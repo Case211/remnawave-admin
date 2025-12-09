@@ -49,7 +49,8 @@ class JsonI18n(I18n):
             if not json_path.is_file():
                 continue
             try:
-                data = json.loads(json_path.read_text(encoding="utf-8"))
+                # messages.json are stored with UTF-8 BOM, use utf-8-sig to strip it
+                data = json.loads(json_path.read_text(encoding="utf-8-sig"))
                 flat = dict(_flatten_translations(data))
                 translations[locale_dir.name] = JsonTranslations(flat)
             except json.JSONDecodeError:
