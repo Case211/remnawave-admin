@@ -1504,6 +1504,24 @@ async def _send_user_create_prompt(
         await target.answer(text, reply_markup=reply_markup)
 
 
+async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None:
+    squads: list[dict] = []
+    try:
+        res = await api_client.get_internal_squads()
+        squads = res.get("response", {}).get("internalSquads", [])
+    except UnauthorizedError:
+        await _send_user_create_prompt(target, _("errors.unauthorized"), users_menu_keyboard())
+        return
+    except ApiClientError:
+        logger.exception("Failed to load squads")
+
+    squads_sorted = sorted(squads, key=lambda s: s.get("viewPosition", 0))
+    markup = user_create_squad_keyboard(squads_sorted)
+    text = _("user.prompt_squad") if squads_sorted else _("user.squad_load_failed")
+    PENDING_INPUT[target.from_user.id] = ctx
+    await _send_user_create_prompt(target, text, markup)
+
+
 def _build_user_create_preview(data: dict) -> str:
     expire_at = format_datetime(data.get("expire_at"))
     traffic_limit = data.get("traffic_limit_bytes")
@@ -1649,7 +1667,7 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
             data["telegram_id"] = None
         ctx["stage"] = "squad"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(message, _("user.prompt_squad"), user_create_squad_keyboard())
+        await _send_squad_prompt(message, ctx)
         return
 
     if stage == "squad":
@@ -1727,7 +1745,7 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
             data["telegram_id"] = None
             ctx["stage"] = "squad"
             PENDING_INPUT[user_id] = ctx
-            await _send_user_create_prompt(callback, _("user.prompt_squad"), user_create_squad_keyboard())
+            await _send_squad_prompt(callback, ctx)
             return
         if field == "squad":
             data["squad_uuid"] = None
@@ -1748,6 +1766,14 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
     if action == "cancel":
         PENDING_INPUT.pop(user_id, None)
         await _send_user_create_prompt(callback, _("user.cancelled"), users_menu_keyboard())
+
+    if action == "squad" and len(parts) >= 3:
+        data["squad_uuid"] = parts[2]
+        ctx["stage"] = "confirm"
+        PENDING_INPUT[user_id] = ctx
+        await _send_user_create_prompt(
+            callback, _build_user_create_preview(data), user_create_confirm_keyboard()
+        )
 
 
 async def _fetch_health_text() -> str:

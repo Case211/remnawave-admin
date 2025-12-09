@@ -87,6 +87,9 @@ class RemnawaveApiClient:
     async def revoke_user_subscription(self, user_uuid: str) -> dict:
         return await self._post(f"/api/users/{user_uuid}/actions/revoke")
 
+    async def get_internal_squads(self) -> dict:
+        return await self._get("/api/internal-squads")
+
     async def create_user(
         self,
         username: str,
