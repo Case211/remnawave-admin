@@ -1,8 +1,6 @@
 import asyncio
 
 from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from src.config import get_settings
@@ -15,7 +13,8 @@ from src.handlers import register_handlers
 async def main() -> None:
     settings = get_settings()
 
-    bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    # parse_mode is left as default (None) to avoid HTML parsing issues with plain text translations
+    bot = Bot(token=settings.bot_token)
     dp = Dispatcher(storage=MemoryStorage())
 
     # middlewares
