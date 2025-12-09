@@ -30,6 +30,8 @@ docker compose up -d
 ```
 Образ публикуется в GHCR: `ghcr.io/<OWNER>/remnawave-admin-bot:latest` (OWNER берётся из GitHub репозитория). Workflow: `.github/workflows/docker.yml`.
 
+> docker-compose.yml теперь сразу пробрасывает переменные окружения (BOT_TOKEN, API_BASE_URL обязательны) и упадёт при их отсутствии. Значения берутся из `.env` в корне или из переменных окружения хоста.
+
 ## Функциональность
 - Общие: `/start`, `/help`, `/ping`, `/health`, `/stats`, `/bandwidth`.
 - Пользователи: `/user <username|telegram_id>`, inline-действия enable/disable/reset/revoke, bulk-операции (сброс трафика, удаление, продление, статус, revoke).

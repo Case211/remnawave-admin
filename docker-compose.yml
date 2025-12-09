@@ -1,13 +1,15 @@
-version: "3.9"
-
 services:
   bot:
     image: ghcr.io/case211/remnawave-admin:latest
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      - PYTHONPATH=/app
+      PYTHONPATH: /app
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN is required}
+      API_BASE_URL: ${API_BASE_URL:?API_BASE_URL is required}
+      API_TOKEN: ${API_TOKEN:-}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ru}
+      ADMINS: ${ADMINS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     networks:
       - remnawave-network
 
