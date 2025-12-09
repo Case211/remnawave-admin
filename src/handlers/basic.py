@@ -1,9 +1,17 @@
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 
-from src.keyboards.main_menu import main_menu_keyboard
+from src.keyboards.main_menu import (
+    main_menu_keyboard,
+    system_menu_keyboard,
+    users_menu_keyboard,
+    nodes_menu_keyboard,
+    resources_menu_keyboard,
+    billing_overview_keyboard,
+    bulk_menu_keyboard,
+)
 from src.keyboards.host_actions import host_actions_keyboard
 from src.keyboards.node_actions import node_actions_keyboard
 from src.keyboards.token_actions import token_actions_keyboard
@@ -111,26 +119,18 @@ async def cmd_help(message: Message) -> None:
     await message.answer(_("bot.help"))
 
 
-@router.message(Command("ping"))
-async def cmd_ping(message: Message) -> None:
-    if await _not_admin(message):
-        return
-
-    await message.answer(_("api.ping_ok"))
-
-
 @router.message(Command("health"))
 async def cmd_health(message: Message) -> None:
     if await _not_admin(message):
         return
-    await message.answer(await _fetch_health_text(), reply_markup=main_menu_keyboard())
+    await message.answer(await _fetch_health_text(), reply_markup=system_menu_keyboard())
 
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message) -> None:
     if await _not_admin(message):
         return
-    await message.answer(await _fetch_stats_text(), reply_markup=main_menu_keyboard())
+    await message.answer(await _fetch_stats_text(), reply_markup=system_menu_keyboard())
 
 
 @router.message(Command("bandwidth"))
@@ -138,7 +138,7 @@ async def cmd_bandwidth(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_bandwidth_text()
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=system_menu_keyboard())
 
 
 @router.message(Command("billing"))
@@ -169,7 +169,7 @@ async def cmd_billing_nodes(message: Message) -> None:
 async def cmd_bulk(message: Message) -> None:
     if await _not_admin(message):
         return
-    await message.answer(_("bulk.title"), reply_markup=bulk_users_keyboard())
+    await message.answer(_("bulk.title"), reply_markup=bulk_menu_keyboard())
 
 
 @router.message(Command("bulk_delete_status"))
@@ -284,7 +284,7 @@ async def cmd_nodes(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_nodes_text()
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=nodes_menu_keyboard())
 
 
 @router.message(Command("nodes_usage"))
@@ -292,7 +292,7 @@ async def cmd_nodes_usage(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_nodes_realtime_text()
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=nodes_menu_keyboard())
 
 
 @router.message(Command("nodes_range"))
@@ -305,7 +305,7 @@ async def cmd_nodes_range(message: Message) -> None:
         return
     start, end = parts[1], parts[2]
     text = await _fetch_nodes_range_text(start, end)
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=nodes_menu_keyboard())
 
 
 @router.message(Command("node"))
@@ -325,7 +325,7 @@ async def cmd_hosts(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_hosts_text()
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=nodes_menu_keyboard())
 
 
 @router.message(Command("host"))
@@ -356,7 +356,7 @@ async def cmd_sub(message: Message) -> None:
 async def cmd_tokens(message: Message) -> None:
     if await _not_admin(message):
         return
-    await _show_tokens(message)
+    await _show_tokens(message, reply_markup=resources_menu_keyboard())
 
 
 @router.message(Command("token"))
@@ -396,7 +396,7 @@ async def cmd_snippets(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_snippets_text()
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=resources_menu_keyboard())
 
 
 @router.message(Command("snippet"))
@@ -430,7 +430,7 @@ async def cmd_configs(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_configs_text()
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=nodes_menu_keyboard())
 
 
 @router.message(Command("config"))
@@ -445,30 +445,52 @@ async def cmd_config(message: Message) -> None:
     await _send_config_detail(message, config_uuid)
 
 
-@router.callback_query(F.data == "menu:ping")
-async def cb_ping(callback: CallbackQuery) -> None:
+@router.callback_query(F.data == "menu:section:users")
+async def cb_section_users(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    await callback.message.edit_text(_("api.ping_ok"), reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(_("bot.menu"), reply_markup=users_menu_keyboard())
 
 
-@router.callback_query(F.data == "menu:settings")
-async def cb_settings(callback: CallbackQuery) -> None:
+@router.callback_query(F.data == "menu:section:nodes")
+async def cb_section_nodes(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
-
     await callback.answer()
-    try:
-        await api_client.get_settings()
-        text = _("api.settings_loaded")
-    except UnauthorizedError:
-        text = _("errors.unauthorized")
-    except ApiClientError:
-        logger.exception("Failed to load settings")
-        text = _("errors.generic")
+    await callback.message.edit_text(_("bot.menu"), reply_markup=nodes_menu_keyboard())
 
-    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
+
+@router.callback_query(F.data == "menu:section:resources")
+async def cb_section_resources(callback: CallbackQuery) -> None:
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    await callback.message.edit_text(_("bot.menu"), reply_markup=resources_menu_keyboard())
+
+
+@router.callback_query(F.data == "menu:section:billing")
+async def cb_section_billing(callback: CallbackQuery) -> None:
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    await callback.message.edit_text(_("bot.menu"), reply_markup=billing_overview_keyboard())
+
+
+@router.callback_query(F.data == "menu:section:bulk")
+async def cb_section_bulk(callback: CallbackQuery) -> None:
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    await callback.message.edit_text(_("bot.menu"), reply_markup=bulk_menu_keyboard())
+
+
+@router.callback_query(F.data == "menu:section:system")
+async def cb_section_system(callback: CallbackQuery) -> None:
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    await callback.message.edit_text(_("bot.menu"), reply_markup=system_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:health")
@@ -477,7 +499,7 @@ async def cb_health(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_health_text()
-    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=system_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:stats")
@@ -486,7 +508,7 @@ async def cb_stats(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_stats_text()
-    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=system_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:find_user")
@@ -494,7 +516,7 @@ async def cb_find_user(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    await callback.message.edit_text(_("bot.user_usage"), reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(_("bot.user_usage"), reply_markup=users_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:nodes")
@@ -503,7 +525,7 @@ async def cb_nodes(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_nodes_text()
-    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=nodes_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:hosts")
@@ -512,7 +534,7 @@ async def cb_hosts(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_hosts_text()
-    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=nodes_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:subs")
@@ -520,7 +542,7 @@ async def cb_subs(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    await callback.message.edit_text(_("sub.usage"), reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(_("sub.usage"), reply_markup=users_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:tokens")
@@ -528,7 +550,7 @@ async def cb_tokens(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    await _show_tokens(callback)
+    await _show_tokens(callback, reply_markup=resources_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:templates")
@@ -546,7 +568,7 @@ async def cb_snippets(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_snippets_text()
-    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=resources_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:configs")
@@ -555,7 +577,7 @@ async def cb_configs(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_configs_text()
-    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=nodes_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:providers")
@@ -1788,13 +1810,16 @@ async def _create_token(target: Message | CallbackQuery, name: str) -> None:
         await target.answer(summary, reply_markup=keyboard)
 
 
-async def _show_tokens(target: Message | CallbackQuery) -> None:
+async def _show_tokens(
+    target: Message | CallbackQuery, reply_markup: InlineKeyboardMarkup | None = None
+) -> None:
     text = await _fetch_tokens_text()
+    markup = reply_markup or main_menu_keyboard()
     if isinstance(target, CallbackQuery):
-        await target.message.edit_text(text, reply_markup=main_menu_keyboard())
+        await target.message.edit_text(text, reply_markup=markup)
         send = target.message.answer
     else:
-        await target.answer(text, reply_markup=main_menu_keyboard())
+        await target.answer(text, reply_markup=markup)
         send = target.answer
 
     # Also send first few tokens with delete buttons for quick actions

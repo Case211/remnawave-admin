@@ -1,13 +1,17 @@
 ﻿{
   "bot": {
     "welcome": "Welcome to the Remnawave admin bot.",
-    "help": "Available commands:\n/start — welcome message\n/help — this help\n/ping — check bot health\n/health — system health\n/stats — system stats\n/bandwidth — bandwidth stats\n/user <username|telegram_id> — find user\n/nodes — list nodes\n/node <uuid> — node details\n/nodes_usage — realtime node usage\n/nodes_range <start_iso> <end_iso> — usage by range\n/hosts — list hosts\n/host <uuid> — host details\n/sub <short_uuid> — subscription info\n/tokens — list tokens\n/templates — list templates\n/snippets — list snippets\n/configs — list config profiles\n/billing — billing history\n/providers — infra providers",
+    "help": "Available commands:\n/start - welcome message\n/help - this help\n/health - system health\n/stats - system stats\n/bandwidth - bandwidth stats\n/user <username|telegram_id> - find user\n/nodes - list nodes\n/node <uuid> - node details\n/nodes_usage - realtime node usage\n/nodes_range <start_iso> <end_iso> - usage by range\n/hosts - list hosts\n/host <uuid> - host details\n/sub <short_uuid> - subscription info\n/tokens - list tokens\n/templates - list templates\n/snippets - list snippets\n/configs - list config profiles\n/billing - billing history\n/providers - infra providers",
     "menu": "Choose an action:",
     "user_usage": "Send /user <username|telegram_id> to get user info."
   },
   "actions": {
-    "ping": "Ping bot",
-    "settings": "Load settings",
+    "menu_users": "Users",
+    "menu_nodes": "Nodes",
+    "menu_resources": "Resources",
+    "menu_billing": "Billing",
+    "menu_bulk": "Bulk actions",
+    "menu_system": "System",
     "health": "Health",
     "stats": "Stats",
     "find_user": "Find user",
@@ -31,8 +35,6 @@
     "revoke": "Revoke subscription"
   },
   "api": {
-    "settings_loaded": "Remnawave settings loaded.",
-    "ping_ok": "Pong! Bot is online."
   },
   "errors": {
     "unauthorized": "Authorization failed. Check API token.",
@@ -220,7 +222,7 @@
     "usage": "Send host UUIDs separated by spaces."
   },
   "bulk": {
-    "title": "Bulk users actions:",
+    "title": "Bulk actions:",
     "reset_all_traffic": "Reset traffic for all users",
     "delete_expired": "Delete expired users",
     "extend_all_7": "Extend all +7d",

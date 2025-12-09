@@ -1,13 +1,17 @@
 ﻿{
   "bot": {
     "welcome": "Добро пожаловать в админ-бот Remnawave.",
-    "help": "Доступные команды:\n/start — приветствие\n/help — эта справка\n/ping — проверить бота\n/health — состояние системы\n/stats — статистика\n/bandwidth — трафик\n/user <username|telegram_id> — найти пользователя\n/nodes — список нод\n/node <uuid> — детали ноды\n/nodes_usage — онлайн-статистика нод\n/nodes_range <start_iso> <end_iso> — трафик за период\n/hosts — список хостов\n/host <uuid> — детали хоста\n/sub <short_uuid> — подписка\n/tokens — список токенов\n/templates — шаблоны\n/snippets — сниппеты\n/configs — конфиги\n/billing — биллинг\n/providers — провайдеры инфраструктуры",
+    "help": "Доступные команды:\n/start - приветствие\n/help - эта справка\n/health - состояние системы\n/stats - статистика\n/bandwidth - трафик\n/user <username|telegram_id> - найти пользователя\n/nodes - список нод\n/node <uuid> - детали ноды\n/nodes_usage - онлайн-статистика нод\n/nodes_range <start_iso> <end_iso> - трафик за период\n/hosts - список хостов\n/host <uuid> - детали хоста\n/sub <short_uuid> - подписка\n/tokens - список токенов\n/templates - шаблоны\n/snippets - сниппеты\n/configs - конфиги\n/billing - биллинг\n/providers - провайдеры инфраструктуры",
     "menu": "Выберите действие:",
     "user_usage": "Отправь /user <username|telegram_id> чтобы получить данные пользователя."
   },
   "actions": {
-    "ping": "Пинг бота",
-    "settings": "Загрузить настройки",
+    "menu_users": "Пользователи",
+    "menu_nodes": "Ноды",
+    "menu_resources": "Инструменты",
+    "menu_billing": "Биллинг",
+    "menu_bulk": "Массовые операции",
+    "menu_system": "Система",
     "health": "Здоровье",
     "stats": "Статистика",
     "find_user": "Найти пользователя",
@@ -31,8 +35,6 @@
     "revoke": "Отозвать подписку"
   },
   "api": {
-    "settings_loaded": "Настройки Remnawave загружены.",
-    "ping_ok": "Pong! Бот на связи."
   },
   "errors": {
     "unauthorized": "Нет доступа. Проверь API токен.",
@@ -220,7 +222,7 @@
     "usage": "Отправь UUID хостов через пробел."
   },
   "bulk": {
-    "title": "Bulk действия с пользователями:",
+    "title": "Массовые операции:",
     "reset_all_traffic": "Сбросить трафик всем",
     "delete_expired": "Удалить просроченных",
     "extend_all_7": "Продлить всем +7д",

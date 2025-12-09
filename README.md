@@ -33,7 +33,7 @@ docker compose up -d
 > docker-compose.yml теперь сразу пробрасывает переменные окружения (BOT_TOKEN, API_BASE_URL обязательны) и упадёт при их отсутствии. Значения берутся из `.env` в корне или из переменных окружения хоста.
 
 ## Функциональность
-- Общие: `/start`, `/help`, `/ping`, `/health`, `/stats`, `/bandwidth`.
+- Общие: `/start`, `/help`, `/health`, `/stats`, `/bandwidth`.
 - Пользователи: `/user <username|telegram_id>`, inline-действия enable/disable/reset/revoke, bulk-операции (сброс трафика, удаление, продление, статус, revoke).
 - Ноды: список/детали, действия enable/disable/restart/reset, realtime и range статистика, bulk назначение профиля+inbounds.
 - Хосты: список/детали, enable/disable, bulk enable/disable/delete.
