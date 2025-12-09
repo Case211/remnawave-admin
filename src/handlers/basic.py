@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
@@ -474,7 +475,10 @@ async def cb_create_user(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     PENDING_INPUT[callback.from_user.id] = {"action": "user_create"}
-    await callback.message.edit_text(_("user.prompt_create"), reply_markup=users_menu_keyboard())
+    try:
+        await callback.message.edit_text(_("user.prompt_create"), reply_markup=users_menu_keyboard())
+    except TelegramBadRequest:
+        await callback.message.answer(_("user.prompt_create"), reply_markup=users_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:section:nodes")
