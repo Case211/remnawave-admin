@@ -14,4 +14,18 @@ def get_i18n() -> I18n:
 
 def get_i18n_middleware() -> I18nMiddleware:
     i18n = get_i18n()
-    return I18nMiddleware(i18n=i18n)
+
+    class SimpleI18nMiddleware(I18nMiddleware):
+        async def get_locale(self, event, data) -> str:  # type: ignore[override]
+            user = getattr(event, "from_user", None)
+            if user:
+                lang = getattr(user, "language_code", None)
+                if lang and self.i18n.is_locale_available(lang):
+                    return lang
+                if lang and "-" in lang:
+                    base_lang = lang.split("-")[0]
+                    if self.i18n.is_locale_available(base_lang):
+                        return base_lang
+            return self.i18n.default_locale
+
+    return SimpleI18nMiddleware(i18n=i18n)
