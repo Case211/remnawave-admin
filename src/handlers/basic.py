@@ -1517,8 +1517,16 @@ async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None
         return
     except ApiClientError:
         logger.exception("Failed to load squads")
+        await _send_user_create_prompt(
+            target, _("user.squad_load_failed"), user_create_squad_keyboard([])
+        )
+        return
     except Exception:
         logger.exception("Unexpected error while loading squads")
+        await _send_user_create_prompt(
+            target, _("user.squad_load_failed"), user_create_squad_keyboard([])
+        )
+        return
 
     squads_sorted = sorted(squads, key=lambda s: s.get("viewPosition", 0))
     markup = user_create_squad_keyboard(squads_sorted)
