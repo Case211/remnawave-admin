@@ -74,6 +74,7 @@ from src.utils.logger import logger
 router = Router(name="basic")
 PENDING_INPUT: dict[int, dict] = {}
 LAST_BOT_MESSAGES: dict[int, int] = {}
+ADMIN_COMMAND_DELETE_DELAY = 2.0
 
 
 async def _cleanup_message(message: Message, delay: float = 0.0) -> None:
@@ -102,7 +103,9 @@ async def _not_admin(message: Message | CallbackQuery) -> bool:
             await _send_clean_message(message, text)
         return True
     if isinstance(message, Message):
-        asyncio.create_task(_cleanup_message(message))
+        is_command = bool(getattr(message, "text", "") and message.text.startswith("/"))
+        delay = ADMIN_COMMAND_DELETE_DELAY if is_command else 0.0
+        asyncio.create_task(_cleanup_message(message, delay=delay))
     return False
 
 
