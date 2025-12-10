@@ -20,6 +20,7 @@ class NavTarget:
     CONFIGS_MENU = "configs_menu"
     USER_SEARCH_PROMPT = "user_search_prompt"
     USER_SEARCH_RESULTS = "user_search_results"
+    SUBS_LIST = "subs_list"
 
 
 def nav_row(back_to: str | None = None) -> list[InlineKeyboardButton]:

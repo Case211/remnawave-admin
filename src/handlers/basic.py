@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 from datetime import datetime, timedelta
+from math import ceil
 
 from src.keyboards.main_menu import (
     main_menu_keyboard,
@@ -77,9 +78,11 @@ PENDING_INPUT: dict[int, dict] = {}
 LAST_BOT_MESSAGES: dict[int, int] = {}
 USER_SEARCH_CONTEXT: dict[int, dict] = {}
 USER_DETAIL_BACK_TARGET: dict[int, str] = {}
+SUBS_PAGE_BY_USER: dict[int, int] = {}
 ADMIN_COMMAND_DELETE_DELAY = 2.0
 SEARCH_PAGE_SIZE = 100
 MAX_SEARCH_RESULTS = 10
+SUBS_PAGE_SIZE = 8
 
 
 async def _cleanup_message(message: Message, delay: float = 0.0) -> None:
@@ -649,7 +652,7 @@ async def cb_subs(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    await callback.message.edit_text(_("sub.usage"), reply_markup=users_menu_keyboard())
+    await _send_subscriptions_page(callback, page=0)
 
 
 @router.callback_query(F.data == "menu:tokens")
@@ -807,6 +810,45 @@ async def cb_nav_back(callback: CallbackQuery) -> None:
     await callback.answer()
     target = callback.data.split(":", 2)[2]
     await _navigate(callback, target)
+
+
+@router.callback_query(F.data.startswith("subs:page:"))
+async def cb_subs_page(callback: CallbackQuery) -> None:
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    try:
+        page = int(callback.data.split(":", 2)[2])
+    except ValueError:
+        page = 0
+    await _send_subscriptions_page(callback, page=max(page, 0))
+
+
+@router.callback_query(F.data.startswith("subs:view:"))
+async def cb_subs_view(callback: CallbackQuery) -> None:
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) < 3:
+        return
+    user_uuid = parts[2]
+    back_to = NavTarget.SUBS_LIST
+    try:
+        user = await api_client.get_user_by_uuid(user_uuid)
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+        return
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
+        return
+    except ApiClientError:
+        logger.exception("User view from subs failed user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+        return
+
+    SUBS_PAGE_BY_USER[callback.from_user.id] = _get_subs_page(callback.from_user.id)
+    await _send_user_summary(callback, user, back_to=back_to)
 
 
 @router.callback_query(F.data == "menu:back")
@@ -1208,6 +1250,12 @@ def _get_user_detail_back_target(user_id: int) -> str:
     return USER_DETAIL_BACK_TARGET.get(user_id, NavTarget.USERS_MENU)
 
 
+def _get_subs_page(user_id: int | None) -> int:
+    if user_id is None:
+        return 0
+    return max(SUBS_PAGE_BY_USER.get(user_id, 0), 0)
+
+
 async def _send_node_detail(target: Message | CallbackQuery, node_uuid: str, from_callback: bool = False) -> None:
     try:
         node = await api_client.get_node(node_uuid)
@@ -1591,19 +1639,22 @@ def _get_target_user_id(target: Message | CallbackQuery) -> int | None:
     return target.from_user.id if getattr(target, "from_user", None) else None
 
 
-def _clear_user_state(user_id: int | None, keep_search: bool = False) -> None:
+def _clear_user_state(user_id: int | None, keep_search: bool = False, keep_subs: bool = False) -> None:
     if user_id is None:
         return
     PENDING_INPUT.pop(user_id, None)
     if not keep_search:
         USER_SEARCH_CONTEXT.pop(user_id, None)
         USER_DETAIL_BACK_TARGET.pop(user_id, None)
+        if not keep_subs:
+            SUBS_PAGE_BY_USER.pop(user_id, None)
 
 
 async def _navigate(target: Message | CallbackQuery, destination: str) -> None:
     user_id = _get_target_user_id(target)
     keep_search = destination in {NavTarget.USER_SEARCH_PROMPT, NavTarget.USER_SEARCH_RESULTS}
-    _clear_user_state(user_id, keep_search=keep_search)
+    keep_subs = destination == NavTarget.SUBS_LIST
+    _clear_user_state(user_id, keep_search=keep_search, keep_subs=keep_subs)
 
     if destination == NavTarget.MAIN_MENU:
         await _send_clean_message(target, _("bot.menu"), reply_markup=main_menu_keyboard())
@@ -1670,8 +1721,66 @@ async def _navigate(target: Message | CallbackQuery, destination: str) -> None:
     if destination == NavTarget.SYSTEM_MENU:
         await _send_clean_message(target, _("bot.menu"), reply_markup=system_menu_keyboard())
         return
+    if destination == NavTarget.SUBS_LIST:
+        await _send_subscriptions_page(target, page=_get_subs_page(user_id))
+        return
 
     await _send_clean_message(target, _("bot.menu"), reply_markup=main_menu_keyboard())
+
+
+async def _send_subscriptions_page(target: Message | CallbackQuery, page: int = 0) -> None:
+    user_id = _get_target_user_id(target)
+    page = max(page, 0)
+    start = page * SUBS_PAGE_SIZE
+    try:
+        data = await api_client.get_users(start=start, size=SUBS_PAGE_SIZE)
+        payload = data.get("response", data)
+        total = payload.get("total", 0) or 0
+        total_pages = max(ceil(total / SUBS_PAGE_SIZE), 1)
+        page = min(page, total_pages - 1)
+        if page != start // SUBS_PAGE_SIZE:
+            start = page * SUBS_PAGE_SIZE
+            data = await api_client.get_users(start=start, size=SUBS_PAGE_SIZE)
+            payload = data.get("response", data)
+        users = payload.get("users") or []
+    except UnauthorizedError:
+        await _send_clean_message(target, _("errors.unauthorized"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))
+        return
+    except ApiClientError:
+        logger.exception("Subscriptions list fetch failed page=%s actor_id=%s", page, user_id)
+        await _send_clean_message(target, _("errors.generic"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))
+        return
+
+    if user_id is not None:
+        SUBS_PAGE_BY_USER[user_id] = page
+
+    if not users:
+        await _send_clean_message(target, _("sub.list_empty"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))
+        return
+
+    total = payload.get("total", len(users)) or len(users)
+    total_pages = max(ceil(total / SUBS_PAGE_SIZE), 1)
+    rows: list[list[InlineKeyboardButton]] = []
+    for user in users:
+        info = user.get("response", user)
+        uuid = info.get("uuid")
+        if not uuid:
+            continue
+        rows.append([InlineKeyboardButton(text=_format_user_choice(info), callback_data=f"subs:view:{uuid}")])
+
+    if total_pages > 1:
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton(text=_("sub.prev_page"), callback_data=f"subs:page:{page-1}"))
+        if page + 1 < total_pages:
+            nav_buttons.append(InlineKeyboardButton(text=_("sub.next_page"), callback_data=f"subs:page:{page+1}"))
+        if nav_buttons:
+            rows.append(nav_buttons)
+
+    rows.append(nav_row(NavTarget.USERS_MENU))
+    keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
+    title = _("sub.list_title").format(page=page + 1, pages=total_pages, total=total)
+    await _send_clean_message(target, title, reply_markup=keyboard)
 
 
 async def _start_user_search_flow(target: Message | CallbackQuery, preset_query: str | None = None) -> None:

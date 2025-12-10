@@ -36,8 +36,7 @@
     "reset_traffic": "🔁 Reset traffic",
     "revoke": "🚫 Revoke subscription"
   },
-  "api": {
-  },
+  "api": {},
   "errors": {
     "unauthorized": "⛔️ Unauthorized. Check your API token.",
     "generic": "⚠️ Something went wrong. Try again later."
@@ -139,7 +138,11 @@
     "usage": "🧾 Send /sub <short_uuid> to view subscription.",
     "not_found": "🙅 Subscription not found.",
     "summary": "🧾 Sub {shortUuid}\n👤 User: {username} ({status})\n📆 Days left: {daysLeft}\n📶 Traffic: {used} / {limit}\n📊 Lifetime used: {lifetime}\n⏳ Expires: {expires}\n🔗 URL: {url}",
-    "open_url": "Open subscription"
+    "open_url": "Open subscription",
+    "list_title": "🧾 Subscriptions • page {page}/{pages} • total {total}",
+    "list_empty": "No users found.",
+    "prev_page": "◀ Previous",
+    "next_page": "Next ▶"
   },
   "token": {
     "usage": "🔑 Create: /token <name>. List: /tokens.",
