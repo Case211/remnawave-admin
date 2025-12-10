@@ -1,7 +1,6 @@
 import asyncio
 
 from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from src.config import get_settings
@@ -25,21 +24,6 @@ async def main() -> None:
     register_handlers(dp)
     dp.shutdown.register(api_client.close)
 
-    # Set bot commands to enable the menu button (/start hint)
-    await bot.set_my_commands(
-        [
-            BotCommand(command="start", description="Start working with the bot"),
-        ],
-        scope=BotCommandScopeDefault(),
-    )
-    await bot.set_my_commands(
-        [
-            BotCommand(command="start", description="Начать работу с ботом"),
-        ],
-        scope=BotCommandScopeDefault(),
-        language_code="ru",
-    )
-    await bot.set_chat_menu_button()
 
     logger.info("Starting bot")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
