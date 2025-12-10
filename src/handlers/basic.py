@@ -329,8 +329,9 @@ async def cmd_user_create(message: Message) -> None:
         return
 
     user_id = message.from_user.id
-    PENDING_INPUT[user_id] = {"action": "user_create", "stage": "username", "data": {}}
-    await _send_user_create_prompt(message, _("user.prompt_username"))
+    ctx = {"action": "user_create", "stage": "username", "data": {}}
+    PENDING_INPUT[user_id] = ctx
+    await _send_user_create_prompt(message, _("user.prompt_username"), ctx=ctx)
 
 
 @router.message(Command("nodes"))
@@ -513,8 +514,9 @@ async def cb_create_user(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     logger.info("🚀 User create flow started by user_id=%s", callback.from_user.id)
-    PENDING_INPUT[callback.from_user.id] = {"action": "user_create", "stage": "username", "data": {}}
-    await _send_user_create_prompt(callback, _("user.prompt_username"))
+    ctx = {"action": "user_create", "stage": "username", "data": {}}
+    PENDING_INPUT[callback.from_user.id] = ctx
+    await _send_user_create_prompt(callback, _("user.prompt_username"), ctx=ctx)
 
 
 @router.callback_query(F.data.startswith("user_create:"))
@@ -1517,13 +1519,59 @@ def _iso_from_days(days: int) -> str:
     return (now + timedelta(days=days)).replace(microsecond=0).isoformat() + "Z"
 
 
+async def _delete_ctx_message(ctx: dict, bot) -> None:
+    message_id = ctx.pop("bot_message_id", None)
+    chat_id = ctx.get("bot_chat_id")
+    if not message_id or not chat_id:
+        return
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception as exc:
+        logger.warning(
+            "🧹 Failed to delete bot prompt chat_id=%s message_id=%s err=%s",
+            chat_id,
+            message_id,
+            exc,
+        )
+
+
 async def _send_user_create_prompt(
-    target: Message | CallbackQuery, text: str, reply_markup: InlineKeyboardMarkup | None = None
+    target: Message | CallbackQuery,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    ctx: dict | None = None,
 ) -> None:
+    bot = target.bot if isinstance(target, Message) else target.message.bot
+    chat_id = target.chat.id if isinstance(target, Message) else target.message.chat.id
+    message_id = ctx.get("bot_message_id") if ctx else None
+
+    if ctx and message_id:
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup
+            )
+            return
+        except Exception as exc:
+            logger.warning(
+                "✏️ Failed to edit user create prompt chat_id=%s message_id=%s err=%s",
+                chat_id,
+                message_id,
+                exc,
+            )
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=message_id)
+            except Exception:
+                pass
+            ctx.pop("bot_message_id", None)
+
     if isinstance(target, CallbackQuery):
-        await target.message.answer(text, reply_markup=reply_markup)
+        sent = await target.message.answer(text, reply_markup=reply_markup)
     else:
-        await target.answer(text, reply_markup=reply_markup)
+        sent = await target.answer(text, reply_markup=reply_markup)
+
+    if ctx is not None:
+        ctx["bot_message_id"] = sent.message_id
+        ctx["bot_chat_id"] = sent.chat.id
 
 
 async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None:
@@ -1535,7 +1583,7 @@ async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None
         squads = res.get("response", {}).get("internalSquads", [])
         logger.info("📥 Loaded %s internal squads for user_id=%s", len(squads), target.from_user.id)
     except UnauthorizedError:
-        await _send_user_create_prompt(target, _("errors.unauthorized"), users_menu_keyboard())
+        await _send_user_create_prompt(target, _("errors.unauthorized"), users_menu_keyboard(), ctx=ctx)
         return
     except ApiClientError:
         logger.exception("⚠️ Failed to load internal squads")
@@ -1549,7 +1597,7 @@ async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None
             squad_source = "external"
             logger.info("📥 Loaded %s external squads for user_id=%s", len(squads), target.from_user.id)
         except UnauthorizedError:
-            await _send_user_create_prompt(target, _("errors.unauthorized"), users_menu_keyboard())
+            await _send_user_create_prompt(target, _("errors.unauthorized"), users_menu_keyboard(), ctx=ctx)
             return
         except ApiClientError:
             logger.exception("⚠️ Failed to load external squads")
@@ -1558,7 +1606,7 @@ async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None
 
     if not squads:
         await _send_user_create_prompt(
-            target, _("user.squad_load_failed"), user_create_squad_keyboard([])
+            target, _("user.squad_load_failed"), user_create_squad_keyboard([]), ctx=ctx
         )
         return
 
@@ -1573,7 +1621,7 @@ async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None
         target.from_user.id,
     )
     PENDING_INPUT[target.from_user.id] = ctx
-    await _send_user_create_prompt(target, text, markup)
+    await _send_user_create_prompt(target, text, markup, ctx=ctx)
 
 
 def _build_user_create_preview(data: dict) -> str:
@@ -1676,20 +1724,24 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
 
     if stage == "username":
         if not text:
-            await _send_user_create_prompt(message, _("user.prompt_username"))
+            await _send_user_create_prompt(message, _("user.prompt_username"), ctx=ctx)
             PENDING_INPUT[user_id] = ctx
             return
         data["username"] = text.split()[0]
         ctx["stage"] = "description"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(message, _("user.prompt_description"), user_create_description_keyboard())
+        await _send_user_create_prompt(
+            message, _("user.prompt_description"), user_create_description_keyboard(), ctx=ctx
+        )
         return
 
     if stage == "description":
         data["description"] = text
         ctx["stage"] = "expire"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(message, _("user.prompt_expire"), user_create_expire_keyboard())
+        await _send_user_create_prompt(
+            message, _("user.prompt_expire"), user_create_expire_keyboard(), ctx=ctx
+        )
         return
 
     if stage == "expire":
@@ -1699,13 +1751,15 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
             ctx["stage"] = "expire"
             PENDING_INPUT[user_id] = ctx
             await _send_user_create_prompt(
-                message, _("user.invalid_expire"), user_create_expire_keyboard()
+                message, _("user.invalid_expire"), user_create_expire_keyboard(), ctx=ctx
             )
             return
         data["expire_at"] = text
         ctx["stage"] = "traffic"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(message, _("user.prompt_traffic"), user_create_traffic_keyboard())
+        await _send_user_create_prompt(
+            message, _("user.prompt_traffic"), user_create_traffic_keyboard(), ctx=ctx
+        )
         return
 
     if stage == "traffic":
@@ -1713,12 +1767,14 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
             gb = float(text)
         except ValueError:
             PENDING_INPUT[user_id] = ctx
-            await _send_user_create_prompt(message, _("user.invalid_traffic"), user_create_traffic_keyboard())
+            await _send_user_create_prompt(
+                message, _("user.invalid_traffic"), user_create_traffic_keyboard(), ctx=ctx
+            )
             return
         data["traffic_limit_bytes"] = int(gb * 1024 * 1024 * 1024)
         ctx["stage"] = "hwid"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(message, _("user.prompt_hwid"), user_create_hwid_keyboard())
+        await _send_user_create_prompt(message, _("user.prompt_hwid"), user_create_hwid_keyboard(), ctx=ctx)
         return
 
     if stage == "hwid":
@@ -1726,12 +1782,16 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
             hwid = int(text)
         except ValueError:
             PENDING_INPUT[user_id] = ctx
-            await _send_user_create_prompt(message, _("user.invalid_hwid"), user_create_hwid_keyboard())
+            await _send_user_create_prompt(
+                message, _("user.invalid_hwid"), user_create_hwid_keyboard(), ctx=ctx
+            )
             return
         data["hwid_limit"] = hwid
         ctx["stage"] = "telegram"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(message, _("user.prompt_telegram"), user_create_telegram_keyboard())
+        await _send_user_create_prompt(
+            message, _("user.prompt_telegram"), user_create_telegram_keyboard(), ctx=ctx
+        )
         return
 
     if stage == "telegram":
@@ -1740,7 +1800,9 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
                 data["telegram_id"] = int(text)
             except ValueError:
                 PENDING_INPUT[user_id] = ctx
-                await _send_user_create_prompt(message, _("user.invalid_telegram"), user_create_telegram_keyboard())
+                await _send_user_create_prompt(
+                    message, _("user.invalid_telegram"), user_create_telegram_keyboard(), ctx=ctx
+                )
                 return
         else:
             data["telegram_id"] = None
@@ -1751,7 +1813,7 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
         except Exception:
             logger.exception("⚠️ Squad prompt failed, falling back to manual entry")
             await _send_user_create_prompt(
-                message, _("user.squad_load_failed"), user_create_squad_keyboard([])
+                message, _("user.squad_load_failed"), user_create_squad_keyboard([]), ctx=ctx
             )
         return
 
@@ -1760,7 +1822,7 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
         ctx["stage"] = "confirm"
         PENDING_INPUT[user_id] = ctx
         await _send_user_create_prompt(
-            message, _build_user_create_preview(data), user_create_confirm_keyboard()
+            message, _build_user_create_preview(data), user_create_confirm_keyboard(), ctx=ctx
         )
         return
 
@@ -1768,7 +1830,7 @@ async def _handle_user_create_input(message: Message, ctx: dict) -> None:
     if ctx.get("stage") == "confirm":
         PENDING_INPUT[user_id] = ctx
         await _send_user_create_prompt(
-            message, _build_user_create_preview(data), user_create_confirm_keyboard()
+            message, _build_user_create_preview(data), user_create_confirm_keyboard(), ctx=ctx
         )
 
 
@@ -1781,6 +1843,37 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
         return
     action = parts[1]
 
+    if action == "skip" and len(parts) >= 3:
+        field = parts[2]
+        if field == "description":
+            data["description"] = ""
+            ctx["stage"] = "expire"
+            PENDING_INPUT[user_id] = ctx
+            await _send_user_create_prompt(
+                callback, _("user.prompt_expire"), user_create_expire_keyboard(), ctx=ctx
+            )
+            return
+        if field == "telegram":
+            data["telegram_id"] = None
+            ctx["stage"] = "squad"
+            PENDING_INPUT[user_id] = ctx
+            try:
+                await _send_squad_prompt(callback, ctx)
+            except Exception:
+                logger.exception("⚠️ Squad prompt failed from callback, falling back to manual entry")
+                await _send_user_create_prompt(
+                    callback, _("user.squad_load_failed"), user_create_squad_keyboard([]), ctx=ctx
+                )
+            return
+        if field == "squad":
+            data["squad_uuid"] = None
+            ctx["stage"] = "confirm"
+            PENDING_INPUT[user_id] = ctx
+            await _send_user_create_prompt(
+                callback, _build_user_create_preview(data), user_create_confirm_keyboard(), ctx=ctx
+            )
+            return
+
     if action == "expire" and len(parts) >= 3:
         try:
             days = int(parts[2])
@@ -1789,7 +1882,9 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
             pass
         ctx["stage"] = "traffic"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(callback, _("user.prompt_traffic"), user_create_traffic_keyboard())
+        await _send_user_create_prompt(
+            callback, _("user.prompt_traffic"), user_create_traffic_keyboard(), ctx=ctx
+        )
         return
 
     if action == "traffic" and len(parts) >= 3:
@@ -1804,7 +1899,7 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
                 data["traffic_limit_bytes"] = None
         ctx["stage"] = "hwid"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(callback, _("user.prompt_hwid"), user_create_hwid_keyboard())
+        await _send_user_create_prompt(callback, _("user.prompt_hwid"), user_create_hwid_keyboard(), ctx=ctx)
         return
 
     if action == "hwid" and len(parts) >= 3:
@@ -1815,39 +1910,15 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
             data["hwid_limit"] = None
         ctx["stage"] = "telegram"
         PENDING_INPUT[user_id] = ctx
-        await _send_user_create_prompt(callback, _("user.prompt_telegram"), user_create_telegram_keyboard())
+        await _send_user_create_prompt(
+            callback, _("user.prompt_telegram"), user_create_telegram_keyboard(), ctx=ctx
+        )
         return
-
-    if action == "skip" and len(parts) >= 3:
-        field = parts[2]
-        if field == "description":
-            data["description"] = ""
-            ctx["stage"] = "expire"
-            PENDING_INPUT[user_id] = ctx
-            await _send_user_create_prompt(callback, _("user.prompt_expire"), user_create_expire_keyboard())
-            return
-        if field == "telegram":
-            data["telegram_id"] = None
-            ctx["stage"] = "squad"
-            PENDING_INPUT[user_id] = ctx
-            try:
-                await _send_squad_prompt(callback, ctx)
-            except Exception:
-                logger.exception("⚠️ Squad prompt failed from callback, falling back to manual entry")
-                await _send_user_create_prompt(
-                    callback, _("user.squad_load_failed"), user_create_squad_keyboard([])
-                )
-            return
-        if field == "squad":
-            data["squad_uuid"] = None
-            ctx["stage"] = "confirm"
-            PENDING_INPUT[user_id] = ctx
-            await _send_user_create_prompt(callback, _build_user_create_preview(data), user_create_confirm_keyboard())
-            return
 
     if action == "confirm":
         try:
             await _create_user(callback, data)
+            await _delete_ctx_message(ctx, callback.message.bot)
             PENDING_INPUT.pop(user_id, None)
         except Exception:
             PENDING_INPUT[user_id] = ctx
@@ -1855,15 +1926,16 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
         return
 
     if action == "cancel":
+        await _delete_ctx_message(ctx, callback.message.bot)
         PENDING_INPUT.pop(user_id, None)
-        await _send_user_create_prompt(callback, _("user.cancelled"), users_menu_keyboard())
+        await _send_user_create_prompt(callback, _("user.cancelled"), users_menu_keyboard(), ctx=ctx)
 
     if action == "squad" and len(parts) >= 3:
         data["squad_uuid"] = parts[2]
         ctx["stage"] = "confirm"
         PENDING_INPUT[user_id] = ctx
         await _send_user_create_prompt(
-            callback, _build_user_create_preview(data), user_create_confirm_keyboard()
+            callback, _build_user_create_preview(data), user_create_confirm_keyboard(), ctx=ctx
         )
 
 
