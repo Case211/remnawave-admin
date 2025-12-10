@@ -1,3 +1,5 @@
+import asyncio
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
@@ -73,6 +75,22 @@ router = Router(name="basic")
 PENDING_INPUT: dict[int, dict] = {}
 
 
+async def _cleanup_message(message: Message, delay: float = 2.0) -> None:
+    if not isinstance(message, Message):
+        return
+    try:
+        if delay > 0:
+            await asyncio.sleep(delay)
+        await message.delete()
+    except Exception as exc:
+        logger.warning(
+            "🧹 Failed to delete message chat_id=%s message_id=%s err=%s",
+            message.chat.id,
+            getattr(message, "message_id", None),
+            exc,
+        )
+
+
 async def _not_admin(message: Message | CallbackQuery) -> bool:
     user_id = message.from_user.id if hasattr(message, "from_user") else None
     if user_id is None or not is_admin(user_id):
@@ -82,6 +100,8 @@ async def _not_admin(message: Message | CallbackQuery) -> bool:
         else:
             await message.answer(text)
         return True
+    if isinstance(message, Message):
+        asyncio.create_task(_cleanup_message(message))
     return False
 
 
