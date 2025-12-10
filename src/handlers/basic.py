@@ -1617,6 +1617,7 @@ async def _create_user(target: Message | CallbackQuery, data: dict) -> None:
             description=data.get("description"),
             external_squad_uuid=external_squad_uuid,
             active_internal_squads=internal_squads,
+            traffic_limit_strategy="MONTH",
         )
     except UnauthorizedError:
         await _respond(_("errors.unauthorized"), reply_markup=users_menu_keyboard())

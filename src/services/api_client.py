@@ -109,12 +109,15 @@ class RemnawaveApiClient:
         description: str | None = None,
         external_squad_uuid: str | None = None,
         active_internal_squads: list[str] | None = None,
+        traffic_limit_strategy: str = "MONTH",
     ) -> dict:
         payload: dict[str, object] = {"username": username, "expireAt": expire_at}
         if telegram_id is not None:
             payload["telegramId"] = telegram_id
         if traffic_limit_bytes is not None:
             payload["trafficLimitBytes"] = traffic_limit_bytes
+        if traffic_limit_strategy:
+            payload["trafficLimitStrategy"] = traffic_limit_strategy
         if hwid_device_limit is not None:
             payload["hwidDeviceLimit"] = hwid_device_limit
         if description:
