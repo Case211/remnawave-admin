@@ -1840,18 +1840,34 @@ async def _handle_bulk_users_input(message: Message, ctx: dict) -> None:
             return
         
         try:
-            # Получаем всех активных пользователей
-            users_data = await api_client.get_users(start=0, size=1000)
-            users = users_data.get("response", users_data).get("users", [])
-            active_uuids = [u.get("uuid") for u in users if u.get("uuid") and u.get("status") == "ACTIVE"]
+            # Получаем всех активных пользователей с пагинацией
+            active_uuids: list[str] = []
+            start = 0
+            while True:
+                users_data = await api_client.get_users(start=start, size=SEARCH_PAGE_SIZE)
+                payload = users_data.get("response", users_data)
+                users = payload.get("users", [])
+                total = payload.get("total", len(users))
+                
+                # Фильтруем активных пользователей
+                for user in users:
+                    user_info = user.get("response", user)
+                    if user_info.get("status") == "ACTIVE" and user_info.get("uuid"):
+                        active_uuids.append(user_info.get("uuid"))
+                
+                start += SEARCH_PAGE_SIZE
+                if start >= total or not users:
+                    break
             
             if not active_uuids:
                 await _send_clean_message(message, _("bulk.no_active_users"), reply_markup=bulk_users_keyboard())
+                del PENDING_INPUT[user_id]
                 return
             
             # Продлеваем активным
             await api_client.bulk_extend_users(active_uuids, days)
-            await _send_clean_message(message, _("bulk.done"), reply_markup=bulk_users_keyboard())
+            result_text = _("bulk.done_extend_active").format(count=len(active_uuids), days=days)
+            await _send_clean_message(message, result_text, reply_markup=bulk_users_keyboard())
             del PENDING_INPUT[user_id]
         except UnauthorizedError:
             await _send_clean_message(message, _("errors.unauthorized"), reply_markup=bulk_users_keyboard())

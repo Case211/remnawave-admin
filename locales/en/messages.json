@@ -303,9 +303,10 @@
     "reset_all_traffic": "🔁 Reset traffic for all",
     "extend_all_7": "⏳ Extend all +7d",
     "extend_all_30": "⏳ Extend all +30d",
-    "prompt_extend_active": "⏳ Enter number of days to extend for active users:",
+    "prompt_extend_active": "⏳ Enter number of days to extend subscriptions for active users:\n\nExample: 7 (extend by 7 days)\nExample: 30 (extend by 30 days)",
     "no_active_users": "ℹ️ No active users found.",
     "done": "✅ Bulk action done.",
+    "done_extend_active": "✅ Subscriptions extended by {days} days for {count} active users.",
     "error": "⚠️ Bulk action failed."
   },
   "system_nodes": {
