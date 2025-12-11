@@ -6,6 +6,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
+from aiogram.exceptions import TelegramBadRequest
 from datetime import datetime, timedelta
 from math import ceil
 
@@ -680,7 +681,7 @@ async def cb_snippets(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_snippets_text()
-    await callback.message.edit_text(text, reply_markup=resources_menu_keyboard())
+    await _edit_text_safe(callback.message, text, reply_markup=resources_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu:configs")
@@ -1129,7 +1130,7 @@ async def cb_template_view(callback: CallbackQuery) -> None:
         data = await api_client.get_template(tpl_uuid)
         template = data.get("response", data)
         text = build_template_summary(template, _)
-        await callback.message.edit_text(text, reply_markup=template_actions_keyboard(tpl_uuid))
+        await _edit_text_safe(callback.message, text, reply_markup=template_actions_keyboard(tpl_uuid))
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=main_menu_keyboard())
     except NotFoundError:
@@ -1984,8 +1985,7 @@ async def _navigate(target: Message | CallbackQuery, destination: str) -> None:
         await _show_tokens(target, reply_markup=resources_menu_keyboard())
         return
     if destination == NavTarget.TEMPLATES_MENU:
-        text = await _fetch_templates_text()
-        await _send_clean_message(target, text, reply_markup=template_menu_keyboard())
+        await _send_templates(target)
         return
     if destination == NavTarget.SNIPPETS_MENU:
         text = await _fetch_snippets_text()
@@ -2891,6 +2891,15 @@ async def _fetch_templates_text() -> str:
         return _("errors.generic")
 
 
+async def _edit_text_safe(message: Message, text: str, reply_markup=None, parse_mode: str | None = None) -> None:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
+    except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc):
+            return
+        raise
+
+
 async def _send_templates(target: Message | CallbackQuery) -> None:
     text = await _fetch_templates_text()
     try:
@@ -2900,7 +2909,7 @@ async def _send_templates(target: Message | CallbackQuery) -> None:
         templates = []
     keyboard = template_list_keyboard(templates)
     if isinstance(target, CallbackQuery):
-        await target.message.edit_text(text, reply_markup=keyboard)
+        await _edit_text_safe(target.message, text, reply_markup=keyboard)
     else:
         await _send_clean_message(target, text, reply_markup=keyboard)
 
@@ -2927,14 +2936,14 @@ async def _send_snippet_detail(target: Message | CallbackQuery, name: str) -> No
     except UnauthorizedError:
         text = _("errors.unauthorized")
         if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=main_menu_keyboard())
+            await _edit_text_safe(target.message, text, reply_markup=main_menu_keyboard())
         else:
             await _send_clean_message(target, text, reply_markup=main_menu_keyboard())
         return
     except NotFoundError:
         text = _("snippet.not_found")
         if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=main_menu_keyboard())
+            await _edit_text_safe(target.message, text, reply_markup=main_menu_keyboard())
         else:
             await _send_clean_message(target, text, reply_markup=main_menu_keyboard())
         return
@@ -2942,7 +2951,7 @@ async def _send_snippet_detail(target: Message | CallbackQuery, name: str) -> No
         logger.exception("⚠️ API client error while fetching snippet")
         text = _("errors.generic")
         if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=main_menu_keyboard())
+            await _edit_text_safe(target.message, text, reply_markup=main_menu_keyboard())
         else:
             await _send_clean_message(target, text, reply_markup=main_menu_keyboard())
         return
@@ -2950,7 +2959,7 @@ async def _send_snippet_detail(target: Message | CallbackQuery, name: str) -> No
     summary = build_snippet_detail(snippet, _)
     keyboard = snippet_actions_keyboard(name)
     if isinstance(target, CallbackQuery):
-        await target.message.edit_text(summary, reply_markup=keyboard)
+        await _edit_text_safe(target.message, summary, reply_markup=keyboard)
     else:
         await _send_clean_message(target, summary, reply_markup=keyboard)
 
@@ -3023,7 +3032,7 @@ async def _show_tokens(
     text = await _fetch_tokens_text()
     markup = reply_markup or main_menu_keyboard()
     if isinstance(target, CallbackQuery):
-        await target.message.edit_text(text, reply_markup=markup)
+        await _edit_text_safe(target.message, text, reply_markup=markup)
     else:
         await _send_clean_message(target, text, reply_markup=markup)
 async def _send_clean_message(
