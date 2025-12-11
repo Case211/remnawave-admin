@@ -1798,10 +1798,10 @@ async def _handle_user_edit_input(message: Message, ctx: dict) -> None:
 
     if field == "traffic":
         try:
-            limit = int(text)
-            if limit < 0:
+            gb = float(text)
+            if gb < 0:
                 raise ValueError
-            payload["trafficLimitBytes"] = limit
+            payload["trafficLimitBytes"] = int(gb * 1024 * 1024 * 1024)
         except ValueError:
             _set_retry("user.edit_invalid_number")
             return
