@@ -35,7 +35,7 @@ from src.keyboards.template_actions import template_actions_keyboard
 from src.keyboards.snippet_actions import snippet_actions_keyboard
 from src.keyboards.config_actions import config_actions_keyboard
 from src.keyboards.bulk_users import bulk_users_keyboard
-from src.keyboards.template_menu import template_menu_keyboard
+from src.keyboards.template_menu import template_menu_keyboard, template_list_keyboard
 from src.keyboards.bulk_hosts import bulk_hosts_keyboard
 from src.keyboards.bulk_nodes import bulk_nodes_keyboard
 from src.keyboards.subscription_actions import subscription_keyboard
@@ -445,8 +445,7 @@ async def cmd_token_create(message: Message) -> None:
 async def cmd_templates(message: Message) -> None:
     if await _not_admin(message):
         return
-    text = await _fetch_templates_text()
-    await _send_clean_message(message, text, reply_markup=template_menu_keyboard())
+    await _send_templates(message)
 
 
 @router.message(Command("template"))
@@ -672,8 +671,7 @@ async def cb_templates(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    text = await _fetch_templates_text()
-    await callback.message.edit_text(text, reply_markup=template_menu_keyboard())
+    await _send_templates(callback)
 
 
 @router.callback_query(F.data == "menu:snippets")
@@ -1105,7 +1103,7 @@ async def cb_template_actions(callback: CallbackQuery) -> None:
     try:
         if action == "delete":
             await api_client.delete_template(tpl_uuid)
-            await callback.message.edit_text(_("template.deleted"), reply_markup=main_menu_keyboard())
+            await _send_templates(callback)
         elif action == "update_json":
             PENDING_INPUT[callback.from_user.id] = {"action": "template_update_json", "uuid": tpl_uuid}
             await callback.message.edit_text(_("template.prompt_update_json"), reply_markup=template_actions_keyboard(tpl_uuid))
@@ -1120,6 +1118,25 @@ async def cb_template_actions(callback: CallbackQuery) -> None:
         logger.exception("❌ Template action failed action=%s template_uuid=%s actor_id=%s", action, tpl_uuid, callback.from_user.id)
         await callback.message.edit_text(_("errors.generic"), reply_markup=main_menu_keyboard())
 
+
+@router.callback_query(F.data.startswith("tplview:"))
+async def cb_template_view(callback: CallbackQuery) -> None:
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    _, tpl_uuid = callback.data.split(":")
+    try:
+        data = await api_client.get_template(tpl_uuid)
+        template = data.get("response", data)
+        text = build_template_summary(template, _)
+        await callback.message.edit_text(text, reply_markup=template_actions_keyboard(tpl_uuid))
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=main_menu_keyboard())
+    except NotFoundError:
+        await callback.message.edit_text(_("template.not_found"), reply_markup=main_menu_keyboard())
+    except ApiClientError:
+        logger.exception("❌ Template view failed template_uuid=%s actor_id=%s", tpl_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=main_menu_keyboard())
 
 @router.callback_query(F.data.startswith("snippet:"))
 async def cb_snippet_actions(callback: CallbackQuery) -> None:
@@ -2872,6 +2889,20 @@ async def _fetch_templates_text() -> str:
     except ApiClientError:
         logger.exception("⚠️ Templates fetch failed")
         return _("errors.generic")
+
+
+async def _send_templates(target: Message | CallbackQuery) -> None:
+    text = await _fetch_templates_text()
+    try:
+        data = await api_client.get_templates()
+        templates = data.get("response", {}).get("templates", [])
+    except Exception:
+        templates = []
+    keyboard = template_list_keyboard(templates)
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await _send_clean_message(target, text, reply_markup=keyboard)
 
 
 async def _fetch_snippets_text() -> str:
