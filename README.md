@@ -1,58 +1,226 @@
-﻿# Remnawave Admin Bot (Telegram, Python)
+# Remnawave Admin Bot
 
-Телеграм-бот для администрирования Remnawave панели. Поддерживает RU/EN локализацию, inline-кнопки, docker-compose запуск и автосборку образа в GHCR через GitHub Actions.
+Telegram-бот для управления панелью Remnawave. Поддерживает локализацию RU/EN, inline-кнопки, развертывание через Docker Compose и автоматическую сборку образа через GitHub Actions.
 
-## Быстрый старт (локально)
-1. Создай виртуальное окружение и установи зависимости:
+## Возможности
+
+- **Управление пользователями**: Просмотр, создание, редактирование пользователей, управление подписками, массовые операции
+- **Управление нодами**: Мониторинг нод, включение/выключение, перезапуск, сброс трафика, назначение профилей
+- **Управление хостами**: Управление хостами, массовые операции
+- **Шаблоны**: Создание и управление шаблонами подписок
+- **Сниппеты**: Управление конфигурационными сниппетами
+- **API токены**: Управление токенами доступа к API
+- **Биллинг**: Отслеживание истории платежей, управление провайдерами и биллинг-нодами
+- **Статистика**: Статистика панели и сервера с детальными метриками
+- **Многоязычность**: Поддержка русского и английского языков
+
+## Быстрый старт
+
+### Требования
+
+- Python 3.12+ (для локальной разработки)
+- Docker и Docker Compose (для развертывания)
+- Токен Telegram-бота от [@BotFather](https://t.me/BotFather)
+- Токен доступа к API Remnawave
+
+### Установка
+
+1. **Клонируйте репозиторий:**
+   ```bash
+   git clone https://github.com/case211/remnawave-admin.git
+   cd remnawave-admin
+   ```
+
+2. **Скопируйте файл окружения:**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Отредактируйте файл `.env`:**
+   ```bash
+   nano .env
+   # или используйте ваш любимый редактор
+   ```
+
+   Обязательные переменные:
+   ```env
+   BOT_TOKEN=ваш_токен_telegram_бота
+   API_BASE_URL=http://remnawave:3000
+   API_TOKEN=ваш_токен_api
+   ADMINS=123456789,987654321
+   DEFAULT_LOCALE=ru
+   LOG_LEVEL=INFO
+   ```
+
+   **Для развертывания в Docker** используйте:
+   - `API_BASE_URL=http://remnawave:3000` (если бот в той же Docker-сети)
+   - `API_BASE_URL=https://ваш-домен-панели.com` (если бот внешний)
+
+4. **Разверните с помощью Docker Compose:**
+   ```bash
+   docker compose pull
+   docker compose up -d
+   ```
+
+5. **Проверьте логи:**
+   ```bash
+   docker compose logs -f bot
+   ```
+
+## Локальная разработка
+
+1. **Создайте виртуальное окружение:**
    ```bash
    python -m venv .venv
-   .venv/Scripts/activate  # Windows
+   source .venv/bin/activate  # Linux/Mac
+   # или
+   .venv\Scripts\activate  # Windows
+   ```
+
+2. **Установите зависимости:**
+   ```bash
    pip install -r requirements.txt
    ```
-2. Скопируй `.env.example` в `.env` и заполни:
-   - `BOT_TOKEN` - токен @BotFather
-   - `API_BASE_URL` - URL Remnawave API (в docker-сети: `http://remnawave:3000`)
-   - `API_TOKEN` - Bearer/JWT токен API
-   - `ADMINS` - Telegram ID администраторов через запятую
-   - `DEFAULT_LOCALE` - `ru` или `en`
-3. Запусти:
+
+3. **Настройте окружение:**
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+
+   Для локальной разработки используйте:
+   ```env
+   API_BASE_URL=https://ваш-домен-панели.com
+   ```
+
+4. **Запустите бота:**
    ```bash
    python -m src.main
    ```
 
-## Docker Compose
+## Конфигурация
+
+### Переменные окружения
+
+| Переменная | Обязательна | По умолчанию | Описание |
+|------------|-------------|--------------|----------|
+| `BOT_TOKEN` | Да | - | Токен Telegram-бота от @BotFather |
+| `API_BASE_URL` | Да | - | Базовый URL API Remnawave |
+| `API_TOKEN` | Нет | - | Токен аутентификации API |
+| `ADMINS` | Нет | - | Список ID пользователей Telegram через запятую |
+| `DEFAULT_LOCALE` | Нет | `ru` | Язык по умолчанию (`ru` или `en`) |
+| `LOG_LEVEL` | Нет | `INFO` | Уровень логирования (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+
+### Docker-сеть
+
+Бот требует доступа к Docker-сети `remnawave-network`. Если она не существует, создайте её:
+
 ```bash
-cp .env.example .env
-# Заполни .env, для docker-сети укажи API_BASE_URL=http://remnawave:3000
-# Сеть remnawave-network должна существовать (создаётся панелью, либо вручную: docker network create remnawave-network)
-docker compose pull
-docker compose up -d
+docker network create remnawave-network
 ```
-Образ публикуется в GHCR: `ghcr.io/<OWNER>/remnawave-admin-bot:latest` (OWNER берётся из GitHub репозитория). Workflow: `.github/workflows/docker.yml`.
 
-> docker-compose.yml теперь сразу пробрасывает переменные окружения (BOT_TOKEN, API_BASE_URL обязательны) и упадёт при их отсутствии. Значения берутся из `.env` в корне или из переменных окружения хоста.
+## Команды
 
-## Функциональность
-- Общие: `/start`, `/help`, `/health`, `/stats`, `/bandwidth`.
-- Пользователи: `/user <username|telegram_id>`, создание `/user_create <username> <expire_iso> [telegram_id]`, inline-действия enable/disable/reset/revoke, bulk-операции (сброс трафика, удаление, продление, статус, revoke).
-- Ноды: список/детали, действия enable/disable/restart/reset, realtime и range статистика, bulk назначение профиля+inbounds.
-- Хосты: список/детали, enable/disable, bulk enable/disable/delete.
-- Подписки: `/sub <short_uuid>`, открытие ссылки.
-- API токены: список, создание, удаление через кнопки.
-- Шаблоны подписок: список/детали, создание, reorder, обновление JSON, удаление.
-- Сниппеты: список/просмотр/создание/обновление/удаление (JSON).
-- Конфиг-профили: список, computed config.
-- Биллинг: история оплат (просмотр/добавление/удаление), провайдеры (создание/обновление/удаление), биллинг-ноды (создать/обновить дату оплаты/удалить).
-- Логирование: stdout (pino-формат через `logger`), удобно смотреть в docker logs.
+### Команды бота
 
-## Структура
-- `src/main.py` — точка входа, aiogram 3, i18n middleware.
-- `src/handlers/basic.py` — вся логика команд/колбэков и ожидание ввода.
-- `src/services/api_client.py` — httpx-клиент Remnawave API.
-- `src/keyboards/` — inline-клавиатуры.
-- `src/utils/` — форматтеры, i18n, logger, ACL.
-- `locales/ru|en/messages.json` — тексты.
+- `/start` - Запустить бота и показать главное меню
+- `/help` - Показать справку
+- `/health` - Показать статус здоровья системы
+- `/stats` - Показать статистику панели и сервера
+- `/bandwidth` - Показать статистику трафика
+- `/user <username|telegram_id>` - Просмотр информации о пользователе
+- `/user_create <username> <expire_iso> [telegram_id]` - Создать нового пользователя
+- `/sub <short_uuid>` - Открыть ссылку на подписку
+- `/node <uuid>` - Просмотр информации о ноде
+- `/host <uuid>` - Просмотр информации о хосте
 
-## Полезные команды
-- Перезапуск docker-стека: `docker compose restart`
-- Проверка логов: `docker compose logs -f bot`
+### Навигация по меню
+
+Бот использует inline-клавиатуры для навигации. Основные разделы:
+
+- **Пользователи** - Управление пользователями, подписки, массовые операции
+- **Ноды** - Управление и мониторинг нод
+- **Хосты** - Управление хостами
+- **Ресурсы** - Шаблоны, сниппеты, API токены, конфиги
+- **Биллинг** - История платежей, провайдеры, биллинг-ноды
+- **Система** - Здоровье, статистика, управление нодами
+
+## Структура проекта
+
+```
+remnawave-admin/
+├── src/
+│   ├── main.py              # Точка входа
+│   ├── config.py            # Управление конфигурацией
+│   ├── handlers/
+│   │   ├── basic.py         # Обработчики команд и колбэков
+│   │   └── errors.py        # Обработчики ошибок
+│   ├── keyboards/           # Определения inline-клавиатур
+│   ├── services/
+│   │   └── api_client.py    # Клиент API Remnawave
+│   └── utils/               # Утилиты (форматтеры, i18n, logger, auth)
+├── locales/
+│   ├── ru/                  # Русские переводы
+│   └── en/                  # Английские переводы
+├── docker-compose.yml       # Конфигурация Docker Compose
+├── Dockerfile               # Определение Docker-образа
+└── requirements.txt         # Python-зависимости
+```
+
+## Docker-образ
+
+Образ бота автоматически собирается и публикуется в GitHub Container Registry:
+
+```
+ghcr.io/case211/remnawave-admin:latest
+```
+
+Workflow сборки: `.github/workflows/docker.yml`
+
+## Решение проблем
+
+### Бот не отвечает
+
+1. Проверьте, запущен ли бот:
+   ```bash
+   docker compose ps
+   ```
+
+2. Проверьте логи на наличие ошибок:
+   ```bash
+   docker compose logs -f bot
+   ```
+
+3. Проверьте переменные окружения:
+   ```bash
+   docker compose config
+   ```
+
+### Проблемы с подключением к API
+
+1. Убедитесь, что `API_BASE_URL` указан правильно
+2. Проверьте, существует ли Docker-сеть:
+   ```bash
+   docker network ls | grep remnawave-network
+   ```
+3. Для внешнего API убедитесь, что URL доступен
+
+### Отказано в доступе
+
+- Убедитесь, что ваш Telegram ID указан в переменной окружения `ADMINS`
+- Получите свой ID, отправив сообщение [@userinfobot](https://t.me/userinfobot)
+
+## Вклад в проект
+
+1. Сделайте форк репозитория
+2. Создайте ветку для функции
+3. Внесите изменения
+4. Отправьте pull request
+
+## Лицензия
+
+[Добавьте вашу лицензию здесь]
+
+## Поддержка
+
+По вопросам и проблемам создавайте issue на GitHub.
