@@ -41,7 +41,7 @@ from src.keyboards.bulk_hosts import bulk_hosts_keyboard
 from src.keyboards.system_nodes import system_nodes_keyboard
 from src.keyboards.stats_menu import stats_menu_keyboard
 from src.keyboards.subscription_actions import subscription_keyboard
-from src.keyboards.user_actions import user_actions_keyboard, user_edit_keyboard, user_edit_strategy_keyboard
+from src.keyboards.user_actions import user_actions_keyboard, user_edit_keyboard, user_edit_strategy_keyboard, user_edit_squad_keyboard
 from src.keyboards.billing_menu import billing_menu_keyboard
 from src.keyboards.billing_nodes_menu import billing_nodes_menu_keyboard
 from src.keyboards.providers_menu import providers_menu_keyboard
@@ -785,7 +785,13 @@ async def cb_billing_actions(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    action = callback.data.split(":")[-1]
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+        return
+    
+    action = parts[1]  # Вторая часть после "billing:"
+    
     if action == "stats":
         text = await _fetch_billing_stats_text()
         await _edit_text_safe(callback.message, text, reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
@@ -824,10 +830,10 @@ async def cb_billing_actions(callback: CallbackQuery) -> None:
             await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
     elif action == "delete_confirm":
         # Подтверждение удаления записи биллинга
-        if len(callback.data.split(":")) < 3:
+        if len(parts) < 3:
             await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
             return
-        record_uuid = callback.data.split(":")[2]
+        record_uuid = parts[2]
         try:
             await api_client.delete_infra_billing_record(record_uuid)
             text = await _fetch_billing_text()
@@ -837,43 +843,6 @@ async def cb_billing_actions(callback: CallbackQuery) -> None:
         except ApiClientError:
             logger.exception("❌ Billing record delete failed")
             await _edit_text_safe(callback.message, _("billing.invalid"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
-    else:
-        await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
-
-
-@router.callback_query(F.data.startswith("billing:provider:"))
-async def cb_billing_provider_selected(callback: CallbackQuery) -> None:
-    """Обработка выбора провайдера в биллинге."""
-    if await _not_admin(callback):
-        return
-    await callback.answer()
-    parts = callback.data.split(":")
-    if len(parts) < 4:
-        await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
-        return
-    
-    action = parts[2]
-    provider_uuid = parts[3]
-    
-    if action == "billing_history_create":
-        # Запрашиваем сумму и дату
-        PENDING_INPUT[callback.from_user.id] = {
-            "action": "billing_history_create_amount",
-            "provider_uuid": provider_uuid,
-        }
-        await _edit_text_safe(callback.message, _("billing.prompt_amount_date"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
-    elif action == "billing_nodes_create":
-        # Показываем список нод для выбора
-        try:
-            nodes_data = await api_client.get_nodes()
-            nodes = nodes_data.get("response", [])
-            if not nodes:
-                await _edit_text_safe(callback.message, _("billing_nodes.no_nodes"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
-                return
-            keyboard = _billing_nodes_keyboard(nodes, "billing_nodes_create", provider_uuid)
-            await _edit_text_safe(callback.message, _("billing_nodes.select_node"), reply_markup=keyboard, parse_mode="Markdown")
-        except Exception:
-            await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
     else:
         await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
 
@@ -903,7 +872,7 @@ async def cb_billing_nodes_actions(callback: CallbackQuery) -> None:
         if len(parts) < 4:
             await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
             return
-        node_action = parts[2]
+        node_action = parts[2]  # billing_nodes:node:action:uuid:provider_uuid
         node_uuid = parts[3]
         provider_uuid = parts[4] if len(parts) > 4 else None
         
@@ -943,7 +912,7 @@ async def cb_billing_nodes_actions(callback: CallbackQuery) -> None:
         if len(parts) < 3:
             await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
             return
-        record_uuid = parts[2]
+        record_uuid = parts[2]  # billing_nodes:delete_confirm:uuid
         try:
             await api_client.delete_infra_billing_node(record_uuid)
             text = await _fetch_billing_nodes_text()
@@ -1185,6 +1154,11 @@ async def cb_user_edit_field(callback: CallbackQuery) -> None:
         return
 
     current_values = _current_user_edit_values(info)
+
+    if field == "squad" and not value:
+        # Показываем список сквадов для выбора
+        await _show_squad_selection_for_edit(callback, user_uuid, back_to)
+        return
 
     prompt_map = {
         "traffic": _("user.edit_prompt_traffic"),
@@ -2256,6 +2230,18 @@ def _format_user_edit_snapshot(info: dict, t: Callable[[str], str]) -> str:
     telegram_id = info.get("telegramId") or t("user.not_set")
     email = info.get("email") or t("user.not_set")
     description = info.get("description") or t("user.not_set")
+    
+    # Получаем информацию о скваде
+    active_squads = info.get("activeInternalSquads", [])
+    squad_display = t("user.not_set")
+    if active_squads:
+        # Пытаемся получить имя сквада (если доступно в ответе)
+        squad_info = info.get("internalSquads", [])
+        if squad_info:
+            squad_display = squad_info[0].get("name", active_squads[0]) if isinstance(squad_info, list) and len(squad_info) > 0 else active_squads[0]
+        else:
+            squad_display = active_squads[0] if len(active_squads) > 0 else t("user.not_set")
+    
     return "\n".join(
         [
             t("user.edit_prompt"),
@@ -2269,11 +2255,21 @@ def _format_user_edit_snapshot(info: dict, t: Callable[[str], str]) -> str:
             f"• {t('user.edit_telegram')}: {telegram_id}",
             f"• {t('user.edit_email')}: {email}",
             f"• {t('user.edit_description')}: {description}",
+            f"• {t('user.edit_squad')}: {squad_display}",
         ]
     )
 
 
 def _current_user_edit_values(info: dict) -> dict[str, str]:
+    active_squads = info.get("activeInternalSquads", [])
+    squad_display = ""
+    if active_squads:
+        squad_info = info.get("internalSquads", [])
+        if squad_info and isinstance(squad_info, list) and len(squad_info) > 0:
+            squad_display = squad_info[0].get("name", active_squads[0])
+        else:
+            squad_display = active_squads[0] if len(active_squads) > 0 else ""
+    
     return {
         "traffic": format_bytes(info.get("trafficLimitBytes")),
         "strategy": info.get("trafficLimitStrategy") or "NO_RESET",
@@ -2283,6 +2279,7 @@ def _current_user_edit_values(info: dict) -> dict[str, str]:
         "tag": info.get("tag") or "",
         "telegram": str(info.get("telegramId") or ""),
         "email": info.get("email") or "",
+        "squad": squad_display,
     }
 
 def _get_target_user_id(target: Message | CallbackQuery) -> int | None:
@@ -2639,6 +2636,47 @@ async def _send_user_create_prompt(
     if ctx is not None:
         ctx["bot_message_id"] = sent.message_id
         ctx["bot_chat_id"] = sent.chat.id
+
+
+async def _show_squad_selection_for_edit(callback: CallbackQuery, user_uuid: str, back_to: str) -> None:
+    """Показывает список сквадов для выбора при редактировании пользователя."""
+    squads: list[dict] = []
+    try:
+        res = await api_client.get_internal_squads()
+        squads = res.get("response", {}).get("internalSquads", [])
+        logger.info("📥 Loaded %s internal squads for edit user_id=%s", len(squads), callback.from_user.id)
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=user_edit_keyboard(user_uuid, back_to=back_to))
+        return
+    except ApiClientError:
+        logger.exception("⚠️ Failed to load internal squads")
+    except Exception:
+        logger.exception("⚠️ Unexpected error while loading internal squads")
+
+    if not squads:
+        try:
+            res = await api_client.get_external_squads()
+            squads = res.get("response", {}).get("externalSquads", [])
+            logger.info("📥 Loaded %s external squads for edit user_id=%s", len(squads), callback.from_user.id)
+        except UnauthorizedError:
+            await callback.message.edit_text(_("errors.unauthorized"), reply_markup=user_edit_keyboard(user_uuid, back_to=back_to))
+            return
+        except ApiClientError:
+            logger.exception("⚠️ Failed to load external squads")
+        except Exception:
+            logger.exception("⚠️ Unexpected error while loading external squads")
+
+    if not squads:
+        await callback.message.edit_text(
+            _("user.squad_load_failed"),
+            reply_markup=user_edit_keyboard(user_uuid, back_to=back_to)
+        )
+        return
+
+    squads_sorted = sorted(squads, key=lambda s: s.get("viewPosition", 0))
+    markup = user_edit_squad_keyboard(squads_sorted, user_uuid, back_to=back_to)
+    text = _("user.edit_prompt_squad") if squads_sorted else _("user.squad_load_failed")
+    await callback.message.edit_text(text, reply_markup=markup)
 
 
 async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None:

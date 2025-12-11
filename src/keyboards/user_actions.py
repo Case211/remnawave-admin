@@ -44,9 +44,19 @@ def user_edit_keyboard(user_uuid: str, back_to: str = NavTarget.USERS_MENU) -> I
                 InlineKeyboardButton(text=_("user.edit_telegram"), callback_data=f"uef:telegram::{user_uuid}"),
                 InlineKeyboardButton(text=_("user.edit_email"), callback_data=f"uef:email::{user_uuid}"),
             ],
+            [
+                InlineKeyboardButton(text=_("user.edit_squad"), callback_data=f"uef:squad::{user_uuid}"),
+            ],
             nav_row(back_to),
         ]
     )
+
+
+def user_edit_squad_keyboard(squads: list[dict], user_uuid: str, back_to: str = NavTarget.USERS_MENU) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=s.get("name", "n/a"), callback_data=f"uef:squad:{s.get('uuid')}:{user_uuid}")] for s in squads]
+    rows.append([InlineKeyboardButton(text=_("user.remove_squad"), callback_data=f"uef:squad:remove:{user_uuid}")])
+    rows.append(nav_row(back_to))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def user_edit_strategy_keyboard(user_uuid: str, back_to: str = NavTarget.USERS_MENU) -> InlineKeyboardMarkup:
