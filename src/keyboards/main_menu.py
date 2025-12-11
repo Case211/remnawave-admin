@@ -22,6 +22,7 @@ def system_menu_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=_("actions.health"), callback_data="menu:health")],
             [InlineKeyboardButton(text=_("actions.stats"), callback_data="menu:stats")],
+            [InlineKeyboardButton(text=_("actions.system_nodes"), callback_data="menu:system_nodes")],
             nav_row(NavTarget.MAIN_MENU),
         ]
     )
@@ -76,7 +77,6 @@ def bulk_menu_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=_("actions.bulk_users"), callback_data="menu:bulk_users")],
             [InlineKeyboardButton(text=_("actions.bulk_hosts"), callback_data="menu:bulk_hosts")],
-            [InlineKeyboardButton(text=_("actions.bulk_nodes"), callback_data="menu:bulk_nodes")],
             nav_row(NavTarget.MAIN_MENU),
         ]
     )

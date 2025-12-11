@@ -38,7 +38,7 @@ from src.keyboards.config_actions import config_actions_keyboard
 from src.keyboards.bulk_users import bulk_users_keyboard
 from src.keyboards.template_menu import template_menu_keyboard, template_list_keyboard
 from src.keyboards.bulk_hosts import bulk_hosts_keyboard
-from src.keyboards.bulk_nodes import bulk_nodes_keyboard
+from src.keyboards.system_nodes import system_nodes_keyboard
 from src.keyboards.subscription_actions import subscription_keyboard
 from src.keyboards.user_actions import user_actions_keyboard, user_edit_keyboard, user_edit_strategy_keyboard
 from src.keyboards.billing_menu import billing_menu_keyboard
@@ -146,8 +146,6 @@ async def handle_pending(message: Message) -> None:
         await _handle_template_update_json_input(message, ctx)
     elif action == "template_reorder":
         await _handle_template_reorder_input(message, ctx)
-    elif action.startswith("bulk_nodes_"):
-        await _handle_bulk_nodes_input(message, ctx)
     elif action.startswith("provider_"):
         await _handle_provider_input(message, ctx)
     elif action.startswith("billing_history_"):
@@ -728,12 +726,12 @@ async def cb_bulk_hosts(callback: CallbackQuery) -> None:
     await _edit_text_safe(callback.message, _("bulk_hosts.overview"), reply_markup=bulk_hosts_keyboard())
 
 
-@router.callback_query(F.data == "menu:bulk_nodes")
-async def cb_bulk_nodes(callback: CallbackQuery) -> None:
+@router.callback_query(F.data == "menu:system_nodes")
+async def cb_system_nodes(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    await _edit_text_safe(callback.message, _("bulk_nodes.overview"), reply_markup=bulk_nodes_keyboard())
+    await _edit_text_safe(callback.message, _("system_nodes.overview"), reply_markup=system_nodes_keyboard())
 
 
 @router.callback_query(F.data == "menu:bulk_users")
@@ -1241,17 +1239,124 @@ async def cb_bulk_hosts_actions(callback: CallbackQuery) -> None:
         await _edit_text_safe(callback.message, _("bulk_hosts.error"), reply_markup=bulk_hosts_keyboard())
 
 
-@router.callback_query(F.data.startswith("bulk:nodes:"))
-async def cb_bulk_nodes_actions(callback: CallbackQuery) -> None:
+@router.callback_query(F.data.startswith("system:nodes:"))
+async def cb_system_nodes_actions(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    action = callback.data.split(":")[-1]
-    if action == "profile":
-        PENDING_INPUT[callback.from_user.id] = {"action": "bulk_nodes_profile", "stage": "profile"}
-        await _edit_text_safe(callback.message, _("bulk_nodes.prompt_profile"), reply_markup=bulk_nodes_keyboard())
-    else:
-        await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=bulk_nodes_keyboard())
+    parts = callback.data.split(":")
+    action = parts[-1]
+    
+    if action == "list":
+        text = await _fetch_nodes_text()
+        await _edit_text_safe(callback.message, text, reply_markup=system_nodes_keyboard())
+        return
+    
+    if action == "assign_profile":
+        try:
+            data = await api_client.get_config_profiles()
+            profiles = data.get("response", {}).get("configProfiles", [])
+        except UnauthorizedError:
+            await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=system_nodes_keyboard())
+            return
+        except ApiClientError:
+            logger.exception("❌ System nodes fetch profiles failed")
+            await _edit_text_safe(callback.message, _("system_nodes.error"), reply_markup=system_nodes_keyboard())
+            return
+
+        if not profiles:
+            await _edit_text_safe(callback.message, _("system_nodes.no_profiles"), reply_markup=system_nodes_keyboard())
+            return
+
+        await _edit_text_safe(
+            callback.message,
+            _("system_nodes.select_profile"),
+            reply_markup=_system_nodes_profiles_keyboard(profiles),
+        )
+        return
+
+    if len(parts) >= 4 and parts[2] == "profile":
+        profile_uuid = parts[3]
+        try:
+            profile = await api_client.get_config_profile_computed(profile_uuid)
+            info = profile.get("response", profile)
+            inbounds = info.get("inbounds", [])
+            inbound_uuids = [i.get("uuid") for i in inbounds if i.get("uuid")]
+
+            nodes_data = await api_client.get_nodes()
+            nodes = nodes_data.get("response", [])
+            uuids = [n.get("uuid") for n in nodes if n.get("uuid")]
+
+            if not uuids:
+                await _edit_text_safe(callback.message, _("system_nodes.no_nodes"), reply_markup=system_nodes_keyboard())
+                return
+
+            await api_client.bulk_nodes_profile_modification(uuids, profile_uuid, inbound_uuids)
+            await _edit_text_safe(callback.message, _("system_nodes.done_assign"), reply_markup=system_nodes_keyboard())
+        except UnauthorizedError:
+            await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=system_nodes_keyboard())
+        except ApiClientError:
+            logger.exception("❌ System nodes assign profile failed profile_uuid=%s", profile_uuid)
+            await _edit_text_safe(callback.message, _("system_nodes.error"), reply_markup=system_nodes_keyboard())
+        return
+    
+    try:
+        # Получаем все ноды
+        nodes_data = await api_client.get_nodes()
+        nodes = nodes_data.get("response", [])
+        uuids = [n.get("uuid") for n in nodes if n.get("uuid")]
+        
+        if not uuids:
+            await _edit_text_safe(callback.message, _("system_nodes.no_nodes"), reply_markup=system_nodes_keyboard())
+            return
+        
+        # Выполняем операцию для каждой ноды
+        success_count = 0
+        error_count = 0
+        
+        if action == "enable_all":
+            for uuid in uuids:
+                try:
+                    await api_client.enable_node(uuid)
+                    success_count += 1
+                except ApiClientError:
+                    error_count += 1
+        elif action == "disable_all":
+            for uuid in uuids:
+                try:
+                    await api_client.disable_node(uuid)
+                    success_count += 1
+                except ApiClientError:
+                    error_count += 1
+        elif action == "restart_all":
+            for uuid in uuids:
+                try:
+                    await api_client.restart_node(uuid)
+                    success_count += 1
+                except ApiClientError:
+                    error_count += 1
+        elif action == "reset_traffic_all":
+            for uuid in uuids:
+                try:
+                    await api_client.reset_node_traffic(uuid)
+                    success_count += 1
+                except ApiClientError:
+                    error_count += 1
+        else:
+            await callback.answer(_("errors.generic"), show_alert=True)
+            return
+        
+        if error_count > 0:
+            result_text = _("system_nodes.done_partial").format(success=success_count, errors=error_count)
+        else:
+            result_text = _("system_nodes.done").format(count=success_count)
+        
+        await _edit_text_safe(callback.message, result_text, reply_markup=system_nodes_keyboard())
+    except UnauthorizedError:
+        await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=system_nodes_keyboard())
+    except ApiClientError:
+        logger.exception("❌ System nodes action failed action=%s", action)
+        await _edit_text_safe(callback.message, _("system_nodes.error"), reply_markup=system_nodes_keyboard())
 
 
 # Bulk helpers
@@ -1703,47 +1808,14 @@ async def _handle_billing_nodes_input(message: Message, ctx: dict) -> None:
         await _send_clean_message(message, _("billing_nodes.invalid"), reply_markup=billing_nodes_menu_keyboard())
 
 
-async def _handle_bulk_nodes_input(message: Message, ctx: dict) -> None:
-    stage = ctx.get("stage", "profile")
-    user_id = message.from_user.id
-
-    if stage == "profile":
-        parts = message.text.split()
-        if len(parts) < 2:
-            PENDING_INPUT[user_id] = {"action": "bulk_nodes_profile", "stage": "profile"}
-            await _send_clean_message(message, _("bulk_nodes.prompt_profile"), reply_markup=bulk_nodes_keyboard())
-            return
-        profile_uuid, inbound_uuids = parts[0], parts[1:]
-        PENDING_INPUT[user_id] = {
-            "action": "bulk_nodes_profile",
-            "stage": "nodes",
-            "profile_uuid": profile_uuid,
-            "inbound_uuids": inbound_uuids,
-        }
-        await _send_clean_message(message, _("bulk_nodes.prompt_nodes"), reply_markup=bulk_nodes_keyboard())
-        return
-
-    node_uuids = message.text.split()
-    if not node_uuids:
-        PENDING_INPUT[user_id] = {
-            "action": "bulk_nodes_profile",
-            "stage": "nodes",
-            "profile_uuid": ctx.get("profile_uuid"),
-            "inbound_uuids": ctx.get("inbound_uuids", []),
-        }
-        await _send_clean_message(message, _("bulk_nodes.prompt_nodes"), reply_markup=bulk_nodes_keyboard())
-        return
-
-    try:
-        await api_client.bulk_nodes_profile_modification(
-            node_uuids, ctx.get("profile_uuid", ""), ctx.get("inbound_uuids", [])
-        )
-        await _send_clean_message(message, _("bulk_nodes.done"), reply_markup=main_menu_keyboard())
-    except UnauthorizedError:
-        await _send_clean_message(message, _("errors.unauthorized"), reply_markup=bulk_nodes_keyboard())
-    except ApiClientError:
-        logger.exception("❌ Bulk nodes action failed")
-        await _send_clean_message(message, _("errors.generic"), reply_markup=bulk_nodes_keyboard())
+def _system_nodes_profiles_keyboard(profiles: list[dict]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for profile in sorted(profiles, key=lambda p: p.get("viewPosition", 0))[:10]:
+        name = profile.get("name", "n/a")
+        uuid = profile.get("uuid", "")
+        rows.append([InlineKeyboardButton(text=name, callback_data=f"system:nodes:profile:{uuid}")])
+    rows.append(nav_row(NavTarget.SYSTEM_MENU))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 

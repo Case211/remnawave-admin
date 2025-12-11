@@ -28,7 +28,7 @@
     "billing_nodes": "💡 Billing nodes",
     "bulk_users": "👥📦 Bulk users",
     "bulk_hosts": "🖥📦 Bulk hosts",
-    "bulk_nodes": "🛰📦 Bulk nodes",
+    "system_nodes": "🛰 Nodes management",
     "back": "↩️ Back",
     "main_menu": "🏠 Main menu",
     "enable": "✅ Enable",
@@ -308,14 +308,23 @@
     "done": "✅ Bulk action done.",
     "error": "⚠️ Bulk action failed."
   },
-  "bulk_nodes": {
-    "title": "📦 Bulk nodes:",
-  "overview": "🛰 Bulk nodes:\nFirst choose profile+inbounds, then send node UUIDs as a list.",
-    "profile": "🔗 Assign profile+inbounds",
-    "prompt": "Send: <profile_uuid> <inbound_uuid1> <inbound_uuid2> ... | then node UUIDs separated by spaces.",
-    "prompt_profile": "First profile UUID then inbound UUIDs separated by spaces.",
-    "prompt_nodes": "Now send node UUIDs separated by spaces.",
-    "done": "✅ Bulk nodes action done.",
-    "usage": "First: profile + inbound UUIDs; then: node UUIDs."
+  "system_nodes": {
+    "title": "🛰 Nodes management:",
+  "overview": "🛰 Nodes management:\nChoose an action for bulk operations on nodes.",
+    "template_enable_all": "✅ Enable all nodes",
+    "template_disable_all": "⛔️ Disable all nodes",
+    "template_restart_all": "🔄 Restart all nodes",
+    "template_reset_traffic_all": "🔁 Reset traffic for all nodes",
+    "template_assign_profile": "🔗 Assign profile+inbounds",
+    "list": "📄 List nodes",
+  "prompt_profile": "Pick a profile to assign to all nodes:",
+    "prompt_nodes": "",
+    "select_profile": "Pick a profile to assign to all nodes:",
+    "no_profiles": "ℹ️ No profiles available.",
+    "done": "✅ Operation completed for {count} nodes.",
+    "done_partial": "⚠️ Operation completed for {success} nodes, errors: {errors}.",
+    "done_assign": "✅ Profile assigned to nodes.",
+    "no_nodes": "ℹ️ No nodes found.",
+    "error": "⚠️ Operation failed."
   }
 }
