@@ -1861,21 +1861,21 @@ async def _handle_bulk_users_input(message: Message, ctx: dict) -> None:
             
             if not active_uuids:
                 await _send_clean_message(message, _("bulk.no_active_users"), reply_markup=bulk_users_keyboard())
-                del PENDING_INPUT[user_id]
+                PENDING_INPUT.pop(user_id, None)
                 return
             
             # Продлеваем активным
             await api_client.bulk_extend_users(active_uuids, days)
             result_text = _("bulk.done_extend_active").format(count=len(active_uuids), days=days)
             await _send_clean_message(message, result_text, reply_markup=bulk_users_keyboard())
-            del PENDING_INPUT[user_id]
+            PENDING_INPUT.pop(user_id, None)
         except UnauthorizedError:
             await _send_clean_message(message, _("errors.unauthorized"), reply_markup=bulk_users_keyboard())
-            del PENDING_INPUT[user_id]
+            PENDING_INPUT.pop(user_id, None)
         except ApiClientError:
             logger.exception("❌ Bulk extend active users failed")
             await _send_clean_message(message, _("bulk.error"), reply_markup=bulk_users_keyboard())
-            del PENDING_INPUT[user_id]
+            PENDING_INPUT.pop(user_id, None)
         return
 
     await _send_clean_message(message, _("errors.generic"), reply_markup=bulk_users_keyboard())
