@@ -167,15 +167,19 @@ def build_bandwidth_stats(stats: dict, t: Callable[[str], str]) -> str:
 
     def row(key: str, label: str) -> str:
         item = resp.get(key, {})
+        current = item.get("current", NA)
+        previous = item.get("previous", NA)
+        diff = item.get("difference", NA)
         return t("bandwidth.row").format(
-            label=label,
-            current=item.get("current", NA),
-            previous=item.get("previous", NA),
-            diff=item.get("difference", NA),
+            label=f"*{label}*",
+            current=f"`{current}`",
+            previous=f"`{previous}`",
+            diff=f"`{diff}`",
         )
 
     lines = [
-        t("bandwidth.title"),
+        f"*{t('bandwidth.title')}*",
+        "",
         row("bandwidthLastTwoDays", t("bandwidth.last_two_days")),
         row("bandwidthLastSevenDays", t("bandwidth.last_seven_days")),
         row("bandwidthLast30Days", t("bandwidth.last_30_days")),

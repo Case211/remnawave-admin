@@ -174,14 +174,14 @@ async def cmd_help(message: Message) -> None:
 async def cmd_health(message: Message) -> None:
     if await _not_admin(message):
         return
-    await _send_clean_message(message, await _fetch_health_text(), reply_markup=system_menu_keyboard())
+    await _send_clean_message(message, await _fetch_health_text(), reply_markup=system_menu_keyboard(), parse_mode="Markdown")
 
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message) -> None:
     if await _not_admin(message):
         return
-    await _send_clean_message(message, await _fetch_stats_text(), reply_markup=system_menu_keyboard())
+    await _send_clean_message(message, await _fetch_stats_text(), reply_markup=system_menu_keyboard(), parse_mode="Markdown")
 
 
 @router.message(Command("bandwidth"))
@@ -189,7 +189,7 @@ async def cmd_bandwidth(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_bandwidth_text()
-    await _send_clean_message(message, text, reply_markup=system_menu_keyboard())
+    await _send_clean_message(message, text, reply_markup=system_menu_keyboard(), parse_mode="Markdown")
 
 
 @router.message(Command("billing"))
@@ -587,7 +587,7 @@ async def cb_health(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_health_text()
-    await callback.message.edit_text(text, reply_markup=system_menu_keyboard())
+    await _edit_text_safe(callback.message, text, reply_markup=system_menu_keyboard(), parse_mode="Markdown")
 
 
 @router.callback_query(F.data == "menu:stats")
@@ -596,7 +596,7 @@ async def cb_stats(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_stats_text()
-    await callback.message.edit_text(text, reply_markup=system_menu_keyboard())
+    await _edit_text_safe(callback.message, text, reply_markup=system_menu_keyboard(), parse_mode="Markdown")
 
 
 @router.callback_query(F.data == "menu:find_user")
@@ -2750,10 +2750,14 @@ async def _fetch_health_text() -> str:
         data = await api_client.get_health()
         pm2 = data.get("response", {}).get("pm2Stats", [])
         if not pm2:
-            return _("health.empty")
-        lines = [_("health.title")]
+            return f"*{_('health.title')}*\n\n{_('health.empty')}"
+        lines = [f"*{_('health.title')}*", ""]
         for proc in pm2:
-            lines.append(f"• {proc.get('name')}: CPU {proc.get('cpu')} | RAM {proc.get('memory')}")
+            name = proc.get('name', 'n/a')
+            cpu = proc.get('cpu', '—')
+            memory = proc.get('memory', '—')
+            lines.append(f"  • *{name}*")
+            lines.append(f"    CPU: `{cpu}%` | RAM: `{memory}`")
         return "\n".join(lines)
     except UnauthorizedError:
         return _("errors.unauthorized")
@@ -2764,6 +2768,7 @@ async def _fetch_health_text() -> str:
 
 async def _fetch_stats_text() -> str:
     try:
+        # Получаем основную статистику системы
         data = await api_client.get_stats()
         res = data.get("response", {})
         mem = res.get("memory", {})
@@ -2772,23 +2777,72 @@ async def _fetch_stats_text() -> str:
         online = res.get("onlineStats", {})
         nodes = res.get("nodes", {})
         status_counts = users.get("statusCounts", {}) or {}
-        status_str = ", ".join(f"{k}: {v}" for k, v in status_counts.items()) if status_counts else "—"
+        status_str = ", ".join(f"`{k}`: *{v}*" for k, v in status_counts.items()) if status_counts else "—"
+        
         lines = [
-            _("stats.title"),
-            _("stats.uptime").format(uptime=format_uptime(res.get("uptime"))),
-            _("stats.cpu").format(cores=cpu.get("cores", "—"), physical=cpu.get("physicalCores", "—")),
-            _("stats.memory").format(
-                used=format_bytes(mem.get("used")), total=format_bytes(mem.get("total"))
-            ),
-            _("stats.users").format(total=users.get("totalUsers", "—")),
-            _("stats.status_counts").format(counts=status_str),
-            _("stats.online").format(
-                now=online.get("onlineNow", "—"),
-                day=online.get("lastDay", "—"),
-                week=online.get("lastWeek", "—"),
-            ),
-            _("stats.nodes").format(online=nodes.get("totalOnline", "—")),
+            f"*{_('stats.title')}*",
+            "",
+            f"*{_('stats.system_section')}*",
+            f"  {_('stats.uptime').format(uptime=format_uptime(res.get('uptime')))}",
+            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('physicalCores', '—'))}",
+            f"  {_('stats.memory').format(used=format_bytes(mem.get('used')), total=format_bytes(mem.get('total')))}",
+            "",
+            f"*{_('stats.users_section')}*",
+            f"  {_('stats.users').format(total=users.get('totalUsers', '—'))}",
+            f"  {_('stats.status_counts').format(counts=status_str)}",
+            f"  {_('stats.online').format(now=online.get('onlineNow', '—'), day=online.get('lastDay', '—'), week=online.get('lastWeek', '—'))}",
+            "",
+            f"*{_('stats.infrastructure_section')}*",
+            f"  {_('stats.nodes').format(online=nodes.get('totalOnline', '—'))}",
         ]
+        
+        # Добавляем статистику по хостам
+        try:
+            hosts_data = await api_client.get_hosts()
+            hosts = hosts_data.get("response", [])
+            total_hosts = len(hosts)
+            enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
+            disabled_hosts = total_hosts - enabled_hosts
+            lines.append(f"  {_('stats.hosts').format(total=total_hosts, enabled=enabled_hosts, disabled=disabled_hosts)}")
+        except Exception:
+            lines.append(f"  {_('stats.hosts').format(total='—', enabled='—', disabled='—')}")
+        
+        # Добавляем статистику по нодам
+        try:
+            nodes_data = await api_client.get_nodes()
+            nodes_list = nodes_data.get("response", [])
+            total_nodes = len(nodes_list)
+            enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
+            disabled_nodes = total_nodes - enabled_nodes
+            online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
+            lines.append(f"  {_('stats.nodes_detailed').format(total=total_nodes, enabled=enabled_nodes, disabled=disabled_nodes, online=online_nodes)}")
+        except Exception:
+            lines.append(f"  {_('stats.nodes_detailed').format(total='—', enabled='—', disabled='—', online='—')}")
+        
+        # Добавляем статистику по ресурсам
+        lines.append("")
+        lines.append(f"*{_('stats.resources_section')}*")
+        try:
+            templates_data = await api_client.get_templates()
+            templates = templates_data.get("response", {}).get("templates", [])
+            lines.append(f"  {_('stats.templates').format(count=len(templates))}")
+        except Exception:
+            lines.append(f"  {_('stats.templates').format(count='—')}")
+        
+        try:
+            tokens_data = await api_client.get_tokens()
+            tokens = tokens_data.get("response", {}).get("apiKeys", [])
+            lines.append(f"  {_('stats.tokens').format(count=len(tokens))}")
+        except Exception:
+            lines.append(f"  {_('stats.tokens').format(count='—')}")
+        
+        try:
+            snippets_data = await api_client.get_snippets()
+            snippets = snippets_data.get("response", {}).get("snippets", [])
+            lines.append(f"  {_('stats.snippets').format(count=len(snippets))}")
+        except Exception:
+            lines.append(f"  {_('stats.snippets').format(count='—')}")
+        
         return "\n".join(lines)
     except UnauthorizedError:
         return _("errors.unauthorized")

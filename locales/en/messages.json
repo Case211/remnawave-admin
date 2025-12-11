@@ -47,13 +47,22 @@
   },
   "stats": {
     "title": "📊 System overview",
-    "uptime": "⏱ Uptime: {uptime}",
-    "cpu": "🧠 CPU: {cores} (physical: {physical})",
-    "memory": "💾 Memory: {used} / {total}",
-    "users": "👥 Users: {total}",
+    "system_section": "🖥 System",
+    "users_section": "👥 Users",
+    "infrastructure_section": "🛰 Infrastructure",
+    "resources_section": "🧰 Resources",
+    "uptime": "⏱ Uptime: `{uptime}`",
+    "cpu": "🧠 CPU: `{cores}` cores (physical: `{physical}`)",
+    "memory": "💾 Memory: `{used}` / `{total}`",
+    "users": "👥 Users: *{total}*",
     "status_counts": "📌 By status: {counts}",
-    "online": "🟢 Online: now {now} • day {day} • week {week}",
-    "nodes": "🛰 Nodes online: {online}"
+    "online": "🟢 Online: now `{now}` • day `{day}` • week `{week}`",
+    "nodes": "🛰 Nodes online: *{online}*",
+    "hosts": "🖥 Hosts: total *{total}* (enabled: `{enabled}`, disabled: `{disabled}`)",
+    "nodes_detailed": "🛰 Nodes: total *{total}* (enabled: `{enabled}`, disabled: `{disabled}`, online: `{online}`)",
+    "templates": "📑 Templates: *{count}*",
+    "tokens": "🔑 API tokens: *{count}*",
+    "snippets": "✂️ Snippets: *{count}*"
   },
   "user": {
     "not_found": "🙅 User not found.",
@@ -209,7 +218,7 @@
   },
   "bandwidth": {
     "title": "📡 Bandwidth:",
-    "row": "• {label}: {current} (prev {previous}, Δ {diff})",
+    "row": "  • {label}: {current} (prev. {previous}, Δ {diff})",
     "last_two_days": "Last 2 days",
     "last_seven_days": "Last 7 days",
     "last_30_days": "Last 30 days",
