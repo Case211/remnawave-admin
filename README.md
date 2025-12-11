@@ -1,4 +1,5 @@
 # Remnawave Admin Bot
+**Доступные языки:** [English](README_EN.md)
 
 Telegram-бот для управления панелью Remnawave. Поддерживает локализацию RU/EN, inline-кнопки, развертывание через Docker Compose и автоматическую сборку образа через GitHub Actions.
 
