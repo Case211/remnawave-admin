@@ -923,10 +923,21 @@ async def cb_user_edit_menu(callback: CallbackQuery) -> None:
     await callback.answer()
     _prefix, user_uuid = callback.data.split(":")
     back_to = _get_user_detail_back_target(callback.from_user.id)
-    await callback.message.edit_text(
-        _("user.edit_prompt"),
-        reply_markup=user_edit_keyboard(user_uuid, back_to=back_to),
-    )
+    try:
+        user = await api_client.get_user_by_uuid(user_uuid)
+        info = user.get("response", user)
+        header = _format_user_edit_snapshot(info, _)
+        await callback.message.edit_text(
+            header,
+            reply_markup=user_edit_keyboard(user_uuid, back_to=back_to),
+        )
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=main_menu_keyboard())
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=main_menu_keyboard())
+    except ApiClientError:
+        logger.exception("❌ User edit menu failed user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=main_menu_keyboard())
 
 
 @router.callback_query(F.data.startswith("uef:"))
@@ -946,6 +957,21 @@ async def cb_user_edit_field(callback: CallbackQuery) -> None:
     user_uuid = parts[-1]
     back_to = _get_user_detail_back_target(callback.from_user.id)
 
+    # load current user data for context/prompts
+    try:
+        user = await api_client.get_user_by_uuid(user_uuid)
+        info = user.get("response", user)
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=main_menu_keyboard())
+        return
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=main_menu_keyboard())
+        return
+    except ApiClientError:
+        logger.exception("❌ User edit fetch failed user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=main_menu_keyboard())
+        return
+
     if field == "status" and value:
         await _apply_user_update(callback, user_uuid, {"status": value}, back_to=back_to)
         return
@@ -958,6 +984,8 @@ async def cb_user_edit_field(callback: CallbackQuery) -> None:
             reply_markup=user_edit_strategy_keyboard(user_uuid, back_to=back_to),
         )
         return
+
+    current_values = _current_user_edit_values(info)
 
     prompt_map = {
         "traffic": _("user.edit_prompt_traffic"),
@@ -972,6 +1000,9 @@ async def cb_user_edit_field(callback: CallbackQuery) -> None:
     if prompt == _("errors.generic"):
         await callback.message.edit_text(prompt, reply_markup=user_edit_keyboard(user_uuid, back_to=back_to))
         return
+
+    current_line = _("user.current").format(value=current_values.get(field, _("user.not_set")))
+    prompt = f"{prompt}\n{current_line}"
 
     PENDING_INPUT[callback.from_user.id] = {
         "action": "user_edit",
@@ -1780,12 +1811,16 @@ async def _handle_user_edit_input(message: Message, ctx: dict) -> None:
             return
         payload["trafficLimitStrategy"] = strategy
     elif field == "expire":
+        iso_text = text
         try:
-            datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if len(text) == 10:
+                # YYYY-MM-DD
+                iso_text = f"{text}T00:00:00Z"
+            datetime.fromisoformat(iso_text.replace("Z", "+00:00"))
         except Exception:
             _set_retry("user.edit_invalid_expire")
             return
-        payload["expireAt"] = text
+        payload["expireAt"] = iso_text
     elif field == "hwid":
         try:
             hwid = int(text)
@@ -1823,6 +1858,44 @@ async def _handle_user_edit_input(message: Message, ctx: dict) -> None:
 
     await _apply_user_update(message, user_uuid, payload, back_to=back_to)
 
+
+def _format_user_edit_snapshot(info: dict, t: Callable[[str], str]) -> str:
+    traffic_limit = info.get("trafficLimitBytes")
+    strategy = info.get("trafficLimitStrategy")
+    expire = format_datetime(info.get("expireAt"))
+    hwid = info.get("hwidDeviceLimit")
+    tag = info.get("tag") or t("user.not_set")
+    telegram_id = info.get("telegramId") or t("user.not_set")
+    email = info.get("email") or t("user.not_set")
+    description = info.get("description") or t("user.not_set")
+    return "\n".join(
+        [
+            t("user.edit_prompt"),
+            t("user.current").format(value=""),
+            f"• {t('user.edit_status_label')}: {info.get('status', 'UNKNOWN')}",
+            f"• {t('user.edit_traffic_limit')}: {format_bytes(traffic_limit)}",
+            f"• {t('user.edit_strategy')}: {strategy or t('user.not_set')}",
+            f"• {t('user.edit_expire')}: {expire}",
+            f"• {t('user.edit_hwid')}: {hwid if hwid is not None else t('user.not_set')}",
+            f"• {t('user.edit_tag')}: {tag}",
+            f"• {t('user.edit_telegram')}: {telegram_id}",
+            f"• {t('user.edit_email')}: {email}",
+            f"• {t('user.edit_description')}: {description}",
+        ]
+    )
+
+
+def _current_user_edit_values(info: dict) -> dict[str, str]:
+    return {
+        "traffic": format_bytes(info.get("trafficLimitBytes")),
+        "strategy": info.get("trafficLimitStrategy") or "NO_RESET",
+        "expire": format_datetime(info.get("expireAt")),
+        "hwid": str(info.get("hwidDeviceLimit")) if info.get("hwidDeviceLimit") is not None else "0",
+        "description": info.get("description") or "",
+        "tag": info.get("tag") or "",
+        "telegram": str(info.get("telegramId") or ""),
+        "email": info.get("email") or "",
+    }
 
 def _get_target_user_id(target: Message | CallbackQuery) -> int | None:
     if isinstance(target, CallbackQuery):

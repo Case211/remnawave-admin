@@ -113,7 +113,7 @@
     "edit_email": "📧 Email",
     "edit_prompt_traffic": "📶 Send limit in bytes (0 = unlimited).",
     "edit_prompt_strategy": "🔁 Send strategy (NO_RESET/DAY/WEEK/MONTH).",
-    "edit_prompt_expire": "⏳ Send ISO datetime (e.g. 2025-02-01T00:00:00Z).",
+    "edit_prompt_expire": "⏳ Send date as YYYY-MM-DD (time will be 00:00 UTC) or full ISO.",
     "edit_prompt_hwid": "💻 Send HWID limit (0 = unlimited).",
     "edit_prompt_description": "📝 Send description or \"-\" to clear.",
     "edit_prompt_tag": "🏷 Send tag (A-Z,0-9,_, up to 16) or \"-\" to clear.",
@@ -122,7 +122,9 @@
     "edit_invalid_number": "⚠️ Invalid number. Try again.",
     "edit_invalid_strategy": "⚠️ Strategy must be NO_RESET/DAY/WEEK/MONTH.",
     "edit_invalid_expire": "⚠️ Invalid date. Use ISO format.",
-    "edit_invalid_tag": "⚠️ Tag must match ^[A-Z0-9_]{1,16}$."
+    "edit_invalid_tag": "⚠️ Tag must match ^[A-Z0-9_]{1,16}$.",
+    "edit_status_label": "Status",
+    "current": "Current: {value}"
   },
   "node": {
     "usage": "🛰 Send /node <uuid> to view and manage a node.",
