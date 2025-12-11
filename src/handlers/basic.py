@@ -52,6 +52,7 @@ from src.services.api_client import (
     api_client,
 )
 from src.utils.auth import is_admin
+from src.utils.cache import get_cache, CacheKeys
 from src.utils.formatters import (
     build_host_summary,
     build_node_summary,
@@ -1192,14 +1193,21 @@ async def cb_node_actions(callback: CallbackQuery) -> None:
     await callback.answer()
     _prefix, node_uuid, action = callback.data.split(":")
     try:
+        cache = get_cache()
         if action == "enable":
             await api_client.enable_node(node_uuid)
+            cache.invalidate(CacheKeys.NODES)
+            cache.invalidate(CacheKeys.STATS_PANEL)
         elif action == "disable":
             await api_client.disable_node(node_uuid)
+            cache.invalidate(CacheKeys.NODES)
+            cache.invalidate(CacheKeys.STATS_PANEL)
         elif action == "restart":
             await api_client.restart_node(node_uuid)
+            cache.invalidate(CacheKeys.NODES)
         elif action == "reset":
             await api_client.reset_node_traffic(node_uuid)
+            cache.invalidate(CacheKeys.NODES)
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
@@ -1220,10 +1228,15 @@ async def cb_host_actions(callback: CallbackQuery) -> None:
     await callback.answer()
     _prefix, host_uuid, action = callback.data.split(":")
     try:
+        cache = get_cache()
         if action == "enable":
             await api_client.enable_hosts([host_uuid])
+            cache.invalidate(CacheKeys.HOSTS)
+            cache.invalidate(CacheKeys.STATS_PANEL)
         elif action == "disable":
             await api_client.disable_hosts([host_uuid])
+            cache.invalidate(CacheKeys.HOSTS)
+            cache.invalidate(CacheKeys.STATS_PANEL)
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
@@ -1244,8 +1257,11 @@ async def cb_token_actions(callback: CallbackQuery) -> None:
     await callback.answer()
     _prefix, token_uuid, action = callback.data.split(":")
     try:
+        cache = get_cache()
         if action == "delete":
             await api_client.delete_token(token_uuid)
+            cache.invalidate(CacheKeys.TOKENS)
+            cache.invalidate(CacheKeys.STATS_PANEL)
             await callback.message.edit_text(_("token.deleted"), reply_markup=main_menu_keyboard())
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
@@ -1274,9 +1290,12 @@ async def cb_template_actions(callback: CallbackQuery) -> None:
         return
 
     _prefix, tpl_uuid, action = parts
+    cache = get_cache()
     try:
         if action == "delete":
             await api_client.delete_template(tpl_uuid)
+            cache.invalidate(CacheKeys.TEMPLATES)
+            cache.invalidate(CacheKeys.STATS_PANEL)
             await _send_templates(callback)
         elif action == "update_json":
             PENDING_INPUT[callback.from_user.id] = {"action": "template_update_json", "uuid": tpl_uuid}
@@ -1489,6 +1508,7 @@ async def cb_system_nodes_actions(callback: CallbackQuery) -> None:
         success_count = 0
         error_count = 0
         
+        cache = get_cache()
         if action == "enable_all":
             for uuid in uuids:
                 try:
@@ -1496,6 +1516,8 @@ async def cb_system_nodes_actions(callback: CallbackQuery) -> None:
                     success_count += 1
                 except ApiClientError:
                     error_count += 1
+            cache.invalidate(CacheKeys.NODES)
+            cache.invalidate(CacheKeys.STATS_PANEL)
         elif action == "disable_all":
             for uuid in uuids:
                 try:
@@ -1503,6 +1525,8 @@ async def cb_system_nodes_actions(callback: CallbackQuery) -> None:
                     success_count += 1
                 except ApiClientError:
                     error_count += 1
+            cache.invalidate(CacheKeys.NODES)
+            cache.invalidate(CacheKeys.STATS_PANEL)
         elif action == "restart_all":
             for uuid in uuids:
                 try:
@@ -1510,6 +1534,7 @@ async def cb_system_nodes_actions(callback: CallbackQuery) -> None:
                     success_count += 1
                 except ApiClientError:
                     error_count += 1
+            cache.invalidate(CacheKeys.NODES)
         elif action == "reset_traffic_all":
             for uuid in uuids:
                 try:
@@ -1517,6 +1542,7 @@ async def cb_system_nodes_actions(callback: CallbackQuery) -> None:
                     success_count += 1
                 except ApiClientError:
                     error_count += 1
+            cache.invalidate(CacheKeys.NODES)
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
@@ -1828,8 +1854,11 @@ async def _handle_template_create_input(message: Message, ctx: dict) -> None:
     if tpl_type not in allowed:
         await _send_clean_message(message, _("template.invalid_type"), reply_markup=template_menu_keyboard())
         return
+    cache = get_cache()
     try:
         await api_client.create_template(name, tpl_type)
+        cache.invalidate(CacheKeys.TEMPLATES)
+        cache.invalidate(CacheKeys.STATS_PANEL)
         await _send_clean_message(message, _("template.created"), reply_markup=template_menu_keyboard())
     except UnauthorizedError:
         await _send_clean_message(message, _("errors.unauthorized"), reply_markup=template_menu_keyboard())
@@ -1847,8 +1876,10 @@ async def _handle_template_update_json_input(message: Message, ctx: dict) -> Non
     except Exception:
         await _send_clean_message(message, _("template.invalid_payload"), reply_markup=template_actions_keyboard(tpl_uuid))
         return
+    cache = get_cache()
     try:
         await api_client.update_template(tpl_uuid, template_json=payload)
+        cache.invalidate(CacheKeys.TEMPLATES)
         await _send_clean_message(message, _("template.updated"), reply_markup=template_actions_keyboard(tpl_uuid))
     except UnauthorizedError:
         await _send_clean_message(message, _("errors.unauthorized"), reply_markup=template_actions_keyboard(tpl_uuid))
@@ -3042,103 +3073,113 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
 
 
 async def _fetch_health_text() -> str:
-    try:
-        data = await api_client.get_health()
-        pm2 = data.get("response", {}).get("pm2Stats", [])
-        if not pm2:
-            return f"*{_('health.title')}*\n\n{_('health.empty')}"
-        lines = [f"*{_('health.title')}*", ""]
-        for proc in pm2:
-            name = proc.get('name', 'n/a')
-            cpu = proc.get('cpu', '—')
-            memory = proc.get('memory', '—')
-            lines.append(f"  • *{name}*")
-            lines.append(f"    CPU: `{cpu}%` | RAM: `{memory}`")
-        return "\n".join(lines)
-    except UnauthorizedError:
-        return _("errors.unauthorized")
-    except ApiClientError:
-        logger.exception("⚠️ Health check failed")
-        return _("errors.generic")
+    cache = get_cache()
+    
+    async def _fetch() -> str:
+        try:
+            data = await api_client.get_health()
+            pm2 = data.get("response", {}).get("pm2Stats", [])
+            if not pm2:
+                return f"*{_('health.title')}*\n\n{_('health.empty')}"
+            lines = [f"*{_('health.title')}*", ""]
+            for proc in pm2:
+                name = proc.get('name', 'n/a')
+                cpu = proc.get('cpu', '—')
+                memory = proc.get('memory', '—')
+                lines.append(f"  • *{name}*")
+                lines.append(f"    CPU: `{cpu}%` | RAM: `{memory}`")
+            return "\n".join(lines)
+        except UnauthorizedError:
+            return _("errors.unauthorized")
+        except ApiClientError:
+            logger.exception("⚠️ Health check failed")
+            return _("errors.generic")
+    
+    return await cache.get_or_set(CacheKeys.HEALTH, _fetch, ttl=30.0)
 
 
 async def _fetch_panel_stats_text() -> str:
     """Статистика панели (пользователи, ноды, хосты, ресурсы)."""
-    try:
-        # Получаем основную статистику системы
-        data = await api_client.get_stats()
-        res = data.get("response", {})
-        users = res.get("users", {})
-        online = res.get("onlineStats", {})
-        nodes = res.get("nodes", {})
-        status_counts = users.get("statusCounts", {}) or {}
-        status_str = ", ".join(f"`{k}`: *{v}*" for k, v in status_counts.items()) if status_counts else "—"
-        
-        lines = [
-            f"*{_('stats.panel_title')}*",
-            "",
-            f"*{_('stats.users_section')}*",
-            f"  {_('stats.users').format(total=users.get('totalUsers', '—'))}",
-            f"  {_('stats.status_counts').format(counts=status_str)}",
-            f"  {_('stats.online').format(now=online.get('onlineNow', '—'), day=online.get('lastDay', '—'), week=online.get('lastWeek', '—'))}",
-            "",
-            f"*{_('stats.infrastructure_section')}*",
-            f"  {_('stats.nodes').format(online=nodes.get('totalOnline', '—'))}",
-        ]
-        
-        # Добавляем статистику по хостам
+    cache = get_cache()
+    
+    async def _fetch() -> str:
         try:
-            hosts_data = await api_client.get_hosts()
-            hosts = hosts_data.get("response", [])
-            total_hosts = len(hosts)
-            enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
-            disabled_hosts = total_hosts - enabled_hosts
-            lines.append(f"  {_('stats.hosts').format(total=total_hosts, enabled=enabled_hosts, disabled=disabled_hosts)}")
-        except Exception:
-            lines.append(f"  {_('stats.hosts').format(total='—', enabled='—', disabled='—')}")
-        
-        # Добавляем статистику по нодам
-        try:
-            nodes_data = await api_client.get_nodes()
-            nodes_list = nodes_data.get("response", [])
-            total_nodes = len(nodes_list)
-            enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
-            disabled_nodes = total_nodes - enabled_nodes
-            online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
-            lines.append(f"  {_('stats.nodes_detailed').format(total=total_nodes, enabled=enabled_nodes, disabled=disabled_nodes, online=online_nodes)}")
-        except Exception:
-            lines.append(f"  {_('stats.nodes_detailed').format(total='—', enabled='—', disabled='—', online='—')}")
-        
-        # Добавляем статистику по ресурсам
-        lines.append("")
-        lines.append(f"*{_('stats.resources_section')}*")
-        try:
-            templates_data = await api_client.get_templates()
-            templates = templates_data.get("response", {}).get("templates", [])
-            lines.append(f"  {_('stats.templates').format(count=len(templates))}")
-        except Exception:
-            lines.append(f"  {_('stats.templates').format(count='—')}")
-        
-        try:
-            tokens_data = await api_client.get_tokens()
-            tokens = tokens_data.get("response", {}).get("apiKeys", [])
-            lines.append(f"  {_('stats.tokens').format(count=len(tokens))}")
-        except Exception:
-            lines.append(f"  {_('stats.tokens').format(count='—')}")
-        
-        try:
-            snippets_data = await api_client.get_snippets()
-            snippets = snippets_data.get("response", {}).get("snippets", [])
-            lines.append(f"  {_('stats.snippets').format(count=len(snippets))}")
-        except Exception:
-            lines.append(f"  {_('stats.snippets').format(count='—')}")
-        
-        return "\n".join(lines)
-    except UnauthorizedError:
-        return _("errors.unauthorized")
-    except ApiClientError:
-        logger.exception("⚠️ Panel stats fetch failed")
-        return _("errors.generic")
+            # Получаем основную статистику системы
+            data = await api_client.get_stats()
+            res = data.get("response", {})
+            users = res.get("users", {})
+            online = res.get("onlineStats", {})
+            nodes = res.get("nodes", {})
+            status_counts = users.get("statusCounts", {}) or {}
+            status_str = ", ".join(f"`{k}`: *{v}*" for k, v in status_counts.items()) if status_counts else "—"
+            
+            lines = [
+                f"*{_('stats.panel_title')}*",
+                "",
+                f"*{_('stats.users_section')}*",
+                f"  {_('stats.users').format(total=users.get('totalUsers', '—'))}",
+                f"  {_('stats.status_counts').format(counts=status_str)}",
+                f"  {_('stats.online').format(now=online.get('onlineNow', '—'), day=online.get('lastDay', '—'), week=online.get('lastWeek', '—'))}",
+                "",
+                f"*{_('stats.infrastructure_section')}*",
+                f"  {_('stats.nodes').format(online=nodes.get('totalOnline', '—'))}",
+            ]
+            
+            # Добавляем статистику по хостам
+            try:
+                hosts_data = await api_client.get_hosts()
+                hosts = hosts_data.get("response", [])
+                total_hosts = len(hosts)
+                enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
+                disabled_hosts = total_hosts - enabled_hosts
+                lines.append(f"  {_('stats.hosts').format(total=total_hosts, enabled=enabled_hosts, disabled=disabled_hosts)}")
+            except Exception:
+                lines.append(f"  {_('stats.hosts').format(total='—', enabled='—', disabled='—')}")
+            
+            # Добавляем статистику по нодам
+            try:
+                nodes_data = await api_client.get_nodes()
+                nodes_list = nodes_data.get("response", [])
+                total_nodes = len(nodes_list)
+                enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
+                disabled_nodes = total_nodes - enabled_nodes
+                online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
+                lines.append(f"  {_('stats.nodes_detailed').format(total=total_nodes, enabled=enabled_nodes, disabled=disabled_nodes, online=online_nodes)}")
+            except Exception:
+                lines.append(f"  {_('stats.nodes_detailed').format(total='—', enabled='—', disabled='—', online='—')}")
+            
+            # Добавляем статистику по ресурсам
+            lines.append("")
+            lines.append(f"*{_('stats.resources_section')}*")
+            try:
+                templates_data = await api_client.get_templates()
+                templates = templates_data.get("response", {}).get("templates", [])
+                lines.append(f"  {_('stats.templates').format(count=len(templates))}")
+            except Exception:
+                lines.append(f"  {_('stats.templates').format(count='—')}")
+            
+            try:
+                tokens_data = await api_client.get_tokens()
+                tokens = tokens_data.get("response", {}).get("apiKeys", [])
+                lines.append(f"  {_('stats.tokens').format(count=len(tokens))}")
+            except Exception:
+                lines.append(f"  {_('stats.tokens').format(count='—')}")
+            
+            try:
+                snippets_data = await api_client.get_snippets()
+                snippets = snippets_data.get("response", {}).get("snippets", [])
+                lines.append(f"  {_('stats.snippets').format(count=len(snippets))}")
+            except Exception:
+                lines.append(f"  {_('stats.snippets').format(count='—')}")
+            
+            return "\n".join(lines)
+        except UnauthorizedError:
+            return _("errors.unauthorized")
+        except ApiClientError:
+            logger.exception("⚠️ Panel stats fetch failed")
+            return _("errors.generic")
+    
+    return await cache.get_or_set(CacheKeys.STATS_PANEL, _fetch, ttl=60.0)
 
 
 async def _fetch_server_stats_text() -> str:
@@ -3293,14 +3334,19 @@ async def _fetch_stats_text() -> str:
 
 
 async def _fetch_bandwidth_text() -> str:
-    try:
-        data = await api_client.get_bandwidth_stats()
-        return build_bandwidth_stats(data, _)
-    except UnauthorizedError:
-        return _("errors.unauthorized")
-    except ApiClientError:
-        logger.exception("⚠️ Bandwidth fetch failed")
-        return _("errors.generic")
+    cache = get_cache()
+    
+    async def _fetch() -> str:
+        try:
+            data = await api_client.get_bandwidth_stats()
+            return build_bandwidth_stats(data, _)
+        except UnauthorizedError:
+            return _("errors.unauthorized")
+        except ApiClientError:
+            logger.exception("⚠️ Bandwidth fetch failed")
+            return _("errors.generic")
+    
+    return await cache.get_or_set(CacheKeys.STATS_BANDWIDTH, _fetch, ttl=60.0)
 
 
 async def _fetch_billing_text() -> str:
@@ -3457,37 +3503,42 @@ async def _fetch_billing_nodes_stats_text() -> str:
 
 
 async def _fetch_nodes_text() -> str:
-    try:
-        data = await api_client.get_nodes()
-        nodes = data.get("response", [])
-        if not nodes:
-            return _("node.list_empty")
-        sorted_nodes = sorted(nodes, key=lambda n: n.get("viewPosition", 0))
-        lines = [_("node.list_title").format(total=len(nodes))]
-        for node in sorted_nodes[:10]:
-            status = "DISABLED" if node.get("isDisabled") else ("ONLINE" if node.get("isConnected") else "OFFLINE")
-            status_emoji = "🟢" if status == "ONLINE" else ("🟡" if status == "DISABLED" else "🔴")
-            address = f"{node.get('address', 'n/a')}:{node.get('port') or '—'}"
-            users_online = node.get("usersOnline", "—")
-            line = _(
-                "node.list_item"
-            ).format(
-                statusEmoji=status_emoji,
-                name=node.get("name", "n/a"),
-                address=address,
-                users=users_online,
-                traffic=format_bytes(node.get("trafficUsedBytes")),
-            )
-            lines.append(line)
-        if len(nodes) > 10:
-            lines.append(_("node.list_more").format(count=len(nodes) - 10))
-        lines.append(_("node.list_hint"))
-        return "\n".join(lines)
-    except UnauthorizedError:
-        return _("errors.unauthorized")
-    except ApiClientError:
-        logger.exception("⚠️ Nodes fetch failed")
-        return _("errors.generic")
+    cache = get_cache()
+    
+    async def _fetch() -> str:
+        try:
+            data = await api_client.get_nodes()
+            nodes = data.get("response", [])
+            if not nodes:
+                return _("node.list_empty")
+            sorted_nodes = sorted(nodes, key=lambda n: n.get("viewPosition", 0))
+            lines = [_("node.list_title").format(total=len(nodes))]
+            for node in sorted_nodes[:10]:
+                status = "DISABLED" if node.get("isDisabled") else ("ONLINE" if node.get("isConnected") else "OFFLINE")
+                status_emoji = "🟢" if status == "ONLINE" else ("🟡" if status == "DISABLED" else "🔴")
+                address = f"{node.get('address', 'n/a')}:{node.get('port') or '—'}"
+                users_online = node.get("usersOnline", "—")
+                line = _(
+                    "node.list_item"
+                ).format(
+                    statusEmoji=status_emoji,
+                    name=node.get("name", "n/a"),
+                    address=address,
+                    users=users_online,
+                    traffic=format_bytes(node.get("trafficUsedBytes")),
+                )
+                lines.append(line)
+            if len(nodes) > 10:
+                lines.append(_("node.list_more").format(count=len(nodes) - 10))
+            lines.append(_("node.list_hint"))
+            return "\n".join(lines)
+        except UnauthorizedError:
+            return _("errors.unauthorized")
+        except ApiClientError:
+            logger.exception("⚠️ Nodes fetch failed")
+            return _("errors.generic")
+    
+    return await cache.get_or_set(CacheKeys.NODES, _fetch, ttl=60.0)
 
 
 async def _fetch_nodes_realtime_text() -> str:
@@ -3561,60 +3612,75 @@ async def _send_config_detail(target: Message | CallbackQuery, config_uuid: str)
 
 
 async def _fetch_hosts_text() -> str:
-    try:
-        data = await api_client.get_hosts()
-        hosts = data.get("response", [])
-        if not hosts:
-            return _("host.list_empty")
-        sorted_hosts = sorted(hosts, key=lambda h: h.get("viewPosition", 0))
-        lines = [_("host.list_title").format(total=len(hosts))]
-        for host in sorted_hosts[:10]:
-            status = "DISABLED" if host.get("isDisabled") else "ENABLED"
-            status_emoji = "🟡" if status == "DISABLED" else "🟢"
-            address = f"{host.get('address', 'n/a')}:{host.get('port', '—')}"
-            remark = host.get("remark", "—")
-            line = _(
-                "host.list_item"
-            ).format(
-                statusEmoji=status_emoji,
-                remark=remark,
-                address=address,
-                tag=host.get("tag", "—"),
-            )
-            lines.append(line)
-        if len(hosts) > 10:
-            lines.append(_("host.list_more").format(count=len(hosts) - 10))
-        lines.append(_("host.list_hint"))
-        return "\n".join(lines)
-    except UnauthorizedError:
-        return _("errors.unauthorized")
-    except ApiClientError:
-        logger.exception("⚠️ Hosts fetch failed")
-        return _("errors.generic")
+    cache = get_cache()
+    
+    async def _fetch() -> str:
+        try:
+            data = await api_client.get_hosts()
+            hosts = data.get("response", [])
+            if not hosts:
+                return _("host.list_empty")
+            sorted_hosts = sorted(hosts, key=lambda h: h.get("viewPosition", 0))
+            lines = [_("host.list_title").format(total=len(hosts))]
+            for host in sorted_hosts[:10]:
+                status = "DISABLED" if host.get("isDisabled") else "ENABLED"
+                status_emoji = "🟡" if status == "DISABLED" else "🟢"
+                address = f"{host.get('address', 'n/a')}:{host.get('port', '—')}"
+                remark = host.get("remark", "—")
+                line = _(
+                    "host.list_item"
+                ).format(
+                    statusEmoji=status_emoji,
+                    remark=remark,
+                    address=address,
+                    tag=host.get("tag", "—"),
+                )
+                lines.append(line)
+            if len(hosts) > 10:
+                lines.append(_("host.list_more").format(count=len(hosts) - 10))
+            lines.append(_("host.list_hint"))
+            return "\n".join(lines)
+        except UnauthorizedError:
+            return _("errors.unauthorized")
+        except ApiClientError:
+            logger.exception("⚠️ Hosts fetch failed")
+            return _("errors.generic")
+    
+    return await cache.get_or_set(CacheKeys.HOSTS, _fetch, ttl=60.0)
 
 
 async def _fetch_tokens_text() -> str:
-    try:
-        data = await api_client.get_tokens()
-        tokens = data.get("response", {}).get("apiKeys", [])
-        return build_tokens_list(tokens, _)
-    except UnauthorizedError:
-        return _("errors.unauthorized")
-    except ApiClientError:
-        logger.exception("⚠️ Tokens fetch failed")
-        return _("errors.generic")
+    cache = get_cache()
+    
+    async def _fetch() -> str:
+        try:
+            data = await api_client.get_tokens()
+            tokens = data.get("response", {}).get("apiKeys", [])
+            return build_tokens_list(tokens, _)
+        except UnauthorizedError:
+            return _("errors.unauthorized")
+        except ApiClientError:
+            logger.exception("⚠️ Tokens fetch failed")
+            return _("errors.generic")
+    
+    return await cache.get_or_set(CacheKeys.TOKENS, _fetch, ttl=120.0)
 
 
 async def _fetch_templates_text() -> str:
-    try:
-        data = await api_client.get_templates()
-        templates = data.get("response", {}).get("templates", [])
-        return build_templates_list(templates, _)
-    except UnauthorizedError:
-        return _("errors.unauthorized")
-    except ApiClientError:
-        logger.exception("⚠️ Templates fetch failed")
-        return _("errors.generic")
+    cache = get_cache()
+    
+    async def _fetch() -> str:
+        try:
+            data = await api_client.get_templates()
+            templates = data.get("response", {}).get("templates", [])
+            return build_templates_list(templates, _)
+        except UnauthorizedError:
+            return _("errors.unauthorized")
+        except ApiClientError:
+            logger.exception("⚠️ Templates fetch failed")
+            return _("errors.generic")
+    
+    return await cache.get_or_set(CacheKeys.TEMPLATES, _fetch, ttl=120.0)
 
 
 async def _edit_text_safe(message: Message, text: str, reply_markup=None, parse_mode: str | None = None) -> None:
@@ -3725,8 +3791,11 @@ async def _upsert_snippet(target: Message, action: str) -> None:
 
 
 async def _create_token(target: Message | CallbackQuery, name: str) -> None:
+    cache = get_cache()
     try:
         token = await api_client.create_token(name)
+        cache.invalidate(CacheKeys.TOKENS)
+        cache.invalidate(CacheKeys.STATS_PANEL)
     except UnauthorizedError:
         text = _("errors.unauthorized")
         if isinstance(target, CallbackQuery):

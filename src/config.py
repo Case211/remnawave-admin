@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     default_locale: str = Field("ru", alias="DEFAULT_LOCALE")
     admins: List[int] = Field(default_factory=list, alias="ADMINS")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
+    cache_ttl: float = Field(60.0, alias="CACHE_TTL")
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
