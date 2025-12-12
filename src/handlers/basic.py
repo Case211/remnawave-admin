@@ -74,6 +74,8 @@ from src.utils.formatters import (
     build_config_profile_detail,
     build_billing_history,
     build_infra_providers,
+    build_billing_nodes,
+    build_bandwidth_stats,
 )
 from src.utils.logger import logger
 
