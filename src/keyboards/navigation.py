@@ -33,3 +33,23 @@ def nav_row(back_to: str | None = None) -> list[InlineKeyboardButton]:
 
 def nav_keyboard(back_to: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[nav_row(back_to)])
+
+
+def input_keyboard(action: str | None = None) -> InlineKeyboardMarkup:
+    """Клавиатура для использования во время ввода данных (только Назад и Главное меню)."""
+    # Определяем целевое меню на основе action
+    back_to = None
+    if action:
+        if action.startswith("provider_"):
+            back_to = NavTarget.PROVIDERS_MENU
+        elif action.startswith("billing_history_"):
+            back_to = NavTarget.BILLING_MENU
+        elif action.startswith("billing_nodes_"):
+            back_to = NavTarget.BILLING_NODES_MENU
+        elif action == "user_create" or action == "user_edit":
+            back_to = NavTarget.USERS_MENU
+        elif action.startswith("bulk_users_"):
+            back_to = NavTarget.BULK_MENU
+        elif action.startswith("template_"):
+            back_to = NavTarget.TEMPLATES_MENU
+    return nav_keyboard(back_to)

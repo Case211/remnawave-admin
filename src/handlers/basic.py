@@ -19,7 +19,7 @@ from src.keyboards.main_menu import (
     billing_overview_keyboard,
     bulk_menu_keyboard,
 )
-from src.keyboards.navigation import NavTarget, nav_keyboard, nav_row
+from src.keyboards.navigation import NavTarget, nav_keyboard, nav_row, input_keyboard
 from src.keyboards.user_create import (
     user_create_description_keyboard,
     user_create_expire_keyboard,
@@ -771,7 +771,7 @@ async def cb_providers_actions(callback: CallbackQuery) -> None:
     
     if action == "create":
         PENDING_INPUT[callback.from_user.id] = {"action": "provider_create", "stage": "name", "data": {}}
-        await callback.message.edit_text(_("provider.prompt_name"), reply_markup=providers_menu_keyboard(), parse_mode="Markdown")
+        await callback.message.edit_text(_("provider.prompt_name"), reply_markup=input_keyboard("provider_create"), parse_mode="Markdown")
     elif action == "update":
         # Показываем список провайдеров для выбора
         try:
@@ -811,7 +811,7 @@ async def cb_providers_actions(callback: CallbackQuery) -> None:
             }
             await callback.message.edit_text(
                 _("provider.prompt_update_name").format(current_name=current_name),
-                reply_markup=providers_menu_keyboard(),
+                reply_markup=input_keyboard("provider_update"),
                 parse_mode="Markdown"
             )
         except Exception:
@@ -908,7 +908,7 @@ async def cb_billing_actions(callback: CallbackQuery) -> None:
                 "provider_name": provider_name,
                 "data": {},
             }
-            await _edit_text_safe(callback.message, _("billing.prompt_amount"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+            await _edit_text_safe(callback.message, _("billing.prompt_amount"), reply_markup=input_keyboard("billing_history_create"), parse_mode="Markdown")
         elif provider_action == "billing_nodes_create":
             # Для создания биллинга ноды нужно показать все ноды системы
             # (можно создать биллинг для любой ноды с указанным провайдером)
@@ -964,7 +964,7 @@ async def cb_billing_nodes_actions(callback: CallbackQuery) -> None:
                 "provider_uuid": provider_uuid,
                 "node_uuid": node_uuid,
             }
-            await _edit_text_safe(callback.message, _("billing_nodes.prompt_date_optional"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
+            await _edit_text_safe(callback.message, _("billing_nodes.prompt_date_optional"), reply_markup=input_keyboard("billing_nodes_create_confirm"), parse_mode="Markdown")
         elif node_action == "billing_nodes_update":
             # Находим UUID записи биллинга для этой ноды
             try:
@@ -983,7 +983,7 @@ async def cb_billing_nodes_actions(callback: CallbackQuery) -> None:
                     "action": "billing_nodes_update_date",
                     "record_uuid": record_uuid,
                 }
-                await _edit_text_safe(callback.message, _("billing_nodes.prompt_new_date"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
+                await _edit_text_safe(callback.message, _("billing_nodes.prompt_new_date"), reply_markup=input_keyboard("billing_nodes_update_date"), parse_mode="Markdown")
             except Exception:
                 await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
         else:
@@ -1965,13 +1965,13 @@ async def _handle_provider_input(message: Message, ctx: dict) -> None:
             # Пошаговый ввод для создания провайдера
             if stage == "name":
                 if not text:
-                    await _send_clean_message(message, _("provider.prompt_name"), reply_markup=providers_menu_keyboard(), parse_mode="Markdown")
+                    await _send_clean_message(message, _("provider.prompt_name"), reply_markup=input_keyboard(action), parse_mode="Markdown")
                     PENDING_INPUT[user_id] = ctx
                     return
                 data["name"] = text
                 ctx["stage"] = "favicon"
                 PENDING_INPUT[user_id] = ctx
-                await _send_clean_message(message, _("provider.prompt_favicon").format(name=data["name"]), reply_markup=providers_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("provider.prompt_favicon").format(name=data["name"]), reply_markup=input_keyboard(action), parse_mode="Markdown")
                 return
             
             elif stage == "favicon":
@@ -1980,7 +1980,7 @@ async def _handle_provider_input(message: Message, ctx: dict) -> None:
                 ctx["stage"] = "login_url"
                 PENDING_INPUT[user_id] = ctx
                 favicon_display = favicon if favicon else "—"
-                await _send_clean_message(message, _("provider.prompt_login_url").format(name=data["name"], favicon=favicon_display), reply_markup=providers_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("provider.prompt_login_url").format(name=data["name"], favicon=favicon_display), reply_markup=input_keyboard(action), parse_mode="Markdown")
                 return
             
             elif stage == "login_url":
@@ -2013,7 +2013,7 @@ async def _handle_provider_input(message: Message, ctx: dict) -> None:
                         current_name=data["name"],
                         current_favicon=data.get("current_favicon", "—") or "—"
                     ),
-                    reply_markup=providers_menu_keyboard(),
+                    reply_markup=input_keyboard(action),
                     parse_mode="Markdown"
                 )
                 return
@@ -2035,7 +2035,7 @@ async def _handle_provider_input(message: Message, ctx: dict) -> None:
                         current_favicon=favicon_display,
                         current_login_url=data.get("current_login_url", "—") or "—"
                     ),
-                    reply_markup=providers_menu_keyboard(),
+                    reply_markup=input_keyboard(action),
                     parse_mode="Markdown"
                 )
                 return
@@ -2095,11 +2095,11 @@ async def _handle_provider_input(message: Message, ctx: dict) -> None:
             # Сохраняем контекст для повторного запроса
             PENDING_INPUT[user_id] = ctx
             if stage == "name":
-                await _send_clean_message(message, _("provider.prompt_name"), reply_markup=providers_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("provider.prompt_name"), reply_markup=input_keyboard(action), parse_mode="Markdown")
             elif stage == "favicon":
-                await _send_clean_message(message, _("provider.prompt_favicon").format(name=data.get("name", "")), reply_markup=providers_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("provider.prompt_favicon").format(name=data.get("name", "")), reply_markup=input_keyboard(action), parse_mode="Markdown")
             elif stage == "login_url":
-                await _send_clean_message(message, _("provider.prompt_login_url").format(name=data.get("name", ""), favicon=data.get("favicon", "—")), reply_markup=providers_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("provider.prompt_login_url").format(name=data.get("name", ""), favicon=data.get("favicon", "—")), reply_markup=input_keyboard(action), parse_mode="Markdown")
         elif action == "provider_update" and stage:
             # Сохраняем контекст для повторного запроса
             PENDING_INPUT[user_id] = ctx
@@ -2107,7 +2107,7 @@ async def _handle_provider_input(message: Message, ctx: dict) -> None:
                 await _send_clean_message(
                     message,
                     _("provider.prompt_update_name").format(current_name=data.get("current_name", "")),
-                    reply_markup=providers_menu_keyboard(),
+                    reply_markup=input_keyboard(action),
                     parse_mode="Markdown"
                 )
             elif stage == "favicon":
@@ -2117,7 +2117,7 @@ async def _handle_provider_input(message: Message, ctx: dict) -> None:
                         current_name=data.get("name", data.get("current_name", "")),
                         current_favicon=data.get("current_favicon", "—") or "—"
                     ),
-                    reply_markup=providers_menu_keyboard(),
+                    reply_markup=input_keyboard(action),
                     parse_mode="Markdown"
                 )
             elif stage == "login_url":
@@ -2128,13 +2128,16 @@ async def _handle_provider_input(message: Message, ctx: dict) -> None:
                         current_favicon=data.get("favicon", data.get("current_favicon", "—")) or "—",
                         current_login_url=data.get("current_login_url", "—") or "—"
                     ),
-                    reply_markup=providers_menu_keyboard(),
+                    reply_markup=input_keyboard(action),
                     parse_mode="Markdown"
                 )
-        else:
-            prompt_key = "provider.prompt_delete" if action == "provider_delete" else "errors.generic"
+        elif action == "provider_delete":
+            prompt_key = "provider.prompt_delete"
             PENDING_INPUT[user_id] = ctx
-            await _send_clean_message(message, _(prompt_key), reply_markup=providers_menu_keyboard())
+            await _send_clean_message(message, _(prompt_key), reply_markup=input_keyboard(action))
+        else:
+            PENDING_INPUT[user_id] = ctx
+            await _send_clean_message(message, _("errors.generic"), reply_markup=input_keyboard(action))
     except UnauthorizedError:
         PENDING_INPUT.pop(user_id, None)
         await _send_clean_message(message, _("errors.unauthorized"), reply_markup=providers_menu_keyboard())
@@ -2159,13 +2162,13 @@ async def _handle_billing_history_input(message: Message, ctx: dict) -> None:
                     amount = float(text)
                 except ValueError:
                     PENDING_INPUT[user_id] = ctx
-                    await _send_clean_message(message, _("billing.prompt_amount"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+                    await _send_clean_message(message, _("billing.prompt_amount"), reply_markup=input_keyboard(action), parse_mode="Markdown")
                     return
                 data["amount"] = amount
                 ctx["stage"] = "billed_at"
                 PENDING_INPUT[user_id] = ctx
                 provider_name = ctx.get("provider_name", "—")
-                await _send_clean_message(message, _("billing.prompt_billed_at").format(provider_name=provider_name, amount=amount), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("billing.prompt_billed_at").format(provider_name=provider_name, amount=amount), reply_markup=input_keyboard(action), parse_mode="Markdown")
                 return
             
             elif stage == "billed_at":
@@ -2173,7 +2176,7 @@ async def _handle_billing_history_input(message: Message, ctx: dict) -> None:
                     PENDING_INPUT[user_id] = ctx
                     provider_name = ctx.get("provider_name", "—")
                     amount = data.get("amount", 0)
-                    await _send_clean_message(message, _("billing.prompt_billed_at").format(provider_name=provider_name, amount=amount), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+                    await _send_clean_message(message, _("billing.prompt_billed_at").format(provider_name=provider_name, amount=amount), reply_markup=input_keyboard(action), parse_mode="Markdown")
                     return
                 # Создаем запись биллинга
                 provider_uuid = ctx.get("provider_uuid")
@@ -2212,11 +2215,11 @@ async def _handle_billing_history_input(message: Message, ctx: dict) -> None:
         if action == "billing_history_create" and stage:
             PENDING_INPUT[user_id] = ctx
             if stage == "amount":
-                await _send_clean_message(message, _("billing.prompt_amount"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("billing.prompt_amount"), reply_markup=input_keyboard(action), parse_mode="Markdown")
             elif stage == "billed_at":
                 provider_name = ctx.get("provider_name", "—")
                 amount = data.get("amount", 0)
-                await _send_clean_message(message, _("billing.prompt_billed_at").format(provider_name=provider_name, amount=amount), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("billing.prompt_billed_at").format(provider_name=provider_name, amount=amount), reply_markup=input_keyboard(action), parse_mode="Markdown")
         elif action == "billing_history_create_amount":
             PENDING_INPUT[user_id] = ctx
             await _send_clean_message(message, _("billing.prompt_amount_date"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
@@ -2267,10 +2270,10 @@ async def _handle_billing_nodes_input(message: Message, ctx: dict) -> None:
     except ValueError:
         if action == "billing_nodes_update_date":
             PENDING_INPUT[user_id] = ctx
-            await _send_clean_message(message, _("billing_nodes.prompt_new_date"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
+            await _send_clean_message(message, _("billing_nodes.prompt_new_date"), reply_markup=input_keyboard(action), parse_mode="Markdown")
         else:
             PENDING_INPUT[user_id] = ctx
-            await _send_clean_message(message, _("billing_nodes.prompt_date_optional"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
+            await _send_clean_message(message, _("billing_nodes.prompt_date_optional"), reply_markup=input_keyboard(action), parse_mode="Markdown")
     except UnauthorizedError:
         await _send_clean_message(message, _("errors.unauthorized"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
         PENDING_INPUT.pop(user_id, None)
