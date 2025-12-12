@@ -8,6 +8,18 @@ def _esc(value: Any) -> str:
     return html.escape("" if value is None else str(value))
 
 
+def escape_markdown(text: str) -> str:
+    """Экранирует специальные символы Markdown для Telegram."""
+    if not text:
+        return ""
+    # Экранируем специальные символы Markdown
+    special_chars = ['*', '_', '`', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    result = str(text)
+    for char in special_chars:
+        result = result.replace(char, f'\\{char}')
+    return result
+
+
 def format_bytes(value: float | int | None) -> str:
     if value is None:
         return NA
