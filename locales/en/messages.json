@@ -193,6 +193,7 @@
     "invalid_name": "⚠️ Invalid name. Must be 3-30 characters.",
     "invalid_address": "⚠️ Invalid address.",
     "list_title": "🛰 Nodes • total {total}",
+    "list_stats": "📊 Statistics:\n  Total: {total}\n  Enabled: {enabled}\n  Disabled: {disabled}\n  Online: {online}\n  Users: {users}\n  Traffic: {traffic}",
     "list_item": "{statusEmoji} {name} — {address} | users {users} | traffic {traffic}",
     "list_more": "…and {count} more",
     "list_hint": "ℹ️ Details: /node <uuid>",

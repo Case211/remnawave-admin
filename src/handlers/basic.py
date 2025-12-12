@@ -5214,20 +5214,43 @@ async def _fetch_nodes_text() -> str:
 
 
 async def _fetch_nodes_with_keyboard() -> tuple[str, InlineKeyboardMarkup]:
-    """Получает текст списка нод и клавиатуру с кнопками для каждой ноды."""
+    """Получает текст списка нод со статистикой и клавиатуру с кнопками для каждой ноды."""
     from src.keyboards.nodes_menu import nodes_list_keyboard
     
     try:
         data = await api_client.get_nodes()
         nodes = data.get("response", [])
         if not nodes:
-            return _("node.list_empty"), nodes_list_keyboard()
+            return _("node.list_empty"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_LIST)])
         
         sorted_nodes = sorted(nodes, key=lambda n: n.get("viewPosition", 0))
-        lines = [_("node.list_title").format(total=len(nodes))]
+        
+        # Вычисляем статистику
+        total_nodes = len(nodes)
+        enabled_nodes = sum(1 for n in nodes if not n.get("isDisabled"))
+        disabled_nodes = total_nodes - enabled_nodes
+        online_nodes = sum(1 for n in nodes if n.get("isConnected"))
+        total_users = sum(n.get("usersOnline", 0) or 0 for n in nodes)
+        total_traffic = sum(n.get("trafficUsedBytes", 0) or 0 for n in nodes)
+        
+        # Формируем текст со статистикой и списком нод
+        lines = [
+            _("node.list_title").format(total=total_nodes),
+            "",
+            _("node.list_stats").format(
+                total=total_nodes,
+                enabled=enabled_nodes,
+                disabled=disabled_nodes,
+                online=online_nodes,
+                users=total_users,
+                traffic=format_bytes(total_traffic)
+            ),
+            "",
+        ]
+        
         rows: list[list[InlineKeyboardButton]] = []
         
-        for node in sorted_nodes[:10]:
+        for node in sorted_nodes[:20]:  # Увеличиваем до 20 нод
             status = "DISABLED" if node.get("isDisabled") else ("ONLINE" if node.get("isConnected") else "OFFLINE")
             status_emoji = "🟢" if status == "ONLINE" else ("🟡" if status == "DISABLED" else "🔴")
             address = f"{node.get('address', 'n/a')}:{node.get('port') or '—'}"
@@ -5248,25 +5271,23 @@ async def _fetch_nodes_with_keyboard() -> tuple[str, InlineKeyboardMarkup]:
             
             # Добавляем кнопку для редактирования ноды
             rows.append([InlineKeyboardButton(
-                text=f"✏️ {name}",
+                text=f"{status_emoji} {name}",
                 callback_data=f"node_edit:{node_uuid}"
             )])
         
-        if len(nodes) > 10:
-            lines.append(_("node.list_more").format(count=len(nodes) - 10))
+        if len(nodes) > 20:
+            lines.append(_("node.list_more").format(count=len(nodes) - 20))
         
-        # Добавляем кнопки меню
-        menu_keyboard = nodes_list_keyboard()
-        # Добавляем кнопки меню к кнопкам нод
-        rows.extend(menu_keyboard.inline_keyboard)
+        # Добавляем только кнопку "Назад" к списку нод
+        rows.append(nav_row(NavTarget.NODES_LIST))
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
         return "\n".join(lines), keyboard
     except UnauthorizedError:
-        return _("errors.unauthorized"), nodes_list_keyboard()
+        return _("errors.unauthorized"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_LIST)])
     except ApiClientError:
         logger.exception("⚠️ Nodes fetch failed")
-        return _("errors.generic"), nodes_list_keyboard()
+        return _("errors.generic"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_LIST)])
 
 
 async def _fetch_nodes_realtime_text() -> str:
