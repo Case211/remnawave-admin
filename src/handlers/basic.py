@@ -666,8 +666,8 @@ async def cb_nodes(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    text, keyboard = await _fetch_nodes_with_keyboard()
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    from src.keyboards.nodes_menu import nodes_list_keyboard
+    await callback.message.edit_text(_("bot.menu"), reply_markup=nodes_list_keyboard())
 
 
 @router.callback_query(F.data.startswith("nodes:") | F.data.startswith("node_create:"))
