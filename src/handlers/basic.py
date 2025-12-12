@@ -843,6 +843,36 @@ async def cb_billing_actions(callback: CallbackQuery) -> None:
         except ApiClientError:
             logger.exception("❌ Billing record delete failed")
             await _edit_text_safe(callback.message, _("billing.invalid"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+    elif action == "provider":
+        # Обработка выбора провайдера
+        if len(parts) < 4:
+            await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+            return
+        provider_action = parts[2]  # billing_history_create или billing_nodes_create
+        provider_uuid = parts[3]
+        
+        if provider_action == "billing_history_create":
+            # Для создания записи биллинга запрашиваем сумму и дату
+            PENDING_INPUT[callback.from_user.id] = {
+                "action": "billing_history_create_amount",
+                "provider_uuid": provider_uuid,
+            }
+            await _edit_text_safe(callback.message, _("billing.prompt_amount_date"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+        elif provider_action == "billing_nodes_create":
+            # Для создания биллинга ноды нужно показать все ноды системы
+            # (можно создать биллинг для любой ноды с указанным провайдером)
+            try:
+                nodes_data = await api_client.get_nodes()
+                all_nodes = nodes_data.get("response", {}).get("nodes", [])
+                if not all_nodes:
+                    await _edit_text_safe(callback.message, _("billing_nodes.no_nodes"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
+                    return
+                keyboard = _billing_nodes_keyboard(all_nodes, "billing_nodes_create", provider_uuid)
+                await _edit_text_safe(callback.message, _("billing_nodes.select_node"), reply_markup=keyboard, parse_mode="Markdown")
+            except Exception:
+                await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
+        else:
+            await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
     else:
         await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
 
@@ -863,7 +893,7 @@ async def cb_billing_nodes_actions(callback: CallbackQuery) -> None:
             if not providers:
                 await _edit_text_safe(callback.message, _("billing_nodes.no_providers"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
                 return
-            keyboard = _billing_providers_keyboard(providers, "billing_nodes_create")
+            keyboard = _billing_providers_keyboard(providers, "billing_nodes_create", NavTarget.BILLING_NODES_MENU)
             await _edit_text_safe(callback.message, _("billing_nodes.select_provider"), reply_markup=keyboard, parse_mode="Markdown")
         except Exception:
             await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
@@ -2005,14 +2035,14 @@ async def _handle_billing_nodes_input(message: Message, ctx: dict) -> None:
         PENDING_INPUT.pop(user_id, None)
 
 
-def _billing_providers_keyboard(providers: list[dict], action_prefix: str) -> InlineKeyboardMarkup:
+def _billing_providers_keyboard(providers: list[dict], action_prefix: str, nav_target: str = NavTarget.BILLING_MENU) -> InlineKeyboardMarkup:
     """Клавиатура для выбора провайдера в биллинге."""
     rows: list[list[InlineKeyboardButton]] = []
     for provider in sorted(providers, key=lambda p: p.get("name", ""))[:10]:
         name = provider.get("name", "n/a")
         uuid = provider.get("uuid", "")
         rows.append([InlineKeyboardButton(text=name, callback_data=f"billing:provider:{action_prefix}:{uuid}")])
-    rows.append(nav_row(NavTarget.BILLING_MENU))
+    rows.append(nav_row(nav_target))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
