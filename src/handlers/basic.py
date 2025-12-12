@@ -2426,11 +2426,11 @@ def _providers_select_keyboard(providers: list[dict], action: str) -> InlineKeyb
         name = provider.get("name", "n/a")
         uuid = provider.get("uuid", "")
         rows.append([InlineKeyboardButton(text=name, callback_data=f"providers:{action}_select:{uuid}")])
-    rows.append(nav_row(NavTarget.PROVIDERS_MENU))
+    rows.append(nav_row(NavTarget.BILLING_OVERVIEW))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _billing_nodes_keyboard(nodes: list[dict], action_prefix: str, provider_uuid: str = "") -> InlineKeyboardMarkup:
+def _billing_nodes_keyboard(nodes: list[dict], action_prefix: str, provider_uuid: str = "", nav_target: str = NavTarget.BILLING_NODES_MENU) -> InlineKeyboardMarkup:
     """Клавиатура для выбора ноды в биллинге."""
     rows: list[list[InlineKeyboardButton]] = []
     for node in sorted(nodes, key=lambda n: n.get("name", ""))[:10]:
@@ -2442,7 +2442,7 @@ def _billing_nodes_keyboard(nodes: list[dict], action_prefix: str, provider_uuid
         if provider_uuid:
             callback_data += f":{provider_uuid}"
         rows.append([InlineKeyboardButton(text=label, callback_data=callback_data)])
-    rows.append(nav_row(NavTarget.BILLING_NODES_MENU))
+    rows.append(nav_row(nav_target))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -2764,6 +2764,9 @@ async def _navigate(target: Message | CallbackQuery, destination: str) -> None:
     if destination == NavTarget.SNIPPETS_MENU:
         text = await _fetch_snippets_text()
         await _send_clean_message(target, text, reply_markup=resources_menu_keyboard())
+        return
+    if destination == NavTarget.BILLING_OVERVIEW:
+        await _send_clean_message(target, _("bot.menu"), reply_markup=billing_overview_keyboard())
         return
     if destination == NavTarget.BILLING_MENU:
         text = await _fetch_billing_text()

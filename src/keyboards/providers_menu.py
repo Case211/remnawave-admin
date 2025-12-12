@@ -10,6 +10,6 @@ def providers_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_("provider.create"), callback_data="providers:create")],
             [InlineKeyboardButton(text=_("provider.update"), callback_data="providers:update")],
             [InlineKeyboardButton(text=_("provider.delete"), callback_data="providers:delete")],
-            nav_row(NavTarget.BILLING_MENU),
+            nav_row(NavTarget.BILLING_OVERVIEW),
         ]
     )

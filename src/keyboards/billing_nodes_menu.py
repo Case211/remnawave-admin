@@ -11,6 +11,6 @@ def billing_nodes_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_("billing_nodes.create"), callback_data="billing_nodes:create")],
             [InlineKeyboardButton(text=_("billing_nodes.update"), callback_data="billing_nodes:update")],
             [InlineKeyboardButton(text=_("billing_nodes.delete"), callback_data="billing_nodes:delete")],
-            nav_row(NavTarget.BILLING_NODES_MENU),
+            nav_row(NavTarget.BILLING_OVERVIEW),
         ]
     )

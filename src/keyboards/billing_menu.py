@@ -10,6 +10,6 @@ def billing_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_("billing.stats"), callback_data="billing:stats")],
             [InlineKeyboardButton(text=_("billing.create"), callback_data="billing:create")],
             [InlineKeyboardButton(text=_("billing.delete"), callback_data="billing:delete")],
-            nav_row(NavTarget.BILLING_MENU),
+            nav_row(NavTarget.BILLING_OVERVIEW),
         ]
     )

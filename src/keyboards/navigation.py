@@ -7,6 +7,7 @@ class NavTarget:
     USERS_MENU = "users_menu"
     NODES_MENU = "nodes_menu"
     RESOURCES_MENU = "resources_menu"
+    BILLING_OVERVIEW = "billing_overview"
     BILLING_MENU = "billing_menu"
     BILLING_NODES_MENU = "billing_nodes_menu"
     PROVIDERS_MENU = "providers_menu"
