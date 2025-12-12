@@ -227,6 +227,72 @@ class RemnawaveApiClient:
     async def reset_node_traffic(self, node_uuid: str) -> dict:
         return await self._post(f"/api/nodes/{node_uuid}/actions/reset-traffic")
 
+    async def update_node(
+        self,
+        node_uuid: str,
+        name: str | None = None,
+        address: str | None = None,
+        port: int | None = None,
+        country_code: str | None = None,
+        provider_uuid: str | None = None,
+        config_profile_uuid: str | None = None,
+        active_inbounds: list[str] | None = None,
+        is_traffic_tracking_active: bool | None = None,
+        traffic_limit_bytes: int | None = None,
+        notify_percent: int | None = None,
+        traffic_reset_day: int | None = None,
+        consumption_multiplier: float | None = None,
+        tags: list[str] | None = None,
+    ) -> dict:
+        """Обновление ноды."""
+        payload: dict[str, object] = {}
+        if name is not None:
+            payload["name"] = name
+        if address is not None:
+            payload["address"] = address
+        if port is not None:
+            payload["port"] = port
+        if country_code is not None:
+            payload["countryCode"] = country_code
+        if provider_uuid is not None:
+            payload["providerUuid"] = provider_uuid
+        if config_profile_uuid is not None and active_inbounds is not None:
+            payload["configProfile"] = {
+                "activeConfigProfileUuid": config_profile_uuid,
+                "activeInbounds": active_inbounds,
+            }
+        if is_traffic_tracking_active is not None:
+            payload["isTrafficTrackingActive"] = is_traffic_tracking_active
+        if traffic_limit_bytes is not None:
+            payload["trafficLimitBytes"] = traffic_limit_bytes
+        if notify_percent is not None:
+            payload["notifyPercent"] = notify_percent
+        if traffic_reset_day is not None:
+            payload["trafficResetDay"] = traffic_reset_day
+        if consumption_multiplier is not None:
+            payload["consumptionMultiplier"] = consumption_multiplier
+        if tags is not None:
+            payload["tags"] = tags
+        return await self._patch(f"/api/nodes/{node_uuid}", json=payload)
+
+    async def delete_node(self, node_uuid: str) -> dict:
+        """Удаление ноды."""
+        try:
+            response = await self._client.delete(f"/api/nodes/{node_uuid}")
+            response.raise_for_status()
+            return response.json()
+        except HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status in (401, 403):
+                raise UnauthorizedError from exc
+            if status == 404:
+                raise NotFoundError from exc
+            logger.warning("API error %s on DELETE /api/nodes/%s: %s", status, node_uuid, exc.response.text)
+            raise ApiClientError from exc
+        except httpx.HTTPError as exc:
+            logger.warning("HTTP client error on DELETE /api/nodes/%s: %s", node_uuid, exc)
+            raise ApiClientError from exc
+
     async def get_nodes_realtime_usage(self) -> dict:
         return await self._get("/api/nodes/usage/realtime")
 

@@ -664,7 +664,8 @@ async def cb_nodes(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_nodes_text()
-    await callback.message.edit_text(text, reply_markup=nodes_menu_keyboard())
+    from src.keyboards.nodes_menu import nodes_list_keyboard
+    await callback.message.edit_text(text, reply_markup=nodes_list_keyboard())
 
 
 @router.callback_query(F.data.startswith("nodes:") | F.data.startswith("node_create:"))
@@ -693,7 +694,8 @@ async def cb_nodes_actions(callback: CallbackQuery) -> None:
     elif action == "select_profile":
         # Выбор профиля конфигурации
         if len(parts) < 3:
-            await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_menu_keyboard())
+            from src.keyboards.nodes_menu import nodes_list_keyboard
+            await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_list_keyboard())
             return
         profile_uuid = parts[2]
         user_id = callback.from_user.id
@@ -1205,14 +1207,17 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
                 )
                 PENDING_INPUT.pop(user_id, None)
                 nodes_text = await _fetch_nodes_text()
-                await callback.message.edit_text(nodes_text, reply_markup=nodes_menu_keyboard())
+                from src.keyboards.nodes_menu import nodes_list_keyboard
+                await callback.message.edit_text(nodes_text, reply_markup=nodes_list_keyboard())
             except UnauthorizedError:
                 PENDING_INPUT.pop(user_id, None)
-                await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nodes_menu_keyboard())
+                from src.keyboards.nodes_menu import nodes_list_keyboard
+                await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nodes_list_keyboard())
             except ApiClientError:
                 PENDING_INPUT.pop(user_id, None)
                 logger.exception("❌ Node creation failed")
-                await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_menu_keyboard())
+                from src.keyboards.nodes_menu import nodes_list_keyboard
+                await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_list_keyboard())
     
     elif action == "host_create":
         # Обработка пропуска шагов при создании хоста
@@ -3265,6 +3270,23 @@ def _providers_select_keyboard(providers: list[dict], action: str) -> InlineKeyb
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _nodes_select_keyboard(nodes: list[dict], action: str) -> InlineKeyboardMarkup:
+    """Клавиатура для выбора ноды для обновления или удаления."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for node in sorted(nodes, key=lambda n: n.get("name", ""))[:10]:
+        name = node.get("name", "n/a")
+        uuid = node.get("uuid", "")
+        address = node.get("address", "")
+        country = node.get("countryCode", "")
+        label = f"{name} ({address})"
+        if country:
+            label += f" [{country}]"
+        rows.append([InlineKeyboardButton(text=label, callback_data=f"nodes:{action}_select:{uuid}")])
+    from src.keyboards.nodes_menu import nodes_list_keyboard
+    rows.append(nav_row(NavTarget.NODES_LIST))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def _billing_nodes_keyboard(nodes: list[dict], action_prefix: str, provider_uuid: str = "", nav_target: str = NavTarget.BILLING_NODES_MENU) -> InlineKeyboardMarkup:
     """Клавиатура для выбора ноды в биллинге."""
     rows: list[list[InlineKeyboardButton]] = []
@@ -3298,7 +3320,7 @@ def _node_config_profiles_keyboard(profiles: list[dict]) -> InlineKeyboardMarkup
         name = profile.get("name", "n/a")
         uuid = profile.get("uuid", "")
         rows.append([InlineKeyboardButton(text=name, callback_data=f"nodes:select_profile:{uuid}")])
-    rows.append(nav_row(NavTarget.NODES_MENU))
+    rows.append(nav_row(NavTarget.NODES_LIST))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -3316,7 +3338,7 @@ def _node_inbounds_keyboard(inbounds: list[dict], selected: list[str]) -> Inline
     if selected:
         rows.append([InlineKeyboardButton(text=_("node.select_inbounds_done").format(count=len(selected)), callback_data="nodes:confirm_inbounds")])
     
-    rows.append(nav_row(NavTarget.NODES_MENU))
+    rows.append(nav_row(NavTarget.NODES_LIST))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -3328,7 +3350,7 @@ def _node_providers_keyboard(providers: list[dict]) -> InlineKeyboardMarkup:
         uuid = provider.get("uuid", "")
         rows.append([InlineKeyboardButton(text=name, callback_data=f"nodes:select_provider:{uuid}")])
     rows.append([InlineKeyboardButton(text=_("actions.skip_step"), callback_data="nodes:select_provider:none")])
-    rows.append(nav_row(NavTarget.NODES_MENU))
+    rows.append(nav_row(NavTarget.NODES_LIST))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -3630,7 +3652,8 @@ async def _navigate(target: Message | CallbackQuery, destination: str) -> None:
         return
     if destination == NavTarget.NODES_LIST:
         text = await _fetch_nodes_text()
-        await _send_clean_message(target, text, reply_markup=nodes_menu_keyboard())
+        from src.keyboards.nodes_menu import nodes_list_keyboard
+        await _send_clean_message(target, text, reply_markup=nodes_list_keyboard())
         return
     if destination == NavTarget.HOSTS_MENU:
         text = await _fetch_hosts_text()

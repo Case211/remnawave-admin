@@ -54,7 +54,7 @@ def input_keyboard(action: str | None = None, allow_skip: bool = False, skip_cal
         elif action.startswith("template_"):
             back_to = NavTarget.TEMPLATES_MENU
         elif action == "node_create":
-            back_to = NavTarget.NODES_MENU
+            back_to = NavTarget.NODES_LIST
         elif action == "host_create":
             back_to = NavTarget.NODES_MENU
     
