@@ -5,7 +5,8 @@ from aiogram.utils.i18n import gettext as _
 
 from src.handlers.common import _edit_text_safe, _not_admin, _send_clean_message
 from src.handlers.state import PENDING_INPUT
-from src.keyboards.billing_menu import billing_menu_keyboard, billing_nodes_menu_keyboard
+from src.keyboards.billing_menu import billing_menu_keyboard
+from src.keyboards.billing_nodes_menu import billing_nodes_menu_keyboard
 from src.keyboards.navigation import NavTarget, input_keyboard, nav_row
 from src.keyboards.providers_menu import providers_menu_keyboard
 from src.services.api_client import ApiClientError, UnauthorizedError, api_client
