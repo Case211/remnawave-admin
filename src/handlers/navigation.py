@@ -324,6 +324,15 @@ async def cb_section_system(callback: CallbackQuery) -> None:
     await _navigate(callback, NavTarget.SYSTEM_MENU)
 
 
+@router.callback_query(F.data == "menu:subs")
+async def cb_subs(callback: CallbackQuery) -> None:
+    """Обработчик кнопки 'Подписки' в меню пользователей."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    await _navigate(callback, NavTarget.SUBS_LIST)
+
+
 @router.callback_query(F.data.startswith("subs:page:"))
 async def cb_subs_page(callback: CallbackQuery) -> None:
     """Обработчик пагинации списка подписок."""
