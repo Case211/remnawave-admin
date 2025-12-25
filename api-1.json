@@ -1828,6 +1828,865 @@
         ]
       }
     },
+    "/api/subscription-page-configs": {
+      "get": {
+        "operationId": "SubscriptionPageConfigController_getAllConfigs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Subscription page configs retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSubscriptionPageConfigsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Get all subscription page configs",
+        "tags": [
+          "Subscription Page Configs Controller"
+        ]
+      },
+      "patch": {
+        "operationId": "SubscriptionPageConfigController_updateConfig",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSubscriptionPageConfigRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Subscription page config updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateSubscriptionPageConfigResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Update subscription page config",
+        "tags": [
+          "Subscription Page Configs Controller"
+        ]
+      },
+      "post": {
+        "operationId": "SubscriptionPageConfigController_createConfig",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubscriptionPageConfigRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Subscription page config created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSubscriptionPageConfigResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Create subscription page config",
+        "tags": [
+          "Subscription Page Configs Controller"
+        ]
+      }
+    },
+    "/api/subscription-page-configs/{uuid}": {
+      "get": {
+        "operationId": "SubscriptionPageConfigController_getConfigByUuid",
+        "parameters": [
+          {
+            "name": "uuid",
+            "required": true,
+            "in": "path",
+            "description": "Subscription page config UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription page config retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSubscriptionPageConfigResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Get subscription page config by uuid",
+        "tags": [
+          "Subscription Page Configs Controller"
+        ]
+      },
+      "delete": {
+        "operationId": "SubscriptionPageConfigController_deleteConfig",
+        "parameters": [
+          {
+            "name": "uuid",
+            "required": true,
+            "in": "path",
+            "description": "Subscription page config UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription page config deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteSubscriptionPageConfigResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Delete subscription page config",
+        "tags": [
+          "Subscription Page Configs Controller"
+        ]
+      }
+    },
+    "/api/subscription-page-configs/actions/reorder": {
+      "post": {
+        "operationId": "SubscriptionPageConfigController_reorderSubscriptionPageConfigs",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderSubscriptionPageConfigsRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Subscription page configs reordered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReorderSubscriptionPageConfigsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Reorder subscription page configs",
+        "tags": [
+          "Subscription Page Configs Controller"
+        ]
+      }
+    },
+    "/api/subscription-page-configs/actions/clone": {
+      "post": {
+        "operationId": "SubscriptionPageConfigController_cloneSubscriptionPageConfig",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneSubscriptionPageConfigRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Subscription page config cloned successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloneSubscriptionPageConfigResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Clone subscription page config",
+        "tags": [
+          "Subscription Page Configs Controller"
+        ]
+      }
+    },
     "/api/users": {
       "post": {
         "operationId": "UsersController_createUser",
@@ -5358,154 +6217,6 @@
         ]
       }
     },
-    "/api/users/stats/usage/{uuid}/range": {
-      "get": {
-        "operationId": "UsersStatsController_getUserUsageByRange",
-        "parameters": [
-          {
-            "name": "start",
-            "required": true,
-            "in": "query",
-            "description": "Start date",
-            "schema": {
-              "format": "date-time",
-              "type": "string"
-            }
-          },
-          {
-            "name": "end",
-            "required": true,
-            "in": "query",
-            "description": "End date",
-            "schema": {
-              "format": "date-time",
-              "type": "string"
-            }
-          },
-          {
-            "name": "uuid",
-            "required": true,
-            "in": "path",
-            "description": "UUID of the user",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "User usage by range fetched successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetUserUsageByRangeResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "statusCode": {
-                      "type": "number",
-                      "example": 400
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "validation": {
-                            "type": "string",
-                            "example": "uuid"
-                          },
-                          "code": {
-                            "type": "string",
-                            "example": "invalid_string"
-                          },
-                          "message": {
-                            "type": "string",
-                            "example": "Invalid uuid"
-                          },
-                          "path": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            },
-                            "example": [
-                              "uuid"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "validation",
-                          "code",
-                          "message",
-                          "path"
-                        ]
-                      },
-                      "example": [
-                        {
-                          "validation": "uuid",
-                          "code": "invalid_string",
-                          "message": "Invalid uuid",
-                          "path": [
-                            "uuid"
-                          ]
-                        }
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "User not found"
-          },
-          "500": {
-            "description": "Server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "timestamp": {
-                      "type": "string"
-                    },
-                    "path": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "errorCode": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "Authorization": []
-          }
-        ],
-        "summary": "Get user usage by range",
-        "tags": [
-          "Users Stats Controller"
-        ]
-      }
-    },
     "/api/sub/{shortUuid}/info": {
       "get": {
         "operationId": "SubscriptionController_getSubscriptionInfoByShortUuid",
@@ -6450,6 +7161,141 @@
           }
         ],
         "summary": "Get Raw Subscription by Short UUID",
+        "tags": [
+          "[Protected] Subscriptions Controller"
+        ]
+      }
+    },
+    "/api/subscriptions/subpage-config/{shortUuid}": {
+      "get": {
+        "operationId": "SubscriptionsController_getSubpageConfigByShortUuid",
+        "parameters": [
+          {
+            "name": "shortUuid",
+            "required": true,
+            "in": "path",
+            "description": "Short UUID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetSubpageConfigByShortUuidRequestBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Subpage config fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSubpageConfigByShortUuidResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Get Subpage Config by Short UUID",
         "tags": [
           "[Protected] Subscriptions Controller"
         ]
@@ -14482,9 +15328,9 @@
         ]
       }
     },
-    "/api/nodes/usage/{uuid}/users/range": {
+    "/api/bandwidth-stats/nodes/{uuid}/users/legacy": {
       "get": {
-        "operationId": "NodesUserUsageHistoryController_getNodeUserUsage",
+        "operationId": "BandwidthStatsNodesController_getNodeUserUsage",
         "parameters": [
           {
             "name": "start",
@@ -14518,11 +15364,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Nodes user usage by range fetched successfully",
+            "description": "Nodes users usage by range (legacy) fetched successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GetNodeUserUsageByRangeResponseDto"
+                  "$ref": "#/components/schemas/GetLegacyStatsNodesUsersUsageResponseDto"
                 }
               }
             }
@@ -14621,15 +15467,15 @@
             "Authorization": []
           }
         ],
-        "summary": "Get node user usage by range and Node UUID",
+        "summary": "Get Node User Usage by Range and Node UUID (Legacy)",
         "tags": [
           "Bandwidth Stats Controller"
         ]
       }
     },
-    "/api/nodes/usage/realtime": {
+    "/api/bandwidth-stats/nodes/realtime": {
       "get": {
-        "operationId": "NodesUserUsageHistoryController_getNodesRealtimeUsage",
+        "operationId": "BandwidthStatsNodesController_getNodesRealtimeUsage",
         "parameters": [],
         "responses": {
           "200": {
@@ -14637,7 +15483,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GetNodesRealtimeUsageResponseDto"
+                  "$ref": "#/components/schemas/GetStatsNodesRealtimeUsageResponseDto"
                 }
               }
             }
@@ -14736,7 +15582,463 @@
             "Authorization": []
           }
         ],
-        "summary": "Get nodes realtime usage",
+        "summary": "Get Nodes Realtime Usage",
+        "tags": [
+          "Bandwidth Stats Controller"
+        ]
+      }
+    },
+    "/api/bandwidth-stats/nodes/{uuid}/users": {
+      "get": {
+        "operationId": "BandwidthStatsNodesController_getStatsNodeUsersUsage",
+        "parameters": [
+          {
+            "name": "topUsersLimit",
+            "required": true,
+            "in": "query",
+            "description": "Limit of top users to return",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "start",
+            "required": true,
+            "in": "query",
+            "description": "Start date",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "required": true,
+            "in": "query",
+            "description": "End date",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "uuid",
+            "required": true,
+            "in": "path",
+            "description": "UUID of the node",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stats node users usage fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetStatsNodeUsersUsageResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Get Node Users Usage by Node UUID",
+        "tags": [
+          "Bandwidth Stats Controller"
+        ]
+      }
+    },
+    "/api/bandwidth-stats/users/{uuid}/legacy": {
+      "get": {
+        "operationId": "BandwidthStatsUsersController_getUserUsageByRange",
+        "parameters": [
+          {
+            "name": "start",
+            "required": true,
+            "in": "query",
+            "description": "Start date",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "required": true,
+            "in": "query",
+            "description": "End date",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "uuid",
+            "required": true,
+            "in": "path",
+            "description": "UUID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User usage by range fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetLegacyStatsUserUsageResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Get User Usage by Range (Legacy)",
+        "tags": [
+          "Bandwidth Stats Controller"
+        ]
+      }
+    },
+    "/api/bandwidth-stats/users/{uuid}": {
+      "get": {
+        "operationId": "BandwidthStatsUsersController_getStatsNodesUsage",
+        "parameters": [
+          {
+            "name": "topNodesLimit",
+            "required": true,
+            "in": "query",
+            "description": "Limit of top nodes to return",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "start",
+            "required": true,
+            "in": "query",
+            "description": "Start date",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "required": true,
+            "in": "query",
+            "description": "End date",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "uuid",
+            "required": true,
+            "in": "path",
+            "description": "UUID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stats user usage fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetStatsUserUsageResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Get User Usage by Range",
         "tags": [
           "Bandwidth Stats Controller"
         ]
@@ -15635,10 +16937,19 @@
         ]
       }
     },
-    "/api/nodes/usage/range": {
+    "/api/bandwidth-stats/nodes": {
       "get": {
-        "operationId": "NodesUsageHistoryController_getNodesUsageByRange",
+        "operationId": "NodesUsageHistoryController_getStatsNodesUsage",
         "parameters": [
+          {
+            "name": "topNodesLimit",
+            "required": true,
+            "in": "query",
+            "description": "Limit of top nodes to return",
+            "schema": {
+              "type": "number"
+            }
+          },
           {
             "name": "start",
             "required": true,
@@ -15662,11 +16973,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Nodes usage by range fetched successfully",
+            "description": "Stats nodes usage fetched successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GetNodesUsageByRangeResponseDto"
+                  "$ref": "#/components/schemas/GetStatsNodesUsageResponseDto"
                 }
               }
             }
@@ -15765,7 +17076,7 @@
             "Authorization": []
           }
         ],
-        "summary": "Get nodes usage by range",
+        "summary": "Get Nodes Usage by Range",
         "tags": [
           "Bandwidth Stats Controller"
         ]
@@ -18657,9 +19968,9 @@
     }
   },
   "info": {
-    "title": "Remnawave API v2.3.2",
+    "title": "Remnawave API v2.4.4",
     "description": "\nRemnawave is a powerful proxy managment tool, built on top of Xray-core, with a focus on simplicity and ease of use.\n\n## Resources\n* https://t.me/remnawave\n* https://github.com/remnawave\n* https://docs.rw\n",
-    "version": "2.3.2",
+    "version": "2.4.4",
     "contact": {},
     "license": {
       "name": "AGPL-3.0",
@@ -18688,10 +19999,6 @@
       "description": "Bulk actions with users."
     },
     {
-      "name": "Users Stats Controller",
-      "description": ""
-    },
-    {
       "name": "HWID User Devices Controller",
       "description": ""
     },
@@ -18704,6 +20011,14 @@
       "description": "Methods of this controller are protected with auth, most of them is returning the same informations as public Subscription Controller."
     },
     {
+      "name": "Nodes Controller",
+      "description": ""
+    },
+    {
+      "name": "Bandwidth Stats Controller",
+      "description": ""
+    },
+    {
       "name": "Config Profiles Controller",
       "description": "Management of Config Profiles."
     },
@@ -18714,10 +20029,6 @@
     {
       "name": "External Squads Controller",
       "description": "Management of External Squads."
-    },
-    {
-      "name": "Nodes Controller",
-      "description": ""
     },
     {
       "name": "Hosts Controller",
@@ -18744,10 +20055,6 @@
       "description": ""
     },
     {
-      "name": "Bandwidth Stats Controller",
-      "description": ""
-    },
-    {
       "name": "Keygen Controller",
       "description": "Generation of SSL_CERT for Remnawave Node."
     },
@@ -18761,6 +20068,10 @@
     },
     {
       "name": "Remnawave Settings Controller",
+      "description": ""
+    },
+    {
+      "name": "Subscription Page Configs Controller",
       "description": ""
     }
   ],
@@ -19904,6 +21215,313 @@
             },
             "required": [
               "accessToken"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "GetSubscriptionPageConfigsResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "number"
+              },
+              "configs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uuid": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "viewPosition": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "config": {
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "uuid",
+                    "viewPosition",
+                    "name",
+                    "config"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "total",
+              "configs"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "GetSubscriptionPageConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "uuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "viewPosition": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "config": {}
+            },
+            "required": [
+              "uuid",
+              "viewPosition",
+              "name",
+              "config"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "UpdateSubscriptionPageConfigRequestDto": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 30,
+            "pattern": "^[A-Za-z0-9_\\s-]+$"
+          },
+          "config": {}
+        },
+        "required": [
+          "uuid"
+        ]
+      },
+      "UpdateSubscriptionPageConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "uuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "viewPosition": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "config": {}
+            },
+            "required": [
+              "uuid",
+              "viewPosition",
+              "name",
+              "config"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "DeleteSubscriptionPageConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "isDeleted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "isDeleted"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "CreateSubscriptionPageConfigRequestDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 30,
+            "pattern": "^[A-Za-z0-9_\\s-]+$"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreateSubscriptionPageConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "uuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "viewPosition": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "config": {
+                "nullable": true
+              }
+            },
+            "required": [
+              "uuid",
+              "viewPosition",
+              "name",
+              "config"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "ReorderSubscriptionPageConfigsRequestDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "viewPosition": {
+                  "type": "integer"
+                },
+                "uuid": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "viewPosition",
+                "uuid"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "ReorderSubscriptionPageConfigsResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "number"
+              },
+              "configs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uuid": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "viewPosition": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "config": {
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "uuid",
+                    "viewPosition",
+                    "name",
+                    "config"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "total",
+              "configs"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "CloneSubscriptionPageConfigRequestDto": {
+        "type": "object",
+        "properties": {
+          "cloneFromUuid": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "cloneFromUuid"
+        ]
+      },
+      "CloneSubscriptionPageConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "uuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "viewPosition": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "config": {}
+            },
+            "required": [
+              "uuid",
+              "viewPosition",
+              "name",
+              "config"
             ]
           }
         },
@@ -23833,50 +25451,6 @@
           "response"
         ]
       },
-      "GetUserUsageByRangeResponseDto": {
-        "type": "object",
-        "properties": {
-          "response": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "userUuid": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "nodeUuid": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "nodeName": {
-                  "type": "string"
-                },
-                "countryCode": {
-                  "type": "string"
-                },
-                "total": {
-                  "type": "number"
-                },
-                "date": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "userUuid",
-                "nodeUuid",
-                "nodeName",
-                "countryCode",
-                "total",
-                "date"
-              ]
-            }
-          }
-        },
-        "required": [
-          "response"
-        ]
-      },
       "GetSubscriptionInfoResponseDto": {
         "type": "object",
         "properties": {
@@ -24989,6 +26563,45 @@
               "convertedUserInfo",
               "headers",
               "rawHosts"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "GetSubpageConfigByShortUuidRequestBodyDto": {
+        "type": "object",
+        "properties": {
+          "requestHeaders": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "requestHeaders"
+        ]
+      },
+      "GetSubpageConfigByShortUuidResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "subpageConfigUuid": {
+                "type": "string",
+                "format": "uuid",
+                "nullable": true
+              },
+              "webpageAllowed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "subpageConfigUuid",
+              "webpageAllowed"
             ]
           }
         },
@@ -27607,6 +29220,11 @@
                       ],
                       "nullable": true
                     },
+                    "subpageConfigUuid": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -27627,6 +29245,7 @@
                     "responseHeaders",
                     "hwidSettings",
                     "customRemarks",
+                    "subpageConfigUuid",
                     "createdAt",
                     "updatedAt"
                   ]
@@ -27838,6 +29457,11 @@
                 ],
                 "nullable": true
               },
+              "subpageConfigUuid": {
+                "type": "string",
+                "format": "uuid",
+                "nullable": true
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
@@ -27858,6 +29482,7 @@
               "responseHeaders",
               "hwidSettings",
               "customRemarks",
+              "subpageConfigUuid",
               "createdAt",
               "updatedAt"
             ]
@@ -28076,6 +29701,11 @@
                 ],
                 "nullable": true
               },
+              "subpageConfigUuid": {
+                "type": "string",
+                "format": "uuid",
+                "nullable": true
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
@@ -28096,6 +29726,7 @@
               "responseHeaders",
               "hwidSettings",
               "customRemarks",
+              "subpageConfigUuid",
               "createdAt",
               "updatedAt"
             ]
@@ -28282,6 +29913,11 @@
               "emptyHosts",
               "emptyInternalSquads"
             ],
+            "nullable": true
+          },
+          "subpageConfigUuid": {
+            "type": "string",
+            "format": "uuid",
             "nullable": true
           }
         },
@@ -28484,6 +30120,11 @@
                 ],
                 "nullable": true
               },
+              "subpageConfigUuid": {
+                "type": "string",
+                "format": "uuid",
+                "nullable": true
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
@@ -28504,6 +30145,7 @@
               "responseHeaders",
               "hwidSettings",
               "customRemarks",
+              "subpageConfigUuid",
               "createdAt",
               "updatedAt"
             ]
@@ -28800,6 +30442,11 @@
                       ],
                       "nullable": true
                     },
+                    "subpageConfigUuid": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -28820,6 +30467,7 @@
                     "responseHeaders",
                     "hwidSettings",
                     "customRemarks",
+                    "subpageConfigUuid",
                     "createdAt",
                     "updatedAt"
                   ]
@@ -28926,8 +30574,10 @@
           },
           "consumptionMultiplier": {
             "type": "number",
-            "minimum": 0.1,
-            "exclusiveMinimum": false
+            "minimum": 0,
+            "exclusiveMinimum": false,
+            "maximum": 100,
+            "exclusiveMaximum": false
           },
           "configProfile": {
             "type": "object",
@@ -30288,8 +31938,10 @@
           },
           "consumptionMultiplier": {
             "type": "number",
-            "minimum": 0.1,
-            "exclusiveMinimum": false
+            "minimum": 0,
+            "exclusiveMinimum": false,
+            "maximum": 100,
+            "exclusiveMaximum": false
           },
           "configProfile": {
             "type": "object",
@@ -33133,7 +34785,7 @@
           "response"
         ]
       },
-      "GetNodeUserUsageByRangeResponseDto": {
+      "GetLegacyStatsNodesUsersUsageResponseDto": {
         "type": "object",
         "properties": {
           "response": {
@@ -33173,7 +34825,7 @@
           "response"
         ]
       },
-      "GetNodesRealtimeUsageResponseDto": {
+      "GetStatsNodesRealtimeUsageResponseDto": {
         "type": "object",
         "properties": {
           "response": {
@@ -33222,6 +34874,202 @@
                 "totalSpeedBps"
               ]
             }
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "GetStatsNodeUsersUsageResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sparklineData": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "topUsers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "color",
+                    "username",
+                    "total"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "categories",
+              "sparklineData",
+              "topUsers"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "GetLegacyStatsUserUsageResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "userUuid": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "nodeUuid": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "nodeName": {
+                  "type": "string"
+                },
+                "countryCode": {
+                  "type": "string"
+                },
+                "total": {
+                  "type": "number"
+                },
+                "date": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userUuid",
+                "nodeUuid",
+                "nodeName",
+                "countryCode",
+                "total",
+                "date"
+              ]
+            }
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "GetStatsUserUsageResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sparklineData": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "topNodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uuid": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "countryCode": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "uuid",
+                    "color",
+                    "name",
+                    "countryCode",
+                    "total"
+                  ]
+                }
+              },
+              "series": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uuid": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "countryCode": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "required": [
+                    "uuid",
+                    "name",
+                    "color",
+                    "countryCode",
+                    "total",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "categories",
+              "sparklineData",
+              "topNodes",
+              "series"
+            ]
           }
         },
         "required": [
@@ -33749,59 +35597,100 @@
           "response"
         ]
       },
-      "GetNodesUsageByRangeResponseDto": {
+      "GetStatsNodesUsageResponseDto": {
         "type": "object",
         "properties": {
           "response": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "nodeUuid": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "nodeName": {
-                  "type": "string"
-                },
-                "nodeCountryCode": {
-                  "type": "string"
-                },
-                "total": {
-                  "type": "number"
-                },
-                "totalDownload": {
-                  "type": "number"
-                },
-                "totalUpload": {
-                  "type": "number"
-                },
-                "humanReadableTotal": {
-                  "type": "string"
-                },
-                "humanReadableTotalDownload": {
-                  "type": "string"
-                },
-                "humanReadableTotalUpload": {
-                  "type": "string"
-                },
-                "date": {
+            "type": "object",
+            "properties": {
+              "categories": {
+                "type": "array",
+                "items": {
                   "type": "string"
                 }
               },
-              "required": [
-                "nodeUuid",
-                "nodeName",
-                "nodeCountryCode",
-                "total",
-                "totalDownload",
-                "totalUpload",
-                "humanReadableTotal",
-                "humanReadableTotalDownload",
-                "humanReadableTotalUpload",
-                "date"
-              ]
-            }
+              "sparklineData": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "topNodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uuid": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "countryCode": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "uuid",
+                    "color",
+                    "name",
+                    "countryCode",
+                    "total"
+                  ]
+                }
+              },
+              "series": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uuid": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "countryCode": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "required": [
+                    "uuid",
+                    "name",
+                    "color",
+                    "countryCode",
+                    "total",
+                    "data"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "categories",
+              "sparklineData",
+              "topNodes",
+              "series"
+            ]
           }
         },
         "required": [

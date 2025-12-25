@@ -245,7 +245,7 @@ class RemnawaveApiClient:
         tags: list[str] | None = None,
     ) -> dict:
         """Обновление ноды."""
-        payload: dict[str, object] = {}
+        payload: dict[str, object] = {"uuid": node_uuid}
         if name is not None:
             payload["name"] = name
         if address is not None:
@@ -273,7 +273,7 @@ class RemnawaveApiClient:
             payload["consumptionMultiplier"] = consumption_multiplier
         if tags is not None:
             payload["tags"] = tags
-        return await self._patch(f"/api/nodes/{node_uuid}", json=payload)
+        return await self._patch("/api/nodes", json=payload)
 
     async def delete_node(self, node_uuid: str) -> dict:
         """Удаление ноды."""
@@ -294,10 +294,10 @@ class RemnawaveApiClient:
             raise ApiClientError from exc
 
     async def get_nodes_realtime_usage(self) -> dict:
-        return await self._get("/api/nodes/usage/realtime")
+        return await self._get("/api/bandwidth-stats/nodes/realtime")
 
-    async def get_nodes_usage_range(self, start: str, end: str) -> dict:
-        return await self._get(f"/api/nodes/usage/range?start={start}&end={end}")
+    async def get_nodes_usage_range(self, start: str, end: str, top_nodes_limit: int = 10) -> dict:
+        return await self._get(f"/api/bandwidth-stats/nodes?start={start}&end={end}&topNodesLimit={top_nodes_limit}")
 
     # --- Hosts ---
     async def get_hosts(self) -> dict:
