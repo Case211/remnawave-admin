@@ -14,10 +14,10 @@ from src.handlers.state import (
 )
 from src.keyboards.billing_menu import billing_menu_keyboard
 from src.keyboards.billing_nodes_menu import billing_nodes_menu_keyboard
-from src.keyboards.billing_overview import billing_overview_keyboard
 from src.keyboards.bulk_menu import bulk_menu_keyboard
 from src.keyboards.hosts_menu import hosts_menu_keyboard
 from src.keyboards.main_menu import (
+    billing_overview_keyboard,
     main_menu_keyboard,
     nodes_menu_keyboard,
     resources_menu_keyboard,
