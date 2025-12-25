@@ -10,7 +10,8 @@ from src.handlers.state import PENDING_INPUT
 from src.keyboards.main_menu import main_menu_keyboard, nodes_menu_keyboard, resources_menu_keyboard
 from src.keyboards.navigation import NavTarget
 from src.keyboards.snippet_actions import snippet_actions_keyboard
-from src.keyboards.template_actions import template_actions_keyboard, template_list_keyboard, template_menu_keyboard
+from src.keyboards.template_actions import template_actions_keyboard
+from src.keyboards.template_menu import template_list_keyboard, template_menu_keyboard
 from src.keyboards.token_actions import token_actions_keyboard
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
 from src.utils.formatters import (
