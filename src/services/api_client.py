@@ -40,6 +40,7 @@ class RemnawaveApiClient:
             headers=self._build_headers(),
             timeout=timeout_config,
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            follow_redirects=True,  # Автоматически следовать редиректам (HTTP -> HTTPS)
         )
 
     def _build_headers(self) -> dict[str, str]:
@@ -64,6 +65,15 @@ class RemnawaveApiClient:
                     raise UnauthorizedError from exc
                 if status == 404:
                     raise NotFoundError from exc
+                # 308 Permanent Redirect обычно означает HTTP -> HTTPS
+                if status == 308:
+                    https_url = full_url.replace("http://", "https://")
+                    logger.error(
+                        "API returned 308 Permanent Redirect. "
+                        "Please use HTTPS in API_BASE_URL. "
+                        "Current: %s -> Should be: %s",
+                        full_url, https_url
+                    )
                 logger.warning("API error %s on GET %s: %s", status, full_url, exc.response.text)
                 raise ApiClientError from exc
             except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout) as exc:
