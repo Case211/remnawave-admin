@@ -13,7 +13,7 @@ def system_nodes_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_("system_nodes.template_reset_traffic_all"), callback_data="system:nodes:reset_traffic_all")],
             [InlineKeyboardButton(text=_("system_nodes.template_assign_profile"), callback_data="system:nodes:assign_profile")],
             [InlineKeyboardButton(text=_("system_nodes.list"), callback_data="system:nodes:list")],
-            nav_row(NavTarget.SYSTEM_MENU),
+            nav_row(NavTarget.NODES_LIST),
         ]
     )
 

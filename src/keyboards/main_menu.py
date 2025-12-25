@@ -22,7 +22,6 @@ def system_menu_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=_("actions.health"), callback_data="menu:health")],
             [InlineKeyboardButton(text=_("actions.stats"), callback_data="menu:stats")],
-            [InlineKeyboardButton(text=_("actions.system_nodes"), callback_data="menu:system_nodes")],
             nav_row(NavTarget.MAIN_MENU),
         ]
     )

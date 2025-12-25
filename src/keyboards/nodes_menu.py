@@ -12,6 +12,7 @@ def nodes_list_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_("node.create"), callback_data="nodes:create")],
             [InlineKeyboardButton(text=_("node.update"), callback_data="nodes:update")],
             [InlineKeyboardButton(text=_("node.bulk_profile_modification"), callback_data="nodes:bulk_profile")],
+            [InlineKeyboardButton(text=_("actions.system_nodes"), callback_data="menu:system_nodes")],
             nav_row(NavTarget.NODES_MENU),
         ]
     )
