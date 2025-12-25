@@ -43,7 +43,13 @@ from src.keyboards.bulk_hosts import bulk_hosts_keyboard
 from src.keyboards.system_nodes import system_nodes_keyboard
 from src.keyboards.stats_menu import stats_menu_keyboard
 from src.keyboards.subscription_actions import subscription_keyboard
-from src.keyboards.user_actions import user_actions_keyboard, user_edit_keyboard, user_edit_strategy_keyboard, user_edit_squad_keyboard
+from src.keyboards.user_actions import (
+    user_actions_keyboard,
+    user_edit_keyboard,
+    user_edit_strategy_keyboard,
+    user_edit_squad_keyboard,
+)
+from src.keyboards.user_stats import user_stats_keyboard
 from src.keyboards.node_edit import node_edit_keyboard
 from src.keyboards.billing_menu import billing_menu_keyboard
 from src.keyboards.billing_nodes_menu import billing_nodes_menu_keyboard
@@ -2145,6 +2151,372 @@ async def cb_user_happ_link(callback: CallbackQuery) -> None:
         await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
     except ApiClientError:
         logger.exception("Failed to get Happ crypto link for user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+
+
+@router.callback_query(F.data.startswith("user_stats:"))
+async def cb_user_stats(callback: CallbackQuery) -> None:
+    """Обработчик статистики пользователя."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        return
+    
+    # Формат: user_stats:{action}:{user_uuid} или user_stats:{user_uuid}
+    if len(parts) == 2:
+        # Только user_uuid, показываем меню
+        user_uuid = parts[1]
+        action = None
+    else:
+        action = parts[1]
+        user_uuid = parts[2]
+    
+    back_to = _get_user_detail_back_target(callback.from_user.id)
+    
+    try:
+        if action == "sub_history":
+            # История запросов подписки
+            history_data = await api_client.get_user_subscription_request_history(user_uuid)
+            history = history_data.get("response", {}).get("records", [])
+            
+            if not history:
+                text = _("user.stats.subscription_history_title") + "\n\n" + _("user.stats.subscription_history_empty")
+            else:
+                lines = [_("user.stats.subscription_history_title"), ""]
+                for i, record in enumerate(history[:20], 1):  # Ограничиваем до 20 записей
+                    date = format_datetime(record.get("requestAt"))
+                    user_agent = record.get("userAgent", "—")
+                    request_ip = record.get("requestIp", "—")
+                    lines.append(_("user.stats.subscription_history_item").format(
+                        index=i,
+                        date=date,
+                        userAgent=_esc(user_agent[:50]) if user_agent else "—",
+                        ip=_esc(request_ip) if request_ip else "—"
+                    ))
+                text = "\n".join(lines)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:{user_uuid}")],
+                nav_row(back_to),
+            ])
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            
+        elif action == "traffic":
+            # Статистика трафика - показываем меню выбора периода
+            from datetime import datetime, timedelta
+            now = datetime.utcnow()
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=_("user.stats.period_today"),
+                        callback_data=f"user_stats:traffic_period:{user_uuid}:today"
+                    ),
+                    InlineKeyboardButton(
+                        text=_("user.stats.period_week"),
+                        callback_data=f"user_stats:traffic_period:{user_uuid}:week"
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=_("user.stats.period_month"),
+                        callback_data=f"user_stats:traffic_period:{user_uuid}:month"
+                    ),
+                    InlineKeyboardButton(
+                        text=_("user.stats.period_custom"),
+                        callback_data=f"user_stats:traffic_period:{user_uuid}:custom"
+                    ),
+                ],
+                [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:{user_uuid}")],
+                nav_row(back_to),
+            ])
+            await callback.message.edit_text(_("user.stats.select_period"), reply_markup=keyboard)
+            
+        elif action == "nodes":
+            # Использование нод - показываем меню выбора периода
+            from datetime import datetime, timedelta
+            now = datetime.utcnow()
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=_("user.stats.period_today"),
+                        callback_data=f"user_stats:nodes_period:{user_uuid}:today"
+                    ),
+                    InlineKeyboardButton(
+                        text=_("user.stats.period_week"),
+                        callback_data=f"user_stats:nodes_period:{user_uuid}:week"
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=_("user.stats.period_month"),
+                        callback_data=f"user_stats:nodes_period:{user_uuid}:month"
+                    ),
+                    InlineKeyboardButton(
+                        text=_("user.stats.period_custom"),
+                        callback_data=f"user_stats:nodes_period:{user_uuid}:custom"
+                    ),
+                ],
+                [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:{user_uuid}")],
+                nav_row(back_to),
+            ])
+            await callback.message.edit_text(_("user.stats.select_period"), reply_markup=keyboard)
+            
+        elif action == "hwid":
+            # Статистика по устройствам
+            hwid_data = await api_client.get_hwid_devices_stats()
+            stats = hwid_data.get("response", {})
+            
+            total_devices = stats.get("totalDevices", 0)
+            active_devices = stats.get("activeDevices", 0)
+            inactive_devices = total_devices - active_devices
+            by_user = stats.get("byUser", [])
+            
+            lines = [
+                _("user.stats.hwid_title"),
+                "",
+                _("user.stats.hwid_total").format(total=total_devices),
+                _("user.stats.hwid_active").format(active=active_devices),
+                _("user.stats.hwid_inactive").format(inactive=inactive_devices),
+            ]
+            
+            if by_user:
+                lines.append("")
+                lines.append(_("user.stats.hwid_by_user"))
+                for user_stat in by_user[:10]:  # Ограничиваем до 10 пользователей
+                    username = user_stat.get("username", "n/a")
+                    count = user_stat.get("devicesCount", 0)
+                    lines.append(_("user.stats.hwid_user_item").format(
+                        username=_esc(username),
+                        count=count
+                    ))
+            
+            text = "\n".join(lines)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:{user_uuid}")],
+                nav_row(back_to),
+            ])
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            
+        else:
+            # Показываем меню статистики
+            user = await api_client.get_user_by_uuid(user_uuid)
+            user_info = user.get("response", user)
+            username = user_info.get("username", "n/a")
+            text = _("user.stats_title").format(username=_esc(username))
+            await callback.message.edit_text(text, reply_markup=user_stats_keyboard(user_uuid, back_to=back_to))
+            
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
+    except ApiClientError:
+        logger.exception("Failed to get user stats user_uuid=%s action=%s actor_id=%s", user_uuid, action, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+
+
+@router.callback_query(F.data.startswith("user_stats:traffic_period:"))
+async def cb_user_stats_traffic_period(callback: CallbackQuery) -> None:
+    """Обработчик выбора периода для статистики трафика."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        return
+    
+    user_uuid = parts[2]
+    period = parts[3]
+    back_to = _get_user_detail_back_target(callback.from_user.id)
+    
+    try:
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        if period == "today":
+            start = today_start.isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "week":
+            start = (today_start - timedelta(days=7)).isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "month":
+            start = (today_start - timedelta(days=30)).isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "custom":
+            # Для произвольного периода нужно будет добавить ввод дат
+            await callback.message.edit_text(
+                _("user.stats.custom_period_not_implemented"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:traffic:{user_uuid}")],
+                    nav_row(back_to),
+                ])
+            )
+            return
+        else:
+            await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+            return
+        
+        # Получаем статистику трафика
+        traffic_data = await api_client.get_user_traffic_stats(user_uuid, start, end, top_nodes_limit=10)
+        response = traffic_data.get("response", {})
+        total_traffic = response.get("totalTrafficBytes", 0)
+        nodes_usage = response.get("nodesUsage", [])
+        
+        lines = [
+            _("user.stats.traffic_title"),
+            "",
+            _("user.stats.traffic_period").format(
+                start=format_datetime(start.replace("Z", "+00:00")),
+                end=format_datetime(end.replace("Z", "+00:00"))
+            ),
+            _("user.stats.traffic_total").format(total=format_bytes(total_traffic)),
+        ]
+        
+        if nodes_usage:
+            lines.append("")
+            lines.append(_("user.stats.traffic_by_node"))
+            for node in nodes_usage:
+                node_name = node.get("nodeName", "n/a")
+                country = node.get("countryCode", "—")
+                traffic_bytes = node.get("trafficBytes", 0)
+                lines.append(_("user.stats.traffic_node_item").format(
+                    nodeName=_esc(node_name),
+                    country=country,
+                    traffic=format_bytes(traffic_bytes)
+                ))
+        
+        text = "\n".join(lines)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:traffic:{user_uuid}")],
+            nav_row(back_to),
+        ])
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
+    except ApiClientError:
+        logger.exception("Failed to get user traffic stats user_uuid=%s period=%s actor_id=%s", user_uuid, period, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+
+
+@router.callback_query(F.data.startswith("user_stats:nodes_period:"))
+async def cb_user_stats_nodes_period(callback: CallbackQuery) -> None:
+    """Обработчик выбора периода для использования нод."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        return
+    
+    user_uuid = parts[2]
+    period = parts[3]
+    back_to = _get_user_detail_back_target(callback.from_user.id)
+    
+    try:
+        # Получаем информацию о пользователе для получения доступных нод
+        user = await api_client.get_user_by_uuid(user_uuid)
+        user_info = user.get("response", user)
+        
+        # Получаем доступные ноды пользователя
+        nodes_data = await api_client.get_user_accessible_nodes(user_uuid)
+        nodes = nodes_data.get("response", {}).get("nodes", [])
+        
+        if not nodes:
+            text = _("user.stats.nodes_usage_title") + "\n\n" + _("user.stats.nodes_usage_empty")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:nodes:{user_uuid}")],
+                nav_row(back_to),
+            ])
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            return
+        
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        if period == "today":
+            start = today_start.isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "week":
+            start = (today_start - timedelta(days=7)).isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "month":
+            start = (today_start - timedelta(days=30)).isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "custom":
+            await callback.message.edit_text(
+                _("user.stats.custom_period_not_implemented"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:nodes:{user_uuid}")],
+                    nav_row(back_to),
+                ])
+            )
+            return
+        else:
+            await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+            return
+        
+        # Получаем статистику по каждой ноде
+        lines = [
+            _("user.stats.nodes_usage_title"),
+            "",
+            _("user.stats.nodes_usage_period").format(
+                start=format_datetime(start.replace("Z", "+00:00")),
+                end=format_datetime(end.replace("Z", "+00:00"))
+            ),
+            "",
+        ]
+        
+        for node in nodes[:10]:  # Ограничиваем до 10 нод
+            node_uuid = node.get("uuid")
+            node_name = node.get("name", "n/a")
+            if not node_uuid:
+                continue
+            
+            try:
+                usage_data = await api_client.get_node_users_usage(node_uuid, start, end, top_users_limit=1)
+                usage_response = usage_data.get("response", {})
+                users_usage = usage_response.get("usersUsage", [])
+                
+                # Ищем использование текущего пользователя
+                user_usage = None
+                for u in users_usage:
+                    if u.get("userUuid") == user_uuid:
+                        user_usage = u
+                        break
+                
+                if user_usage:
+                    traffic_bytes = user_usage.get("trafficBytes", 0)
+                    lines.append(f"  • {_esc(node_name)}: {format_bytes(traffic_bytes)}")
+            except Exception:
+                # Если не удалось получить статистику для ноды, пропускаем
+                pass
+        
+        if len(lines) == 4:  # Только заголовки, нет данных
+            lines.append(_("user.stats.nodes_usage_empty"))
+        
+        text = "\n".join(lines)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=_("user.back_to_stats"), callback_data=f"user_stats:nodes:{user_uuid}")],
+            nav_row(back_to),
+        ])
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
+    except ApiClientError:
+        logger.exception("Failed to get user nodes usage user_uuid=%s period=%s actor_id=%s", user_uuid, period, callback.from_user.id)
         await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
 
 

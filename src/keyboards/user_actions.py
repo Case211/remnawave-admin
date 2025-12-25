@@ -20,6 +20,9 @@ def user_actions_keyboard(user_uuid: str, status: str, back_to: str = NavTarget.
             [
                 InlineKeyboardButton(text=_("user.edit"), callback_data=f"user_edit:{user_uuid}"),
             ],
+            [
+                InlineKeyboardButton(text=_("user.stats"), callback_data=f"user_stats:{user_uuid}"),
+            ],
             nav_row(back_to),
         ]
     )

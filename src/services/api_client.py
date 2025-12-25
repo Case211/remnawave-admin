@@ -518,6 +518,31 @@ class RemnawaveApiClient:
         """Шифрует ссылку подписки для Happ."""
         return await self._post("/api/system/tools/happ/encrypt", json={"linkToEncrypt": link_to_encrypt})
 
+    # --- User Statistics ---
+    async def get_user_subscription_request_history(self, user_uuid: str) -> dict:
+        """Получает историю запросов подписки пользователя (последние 24 записи)."""
+        return await self._get(f"/api/users/{user_uuid}/subscription-request-history")
+
+    async def get_user_traffic_stats(self, user_uuid: str, start: str, end: str, top_nodes_limit: int = 10) -> dict:
+        """Получает статистику трафика пользователя по нодам за период."""
+        return await self._get(f"/api/bandwidth-stats/users/{user_uuid}?start={start}&end={end}&topNodesLimit={top_nodes_limit}")
+
+    async def get_user_traffic_stats_legacy(self, user_uuid: str, start: str, end: str) -> dict:
+        """Получает статистику трафика пользователя (legacy формат)."""
+        return await self._get(f"/api/bandwidth-stats/users/{user_uuid}/legacy?start={start}&end={end}")
+
+    async def get_user_accessible_nodes(self, user_uuid: str) -> dict:
+        """Получает список доступных нод для пользователя."""
+        return await self._get(f"/api/users/{user_uuid}/accessible-nodes")
+
+    async def get_node_users_usage(self, node_uuid: str, start: str, end: str, top_users_limit: int = 10) -> dict:
+        """Получает статистику использования ноды пользователями."""
+        return await self._get(f"/api/bandwidth-stats/nodes/{node_uuid}/users?start={start}&end={end}&topUsersLimit={top_users_limit}")
+
+    async def get_hwid_devices_stats(self) -> dict:
+        """Получает статистику по устройствам (HWID)."""
+        return await self._get("/api/hwid/devices/stats")
+
     # --- API Tokens ---
     async def get_tokens(self) -> dict:
         return await self._get("/api/tokens")
