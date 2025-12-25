@@ -65,6 +65,7 @@ from src.utils.formatters import (
     format_bytes,
     format_uptime,
     build_subscription_summary,
+    _esc,
     build_tokens_list,
     build_created_token,
     escape_markdown,
@@ -1938,16 +1939,137 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
     await callback.answer()
     _prefix, user_uuid = callback.data.split(":")
     back_to = _get_user_detail_back_target(callback.from_user.id)
+    
     try:
-        data = await api_client.get_config_profiles()
-        profiles = data.get("response", {}).get("configProfiles", [])
-        text = _("user.configs_title").format(count=len(profiles)) + "\n" + build_config_profiles_list(profiles, _)
+        # Получаем информацию о пользователе
+        user = await api_client.get_user_by_uuid(user_uuid)
+        user_info = user.get("response", user)
+        short_uuid = user_info.get("shortUuid")
+        subscription_url = user_info.get("subscriptionUrl")
+        
+        subscription_links = []
+        happ_crypto_link = None
+        
+        # Получаем подписные ссылки из информации о подписке
+        if short_uuid:
+            try:
+                sub_info = await api_client.get_subscription_info(short_uuid)
+                sub_response = sub_info.get("response", {})
+                subscription_links = sub_response.get("links", [])
+            except Exception:
+                logger.debug("Failed to fetch subscription links for user %s", short_uuid)
+        
+        # Получаем Happ crypto link, если есть subscriptionUrl
+        if subscription_url:
+            try:
+                happ_response = await api_client.encrypt_happ_crypto_link(subscription_url)
+                happ_crypto_link = happ_response.get("response", {}).get("encryptedLink")
+            except Exception:
+                logger.debug("Failed to encrypt Happ crypto link for user %s", short_uuid)
+        
+        # Формируем текст и клавиатуру
+        text_lines = [_("user.configs_title")]
+        
+        if not subscription_links and not happ_crypto_link:
+            text_lines.append("")
+            text_lines.append(_("user.no_subscription_links"))
+        
+        keyboard_rows: list[list[InlineKeyboardButton]] = []
+        
+        # Добавляем кнопки для подписных ссылок
+        if subscription_links:
+            text_lines.append("")
+            text_lines.append(_("user.subscription_links_title"))
+            for i, link in enumerate(subscription_links[:10]):  # Ограничиваем до 10 ссылок
+                # Определяем тип ссылки по префиксу для текста кнопки
+                if link.startswith("vless://"):
+                    button_text = f"🔷 VLESS {i+1}"
+                elif link.startswith("ss://"):
+                    button_text = f"🔶 SS {i+1}"
+                elif link.startswith("trojan://"):
+                    button_text = f"🔴 Trojan {i+1}"
+                elif link.startswith("vmess://"):
+                    button_text = f"🟣 VMess {i+1}"
+                else:
+                    button_text = f"🔗 Link {i+1}"
+                
+                # Используем URL кнопку для прямой ссылки
+                keyboard_rows.append([InlineKeyboardButton(text=button_text, url=link)])
+        
+        # Добавляем кнопку для Happ crypto link
+        if happ_crypto_link:
+            text_lines.append("")
+            text_lines.append(_("user.happ_crypto_link_title"))
+            # Для Happ crypto link используем callback, так как это не URL
+            keyboard_rows.append([InlineKeyboardButton(
+                text=_("user.happ_crypto_link_button"),
+                callback_data=f"user_happ_link:{user_uuid}"
+            )])
+        
+        text = "\n".join(text_lines)
+        
+        # Добавляем кнопку "Назад"
+        keyboard_rows.append(nav_row(back_to))
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+        
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     except UnauthorizedError:
-        text = _("errors.unauthorized")
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
     except ApiClientError:
         logger.exception("Failed to fetch configs for user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
-        text = _("errors.generic")
-    await callback.message.edit_text(text, reply_markup=nav_keyboard(back_to))
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+
+
+@router.callback_query(F.data.startswith("user_happ_link:"))
+async def cb_user_happ_link(callback: CallbackQuery) -> None:
+    """Обработчик для отображения Happ crypto link."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    _prefix, user_uuid = callback.data.split(":")
+    back_to = _get_user_detail_back_target(callback.from_user.id)
+    
+    try:
+        # Получаем информацию о пользователе
+        user = await api_client.get_user_by_uuid(user_uuid)
+        user_info = user.get("response", user)
+        subscription_url = user_info.get("subscriptionUrl")
+        
+        if not subscription_url:
+            await callback.message.edit_text(
+                _("user.no_subscription_url"),
+                reply_markup=nav_keyboard(back_to)
+            )
+            return
+        
+        # Получаем Happ crypto link
+        happ_response = await api_client.encrypt_happ_crypto_link(subscription_url)
+        happ_crypto_link = happ_response.get("response", {}).get("encryptedLink")
+        
+        if not happ_crypto_link:
+            await callback.message.edit_text(
+                _("user.happ_crypto_link_error"),
+                reply_markup=nav_keyboard(back_to)
+            )
+            return
+        
+        # Отображаем Happ crypto link
+        text = f"{_('user.happ_crypto_link_title')}\n\n<code>{_esc(happ_crypto_link)}</code>"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=_("user.back_to_configs"), callback_data=f"user_configs:{user_uuid}")],
+            nav_row(back_to),
+        ])
+        
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
+    except ApiClientError:
+        logger.exception("Failed to get Happ crypto link for user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
 
 
 @router.callback_query(F.data == "menu:back")
@@ -2739,30 +2861,8 @@ async def _send_user_detail(
 
 
 async def _send_user_summary(target: Message | CallbackQuery, user: dict, back_to: str) -> None:
+    summary = build_user_summary(user, _)
     info = user.get("response", user)
-    short_uuid = info.get("shortUuid")
-    subscription_links = None
-    happ_crypto_link = None
-    
-    # Получаем подписные ссылки из информации о подписке
-    if short_uuid:
-        try:
-            sub_info = await api_client.get_subscription_info(short_uuid)
-            sub_response = sub_info.get("response", {})
-            subscription_links = sub_response.get("links", [])
-            
-            # Получаем Happ crypto link, если есть subscriptionUrl
-            subscription_url = info.get("subscriptionUrl")
-            if subscription_url:
-                try:
-                    happ_response = await api_client.encrypt_happ_crypto_link(subscription_url)
-                    happ_crypto_link = happ_response.get("response", {}).get("encryptedLink")
-                except Exception:
-                    logger.debug("Failed to encrypt Happ crypto link for user %s", short_uuid)
-        except Exception:
-            logger.debug("Failed to fetch subscription links for user %s", short_uuid)
-    
-    summary = build_user_summary(user, _, subscription_links=subscription_links, happ_crypto_link=happ_crypto_link)
     status = info.get("status", "UNKNOWN")
     uuid = info.get("uuid")
     reply_markup = user_actions_keyboard(uuid, status, back_to=back_to)

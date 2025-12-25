@@ -60,7 +60,7 @@ def format_uptime(seconds: float | int | None) -> str:
     return " ".join(parts) or "0m"
 
 
-def build_user_summary(user: dict, t: Callable[[str], str], subscription_links: list[str] | None = None, happ_crypto_link: str | None = None) -> str:
+def build_user_summary(user: dict, t: Callable[[str], str]) -> str:
     info = user.get("response", user)
     status = info.get("status", "UNKNOWN")
     expire_at = format_datetime(info.get("expireAt"))
@@ -77,8 +77,7 @@ def build_user_summary(user: dict, t: Callable[[str], str], subscription_links: 
         "EXPIRED": "🔴",
     }.get(status, "⚙️")
 
-    # Формируем базовую информацию
-    base_summary = t("user.summary").format(
+    return t("user.summary").format(
         username=_esc(info.get("username", NA)),
         status=_esc(status),
         statusEmoji=status_emoji,
@@ -93,35 +92,6 @@ def build_user_summary(user: dict, t: Callable[[str], str], subscription_links: 
         online=_esc(last_online),
         created=_esc(created_at),
     )
-
-    # Добавляем подписные ссылки, если они есть
-    links_section = []
-    if subscription_links:
-        links_section.append("")
-        links_section.append(t("user.subscription_links_title"))
-        for link in subscription_links[:10]:  # Ограничиваем до 10 ссылок
-            # Определяем тип ссылки по префиксу
-            if link.startswith("vless://"):
-                links_section.append(f"🔷 VLESS: <code>{_esc(link)}</code>")
-            elif link.startswith("ss://"):
-                links_section.append(f"🔶 SS: <code>{_esc(link)}</code>")
-            elif link.startswith("trojan://"):
-                links_section.append(f"🔴 Trojan: <code>{_esc(link)}</code>")
-            elif link.startswith("vmess://"):
-                links_section.append(f"🟣 VMess: <code>{_esc(link)}</code>")
-            else:
-                links_section.append(f"🔗 {_esc(link)}")
-    
-    # Добавляем Happ crypto link, если он есть
-    if happ_crypto_link:
-        links_section.append("")
-        links_section.append(t("user.happ_crypto_link_title"))
-        links_section.append(f"🔐 Happ: <code>{_esc(happ_crypto_link)}</code>")
-
-    if links_section:
-        return base_summary + "\n".join(links_section)
-    
-    return base_summary
 
 
 def build_created_user(user: dict, t: Callable[[str], str]) -> str:
