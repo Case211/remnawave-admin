@@ -22,10 +22,22 @@ class UnauthorizedError(ApiClientError):
 class RemnawaveApiClient:
     def __init__(self) -> None:
         self.settings = get_settings()
+        # Увеличиваем таймауты для стабильности соединения
+        # connect - таймаут на установку соединения
+        # read - таймаут на чтение ответа
+        # write - таймаут на отправку запроса
+        # pool - таймаут на получение соединения из пула
+        timeout_config = httpx.Timeout(
+            connect=15.0,  # Увеличен с 20 до 15 для connect
+            read=30.0,     # Увеличен до 30 для read
+            write=15.0,    # Таймаут на запись
+            pool=10.0      # Таймаут на получение из пула
+        )
         self._client = httpx.AsyncClient(
             base_url=str(self.settings.api_base_url),
             headers=self._build_headers(),
-            timeout=20.0,
+            timeout=timeout_config,
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
         )
 
     def _build_headers(self) -> dict[str, str]:
@@ -36,9 +48,11 @@ class RemnawaveApiClient:
 
     async def _get(self, url: str, max_retries: int = 3) -> dict:
         """Выполняет GET запрос с retry для сетевых ошибок."""
+        full_url = f"{self._client.base_url}{url}"
         last_exc = None
         for attempt in range(max_retries):
             try:
+                logger.debug("GET request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
                 response = await self._client.get(url)
                 response.raise_for_status()
                 return response.json()
@@ -48,7 +62,7 @@ class RemnawaveApiClient:
                     raise UnauthorizedError from exc
                 if status == 404:
                     raise NotFoundError from exc
-                logger.warning("API error %s on GET %s: %s", status, url, exc.response.text)
+                logger.warning("API error %s on GET %s: %s", status, full_url, exc.response.text)
                 raise ApiClientError from exc
             except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout) as exc:
                 last_exc = exc
@@ -57,54 +71,106 @@ class RemnawaveApiClient:
                     delay = 0.5 * (2 ** attempt)  # Экспоненциальная задержка: 0.5s, 1s, 2s
                     logger.warning(
                         "HTTP client error on GET %s: %s (%s), retrying in %.1fs (attempt %d/%d)",
-                        url, exc, error_type, delay, attempt + 1, max_retries
+                        full_url, exc, error_type, delay, attempt + 1, max_retries
                     )
                     await asyncio.sleep(delay)
                 else:
-                    logger.warning("HTTP client error on GET %s: %s (%s) - max retries reached", url, exc, error_type)
+                    logger.error(
+                        "HTTP client error on GET %s: %s (%s) - max retries reached. "
+                        "Server may be overloaded or network unstable.",
+                        full_url, exc, error_type
+                    )
             except httpx.HTTPError as exc:
                 error_type = type(exc).__name__
-                logger.warning("HTTP client error on GET %s: %s (%s)", url, exc, error_type)
+                logger.warning("HTTP client error on GET %s: %s (%s)", full_url, exc, error_type)
                 raise ApiClientError from exc
         
         # Если все попытки исчерпаны, выбрасываем последнюю ошибку
-        raise ApiClientError from last_exc
+        raise ApiClientError(f"Failed to get {full_url} after {max_retries} attempts") from last_exc
 
-    async def _post(self, url: str, json: dict | None = None) -> dict:
-        try:
-            response = await self._client.post(url, json=json)
-            response.raise_for_status()
-            return response.json()
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status in (401, 403):
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on POST %s: %s", status, url, exc.response.text)
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on POST %s: %s (%s)", url, exc, error_type)
-            raise ApiClientError from exc
+    async def _post(self, url: str, json: dict | None = None, max_retries: int = 3) -> dict:
+        """Выполняет POST запрос с retry для сетевых ошибок."""
+        full_url = f"{self._client.base_url}{url}"
+        last_exc = None
+        for attempt in range(max_retries):
+            try:
+                logger.debug("POST request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
+                response = await self._client.post(url, json=json)
+                response.raise_for_status()
+                return response.json()
+            except HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status in (401, 403):
+                    raise UnauthorizedError from exc
+                if status == 404:
+                    raise NotFoundError from exc
+                logger.warning("API error %s on POST %s: %s", status, full_url, exc.response.text)
+                raise ApiClientError from exc
+            except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout) as exc:
+                last_exc = exc
+                error_type = type(exc).__name__
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)  # Экспоненциальная задержка: 0.5s, 1s, 2s
+                    logger.warning(
+                        "HTTP client error on POST %s: %s (%s), retrying in %.1fs (attempt %d/%d)",
+                        full_url, exc, error_type, delay, attempt + 1, max_retries
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        "HTTP client error on POST %s: %s (%s) - max retries reached. "
+                        "Server may be overloaded or network unstable.",
+                        full_url, exc, error_type
+                    )
+            except httpx.HTTPError as exc:
+                error_type = type(exc).__name__
+                logger.warning("HTTP client error on POST %s: %s (%s)", full_url, exc, error_type)
+                raise ApiClientError from exc
+        
+        # Если все попытки исчерпаны, выбрасываем последнюю ошибку
+        raise ApiClientError(f"Failed to post {full_url} after {max_retries} attempts") from last_exc
 
-    async def _patch(self, url: str, json: dict | None = None) -> dict:
-        try:
-            response = await self._client.patch(url, json=json)
-            response.raise_for_status()
-            return response.json()
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status in (401, 403):
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on PATCH %s: %s", status, url, exc.response.text)
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on PATCH %s: %s (%s)", url, exc, error_type)
-            raise ApiClientError from exc
+    async def _patch(self, url: str, json: dict | None = None, max_retries: int = 3) -> dict:
+        """Выполняет PATCH запрос с retry для сетевых ошибок."""
+        full_url = f"{self._client.base_url}{url}"
+        last_exc = None
+        for attempt in range(max_retries):
+            try:
+                logger.debug("PATCH request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
+                response = await self._client.patch(url, json=json)
+                response.raise_for_status()
+                return response.json()
+            except HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status in (401, 403):
+                    raise UnauthorizedError from exc
+                if status == 404:
+                    raise NotFoundError from exc
+                logger.warning("API error %s on PATCH %s: %s", status, full_url, exc.response.text)
+                raise ApiClientError from exc
+            except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout) as exc:
+                last_exc = exc
+                error_type = type(exc).__name__
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)  # Экспоненциальная задержка: 0.5s, 1s, 2s
+                    logger.warning(
+                        "HTTP client error on PATCH %s: %s (%s), retrying in %.1fs (attempt %d/%d)",
+                        full_url, exc, error_type, delay, attempt + 1, max_retries
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        "HTTP client error on PATCH %s: %s (%s) - max retries reached. "
+                        "Server may be overloaded or network unstable.",
+                        full_url, exc, error_type
+                    )
+            except httpx.HTTPError as exc:
+                error_type = type(exc).__name__
+                logger.warning("HTTP client error on PATCH %s: %s (%s)", full_url, exc, error_type)
+                raise ApiClientError from exc
+        
+        # Если все попытки исчерпаны, выбрасываем последнюю ошибку
+        raise ApiClientError(f"Failed to patch {full_url} after {max_retries} attempts") from last_exc
 
     # --- Settings ---
     async def get_settings(self) -> dict:
@@ -138,8 +204,12 @@ class RemnawaveApiClient:
     async def reset_user_traffic(self, user_uuid: str) -> dict:
         return await self._post(f"/api/users/{user_uuid}/actions/reset-traffic")
 
-    async def revoke_user_subscription(self, user_uuid: str) -> dict:
-        return await self._post(f"/api/users/{user_uuid}/actions/revoke")
+    async def revoke_user_subscription(self, user_uuid: str, short_uuid: str | None = None) -> dict:
+        """Отзывает подписку пользователя. short_uuid опционален - если не указан, будет сгенерирован автоматически."""
+        payload: dict[str, object] = {}
+        if short_uuid:
+            payload["shortUuid"] = short_uuid
+        return await self._post(f"/api/users/{user_uuid}/actions/revoke", json=payload)
 
     async def get_internal_squads(self) -> dict:
         """Получает список внутренних squads с увеличенным таймаутом и retry."""
@@ -151,11 +221,13 @@ class RemnawaveApiClient:
 
     async def _get_with_timeout(self, url: str, timeout: float = 30.0, max_retries: int = 3) -> dict:
         """Выполняет GET запрос с кастомным таймаутом и retry для сетевых ошибок."""
+        full_url = f"{self._client.base_url}{url}"
         last_exc = None
-        custom_timeout = httpx.Timeout(timeout, connect=10.0)
+        custom_timeout = httpx.Timeout(timeout, connect=15.0, read=timeout, write=15.0, pool=10.0)
         
         for attempt in range(max_retries):
             try:
+                logger.debug("GET request to %s with timeout %.1fs (attempt %d/%d)", full_url, timeout, attempt + 1, max_retries)
                 response = await self._client.get(url, timeout=custom_timeout)
                 response.raise_for_status()
                 return response.json()
@@ -165,7 +237,7 @@ class RemnawaveApiClient:
                     raise UnauthorizedError from exc
                 if status == 404:
                     raise NotFoundError from exc
-                logger.warning("API error %s on GET %s: %s", status, url, exc.response.text)
+                logger.warning("API error %s on GET %s: %s", status, full_url, exc.response.text)
                 raise ApiClientError from exc
             except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout) as exc:
                 last_exc = exc
@@ -174,18 +246,22 @@ class RemnawaveApiClient:
                     delay = 0.5 * (2 ** attempt)  # Экспоненциальная задержка: 0.5s, 1s, 2s
                     logger.warning(
                         "HTTP client error on GET %s: %s (%s), retrying in %.1fs (attempt %d/%d)",
-                        url, exc, error_type, delay, attempt + 1, max_retries
+                        full_url, exc, error_type, delay, attempt + 1, max_retries
                     )
                     await asyncio.sleep(delay)
                 else:
-                    logger.warning("HTTP client error on GET %s: %s (%s) - max retries reached", url, exc, error_type)
+                    logger.error(
+                        "HTTP client error on GET %s: %s (%s) - max retries reached. "
+                        "Server may be overloaded or network unstable.",
+                        full_url, exc, error_type
+                    )
             except httpx.HTTPError as exc:
                 error_type = type(exc).__name__
-                logger.warning("HTTP client error on GET %s: %s (%s)", url, exc, error_type)
+                logger.warning("HTTP client error on GET %s: %s (%s)", full_url, exc, error_type)
                 raise ApiClientError from exc
         
         # Если все попытки исчерпаны, выбрасываем последнюю ошибку
-        raise ApiClientError from last_exc
+        raise ApiClientError(f"Failed to get {full_url} after {max_retries} attempts") from last_exc
 
     async def create_user(
         self,
@@ -459,7 +535,7 @@ class RemnawaveApiClient:
             payload["name"] = name
         if template_json is not None:
             payload["templateJson"] = template_json
-        return await self._client.patch("/api/subscription-templates", json=payload).json()
+        return await self._patch("/api/subscription-templates", json=payload)
 
     async def reorder_templates(self, uuids_in_order: list[str]) -> dict:
         items = [{"uuid": uuid, "viewPosition": idx + 1} for idx, uuid in enumerate(uuids_in_order)]
@@ -473,18 +549,7 @@ class RemnawaveApiClient:
         return await self._post("/api/snippets", json={"name": name, "snippet": snippet})
 
     async def update_snippet(self, name: str, snippet: list[dict] | dict) -> dict:
-        try:
-            response = await self._client.patch("/api/snippets", json={"name": name, "snippet": snippet})
-            response.raise_for_status()
-            return response.json()
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 401:
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on PATCH /api/snippets: %s", status, exc.response.text)
-            raise ApiClientError from exc
+        return await self._patch("/api/snippets", json={"name": name, "snippet": snippet})
 
     async def delete_snippet(self, name: str) -> dict:
         try:
@@ -545,18 +610,7 @@ class RemnawaveApiClient:
             payload["faviconLink"] = favicon_link
         if login_url is not None:
             payload["loginUrl"] = login_url
-        try:
-            response = await self._client.patch("/api/infra-billing/providers", json=payload)
-            response.raise_for_status()
-            return response.json()
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 401:
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on PATCH /api/infra-billing/providers: %s", status, exc.response.text)
-            raise ApiClientError from exc
+        return await self._patch("/api/infra-billing/providers", json=payload)
 
     async def delete_infra_provider(self, provider_uuid: str) -> dict:
         try:
@@ -610,20 +664,7 @@ class RemnawaveApiClient:
         return await self._post("/api/infra-billing/nodes", json=payload)
 
     async def update_infra_billing_nodes(self, uuids: list[str], next_billing_at: str) -> dict:
-        try:
-            response = await self._client.patch(
-                "/api/infra-billing/nodes", json={"uuids": uuids, "nextBillingAt": next_billing_at}
-            )
-            response.raise_for_status()
-            return response.json()
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 401:
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on PATCH /api/infra-billing/nodes: %s", status, exc.response.text)
-            raise ApiClientError from exc
+        return await self._patch("/api/infra-billing/nodes", json={"uuids": uuids, "nextBillingAt": next_billing_at})
 
     async def delete_infra_billing_node(self, record_uuid: str) -> dict:
         try:
