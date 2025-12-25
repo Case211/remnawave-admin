@@ -81,6 +81,8 @@
   "user": {
     "not_found": "🙅 User not found.",
     "summary": "👤 {username}\n{statusEmoji} Status: {status}\n💬 TG ID: <code>{telegramId}</code>\n🔗 Subscription: {subscriptionUrl}\n\n🆔 UUID: {uuid}\n🔖 Short: {shortUuid}\n\n📶 Traffic: {used} / {limit}\n⏳ Expires: {expire}\n💻 HWID: {hwid}\n📳 Last online: {online}\n📅 Created: {created}",
+    "subscription_links_title": "🔗 Subscription links:",
+    "happ_crypto_link_title": "🔐 Happ encrypted link:",
     "created": "✅ User created\n👤 {username} ({status})\n🆔 UUID: {uuid}\n🔖 Short: {shortUuid}\n💬 TG: {telegramId}\n⏳ Expires: {expire}\n🔗 Subscription: {subscriptionUrl}",
     "prompt_username": "🆕 Enter username (letters/numbers/hyphen).",
     "prompt_description": "📝 Add a description/label or tap “Skip”.",

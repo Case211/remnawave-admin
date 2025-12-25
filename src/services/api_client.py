@@ -514,6 +514,10 @@ class RemnawaveApiClient:
     async def get_subscription_info(self, short_uuid: str) -> dict:
         return await self._get(f"/api/sub/{short_uuid}/info")
 
+    async def encrypt_happ_crypto_link(self, link_to_encrypt: str) -> dict:
+        """Шифрует ссылку подписки для Happ."""
+        return await self._post("/api/system/tools/happ/encrypt", json={"linkToEncrypt": link_to_encrypt})
+
     # --- API Tokens ---
     async def get_tokens(self) -> dict:
         return await self._get("/api/tokens")

@@ -81,6 +81,8 @@
   "user": {
     "not_found": "🙅 Пользователь не найден.",
     "summary": "👤 {username}\n{statusEmoji} Статус: {status}\n💬 TG ID: <code>{telegramId}</code>\n🔗 Подписка: {subscriptionUrl}\n\n🆔 UUID: {uuid}\n🔖 Short: {shortUuid}\n\n📶 Трафик: {used} / {limit}\n⏳ Истекает: {expire}\n💻 HWID: {hwid}\n📳 Был онлайн: {online}\n📅 Создан: {created}",
+    "subscription_links_title": "🔗 Подписные ссылки:",
+    "happ_crypto_link_title": "🔐 Шифрованная ссылка Happ:",
     "created": "✅ Пользователь создан\n👤 {username} ({status})\n🆔 UUID: {uuid}\n🔖 Short: {shortUuid}\n💬 TG: {telegramId}\n⏳ Истекает: {expire}\n🔗 Подписка: {subscriptionUrl}",
     "prompt_username": "🆕 Введи username (латиница/цифры/дефис).",
     "prompt_description": "📝 Укажи описание/метку для удобства или нажми «Пропустить».",

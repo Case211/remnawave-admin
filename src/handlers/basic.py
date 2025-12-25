@@ -2739,8 +2739,30 @@ async def _send_user_detail(
 
 
 async def _send_user_summary(target: Message | CallbackQuery, user: dict, back_to: str) -> None:
-    summary = build_user_summary(user, _)
     info = user.get("response", user)
+    short_uuid = info.get("shortUuid")
+    subscription_links = None
+    happ_crypto_link = None
+    
+    # Получаем подписные ссылки из информации о подписке
+    if short_uuid:
+        try:
+            sub_info = await api_client.get_subscription_info(short_uuid)
+            sub_response = sub_info.get("response", {})
+            subscription_links = sub_response.get("links", [])
+            
+            # Получаем Happ crypto link, если есть subscriptionUrl
+            subscription_url = info.get("subscriptionUrl")
+            if subscription_url:
+                try:
+                    happ_response = await api_client.encrypt_happ_crypto_link(subscription_url)
+                    happ_crypto_link = happ_response.get("response", {}).get("encryptedLink")
+                except Exception:
+                    logger.debug("Failed to encrypt Happ crypto link for user %s", short_uuid)
+        except Exception:
+            logger.debug("Failed to fetch subscription links for user %s", short_uuid)
+    
+    summary = build_user_summary(user, _, subscription_links=subscription_links, happ_crypto_link=happ_crypto_link)
     status = info.get("status", "UNKNOWN")
     uuid = info.get("uuid")
     reply_markup = user_actions_keyboard(uuid, status, back_to=back_to)
