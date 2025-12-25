@@ -8,7 +8,7 @@
   },
   "actions": {
     "menu_users": "👥 Users",
-    "menu_nodes": "🛰 Nodes",
+    "menu_nodes": "🛰 Nodes/Hosts/Profiles",
     "menu_resources": "🧰 Tools",
     "menu_billing": "💳 Billing",
     "menu_bulk": "📦 Bulk actions",
