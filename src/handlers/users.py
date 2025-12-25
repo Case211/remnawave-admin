@@ -6,7 +6,6 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from aiogram.utils.i18n import gettext as _
 
 from src.handlers.common import _edit_text_safe, _get_target_user_id, _not_admin, _send_clean_message
-from src.handlers.navigation import _navigate
 from src.handlers.state import (
     MAX_SEARCH_RESULTS,
     PENDING_INPUT,
