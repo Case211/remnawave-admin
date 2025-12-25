@@ -879,6 +879,183 @@ async def cb_nodes_actions(callback: CallbackQuery) -> None:
             ),
             reply_markup=input_keyboard("node_create", allow_skip=True, skip_callback="input:skip:node_create:traffic_limit")
         )
+    elif action == "bulk_profile":
+        # Начинаем массовое изменение профилей конфигурации
+        try:
+            # Получаем список нод для выбора
+            nodes_data = await api_client.get_nodes()
+            nodes = nodes_data.get("response", [])
+            if not nodes:
+                from src.keyboards.nodes_menu import nodes_list_keyboard
+                await callback.message.edit_text(_("node.list_empty"), reply_markup=nodes_list_keyboard())
+                return
+            
+            # Инициализируем состояние для массового изменения
+            PENDING_INPUT[callback.from_user.id] = {
+                "action": "nodes_bulk_profile",
+                "stage": "select_nodes",
+                "data": {
+                    "selected_nodes": [],
+                    "available_nodes": nodes,
+                }
+            }
+            
+            # Показываем список нод для выбора
+            keyboard = _bulk_nodes_select_keyboard(nodes, [])
+            await callback.message.edit_text(_("node.bulk_profile_select_nodes"), reply_markup=keyboard)
+        except Exception:
+            logger.exception("Failed to start bulk profile modification")
+            from src.keyboards.nodes_menu import nodes_list_keyboard
+            await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_list_keyboard())
+    elif action == "bulk_profile_toggle_node":
+        # Переключение выбора ноды для массового изменения
+        if len(parts) < 3:
+            return
+        node_uuid = parts[2]
+        user_id = callback.from_user.id
+        if user_id not in PENDING_INPUT:
+            return
+        ctx = PENDING_INPUT[user_id]
+        data = ctx.setdefault("data", {})
+        selected = data.get("selected_nodes", [])
+        available = data.get("available_nodes", [])
+        
+        if node_uuid in selected:
+            selected.remove(node_uuid)
+        else:
+            selected.append(node_uuid)
+        
+        data["selected_nodes"] = selected
+        PENDING_INPUT[user_id] = ctx
+        
+        # Обновляем клавиатуру
+        keyboard = _bulk_nodes_select_keyboard(available, selected)
+        await callback.message.edit_text(_("node.bulk_profile_select_nodes"), reply_markup=keyboard)
+    elif action == "bulk_profile_confirm_nodes":
+        # Подтверждение выбора нод
+        user_id = callback.from_user.id
+        if user_id not in PENDING_INPUT:
+            return
+        ctx = PENDING_INPUT[user_id]
+        data = ctx.setdefault("data", {})
+        selected = data.get("selected_nodes", [])
+        
+        if not selected:
+            await callback.answer(_("node.bulk_profile_select_nodes"), show_alert=True)
+            return
+        
+        # Получаем список профилей конфигурации
+        try:
+            profiles_data = await api_client.get_config_profiles()
+            profiles = profiles_data.get("response", {}).get("configProfiles", [])
+            if not profiles:
+                await callback.message.edit_text(_("node.no_profiles"), reply_markup=nodes_menu_keyboard())
+                return
+            
+            ctx["stage"] = "select_profile"
+            PENDING_INPUT[user_id] = ctx
+            
+            # Показываем список профилей
+            keyboard = _bulk_profile_select_keyboard(profiles)
+            await callback.message.edit_text(_("node.bulk_profile_select_profile"), reply_markup=keyboard)
+        except Exception:
+            logger.exception("Failed to get config profiles for bulk modification")
+            await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_menu_keyboard())
+    elif action == "bulk_profile_select_profile":
+        # Выбор профиля конфигурации
+        if len(parts) < 3:
+            return
+        profile_uuid = parts[2]
+        user_id = callback.from_user.id
+        if user_id not in PENDING_INPUT:
+            return
+        ctx = PENDING_INPUT[user_id]
+        data = ctx.setdefault("data", {})
+        
+        try:
+            # Получаем информацию о профиле и его инбаундах
+            profile_data = await api_client.get_config_profile_computed(profile_uuid)
+            profile_info = profile_data.get("response", profile_data)
+            inbounds = profile_info.get("inbounds", [])
+            
+            if not inbounds:
+                await callback.message.edit_text(_("node.no_inbounds"), reply_markup=nodes_menu_keyboard())
+                return
+            
+            data["config_profile_uuid"] = profile_uuid
+            data["profile_name"] = profile_info.get("name", "n/a")
+            data["available_inbounds"] = inbounds
+            data["selected_inbounds"] = []
+            ctx["stage"] = "select_inbounds"
+            PENDING_INPUT[user_id] = ctx
+            
+            # Показываем список инбаундов для выбора
+            keyboard = _bulk_profile_inbounds_keyboard(inbounds, [])
+            await callback.message.edit_text(_("node.bulk_profile_select_inbounds"), reply_markup=keyboard)
+        except Exception:
+            logger.exception("Failed to get profile inbounds for bulk modification")
+            await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_menu_keyboard())
+    elif action == "bulk_profile_toggle_inbound":
+        # Переключение выбора инбаунда для массового изменения
+        if len(parts) < 3:
+            return
+        inbound_uuid = parts[2]
+        user_id = callback.from_user.id
+        if user_id not in PENDING_INPUT:
+            return
+        ctx = PENDING_INPUT[user_id]
+        data = ctx.setdefault("data", {})
+        selected = data.get("selected_inbounds", [])
+        available = data.get("available_inbounds", [])
+        
+        if inbound_uuid in selected:
+            selected.remove(inbound_uuid)
+        else:
+            selected.append(inbound_uuid)
+        
+        data["selected_inbounds"] = selected
+        PENDING_INPUT[user_id] = ctx
+        
+        # Обновляем клавиатуру
+        keyboard = _bulk_profile_inbounds_keyboard(available, selected)
+        await callback.message.edit_text(_("node.bulk_profile_select_inbounds"), reply_markup=keyboard)
+    elif action == "bulk_profile_confirm":
+        # Применение массового изменения профилей
+        user_id = callback.from_user.id
+        if user_id not in PENDING_INPUT:
+            return
+        ctx = PENDING_INPUT[user_id]
+        data = ctx.setdefault("data", {})
+        selected_nodes = data.get("selected_nodes", [])
+        profile_uuid = data.get("config_profile_uuid")
+        selected_inbounds = data.get("selected_inbounds", [])
+        
+        if not selected_nodes or not profile_uuid or not selected_inbounds:
+            await callback.answer(_("errors.generic"), show_alert=True)
+            return
+        
+        try:
+            # Применяем массовое изменение
+            await api_client.bulk_nodes_profile_modification(
+                node_uuids=selected_nodes,
+                profile_uuid=profile_uuid,
+                inbound_uuids=selected_inbounds
+            )
+            
+            # Очищаем состояние
+            PENDING_INPUT.pop(user_id, None)
+            
+            # Показываем успешное сообщение
+            from src.keyboards.nodes_menu import nodes_list_keyboard
+            text = _("node.bulk_profile_success").format(count=len(selected_nodes))
+            await callback.message.edit_text(text, reply_markup=nodes_list_keyboard())
+        except UnauthorizedError:
+            await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nodes_menu_keyboard())
+        except ApiClientError:
+            logger.exception("Failed to apply bulk profile modification")
+            await callback.message.edit_text(_("node.bulk_profile_error"), reply_markup=nodes_menu_keyboard())
+        finally:
+            PENDING_INPUT.pop(user_id, None)
 
 
 @router.callback_query(F.data == "menu:hosts")
@@ -2850,6 +3027,85 @@ async def cb_node_edit_field(callback: CallbackQuery) -> None:
     )
 
 
+@router.callback_query(F.data.startswith("node_delete:"))
+async def cb_node_delete(callback: CallbackQuery) -> None:
+    """Обработчик удаления ноды с подтверждением."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        return
+    
+    node_uuid = parts[1]
+    back_to = NavTarget.NODES_LIST
+    
+    try:
+        # Получаем информацию о ноде для подтверждения
+        node = await api_client.get_node(node_uuid)
+        node_info = node.get("response", node)
+        node_name = node_info.get("name", "n/a")
+        
+        # Показываем подтверждение удаления
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("node.delete_confirm_yes"),
+                    callback_data=f"node_delete_confirm:{node_uuid}"
+                ),
+                InlineKeyboardButton(
+                    text=_("node.delete_confirm_no"),
+                    callback_data=f"node_edit:{node_uuid}"
+                ),
+            ],
+            nav_row(back_to),
+        ])
+        text = _("node.delete_confirm").format(name=_esc(node_name))
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("node.not_found"), reply_markup=nav_keyboard(back_to))
+    except ApiClientError:
+        logger.exception("Failed to get node for delete confirmation node_uuid=%s actor_id=%s", node_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+
+
+@router.callback_query(F.data.startswith("node_delete_confirm:"))
+async def cb_node_delete_confirm(callback: CallbackQuery) -> None:
+    """Обработчик подтверждения удаления ноды."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        return
+    
+    node_uuid = parts[1]
+    back_to = NavTarget.NODES_LIST
+    
+    try:
+        # Получаем информацию о ноде перед удалением
+        node = await api_client.get_node(node_uuid)
+        node_info = node.get("response", node)
+        node_name = node_info.get("name", "n/a")
+        
+        # Удаляем ноду
+        await api_client.delete_node(node_uuid)
+        
+        # Показываем сообщение об успешном удалении
+        text = _("node.deleted").format(name=_esc(node_name))
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[nav_row(back_to)])
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("node.not_found"), reply_markup=nav_keyboard(back_to))
+    except ApiClientError:
+        logger.exception("Failed to delete node node_uuid=%s actor_id=%s", node_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+
+
 @router.callback_query(F.data.startswith("node:"))
 async def cb_node_actions(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
@@ -4444,6 +4700,53 @@ def _node_inbounds_keyboard(inbounds: list[dict], selected: list[str]) -> Inline
     # Кнопка подтверждения выбора
     if selected:
         rows.append([InlineKeyboardButton(text=_("node.select_inbounds_done").format(count=len(selected)), callback_data="nodes:confirm_inbounds")])
+    
+    rows.append(nav_row(NavTarget.NODES_LIST))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _bulk_nodes_select_keyboard(nodes: list[dict], selected: list[str]) -> InlineKeyboardMarkup:
+    """Клавиатура для выбора нод для массового изменения профилей."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for node in nodes[:20]:  # Ограничиваем до 20 для удобства
+        name = node.get("name", "n/a")
+        uuid = node.get("uuid", "")
+        is_selected = uuid in selected
+        prefix = "✅ " if is_selected else "☐ "
+        rows.append([InlineKeyboardButton(text=f"{prefix}{name}", callback_data=f"nodes:bulk_profile_toggle_node:{uuid}")])
+    
+    # Кнопка подтверждения выбора
+    if selected:
+        rows.append([InlineKeyboardButton(text=_("node.select_inbounds_done").format(count=len(selected)), callback_data="nodes:bulk_profile_confirm_nodes")])
+    
+    rows.append(nav_row(NavTarget.NODES_LIST))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _bulk_profile_select_keyboard(profiles: list[dict]) -> InlineKeyboardMarkup:
+    """Клавиатура для выбора профиля конфигурации для массового изменения."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for profile in sorted(profiles, key=lambda p: p.get("viewPosition", 0))[:10]:
+        name = profile.get("name", "n/a")
+        uuid = profile.get("uuid", "")
+        rows.append([InlineKeyboardButton(text=name, callback_data=f"nodes:bulk_profile_select_profile:{uuid}")])
+    rows.append(nav_row(NavTarget.NODES_LIST))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _bulk_profile_inbounds_keyboard(inbounds: list[dict], selected: list[str]) -> InlineKeyboardMarkup:
+    """Клавиатура для выбора инбаундов для массового изменения профилей."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for inbound in inbounds[:20]:  # Ограничиваем до 20 для удобства
+        name = inbound.get("remark") or inbound.get("tag") or "n/a"
+        uuid = inbound.get("uuid", "")
+        is_selected = uuid in selected
+        prefix = "✅ " if is_selected else "☐ "
+        rows.append([InlineKeyboardButton(text=f"{prefix}{name}", callback_data=f"nodes:bulk_profile_toggle_inbound:{uuid}")])
+    
+    # Кнопка подтверждения выбора
+    if selected:
+        rows.append([InlineKeyboardButton(text=_("node.select_inbounds_done").format(count=len(selected)), callback_data="nodes:bulk_profile_confirm")])
     
     rows.append(nav_row(NavTarget.NODES_LIST))
     return InlineKeyboardMarkup(inline_keyboard=rows)
