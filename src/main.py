@@ -10,8 +10,29 @@ from src.utils.logger import logger
 from src.handlers import register_handlers
 
 
+async def check_api_connection() -> bool:
+    """Проверяет подключение к API."""
+    try:
+        logger.info("Checking API connection...")
+        await api_client.get_health()
+        logger.info("✅ API connection successful")
+        return True
+    except Exception as exc:
+        logger.error("❌ API connection failed: %s", exc)
+        return False
+
+
 async def main() -> None:
     settings = get_settings()
+
+    # Проверяем подключение к API перед стартом
+    if not await check_api_connection():
+        logger.error(
+            "🚨 Cannot start bot: API is unavailable. "
+            "Please check API_BASE_URL and API_TOKEN in your .env file. "
+            "Make sure the API server is running and accessible."
+        )
+        return
 
     # parse_mode is left as default (None) to avoid HTML parsing issues with plain text translations
     bot = Bot(token=settings.bot_token)
@@ -23,7 +44,6 @@ async def main() -> None:
 
     register_handlers(dp)
     dp.shutdown.register(api_client.close)
-
 
     logger.info("Starting bot")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())

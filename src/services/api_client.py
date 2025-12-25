@@ -33,8 +33,10 @@ class RemnawaveApiClient:
             write=15.0,    # Таймаут на запись
             pool=10.0      # Таймаут на получение из пула
         )
+        # Убираем завершающий слеш из base_url, чтобы избежать двойного слеша при объединении с URL
+        base_url = str(self.settings.api_base_url).rstrip("/")
         self._client = httpx.AsyncClient(
-            base_url=str(self.settings.api_base_url),
+            base_url=base_url,
             headers=self._build_headers(),
             timeout=timeout_config,
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
