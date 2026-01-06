@@ -71,6 +71,16 @@ async def main() -> None:
             "⚠️ WARNING: No administrators configured! "
             "Set ADMINS environment variable with comma-separated user IDs (e.g., ADMINS=123456789,987654321)"
         )
+    
+    # Логируем настройки уведомлений
+    if settings.notifications_chat_id:
+        logger.info(
+            "📢 Notifications enabled: chat_id=%s topic_id=%s",
+            settings.notifications_chat_id,
+            settings.notifications_topic_id,
+        )
+    else:
+        logger.info("📢 Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
 
     # Проверяем подключение к API перед стартом
     if not await check_api_connection():

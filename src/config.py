@@ -21,6 +21,21 @@ class Settings(BaseSettings):
     notifications_chat_id: int | None = Field(default=None, alias="NOTIFICATIONS_CHAT_ID")
     notifications_topic_id: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ID")
 
+    @field_validator("notifications_chat_id", "notifications_topic_id", mode="before")
+    @classmethod
+    def parse_int_or_none(cls, value):
+        """Парсит значение в int или возвращает None."""
+        if value is None or value == "":
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
+
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",

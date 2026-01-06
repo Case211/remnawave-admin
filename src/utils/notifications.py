@@ -19,7 +19,15 @@ async def send_user_notification(
     settings = get_settings()
     
     if not settings.notifications_chat_id:
+        logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return  # Уведомления отключены
+    
+    logger.info(
+        "Sending user notification action=%s chat_id=%s topic_id=%s",
+        action,
+        settings.notifications_chat_id,
+        settings.notifications_topic_id,
+    )
     
     try:
         info = user_info.get("response", user_info)
@@ -145,16 +153,28 @@ async def send_user_notification(
         text = "\n".join(lines)
         
         # Отправляем в топик
-        message_thread_id = settings.notifications_topic_id
-        await bot.send_message(
-            chat_id=settings.notifications_chat_id,
-            message_thread_id=message_thread_id,
-            text=text,
-            parse_mode="HTML",
-        )
+        message_kwargs = {
+            "chat_id": settings.notifications_chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+        
+        # Добавляем message_thread_id только если он указан
+        if settings.notifications_topic_id is not None:
+            message_kwargs["message_thread_id"] = settings.notifications_topic_id
+        
+        await bot.send_message(**message_kwargs)
+        logger.info("User notification sent successfully action=%s chat_id=%s", action, settings.notifications_chat_id)
         
     except Exception as exc:
-        logger.exception("Failed to send user notification action=%s user_uuid=%s", action, info.get("uuid", "unknown"))
+        logger.exception(
+            "Failed to send user notification action=%s user_uuid=%s chat_id=%s topic_id=%s error=%s",
+            action,
+            info.get("uuid", "unknown"),
+            settings.notifications_chat_id,
+            settings.notifications_topic_id,
+            exc,
+        )
 
 
 def _esc(text: str) -> str:
