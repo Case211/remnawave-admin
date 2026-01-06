@@ -10,6 +10,8 @@ services:
       DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ru}
       ADMINS: ${ADMINS:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      NOTIFICATIONS_CHAT_ID: ${NOTIFICATIONS_CHAT_ID:-}
+      NOTIFICATIONS_TOPIC_ID: ${NOTIFICATIONS_TOPIC_ID:-}
     networks:
       - remnawave-network
     # Бот будет ждать, пока API будет доступен (но не блокирует старт, если API еще не готов)

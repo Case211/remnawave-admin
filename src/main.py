@@ -73,6 +73,15 @@ async def main() -> None:
         )
     
     # Логируем настройки уведомлений
+    raw_chat_id = os.getenv("NOTIFICATIONS_CHAT_ID", "NOT_SET")
+    raw_topic_id = os.getenv("NOTIFICATIONS_TOPIC_ID", "NOT_SET")
+    logger.info(
+        "📢 Notifications config: raw_chat_id=%s raw_topic_id=%s parsed_chat_id=%s parsed_topic_id=%s",
+        repr(raw_chat_id),
+        repr(raw_topic_id),
+        settings.notifications_chat_id,
+        settings.notifications_topic_id,
+    )
     if settings.notifications_chat_id:
         logger.info(
             "📢 Notifications enabled: chat_id=%s topic_id=%s",
@@ -80,7 +89,7 @@ async def main() -> None:
             settings.notifications_topic_id,
         )
     else:
-        logger.info("📢 Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
+        logger.warning("📢 Notifications disabled: NOTIFICATIONS_CHAT_ID not set or invalid")
 
     # Проверяем подключение к API перед стартом
     if not await check_api_connection():
