@@ -1767,11 +1767,11 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
         devices = devices_data.get("response", {}).get("devices", [])
         
         lines = [
-            f"*{_('hwid.title')}*",
+            f"<b>{_('hwid.title')}</b>",
             "",
             _("hwid.user_info").format(
                 username=_esc(username),
-                limit=hwid_limit_display,
+                limit=_esc(hwid_limit_display),
                 count=len(devices)
             ),
         ]
@@ -1781,7 +1781,7 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
             lines.append(_("hwid.no_devices"))
         else:
             lines.append("")
-            lines.append(f"*{_('hwid.devices_list')}*")
+            lines.append(f"<b>{_('hwid.devices_list')}</b>")
             for idx, device in enumerate(devices[:10], 1):  # Показываем до 10 устройств
                 hwid = device.get("hwid", "n/a")
                 created_at = device.get("createdAt")
@@ -1789,8 +1789,8 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
                 lines.append(
                     _("hwid.device_item").format(
                         index=idx,
-                        hwid=hwid[:40] + "..." if len(hwid) > 40 else hwid,
-                        created=created_str
+                        hwid=_esc(hwid[:40] + "..." if len(hwid) > 40 else hwid),
+                        created=_esc(created_str)
                     )
                 )
         
@@ -1798,7 +1798,7 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
         await callback.message.edit_text(
             text,
             reply_markup=hwid_devices_keyboard(user_uuid, devices, back_to=back_to),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
@@ -1857,11 +1857,11 @@ async def cb_hwid_delete(callback: CallbackQuery) -> None:
         devices = devices_data.get("response", {}).get("devices", [])
         
         lines = [
-            f"*{_('hwid.title')}*",
+            f"<b>{_('hwid.title')}</b>",
             "",
             _("hwid.user_info").format(
                 username=_esc(username),
-                limit=hwid_limit_display,
+                limit=_esc(hwid_limit_display),
                 count=len(devices)
             ),
         ]
@@ -1871,7 +1871,7 @@ async def cb_hwid_delete(callback: CallbackQuery) -> None:
             lines.append(_("hwid.no_devices"))
         else:
             lines.append("")
-            lines.append(f"*{_('hwid.devices_list')}*")
+            lines.append(f"<b>{_('hwid.devices_list')}</b>")
             for idx, device in enumerate(devices[:10], 1):
                 device_hwid = device.get("hwid", "n/a")
                 created_at = device.get("createdAt")
@@ -1879,8 +1879,8 @@ async def cb_hwid_delete(callback: CallbackQuery) -> None:
                 lines.append(
                     _("hwid.device_item").format(
                         index=idx,
-                        hwid=device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid,
-                        created=created_str
+                        hwid=_esc(device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid),
+                        created=_esc(created_str)
                     )
                 )
         
@@ -1888,7 +1888,7 @@ async def cb_hwid_delete(callback: CallbackQuery) -> None:
         await callback.message.edit_text(
             text,
             reply_markup=hwid_devices_keyboard(user_uuid, devices, back_to=back_to),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
@@ -1928,11 +1928,11 @@ async def cb_hwid_delete_all(callback: CallbackQuery) -> None:
         devices = devices_data.get("response", {}).get("devices", [])
         
         lines = [
-            f"*{_('hwid.title')}*",
+            f"<b>{_('hwid.title')}</b>",
             "",
             _("hwid.user_info").format(
                 username=_esc(username),
-                limit=hwid_limit_display,
+                limit=_esc(hwid_limit_display),
                 count=len(devices)
             ),
         ]
@@ -1942,7 +1942,7 @@ async def cb_hwid_delete_all(callback: CallbackQuery) -> None:
             lines.append(_("hwid.no_devices"))
         else:
             lines.append("")
-            lines.append(f"*{_('hwid.devices_list')}*")
+            lines.append(f"<b>{_('hwid.devices_list')}</b>")
             for idx, device in enumerate(devices[:10], 1):
                 device_hwid = device.get("hwid", "n/a")
                 created_at = device.get("createdAt")
@@ -1950,8 +1950,8 @@ async def cb_hwid_delete_all(callback: CallbackQuery) -> None:
                 lines.append(
                     _("hwid.device_item").format(
                         index=idx,
-                        hwid=device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid,
-                        created=created_str
+                        hwid=_esc(device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid),
+                        created=_esc(created_str)
                     )
                 )
         
@@ -1959,7 +1959,7 @@ async def cb_hwid_delete_all(callback: CallbackQuery) -> None:
         await callback.message.edit_text(
             text,
             reply_markup=hwid_devices_keyboard(user_uuid, devices, back_to=back_to),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
@@ -1994,7 +1994,7 @@ async def cb_hwid_add(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         _("hwid.prompt_add"),
         reply_markup=nav_keyboard(back_to),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
 
@@ -2034,11 +2034,11 @@ async def handle_hwid_add_input(message: Message) -> None:
         hwid_limit_display = _("hwid.unlimited") if not hwid_limit else str(hwid_limit)
         
         lines = [
-            f"*{_('hwid.title')}*",
+            f"<b>{_('hwid.title')}</b>",
             "",
             _("hwid.user_info").format(
                 username=_esc(username),
-                limit=hwid_limit_display,
+                limit=_esc(hwid_limit_display),
                 count=len(devices)
             ),
         ]
@@ -2048,7 +2048,7 @@ async def handle_hwid_add_input(message: Message) -> None:
             lines.append(_("hwid.no_devices"))
         else:
             lines.append("")
-            lines.append(f"*{_('hwid.devices_list')}*")
+            lines.append(f"<b>{_('hwid.devices_list')}</b>")
             for idx, device in enumerate(devices[:10], 1):
                 device_hwid = device.get("hwid", "n/a")
                 created_at = device.get("createdAt")
@@ -2056,8 +2056,8 @@ async def handle_hwid_add_input(message: Message) -> None:
                 lines.append(
                     _("hwid.device_item").format(
                         index=idx,
-                        hwid=device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid,
-                        created=created_str
+                        hwid=_esc(device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid),
+                        created=_esc(created_str)
                     )
                 )
         
@@ -2066,7 +2066,7 @@ async def handle_hwid_add_input(message: Message) -> None:
             message,
             text,
             reply_markup=hwid_devices_keyboard(user_uuid, devices, back_to=back_to),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     except UnauthorizedError:
         PENDING_INPUT.pop(user_id, None)
