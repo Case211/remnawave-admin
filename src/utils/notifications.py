@@ -42,7 +42,7 @@ async def send_user_notification(
             lines.append("🗑 <b>Пользователь удален</b>")
         
         lines.append("")
-        lines.append(f"👤 <b>Username:</b> {_esc(info.get('username', 'n/a'))}")
+        lines.append(f"👤 <b>Username:</b> <code>{_esc(info.get('username', 'n/a'))}</code>")
         
         # Лимит трафика
         traffic_limit = info.get("trafficLimitBytes")
@@ -60,11 +60,11 @@ async def send_user_notification(
                 old_traffic_display = "Безлимит"
             
             if old_traffic_display != traffic_display:
-                lines.append(f"📶 <b>Лимит трафика:</b> {old_traffic_display} → {traffic_display}")
+                lines.append(f"📶 <b>Лимит трафика:</b> <code>{old_traffic_display}</code> → <code>{traffic_display}</code>")
             else:
-                lines.append(f"📶 <b>Лимит трафика:</b> {traffic_display}")
+                lines.append(f"📶 <b>Лимит трафика:</b> <code>{traffic_display}</code>")
         else:
-            lines.append(f"📶 <b>Лимит трафика:</b> {traffic_display}")
+            lines.append(f"📶 <b>Лимит трафика:</b> <code>{traffic_display}</code>")
         
         # Дата истечения подписки
         expire_at = info.get("expireAt")
@@ -82,11 +82,11 @@ async def send_user_notification(
                 old_expire_display = "—"
             
             if old_expire_display != expire_display:
-                lines.append(f"⏳ <b>Дата истечения подписки:</b> {old_expire_display} → {expire_display}")
+                lines.append(f"⏳ <b>Дата истечения подписки:</b> <code>{old_expire_display}</code> → <code>{expire_display}</code>")
             else:
-                lines.append(f"⏳ <b>Дата истечения подписки:</b> {expire_display}")
+                lines.append(f"⏳ <b>Дата истечения подписки:</b> <code>{expire_display}</code>")
         else:
-            lines.append(f"⏳ <b>Дата истечения подписки:</b> {expire_display}")
+            lines.append(f"⏳ <b>Дата истечения подписки:</b> <code>{expire_display}</code>")
         
         # Ссылка на подписку
         subscription_url = info.get("subscriptionUrl")
@@ -130,11 +130,61 @@ async def send_user_notification(
                 old_squad_display = f"External: {old_external_squad[:8]}..."
             
             if old_squad_display != squad_display:
-                lines.append(f"👥 <b>Внутренний сквад:</b> {old_squad_display} → {squad_display}")
+                lines.append(f"👥 <b>Внутренний сквад:</b> <code>{old_squad_display}</code> → <code>{squad_display}</code>")
             else:
-                lines.append(f"👥 <b>Внутренний сквад:</b> {squad_display}")
+                lines.append(f"👥 <b>Внутренний сквад:</b> <code>{squad_display}</code>")
         else:
-            lines.append(f"👥 <b>Внутренний сквад:</b> {squad_display}")
+            lines.append(f"👥 <b>Внутренний сквад:</b> <code>{squad_display}</code>")
+        
+        # HWID (только если есть)
+        hwid_limit = info.get("hwidDeviceLimit")
+        if hwid_limit is not None:
+            hwid_display = "Безлимит" if hwid_limit == 0 else str(hwid_limit)
+            if action == "updated" and old_user_info:
+                old_info = old_user_info.get("response", old_user_info)
+                old_hwid_limit = old_info.get("hwidDeviceLimit")
+                if old_hwid_limit is not None:
+                    old_hwid_display = "Безлимит" if old_hwid_limit == 0 else str(old_hwid_limit)
+                else:
+                    old_hwid_display = "—"
+                
+                if old_hwid_display != hwid_display:
+                    lines.append(f"💻 <b>HWID:</b> <code>{old_hwid_display}</code> → <code>{hwid_display}</code>")
+                else:
+                    lines.append(f"💻 <b>HWID:</b> <code>{hwid_display}</code>")
+            else:
+                lines.append(f"💻 <b>HWID:</b> <code>{hwid_display}</code>")
+        
+        # Период сброса трафика
+        traffic_strategy = info.get("trafficLimitStrategy") or "NO_RESET"
+        strategy_display = traffic_strategy
+        if action == "updated" and old_user_info:
+            old_info = old_user_info.get("response", old_user_info)
+            old_strategy = old_info.get("trafficLimitStrategy") or "NO_RESET"
+            old_strategy_display = old_strategy
+            
+            if old_strategy_display != strategy_display:
+                lines.append(f"🔁 <b>Период сброса трафика:</b> <code>{old_strategy_display}</code> → <code>{strategy_display}</code>")
+            else:
+                lines.append(f"🔁 <b>Период сброса трафика:</b> <code>{strategy_display}</code>")
+        else:
+            lines.append(f"🔁 <b>Период сброса трафика:</b> <code>{strategy_display}</code>")
+        
+        # TG ID (только если есть)
+        telegram_id = info.get("telegramId")
+        if telegram_id is not None:
+            tg_display = str(telegram_id)
+            if action == "updated" and old_user_info:
+                old_info = old_user_info.get("response", old_user_info)
+                old_telegram_id = old_info.get("telegramId")
+                old_tg_display = str(old_telegram_id) if old_telegram_id is not None else "—"
+                
+                if old_tg_display != tg_display:
+                    lines.append(f"✈️ <b>TG ID:</b> <code>{old_tg_display}</code> → <code>{tg_display}</code>")
+                else:
+                    lines.append(f"✈️ <b>TG ID:</b> <code>{tg_display}</code>")
+            else:
+                lines.append(f"✈️ <b>TG ID:</b> <code>{tg_display}</code>")
         
         # Описание (только если есть)
         description = info.get("description")
@@ -144,11 +194,11 @@ async def send_user_notification(
                 old_description = old_info.get("description")
                 
                 if old_description != description:
-                    lines.append(f"📝 <b>Описание:</b> {_esc(old_description or '—')} → {_esc(description)}")
+                    lines.append(f"📝 <b>Описание:</b> <code>{_esc(old_description or '—')}</code> → <code>{_esc(description)}</code>")
                 else:
-                    lines.append(f"📝 <b>Описание:</b> {_esc(description)}")
+                    lines.append(f"📝 <b>Описание:</b> <code>{_esc(description)}</code>")
             else:
-                lines.append(f"📝 <b>Описание:</b> {_esc(description)}")
+                lines.append(f"📝 <b>Описание:</b> <code>{_esc(description)}</code>")
         
         text = "\n".join(lines)
         
