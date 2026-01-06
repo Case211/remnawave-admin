@@ -231,6 +231,7 @@
     "hwid.all_deleted": "✅ All devices deleted",
     "hwid.device_not_found": "⚠️ Device not found",
     "hwid.unlimited": "Unlimited",
+    "hwid.click_to_delete": "💡 Click on a device to delete it",
     "edit_invalid_number": "⚠️ Invalid number. Try again.",
     "edit_invalid_strategy": "⚠️ Strategy must be NO_RESET/DAY/WEEK/MONTH.",
     "edit_invalid_expire": "⚠️ Invalid date. Use ISO format.",

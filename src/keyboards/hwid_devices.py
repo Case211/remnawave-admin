@@ -30,13 +30,5 @@ def hwid_devices_keyboard(user_uuid: str, devices: list[dict], back_to: str = Na
             )
         ])
     
-    # Кнопка добавления устройства
-    rows.append([
-        InlineKeyboardButton(
-            text=_("hwid.add_device"),
-            callback_data=f"hwid_add:{user_uuid}"
-        )
-    ])
-    
     rows.append(nav_row(back_to))
     return InlineKeyboardMarkup(inline_keyboard=rows)

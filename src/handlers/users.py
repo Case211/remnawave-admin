@@ -1782,6 +1782,8 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
         else:
             lines.append("")
             lines.append(f"<b>{_('hwid.devices_list')}</b>")
+            lines.append("")
+            lines.append(f"<i>{_('hwid.click_to_delete')}</i>")
             for idx, device in enumerate(devices[:10], 1):  # Показываем до 10 устройств
                 hwid = device.get("hwid", "n/a")
                 created_at = device.get("createdAt")
@@ -1969,113 +1971,4 @@ async def cb_hwid_delete_all(callback: CallbackQuery) -> None:
         logger.exception("Failed to delete all HWID devices user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
         await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
 
-
-@router.callback_query(F.data.startswith("hwid_add:"))
-async def cb_hwid_add(callback: CallbackQuery) -> None:
-    """Обработчик добавления HWID устройства - запрашивает ввод."""
-    if await _not_admin(callback):
-        return
-    await callback.answer()
-    parts = callback.data.split(":")
-    if len(parts) < 2:
-        return
-    
-    user_uuid = parts[1]
-    back_to = _get_user_detail_back_target(callback.from_user.id)
-    
-    # Сохраняем контекст для обработки ввода
-    user_id = callback.from_user.id
-    PENDING_INPUT[user_id] = {
-        "action": "hwid_add",
-        "user_uuid": user_uuid,
-        "back_to": back_to,
-    }
-    
-    await callback.message.edit_text(
-        _("hwid.prompt_add"),
-        reply_markup=nav_keyboard(back_to),
-        parse_mode="HTML"
-    )
-
-
-@router.message(F.text & ~F.text.startswith("/"))
-async def handle_hwid_add_input(message: Message) -> None:
-    """Обработчик ввода HWID для добавления устройства."""
-    user_id = message.from_user.id
-    ctx = PENDING_INPUT.get(user_id)
-    
-    if not ctx or ctx.get("action") != "hwid_add":
-        return
-    
-    if await _not_admin(message):
-        return
-    
-    user_uuid = ctx.get("user_uuid")
-    back_to = ctx.get("back_to", NavTarget.USERS_MENU)
-    hwid = message.text.strip()
-    
-    if not hwid:
-        await _send_clean_message(message, _("hwid.invalid_hwid"), reply_markup=nav_keyboard(back_to))
-        return
-    
-    try:
-        await api_client.create_user_hwid_device(user_uuid, hwid)
-        # Очищаем контекст
-        PENDING_INPUT.pop(user_id, None)
-        
-        # Получаем обновленный список устройств
-        devices_data = await api_client.get_user_hwid_devices(user_uuid)
-        devices = devices_data.get("response", {}).get("devices", [])
-        
-        user = await api_client.get_user_by_uuid(user_uuid)
-        user_info = user.get("response", user)
-        username = user_info.get("username", "n/a")
-        hwid_limit = user_info.get("hwidDeviceLimit")
-        hwid_limit_display = _("hwid.unlimited") if not hwid_limit else str(hwid_limit)
-        
-        lines = [
-            f"<b>{_('hwid.title')}</b>",
-            "",
-            _("hwid.user_info").format(
-                username=_esc(username),
-                limit=_esc(hwid_limit_display),
-                count=len(devices)
-            ),
-        ]
-        
-        if not devices:
-            lines.append("")
-            lines.append(_("hwid.no_devices"))
-        else:
-            lines.append("")
-            lines.append(f"<b>{_('hwid.devices_list')}</b>")
-            for idx, device in enumerate(devices[:10], 1):
-                device_hwid = device.get("hwid", "n/a")
-                created_at = device.get("createdAt")
-                created_str = format_datetime(created_at) if created_at else "—"
-                lines.append(
-                    _("hwid.device_item").format(
-                        index=idx,
-                        hwid=_esc(device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid),
-                        created=_esc(created_str)
-                    )
-                )
-        
-        text = "\n".join(lines)
-        await _send_clean_message(
-            message,
-            text,
-            reply_markup=hwid_devices_keyboard(user_uuid, devices, back_to=back_to),
-            parse_mode="HTML"
-        )
-    except UnauthorizedError:
-        PENDING_INPUT.pop(user_id, None)
-        await _send_clean_message(message, _("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
-    except NotFoundError:
-        PENDING_INPUT.pop(user_id, None)
-        await _send_clean_message(message, _("user.not_found"), reply_markup=nav_keyboard(back_to))
-    except ApiClientError:
-        PENDING_INPUT.pop(user_id, None)
-        logger.exception("Failed to add HWID device user_uuid=%s actor_id=%s", user_uuid, message.from_user.id)
-        await _send_clean_message(message, _("errors.generic"), reply_markup=nav_keyboard(back_to))
 
