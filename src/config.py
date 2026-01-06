@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     default_locale: str = Field("ru", alias="DEFAULT_LOCALE")
     admins: List[int] = Field(default_factory=list, alias="ADMINS", json_schema_extra={"type": "string"})
     log_level: str = Field("INFO", alias="LOG_LEVEL")
+    notifications_chat_id: int | None = Field(default=None, alias="NOTIFICATIONS_CHAT_ID")
+    notifications_topic_id: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ID")
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

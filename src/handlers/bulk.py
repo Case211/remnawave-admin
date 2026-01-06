@@ -11,6 +11,7 @@ from src.keyboards.bulk_hosts import bulk_hosts_keyboard
 from src.keyboards.bulk_users import bulk_users_keyboard
 from src.services.api_client import ApiClientError, UnauthorizedError, api_client
 from src.utils.logger import logger
+from src.utils.notifications import send_user_notification
 
 # Временные импорты из других модулей
 # TODO: Импортировать _fetch_hosts_text из hosts.py после завершения рефакторинга
@@ -42,12 +43,60 @@ async def _run_bulk_action(
         if action == "reset":
             await api_client.bulk_reset_traffic_users(uuids or [])
         elif action == "delete":
+            # Получаем информацию о пользователях перед удалением для уведомлений
+            users_to_notify = []
+            if uuids:
+                for user_uuid in uuids:
+                    try:
+                        user = await api_client.get_user_by_uuid(user_uuid)
+                        users_to_notify.append(user)
+                    except Exception:
+                        logger.debug("Failed to get user data for notification user_uuid=%s", user_uuid)
+            
             await api_client.bulk_delete_users(uuids or [])
+            
+            # Отправляем уведомления о удалении
+            try:
+                bot = target.message.bot if isinstance(target, CallbackQuery) else target.bot
+                for user in users_to_notify:
+                    await send_user_notification(bot, "deleted", user)
+            except Exception:
+                logger.exception("Failed to send user deletion notifications")
         elif action == "delete_status":
             if status not in ALLOWED_STATUSES:
                 await _reply(target, _("bulk.usage_delete_status"))
                 return
+            
+            # Получаем информацию о пользователях перед удалением для уведомлений
+            users_to_notify = []
+            try:
+                start = 0
+                while True:
+                    users_data = await api_client.get_users(start=start, size=SEARCH_PAGE_SIZE)
+                    payload = users_data.get("response", users_data)
+                    users = payload.get("users", [])
+                    total = payload.get("total", len(users))
+                    
+                    for user in users:
+                        user_info = user.get("response", user)
+                        if user_info.get("status") == status and user_info.get("uuid"):
+                            users_to_notify.append(user)
+                    
+                    start += SEARCH_PAGE_SIZE
+                    if start >= total or not users:
+                        break
+            except Exception:
+                logger.exception("Failed to get users for deletion notifications")
+            
             await api_client.bulk_delete_users_by_status(status)
+            
+            # Отправляем уведомления о удалении
+            try:
+                bot = target.message.bot if isinstance(target, CallbackQuery) else target.bot
+                for user in users_to_notify:
+                    await send_user_notification(bot, "deleted", user)
+            except Exception:
+                logger.exception("Failed to send user deletion notifications")
         elif action == "revoke":
             await api_client.bulk_revoke_subscriptions(uuids or [])
         elif action == "extend":
@@ -170,7 +219,38 @@ async def cb_bulk_users_actions(callback: CallbackQuery) -> None:
             await _edit_text_safe(callback.message, _("bulk.done"), reply_markup=bulk_users_keyboard())
         elif action == "delete" and len(parts) > 3:
             status = parts[3]
+            
+            # Получаем информацию о пользователях перед удалением для уведомлений
+            users_to_notify = []
+            try:
+                start = 0
+                while True:
+                    users_data = await api_client.get_users(start=start, size=SEARCH_PAGE_SIZE)
+                    payload = users_data.get("response", users_data)
+                    users = payload.get("users", [])
+                    total = payload.get("total", len(users))
+                    
+                    for user in users:
+                        user_info = user.get("response", user)
+                        if user_info.get("status") == status and user_info.get("uuid"):
+                            users_to_notify.append(user)
+                    
+                    start += SEARCH_PAGE_SIZE
+                    if start >= total or not users:
+                        break
+            except Exception:
+                logger.exception("Failed to get users for deletion notifications")
+            
             await api_client.bulk_delete_users_by_status(status)
+            
+            # Отправляем уведомления о удалении
+            try:
+                bot = callback.message.bot
+                for user in users_to_notify:
+                    await send_user_notification(bot, "deleted", user)
+            except Exception:
+                logger.exception("Failed to send user deletion notifications")
+            
             await _edit_text_safe(callback.message, _("bulk.done"), reply_markup=bulk_users_keyboard())
         elif action == "extend_all" and len(parts) > 3:
             try:

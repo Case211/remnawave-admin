@@ -41,6 +41,7 @@ from src.utils.formatters import (
     format_datetime,
 )
 from src.utils.logger import logger
+from src.utils.notifications import send_user_notification
 
 # Функции перенесены из basic.py
 
@@ -410,6 +411,13 @@ async def _create_user(target: Message | CallbackQuery, data: dict) -> None:
     status = info.get("status", "UNKNOWN")
     reply_markup = user_actions_keyboard(info.get("uuid", ""), status)
     await _respond(summary, reply_markup)
+    
+    # Отправляем уведомление о создании пользователя
+    try:
+        bot = target.bot if isinstance(target, Message) else target.message.bot
+        await send_user_notification(bot, "created", user)
+    except Exception:
+        logger.exception("Failed to send user creation notification")
 
 
 def _format_user_edit_snapshot(info: dict, t) -> str:
@@ -479,6 +487,13 @@ def _current_user_edit_values(info: dict) -> dict[str, str]:
 async def _apply_user_update(target: Message | CallbackQuery, user_uuid: str, payload: dict, back_to: str) -> None:
     """Применяет обновление пользователя."""
     try:
+        # Получаем старое значение пользователя перед обновлением
+        old_user = None
+        try:
+            old_user = await api_client.get_user_by_uuid(user_uuid)
+        except Exception:
+            logger.debug("Failed to get old user data for notification user_uuid=%s", user_uuid)
+        
         await api_client.update_user(user_uuid, **payload)
         user = await api_client.get_user_by_uuid(user_uuid)
         info = user.get("response", user)
@@ -488,6 +503,13 @@ async def _apply_user_update(target: Message | CallbackQuery, user_uuid: str, pa
             await target.message.edit_text(text, reply_markup=markup)
         else:
             await _send_clean_message(target, text, reply_markup=markup)
+        
+        # Отправляем уведомление об изменении пользователя
+        try:
+            bot = target.message.bot if isinstance(target, CallbackQuery) else target.bot
+            await send_user_notification(bot, "updated", user, old_user_info=old_user)
+        except Exception:
+            logger.exception("Failed to send user update notification")
     except UnauthorizedError:
         reply_markup = main_menu_keyboard()
         if isinstance(target, CallbackQuery):
