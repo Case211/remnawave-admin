@@ -13,6 +13,7 @@ class NavTarget:
     PROVIDERS_MENU = "providers_menu"
     BULK_MENU = "bulk_menu"
     SYSTEM_MENU = "system_menu"
+    STATS_MENU = "stats_menu"
     TEMPLATES_MENU = "templates_menu"
     SNIPPETS_MENU = "snippets_menu"
     TOKENS_MENU = "tokens_menu"

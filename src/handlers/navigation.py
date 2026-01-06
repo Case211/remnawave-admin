@@ -235,6 +235,11 @@ async def _navigate(target: Message | CallbackQuery, destination: str) -> None:
     if destination == NavTarget.SYSTEM_MENU:
         await _send_clean_message(target, _("bot.menu"), reply_markup=system_menu_keyboard())
         return
+    if destination == NavTarget.STATS_MENU:
+        from src.keyboards.stats_menu import stats_menu_keyboard
+        text = _("stats.menu_title")
+        await _send_clean_message(target, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+        return
     if destination == NavTarget.SUBS_LIST:
         await _send_subscriptions_page(target, page=_get_subs_page(user_id))
         return

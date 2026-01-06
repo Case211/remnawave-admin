@@ -77,7 +77,20 @@
     "nodes_detailed": "🛰 Нод: всего *{total}* (включено: `{enabled}`, выключено: `{disabled}`, онлайн: `{online}`)",
     "templates": "📑 Шаблонов: *{count}*",
     "tokens": "🔑 API токенов: *{count}*",
-    "snippets": "✂️ Сниппетов: *{count}*"
+    "snippets": "✂️ Сниппетов: *{count}*",
+    "traffic_stats": "📶 Статистика трафика",
+    "traffic_select_period": "*📶 Статистика трафика*\n\nВыберите период:",
+    "traffic_title": "📶 Статистика трафика",
+    "traffic_period": "Период: {start} — {end}",
+    "traffic_empty": "Нет данных за выбранный период.",
+    "traffic_summary": "📊 Сводка",
+    "traffic_total": "Всего: `{total}`",
+    "traffic_download": "📥 Скачано: `{download}`",
+    "traffic_upload": "📤 Загружено: `{upload}`",
+    "traffic_by_node": "По нодам:",
+    "traffic_node_item": "  • *{nodeName}* ({country}): `{traffic}` (↓{download} ↑{upload})",
+    "period_3months": "3 месяца",
+    "period_year": "Год"
   },
   "user": {
     "not_found": "🙅 Пользователь не найден.",

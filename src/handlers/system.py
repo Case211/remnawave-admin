@@ -7,10 +7,10 @@ from src.handlers.common import _edit_text_safe, _not_admin
 from src.handlers.state import PENDING_INPUT
 from src.keyboards.main_menu import system_menu_keyboard
 from src.keyboards.navigation import NavTarget, nav_row
-from src.keyboards.stats_menu import stats_menu_keyboard
+from src.keyboards.stats_menu import stats_menu_keyboard, stats_period_keyboard
 from src.keyboards.system_nodes import system_nodes_keyboard
 from src.services.api_client import ApiClientError, UnauthorizedError, api_client
-from src.utils.formatters import build_bandwidth_stats, format_bytes, format_uptime
+from src.utils.formatters import build_bandwidth_stats, format_bytes, format_datetime, format_uptime
 from src.utils.logger import logger
 
 # Временные импорты из других модулей
@@ -334,6 +334,10 @@ async def cb_stats_type(callback: CallbackQuery) -> None:
     elif stats_type == "server":
         text = await _fetch_server_stats_text()
         await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+    elif stats_type == "traffic":
+        # Показываем меню выбора периода
+        text = _("stats.traffic_select_period")
+        await _edit_text_safe(callback.message, text, reply_markup=stats_period_keyboard(), parse_mode="Markdown")
     else:
         await callback.answer(_("errors.generic"), show_alert=True)
 
@@ -466,4 +470,109 @@ async def cb_system_nodes_actions(callback: CallbackQuery) -> None:
     except ApiClientError:
         logger.exception("❌ System nodes action failed action=%s", action)
         await _edit_text_safe(callback.message, _("system_nodes.error"), reply_markup=system_nodes_keyboard())
+
+
+async def _fetch_traffic_stats_text(start: str, end: str) -> str:
+    """Получает статистику трафика за период."""
+    try:
+        data = await api_client.get_nodes_usage_range(start, end, top_nodes_limit=20)
+        # API возвращает массив напрямую в response
+        nodes_usage = data.get("response", [])
+
+        lines = [
+            f"*{_('stats.traffic_title')}*",
+            "",
+            _("stats.traffic_period").format(
+                start=format_datetime(start.replace("Z", "+00:00")),
+                end=format_datetime(end.replace("Z", "+00:00")),
+            ),
+        ]
+
+        if not nodes_usage:
+            lines.append("")
+            lines.append(_("stats.traffic_empty"))
+        else:
+            # Подсчитываем общий трафик
+            total_traffic = sum(node.get("totalTrafficBytes", 0) for node in nodes_usage)
+            total_download = sum(node.get("totalDownloadBytes", 0) for node in nodes_usage)
+            total_upload = sum(node.get("totalUploadBytes", 0) for node in nodes_usage)
+
+            lines.append("")
+            lines.append(f"*{_('stats.traffic_summary')}*")
+            lines.append(_("stats.traffic_total").format(total=format_bytes(total_traffic)))
+            lines.append(_("stats.traffic_download").format(download=format_bytes(total_download)))
+            lines.append(_("stats.traffic_upload").format(upload=format_bytes(total_upload)))
+
+            lines.append("")
+            lines.append(f"*{_('stats.traffic_by_node')}*")
+            # Сортируем по трафику (по убыванию)
+            sorted_nodes = sorted(nodes_usage, key=lambda x: x.get("totalTrafficBytes", 0), reverse=True)
+            for node in sorted_nodes[:20]:  # Показываем топ-20
+                node_name = node.get("nodeName", "n/a")
+                country = node.get("nodeCountryCode", "—")
+                traffic_bytes = node.get("totalTrafficBytes", 0)
+                download_bytes = node.get("totalDownloadBytes", 0)
+                upload_bytes = node.get("totalUploadBytes", 0)
+                lines.append(
+                    _("stats.traffic_node_item").format(
+                        nodeName=node_name,
+                        country=country,
+                        traffic=format_bytes(traffic_bytes),
+                        download=format_bytes(download_bytes),
+                        upload=format_bytes(upload_bytes),
+                    )
+                )
+
+        return "\n".join(lines)
+    except UnauthorizedError:
+        return _("errors.unauthorized")
+    except ApiClientError:
+        logger.exception("⚠️ Traffic stats fetch failed")
+        return _("errors.generic")
+
+
+@router.callback_query(F.data.startswith("stats:traffic_period:"))
+async def cb_stats_traffic_period(callback: CallbackQuery) -> None:
+    """Обработчик выбора периода для статистики трафика."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) < 3:
+        return
+
+    period = parts[2]
+
+    try:
+        from datetime import datetime, timedelta
+
+        now = datetime.utcnow()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if period == "today":
+            start = today_start.isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "week":
+            start = (today_start - timedelta(days=7)).isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "month":
+            start = (today_start - timedelta(days=30)).isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "3months":
+            start = (today_start - timedelta(days=90)).isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        elif period == "year":
+            start = (today_start - timedelta(days=365)).isoformat() + "Z"
+            end = now.isoformat() + "Z"
+        else:
+            await callback.answer(_("errors.generic"), show_alert=True)
+            return
+
+        text = await _fetch_traffic_stats_text(start, end)
+        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+    except UnauthorizedError:
+        await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=stats_menu_keyboard())
+    except ApiClientError:
+        logger.exception("⚠️ Traffic stats period fetch failed period=%s", period)
+        await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=stats_menu_keyboard())
 

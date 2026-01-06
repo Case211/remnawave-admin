@@ -77,7 +77,20 @@
     "nodes_detailed": "🛰 Nodes: total *{total}* (enabled: `{enabled}`, disabled: `{disabled}`, online: `{online}`)",
     "templates": "📑 Templates: *{count}*",
     "tokens": "🔑 API tokens: *{count}*",
-    "snippets": "✂️ Snippets: *{count}*"
+    "snippets": "✂️ Snippets: *{count}*",
+    "traffic_stats": "📶 Traffic statistics",
+    "traffic_select_period": "*📶 Traffic statistics*\n\nSelect period:",
+    "traffic_title": "📶 Traffic statistics",
+    "traffic_period": "Period: {start} — {end}",
+    "traffic_empty": "No data for the selected period.",
+    "traffic_summary": "📊 Summary",
+    "traffic_total": "Total: `{total}`",
+    "traffic_download": "📥 Downloaded: `{download}`",
+    "traffic_upload": "📤 Uploaded: `{upload}`",
+    "traffic_by_node": "By nodes:",
+    "traffic_node_item": "  • *{nodeName}* ({country}): `{traffic}` (↓{download} ↑{upload})",
+    "period_3months": "3 months",
+    "period_year": "Year"
   },
   "user": {
     "not_found": "🙅 User not found.",
