@@ -57,6 +57,8 @@ async def _send_clean_message(
 
 async def _not_admin(message: Message | CallbackQuery) -> bool:
     """Проверяет, является ли пользователь администратором. Удаляет команды автоматически."""
+    from src.handlers.state import PENDING_INPUT
+    
     user_id = message.from_user.id if hasattr(message, "from_user") else None
     if user_id is None or not is_admin(user_id):
         text = _("errors.unauthorized")
@@ -67,8 +69,15 @@ async def _not_admin(message: Message | CallbackQuery) -> bool:
         return True
     if isinstance(message, Message):
         is_command = bool(getattr(message, "text", "") and message.text.startswith("/"))
-        delay = ADMIN_COMMAND_DELETE_DELAY if is_command else 0.0
-        asyncio.create_task(_cleanup_message(message, delay=delay))
+        # Если это ожидаемый ввод (пользователь в PENDING_INPUT), не удаляем сообщение сразу
+        # Оно будет удалено после обработки в соответствующем обработчике
+        is_pending_input = user_id in PENDING_INPUT
+        if is_command:
+            delay = ADMIN_COMMAND_DELETE_DELAY
+            asyncio.create_task(_cleanup_message(message, delay=delay))
+        elif not is_pending_input:
+            # Для обычных текстовых сообщений (не команды и не ожидаемый ввод) удаляем сразу
+            asyncio.create_task(_cleanup_message(message, delay=0.0))
     return False
 
 
