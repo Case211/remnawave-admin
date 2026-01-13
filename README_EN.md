@@ -379,6 +379,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For questions and issues, create an [issue](https://github.com/case211/remnawave-admin/issues) on GitHub.
 
+Join our Telegram chat - https://t.me/remnawave_admin
+
 ---
 
 <div align="center">
