@@ -36,14 +36,40 @@ def verify_webhook_secret(request: Request) -> bool:
         return True
     
     # Официальный заголовок от панели Remnawave
-    signature = request.headers.get("X-Remnawave-Signature")
+    # Проверяем разные варианты имени заголовка (FastAPI нормализует к нижнему регистру)
+    signature = (
+        request.headers.get("X-Remnawave-Signature") or
+        request.headers.get("x-remnawave-signature") or
+        request.headers.get("X-REMNAWAVE-SIGNATURE")
+    )
+    
+    # Логируем все заголовки для отладки (без секретных данных)
+    all_headers = dict(request.headers)
+    logger.debug("Webhook request headers: %s", {k: v for k, v in all_headers.items() if k.lower() not in ['x-remnawave-signature']})
     
     if not signature:
-        logger.warning("X-Remnawave-Signature header missing")
+        logger.error(
+            "X-Remnawave-Signature header missing. Available headers: %s. "
+            "Проверьте, что в панели Remnawave установлена переменная WEBHOOK_SECRET_HEADER",
+            list(request.headers.keys())
+        )
         return False
     
     # Сравниваем подпись с секретным ключом
-    return signature == settings.webhook_secret
+    is_valid = signature == settings.webhook_secret
+    
+    if not is_valid:
+        logger.error(
+            "Webhook signature mismatch! "
+            "Ожидаемая длина: %d, Полученная длина: %d. "
+            "Первые 10 символов полученного ключа: '%s'. "
+            "Убедитесь, что WEBHOOK_SECRET в боте совпадает с WEBHOOK_SECRET_HEADER в панели Remnawave.",
+            len(settings.webhook_secret) if settings.webhook_secret else 0,
+            len(signature) if signature else 0,
+            signature[:10] if signature else "None"
+        )
+    
+    return is_valid
 
 
 @app.post("/webhook")
