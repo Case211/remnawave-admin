@@ -72,6 +72,10 @@ async def _not_admin(message: Message | CallbackQuery) -> bool:
         # Если это ожидаемый ввод (пользователь в PENDING_INPUT), не удаляем сообщение сразу
         # Оно будет удалено после обработки в соответствующем обработчике
         is_pending_input = user_id in PENDING_INPUT
+        logger.debug(
+            "_not_admin: user_id=%s is_command=%s is_pending_input=%s text='%s'",
+            user_id, is_command, is_pending_input, message.text[:50] if message.text else None
+        )
         if is_command:
             delay = ADMIN_COMMAND_DELETE_DELAY
             asyncio.create_task(_cleanup_message(message, delay=delay))
@@ -102,8 +106,10 @@ def _clear_user_state(user_id: int | None, keep_search: bool = False, keep_subs:
 
     if user_id is None:
         return
-    PENDING_INPUT.pop(user_id, None)
+    # НЕ удаляем PENDING_INPUT, если это поиск - он будет установлен в _start_user_search_flow
+    # PENDING_INPUT должен сохраняться для ожидаемого ввода
     if not keep_search:
+        PENDING_INPUT.pop(user_id, None)
         USER_SEARCH_CONTEXT.pop(user_id, None)
         USER_DETAIL_BACK_TARGET.pop(user_id, None)
         if not keep_subs:

@@ -273,13 +273,22 @@ async def _show_user_search_results(target: Message | CallbackQuery, query: str,
 async def _handle_user_search_input(message: Message, ctx: dict) -> None:
     """Обрабатывает ввод поискового запроса."""
     query = (message.text or "").strip()
-    PENDING_INPUT[message.from_user.id] = {"action": "user_search"}
+    user_id = message.from_user.id
+    
+    # Удаляем из PENDING_INPUT только после начала обработки
+    # Это гарантирует, что сообщение не будет удалено до обработки
+    if user_id in PENDING_INPUT:
+        PENDING_INPUT.pop(user_id)
+    
     if not query:
         await _send_clean_message(message, _("user.search_prompt"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))
         # Удаляем сообщение пользователя после обработки
         asyncio.create_task(_cleanup_message(message, delay=0.5))
         return
+    
+    # Выполняем поиск
     await _run_user_search(message, query)
+    
     # Удаляем сообщение пользователя после обработки поиска
     asyncio.create_task(_cleanup_message(message, delay=0.5))
 
