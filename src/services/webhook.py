@@ -25,6 +25,34 @@ from src.utils.notifications import (
 app = FastAPI(title="Remnawave Admin Webhook")
 
 
+@app.middleware("http")
+async def catch_invalid_requests(request: Request, call_next):
+    """
+    Middleware для обработки некорректных HTTP-запросов.
+    Подавляет предупреждения от uvicorn для известных паттернов некорректных запросов.
+    """
+    try:
+        # Проверяем, является ли запрос валидным HTTP-запросом
+        if request.method not in ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]:
+            # Некорректный метод - возвращаем 405 без логирования
+            return JSONResponse(status_code=405, content={"error": "Method not allowed"})
+        
+        # Проверяем путь - если это не наш endpoint, возвращаем 404 без логирования
+        if request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"]:
+            # Для корневого пути возвращаем простой ответ
+            if request.url.path == "/":
+                return JSONResponse(status_code=200, content={"service": "remnawave-admin-webhook", "status": "ok"})
+            # Для других путей - 404 без логирования
+            return JSONResponse(status_code=404, content={"error": "Not found"})
+        
+        # Продолжаем обработку валидного запроса
+        response = await call_next(request)
+        return response
+    except Exception:
+        # Если произошла ошибка при обработке запроса, возвращаем 400 без логирования
+        return JSONResponse(status_code=400, content={"error": "Bad request"})
+
+
 def verify_webhook_secret(request: Request, body: bytes) -> bool:
     """
     Проверяет подпись webhook из заголовка X-Remnawave-Signature.

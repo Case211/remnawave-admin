@@ -61,12 +61,30 @@ async def run_webhook_server(bot: Bot, port: int) -> None:
     # Сохраняем бот в состоянии приложения для доступа из webhook handlers
     webhook_app.state.bot = bot
     
+    # Настраиваем логирование uvicorn для подавления предупреждений о некорректных запросах
+    import logging
+    uvicorn_logger = logging.getLogger("uvicorn.error")
+    
+    # Создаем фильтр для подавления предупреждений "Invalid HTTP request"
+    class InvalidRequestFilter(logging.Filter):
+        def filter(self, record):
+            # Подавляем предупреждения о некорректных HTTP-запросах
+            if "Invalid HTTP request" in str(record.getMessage()):
+                return False
+            return True
+    
+    # Применяем фильтр к логгеру uvicorn
+    invalid_request_filter = InvalidRequestFilter()
+    uvicorn_logger.addFilter(invalid_request_filter)
+    
     config = uvicorn.Config(
         app=webhook_app,
         host="0.0.0.0",
         port=port,
         log_level="info",
         access_log=True,
+        # Отключаем логирование некорректных запросов на уровне uvicorn
+        log_config=None,  # Используем нашу собственную конфигурацию логирования
     )
     server = uvicorn.Server(config)
     

@@ -1609,7 +1609,6 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                 text_lines.append("")
                 text_lines.append(_("user.configs_by_nodes_title"))
                 
-                link_index = 0
                 # Получаем информацию о пользователе для формирования ссылок
                 vless_uuid = user_info.get("vlessUuid")
                 trojan_password = user_info.get("trojanPassword")
@@ -1669,50 +1668,17 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                     text_lines.append(f"\n<b>🖥 {_esc(node_name)}{country_display}</b>")
                     logger.info("Adding configs for node %s: vless=%s, trojan=%s, ss=%s", node_name, bool(vless_uuid), bool(trojan_password), bool(ss_password))
                     
-                    # Формируем ссылки для доступных протоколов
-                    # VLESS
-                    if vless_uuid:
-                        vless_link = f"vless://{vless_uuid}@{node_address}:{node_port}?type=tcp&security=none#VLESS-{_esc(node_name)}"
-                        text_lines.append(f"   🔷 VLESS")
-                        keyboard_rows.append([
-                            InlineKeyboardButton(
-                                text=f"🔷 VLESS - {node_name}",
-                                callback_data=f"user_sub_link:{user_uuid}:{link_index}",
-                            )
-                        ])
-                        subscription_links.append(vless_link)
-                        logger.info("Added VLESS link for node %s, link_index=%s, total_links=%s", node_name, link_index, len(subscription_links))
-                        link_index += 1
+                    # Проверяем, есть ли хотя бы один протокол для этой ноды
+                    has_protocols = bool(vless_uuid or trojan_password or ss_password)
                     
-                    # Trojan
-                    if trojan_password:
-                        trojan_link = f"trojan://{trojan_password}@{node_address}:{node_port}?type=tcp#Trojan-{_esc(node_name)}"
-                        text_lines.append(f"   🔴 Trojan")
+                    if has_protocols:
+                        # Добавляем кнопку для ноды
                         keyboard_rows.append([
                             InlineKeyboardButton(
-                                text=f"🔴 Trojan - {node_name}",
-                                callback_data=f"user_sub_link:{user_uuid}:{link_index}",
+                                text=f"🖥 {node_name}{country_display}",
+                                callback_data=f"user_node_configs:{user_uuid}:{node_uuid}",
                             )
                         ])
-                        subscription_links.append(trojan_link)
-                        logger.info("Added Trojan link for node %s, link_index=%s, total_links=%s", node_name, link_index, len(subscription_links))
-                        link_index += 1
-                    
-                    # SS
-                    if ss_password:
-                        ss_method = "aes-256-gcm"  # Стандартный метод для SS
-                        ss_encoded = base64.b64encode(f"{ss_method}:{ss_password}@{node_address}:{node_port}".encode()).decode()
-                        ss_link = f"ss://{ss_encoded}#SS-{_esc(node_name)}"
-                        text_lines.append(f"   🔶 SS")
-                        keyboard_rows.append([
-                            InlineKeyboardButton(
-                                text=f"🔶 SS - {node_name}",
-                                callback_data=f"user_sub_link:{user_uuid}:{link_index}",
-                            )
-                        ])
-                        subscription_links.append(ss_link)
-                        logger.info("Added SS link for node %s, link_index=%s, total_links=%s", node_name, link_index, len(subscription_links))
-                        link_index += 1
 
         # Если конфигов нет, но есть доступные ноды, пробуем получить все ноды и сформировать конфиги
         if not subscription_links and not accessible_nodes:
@@ -1764,44 +1730,17 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                             country_display = f" ({node_country})" if node_country else ""
                             text_lines.append(f"\n<b>🖥 {_esc(node_name)}{country_display}</b>")
                             
-                            # Формируем ссылки для доступных протоколов
-                            if vless_uuid:
-                                vless_link = f"vless://{vless_uuid}@{node_address}:{node_port}?type=tcp&security=none#VLESS-{_esc(node_name)}"
-                                text_lines.append(f"   🔷 VLESS")
-                                keyboard_rows.append([
-                                    InlineKeyboardButton(
-                                        text=f"🔷 VLESS - {node_name}",
-                                        callback_data=f"user_sub_link:{user_uuid}:{link_index}",
-                                    )
-                                ])
-                                subscription_links.append(vless_link)
-                                link_index += 1
+                            # Проверяем, есть ли хотя бы один протокол для этой ноды
+                            has_protocols = bool(vless_uuid or trojan_password or ss_password)
                             
-                            if trojan_password:
-                                trojan_link = f"trojan://{trojan_password}@{node_address}:{node_port}?type=tcp#Trojan-{_esc(node_name)}"
-                                text_lines.append(f"   🔴 Trojan")
+                            if has_protocols:
+                                # Добавляем кнопку для ноды
                                 keyboard_rows.append([
                                     InlineKeyboardButton(
-                                        text=f"🔴 Trojan - {node_name}",
-                                        callback_data=f"user_sub_link:{user_uuid}:{link_index}",
+                                        text=f"🖥 {node_name}{country_display}",
+                                        callback_data=f"user_node_configs:{user_uuid}:{node_uuid}",
                                     )
                                 ])
-                                subscription_links.append(trojan_link)
-                                link_index += 1
-                            
-                            if ss_password:
-                                ss_method = "aes-256-gcm"
-                                ss_encoded = base64.b64encode(f"{ss_method}:{ss_password}@{node_address}:{node_port}".encode()).decode()
-                                ss_link = f"ss://{ss_encoded}#SS-{_esc(node_name)}"
-                                text_lines.append(f"   🔶 SS")
-                                keyboard_rows.append([
-                                    InlineKeyboardButton(
-                                        text=f"🔶 SS - {node_name}",
-                                        callback_data=f"user_sub_link:{user_uuid}:{link_index}",
-                                    )
-                                ])
-                                subscription_links.append(ss_link)
-                                link_index += 1
             except Exception:
                 logger.exception("Failed to get all nodes for config generation")
         
@@ -1851,135 +1790,221 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
     if len(parts) < 3:
         return
     user_uuid = parts[1]
-    try:
-        link_index = int(parts[2])
-    except ValueError:
-        await callback.message.edit_text(
-            _("errors.generic"), reply_markup=nav_keyboard(_get_user_detail_back_target(callback.from_user.id))
-        )
-        return
     back_to = _get_user_detail_back_target(callback.from_user.id)
 
     try:
         # Получаем информацию о пользователе
         user = await api_client.get_user_by_uuid(user_uuid)
         user_info = user.get("response", user)
-        short_uuid = user_info.get("shortUuid")
-
-        # Собираем все ссылки (как в cb_user_configs)
-        subscription_links = []
         
-        # Получаем подписные ссылки из информации о подписке
-        if short_uuid:
+        # Проверяем формат callback_data
+        # Новый формат: user_sub_link:{user_uuid}:{node_uuid}:{protocol}
+        # Старый формат: user_sub_link:{user_uuid}:{link_index} (для обратной совместимости)
+        if len(parts) >= 4:
+            # Новый формат - по ноде и протоколу
+            node_uuid = parts[2]
+            protocol = parts[3]
+            
+            # Получаем доступные ноды
+            nodes_data = await api_client.get_user_accessible_nodes(user_uuid)
+            nodes_response = nodes_data.get("response", nodes_data)
+            accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
+            
+            # Находим нужную ноду
+            node_info = None
+            for node in accessible_nodes:
+                if isinstance(node, dict) and node.get("uuid") == node_uuid:
+                    node_info = node
+                    break
+            
+            if not node_info:
+                await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+                return
+            
+            node_name = node_info.get("nodeName", node_info.get("name", "Unknown"))
+            
+            # Получаем все ноды для получения адресов и портов
+            all_nodes_data = await api_client.get_nodes()
+            all_nodes = all_nodes_data.get("response", [])
+            nodes_dict = {n.get("uuid"): n for n in all_nodes if isinstance(n, dict)}
+            
+            node_details = nodes_dict.get(node_uuid)
+            if not node_details:
+                await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+                return
+            
+            node_address = node_details.get("address", "")
+            node_port = node_details.get("port")
+            
+            if not node_address or not node_port:
+                await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+                return
+            
+            # Генерируем ссылку для конкретного протокола
+            vless_uuid = user_info.get("vlessUuid")
+            trojan_password = user_info.get("trojanPassword")
+            ss_password = user_info.get("ssPassword")
+            
+            link = None
+            link_type = ""
+            
+            if protocol == "vless" and vless_uuid:
+                link = f"vless://{vless_uuid}@{node_address}:{node_port}?type=tcp&security=none#VLESS-{_esc(node_name)}"
+                link_type = "🔷 VLESS"
+            elif protocol == "trojan" and trojan_password:
+                link = f"trojan://{trojan_password}@{node_address}:{node_port}?type=tcp#Trojan-{_esc(node_name)}"
+                link_type = "🔴 Trojan"
+            elif protocol == "ss" and ss_password:
+                ss_method = "aes-256-gcm"
+                ss_encoded = base64.b64encode(f"{ss_method}:{ss_password}@{node_address}:{node_port}".encode()).decode()
+                link = f"ss://{ss_encoded}#SS-{_esc(node_name)}"
+                link_type = "🔶 SS"
+            
+            if not link:
+                await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+                return
+        else:
+            # Старый формат - по индексу (для обратной совместимости)
             try:
-                sub_info = await api_client.get_subscription_info(short_uuid)
-                sub_response = sub_info.get("response", sub_info)
-                
-                configs_by_node = sub_response.get("configsByNode", sub_response.get("nodes", []))
-                links_list = sub_response.get("links", sub_response.get("subscriptionLinks", []))
-                ss_conf_links = sub_response.get("ssConfLinks", {})
-                
-                # Обрабатываем ssConfLinks
-                if ss_conf_links and isinstance(ss_conf_links, dict) and ss_conf_links:
-                    for key, value in ss_conf_links.items():
-                        if isinstance(value, list):
-                            subscription_links.extend([link for link in value if isinstance(link, str)])
-                        elif isinstance(value, dict):
-                            protocols = value.get("protocols", value.get("links", []))
-                            if isinstance(protocols, list):
-                                for protocol in protocols:
+                link_index = int(parts[2])
+            except ValueError:
+                await callback.message.edit_text(
+                    _("errors.generic"), reply_markup=nav_keyboard(_get_user_detail_back_target(callback.from_user.id))
+                )
+                return
+            
+            short_uuid = user_info.get("shortUuid")
+            
+            # Собираем все ссылки (как в cb_user_configs)
+            subscription_links = []
+            
+            # Получаем подписные ссылки из информации о подписке
+            if short_uuid:
+                try:
+                    sub_info = await api_client.get_subscription_info(short_uuid)
+                    sub_response = sub_info.get("response", sub_info)
+                    
+                    configs_by_node = sub_response.get("configsByNode", sub_response.get("nodes", []))
+                    links_list = sub_response.get("links", sub_response.get("subscriptionLinks", []))
+                    ss_conf_links = sub_response.get("ssConfLinks", {})
+                    
+                    # Обрабатываем ssConfLinks
+                    if ss_conf_links and isinstance(ss_conf_links, dict) and ss_conf_links:
+                        for key, value in ss_conf_links.items():
+                            if isinstance(value, list):
+                                subscription_links.extend([link for link in value if isinstance(link, str)])
+                            elif isinstance(value, dict):
+                                protocols = value.get("protocols", value.get("links", []))
+                                if isinstance(protocols, list):
+                                    for protocol in protocols:
+                                        if isinstance(protocol, str):
+                                            subscription_links.append(protocol)
+                                        elif isinstance(protocol, dict):
+                                            protocol_link = protocol.get("link", protocol.get("url", ""))
+                                            if protocol_link:
+                                                subscription_links.append(protocol_link)
+                    
+                    # Обрабатываем configs_by_node
+                    if configs_by_node and isinstance(configs_by_node, list):
+                        for node_config in configs_by_node:
+                            if not isinstance(node_config, dict):
+                                continue
+                            node_protocols = node_config.get("protocols", node_config.get("links", []))
+                            if isinstance(node_protocols, list):
+                                for protocol in node_protocols:
                                     if isinstance(protocol, str):
                                         subscription_links.append(protocol)
                                     elif isinstance(protocol, dict):
                                         protocol_link = protocol.get("link", protocol.get("url", ""))
                                         if protocol_link:
                                             subscription_links.append(protocol_link)
-                
-                # Обрабатываем configs_by_node
-                if configs_by_node and isinstance(configs_by_node, list):
-                    for node_config in configs_by_node:
-                        if not isinstance(node_config, dict):
-                            continue
-                        node_protocols = node_config.get("protocols", node_config.get("links", []))
-                        if isinstance(node_protocols, list):
-                            for protocol in node_protocols:
-                                if isinstance(protocol, str):
-                                    subscription_links.append(protocol)
-                                elif isinstance(protocol, dict):
-                                    protocol_link = protocol.get("link", protocol.get("url", ""))
-                                    if protocol_link:
-                                        subscription_links.append(protocol_link)
-                
-                # Обрабатываем links_list
-                if links_list and isinstance(links_list, list):
-                    subscription_links.extend([link for link in links_list if isinstance(link, str)])
-            except Exception:
-                logger.exception("Failed to fetch subscription links for user %s", short_uuid)
-        
-        # Если ссылок нет, генерируем из доступных нод (как в cb_user_configs)
-        if not subscription_links:
-            try:
-                nodes_data = await api_client.get_user_accessible_nodes(user_uuid)
-                nodes_response = nodes_data.get("response", nodes_data)
-                accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
-                
-                if accessible_nodes and isinstance(accessible_nodes, list):
-                    # Получаем все ноды для получения адресов и портов
-                    all_nodes_data = await api_client.get_nodes()
-                    all_nodes = all_nodes_data.get("response", [])
-                    nodes_dict = {n.get("uuid"): n for n in all_nodes if isinstance(n, dict)}
                     
-                    vless_uuid = user_info.get("vlessUuid")
-                    trojan_password = user_info.get("trojanPassword")
-                    ss_password = user_info.get("ssPassword")
+                    # Обрабатываем links_list
+                    if links_list and isinstance(links_list, list):
+                        subscription_links.extend([link for link in links_list if isinstance(link, str)])
+                except Exception:
+                    logger.exception("Failed to fetch subscription links for user %s", short_uuid)
+            
+            # Если ссылок нет, генерируем из доступных нод (как в cb_user_configs)
+            if not subscription_links:
+                try:
+                    nodes_data = await api_client.get_user_accessible_nodes(user_uuid)
+                    nodes_response = nodes_data.get("response", nodes_data)
+                    accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
                     
-                    for node in accessible_nodes:
-                        if not isinstance(node, dict):
-                            continue
+                    if accessible_nodes and isinstance(accessible_nodes, list):
+                        # Получаем все ноды для получения адресов и портов
+                        all_nodes_data = await api_client.get_nodes()
+                        all_nodes = all_nodes_data.get("response", [])
+                        nodes_dict = {n.get("uuid"): n for n in all_nodes if isinstance(n, dict)}
                         
-                        node_uuid = node.get("uuid", "")
-                        node_info = nodes_dict.get(node_uuid)
-                        if not node_info:
-                            continue
+                        vless_uuid = user_info.get("vlessUuid")
+                        trojan_password = user_info.get("trojanPassword")
+                        ss_password = user_info.get("ssPassword")
                         
-                        node_address = node_info.get("address", "")
-                        node_port = node_info.get("port")
-                        
-                        if not node_address or not node_port:
-                            continue
-                        
-                        # Генерируем ссылки для доступных протоколов
-                        if vless_uuid:
-                            vless_link = f"vless://{vless_uuid}@{node_address}:{node_port}?type=tcp&security=none#VLESS"
-                            subscription_links.append(vless_link)
-                        
-                        if trojan_password:
-                            trojan_link = f"trojan://{trojan_password}@{node_address}:{node_port}?type=tcp#Trojan"
-                            subscription_links.append(trojan_link)
-                        
-                        if ss_password:
-                            ss_method = "aes-256-gcm"
-                            ss_encoded = base64.b64encode(f"{ss_method}:{ss_password}@{node_address}:{node_port}".encode()).decode()
-                            ss_link = f"ss://{ss_encoded}#SS"
-                            subscription_links.append(ss_link)
-            except Exception:
-                logger.exception("Failed to generate links from accessible nodes")
+                        for node in accessible_nodes:
+                            if not isinstance(node, dict):
+                                continue
+                            
+                            node_uuid = node.get("uuid", "")
+                            node_info = nodes_dict.get(node_uuid)
+                            if not node_info:
+                                continue
+                            
+                            node_address = node_info.get("address", "")
+                            node_port = node_info.get("port")
+                            
+                            if not node_address or not node_port:
+                                continue
+                            
+                            # Генерируем ссылки для доступных протоколов
+                            if vless_uuid:
+                                vless_link = f"vless://{vless_uuid}@{node_address}:{node_port}?type=tcp&security=none#VLESS"
+                                subscription_links.append(vless_link)
+                            
+                            if trojan_password:
+                                trojan_link = f"trojan://{trojan_password}@{node_address}:{node_port}?type=tcp#Trojan"
+                                subscription_links.append(trojan_link)
+                            
+                            if ss_password:
+                                ss_method = "aes-256-gcm"
+                                ss_encoded = base64.b64encode(f"{ss_method}:{ss_password}@{node_address}:{node_port}".encode()).decode()
+                                ss_link = f"ss://{ss_encoded}#SS"
+                                subscription_links.append(ss_link)
+                except Exception:
+                    logger.exception("Failed to generate links from accessible nodes")
 
-        if link_index >= len(subscription_links):
-            await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
-            return
+            if link_index >= len(subscription_links):
+                await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+                return
 
-        link = subscription_links[link_index]
-
-        # Определяем тип ссылки для заголовка
-        protocol_type = _get_protocol_type(link)
-        link_type = _get_protocol_name(protocol_type)
+            link = subscription_links[link_index]
+            
+            # Определяем тип ссылки для заголовка
+            protocol_type = _get_protocol_type(link)
+            link_type = _get_protocol_name(protocol_type)
 
         # Отображаем ссылку
         text = f"{link_type}\n\n<code>{_esc(link)}</code>"
+        
+        # Определяем, откуда вернуться (к конфигам ноды или к списку нод)
+        if len(parts) >= 4:
+            # Новый формат - возвращаемся к протоколам ноды
+            node_uuid = parts[2]
+            back_button = InlineKeyboardButton(
+                text=_("actions.back"),
+                callback_data=f"user_node_configs:{user_uuid}:{node_uuid}"
+            )
+        else:
+            # Старый формат - возвращаемся к списку конфигов
+            back_button = InlineKeyboardButton(
+                text=_("user.back_to_configs"),
+                callback_data=f"user_configs:{user_uuid}"
+            )
+        
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=_("user.back_to_configs"), callback_data=f"user_configs:{user_uuid}")],
+                [back_button],
                 nav_row(back_to),
             ]
         )
