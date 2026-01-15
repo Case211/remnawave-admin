@@ -566,25 +566,26 @@ async def cb_stats_traffic_period(callback: CallbackQuery) -> None:
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
         # API для /api/bandwidth-stats/nodes ожидает формат только с датой (YYYY-MM-DD)
-        # Без времени и timezone
+        # Для end используем завтрашний день, чтобы включить весь последний день периода
         def format_date_only(dt: datetime) -> str:
             return dt.strftime("%Y-%m-%d")
 
         if period == "today":
+            # Для "сегодня" используем сегодня и завтра
             start = format_date_only(today_start)
-            end = format_date_only(now)
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "week":
             start = format_date_only(today_start - timedelta(days=7))
-            end = format_date_only(now)
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "month":
             start = format_date_only(today_start - timedelta(days=30))
-            end = format_date_only(now)
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "3months":
             start = format_date_only(today_start - timedelta(days=90))
-            end = format_date_only(now)
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "year":
             start = format_date_only(today_start - timedelta(days=365))
-            end = format_date_only(now)
+            end = format_date_only(today_start + timedelta(days=1))
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
