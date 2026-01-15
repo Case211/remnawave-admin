@@ -182,6 +182,8 @@
     "unlimited": "♾ Unlimited",
     "not_set": "— Not set",
     "no_squad": "— Not selected",
+    "profile_title": "User Profile",
+    "subscription_section": "Subscription and Dates",
     "usage_create": "📌 Usage: /user_create <username> <expire_iso> [telegram_id]",
     "search_prompt": "🔎 Enter username, email, Telegram ID, or description to search.",
     "search_no_results": "No matches for \"{query}\". Try again or use the buttons below.",

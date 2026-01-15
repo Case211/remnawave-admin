@@ -1150,7 +1150,8 @@ async def cb_user_edit_menu(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     _prefix, user_uuid = callback.data.split(":")
-    back_to = _get_user_detail_back_target(callback.from_user.id)
+    # Кнопка "Назад" должна вести в профиль пользователя, а не в поиск
+    back_to = f"user:{user_uuid}"
     try:
         user = await api_client.get_user_by_uuid(user_uuid)
         info = user.get("response", user)

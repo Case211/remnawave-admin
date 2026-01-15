@@ -61,37 +61,86 @@ def format_uptime(seconds: float | int | None) -> str:
 
 
 def build_user_summary(user: dict, t: Callable[[str], str]) -> str:
+    """Форматирует информацию о пользователе для отображения в профиле."""
     info = user.get("response", user)
     status = info.get("status", "UNKNOWN")
     expire_at = format_datetime(info.get("expireAt"))
     used = info.get("userTraffic", {}).get("usedTrafficBytes", 0)
     limit = info.get("trafficLimitBytes")
-    hwid_limit = info.get("hwidDeviceLimit", NA)
+    hwid_limit = info.get("hwidDeviceLimit")
     last_online = format_datetime(info.get("userTraffic", {}).get("onlineAt"))
     created_at = format_datetime(info.get("createdAt"))
     subscription_url = info.get("subscriptionUrl") or NA
+    username = info.get("username", NA)
+    short_uuid = info.get("shortUuid", NA)
+    uuid = info.get("uuid", NA)
+    telegram_id = info.get("telegramId") or t("user.not_set")
+    email = info.get("email") or t("user.not_set")
+    description = info.get("description") or t("user.not_set")
+    tag = info.get("tag") or t("user.not_set")
+    strategy = info.get("trafficLimitStrategy") or t("user.not_set")
+    lifetime_used = info.get("userTraffic", {}).get("lifetimeUsedTrafficBytes", 0)
+    
     status_emoji = {
         "ACTIVE": "🟢",
         "DISABLED": "⚪",
         "LIMITED": "🟠",
         "EXPIRED": "🔴",
     }.get(status, "⚙️")
-
-    return t("user.summary").format(
-        username=_esc(info.get("username", NA)),
-        status=_esc(status),
-        statusEmoji=status_emoji,
-        uuid=_esc(info.get("uuid", NA)),
-        shortUuid=_esc(info.get("shortUuid", NA)),
-        telegramId=_esc(info.get("telegramId", NA)),
-        subscriptionUrl=_esc(subscription_url),
-        used=_esc(format_bytes(used)),
-        limit=_esc(format_bytes(limit)),
-        hwid=_esc(hwid_limit),
-        expire=_esc(expire_at),
-        online=_esc(last_online),
-        created=_esc(created_at),
-    )
+    
+    # Получаем информацию о скваде
+    active_squads = info.get("activeInternalSquads", [])
+    squad_display = t("user.not_set")
+    if active_squads:
+        first_squad = active_squads[0]
+        # activeInternalSquads может быть списком словарей или списком строк UUID
+        if isinstance(first_squad, dict):
+            # Если это словарь, извлекаем имя сквада
+            squad_display = first_squad.get("name", first_squad.get("uuid", t("user.not_set")))
+        else:
+            # Если это строка UUID, пытаемся получить имя сквада
+            squad_info = info.get("internalSquads", [])
+            if squad_info and isinstance(squad_info, list) and len(squad_info) > 0:
+                squad_display = squad_info[0].get("name", first_squad)
+            else:
+                squad_display = first_squad
+    
+    # Форматируем информацию о пользователе с группировкой по секциям (как в меню редактирования)
+    lines = [
+        f"<b>👤 {t('user.profile_title')}</b>",
+        "",
+        f"<b>{t('user.edit_section_user_info')}</b>",
+        f"   Username: <code>{_esc(username)}</code>",
+        f"   🔖 Short: <code>{_esc(short_uuid)}</code>",
+        f"   🆔 UUID: <code>{_esc(uuid)}</code>",
+        f"   {t('user.edit_status_label')}: <b>{status_emoji} {status}</b>",
+        "",
+        f"<b>{t('user.edit_section_traffic')}</b>",
+        f"   {t('user.edit_traffic_limit')}: <code>{format_bytes(limit)}</code>",
+        f"   {t('user.edit_strategy')}: <code>{strategy}</code>",
+        f"   {t('user.edit_expire')}: <code>{expire_at}</code>",
+        f"   {t('user.edit_hwid')}: <code>{hwid_limit if hwid_limit is not None else t('user.not_set')}</code>",
+        f"   📊 Использовано: <code>{format_bytes(used)}</code> / <code>{format_bytes(limit)}</code>",
+        f"   📈 Всего использовано: <code>{format_bytes(lifetime_used)}</code>",
+        "",
+        f"<b>{t('user.edit_section_additional')}</b>",
+        f"   {t('user.edit_tag')}: <code>{tag}</code>",
+        f"   {t('user.edit_description')}: <code>{_esc(description)}</code>",
+        "",
+        f"<b>{t('user.edit_section_contacts')}</b>",
+        f"   {t('user.edit_telegram')}: <code>{telegram_id}</code>",
+        f"   {t('user.edit_email')}: <code>{email}</code>",
+        "",
+        f"<b>{t('user.edit_section_squad')}</b>",
+        f"   <code>{_esc(squad_display)}</code>",
+        "",
+        f"<b>🔗 {t('user.subscription_section')}</b>",
+        f"   🔗 Подписка: <code>{_esc(subscription_url)}</code>",
+        f"   📳 Был онлайн: <code>{last_online}</code>",
+        f"   📅 Создан: <code>{created_at}</code>",
+    ]
+    
+    return "\n".join(lines)
 
 
 def build_created_user(user: dict, t: Callable[[str], str]) -> str:
