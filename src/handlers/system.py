@@ -483,8 +483,8 @@ async def _fetch_traffic_stats_text(start: str, end: str) -> str:
             f"*{_('stats.traffic_title')}*",
             "",
             _("stats.traffic_period").format(
-                start=format_datetime(start.replace("Z", "+00:00")),
-                end=format_datetime(end.replace("Z", "+00:00")),
+                start=format_datetime(start),
+                end=format_datetime(end),
             ),
         ]
 
@@ -551,21 +551,22 @@ async def cb_stats_traffic_period(callback: CallbackQuery) -> None:
         now = now.replace(microsecond=0)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
+        # API ожидает формат ISO 8601 с +00:00 вместо Z
         if period == "today":
-            start = today_start.isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = today_start.isoformat() + "+00:00"
+            end = now.isoformat() + "+00:00"
         elif period == "week":
-            start = (today_start - timedelta(days=7)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = (today_start - timedelta(days=7)).isoformat() + "+00:00"
+            end = now.isoformat() + "+00:00"
         elif period == "month":
-            start = (today_start - timedelta(days=30)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = (today_start - timedelta(days=30)).isoformat() + "+00:00"
+            end = now.isoformat() + "+00:00"
         elif period == "3months":
-            start = (today_start - timedelta(days=90)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = (today_start - timedelta(days=90)).isoformat() + "+00:00"
+            end = now.isoformat() + "+00:00"
         elif period == "year":
-            start = (today_start - timedelta(days=365)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = (today_start - timedelta(days=365)).isoformat() + "+00:00"
+            end = now.isoformat() + "+00:00"
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
