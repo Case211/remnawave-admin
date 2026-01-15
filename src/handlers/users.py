@@ -1633,18 +1633,31 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                         logger.warning("Node info not found for uuid %s (node: %s). Available node UUIDs: %s", node_uuid, node_name, list(nodes_dict.keys())[:5])
                         continue
                     
-                    host_uuid = node_info.get("hostUuid")
-                    if not host_uuid:
-                        logger.warning("Host UUID not found for node %s (uuid: %s)", node_name, node_uuid)
-                        continue
+                    # Логируем структуру ноды для отладки
+                    logger.info("Node info for %s: keys=%s", node_name, list(node_info.keys())[:10])
                     
-                    host = hosts_dict.get(host_uuid)
-                    if not host:
-                        logger.warning("Host not found for uuid %s (node: %s). Available host UUIDs: %s", host_uuid, node_name, list(hosts_dict.keys())[:5])
-                        continue
+                    # Пробуем получить адрес и порт напрямую из ноды (как в nodes.py)
+                    node_address = node_info.get("address", "")
+                    node_port = node_info.get("port")
                     
-                    node_address = host.get("address", "")
-                    node_port = host.get("port")
+                    # Если адрес и порт не найдены в ноде, пробуем получить через хост
+                    if not node_address or not node_port:
+                        host_uuid = node_info.get("hostUuid")
+                        if not host_uuid:
+                            # Пробуем альтернативные поля
+                            host_uuid = node_info.get("host", {}).get("uuid") if isinstance(node_info.get("host"), dict) else None
+                        
+                        if host_uuid:
+                            host = hosts_dict.get(host_uuid)
+                            if host:
+                                node_address = host.get("address", "")
+                                node_port = host.get("port")
+                                logger.info("Got address/port from host for node %s: address=%s, port=%s", node_name, node_address, node_port)
+                            else:
+                                logger.warning("Host not found for uuid %s (node: %s)", host_uuid, node_name)
+                        else:
+                            logger.warning("Host UUID not found for node %s (uuid: %s). Node keys: %s", node_name, node_uuid, list(node_info.keys())[:10])
+                    
                     logger.info("Node %s: address=%s, port=%s", node_name, node_address, node_port)
                     
                     # Пропускаем ноды без адреса или порта
