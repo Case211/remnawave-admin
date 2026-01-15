@@ -78,11 +78,6 @@ async def _not_admin(message: Message | CallbackQuery) -> bool:
         # Если это ожидаемый ввод (пользователь в PENDING_INPUT), не удаляем сообщение сразу
         # Оно будет удалено после обработки в соответствующем обработчике
         is_pending_input = user_id in PENDING_INPUT
-        if not is_command and not is_pending_input:
-            logger.info(
-                "_not_admin: user_id=%s is_command=%s is_pending_input=%s text='%s' - message will be deleted in handle_pending",
-                user_id, is_command, is_pending_input, message.text[:50] if message.text else None
-            )
         if is_command:
             delay = ADMIN_COMMAND_DELETE_DELAY
             asyncio.create_task(_cleanup_message(message, delay=delay))

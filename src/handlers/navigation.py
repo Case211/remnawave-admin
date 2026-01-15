@@ -177,6 +177,8 @@ async def _send_subscriptions_page(target: Message | CallbackQuery, page: int = 
         if nav_buttons:
             rows.append(nav_buttons)
 
+    # Добавляем кнопку поиска
+    rows.append([InlineKeyboardButton(text=_("sub.search"), callback_data="subs:search")])
     rows.append(nav_row(NavTarget.USERS_MENU))
     keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
     title = _("sub.list_title").format(page=page + 1, pages=total_pages, total=total)
@@ -361,6 +363,101 @@ async def cb_subs(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     await _navigate(callback, NavTarget.SUBS_LIST)
+
+
+@router.callback_query(F.data == "subs:search")
+async def cb_subs_search(callback: CallbackQuery) -> None:
+    """Обработчик кнопки 'Поиск' в списке подписок."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    
+    from src.handlers.state import PENDING_INPUT
+    from src.handlers.common import _get_target_user_id
+    
+    user_id = _get_target_user_id(callback)
+    if user_id is not None:
+        # Устанавливаем PENDING_INPUT для поиска подписок
+        PENDING_INPUT[user_id] = {"action": "subs_search"}
+        logger.info("cb_subs_search: set PENDING_INPUT for user_id=%s", user_id)
+    
+    await _send_clean_message(
+        callback,
+        _("sub.search_prompt"),
+        reply_markup=nav_keyboard(NavTarget.SUBS_LIST)
+    )
+
+
+async def _handle_subs_search_input(message: Message, ctx: dict) -> None:
+    """Обрабатывает ввод поискового запроса для подписок."""
+    from src.handlers.users import _search_users, _send_user_summary, _format_user_choice
+    from src.handlers.state import MAX_SEARCH_RESULTS, PENDING_INPUT
+    from src.handlers.common import _cleanup_message
+    from src.utils.formatters import _esc
+    import asyncio
+    
+    query = (message.text or "").strip()
+    user_id = message.from_user.id
+    
+    # Удаляем из PENDING_INPUT только после начала обработки
+    if user_id in PENDING_INPUT:
+        PENDING_INPUT.pop(user_id)
+    
+    if not query:
+        await _send_clean_message(message, _("sub.search_prompt"), reply_markup=nav_keyboard(NavTarget.SUBS_LIST))
+        asyncio.create_task(_cleanup_message(message, delay=0.5))
+        return
+    
+    # Выполняем поиск пользователей (подписки - это те же пользователи)
+    try:
+        matches = await _search_users(query)
+    except UnauthorizedError:
+        await _send_clean_message(message, _("errors.unauthorized"), reply_markup=nav_keyboard(NavTarget.SUBS_LIST))
+        asyncio.create_task(_cleanup_message(message, delay=0.5))
+        return
+    except ApiClientError:
+        logger.exception("Subs search failed query=%s actor_id=%s", query, user_id)
+        await _send_clean_message(message, _("errors.generic"), reply_markup=nav_keyboard(NavTarget.SUBS_LIST))
+        asyncio.create_task(_cleanup_message(message, delay=0.5))
+        return
+    
+    if not matches:
+        await _send_clean_message(
+            message,
+            _("sub.search_no_results").format(query=_esc(query)),
+            reply_markup=nav_keyboard(NavTarget.SUBS_LIST),
+        )
+        asyncio.create_task(_cleanup_message(message, delay=0.5))
+        return
+    
+    if len(matches) == 1:
+        # Если найден один пользователь, показываем его подписку
+        await _send_user_summary(message, matches[0], back_to=NavTarget.SUBS_LIST)
+        asyncio.create_task(_cleanup_message(message, delay=0.5))
+        return
+    
+    # Показываем результаты поиска
+    rows = []
+    for user in matches[:MAX_SEARCH_RESULTS]:
+        info = user.get("response", user)
+        uuid = info.get("uuid")
+        if not uuid:
+            continue
+        rows.append([InlineKeyboardButton(text=_format_user_choice(info), callback_data=f"subs:view:{uuid}")])
+    
+    rows.append(nav_row(NavTarget.SUBS_LIST))
+    keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
+    
+    extra_line = ""
+    if len(matches) > MAX_SEARCH_RESULTS:
+        extra_line = _("sub.search_results_limited").format(shown=MAX_SEARCH_RESULTS, total=len(matches))
+    
+    text = _("sub.search_results").format(count=len(matches), query=_esc(query))
+    if extra_line:
+        text = f"{text}\n{extra_line}"
+    
+    await _send_clean_message(message, text, reply_markup=keyboard)
+    asyncio.create_task(_cleanup_message(message, delay=0.5))
 
 
 @router.callback_query(F.data.startswith("subs:page:"))

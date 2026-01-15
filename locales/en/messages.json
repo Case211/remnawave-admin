@@ -397,7 +397,12 @@
     "list_title": "🧾 Subscriptions • page {page}/{pages} • total {total}",
     "list_empty": "No users found.",
     "prev_page": "◀ Previous",
-    "next_page": "Next ▶"
+    "next_page": "Next ▶",
+    "search": "🔍 Search",
+    "search_prompt": "🔍 Enter username, email, Telegram ID or description to search for subscription.",
+    "search_no_results": "🙅 No subscriptions found for query: <code>{query}</code>",
+    "search_results": "🔍 Found subscriptions: {count}\n\nQuery: <code>{query}</code>",
+    "search_results_limited": "⚠️ Showing only {shown} of {total} results."
   },
   "token": {
     "usage": "🔑 Create: /token <name>. List: /tokens.",

@@ -91,6 +91,9 @@ async def handle_pending(message: Message) -> None:
     logger.info("handle_pending: processing action=%s", action)
     if action == "user_search":
         await _handle_user_search_input(message, ctx)
+    elif action == "subs_search":
+        from src.handlers.navigation import _handle_subs_search_input
+        await _handle_subs_search_input(message, ctx)
     elif action == "template_create":
         await _handle_template_create_input(message, ctx)
     elif action == "template_update_json":
