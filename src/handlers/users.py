@@ -1825,18 +1825,19 @@ async def cb_user_traffic_nodes_period(callback: CallbackQuery) -> None:
         total_traffic = response.get("totalTrafficBytes", 0)
         nodes_usage = response.get("nodesUsage", [])
         
+        # Для отображения: если формат только дата (YYYY-MM-DD), показываем как есть
+        # Для end показываем текущий день (end - 1 день), так как мы используем следующий день для API
+        from datetime import datetime as dt
+        if len(end) == 10:
+            end_date = dt.strptime(end, "%Y-%m-%d")
+            end_display = (end_date - timedelta(days=1)).strftime("%Y-%m-%d")
+        else:
+            end_display = format_datetime(end.replace("Z", "+00:00"))
+        start_display = start if len(start) == 10 else format_datetime(start.replace("Z", "+00:00"))
+        
         lines = [
             _("user.stats.traffic_title"),
             "",
-            # Для отображения: если формат только дата (YYYY-MM-DD), показываем как есть
-            # Для end показываем текущий день (end - 1 день), так как мы используем следующий день для API
-            from datetime import datetime as dt
-            if len(end) == 10:
-                end_date = dt.strptime(end, "%Y-%m-%d")
-                end_display = (end_date - timedelta(days=1)).strftime("%Y-%m-%d")
-            else:
-                end_display = format_datetime(end.replace("Z", "+00:00"))
-            start_display = start if len(start) == 10 else format_datetime(start.replace("Z", "+00:00"))
             _("user.stats.traffic_period").format(
                 start=start_display,
                 end=end_display,
@@ -1945,18 +1946,19 @@ async def cb_user_stats_traffic_period(callback: CallbackQuery) -> None:
         total_traffic = response.get("totalTrafficBytes", 0)
         nodes_usage = response.get("nodesUsage", [])
 
+        # Для отображения: если формат только дата (YYYY-MM-DD), показываем как есть
+        # Для end показываем текущий день (end - 1 день), так как мы используем следующий день для API
+        from datetime import datetime as dt
+        if len(end) == 10:
+            end_date = dt.strptime(end, "%Y-%m-%d")
+            end_display = (end_date - timedelta(days=1)).strftime("%Y-%m-%d")
+        else:
+            end_display = format_datetime(end.replace("Z", "+00:00"))
+        start_display = start if len(start) == 10 else format_datetime(start.replace("Z", "+00:00"))
+        
         lines = [
             _("user.stats.traffic_title"),
             "",
-            # Для отображения: если формат только дата (YYYY-MM-DD), показываем как есть
-            # Для end показываем текущий день (end - 1 день), так как мы используем следующий день для API
-            from datetime import datetime as dt
-            if len(end) == 10:
-                end_date = dt.strptime(end, "%Y-%m-%d")
-                end_display = (end_date - timedelta(days=1)).strftime("%Y-%m-%d")
-            else:
-                end_display = format_datetime(end.replace("Z", "+00:00"))
-            start_display = start if len(start) == 10 else format_datetime(start.replace("Z", "+00:00"))
             _("user.stats.traffic_period").format(
                 start=start_display,
                 end=end_display,
@@ -2070,12 +2072,23 @@ async def cb_user_stats_nodes_period(callback: CallbackQuery) -> None:
 
         # Получаем статистику использования нод
         node_uuids = [n.get("uuid") for n in nodes if n.get("uuid")]
+        
+        # Для отображения: если формат только дата (YYYY-MM-DD), показываем как есть
+        # Для end показываем текущий день (end - 1 день), так как мы используем следующий день для API
+        from datetime import datetime as dt
+        if len(end) == 10:
+            end_date = dt.strptime(end, "%Y-%m-%d")
+            end_display = (end_date - timedelta(days=1)).strftime("%Y-%m-%d")
+        else:
+            end_display = format_datetime(end.replace("Z", "+00:00"))
+        start_display = start if len(start) == 10 else format_datetime(start.replace("Z", "+00:00"))
+        
         lines = [
             _("user.stats.nodes_usage_title"),
             "",
             _("user.stats.nodes_usage_period").format(
-                start=format_datetime(start.replace("Z", "+00:00")),
-                end=format_datetime(end.replace("Z", "+00:00")),
+                start=start_display,
+                end=end_display,
             ),
         ]
 
