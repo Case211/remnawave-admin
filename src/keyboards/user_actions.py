@@ -15,7 +15,7 @@ def user_actions_keyboard(user_uuid: str, status: str, back_to: str = NavTarget.
             ],
             [
                 InlineKeyboardButton(text=_("actions.revoke"), callback_data=f"user:{user_uuid}:revoke"),
-                InlineKeyboardButton(text=_("user.configs_button"), callback_data=f"user_configs:{user_uuid}"),
+                InlineKeyboardButton(text=_("user.configs_button"), callback_data=f"ucfg:{user_uuid}"),
             ],
             [
                 InlineKeyboardButton(text=_("user.edit"), callback_data=f"user_edit:{user_uuid}"),

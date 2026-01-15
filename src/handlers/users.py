@@ -1344,13 +1344,17 @@ async def cb_user_edit_field(callback: CallbackQuery) -> None:
     await callback.message.edit_text(prompt, reply_markup=user_edit_keyboard(user_uuid, back_to=back_to))
 
 
-@router.callback_query(F.data.startswith("user_configs:"))
+@router.callback_query(F.data.startswith("user_configs:") | F.data.startswith("ucfg:"))
 async def cb_user_configs(callback: CallbackQuery) -> None:
     """Обработчик просмотра конфигураций пользователя (подписные ссылки)."""
     if await _not_admin(callback):
         return
     await callback.answer()
-    _prefix, user_uuid = callback.data.split(":")
+    # Поддерживаем оба формата для обратной совместимости
+    if callback.data.startswith("ucfg:"):
+        user_uuid = callback.data.split(":", 1)[1]
+    else:
+        user_uuid = callback.data.split(":", 1)[1]
     back_to = _get_user_detail_back_target(callback.from_user.id)
 
     try:
@@ -1615,7 +1619,8 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                 ss_password = user_info.get("ssPassword")
                 logger.info("User protocols: vless_uuid=%s, trojan=%s, ss=%s", bool(vless_uuid), bool(trojan_password), bool(ss_password))
                 
-                for node in accessible_nodes:
+                # Используем индекс вместо UUID для callback_data (лимит Telegram - 64 байта)
+                for node_index, node in enumerate(accessible_nodes):
                     if not isinstance(node, dict):
                         logger.debug("Skipping non-dict node: %s", type(node))
                         continue
@@ -1673,10 +1678,13 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                     
                     if has_protocols:
                         # Добавляем кнопку для ноды
+                        # Используем индекс вместо UUID для callback_data (лимит Telegram - 64 байта)
+                        # Формат: unc:{user_uuid}:{node_index} (unc = user node configs)
+                        # Сохраняем node_uuid для последующего использования
                         keyboard_rows.append([
                             InlineKeyboardButton(
                                 text=f"🖥 {node_name}{country_display}",
-                                callback_data=f"user_node_configs:{user_uuid}:{node_uuid}",
+                                callback_data=f"unc:{user_uuid}:{node_index}",
                             )
                         ])
 
@@ -1735,10 +1743,11 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                             
                             if has_protocols:
                                 # Добавляем кнопку для ноды
+                                # Используем короткий формат для callback_data (лимит Telegram - 64 байта)
                                 keyboard_rows.append([
                                     InlineKeyboardButton(
                                         text=f"🖥 {node_name}{country_display}",
-                                        callback_data=f"user_node_configs:{user_uuid}:{node_uuid}",
+                                        callback_data=f"unc:{user_uuid}:{node_uuid}",
                                     )
                                 ])
             except Exception:
@@ -1759,7 +1768,7 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                 [
                     InlineKeyboardButton(
                         text=_("user.happ_crypto_link_button"),
-                        callback_data=f"user_happ_link:{user_uuid}",
+                        callback_data=f"uhapp:{user_uuid}",
                     )
                 ]
             )
@@ -1780,7 +1789,7 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
         await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
 
 
-@router.callback_query(F.data.startswith("user_sub_link:"))
+@router.callback_query(F.data.startswith("usl:") | F.data.startswith("user_sub_link:"))
 async def cb_user_sub_link(callback: CallbackQuery) -> None:
     """Обработчик для отображения подписной ссылки."""
     if await _not_admin(callback):
@@ -1798,30 +1807,34 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
         user_info = user.get("response", user)
         
         # Проверяем формат callback_data
-        # Новый формат: user_sub_link:{user_uuid}:{node_uuid}:{protocol}
+        # Новый формат: usl:{user_uuid}:{node_index}:{protocol_index}
         # Старый формат: user_sub_link:{user_uuid}:{link_index} (для обратной совместимости)
         if len(parts) >= 4:
-            # Новый формат - по ноде и протоколу
-            node_uuid = parts[2]
-            protocol = parts[3]
+            # Новый формат - по индексу ноды и индексу протокола
+            try:
+                node_index = int(parts[2])
+                protocol_index = int(parts[3])
+            except ValueError:
+                await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+                return
             
             # Получаем доступные ноды
             nodes_data = await api_client.get_user_accessible_nodes(user_uuid)
             nodes_response = nodes_data.get("response", nodes_data)
             accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
             
-            # Находим нужную ноду
-            node_info = None
-            for node in accessible_nodes:
-                if isinstance(node, dict) and node.get("uuid") == node_uuid:
-                    node_info = node
-                    break
+            # Получаем ноду по индексу
+            if node_index >= len(accessible_nodes) or node_index < 0:
+                await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+                return
             
-            if not node_info:
+            node_info = accessible_nodes[node_index]
+            if not isinstance(node_info, dict):
                 await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
                 return
             
             node_name = node_info.get("nodeName", node_info.get("name", "Unknown"))
+            node_uuid = node_info.get("uuid", "")
             
             # Получаем все ноды для получения адресов и портов
             all_nodes_data = await api_client.get_nodes()
@@ -1840,21 +1853,35 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
                 await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
                 return
             
-            # Генерируем ссылку для конкретного протокола
+            # Генерируем ссылку для конкретного протокола по индексу
             vless_uuid = user_info.get("vlessUuid")
             trojan_password = user_info.get("trojanPassword")
             ss_password = user_info.get("ssPassword")
             
+            # Определяем протокол по индексу (0=vless, 1=trojan, 2=ss)
+            protocols = []
+            if vless_uuid:
+                protocols.append("vless")
+            if trojan_password:
+                protocols.append("trojan")
+            if ss_password:
+                protocols.append("ss")
+            
+            if protocol_index >= len(protocols) or protocol_index < 0:
+                await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+                return
+            
+            protocol = protocols[protocol_index]
             link = None
             link_type = ""
             
-            if protocol == "vless" and vless_uuid:
+            if protocol == "vless":
                 link = f"vless://{vless_uuid}@{node_address}:{node_port}?type=tcp&security=none#VLESS-{_esc(node_name)}"
                 link_type = "🔷 VLESS"
-            elif protocol == "trojan" and trojan_password:
+            elif protocol == "trojan":
                 link = f"trojan://{trojan_password}@{node_address}:{node_port}?type=tcp#Trojan-{_esc(node_name)}"
                 link_type = "🔴 Trojan"
-            elif protocol == "ss" and ss_password:
+            elif protocol == "ss":
                 ss_method = "aes-256-gcm"
                 ss_encoded = base64.b64encode(f"{ss_method}:{ss_password}@{node_address}:{node_port}".encode()).decode()
                 link = f"ss://{ss_encoded}#SS-{_esc(node_name)}"
@@ -1990,16 +2017,22 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
         # Определяем, откуда вернуться (к конфигам ноды или к списку нод)
         if len(parts) >= 4:
             # Новый формат - возвращаемся к протоколам ноды
-            node_uuid = parts[2]
-            back_button = InlineKeyboardButton(
-                text=_("actions.back"),
-                callback_data=f"user_node_configs:{user_uuid}:{node_uuid}"
-            )
+            try:
+                node_index = int(parts[2])
+                back_button = InlineKeyboardButton(
+                    text=_("actions.back"),
+                    callback_data=f"unc:{user_uuid}:{node_index}"
+                )
+            except ValueError:
+                back_button = InlineKeyboardButton(
+                    text=_("user.back_to_configs"),
+                    callback_data=f"ucfg:{user_uuid}"
+                )
         else:
             # Старый формат - возвращаемся к списку конфигов
             back_button = InlineKeyboardButton(
                 text=_("user.back_to_configs"),
-                callback_data=f"user_configs:{user_uuid}"
+                callback_data=f"ucfg:{user_uuid}"
             )
         
         keyboard = InlineKeyboardMarkup(
@@ -2024,13 +2057,17 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
         await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
 
 
-@router.callback_query(F.data.startswith("user_happ_link:"))
+@router.callback_query(F.data.startswith("user_happ_link:") | F.data.startswith("uhapp:"))
 async def cb_user_happ_link(callback: CallbackQuery) -> None:
     """Обработчик для отображения Happ crypto link."""
     if await _not_admin(callback):
         return
     await callback.answer()
-    _prefix, user_uuid = callback.data.split(":")
+    # Поддерживаем оба формата для обратной совместимости
+    if callback.data.startswith("uhapp:"):
+        user_uuid = callback.data.split(":", 1)[1]
+    else:
+        user_uuid = callback.data.split(":", 1)[1]
     back_to = _get_user_detail_back_target(callback.from_user.id)
 
     try:
@@ -2055,7 +2092,7 @@ async def cb_user_happ_link(callback: CallbackQuery) -> None:
         text = f"{_('user.happ_crypto_link_title')}\n\n<code>{_esc(happ_crypto_link)}</code>"
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=_("user.back_to_configs"), callback_data=f"user_configs:{user_uuid}")],
+                [InlineKeyboardButton(text=_("user.back_to_configs"), callback_data=f"ucfg:{user_uuid}")],
                 nav_row(back_to),
             ]
         )
