@@ -51,15 +51,24 @@ class RemnawaveApiClient:
 
     async def _get(self, url: str, params: dict | None = None, max_retries: int = 3) -> dict:
         """Выполняет GET запрос с retry для сетевых ошибок."""
+        from src.utils.logger import log_api_call, log_api_error
+        import time
+        
         full_url = f"{self._client.base_url}{url}"
         last_exc = None
+        start_time = time.time()
+        
         for attempt in range(max_retries):
             try:
                 logger.debug("GET request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
                 response = await self._client.get(url, params=params)
+                duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
+                log_api_call("GET", url, status_code=response.status_code, duration_ms=duration_ms)
                 return response.json()
             except HTTPStatusError as exc:
+                duration_ms = (time.time() - start_time) * 1000
+                log_api_error("GET", url, exc, status_code=exc.response.status_code)
                 status = exc.response.status_code
                 if status in (401, 403):
                     raise UnauthorizedError from exc
@@ -102,15 +111,24 @@ class RemnawaveApiClient:
 
     async def _post(self, url: str, json: dict | None = None, max_retries: int = 3) -> dict:
         """Выполняет POST запрос с retry для сетевых ошибок."""
+        from src.utils.logger import log_api_call, log_api_error
+        import time
+        
         full_url = f"{self._client.base_url}{url}"
         last_exc = None
+        start_time = time.time()
+        
         for attempt in range(max_retries):
             try:
                 logger.debug("POST request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
                 response = await self._client.post(url, json=json)
+                duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
+                log_api_call("POST", url, status_code=response.status_code, duration_ms=duration_ms)
                 return response.json()
             except HTTPStatusError as exc:
+                duration_ms = (time.time() - start_time) * 1000
+                log_api_error("POST", url, exc, status_code=exc.response.status_code)
                 status = exc.response.status_code
                 if status in (401, 403):
                     raise UnauthorizedError from exc
@@ -144,15 +162,24 @@ class RemnawaveApiClient:
 
     async def _patch(self, url: str, json: dict | None = None, max_retries: int = 3) -> dict:
         """Выполняет PATCH запрос с retry для сетевых ошибок."""
+        from src.utils.logger import log_api_call, log_api_error
+        import time
+        
         full_url = f"{self._client.base_url}{url}"
         last_exc = None
+        start_time = time.time()
+        
         for attempt in range(max_retries):
             try:
                 logger.debug("PATCH request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
                 response = await self._client.patch(url, json=json)
+                duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
+                log_api_call("PATCH", url, status_code=response.status_code, duration_ms=duration_ms)
                 return response.json()
             except HTTPStatusError as exc:
+                duration_ms = (time.time() - start_time) * 1000
+                log_api_error("PATCH", url, exc, status_code=exc.response.status_code)
                 status = exc.response.status_code
                 if status in (401, 403):
                     raise UnauthorizedError from exc

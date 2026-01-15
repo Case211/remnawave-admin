@@ -58,7 +58,7 @@ async def cmd_start(message: Message) -> None:
 
     await _send_clean_message(message, _("bot.welcome"))
     menu_text = await _fetch_main_menu_text()
-    await _send_clean_message(message, menu_text, reply_markup=main_menu_keyboard())
+    await _send_clean_message(message, menu_text, reply_markup=main_menu_keyboard(), parse_mode="HTML")
 
 
 @router.message(F.text & ~F.text.startswith("/"))

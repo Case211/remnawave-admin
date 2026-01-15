@@ -6,7 +6,7 @@ from aiogram.utils.i18n import gettext as _
 
 from src.config import get_settings
 from src.utils.i18n import get_i18n
-from src.utils.logger import logger
+from src.utils.logger import log_button_click, log_command, log_user_input, logger
 
 
 def is_admin(user_id: int) -> bool:
@@ -87,6 +87,36 @@ class AdminMiddleware(BaseMiddleware):
                         pass  # Игнорируем ошибки при отправке ответа
             # Не вызываем handler, чтобы заблокировать обработку
             return
+        
+        # Логируем действия пользователя
+        if isinstance(event, CallbackQuery):
+            username = event.from_user.username if event.from_user else None
+            log_button_click(
+                callback_data=event.data or "unknown",
+                user_id=user_id,
+                username=username,
+            )
+        elif isinstance(event, Message):
+            username = event.from_user.username if event.from_user else None
+            if event.text and event.text.startswith("/"):
+                # Это команда
+                command_parts = event.text.split(maxsplit=1)
+                command = command_parts[0]
+                args = command_parts[1] if len(command_parts) > 1 else None
+                log_command(
+                    command=command,
+                    user_id=user_id,
+                    username=username,
+                    args=args,
+                )
+            elif event.text:
+                # Это текстовый ввод
+                log_user_input(
+                    field="text_input",
+                    user_id=user_id,
+                    username=username,
+                    preview=event.text,
+                )
         
         # Если пользователь администратор, продолжаем обработку
         return await handler(event, data)

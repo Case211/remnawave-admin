@@ -410,6 +410,7 @@ async def send_service_notification(
             "service.panel_started": "🚀 <b>Панель запущена</b>",
             "service.login_attempt_failed": "⚠️ <b>Неудачная попытка входа</b>",
             "service.login_attempt_success": "✅ <b>Успешный вход</b>",
+            "panel.unavailable": "❌ <b>Панель недоступна</b>",
         }
         
         lines.append(event_titles.get(event, f"ℹ️ <b>Событие сервиса: {event}</b>"))
@@ -426,6 +427,18 @@ async def send_service_notification(
                 lines.append(f"🌐 <b>IP:</b> <code>{_esc(ip)}</code>")
             if user_agent != "—":
                 lines.append(f"🔍 <b>User Agent:</b> <code>{_esc(user_agent[:50])}</code>")
+        elif event == "panel.unavailable":
+            error_type = event_data.get("error_type", "—")
+            error_message = event_data.get("error_message", "—")
+            consecutive_failures = event_data.get("consecutive_failures", 0)
+            last_check = event_data.get("last_check", "—")
+            
+            lines.append(f"⚠️ <b>Ошибка:</b> <code>{_esc(error_type)}</code>")
+            if error_message != "—":
+                lines.append(f"📝 <b>Сообщение:</b> <code>{_esc(error_message[:100])}</code>")
+            lines.append(f"🔄 <b>Неудачных попыток подряд:</b> {consecutive_failures}")
+            if last_check != "—":
+                lines.append(f"🕒 <b>Последняя проверка:</b> {last_check}")
         
         text = "\n".join(lines)
         

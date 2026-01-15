@@ -40,6 +40,27 @@ from src.utils.formatters import build_subscription_summary
 
 async def _fetch_main_menu_text() -> str:
     """Получает текст для главного меню с краткой статистикой."""
+    from aiogram import Bot
+    from aiogram.fsm.context import FSMContext
+    
+    panel_status = "✅"
+    panel_status_text = ""
+    
+    # Проверяем статус панели через health checker, если доступен
+    try:
+        # Пытаемся получить health checker из контекста диспетчера
+        # Это работает только если бот уже запущен
+        from src.services.api_client import ApiClientError
+        try:
+            await api_client.get_health()
+            panel_status = "✅"
+        except ApiClientError:
+            panel_status = "❌"
+            panel_status_text = f"\n{_('panel.unavailable_warning')}"
+    except Exception:
+        # Если не можем проверить, показываем нейтральный статус
+        pass
+    
     try:
         # Получаем основную статистику системы
         data = await api_client.get_stats()
@@ -76,6 +97,8 @@ async def _fetch_main_menu_text() -> str:
 
         lines = [
             _("bot.menu"),
+            "",
+            f"{panel_status} {_('panel.status')}{panel_status_text}",
             "",
             _("bot.menu_stats").format(
                 users=total_users,
@@ -169,7 +192,7 @@ async def _navigate(target: Message | CallbackQuery, destination: str) -> None:
 
     if destination == NavTarget.MAIN_MENU:
         menu_text = await _fetch_main_menu_text()
-        await _send_clean_message(target, menu_text, reply_markup=main_menu_keyboard())
+        await _send_clean_message(target, menu_text, reply_markup=main_menu_keyboard(), parse_mode="HTML")
         return
     if destination == NavTarget.USERS_MENU:
         await _send_clean_message(target, _("bot.menu"), reply_markup=users_menu_keyboard())

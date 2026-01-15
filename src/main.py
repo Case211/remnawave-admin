@@ -8,6 +8,7 @@ import uvicorn
 
 from src.config import get_settings
 from src.services.api_client import api_client
+from src.services.health_check import PanelHealthChecker
 from src.services.webhook import app as webhook_app
 from src.utils.auth import AdminMiddleware
 from src.utils.i18n import get_i18n_middleware
@@ -148,10 +149,26 @@ async def main() -> None:
     else:
         logger.info("🌐 Webhook server disabled (WEBHOOK_PORT not set)")
 
+    # Запускаем health checker для панели
+    health_checker = PanelHealthChecker(bot, check_interval=60)
+    health_checker_task = asyncio.create_task(health_checker.start())
+    
+    # Сохраняем health checker в состоянии диспетчера для доступа из обработчиков
+    dp["health_checker"] = health_checker
+
     logger.info("🤖 Starting bot")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        # Останавливаем health checker
+        logger.info("🏥 Stopping panel health checker")
+        health_checker.stop()
+        health_checker_task.cancel()
+        try:
+            await health_checker_task
+        except asyncio.CancelledError:
+            pass
+        
         # Останавливаем webhook сервер при остановке бота
         if webhook_task:
             logger.info("🌐 Stopping webhook server")

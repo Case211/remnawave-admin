@@ -6,6 +6,10 @@
     "menu_stats": "📊 Statistics:\n👥 Users: {users} (online: {online})\n🛰 Nodes: {nodes} (enabled: {nodes_enabled}, online: {nodes_online})\n🖥 Hosts: {hosts} (enabled: {hosts_enabled})",
     "user_usage": "🔍 Use Users → Find user and type username/email/Telegram ID/description."
   },
+  "panel": {
+    "status": "Panel status",
+    "unavailable_warning": "⚠️ Panel unavailable. Some features may not work."
+  },
   "actions": {
     "menu_users": "👥 Users",
     "menu_nodes": "🛰 Nodes/Hosts/Profiles",
