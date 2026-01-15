@@ -4,10 +4,16 @@ from aiogram.utils.i18n import gettext as _
 from src.keyboards.navigation import NavTarget, nav_row
 
 
-def node_edit_keyboard(node_uuid: str, back_to: str = NavTarget.NODES_LIST) -> InlineKeyboardMarkup:
+def node_edit_keyboard(node_uuid: str, is_disabled: bool = False, back_to: str = NavTarget.NODES_LIST) -> InlineKeyboardMarkup:
     """Клавиатура для редактирования ноды."""
+    toggle_action = "enable" if is_disabled else "disable"
+    toggle_text = _("node.enable") if is_disabled else _("node.disable")
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(text=toggle_text, callback_data=f"node:{node_uuid}:{toggle_action}"),
+                InlineKeyboardButton(text=_("node.restart"), callback_data=f"node:{node_uuid}:restart"),
+            ],
             [
                 InlineKeyboardButton(text=_("node.edit_name"), callback_data=f"nef:name::{node_uuid}"),
                 InlineKeyboardButton(text=_("node.edit_address"), callback_data=f"nef:address::{node_uuid}"),

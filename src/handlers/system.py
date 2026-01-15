@@ -20,13 +20,13 @@ from src.handlers.nodes import _fetch_nodes_text
 router = Router(name="system")
 
 
-def _system_nodes_profiles_keyboard(profiles: list[dict]) -> InlineKeyboardMarkup:
+def _system_nodes_profiles_keyboard(profiles: list[dict], prefix: str = "system:nodes:profile:") -> InlineKeyboardMarkup:
     """Клавиатура для выбора профиля конфигурации для системных нод."""
     rows: list[list[InlineKeyboardButton]] = []
     for profile in sorted(profiles, key=lambda p: p.get("viewPosition", 0))[:10]:
         name = profile.get("name", "n/a")
         uuid = profile.get("uuid", "")
-        rows.append([InlineKeyboardButton(text=name, callback_data=f"system:nodes:profile:{uuid}")])
+        rows.append([InlineKeyboardButton(text=name, callback_data=f"{prefix}{uuid}")])
     rows.append(nav_row(NavTarget.NODES_LIST))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -365,111 +365,8 @@ async def cb_system_nodes_actions(callback: CallbackQuery) -> None:
         await _edit_text_safe(callback.message, text, reply_markup=system_nodes_keyboard())
         return
 
-    if action == "assign_profile":
-        try:
-            data = await api_client.get_config_profiles()
-            profiles = data.get("response", {}).get("configProfiles", [])
-        except UnauthorizedError:
-            await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=system_nodes_keyboard())
-            return
-        except ApiClientError:
-            logger.exception("❌ System nodes fetch profiles failed")
-            await _edit_text_safe(callback.message, _("system_nodes.error"), reply_markup=system_nodes_keyboard())
-            return
-
-        if not profiles:
-            await _edit_text_safe(callback.message, _("system_nodes.no_profiles"), reply_markup=system_nodes_keyboard())
-            return
-
-        await _edit_text_safe(
-            callback.message,
-            _("system_nodes.select_profile"),
-            reply_markup=_system_nodes_profiles_keyboard(profiles),
-        )
-        return
-
-    if len(parts) >= 4 and parts[2] == "profile":
-        profile_uuid = parts[3]
-        try:
-            profile = await api_client.get_config_profile_computed(profile_uuid)
-            info = profile.get("response", profile)
-            inbounds = info.get("inbounds", [])
-            inbound_uuids = [i.get("uuid") for i in inbounds if i.get("uuid")]
-
-            nodes_data = await api_client.get_nodes()
-            nodes = nodes_data.get("response", [])
-            uuids = [n.get("uuid") for n in nodes if n.get("uuid")]
-
-            if not uuids:
-                await _edit_text_safe(callback.message, _("system_nodes.no_nodes"), reply_markup=system_nodes_keyboard())
-                return
-
-            await api_client.bulk_nodes_profile_modification(uuids, profile_uuid, inbound_uuids)
-            await _edit_text_safe(callback.message, _("system_nodes.done_assign"), reply_markup=system_nodes_keyboard())
-        except UnauthorizedError:
-            await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=system_nodes_keyboard())
-        except ApiClientError:
-            logger.exception("❌ System nodes assign profile failed profile_uuid=%s", profile_uuid)
-            await _edit_text_safe(callback.message, _("system_nodes.error"), reply_markup=system_nodes_keyboard())
-        return
-
-    try:
-        # Получаем все ноды
-        nodes_data = await api_client.get_nodes()
-        nodes = nodes_data.get("response", [])
-        uuids = [n.get("uuid") for n in nodes if n.get("uuid")]
-
-        if not uuids:
-            await _edit_text_safe(callback.message, _("system_nodes.no_nodes"), reply_markup=system_nodes_keyboard())
-            return
-
-        # Выполняем операцию для каждой ноды
-        success_count = 0
-        error_count = 0
-
-        if action == "enable_all":
-            for uuid in uuids:
-                try:
-                    await api_client.enable_node(uuid)
-                    success_count += 1
-                except ApiClientError:
-                    error_count += 1
-        elif action == "disable_all":
-            for uuid in uuids:
-                try:
-                    await api_client.disable_node(uuid)
-                    success_count += 1
-                except ApiClientError:
-                    error_count += 1
-        elif action == "restart_all":
-            for uuid in uuids:
-                try:
-                    await api_client.restart_node(uuid)
-                    success_count += 1
-                except ApiClientError:
-                    error_count += 1
-        elif action == "reset_traffic_all":
-            for uuid in uuids:
-                try:
-                    await api_client.reset_node_traffic(uuid)
-                    success_count += 1
-                except ApiClientError:
-                    error_count += 1
-        else:
-            await callback.answer(_("errors.generic"), show_alert=True)
-            return
-
-        if error_count > 0:
-            result_text = _("system_nodes.done_partial").format(success=success_count, errors=error_count)
-        else:
-            result_text = _("system_nodes.done").format(count=success_count)
-
-        await _edit_text_safe(callback.message, result_text, reply_markup=system_nodes_keyboard())
-    except UnauthorizedError:
-        await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=system_nodes_keyboard())
-    except ApiClientError:
-        logger.exception("❌ System nodes action failed action=%s", action)
-        await _edit_text_safe(callback.message, _("system_nodes.error"), reply_markup=system_nodes_keyboard())
+    # Все массовые операции перенесены в bulk.py
+    await callback.answer(_("errors.generic"), show_alert=True)
 
 
 async def _fetch_traffic_stats_text(start: str, end: str) -> str:

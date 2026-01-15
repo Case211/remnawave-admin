@@ -181,8 +181,9 @@ async def _apply_node_update(target: Message | CallbackQuery, node_uuid: str, pa
         await api_client.update_node(node_uuid, **api_payload)
         node = await api_client.get_node(node_uuid)
         info = node.get("response", node)
+        is_disabled = bool(info.get("isDisabled"))
         text = _format_node_edit_snapshot(info, _)
-        markup = node_edit_keyboard(node_uuid, back_to=back_to)
+        markup = node_edit_keyboard(node_uuid, is_disabled=is_disabled, back_to=back_to)
         if isinstance(target, CallbackQuery):
             await target.message.edit_text(text, reply_markup=markup, parse_mode="Markdown")
         else:
@@ -1268,10 +1269,12 @@ async def cb_node_edit_menu(callback: CallbackQuery) -> None:
     _prefix, node_uuid = callback.data.split(":")
     try:
         node = await api_client.get_node(node_uuid)
+        info = node.get("response", node)
         summary = build_node_summary(node, _)
+        is_disabled = bool(info.get("isDisabled"))
         await callback.message.edit_text(
             summary,
-            reply_markup=node_edit_keyboard(node_uuid, back_to=NavTarget.NODES_LIST),
+            reply_markup=node_edit_keyboard(node_uuid, is_disabled=is_disabled, back_to=NavTarget.NODES_LIST),
             parse_mode="HTML",
         )
     except UnauthorizedError:

@@ -29,6 +29,7 @@
     "billing_nodes": "💡 Billing nodes",
     "bulk_users": "👥📦 Bulk users",
     "bulk_hosts": "🖥📦 Bulk hosts",
+    "bulk_nodes": "🛰📦 Bulk nodes",
     "system_nodes": "🛰 Nodes management",
     "back": "↩️ Back",
     "main_menu": "🏠 Main menu",
@@ -547,6 +548,22 @@
     "list": "📄 List hosts",
     "done": "✅ Hosts bulk action done.",
     "error": "⚠️ Hosts bulk action failed."
+  },
+  "bulk_nodes": {
+    "title": "📦 Bulk nodes:",
+    "overview": "🛰 Bulk nodes:\nChoose an action for bulk operations on nodes.",
+    "profile": "🔗 Bulk profile modification",
+    "enable_all": "✅ Enable all nodes",
+    "disable_all": "⛔️ Disable all nodes",
+    "restart_all": "🔄 Restart all nodes",
+    "reset_traffic_all": "🔁 Reset traffic for all nodes",
+    "assign_profile": "🔗 Assign profile+inbounds",
+    "select_profile": "Select a profile to assign to all nodes:",
+    "no_profiles": "ℹ️ No available profiles.",
+    "no_nodes": "ℹ️ No nodes found.",
+    "done": "✅ Operation completed for {success} nodes. Errors: {error}.",
+    "done_assign": "✅ Profile assigned to nodes.",
+    "error": "⚠️ Operation failed."
   },
   "bulk": {
     "title": "📦 Bulk actions:",

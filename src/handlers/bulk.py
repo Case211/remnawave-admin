@@ -8,6 +8,7 @@ from aiogram.utils.i18n import gettext as _
 from src.handlers.common import _edit_text_safe, _not_admin, _send_clean_message
 from src.handlers.state import PENDING_INPUT, SEARCH_PAGE_SIZE
 from src.keyboards.bulk_hosts import bulk_hosts_keyboard
+from src.keyboards.bulk_nodes import bulk_nodes_keyboard
 from src.keyboards.bulk_users import bulk_users_keyboard
 from src.services.api_client import ApiClientError, UnauthorizedError, api_client
 from src.utils.logger import logger
@@ -272,6 +273,161 @@ async def cb_bulk_users_actions(callback: CallbackQuery) -> None:
     except ApiClientError:
         logger.exception("❌ Bulk users action failed action=%s", action)
         await _edit_text_safe(callback.message, _("bulk.error"), reply_markup=bulk_users_keyboard())
+
+
+@router.callback_query(F.data == "menu:bulk_nodes")
+async def cb_bulk_nodes(callback: CallbackQuery) -> None:
+    """Обработчик кнопки 'Массовые операции (ноды)' в меню."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    await _edit_text_safe(callback.message, _("bulk_nodes.overview"), reply_markup=bulk_nodes_keyboard())
+
+
+@router.callback_query(F.data.startswith("bulk:nodes:"))
+async def cb_bulk_nodes_actions(callback: CallbackQuery) -> None:
+    """Обработчик действий массовых операций над нодами."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    action = parts[2] if len(parts) > 2 else None
+    
+    try:
+        if action == "profile":
+            # Начинаем массовое изменение профилей конфигурации
+            from src.handlers.nodes import _bulk_nodes_select_keyboard
+            
+            try:
+                nodes_data = await api_client.get_nodes()
+                nodes = nodes_data.get("response", [])
+            except UnauthorizedError:
+                await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=bulk_nodes_keyboard())
+                return
+            except ApiClientError:
+                logger.exception("❌ Bulk nodes fetch failed")
+                await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=bulk_nodes_keyboard())
+                return
+
+            if not nodes:
+                await _edit_text_safe(callback.message, _("node.list_empty"), reply_markup=bulk_nodes_keyboard())
+                return
+
+            # Инициализируем состояние для массового изменения
+            user_id = callback.from_user.id
+            PENDING_INPUT[user_id] = {
+                "action": "bulk_nodes_profile",
+                "data": {"available_nodes": nodes, "selected_nodes": []},
+                "stage": "nodes",
+            }
+            keyboard = _bulk_nodes_select_keyboard(nodes, [])
+            await callback.message.edit_text(_("node.bulk_profile_select_nodes"), reply_markup=keyboard)
+            return
+        
+        if action == "assign_profile":
+            try:
+                data = await api_client.get_config_profiles()
+                profiles = data.get("response", {}).get("configProfiles", [])
+            except UnauthorizedError:
+                await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=bulk_nodes_keyboard())
+                return
+            except ApiClientError:
+                logger.exception("❌ Bulk nodes fetch profiles failed")
+                await _edit_text_safe(callback.message, _("bulk_nodes.error"), reply_markup=bulk_nodes_keyboard())
+                return
+
+            if not profiles:
+                await _edit_text_safe(callback.message, _("bulk_nodes.no_profiles"), reply_markup=bulk_nodes_keyboard())
+                return
+
+            from src.handlers.system import _system_nodes_profiles_keyboard
+            await _edit_text_safe(
+                callback.message,
+                _("bulk_nodes.select_profile"),
+                reply_markup=_system_nodes_profiles_keyboard(profiles, prefix="bulk:nodes:profile:"),
+            )
+            return
+        
+        if len(parts) >= 4 and parts[2] == "profile":
+            profile_uuid = parts[3]
+            try:
+                profile = await api_client.get_config_profile_computed(profile_uuid)
+                info = profile.get("response", profile)
+                inbounds = info.get("inbounds", [])
+                inbound_uuids = [i.get("uuid") for i in inbounds if i.get("uuid")]
+
+                nodes_data = await api_client.get_nodes()
+                nodes = nodes_data.get("response", [])
+                uuids = [n.get("uuid") for n in nodes if n.get("uuid")]
+
+                if not uuids:
+                    await _edit_text_safe(callback.message, _("bulk_nodes.no_nodes"), reply_markup=bulk_nodes_keyboard())
+                    return
+
+                await api_client.bulk_nodes_profile_modification(uuids, profile_uuid, inbound_uuids)
+                await _edit_text_safe(callback.message, _("bulk_nodes.done_assign"), reply_markup=bulk_nodes_keyboard())
+            except UnauthorizedError:
+                await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=bulk_nodes_keyboard())
+            except ApiClientError:
+                logger.exception("❌ Bulk nodes assign profile failed profile_uuid=%s", profile_uuid)
+                await _edit_text_safe(callback.message, _("bulk_nodes.error"), reply_markup=bulk_nodes_keyboard())
+            return
+
+        # Получаем все ноды
+        nodes_data = await api_client.get_nodes()
+        nodes = nodes_data.get("response", [])
+        uuids = [n.get("uuid") for n in nodes if n.get("uuid")]
+
+        if not uuids:
+            await _edit_text_safe(callback.message, _("bulk_nodes.no_nodes"), reply_markup=bulk_nodes_keyboard())
+            return
+
+        # Выполняем операцию для каждой ноды
+        success_count = 0
+        error_count = 0
+
+        if action == "enable_all":
+            for uuid in uuids:
+                try:
+                    await api_client.enable_node(uuid)
+                    success_count += 1
+                except ApiClientError:
+                    error_count += 1
+        elif action == "disable_all":
+            for uuid in uuids:
+                try:
+                    await api_client.disable_node(uuid)
+                    success_count += 1
+                except ApiClientError:
+                    error_count += 1
+        elif action == "restart_all":
+            for uuid in uuids:
+                try:
+                    await api_client.restart_node(uuid)
+                    success_count += 1
+                except ApiClientError:
+                    error_count += 1
+        elif action == "reset_traffic_all":
+            for uuid in uuids:
+                try:
+                    await api_client.reset_node_traffic(uuid)
+                    success_count += 1
+                except ApiClientError:
+                    error_count += 1
+        else:
+            await callback.answer(_("errors.generic"), show_alert=True)
+            return
+
+        if success_count > 0:
+            text = _("bulk_nodes.done").format(success=success_count, error=error_count)
+        else:
+            text = _("bulk_nodes.error")
+        await _edit_text_safe(callback.message, text, reply_markup=bulk_nodes_keyboard())
+    except UnauthorizedError:
+        await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=bulk_nodes_keyboard())
+    except ApiClientError:
+        logger.exception("❌ Bulk nodes action failed action=%s", action)
+        await _edit_text_safe(callback.message, _("bulk_nodes.error"), reply_markup=bulk_nodes_keyboard())
 
 
 @router.callback_query(F.data == "menu:bulk_hosts")
