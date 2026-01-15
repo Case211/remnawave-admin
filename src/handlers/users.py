@@ -1714,6 +1714,9 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                         trojan_password = user_info.get("trojanPassword")
                         ss_password = user_info.get("ssPassword")
                         
+                        # В fallback коде мы не можем использовать индексы из accessible_nodes,
+                        # так как здесь используются все ноды. Поэтому просто не добавляем кнопки
+                        # для этого случая - пользователь должен использовать accessible_nodes путь
                         for node in enabled_nodes[:20]:  # Ограничиваем до 20 нод
                             if not isinstance(node, dict):
                                 continue
@@ -1738,18 +1741,8 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
                             country_display = f" ({node_country})" if node_country else ""
                             text_lines.append(f"\n<b>🖥 {_esc(node_name)}{country_display}</b>")
                             
-                            # Проверяем, есть ли хотя бы один протокол для этой ноды
-                            has_protocols = bool(vless_uuid or trojan_password or ss_password)
-                            
-                            if has_protocols:
-                                # Добавляем кнопку для ноды
-                                # Используем короткий формат для callback_data (лимит Telegram - 64 байта)
-                                keyboard_rows.append([
-                                    InlineKeyboardButton(
-                                        text=f"🖥 {node_name}{country_display}",
-                                        callback_data=f"unc:{user_uuid}:{node_uuid}",
-                                    )
-                                ])
+                            # В fallback коде не добавляем кнопки, так как здесь используются все ноды,
+                            # а не accessible_nodes, поэтому индексы не совпадут
             except Exception:
                 logger.exception("Failed to get all nodes for config generation")
         
@@ -1786,6 +1779,144 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
         await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
     except ApiClientError:
         logger.exception("Failed to fetch configs for user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+
+
+@router.callback_query(F.data.startswith("unc:"))
+async def cb_user_node_configs(callback: CallbackQuery) -> None:
+    """Обработчик для отображения протоколов конкретной ноды."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) < 3:
+        return
+    user_uuid = parts[1]
+    try:
+        node_index = int(parts[2])
+    except ValueError:
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(_get_user_detail_back_target(callback.from_user.id)))
+        return
+    back_to = _get_user_detail_back_target(callback.from_user.id)
+
+    try:
+        # Получаем информацию о пользователе
+        user = await api_client.get_user_by_uuid(user_uuid)
+        user_info = user.get("response", user)
+        
+        # Получаем доступные ноды
+        nodes_data = await api_client.get_user_accessible_nodes(user_uuid)
+        nodes_response = nodes_data.get("response", nodes_data)
+        accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
+        
+        # Получаем ноду по индексу
+        if node_index >= len(accessible_nodes) or node_index < 0:
+            await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+            return
+        
+        node_info = accessible_nodes[node_index]
+        if not isinstance(node_info, dict):
+            await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+            return
+        
+        node_name = node_info.get("nodeName", node_info.get("name", "Unknown"))
+        node_country = node_info.get("countryCode", node_info.get("country", ""))
+        node_uuid = node_info.get("uuid", "")
+        
+        # Получаем все ноды для получения адресов и портов
+        all_nodes_data = await api_client.get_nodes()
+        all_nodes = all_nodes_data.get("response", [])
+        nodes_dict = {n.get("uuid"): n for n in all_nodes if isinstance(n, dict)}
+        
+        node_details = nodes_dict.get(node_uuid)
+        if not node_details:
+            await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+            return
+        
+        node_address = node_details.get("address", "")
+        node_port = node_details.get("port")
+        
+        if not node_address or not node_port:
+            await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+            return
+        
+        # Получаем протоколы пользователя
+        vless_uuid = user_info.get("vlessUuid")
+        trojan_password = user_info.get("trojanPassword")
+        ss_password = user_info.get("ssPassword")
+        
+        # Определяем доступные протоколы
+        node_links = {}
+        if vless_uuid:
+            node_links["vless"] = True
+        if trojan_password:
+            node_links["trojan"] = True
+        if ss_password:
+            node_links["ss"] = True
+        
+        if not node_links:
+            await callback.message.edit_text(_("user.link_not_found"), reply_markup=nav_keyboard(back_to))
+            return
+        
+        # Формируем текст и кнопки
+        country_display = f" ({node_country})" if node_country else ""
+        text_lines = [
+            f"<b>🖥 {_esc(node_name)}{country_display}</b>",
+            "",
+            "Выберите протокол:",
+        ]
+        
+        keyboard_rows = []
+        
+        # Определяем индексы протоколов (0=vless, 1=trojan, 2=ss)
+        protocol_index = 0
+        if "vless" in node_links:
+            text_lines.append("   🔷 VLESS")
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    text="🔷 VLESS",
+                    callback_data=f"usl:{user_uuid}:{node_index}:{protocol_index}",
+                )
+            ])
+            protocol_index += 1
+        
+        if "trojan" in node_links:
+            text_lines.append("   🔴 Trojan")
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    text="🔴 Trojan",
+                    callback_data=f"usl:{user_uuid}:{node_index}:{protocol_index}",
+                )
+            ])
+            protocol_index += 1
+        
+        if "ss" in node_links:
+            text_lines.append("   🔶 SS")
+            keyboard_rows.append([
+                InlineKeyboardButton(
+                    text="🔶 SS",
+                    callback_data=f"usl:{user_uuid}:{node_index}:{protocol_index}",
+                )
+            ])
+            protocol_index += 1
+        
+        # Добавляем кнопку "Назад"
+        keyboard_rows.append([InlineKeyboardButton(text=_("user.back_to_configs"), callback_data=f"ucfg:{user_uuid}")])
+        keyboard_rows.append(nav_row(back_to))
+        
+        text = "\n".join(text_lines)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+        
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
+    except ApiClientError:
+        logger.exception("Failed to fetch node configs for user_uuid=%s node_index=%s actor_id=%s", user_uuid, node_index, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+    except Exception:
+        logger.exception("Unexpected error in cb_user_node_configs")
         await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
 
 
