@@ -1794,21 +1794,27 @@ async def cb_user_traffic_nodes_period(callback: CallbackQuery) -> None:
         now = now.replace(microsecond=0)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         
+        # API для статистики пользователя ожидает формат только с датой (YYYY-MM-DD)
+        # Для end используем следующий день, чтобы включить весь последний день периода
+        def format_date_only(dt: datetime) -> str:
+            return dt.strftime("%Y-%m-%d")
+
         if period == "today":
-            start = today_start.isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            # Для "сегодня" используем сегодня и завтра
+            start = format_date_only(today_start)
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "week":
-            start = (today_start - timedelta(days=7)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=7))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "month":
-            start = (today_start - timedelta(days=30)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=30))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "3months":
-            start = (today_start - timedelta(days=90)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=90))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "year":
-            start = (today_start - timedelta(days=365)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=365))
+            end = format_date_only(today_start + timedelta(days=1))
         else:
             await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
             return
@@ -1822,9 +1828,18 @@ async def cb_user_traffic_nodes_period(callback: CallbackQuery) -> None:
         lines = [
             _("user.stats.traffic_title"),
             "",
+            # Для отображения: если формат только дата (YYYY-MM-DD), показываем как есть
+            # Для end показываем текущий день (end - 1 день), так как мы используем следующий день для API
+            from datetime import datetime as dt
+            if len(end) == 10:
+                end_date = dt.strptime(end, "%Y-%m-%d")
+                end_display = (end_date - timedelta(days=1)).strftime("%Y-%m-%d")
+            else:
+                end_display = format_datetime(end.replace("Z", "+00:00"))
+            start_display = start if len(start) == 10 else format_datetime(start.replace("Z", "+00:00"))
             _("user.stats.traffic_period").format(
-                start=format_datetime(start.replace("Z", "+00:00")),
-                end=format_datetime(end.replace("Z", "+00:00")),
+                start=start_display,
+                end=end_display,
             ),
             _("user.stats.traffic_total").format(total=format_bytes(total_traffic)),
         ]
@@ -1887,21 +1902,27 @@ async def cb_user_stats_traffic_period(callback: CallbackQuery) -> None:
         now = now.replace(microsecond=0)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
+        # API для статистики пользователя ожидает формат только с датой (YYYY-MM-DD)
+        # Для end используем следующий день, чтобы включить весь последний день периода
+        def format_date_only(dt: datetime) -> str:
+            return dt.strftime("%Y-%m-%d")
+
         if period == "today":
-            start = today_start.isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            # Для "сегодня" используем сегодня и завтра
+            start = format_date_only(today_start)
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "week":
-            start = (today_start - timedelta(days=7)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=7))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "month":
-            start = (today_start - timedelta(days=30)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=30))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "3months":
-            start = (today_start - timedelta(days=90)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=90))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "year":
-            start = (today_start - timedelta(days=365)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=365))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "custom":
             # Для произвольного периода нужно будет добавить ввод дат
             await callback.message.edit_text(
@@ -1927,9 +1948,18 @@ async def cb_user_stats_traffic_period(callback: CallbackQuery) -> None:
         lines = [
             _("user.stats.traffic_title"),
             "",
+            # Для отображения: если формат только дата (YYYY-MM-DD), показываем как есть
+            # Для end показываем текущий день (end - 1 день), так как мы используем следующий день для API
+            from datetime import datetime as dt
+            if len(end) == 10:
+                end_date = dt.strptime(end, "%Y-%m-%d")
+                end_display = (end_date - timedelta(days=1)).strftime("%Y-%m-%d")
+            else:
+                end_display = format_datetime(end.replace("Z", "+00:00"))
+            start_display = start if len(start) == 10 else format_datetime(start.replace("Z", "+00:00"))
             _("user.stats.traffic_period").format(
-                start=format_datetime(start.replace("Z", "+00:00")),
-                end=format_datetime(end.replace("Z", "+00:00")),
+                start=start_display,
+                end=end_display,
             ),
             _("user.stats.traffic_total").format(total=format_bytes(total_traffic)),
         ]
@@ -2007,15 +2037,21 @@ async def cb_user_stats_nodes_period(callback: CallbackQuery) -> None:
         now = now.replace(microsecond=0)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
+        # API для статистики пользователя ожидает формат только с датой (YYYY-MM-DD)
+        # Для end используем следующий день, чтобы включить весь последний день периода
+        def format_date_only(dt: datetime) -> str:
+            return dt.strftime("%Y-%m-%d")
+
         if period == "today":
-            start = today_start.isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            # Для "сегодня" используем сегодня и завтра
+            start = format_date_only(today_start)
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "week":
-            start = (today_start - timedelta(days=7)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=7))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "month":
-            start = (today_start - timedelta(days=30)).isoformat() + "Z"
-            end = now.isoformat() + "Z"
+            start = format_date_only(today_start - timedelta(days=30))
+            end = format_date_only(today_start + timedelta(days=1))
         elif period == "custom":
             # Для произвольного периода нужно будет добавить ввод дат
             await callback.message.edit_text(
