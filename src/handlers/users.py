@@ -1111,12 +1111,33 @@ async def cb_user_search_view(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("user:"))
 async def cb_user_actions(callback: CallbackQuery) -> None:
-    """Обработчик действий с пользователем (enable, disable, reset, revoke)."""
+    """Обработчик действий с пользователем (enable, disable, reset, revoke) или возврата в профиль."""
     if await _not_admin(callback):
         return
     await callback.answer()
-    _prefix, user_uuid, action = callback.data.split(":")
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+    
+    user_uuid = parts[1]
+    action = parts[2] if len(parts) > 2 else None
     back_to = _get_user_detail_back_target(callback.from_user.id)
+    
+    # Если action отсутствует, просто возвращаемся в профиль пользователя
+    if not action:
+        try:
+            user = await api_client.get_user_by_uuid(user_uuid)
+            await _send_user_summary(callback, user, back_to=back_to)
+        except UnauthorizedError:
+            await callback.message.edit_text(_("errors.unauthorized"), reply_markup=main_menu_keyboard())
+        except NotFoundError:
+            await callback.message.edit_text(_("user.not_found"), reply_markup=main_menu_keyboard())
+        except ApiClientError:
+            logger.exception("Failed to get user profile user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
+            await callback.message.edit_text(_("errors.generic"), reply_markup=main_menu_keyboard())
+        return
+    
     try:
         if action == "enable":
             await api_client.enable_user(user_uuid)
@@ -1132,8 +1153,11 @@ async def cb_user_actions(callback: CallbackQuery) -> None:
         user = await api_client.get_user_by_uuid(user_uuid)
         summary = build_user_summary(user, _)
         status = user.get("response", user).get("status", "UNKNOWN")
-        await callback.message.edit_text(
-            summary, reply_markup=user_actions_keyboard(user_uuid, status, back_to=back_to)
+        await _edit_text_safe(
+            callback.message,
+            summary,
+            reply_markup=user_actions_keyboard(user_uuid, status, back_to=back_to),
+            parse_mode="HTML"
         )
         _store_user_detail_back_target(callback.from_user.id, back_to)
     except UnauthorizedError:
@@ -1761,7 +1785,7 @@ async def cb_user_stats(callback: CallbackQuery) -> None:
                     [InlineKeyboardButton(text=_("actions.main_menu"), callback_data="nav:home")],
                 ]
             )
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            await _edit_text_safe(callback.message, text, reply_markup=keyboard, parse_mode="HTML")
 
         elif action == "traffic":
             # Статистика трафика - показываем меню выбора периода
@@ -1797,7 +1821,7 @@ async def cb_user_stats(callback: CallbackQuery) -> None:
                     [InlineKeyboardButton(text=_("actions.main_menu"), callback_data="nav:home")],
                 ]
             )
-            await callback.message.edit_text(_("user.stats.select_period"), reply_markup=keyboard)
+            await _edit_text_safe(callback.message, _("user.stats.select_period"), reply_markup=keyboard)
 
         elif action == "nodes":
             # Использование нод - показываем меню выбора периода
@@ -1833,7 +1857,7 @@ async def cb_user_stats(callback: CallbackQuery) -> None:
                     [InlineKeyboardButton(text=_("actions.main_menu"), callback_data="nav:home")],
                 ]
             )
-            await callback.message.edit_text(_("user.stats.select_period"), reply_markup=keyboard)
+            await _edit_text_safe(callback.message, _("user.stats.select_period"), reply_markup=keyboard)
 
         elif action == "hwid":
             # Статистика по устройствам
@@ -1869,7 +1893,7 @@ async def cb_user_stats(callback: CallbackQuery) -> None:
                     [InlineKeyboardButton(text=_("actions.main_menu"), callback_data="nav:home")],
                 ]
             )
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            await _edit_text_safe(callback.message, text, reply_markup=keyboard, parse_mode="HTML")
 
         else:
             # Показываем меню статистики
@@ -1877,7 +1901,7 @@ async def cb_user_stats(callback: CallbackQuery) -> None:
             user_info = user.get("response", user)
             username = user_info.get("username", "n/a")
             text = _("user.stats_title").format(username=_esc(username))
-            await callback.message.edit_text(text, reply_markup=user_stats_keyboard(user_uuid, back_to=back_to))
+            await _edit_text_safe(callback.message, text, reply_markup=user_stats_keyboard(user_uuid, back_to=back_to))
 
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
@@ -1992,7 +2016,7 @@ async def cb_user_traffic_nodes_period(callback: CallbackQuery) -> None:
                 nav_row(back_to),
             ]
         )
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await _edit_text_safe(callback.message, text, reply_markup=keyboard, parse_mode="HTML")
         # Очищаем контекст после использования
         PENDING_INPUT.pop(user_id, None)
         
@@ -2138,7 +2162,7 @@ async def cb_user_stats_traffic_period(callback: CallbackQuery) -> None:
                 [InlineKeyboardButton(text=_("actions.main_menu"), callback_data="nav:home")],
             ]
         )
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await _edit_text_safe(callback.message, text, reply_markup=keyboard, parse_mode="HTML")
 
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
@@ -2308,7 +2332,7 @@ async def cb_user_stats_nodes_period(callback: CallbackQuery) -> None:
                 [InlineKeyboardButton(text=_("actions.main_menu"), callback_data="nav:home")],
             ]
         )
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await _edit_text_safe(callback.message, text, reply_markup=keyboard, parse_mode="HTML")
 
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
