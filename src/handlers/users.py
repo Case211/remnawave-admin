@@ -1947,9 +1947,26 @@ async def cb_user_stats_traffic_period(callback: CallbackQuery) -> None:
 
         # Получаем статистику трафика
         traffic_data = await api_client.get_user_traffic_stats(user_uuid, start, end)
-        response = traffic_data.get("response", {})
-        total_traffic = response.get("totalTrafficBytes", 0)
-        nodes_usage = response.get("nodesUsage", [])
+        
+        # Логируем структуру ответа для отладки
+        logger.info("User traffic stats API response: type=%s, keys=%s", type(traffic_data).__name__, list(traffic_data.keys()) if isinstance(traffic_data, dict) else "N/A")
+        if isinstance(traffic_data, dict):
+            logger.info("User traffic stats content (first 500 chars): %s", str(traffic_data)[:500])
+        
+        # API может возвращать данные в разных форматах
+        response = traffic_data.get("response", traffic_data)
+        if not isinstance(response, dict):
+            response = {}
+        
+        # Пробуем разные поля для общего трафика
+        total_traffic = response.get("totalTrafficBytes", response.get("total", 0))
+        
+        # Пробуем разные поля для использования нод
+        nodes_usage = response.get("nodesUsage", response.get("topNodes", response.get("nodes", [])))
+        if not isinstance(nodes_usage, list):
+            nodes_usage = []
+        
+        logger.info("Parsed traffic stats: total_traffic=%s, nodes_usage_count=%s", total_traffic, len(nodes_usage))
 
         # Для отображения: если формат только дата (YYYY-MM-DD), показываем как есть
         # Для end показываем текущий день (end - 1 день), так как мы используем следующий день для API
@@ -1971,18 +1988,24 @@ async def cb_user_stats_traffic_period(callback: CallbackQuery) -> None:
             _("user.stats.traffic_total").format(total=format_bytes(total_traffic)),
         ]
 
-        if nodes_usage:
+        if nodes_usage and isinstance(nodes_usage, list):
             lines.append("")
             lines.append(_("user.stats.traffic_by_node"))
             for node in nodes_usage:
-                node_name = node.get("nodeName", "n/a")
-                country = node.get("countryCode", "—")
-                traffic_bytes = node.get("trafficBytes", 0)
-                lines.append(
-                    _("user.stats.traffic_node_item").format(
-                        nodeName=_esc(node_name), country=country, traffic=format_bytes(traffic_bytes)
+                if not isinstance(node, dict):
+                    continue
+                # Пробуем разные поля для имени ноды
+                node_name = node.get("nodeName", node.get("name", "n/a"))
+                # Пробуем разные поля для страны
+                country = node.get("countryCode", node.get("country", "—"))
+                # Пробуем разные поля для трафика
+                traffic_bytes = node.get("trafficBytes", node.get("traffic", node.get("total", 0)))
+                if traffic_bytes > 0:
+                    lines.append(
+                        _("user.stats.traffic_node_item").format(
+                            nodeName=_esc(node_name), country=country, traffic=format_bytes(traffic_bytes)
+                        )
                     )
-                )
 
         text = "\n".join(lines)
         keyboard = InlineKeyboardMarkup(
@@ -2106,16 +2129,35 @@ async def cb_user_stats_nodes_period(callback: CallbackQuery) -> None:
             # Получаем статистику для каждой ноды
             for node_uuid in node_uuids[:10]:  # Ограничиваем до 10 нод
                 try:
-                    node_usage_data = await api_client.get_stats_node_users_usage(node_uuid, start, end, top_users_limit=1)
-                    node_usage_response = node_usage_data.get("response", {})
-                    top_users = node_usage_response.get("topUsers", [])
+                    # Используем больший лимит, чтобы гарантированно получить данные пользователя
+                    node_usage_data = await api_client.get_node_users_usage(node_uuid, start, end, top_users_limit=50)
+                    
+                    # Логируем структуру ответа для отладки
+                    logger.debug("Node usage API response for node %s: type=%s, keys=%s", node_uuid, type(node_usage_data).__name__, list(node_usage_data.keys()) if isinstance(node_usage_data, dict) else "N/A")
+                    
+                    # API может возвращать данные в разных форматах
+                    node_usage_response = node_usage_data.get("response", node_usage_data)
+                    if not isinstance(node_usage_response, dict):
+                        node_usage_response = {}
+                    
+                    top_users = node_usage_response.get("topUsers", node_usage_response.get("users", []))
+                    
+                    logger.debug("Parsed node usage: top_users_count=%s", len(top_users) if isinstance(top_users, list) else 0)
 
                     # Находим текущего пользователя в топе
                     user_traffic = 0
-                    for top_user in top_users:
-                        if top_user.get("userUuid") == user_uuid:
-                            user_traffic = top_user.get("trafficBytes", 0)
-                            break
+                    if isinstance(top_users, list):
+                        for top_user in top_users:
+                            if not isinstance(top_user, dict):
+                                continue
+                            # Пробуем разные поля для UUID пользователя
+                            top_user_uuid = top_user.get("userUuid", top_user.get("uuid", ""))
+                            if top_user_uuid == user_uuid:
+                                # Пробуем разные поля для трафика
+                                user_traffic = top_user.get("trafficBytes", top_user.get("traffic", top_user.get("total", 0)))
+                                break
+                    
+                    logger.debug("User traffic for node %s: %s bytes", node_uuid, user_traffic)
 
                     # Получаем информацию о ноде
                     node_info = next((n for n in nodes if n.get("uuid") == node_uuid), {})
