@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import List
@@ -15,7 +16,7 @@ class Settings(BaseSettings):
     api_base_url: AnyHttpUrl = Field(..., alias="API_BASE_URL")
     api_token: str | None = Field(default=None, alias="API_TOKEN")
     default_locale: str = Field("ru", alias="DEFAULT_LOCALE")
-    _admins_raw: str | None = Field(default=None, alias="ADMINS", exclude=True)
+    admins_raw: str | None = Field(default=None, alias="ADMINS", exclude=True)
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     notifications_chat_id: int | None = Field(default=None, alias="NOTIFICATIONS_CHAT_ID")
     notifications_topic_id: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ID")
@@ -80,10 +81,10 @@ class Settings(BaseSettings):
     @property
     def admins(self) -> List[int]:
         """Парсит список администраторов из строки через запятую."""
-        if not self._admins_raw:
+        if not self.admins_raw:
             return []
         
-        parts = [x.strip() for x in self._admins_raw.split(",")]
+        parts = [x.strip() for x in self.admins_raw.split(",")]
         admins = []
         for part in parts:
             if not part:
