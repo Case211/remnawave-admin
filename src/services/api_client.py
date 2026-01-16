@@ -47,6 +47,16 @@ class RemnawaveApiClient:
         headers = {"Content-Type": "application/json"}
         if self.settings.api_token:
             headers["Authorization"] = f"Bearer {self.settings.api_token}"
+        
+        # Добавляем заголовки для обхода ProxyCheckMiddleware при внутренних запросах
+        # Эти заголовки имитируют reverse proxy для запросов из Docker сети
+        base_url_str = str(self.settings.api_base_url)
+        if base_url_str.startswith("http://"):
+            # Для внутренних HTTP запросов добавляем заголовки, которые указывают на HTTPS через proxy
+            headers["X-Forwarded-Proto"] = "https"
+            headers["X-Forwarded-For"] = "127.0.0.1"
+            headers["X-Real-IP"] = "127.0.0.1"
+        
         return headers
 
     async def _get(self, url: str, params: dict | None = None, max_retries: int = 3) -> dict:
