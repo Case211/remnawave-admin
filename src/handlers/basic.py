@@ -323,7 +323,8 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
                     ),
                     reply_markup=keyboard
                 )
-            except Exception:
+            except (ApiClientError, UnauthorizedError, NotFoundError):
+                logger.warning("Failed to load infra providers for node creation")
                 data["provider_uuid"] = None
                 ctx["stage"] = "traffic_tracking"
                 PENDING_INPUT[user_id] = ctx
@@ -472,7 +473,7 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
                     _("host.prompt_config_profile"),
                     reply_markup=keyboard
                 )
-            except Exception:
+            except (ApiClientError, UnauthorizedError, NotFoundError):
                 logger.exception("❌ Failed to load config profiles for host creation")
                 await callback.message.edit_text(_("errors.generic"), reply_markup=hosts_menu_keyboard())
                 PENDING_INPUT.pop(user_id, None)
@@ -508,7 +509,7 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
                 },
                 back_to=back_to
             )
-        except Exception:
+        except (ApiClientError, UnauthorizedError, NotFoundError):
             logger.exception("❌ Failed to update host inbound")
             await callback.message.edit_text(_("errors.generic"), reply_markup=host_edit_keyboard(host_uuid, back_to=back_to))
     elif len(parts) >= 4 and parts[0] == "nef" and parts[1] == "skip":
@@ -526,7 +527,8 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
                 reply_markup=node_edit_keyboard(node_uuid, back_to=back_to),
                 parse_mode="HTML"
             )
-        except Exception:
+        except (ApiClientError, UnauthorizedError, NotFoundError):
+            logger.warning("Failed to get node for skip field node_uuid=%s", node_uuid)
             await callback.message.edit_text(_("errors.generic"), reply_markup=node_edit_keyboard(node_uuid, back_to=back_to))
 
 

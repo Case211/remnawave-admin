@@ -6,3 +6,5 @@ dist/
 .DS_Store
 *.log
 log_error.json
+settings.local.json
+nul

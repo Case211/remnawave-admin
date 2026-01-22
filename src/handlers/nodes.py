@@ -4,6 +4,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 
+from src.handlers.callback_mapping import generate_short_callback, resolve_short_callback
 from src.handlers.common import _cleanup_message, _edit_text_safe, _not_admin, _send_clean_message
 from src.handlers.state import PENDING_INPUT
 from src.keyboards.main_menu import main_menu_keyboard, nodes_menu_keyboard
@@ -1302,6 +1303,12 @@ async def cb_node_edit_field(callback: CallbackQuery) -> None:
     node_uuid = parts[-1]
     back_to = NavTarget.NODES_LIST
 
+    # Маппинг коротких префиксов на полные имена полей (для экономии байт в callback_data)
+    field_mapping = {
+        "cmult": "consumption_multiplier",
+    }
+    field = field_mapping.get(field, field)
+
     # Загружаем текущие данные ноды
     try:
         node = await api_client.get_node(node_uuid)
@@ -1329,15 +1336,15 @@ async def cb_node_edit_field(callback: CallbackQuery) -> None:
                 )
                 return
             keyboard = _node_providers_keyboard(providers)
-            # Заменяем callback_data для редактирования
+            # Заменяем callback_data для редактирования (используем короткие callback для обхода 64-байтового лимита)
             for row in keyboard.inline_keyboard:
                 for button in row:
                     if button.callback_data:
                         if button.callback_data.startswith("nodes:select_provider:"):
                             provider_uuid = button.callback_data.split(":")[-1]
-                            button.callback_data = f"nef:provider:{provider_uuid}:{node_uuid}"
+                            button.callback_data = generate_short_callback(provider_uuid, node_uuid, "nef_prov")
                         elif button.callback_data == "nodes:select_provider:none":
-                            button.callback_data = f"nef:provider:none:{node_uuid}"
+                            button.callback_data = generate_short_callback("none", node_uuid, "nef_prov")
             await callback.message.edit_text(_("node.prompt_provider"), reply_markup=keyboard)
             return
         except Exception:
@@ -1355,12 +1362,12 @@ async def cb_node_edit_field(callback: CallbackQuery) -> None:
                 )
                 return
             keyboard = _node_config_profiles_keyboard(profiles)
-            # Заменяем callback_data для редактирования
+            # Заменяем callback_data для редактирования (используем короткие callback для обхода 64-байтового лимита)
             for row in keyboard.inline_keyboard:
                 for button in row:
                     if button.callback_data and button.callback_data.startswith("nodes:select_profile:"):
                         profile_uuid = button.callback_data.split(":")[-1]
-                        button.callback_data = f"nef:config_profile:{profile_uuid}:{node_uuid}"
+                        button.callback_data = generate_short_callback(profile_uuid, node_uuid, "nef_cfg")
             await callback.message.edit_text(_("node.prompt_config_profile"), reply_markup=keyboard)
             return
         except Exception:
@@ -1542,4 +1549,63 @@ async def cb_node_actions(callback: CallbackQuery) -> None:
     except ApiClientError:
         logger.exception("❌ Node action failed action=%s node_uuid=%s actor_id=%s", action, node_uuid, callback.from_user.id)
         await callback.message.edit_text(_("errors.generic"), reply_markup=main_menu_keyboard())
+
+
+@router.callback_query(F.data.startswith("nef_prov:"))
+async def cb_node_provider_short(callback: CallbackQuery) -> None:
+    """Обработчик выбора provider через короткий callback (для обхода 64-байтового лимита)."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+
+    result = resolve_short_callback(callback.data)
+    if not result:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+
+    provider_uuid, node_uuid, _ = result
+    back_to = NavTarget.NODES_LIST
+
+    # Обновляем provider ноды
+    payload = {}
+    if provider_uuid == "none":
+        payload["providerUuid"] = None
+    else:
+        payload["providerUuid"] = provider_uuid
+
+    await _apply_node_update(callback, node_uuid, payload, back_to)
+
+
+@router.callback_query(F.data.startswith("nef_cfg:"))
+async def cb_node_config_profile_short(callback: CallbackQuery) -> None:
+    """Обработчик выбора config profile через короткий callback (для обхода 64-байтового лимита)."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+
+    result = resolve_short_callback(callback.data)
+    if not result:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+
+    profile_uuid, node_uuid, _ = result
+    back_to = NavTarget.NODES_LIST
+
+    # Для профиля конфигурации нужно также получить инбаунды
+    try:
+        profile_data = await api_client.get_config_profile_computed(profile_uuid)
+        profile_info = profile_data.get("response", profile_data)
+        inbounds = profile_info.get("inbounds", [])
+        inbound_uuids = [i.get("uuid") for i in inbounds if i.get("uuid")]
+        if inbound_uuids:
+            payload = {
+                "config_profile_uuid": profile_uuid,
+                "active_inbounds": inbound_uuids
+            }
+            await _apply_node_update(callback, node_uuid, payload, back_to)
+        else:
+            await callback.message.edit_text(_("errors.generic"), reply_markup=node_edit_keyboard(node_uuid, back_to=back_to))
+    except (ApiClientError, UnauthorizedError, NotFoundError):
+        logger.exception("❌ Failed to update node config profile node_uuid=%s profile_uuid=%s", node_uuid, profile_uuid)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=node_edit_keyboard(node_uuid, back_to=back_to))
 

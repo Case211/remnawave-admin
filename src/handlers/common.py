@@ -118,6 +118,36 @@ def _clear_user_state(user_id: int | None, keep_search: bool = False, keep_subs:
             SUBS_PAGE_BY_USER.pop(user_id, None)
 
 
+def parse_callback_data(callback_data: str, separator: str = ":", expected_parts: int | None = None) -> list[str] | None:
+    """
+    Безопасно парсит callback_data.
+
+    Args:
+        callback_data: строка callback_data
+        separator: разделитель (по умолчанию ":")
+        expected_parts: ожидаемое количество частей (None = любое количество)
+
+    Returns:
+        список частей callback_data или None если не удалось распарсить
+    """
+    if not callback_data:
+        logger.warning("Empty callback_data received")
+        return None
+
+    parts = callback_data.split(separator)
+
+    if expected_parts is not None and len(parts) != expected_parts:
+        logger.warning(
+            "Invalid callback_data format: expected %d parts, got %d. callback_data=%s",
+            expected_parts,
+            len(parts),
+            callback_data,
+        )
+        return None
+
+    return parts
+
+
 async def _edit_text_safe(
     message: Message, text: str, reply_markup: InlineKeyboardMarkup | None = None, parse_mode: str | None = None
 ) -> None:

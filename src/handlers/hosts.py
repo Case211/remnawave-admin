@@ -4,6 +4,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 
+from src.handlers.callback_mapping import generate_short_callback, resolve_short_callback
 from src.handlers.common import _edit_text_safe, _not_admin, _send_clean_message
 from src.handlers.state import PENDING_INPUT
 from src.keyboards.host_actions import host_actions_keyboard
@@ -600,15 +601,15 @@ async def cb_host_edit_field(callback: CallbackQuery) -> None:
                 )
                 return
             keyboard = _host_inbounds_keyboard(inbounds)
-            # Заменяем callback_data для редактирования
+            # Заменяем callback_data для редактирования (используем короткие callback для обхода 64-байтового лимита)
             for row in keyboard.inline_keyboard:
                 for button in row:
                     if button.callback_data and button.callback_data.startswith("hosts:select_inbound:"):
                         inbound_uuid = button.callback_data.split(":")[-1]
-                        button.callback_data = f"hef:inbound:{inbound_uuid}:{host_uuid}"
+                        button.callback_data = generate_short_callback(inbound_uuid, host_uuid, "hef_inb")
             await callback.message.edit_text(_("host.edit_prompt_inbound"), reply_markup=keyboard)
             return
-        except Exception:
+        except (ApiClientError, UnauthorizedError, NotFoundError):
             logger.exception("❌ Failed to load inbounds for host edit")
             await callback.message.edit_text(_("errors.generic"), reply_markup=host_edit_keyboard(host_uuid, back_to=back_to))
             return
@@ -642,4 +643,47 @@ async def cb_host_actions(callback: CallbackQuery) -> None:
     except ApiClientError:
         logger.exception("❌ Host action failed action=%s host_uuid=%s actor_id=%s", action, host_uuid, callback.from_user.id)
         await callback.message.edit_text(_("errors.generic"), reply_markup=main_menu_keyboard())
+
+
+@router.callback_query(F.data.startswith("hef_inb:"))
+async def cb_host_inbound_short(callback: CallbackQuery) -> None:
+    """Обработчик выбора inbound через короткий callback (для обхода 64-байтового лимита)."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+
+    result = resolve_short_callback(callback.data)
+    if not result:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+
+    inbound_uuid, host_uuid, _ = result
+    back_to = NavTarget.HOSTS_MENU
+
+    # Получаем текущий профиль конфигурации хоста
+    try:
+        host = await api_client.get_host(host_uuid)
+        info = host.get("response", host)
+        inbound_info = info.get("inbound", {})
+        config_profile_uuid = inbound_info.get("configProfileUuid")
+
+        if not config_profile_uuid:
+            await callback.message.edit_text(_("errors.generic"), reply_markup=host_edit_keyboard(host_uuid, back_to=back_to))
+            return
+
+        # Обновляем inbound хоста
+        await _apply_host_update(
+            callback,
+            host_uuid,
+            {
+                "inbound": {
+                    "configProfileUuid": config_profile_uuid,
+                    "configProfileInboundUuid": inbound_uuid,
+                }
+            },
+            back_to=back_to
+        )
+    except (ApiClientError, UnauthorizedError, NotFoundError):
+        logger.exception("❌ Failed to update host inbound host_uuid=%s inbound_uuid=%s", host_uuid, inbound_uuid)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=host_edit_keyboard(host_uuid, back_to=back_to))
 

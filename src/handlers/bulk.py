@@ -5,11 +5,13 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.i18n import gettext as _
 
-from src.handlers.common import _edit_text_safe, _not_admin, _send_clean_message
+from src.handlers.common import _edit_text_safe, _not_admin, _send_clean_message, parse_callback_data
 from src.handlers.state import PENDING_INPUT, SEARCH_PAGE_SIZE
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from src.keyboards.bulk_hosts import bulk_hosts_keyboard
 from src.keyboards.bulk_nodes import bulk_nodes_keyboard
 from src.keyboards.bulk_users import bulk_users_keyboard
+from src.keyboards.navigation import NavTarget, nav_row
 from src.services.api_client import ApiClientError, UnauthorizedError, api_client
 from src.utils.logger import logger
 from src.utils.notifications import send_user_notification
@@ -30,6 +32,18 @@ def _parse_uuids(text: str, expected_min: int = 1) -> list[str]:
     if len(parts) <= expected_min:
         return []
     return parts[expected_min:]
+
+
+def _confirmation_keyboard(confirm_callback: str, cancel_target: str = "menu:bulk_users") -> InlineKeyboardMarkup:
+    """Создаёт клавиатуру подтверждения опасной операции."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=_("actions.confirm"), callback_data=confirm_callback),
+                InlineKeyboardButton(text=_("actions.cancel"), callback_data=cancel_target),
+            ]
+        ]
+    )
 
 
 async def _run_bulk_action(
@@ -212,15 +226,81 @@ async def cb_bulk_users_actions(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    parts = callback.data.split(":")
-    action = parts[2] if len(parts) > 2 else None
+
+    parts = parse_callback_data(callback.data)
+    if not parts or len(parts) < 3:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+
+    action = parts[2]
+    try:
+        if action == "reset":
+            # Запрашиваем подтверждение
+            confirm_text = _("bulk.confirm_reset_all")
+            await _edit_text_safe(
+                callback.message,
+                confirm_text,
+                reply_markup=_confirmation_keyboard("confirm:bulk:users:reset", "menu:bulk_users"),
+            )
+            return
+        elif action == "delete" and len(parts) > 3:
+            status = parts[3]
+            # Запрашиваем подтверждение
+            confirm_text = _("bulk.confirm_delete_status").format(status=status)
+            await _edit_text_safe(
+                callback.message,
+                confirm_text,
+                reply_markup=_confirmation_keyboard(f"confirm:bulk:users:delete:{status}", "menu:bulk_users"),
+            )
+            return
+        elif action == "extend_all" and len(parts) > 3:
+            try:
+                days = int(parts[3])
+            except ValueError:
+                await callback.answer(_("errors.generic"), show_alert=True)
+                return
+            # Запрашиваем подтверждение
+            confirm_text = _("bulk.confirm_extend_all").format(days=days)
+            await _edit_text_safe(
+                callback.message,
+                confirm_text,
+                reply_markup=_confirmation_keyboard(f"confirm:bulk:users:extend_all:{days}", "menu:bulk_users"),
+            )
+            return
+        elif action == "extend_active":
+            # Запрашиваем количество дней
+            PENDING_INPUT[callback.from_user.id] = {"action": "bulk_users_extend_active"}
+            await _edit_text_safe(callback.message, _("bulk.prompt_extend_active"), reply_markup=bulk_users_keyboard())
+        else:
+            await callback.answer(_("errors.generic"), show_alert=True)
+            return
+    except UnauthorizedError:
+        await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=bulk_users_keyboard())
+    except ApiClientError:
+        logger.exception("❌ Bulk users action failed action=%s", action)
+        await _edit_text_safe(callback.message, _("bulk.error"), reply_markup=bulk_users_keyboard())
+
+
+@router.callback_query(F.data.startswith("confirm:bulk:users:"))
+async def cb_confirm_bulk_users(callback: CallbackQuery) -> None:
+    """Обработчик подтверждения массовых операций над пользователями."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    # Парсим callback_data: confirm:bulk:users:action[:param]
+    parts = parse_callback_data(callback.data)
+    if not parts or len(parts) < 4:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+
+    action = parts[3]
     try:
         if action == "reset":
             await api_client.bulk_reset_traffic_all_users()
             await _edit_text_safe(callback.message, _("bulk.done"), reply_markup=bulk_users_keyboard())
-        elif action == "delete" and len(parts) > 3:
-            status = parts[3]
-            
+        elif action == "delete" and len(parts) > 4:
+            status = parts[4]
+
             # Получаем информацию о пользователях перед удалением для уведомлений
             users_to_notify = []
             try:
@@ -230,20 +310,20 @@ async def cb_bulk_users_actions(callback: CallbackQuery) -> None:
                     payload = users_data.get("response", users_data)
                     users = payload.get("users", [])
                     total = payload.get("total", len(users))
-                    
+
                     for user in users:
                         user_info = user.get("response", user)
                         if user_info.get("status") == status and user_info.get("uuid"):
                             users_to_notify.append(user)
-                    
+
                     start += SEARCH_PAGE_SIZE
                     if start >= total or not users:
                         break
             except Exception:
                 logger.exception("Failed to get users for deletion notifications")
-            
+
             await api_client.bulk_delete_users_by_status(status)
-            
+
             # Отправляем уведомления о удалении
             try:
                 bot = callback.message.bot
@@ -251,20 +331,16 @@ async def cb_bulk_users_actions(callback: CallbackQuery) -> None:
                     await send_user_notification(bot, "deleted", user)
             except Exception:
                 logger.exception("Failed to send user deletion notifications")
-            
+
             await _edit_text_safe(callback.message, _("bulk.done"), reply_markup=bulk_users_keyboard())
-        elif action == "extend_all" and len(parts) > 3:
+        elif action == "extend_all" and len(parts) > 4:
             try:
-                days = int(parts[3])
+                days = int(parts[4])
             except ValueError:
                 await callback.answer(_("errors.generic"), show_alert=True)
                 return
             await api_client.bulk_extend_all_users(days)
             await _edit_text_safe(callback.message, _("bulk.done"), reply_markup=bulk_users_keyboard())
-        elif action == "extend_active":
-            # Запрашиваем количество дней
-            PENDING_INPUT[callback.from_user.id] = {"action": "bulk_users_extend_active"}
-            await _edit_text_safe(callback.message, _("bulk.prompt_extend_active"), reply_markup=bulk_users_keyboard())
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
@@ -290,9 +366,14 @@ async def cb_bulk_nodes_actions(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    parts = callback.data.split(":")
-    action = parts[2] if len(parts) > 2 else None
-    
+
+    parts = parse_callback_data(callback.data)
+    if not parts or len(parts) < 3:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+
+    action = parts[2]
+
     try:
         if action == "profile":
             # Начинаем массовое изменение профилей конфигурации
@@ -445,7 +526,13 @@ async def cb_bulk_hosts_actions(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    action = callback.data.split(":")[-1]
+
+    parts = parse_callback_data(callback.data)
+    if not parts or len(parts) < 3:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+
+    action = parts[-1]
     if action == "list":
         text = await _fetch_hosts_text()
         await _edit_text_safe(callback.message, text, reply_markup=bulk_hosts_keyboard())

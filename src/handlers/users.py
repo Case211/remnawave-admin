@@ -220,10 +220,12 @@ async def _run_user_search(target: Message | CallbackQuery, query: str) -> None:
     try:
         matches = await _search_users(query)
     except UnauthorizedError:
+        _clear_user_state(user_id)
         await _send_clean_message(target, _("errors.unauthorized"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))
         return
     except ApiClientError:
         logger.exception("User search failed query=%s actor_id=%s", query, user_id)
+        _clear_user_state(user_id)
         await _send_clean_message(target, _("errors.generic"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))
         return
 
@@ -248,10 +250,7 @@ async def _run_user_search(target: Message | CallbackQuery, query: str) -> None:
 
 async def _show_user_search_results(target: Message | CallbackQuery, query: str, results: list[dict]) -> None:
     """Показывает результаты поиска пользователей."""
-    user_id = _get_target_user_id(target)
-    if user_id is not None:
-        PENDING_INPUT[user_id] = {"action": "user_search"}
-
+    # PENDING_INPUT уже установлен в _run_user_search, не нужно устанавливать снова
     rows = []
     for user in results[:MAX_SEARCH_RESULTS]:
         info = user.get("response", user)

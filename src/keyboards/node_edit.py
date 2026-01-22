@@ -5,7 +5,13 @@ from src.keyboards.navigation import NavTarget, nav_row
 
 
 def node_edit_keyboard(node_uuid: str, is_disabled: bool = False, back_to: str = NavTarget.NODES_LIST) -> InlineKeyboardMarkup:
-    """Клавиатура для редактирования ноды."""
+    """
+    Клавиатура для редактирования ноды.
+
+    ВАЖНО: Telegram ограничивает callback_data до 64 байт.
+    Используется сокращённый префикс nef:cmult вместо nef:consumption_multiplier для экономии байт.
+    При добавлении новых полей проверяйте длину callback_data.
+    """
     toggle_action = "enable" if is_disabled else "disable"
     toggle_text = _("node.enable") if is_disabled else _("node.disable")
     return InlineKeyboardMarkup(
@@ -32,7 +38,7 @@ def node_edit_keyboard(node_uuid: str, is_disabled: bool = False, back_to: str =
             ],
             [
                 InlineKeyboardButton(text=_("node.edit_traffic_reset_day"), callback_data=f"nef:traffic_reset_day::{node_uuid}"),
-                InlineKeyboardButton(text=_("node.edit_consumption_multiplier"), callback_data=f"nef:consumption_multiplier::{node_uuid}"),
+                InlineKeyboardButton(text=_("node.edit_consumption_multiplier"), callback_data=f"nef:cmult::{node_uuid}"),
             ],
             [
                 InlineKeyboardButton(text=_("node.edit_tags"), callback_data=f"nef:tags::{node_uuid}"),

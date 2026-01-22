@@ -5,7 +5,13 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 
-from src.handlers.common import _clear_user_state, _get_target_user_id, _not_admin, _send_clean_message
+from src.handlers.common import (
+    _clear_user_state,
+    _get_target_user_id,
+    _not_admin,
+    _send_clean_message,
+    parse_callback_data,
+)
 from src.handlers.state import (
     PENDING_INPUT,
     SUBS_PAGE_BY_USER,
@@ -144,10 +150,12 @@ async def _send_subscriptions_page(target: Message | CallbackQuery, page: int = 
             payload = data.get("response", data)
         users = payload.get("users") or []
     except UnauthorizedError:
+        _clear_user_state(user_id)
         await _send_clean_message(target, _("errors.unauthorized"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))
         return
     except ApiClientError:
         logger.exception("Subscriptions list fetch failed page=%s actor_id=%s", page, user_id)
+        _clear_user_state(user_id)
         await _send_clean_message(target, _("errors.generic"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))
         return
 
@@ -289,7 +297,13 @@ async def cb_nav_back(callback: CallbackQuery) -> None:
     if await _not_admin(callback):
         return
     await callback.answer()
-    target = callback.data.split(":", 2)[2]
+
+    parts = parse_callback_data(callback.data, expected_parts=3)
+    if not parts:
+        await callback.answer(_("errors.generic"), show_alert=True)
+        return
+
+    target = parts[2]
     await _navigate(callback, target)
 
 
