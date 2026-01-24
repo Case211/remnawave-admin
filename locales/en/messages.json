@@ -2,12 +2,12 @@
   "bot": {
     "welcome": "👋 Welcome to the Remnawave admin bot. Control users, nodes, and billing from one place.",
     "help": "ℹ️ Quick commands:\n\nCore:\n/start — welcome\n/help — this help\n/health — system check\n/stats — summary\n/bandwidth — traffic\n\nUsers:\nUsers → Find user (menu) — search by username/email/Telegram ID/description\n/user_create <username> <expire_iso> [telegram_id] — create user\n\nInfra:\n/nodes — list nodes\n/node <uuid> — node details\n/nodes_usage — realtime usage\n/nodes_range <start_iso> <end_iso> — traffic by range\n/hosts — list hosts\n/host <uuid> — host details\n\nOther:\n/sub <short_uuid> — subscription\n/tokens — API tokens\n/templates — templates\n/snippets — snippets\n/configs — configs\n/billing — billing\n/providers — providers",
-    "menu": "📋 Choose an action below:",
-    "menu_stats": "📊 Statistics:\n👥 Users: {users} (online: {online})\n🛰 Nodes: {nodes} (enabled: {nodes_enabled}, online: {nodes_online})\n🖥 Hosts: {hosts} (enabled: {hosts_enabled})",
+    "menu": "🤖 Remnawave Admin Bot",
+    "menu_stats": "📊 Statistics:\n\n  👥 Users: {users}\n     └─ Online: {online}\n\n  🛰 Nodes: {nodes}\n     ├─ Enabled: {nodes_enabled}\n     └─ Online: {nodes_online}\n\n  🖥 Hosts: {hosts}\n     └─ Enabled: {hosts_enabled}",
     "user_usage": "🔍 Use Users → Find user and type username/email/Telegram ID/description."
   },
   "panel": {
-    "status": "Panel status",
+    "status": "🟢 Panel status",
     "unavailable_warning": "⚠️ Panel unavailable. Some features may not work."
   },
   "actions": {

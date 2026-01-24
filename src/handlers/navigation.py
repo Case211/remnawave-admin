@@ -44,7 +44,7 @@ async def _fetch_main_menu_text() -> str:
     from aiogram import Bot
     from aiogram.fsm.context import FSMContext
     
-    panel_status = "✅"
+    panel_status = "🟢"
     panel_status_text = ""
     
     # Проверяем статус панели через health checker, если доступен
@@ -54,13 +54,13 @@ async def _fetch_main_menu_text() -> str:
         from src.services.api_client import ApiClientError
         try:
             await api_client.get_health()
-            panel_status = "✅"
+            panel_status = "🟢"
         except ApiClientError:
-            panel_status = "❌"
+            panel_status = "🔴"
             panel_status_text = f"\n{_('panel.unavailable_warning')}"
     except Exception:
         # Если не можем проверить, показываем нейтральный статус
-        pass
+        panel_status = "🟡"
     
     try:
         # Получаем основную статистику системы
