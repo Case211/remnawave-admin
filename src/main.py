@@ -18,6 +18,52 @@ from src.utils.logger import logger
 from src.handlers import register_handlers
 
 
+async def run_migrations() -> bool:
+    """
+    Запускает миграции Alembic автоматически при старте.
+    Возвращает True если миграции успешны или не требуются.
+    """
+    try:
+        from alembic.config import Config
+        from alembic import command
+        from alembic.runtime.migration import MigrationContext
+        from sqlalchemy import create_engine, text
+        
+        settings = get_settings()
+        if not settings.database_url:
+            return True
+        
+        # Создаём engine для проверки текущей версии
+        engine = create_engine(str(settings.database_url).replace("postgresql://", "postgresql+psycopg2://"))
+        
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn)
+            current_rev = context.get_current_revision()
+            logger.info("📊 Current database revision: %s", current_rev or "None (fresh database)")
+        
+        # Настраиваем Alembic
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.set_main_option("sqlalchemy.url", str(settings.database_url).replace("postgresql://", "postgresql+psycopg2://"))
+        
+        # Запускаем миграции
+        logger.info("🔄 Running database migrations...")
+        command.upgrade(alembic_cfg, "head")
+        
+        # Проверяем новую версию
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn)
+            new_rev = context.get_current_revision()
+            logger.info("✅ Database migrations completed. Current revision: %s", new_rev)
+        
+        engine.dispose()
+        return True
+        
+    except Exception as e:
+        logger.error("❌ Failed to run database migrations: %s", e)
+        logger.warning("⚠️ Bot will continue without database migrations. You may need to run them manually.")
+        return False
+
+
 async def check_api_connection() -> bool:
     """Проверяет подключение к API с повторными попытками."""
     from src.config import get_settings
@@ -146,6 +192,13 @@ async def main() -> None:
     db_connected = False
     if settings.database_enabled:
         logger.info("🗄️ Connecting to PostgreSQL database...")
+        
+        # Сначала запускаем автоматические миграции
+        migrations_ok = await run_migrations()
+        if not migrations_ok:
+            logger.warning("⚠️ Migrations failed, but continuing...")
+        
+        # Затем подключаемся через asyncpg для работы бота
         db_connected = await db_service.connect()
         if db_connected:
             logger.info("✅ Database connection established")

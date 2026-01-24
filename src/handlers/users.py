@@ -1632,19 +1632,17 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
             if not subscription_links and accessible_nodes and isinstance(accessible_nodes, list) and len(accessible_nodes) > 0:
                 logger.info("No links in subscription_data, generating from accessible nodes. Nodes count: %s", len(accessible_nodes))
                 
-                # Получаем все хосты для получения адресов и портов
+                # Получаем все хосты для получения адресов и портов (из БД с fallback на API)
                 try:
-                    hosts_data = await api_client.get_hosts()
-                    hosts = hosts_data.get("response", [])
+                    hosts = await data_access.get_all_hosts()
                     hosts_dict = {h.get("uuid"): h for h in hosts if isinstance(h, dict)}
                 except Exception:
                     logger.exception("Failed to get hosts for accessible nodes")
                     hosts_dict = {}
                 
-                # Получаем все ноды для получения hostUuid
+                # Получаем все ноды для получения hostUuid (из БД с fallback на API)
                 try:
-                    all_nodes_data = await api_client.get_nodes()
-                    all_nodes = all_nodes_data.get("response", [])
+                    all_nodes = await data_access.get_all_nodes()
                     nodes_dict = {n.get("uuid"): n for n in all_nodes if isinstance(n, dict)}
                 except Exception:
                     logger.exception("Failed to get nodes for accessible nodes")
@@ -1732,11 +1730,9 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
         if not subscription_links and not accessible_nodes:
             logger.info("No subscription links and no accessible nodes, trying to get all nodes")
             try:
-                # Получаем все ноды и хосты один раз
-                all_nodes_data = await api_client.get_nodes()
-                all_nodes = all_nodes_data.get("response", [])
-                hosts_data = await api_client.get_hosts()
-                hosts = hosts_data.get("response", [])
+                # Получаем все ноды и хосты один раз (из БД с fallback на API)
+                all_nodes = await data_access.get_all_nodes()
+                hosts = await data_access.get_all_hosts()
                 
                 # Создаем словарь хостов для быстрого поиска
                 hosts_dict = {h.get("uuid"): h for h in hosts if isinstance(h, dict)}
@@ -1863,9 +1859,8 @@ async def cb_user_node_configs(callback: CallbackQuery) -> None:
         node_country = node_info.get("countryCode", node_info.get("country", ""))
         node_uuid = node_info.get("uuid", "")
         
-        # Получаем все ноды для получения адресов и портов
-        all_nodes_data = await api_client.get_nodes()
-        all_nodes = all_nodes_data.get("response", [])
+        # Получаем все ноды для получения адресов и портов (из БД с fallback на API)
+        all_nodes = await data_access.get_all_nodes()
         nodes_dict = {n.get("uuid"): n for n in all_nodes if isinstance(n, dict)}
         
         node_details = nodes_dict.get(node_uuid)
@@ -2007,9 +2002,8 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
             node_name = node_info.get("nodeName", node_info.get("name", "Unknown"))
             node_uuid = node_info.get("uuid", "")
             
-            # Получаем все ноды для получения адресов и портов
-            all_nodes_data = await api_client.get_nodes()
-            all_nodes = all_nodes_data.get("response", [])
+            # Получаем все ноды для получения адресов и портов (из БД с fallback на API)
+            all_nodes = await data_access.get_all_nodes()
             nodes_dict = {n.get("uuid"): n for n in all_nodes if isinstance(n, dict)}
             
             node_details = nodes_dict.get(node_uuid)
@@ -2131,9 +2125,8 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
                     accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
                     
                     if accessible_nodes and isinstance(accessible_nodes, list):
-                        # Получаем все ноды для получения адресов и портов
-                        all_nodes_data = await api_client.get_nodes()
-                        all_nodes = all_nodes_data.get("response", [])
+                        # Получаем все ноды для получения адресов и портов (из БД с fallback на API)
+                        all_nodes = await data_access.get_all_nodes()
                         nodes_dict = {n.get("uuid"): n for n in all_nodes if isinstance(n, dict)}
                         
                         vless_uuid = user_info.get("vlessUuid")

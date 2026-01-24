@@ -228,3 +228,63 @@ async def get_all_squads() -> tuple[List[Dict[str, Any]], str]:
     
     squads = await get_all_external_squads()
     return squads, "external"
+
+
+# ==================== Host Access ====================
+
+async def get_all_hosts() -> List[Dict[str, Any]]:
+    """Get all hosts. Tries DB first, falls back to API."""
+    if db_service.is_connected:
+        hosts = await db_service.get_all_hosts()
+        if hosts:
+            logger.debug("Hosts fetched from DB (%d)", len(hosts))
+            return hosts
+    
+    try:
+        response = await api_client.get_hosts()
+        return response.get("response", [])
+    except Exception as e:
+        logger.warning("Failed to fetch hosts from API: %s", e)
+    
+    return []
+
+
+async def get_all_hosts_wrapped() -> Dict[str, Any]:
+    """Get all hosts with response wrapper for backward compatibility."""
+    if db_service.is_connected:
+        hosts = await db_service.get_all_hosts()
+        if hosts:
+            logger.debug("Hosts fetched from DB (wrapped, %d)", len(hosts))
+            return {"response": hosts}
+    
+    return await api_client.get_hosts()
+
+
+# ==================== Node Access ====================
+
+async def get_all_nodes() -> List[Dict[str, Any]]:
+    """Get all nodes. Tries DB first, falls back to API."""
+    if db_service.is_connected:
+        nodes = await db_service.get_all_nodes()
+        if nodes:
+            logger.debug("Nodes fetched from DB (%d)", len(nodes))
+            return nodes
+    
+    try:
+        response = await api_client.get_nodes()
+        return response.get("response", [])
+    except Exception as e:
+        logger.warning("Failed to fetch nodes from API: %s", e)
+    
+    return []
+
+
+async def get_all_nodes_wrapped() -> Dict[str, Any]:
+    """Get all nodes with response wrapper for backward compatibility."""
+    if db_service.is_connected:
+        nodes = await db_service.get_all_nodes()
+        if nodes:
+            logger.debug("Nodes fetched from DB (wrapped, %d)", len(nodes))
+            return {"response": nodes}
+    
+    return await api_client.get_nodes()
