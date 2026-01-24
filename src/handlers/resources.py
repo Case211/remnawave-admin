@@ -14,6 +14,7 @@ from src.keyboards.template_actions import template_actions_keyboard
 from src.keyboards.template_menu import template_list_keyboard, template_menu_keyboard
 from src.keyboards.token_actions import token_actions_keyboard
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from src.services.database import db_service
 from src.utils.formatters import (
     build_config_profiles_list,
     build_created_token,
@@ -256,10 +257,24 @@ async def _fetch_snippets_text() -> str:
 
 
 async def _fetch_configs_text() -> str:
-    """Получает текст со списком профилей конфигурации."""
+    """Получает текст со списком профилей конфигурации (из БД, fallback на API)."""
     try:
-        data = await api_client.get_config_profiles()
-        profiles = data.get("response", {}).get("configProfiles", [])
+        profiles = []
+        
+        # Сначала пробуем получить из БД
+        if db_service.is_connected:
+            try:
+                profiles = await db_service.get_all_config_profiles()
+                logger.debug("Fetched %d config profiles from database", len(profiles))
+            except Exception as e:
+                logger.warning("DB fetch failed, fallback to API: %s", e)
+                profiles = []
+        
+        # Fallback на API если БД пуста или недоступна
+        if not profiles:
+            data = await api_client.get_config_profiles()
+            profiles = data.get("response", {}).get("configProfiles", [])
+        
         return build_config_profiles_list(profiles, _)
     except UnauthorizedError:
         return _("errors.unauthorized")

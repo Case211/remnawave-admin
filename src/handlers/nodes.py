@@ -14,6 +14,7 @@ from src.keyboards.node_actions import node_actions_keyboard
 from src.keyboards.node_edit import node_edit_keyboard
 from src.keyboards.navigation import input_keyboard
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from src.services.database import db_service
 from src.utils.formatters import _esc, build_node_summary, build_nodes_realtime_usage, build_nodes_usage_range, format_bytes
 from src.utils.logger import logger
 
@@ -23,15 +24,32 @@ router = Router(name="nodes")
 
 
 async def _fetch_nodes_text() -> str:
-    """Получает текст со списком нод."""
+    """Получает текст со списком нод (API для realtime, БД как fallback)."""
     try:
-        data = await api_client.get_nodes()
-        nodes = data.get("response", [])
+        nodes = []
+        from_db = False
+        
+        # Пробуем получить из API (realtime данные)
+        try:
+            data = await api_client.get_nodes()
+            nodes = data.get("response", [])
+        except ApiClientError:
+            # Fallback на БД
+            if db_service.is_connected:
+                nodes = await db_service.get_all_nodes()
+                from_db = True
+                logger.warning("API unavailable, using database for nodes")
+        
         if not nodes:
             return _("node.list_empty")
+        
         sorted_nodes = sorted(nodes, key=lambda n: n.get("viewPosition", 0))
         total = len(nodes)
         lines = [_("node.list_title").format(total=total, page=1, pages=1)]
+        
+        if from_db:
+            lines.append("<i>(данные из кэша)</i>")
+        
         for node in sorted_nodes[:10]:
             status = "DISABLED" if node.get("isDisabled") else ("ONLINE" if node.get("isConnected") else "OFFLINE")
             status_emoji = "🟢" if status == "ONLINE" else ("🟡" if status == "DISABLED" else "🔴")
@@ -65,10 +83,22 @@ def _get_nodes_page(user_id: int | None) -> int:
 
 
 async def _fetch_nodes_with_keyboard(user_id: int | None = None, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
-    """Получает текст списка нод со статистикой и клавиатуру с кнопками для каждой ноды с пагинацией и фильтрацией."""
+    """Получает текст списка нод со статистикой и клавиатуру с кнопками для каждой ноды (API для realtime, БД как fallback)."""
     try:
-        data = await api_client.get_nodes()
-        nodes = data.get("response", [])
+        nodes = []
+        from_db = False
+        
+        # Пробуем получить из API (realtime данные)
+        try:
+            data = await api_client.get_nodes()
+            nodes = data.get("response", [])
+        except ApiClientError:
+            # Fallback на БД
+            if db_service.is_connected:
+                nodes = await db_service.get_all_nodes()
+                from_db = True
+                logger.warning("API unavailable, using database for nodes with keyboard")
+        
         if not nodes:
             return _("node.list_empty"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_MENU)])
 
@@ -109,7 +139,7 @@ async def _fetch_nodes_with_keyboard(user_id: int | None = None, page: int = 0) 
             sorted_nodes = filtered_nodes
 
         # Вычисляем статистику (по всем нодам, не отфильтрованным)
-        all_nodes = data.get("response", [])
+        all_nodes = nodes
         total_all_nodes = len(all_nodes)
         enabled_nodes = sum(1 for n in all_nodes if not n.get("isDisabled"))
         disabled_nodes = total_all_nodes - enabled_nodes

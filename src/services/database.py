@@ -287,6 +287,59 @@ class DatabaseService:
             result = await conn.fetchval("SELECT COUNT(*) FROM users")
             return result or 0
     
+    async def get_all_users(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        status: Optional[str] = None,
+        order_by: str = "username"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all users with optional filtering and pagination.
+        Returns list of users with raw_data converted to API format.
+        """
+        if not self.is_connected:
+            return []
+        
+        async with self.acquire() as conn:
+            if status:
+                rows = await conn.fetch(
+                    f"SELECT * FROM users WHERE status = $1 ORDER BY {order_by} LIMIT $2 OFFSET $3",
+                    status, limit, offset
+                )
+            else:
+                rows = await conn.fetch(
+                    f"SELECT * FROM users ORDER BY {order_by} LIMIT $1 OFFSET $2",
+                    limit, offset
+                )
+            return [_db_row_to_api_format(row) for row in rows]
+    
+    async def get_users_stats(self) -> Dict[str, int]:
+        """
+        Get users statistics by status.
+        Returns dict: {total, active, expired, disabled, limited}
+        """
+        if not self.is_connected:
+            return {"total": 0, "active": 0, "expired": 0, "disabled": 0, "limited": 0}
+        
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT status, COUNT(*) as count FROM users 
+                GROUP BY status
+                """
+            )
+            
+            stats = {"total": 0, "active": 0, "expired": 0, "disabled": 0, "limited": 0}
+            for row in rows:
+                status = row["status"]
+                count = row["count"]
+                stats["total"] += count
+                if status:
+                    stats[status.lower()] = count
+            
+            return stats
+    
     async def get_users_by_status(self, status: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get users by status."""
         if not self.is_connected:
@@ -381,16 +434,16 @@ class DatabaseService:
     # ==================== Nodes ====================
     
     async def get_all_nodes(self) -> List[Dict[str, Any]]:
-        """Get all nodes."""
+        """Get all nodes with raw_data in API format."""
         if not self.is_connected:
             return []
         
         async with self.acquire() as conn:
             rows = await conn.fetch("SELECT * FROM nodes ORDER BY name")
-            return [dict(row) for row in rows]
+            return [_db_row_to_api_format(row) for row in rows]
     
     async def get_node_by_uuid(self, uuid: str) -> Optional[Dict[str, Any]]:
-        """Get node by UUID."""
+        """Get node by UUID with raw_data in API format."""
         if not self.is_connected:
             return None
         
@@ -399,7 +452,28 @@ class DatabaseService:
                 "SELECT * FROM nodes WHERE uuid = $1",
                 uuid
             )
-            return dict(row) if row else None
+            return _db_row_to_api_format(row) if row else None
+    
+    async def get_nodes_stats(self) -> Dict[str, int]:
+        """
+        Get nodes statistics.
+        Returns dict: {total, enabled, disabled, connected}
+        """
+        if not self.is_connected:
+            return {"total": 0, "enabled": 0, "disabled": 0, "connected": 0}
+        
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE NOT is_disabled) as enabled,
+                    COUNT(*) FILTER (WHERE is_disabled) as disabled,
+                    COUNT(*) FILTER (WHERE is_connected AND NOT is_disabled) as connected
+                FROM nodes
+                """
+            )
+            return dict(row) if row else {"total": 0, "enabled": 0, "disabled": 0, "connected": 0}
     
     async def upsert_node(self, node_data: Dict[str, Any]) -> None:
         """Insert or update a node."""
@@ -474,16 +548,16 @@ class DatabaseService:
     # ==================== Hosts ====================
     
     async def get_all_hosts(self) -> List[Dict[str, Any]]:
-        """Get all hosts."""
+        """Get all hosts with raw_data in API format."""
         if not self.is_connected:
             return []
         
         async with self.acquire() as conn:
             rows = await conn.fetch("SELECT * FROM hosts ORDER BY remark")
-            return [dict(row) for row in rows]
+            return [_db_row_to_api_format(row) for row in rows]
     
     async def get_host_by_uuid(self, uuid: str) -> Optional[Dict[str, Any]]:
-        """Get host by UUID."""
+        """Get host by UUID with raw_data in API format."""
         if not self.is_connected:
             return None
         
@@ -492,7 +566,27 @@ class DatabaseService:
                 "SELECT * FROM hosts WHERE uuid = $1",
                 uuid
             )
-            return dict(row) if row else None
+            return _db_row_to_api_format(row) if row else None
+    
+    async def get_hosts_stats(self) -> Dict[str, int]:
+        """
+        Get hosts statistics.
+        Returns dict: {total, enabled, disabled}
+        """
+        if not self.is_connected:
+            return {"total": 0, "enabled": 0, "disabled": 0}
+        
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE NOT is_disabled) as enabled,
+                    COUNT(*) FILTER (WHERE is_disabled) as disabled
+                FROM hosts
+                """
+            )
+            return dict(row) if row else {"total": 0, "enabled": 0, "disabled": 0}
     
     async def upsert_host(self, host_data: Dict[str, Any]) -> None:
         """Insert or update a host."""
@@ -560,13 +654,25 @@ class DatabaseService:
     # ==================== Config Profiles ====================
     
     async def get_all_config_profiles(self) -> List[Dict[str, Any]]:
-        """Get all config profiles."""
+        """Get all config profiles with raw_data in API format."""
         if not self.is_connected:
             return []
         
         async with self.acquire() as conn:
             rows = await conn.fetch("SELECT * FROM config_profiles ORDER BY name")
-            return [dict(row) for row in rows]
+            return [_db_row_to_api_format(row) for row in rows]
+    
+    async def get_config_profile_by_uuid(self, uuid: str) -> Optional[Dict[str, Any]]:
+        """Get config profile by UUID with raw_data in API format."""
+        if not self.is_connected:
+            return None
+        
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM config_profiles WHERE uuid = $1",
+                uuid
+            )
+            return _db_row_to_api_format(row) if row else None
     
     async def upsert_config_profile(self, profile_data: Dict[str, Any]) -> None:
         """Insert or update a config profile."""
@@ -731,6 +837,65 @@ class DatabaseService:
                 connection_id
             )
             return result == "UPDATE 1"
+
+
+def _db_row_to_api_format(row) -> Dict[str, Any]:
+    """
+    Convert database row to API format.
+    If raw_data exists, use it; otherwise build from row fields.
+    """
+    if row is None:
+        return {}
+    
+    row_dict = dict(row)
+    raw_data = row_dict.get("raw_data")
+    
+    if raw_data:
+        # Use raw_data if available (contains full API response)
+        if isinstance(raw_data, str):
+            try:
+                return json.loads(raw_data)
+            except json.JSONDecodeError:
+                pass
+        elif isinstance(raw_data, dict):
+            return raw_data
+    
+    # Fallback: build from row fields (convert snake_case to camelCase)
+    result = {}
+    field_mapping = {
+        "uuid": "uuid",
+        "short_uuid": "shortUuid",
+        "username": "username",
+        "subscription_uuid": "subscriptionUuid",
+        "telegram_id": "telegramId",
+        "email": "email",
+        "status": "status",
+        "expire_at": "expireAt",
+        "traffic_limit_bytes": "trafficLimitBytes",
+        "used_traffic_bytes": "usedTrafficBytes",
+        "hwid_device_limit": "hwidDeviceLimit",
+        "created_at": "createdAt",
+        "updated_at": "updatedAt",
+        "name": "name",
+        "address": "address",
+        "port": "port",
+        "is_disabled": "isDisabled",
+        "is_connected": "isConnected",
+        "remark": "remark",
+    }
+    
+    for db_field, api_field in field_mapping.items():
+        if db_field in row_dict and row_dict[db_field] is not None:
+            value = row_dict[db_field]
+            # Convert datetime to ISO string
+            if isinstance(value, datetime):
+                value = value.isoformat()
+            # Convert UUID to string
+            elif hasattr(value, 'hex'):
+                value = str(value)
+            result[api_field] = value
+    
+    return result
 
 
 def _parse_timestamp(value: Any) -> Optional[datetime]:

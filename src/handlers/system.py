@@ -10,6 +10,7 @@ from src.keyboards.navigation import NavTarget, nav_row
 from src.keyboards.stats_menu import stats_menu_keyboard, stats_period_keyboard
 from src.keyboards.system_nodes import system_nodes_keyboard
 from src.services.api_client import ApiClientError, UnauthorizedError, api_client
+from src.services.database import db_service
 from src.utils.formatters import build_bandwidth_stats, format_bytes, format_datetime, format_uptime
 from src.utils.logger import logger
 
@@ -75,25 +76,44 @@ async def _fetch_panel_stats_text() -> str:
             f"  {_('stats.nodes').format(online=nodes.get('totalOnline', '—'))}",
         ]
 
-        # Добавляем статистику по хостам
+        # Добавляем статистику по хостам (из БД, fallback на API)
         try:
-            hosts_data = await api_client.get_hosts()
-            hosts = hosts_data.get("response", [])
-            total_hosts = len(hosts)
-            enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
-            disabled_hosts = total_hosts - enabled_hosts
+            if db_service.is_connected:
+                hosts_stats = await db_service.get_hosts_stats()
+                total_hosts = hosts_stats.get("total", 0)
+                enabled_hosts = hosts_stats.get("enabled", 0)
+                disabled_hosts = hosts_stats.get("disabled", 0)
+            else:
+                hosts_data = await api_client.get_hosts()
+                hosts = hosts_data.get("response", [])
+                total_hosts = len(hosts)
+                enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
+                disabled_hosts = total_hosts - enabled_hosts
             lines.append(f"  {_('stats.hosts').format(total=total_hosts, enabled=enabled_hosts, disabled=disabled_hosts)}")
         except Exception:
             lines.append(f"  {_('stats.hosts').format(total='—', enabled='—', disabled='—')}")
 
-        # Добавляем статистику по нодам
+        # Добавляем статистику по нодам (из БД для счётчиков, API для online)
         try:
-            nodes_data = await api_client.get_nodes()
-            nodes_list = nodes_data.get("response", [])
-            total_nodes = len(nodes_list)
-            enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
-            disabled_nodes = total_nodes - enabled_nodes
-            online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
+            if db_service.is_connected:
+                nodes_stats = await db_service.get_nodes_stats()
+                total_nodes = nodes_stats.get("total", 0)
+                enabled_nodes = nodes_stats.get("enabled", 0)
+                disabled_nodes = nodes_stats.get("disabled", 0)
+                # Для online нужен API
+                try:
+                    nodes_data = await api_client.get_nodes()
+                    nodes_list = nodes_data.get("response", [])
+                    online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
+                except Exception:
+                    online_nodes = nodes_stats.get("connected", 0)
+            else:
+                nodes_data = await api_client.get_nodes()
+                nodes_list = nodes_data.get("response", [])
+                total_nodes = len(nodes_list)
+                enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
+                disabled_nodes = total_nodes - enabled_nodes
+                online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
             lines.append(
                 f"  {_('stats.nodes_detailed').format(total=total_nodes, enabled=enabled_nodes, disabled=disabled_nodes, online=online_nodes)}"
             )
@@ -295,13 +315,25 @@ async def _fetch_extended_stats_text() -> str:
         lines.append("")
         lines.append(f"*{_('stats.extended_infra_section')}*")
 
-        # Статистика нод
+        # Статистика нод (счётчики из БД, online из API)
         try:
-            nodes_data = await api_client.get_nodes()
-            nodes_list = nodes_data.get("response", [])
-            total_nodes = len(nodes_list)
-            enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
-            online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
+            if db_service.is_connected:
+                nodes_stats = await db_service.get_nodes_stats()
+                total_nodes = nodes_stats.get("total", 0)
+                enabled_nodes = nodes_stats.get("enabled", 0)
+                # Для online нужен API
+                try:
+                    nodes_data = await api_client.get_nodes()
+                    nodes_list = nodes_data.get("response", [])
+                    online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
+                except Exception:
+                    online_nodes = nodes_stats.get("connected", 0)
+            else:
+                nodes_data = await api_client.get_nodes()
+                nodes_list = nodes_data.get("response", [])
+                total_nodes = len(nodes_list)
+                enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
+                online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
             
             if total_nodes > 0:
                 online_percent = (online_nodes / total_nodes * 100)
@@ -317,12 +349,17 @@ async def _fetch_extended_stats_text() -> str:
         except Exception:
             pass
 
-        # Статистика хостов
+        # Статистика хостов (из БД, fallback на API)
         try:
-            hosts_data = await api_client.get_hosts()
-            hosts = hosts_data.get("response", [])
-            total_hosts = len(hosts)
-            enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
+            if db_service.is_connected:
+                hosts_stats = await db_service.get_hosts_stats()
+                total_hosts = hosts_stats.get("total", 0)
+                enabled_hosts = hosts_stats.get("enabled", 0)
+            else:
+                hosts_data = await api_client.get_hosts()
+                hosts = hosts_data.get("response", [])
+                total_hosts = len(hosts)
+                enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
             
             if total_hosts > 0:
                 enabled_percent = (enabled_hosts / total_hosts * 100)
@@ -390,25 +427,44 @@ async def _fetch_stats_text() -> str:
             f"  {_('stats.nodes').format(online=nodes.get('totalOnline', '—'))}",
         ]
 
-        # Добавляем статистику по хостам
+        # Добавляем статистику по хостам (из БД, fallback на API)
         try:
-            hosts_data = await api_client.get_hosts()
-            hosts = hosts_data.get("response", [])
-            total_hosts = len(hosts)
-            enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
-            disabled_hosts = total_hosts - enabled_hosts
+            if db_service.is_connected:
+                hosts_stats = await db_service.get_hosts_stats()
+                total_hosts = hosts_stats.get("total", 0)
+                enabled_hosts = hosts_stats.get("enabled", 0)
+                disabled_hosts = hosts_stats.get("disabled", 0)
+            else:
+                hosts_data = await api_client.get_hosts()
+                hosts = hosts_data.get("response", [])
+                total_hosts = len(hosts)
+                enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
+                disabled_hosts = total_hosts - enabled_hosts
             lines.append(f"  {_('stats.hosts').format(total=total_hosts, enabled=enabled_hosts, disabled=disabled_hosts)}")
         except Exception:
             lines.append(f"  {_('stats.hosts').format(total='—', enabled='—', disabled='—')}")
 
-        # Добавляем статистику по нодам
+        # Добавляем статистику по нодам (из БД для счётчиков, API для online)
         try:
-            nodes_data = await api_client.get_nodes()
-            nodes_list = nodes_data.get("response", [])
-            total_nodes = len(nodes_list)
-            enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
-            disabled_nodes = total_nodes - enabled_nodes
-            online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
+            if db_service.is_connected:
+                nodes_stats = await db_service.get_nodes_stats()
+                total_nodes = nodes_stats.get("total", 0)
+                enabled_nodes = nodes_stats.get("enabled", 0)
+                disabled_nodes = nodes_stats.get("disabled", 0)
+                # Для online нужен API
+                try:
+                    nodes_data = await api_client.get_nodes()
+                    nodes_list = nodes_data.get("response", [])
+                    online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
+                except Exception:
+                    online_nodes = nodes_stats.get("connected", 0)
+            else:
+                nodes_data = await api_client.get_nodes()
+                nodes_list = nodes_data.get("response", [])
+                total_nodes = len(nodes_list)
+                enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
+                disabled_nodes = total_nodes - enabled_nodes
+                online_nodes = sum(1 for n in nodes_list if n.get("isConnected"))
             lines.append(
                 f"  {_('stats.nodes_detailed').format(total=total_nodes, enabled=enabled_nodes, disabled=disabled_nodes, online=online_nodes)}"
             )

@@ -347,84 +347,168 @@ class SyncService:
             )
             raise
     
-    # ==================== Webhook Event Handlers ====================
+    # ==================== Webhook Event Handlers with Diff ====================
     
-    async def handle_webhook_event(self, event: str, event_data: Dict[str, Any]) -> None:
+    async def handle_webhook_event(self, event: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Handle webhook event and update database accordingly.
+        Handle webhook event, update database, and return diff for notifications.
         
         Args:
             event: Event type (e.g., "user.created", "node.modified")
             event_data: Event payload data
+            
+        Returns:
+            Dict with keys:
+                - old_data: Data before change (from DB) or None if created
+                - new_data: Data after change (from webhook)
+                - changes: List of human-readable changes
+                - is_new: True if this is a new record
         """
+        result = {
+            "old_data": None,
+            "new_data": event_data,
+            "changes": [],
+            "is_new": False
+        }
+        
         if not db_service.is_connected:
             logger.debug("Database not connected, skipping webhook sync for %s", event)
-            return
+            return result
         
         try:
             if event.startswith("user."):
-                await self._handle_user_webhook(event, event_data)
+                return await self._handle_user_webhook_with_diff(event, event_data)
             elif event.startswith("node."):
-                await self._handle_node_webhook(event, event_data)
+                return await self._handle_node_webhook_with_diff(event, event_data)
             elif event.startswith("host."):
-                await self._handle_host_webhook(event, event_data)
+                return await self._handle_host_webhook_with_diff(event, event_data)
             else:
                 logger.debug("Unhandled webhook event for sync: %s", event)
+                return result
                 
         except Exception as e:
             logger.error("Error handling webhook event %s: %s", event, e)
+            return result
     
-    async def _handle_user_webhook(self, event: str, event_data: Dict[str, Any]) -> None:
-        """Handle user-related webhook events."""
+    async def _handle_user_webhook_with_diff(self, event: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle user webhook events with diff tracking."""
         uuid = event_data.get("uuid")
+        result = {
+            "old_data": None,
+            "new_data": event_data,
+            "changes": [],
+            "is_new": False
+        }
         
         if not uuid:
             logger.warning("User webhook event without UUID: %s", event)
-            return
+            return result
+        
+        # Get old data from DB before updating
+        old_db_record = await db_service.get_user_by_uuid(uuid)
+        if old_db_record:
+            # Extract raw_data as old_data
+            raw_data = old_db_record.get("raw_data")
+            if raw_data:
+                if isinstance(raw_data, str):
+                    import json
+                    result["old_data"] = json.loads(raw_data)
+                else:
+                    result["old_data"] = raw_data
         
         if event == "user.deleted":
-            # Delete user from database
             await db_service.delete_user(uuid)
             logger.debug("Deleted user %s from database (webhook)", uuid)
         else:
-            # For all other user events, upsert the user data
-            # The event_data should contain the user info
+            # Upsert new data
             await db_service.upsert_user({"response": event_data})
             logger.debug("Updated user %s in database (webhook: %s)", uuid, event)
+            
+            # Calculate changes if we have old data
+            if result["old_data"]:
+                result["changes"] = _compare_user_data(result["old_data"], event_data)
+            else:
+                result["is_new"] = True
+        
+        return result
     
-    async def _handle_node_webhook(self, event: str, event_data: Dict[str, Any]) -> None:
-        """Handle node-related webhook events."""
+    async def _handle_node_webhook_with_diff(self, event: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle node webhook events with diff tracking."""
         uuid = event_data.get("uuid")
+        result = {
+            "old_data": None,
+            "new_data": event_data,
+            "changes": [],
+            "is_new": False
+        }
         
         if not uuid:
             logger.warning("Node webhook event without UUID: %s", event)
-            return
+            return result
+        
+        # Get old data from DB
+        old_db_record = await db_service.get_node_by_uuid(uuid)
+        if old_db_record:
+            raw_data = old_db_record.get("raw_data")
+            if raw_data:
+                if isinstance(raw_data, str):
+                    import json
+                    result["old_data"] = json.loads(raw_data)
+                else:
+                    result["old_data"] = raw_data
         
         if event == "node.deleted":
-            # Delete node from database
             await db_service.delete_node(uuid)
             logger.debug("Deleted node %s from database (webhook)", uuid)
         else:
-            # For all other node events, upsert the node data
             await db_service.upsert_node({"response": event_data})
             logger.debug("Updated node %s in database (webhook: %s)", uuid, event)
+            
+            if result["old_data"]:
+                result["changes"] = _compare_node_data(result["old_data"], event_data)
+            else:
+                result["is_new"] = True
+        
+        return result
     
-    async def _handle_host_webhook(self, event: str, event_data: Dict[str, Any]) -> None:
-        """Handle host-related webhook events."""
+    async def _handle_host_webhook_with_diff(self, event: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle host webhook events with diff tracking."""
         uuid = event_data.get("uuid")
+        result = {
+            "old_data": None,
+            "new_data": event_data,
+            "changes": [],
+            "is_new": False
+        }
         
         if not uuid:
             logger.warning("Host webhook event without UUID: %s", event)
-            return
+            return result
+        
+        # Get old data from DB
+        old_db_record = await db_service.get_host_by_uuid(uuid)
+        if old_db_record:
+            raw_data = old_db_record.get("raw_data")
+            if raw_data:
+                if isinstance(raw_data, str):
+                    import json
+                    result["old_data"] = json.loads(raw_data)
+                else:
+                    result["old_data"] = raw_data
         
         if event == "host.deleted":
-            # Delete host from database
             await db_service.delete_host(uuid)
             logger.debug("Deleted host %s from database (webhook)", uuid)
         else:
-            # For all other host events, upsert the host data
             await db_service.upsert_host({"response": event_data})
             logger.debug("Updated host %s in database (webhook: %s)", uuid, event)
+            
+            if result["old_data"]:
+                result["changes"] = _compare_host_data(result["old_data"], event_data)
+            else:
+                result["is_new"] = True
+        
+        return result
     
     # ==================== On-Demand Sync ====================
     
@@ -478,6 +562,130 @@ class SyncService:
         except Exception as e:
             logger.warning("Failed to sync single host %s: %s", uuid, e)
             return False
+
+
+# ==================== Data Comparison Functions ====================
+
+def _compare_user_data(old_data: Dict[str, Any], new_data: Dict[str, Any]) -> List[str]:
+    """
+    Compare user data and return list of human-readable changes.
+    """
+    changes = []
+    
+    fields_to_compare = {
+        "username": ("Username", None),
+        "email": ("Email", None),
+        "telegramId": ("Telegram ID", None),
+        "status": ("Статус", None),
+        "expireAt": ("Срок действия", _format_date),
+        "trafficLimitBytes": ("Лимит трафика", _format_bytes),
+        "hwidDeviceLimit": ("Лимит устройств", None),
+        "description": ("Описание", None),
+    }
+    
+    for field, (label, formatter) in fields_to_compare.items():
+        old_val = old_data.get(field)
+        new_val = new_data.get(field)
+        
+        if old_val != new_val:
+            old_display = formatter(old_val) if formatter and old_val else (old_val or "—")
+            new_display = formatter(new_val) if formatter and new_val else (new_val or "—")
+            changes.append(f"• {label}: {old_display} → {new_display}")
+    
+    return changes
+
+
+def _compare_node_data(old_data: Dict[str, Any], new_data: Dict[str, Any]) -> List[str]:
+    """
+    Compare node data and return list of human-readable changes.
+    """
+    changes = []
+    
+    fields_to_compare = {
+        "name": ("Название", None),
+        "address": ("Адрес", None),
+        "port": ("Порт", None),
+        "isDisabled": ("Отключена", _format_bool),
+        "trafficLimitBytes": ("Лимит трафика", _format_bytes),
+    }
+    
+    for field, (label, formatter) in fields_to_compare.items():
+        old_val = old_data.get(field)
+        new_val = new_data.get(field)
+        
+        if old_val != new_val:
+            old_display = formatter(old_val) if formatter else (old_val if old_val is not None else "—")
+            new_display = formatter(new_val) if formatter else (new_val if new_val is not None else "—")
+            changes.append(f"• {label}: {old_display} → {new_display}")
+    
+    return changes
+
+
+def _compare_host_data(old_data: Dict[str, Any], new_data: Dict[str, Any]) -> List[str]:
+    """
+    Compare host data and return list of human-readable changes.
+    """
+    changes = []
+    
+    fields_to_compare = {
+        "remark": ("Название", None),
+        "address": ("Адрес", None),
+        "port": ("Порт", None),
+        "isDisabled": ("Отключен", _format_bool),
+    }
+    
+    for field, (label, formatter) in fields_to_compare.items():
+        old_val = old_data.get(field)
+        new_val = new_data.get(field)
+        
+        if old_val != new_val:
+            old_display = formatter(old_val) if formatter else (old_val if old_val is not None else "—")
+            new_display = formatter(new_val) if formatter else (new_val if new_val is not None else "—")
+            changes.append(f"• {label}: {old_display} → {new_display}")
+    
+    return changes
+
+
+def _format_bytes(value) -> str:
+    """Format bytes to human-readable format."""
+    if value is None or value == 0:
+        return "Безлимит"
+    
+    try:
+        value = int(value)
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if abs(value) < 1024.0:
+                return f"{value:.1f} {unit}"
+            value /= 1024.0
+        return f"{value:.1f} PB"
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def _format_date(value) -> str:
+    """Format date to human-readable format."""
+    if value is None:
+        return "Бессрочно"
+    
+    if isinstance(value, str):
+        try:
+            # Try to parse ISO format
+            from datetime import datetime
+            dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            return dt.strftime("%d.%m.%Y %H:%M")
+        except ValueError:
+            return value
+    
+    return str(value)
+
+
+def _format_bool(value) -> str:
+    """Format boolean to human-readable format."""
+    if value is True:
+        return "Да"
+    elif value is False:
+        return "Нет"
+    return "—"
 
 
 # Global sync service instance

@@ -31,6 +31,7 @@ from src.keyboards.main_menu import (
 from src.keyboards.navigation import NavTarget, nav_keyboard, nav_row
 from src.keyboards.providers_menu import providers_menu_keyboard
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from src.services.database import db_service
 from src.utils.logger import logger
 
 # Импорты из соответствующих модулей
@@ -86,24 +87,40 @@ async def _fetch_main_menu_text(force_refresh: bool = False) -> str:
         total_users = users.get("totalUsers", 0)
         online_now = online.get("onlineNow", 0)
 
-        # Получаем количество хостов
+        # Получаем количество хостов (из БД, fallback на API)
         try:
-            hosts_data = await api_client.get_hosts()
-            hosts = hosts_data.get("response", [])
-            total_hosts = len(hosts)
-            enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
+            if db_service.is_connected:
+                hosts_stats = await db_service.get_hosts_stats()
+                total_hosts = hosts_stats.get("total", 0)
+                enabled_hosts = hosts_stats.get("enabled", 0)
+            else:
+                hosts_data = await api_client.get_hosts()
+                hosts = hosts_data.get("response", [])
+                total_hosts = len(hosts)
+                enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
         except Exception:
             total_hosts = "—"
             enabled_hosts = "—"
 
-        # Получаем количество нод
+        # Получаем количество нод (счётчики из БД, online из API)
         try:
-            nodes_data = await api_client.get_nodes()
-            nodes_list = nodes_data.get("response", [])
-            total_nodes = len(nodes_list)
-            enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
-            # Правильно считаем онлайн ноды из списка нод, а не из статистики API
-            nodes_online = sum(1 for n in nodes_list if n.get("isConnected"))
+            if db_service.is_connected:
+                nodes_stats = await db_service.get_nodes_stats()
+                total_nodes = nodes_stats.get("total", 0)
+                enabled_nodes = nodes_stats.get("enabled", 0)
+                # Для online нужен API
+                try:
+                    nodes_data = await api_client.get_nodes()
+                    nodes_list = nodes_data.get("response", [])
+                    nodes_online = sum(1 for n in nodes_list if n.get("isConnected"))
+                except Exception:
+                    nodes_online = nodes_stats.get("connected", 0)
+            else:
+                nodes_data = await api_client.get_nodes()
+                nodes_list = nodes_data.get("response", [])
+                total_nodes = len(nodes_list)
+                enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
+                nodes_online = sum(1 for n in nodes_list if n.get("isConnected"))
         except Exception:
             total_nodes = "—"
             enabled_nodes = "—"

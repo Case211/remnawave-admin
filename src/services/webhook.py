@@ -211,17 +211,18 @@ async def remnawave_webhook(request: Request):
             logger.error("Bot instance not found in app state")
             raise HTTPException(status_code=500, detail="Bot instance not available")
         
-        # Синхронизируем данные в БД (если БД подключена)
+        # Синхронизируем данные в БД и получаем diff для уведомлений
+        diff_result = None
         try:
-            await sync_service.handle_webhook_event(event, event_data)
+            diff_result = await sync_service.handle_webhook_event(event, event_data)
         except Exception as sync_exc:
             logger.warning("Failed to sync webhook event to database: %s", sync_exc)
         
         # Обрабатываем события по категориям
         if event.startswith("user."):
-            await _handle_user_event(bot, event, event_data)
+            await _handle_user_event(bot, event, event_data, diff_result)
         elif event.startswith("node."):
-            await _handle_node_event(bot, event, event_data)
+            await _handle_node_event(bot, event, event_data, diff_result)
         elif event.startswith("service."):
             await _handle_service_event(bot, event, event_data)
         elif event.startswith("user_hwid_devices."):
@@ -251,10 +252,8 @@ async def remnawave_webhook(request: Request):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-async def _handle_user_event(bot: Bot, event: str, event_data: dict) -> None:
-    """Обрабатывает события пользователей."""
-        
-    """Обрабатывает события пользователей."""
+async def _handle_user_event(bot: Bot, event: str, event_data: dict, diff_result: dict = None) -> None:
+    """Обрабатывает события пользователей с поддержкой diff."""
     if not event_data:
         logger.warning("User data not found in webhook payload")
         return
@@ -267,7 +266,6 @@ async def _handle_user_event(bot: Bot, event: str, event_data: dict) -> None:
         return
     
     # Определяем действие для уведомления на основе официальных событий
-    # Специальные события обрабатываем отдельно
     special_events = {
         "user.expired": "expired",
         "user.expires_in_72_hours": "expires_in_72h",
@@ -301,36 +299,58 @@ async def _handle_user_event(bot: Bot, event: str, event_data: dict) -> None:
     else:
         user_data = event_data
     
+    # Извлекаем данные из diff_result
+    old_user_info = None
+    changes = None
+    if diff_result:
+        old_user_info = diff_result.get("old_data")
+        changes = diff_result.get("changes")
+    
     logger.info(
-        "Sending user notification event=%s action=%s user_uuid=%s",
+        "Sending user notification event=%s action=%s user_uuid=%s changes=%s",
         event,
         action,
-        user_uuid
+        user_uuid,
+        len(changes) if changes else 0
     )
     
     await send_user_notification(
         bot=bot,
         action=action,
         user_info=user_data,
-        old_user_info=None,
-        event_type=event,  # Передаем оригинальный тип события
+        old_user_info=old_user_info,
+        changes=changes,
+        event_type=event,
     )
 
 
-async def _handle_node_event(bot: Bot, event: str, event_data: dict) -> None:
-    """Обрабатывает события нод."""
-    logger.info("Sending node notification event=%s", event)
-    
+async def _handle_node_event(bot: Bot, event: str, event_data: dict, diff_result: dict = None) -> None:
+    """Обрабатывает события нод с поддержкой diff."""
     # Нормализуем структуру данных
     if "response" not in event_data:
         node_data = {"response": event_data}
     else:
         node_data = event_data
     
+    # Извлекаем данные из diff_result
+    old_node_data = None
+    changes = None
+    if diff_result:
+        old_node_data = diff_result.get("old_data")
+        changes = diff_result.get("changes")
+    
+    logger.info(
+        "Sending node notification event=%s changes=%s",
+        event,
+        len(changes) if changes else 0
+    )
+    
     await send_node_notification(
         bot=bot,
         event=event,
         node_data=node_data,
+        old_node_data=old_node_data,
+        changes=changes,
     )
 
 

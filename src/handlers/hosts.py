@@ -14,6 +14,7 @@ from src.keyboards.hosts_menu import hosts_menu_keyboard
 from src.keyboards.main_menu import main_menu_keyboard
 from src.keyboards.navigation import NavTarget, input_keyboard, nav_keyboard, nav_row
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from src.services.database import db_service
 from src.utils.formatters import build_host_summary
 from src.utils.logger import logger
 
@@ -45,12 +46,27 @@ def _host_inbounds_keyboard(inbounds: list[dict]) -> InlineKeyboardMarkup:
 
 
 async def _fetch_hosts_text() -> str:
-    """Получает текст со списком хостов."""
+    """Получает текст со списком хостов (из БД, fallback на API)."""
     try:
-        data = await api_client.get_hosts()
-        hosts = data.get("response", [])
+        hosts = []
+        
+        # Сначала пробуем получить из БД
+        if db_service.is_connected:
+            try:
+                hosts = await db_service.get_all_hosts()
+                logger.debug("Fetched %d hosts from database", len(hosts))
+            except Exception as e:
+                logger.warning("DB fetch failed, fallback to API: %s", e)
+                hosts = []
+        
+        # Fallback на API если БД пуста или недоступна
+        if not hosts:
+            data = await api_client.get_hosts()
+            hosts = data.get("response", [])
+        
         if not hosts:
             return _("host.list_empty")
+        
         sorted_hosts = sorted(hosts, key=lambda h: h.get("viewPosition", 0))
         total = len(hosts)
         lines = [_("host.list_title").format(total=total, page=1, pages=1)]
@@ -85,10 +101,24 @@ def _get_hosts_page(user_id: int | None) -> int:
 
 
 async def _fetch_hosts_with_keyboard(user_id: int | None = None, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
-    """Получает список хостов с клавиатурой для редактирования с пагинацией и фильтрацией."""
+    """Получает список хостов с клавиатурой для редактирования с пагинацией и фильтрацией (из БД)."""
     try:
-        data = await api_client.get_hosts()
-        hosts = data.get("response", [])
+        hosts = []
+        
+        # Сначала пробуем получить из БД
+        if db_service.is_connected:
+            try:
+                hosts = await db_service.get_all_hosts()
+                logger.debug("Fetched %d hosts from database for keyboard", len(hosts))
+            except Exception as e:
+                logger.warning("DB fetch failed, fallback to API: %s", e)
+                hosts = []
+        
+        # Fallback на API если БД пуста или недоступна
+        if not hosts:
+            data = await api_client.get_hosts()
+            hosts = data.get("response", [])
+        
         if not hosts:
             return _("host.list_empty"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_MENU)])
 
@@ -113,7 +143,7 @@ async def _fetch_hosts_with_keyboard(user_id: int | None = None, page: int = 0) 
             sorted_hosts = filtered_hosts
 
         # Вычисляем статистику (по всем хостам, не отфильтрованным)
-        all_hosts = data.get("response", [])
+        all_hosts = hosts
         total_all_hosts = len(all_hosts)
         enabled_hosts = sum(1 for h in all_hosts if not h.get("isDisabled"))
         disabled_hosts = total_all_hosts - enabled_hosts

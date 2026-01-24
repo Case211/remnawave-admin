@@ -32,6 +32,7 @@ async def send_user_notification(
     action: str,  # "created", "updated", "deleted", "expired", "expires_in_*", etc.
     user_info: dict,
     old_user_info: dict | None = None,
+    changes: list | None = None,  # Список изменений из sync_service
     event_type: str | None = None,  # Оригинальный тип события из webhook
 ) -> None:
     """Отправляет уведомление о действии с пользователем в Telegram топик."""
@@ -259,6 +260,13 @@ async def send_user_notification(
             else:
                 lines.append(f"   <code>{_esc(description)}</code>")
         
+        # Секция изменений (если есть changes из sync_service)
+        if changes and action == "updated":
+            lines.append("")
+            lines.append("📋 <b>Изменения</b>")
+            for change in changes:
+                lines.append(f"   {_esc(change)}")
+        
         text = "\n".join(lines)
         
         # Отправляем в топик
@@ -322,8 +330,10 @@ async def send_node_notification(
     bot: Bot,
     event: str,
     node_data: dict,
+    old_node_data: dict | None = None,
+    changes: list | None = None,
 ) -> None:
-    """Отправляет уведомление о событии с нодой."""
+    """Отправляет уведомление о событии с нодой с поддержкой изменений."""
     settings = get_settings()
     
     if not settings.notifications_chat_id:
@@ -372,6 +382,13 @@ async def send_node_notification(
         traffic_limit = node_info.get("trafficLimitBytes")
         if traffic_limit:
             lines.append(f"📶 <b>Лимит трафика:</b> <code>{format_bytes(traffic_limit)}</code>")
+        
+        # Секция изменений
+        if changes and event == "node.modified":
+            lines.append("")
+            lines.append("📋 <b>Изменения</b>")
+            for change in changes:
+                lines.append(f"   {_esc(change)}")
         
         text = "\n".join(lines)
         
