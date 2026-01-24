@@ -11,6 +11,7 @@ def nodes_list_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_("node.list"), callback_data="nodes:list")],
             [InlineKeyboardButton(text=_("node.create"), callback_data="nodes:create")],
             [InlineKeyboardButton(text=_("node.update"), callback_data="nodes:update")],
+            [InlineKeyboardButton(text=_("actions.refresh"), callback_data="nodes:refresh")],
             nav_row(NavTarget.NODES_MENU),
         ]
     )

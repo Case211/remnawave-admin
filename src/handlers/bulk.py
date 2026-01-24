@@ -14,8 +14,6 @@ from src.services.api_client import ApiClientError, UnauthorizedError, api_clien
 from src.utils.logger import logger
 from src.utils.notifications import send_user_notification
 
-# Временные импорты из других модулей
-# TODO: Импортировать _fetch_hosts_text из hosts.py после завершения рефакторинга
 from src.handlers.hosts import _fetch_hosts_text
 
 router = Router(name="bulk")

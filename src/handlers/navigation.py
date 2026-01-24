@@ -5,7 +5,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 
-from src.handlers.common import _clear_user_state, _get_target_user_id, _not_admin, _send_clean_message
+from src.handlers.common import _clear_user_state, _edit_text_safe, _get_target_user_id, _not_admin, _send_clean_message
 from src.handlers.state import (
     PENDING_INPUT,
     SUBS_PAGE_BY_USER,
@@ -44,7 +44,7 @@ async def _fetch_main_menu_text() -> str:
     from aiogram import Bot
     from aiogram.fsm.context import FSMContext
     
-    panel_status = "🟢"
+    panel_status = ""
     panel_status_text = ""
     
     # Проверяем статус панели через health checker, если доступен
@@ -298,6 +298,16 @@ async def cb_nav_home(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     await _navigate(callback, NavTarget.MAIN_MENU)
+
+
+@router.callback_query(F.data == "menu:refresh")
+async def cb_menu_refresh(callback: CallbackQuery) -> None:
+    """Обработчик кнопки 'Обновить' в главном меню."""
+    if await _not_admin(callback):
+        return
+    await callback.answer(_("node.list_updated"), show_alert=False)
+    menu_text = await _fetch_main_menu_text()
+    await _edit_text_safe(callback.message, menu_text, reply_markup=main_menu_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("nav:back:"))

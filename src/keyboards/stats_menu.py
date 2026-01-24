@@ -10,6 +10,7 @@ def stats_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_("stats.panel_stats"), callback_data="stats:panel")],
             [InlineKeyboardButton(text=_("stats.server_stats"), callback_data="stats:server")],
             [InlineKeyboardButton(text=_("stats.traffic_stats"), callback_data="stats:traffic")],
+            [InlineKeyboardButton(text=_("actions.refresh"), callback_data="stats:refresh")],
             nav_row(NavTarget.SYSTEM_MENU),
         ]
     )

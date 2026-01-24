@@ -377,8 +377,42 @@ async def cb_token_actions(callback: CallbackQuery) -> None:
     _prefix, token_uuid, action = callback.data.split(":")
     try:
         if action == "delete":
+            # Показываем подтверждение перед удалением
+            try:
+                tokens_data = await api_client.get_tokens()
+                tokens = tokens_data.get("response", {}).get("apiKeys", [])
+                token = next((t for t in tokens if t.get("uuid") == token_uuid), None)
+                token_name = token.get("name", "Unknown") if token else "Unknown"
+                from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=_("token.delete_confirm_yes"),
+                            callback_data=f"token:{token_uuid}:delete_confirm"
+                        ),
+                        InlineKeyboardButton(
+                            text=_("token.delete_confirm_no"),
+                            callback_data=f"token:{token_uuid}:cancel"
+                        )
+                    ]
+                ])
+                await callback.message.edit_text(
+                    _("token.delete_confirm").format(name=token_name),
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
+                )
+                return
+            except Exception:
+                logger.exception("Failed to get token for delete confirmation")
+                await callback.answer(_("errors.generic"), show_alert=True)
+                return
+        elif action == "delete_confirm":
+            # Подтвержденное удаление
             await api_client.delete_token(token_uuid)
             await callback.message.edit_text(_("token.deleted"), reply_markup=main_menu_keyboard())
+        elif action == "cancel":
+            # Отмена - просто возвращаемся к списку токенов
+            await _show_tokens(callback, reply_markup=resources_menu_keyboard())
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
     except UnauthorizedError:
@@ -418,8 +452,47 @@ async def cb_template_actions(callback: CallbackQuery) -> None:
     _prefix, tpl_uuid, action = parts
     try:
         if action == "delete":
+            # Показываем подтверждение перед удалением
+            try:
+                data = await api_client.get_template(tpl_uuid)
+                template = data.get("response", data)
+                template_name = template.get("name", "Unknown")
+                from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=_("template.delete_confirm_yes"),
+                            callback_data=f"template:{tpl_uuid}:delete_confirm"
+                        ),
+                        InlineKeyboardButton(
+                            text=_("template.delete_confirm_no"),
+                            callback_data=f"template:{tpl_uuid}:cancel"
+                        )
+                    ]
+                ])
+                await callback.message.edit_text(
+                    _("template.delete_confirm").format(name=template_name),
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
+                )
+                return
+            except Exception:
+                logger.exception("Failed to get template for delete confirmation")
+                await callback.answer(_("errors.generic"), show_alert=True)
+                return
+        elif action == "delete_confirm":
+            # Подтвержденное удаление
             await api_client.delete_template(tpl_uuid)
             await _send_templates(callback)
+        elif action == "cancel":
+            # Отмена - возвращаемся к деталям шаблона
+            try:
+                data = await api_client.get_template(tpl_uuid)
+                template = data.get("response", data)
+                text = build_template_summary(template, _)
+                await _edit_text_safe(callback.message, text, reply_markup=template_actions_keyboard(tpl_uuid))
+            except Exception:
+                await _send_templates(callback)
         elif action == "update_json":
             PENDING_INPUT[callback.from_user.id] = {"action": "template_update_json", "uuid": tpl_uuid}
             await callback.message.edit_text(_("template.prompt_update_json"), reply_markup=template_actions_keyboard(tpl_uuid))
@@ -475,8 +548,42 @@ async def cb_snippet_actions(callback: CallbackQuery) -> None:
     _prefix, name, action = callback.data.split(":")
     try:
         if action == "delete":
+            # Показываем подтверждение перед удалением
+            from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=_("snippet.delete_confirm_yes"),
+                        callback_data=f"snippet:{name}:delete_confirm"
+                    ),
+                    InlineKeyboardButton(
+                        text=_("snippet.delete_confirm_no"),
+                        callback_data=f"snippet:{name}:cancel"
+                    )
+                ]
+            ])
+            await callback.message.edit_text(
+                _("snippet.delete_confirm").format(name=name),
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+            return
+        elif action == "delete_confirm":
+            # Подтвержденное удаление
             await api_client.delete_snippet(name)
             await callback.message.edit_text(_("snippet.deleted"), reply_markup=main_menu_keyboard())
+        elif action == "cancel":
+            # Отмена - возвращаемся к деталям сниппета
+            try:
+                data = await api_client.get_snippet(name)
+                snippet = data.get("response", data)
+                content = snippet.get("content", "")
+                text = _("snippet.detail").format(name=name, content=content)
+                from src.keyboards.snippet_actions import snippet_actions_keyboard
+                await _edit_text_safe(callback.message, text, reply_markup=snippet_actions_keyboard(name))
+            except Exception:
+                text = await _fetch_snippets_text()
+                await _edit_text_safe(callback.message, text, reply_markup=resources_menu_keyboard())
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
     except UnauthorizedError:

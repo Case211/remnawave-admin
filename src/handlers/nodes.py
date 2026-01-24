@@ -906,12 +906,14 @@ async def cb_nodes_actions(callback: CallbackQuery) -> None:
     else:
         action = parts[1] if len(parts) > 1 else None
 
-    if action == "list":
+    if action == "list" or action == "refresh":
         # Обновляем список нод
         try:
             text, keyboard = await _fetch_nodes_with_keyboard()
             try:
                 await callback.message.edit_text(text, reply_markup=keyboard)
+                if action == "refresh":
+                    await callback.answer(_("node.list_updated"), show_alert=False)
             except TelegramBadRequest as e:
                 # Если сообщение не изменилось, просто показываем уведомление
                 if "message is not modified" in str(e):

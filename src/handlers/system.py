@@ -13,8 +13,6 @@ from src.services.api_client import ApiClientError, UnauthorizedError, api_clien
 from src.utils.formatters import build_bandwidth_stats, format_bytes, format_datetime, format_uptime
 from src.utils.logger import logger
 
-# Временные импорты из других модулей
-# TODO: Импортировать _fetch_nodes_text из nodes.py после завершения рефакторинга
 from src.handlers.nodes import _fetch_nodes_text
 
 router = Router(name="system")
@@ -340,6 +338,17 @@ async def cb_stats_type(callback: CallbackQuery) -> None:
         await _edit_text_safe(callback.message, text, reply_markup=stats_period_keyboard(), parse_mode="Markdown")
     else:
         await callback.answer(_("errors.generic"), show_alert=True)
+
+
+@router.callback_query(F.data == "stats:refresh")
+async def cb_stats_refresh(callback: CallbackQuery) -> None:
+    """Обработчик кнопки 'Обновить' в меню статистики."""
+    if await _not_admin(callback):
+        return
+    await callback.answer(_("node.list_updated"), show_alert=False)
+    # Обновляем последний просмотренный тип статистики или показываем меню
+    text = _("stats.menu_title")
+    await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
 
 
 @router.callback_query(F.data == "menu:system_nodes")

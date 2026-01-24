@@ -13,6 +13,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=_("actions.menu_billing"), callback_data="menu:section:billing")],
             [InlineKeyboardButton(text=_("actions.menu_bulk"), callback_data="menu:section:bulk")],
             [InlineKeyboardButton(text=_("actions.menu_system"), callback_data="menu:section:system")],
+            [InlineKeyboardButton(text=_("actions.refresh"), callback_data="menu:refresh")],
         ]
     )
 

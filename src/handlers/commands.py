@@ -43,8 +43,6 @@ from src.handlers.users import (
     _start_user_search_flow,
 )
 
-# Временные импорты из basic.py - будут перенесены
-# TODO: Перенести эти функции в billing.py
 from src.handlers.billing import _handle_billing_history_input, _handle_billing_nodes_input, _handle_provider_input
 
 router = Router(name="commands")

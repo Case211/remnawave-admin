@@ -1147,6 +1147,37 @@ async def cb_user_actions(callback: CallbackQuery) -> None:
         elif action == "reset":
             await api_client.reset_user_traffic(user_uuid)
         elif action == "revoke":
+            # Показываем подтверждение перед отзывом подписки
+            try:
+                user = await api_client.get_user_by_uuid(user_uuid)
+                user_info = user.get("response", user)
+                username = user_info.get("username", "Unknown")
+                from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=_("actions.revoke_confirm_yes"),
+                            callback_data=f"user:{user_uuid}:revoke_confirm"
+                        ),
+                        InlineKeyboardButton(
+                            text=_("actions.revoke_confirm_no"),
+                            callback_data=f"user:{user_uuid}"
+                        )
+                    ]
+                ])
+                await _edit_text_safe(
+                    callback.message,
+                    _("actions.revoke_confirm").format(username=username),
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
+                )
+                return
+            except Exception:
+                logger.exception("Failed to get user for revoke confirmation")
+                await callback.answer(_("errors.generic"), show_alert=True)
+                return
+        elif action == "revoke_confirm":
+            # Подтвержденное отзыв подписки
             await api_client.revoke_user_subscription(user_uuid)
         else:
             await callback.answer(_("errors.generic"), show_alert=True)

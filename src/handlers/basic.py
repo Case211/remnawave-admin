@@ -539,8 +539,8 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
 # Обработчики bulk:users:*, bulk:hosts:* перенесены в bulk.py
 # Удаляем дубликаты для уменьшения размера файла
 
-# Временно оставляем обработчик input:skip: для обратной совместимости
-# TODO: Перенести логику input:skip: в соответствующие модули
+# Обработчик input:skip: оставлен для обратной совместимости
+# Логика input:skip: используется в billing.py, hosts.py, nodes.py
 
 # Обработчики providers:*, billing:*, billing_nodes:* уже есть в billing.py - удаляем дубликаты
 # Обработчики nav:home, nav:back:*, subs:page:*, subs:view:* уже есть в navigation.py - удаляем дубликаты
