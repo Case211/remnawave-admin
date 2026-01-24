@@ -4,6 +4,7 @@ import httpx
 from httpx import HTTPStatusError
 
 from src.config import get_settings
+from src.services.cache import CacheKeys, CacheManager, cache
 from src.utils.logger import logger
 
 
@@ -469,21 +470,62 @@ class RemnawaveApiClient:
         return await self._post("/api/users", json=payload)
 
     # --- System ---
-    async def get_health(self) -> dict:
-        return await self._get("/api/system/health")
+    async def get_health(self, use_cache: bool = True) -> dict:
+        """Получает состояние системы с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.HEALTH)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/system/health")
+        await cache.set(CacheKeys.HEALTH, data, CacheManager.HEALTH_TTL)
+        return data
 
-    async def get_stats(self) -> dict:
-        return await self._get("/api/system/stats")
+    async def get_stats(self, use_cache: bool = True) -> dict:
+        """Получает статистику системы с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.STATS)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/system/stats")
+        await cache.set(CacheKeys.STATS, data, CacheManager.STATS_TTL)
+        return data
 
-    async def get_bandwidth_stats(self) -> dict:
-        return await self._get("/api/system/stats/bandwidth")
+    async def get_bandwidth_stats(self, use_cache: bool = True) -> dict:
+        """Получает статистику пропускной способности с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.BANDWIDTH_STATS)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/system/stats/bandwidth")
+        await cache.set(CacheKeys.BANDWIDTH_STATS, data, CacheManager.STATS_TTL)
+        return data
 
     # --- Nodes ---
-    async def get_nodes(self) -> dict:
-        return await self._get("/api/nodes")
+    async def get_nodes(self, use_cache: bool = True) -> dict:
+        """Получает список нод с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.NODES)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/nodes")
+        await cache.set(CacheKeys.NODES, data, CacheManager.NODES_TTL)
+        return data
 
-    async def get_node(self, node_uuid: str) -> dict:
-        return await self._get(f"/api/nodes/{node_uuid}")
+    async def get_node(self, node_uuid: str, use_cache: bool = True) -> dict:
+        """Получает данные ноды с кэшированием."""
+        cache_key = CacheKeys.node(node_uuid)
+        if use_cache:
+            cached = await cache.get(cache_key)
+            if cached is not None:
+                return cached
+        
+        data = await self._get(f"/api/nodes/{node_uuid}")
+        await cache.set(cache_key, data, CacheManager.NODES_TTL)
+        return data
 
     async def create_node(
         self,
@@ -528,19 +570,39 @@ class RemnawaveApiClient:
             payload["consumptionMultiplier"] = consumption_multiplier
         if tags:
             payload["tags"] = tags
-        return await self._post("/api/nodes", json=payload)
+        result = await self._post("/api/nodes", json=payload)
+        # Инвалидируем кэш списка нод после создания
+        await cache.invalidate(CacheKeys.NODES)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def enable_node(self, node_uuid: str) -> dict:
-        return await self._post(f"/api/nodes/{node_uuid}/actions/enable")
+        result = await self._post(f"/api/nodes/{node_uuid}/actions/enable")
+        # Инвалидируем кэш ноды и списка нод
+        await cache.invalidate(CacheKeys.node(node_uuid))
+        await cache.invalidate(CacheKeys.NODES)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def disable_node(self, node_uuid: str) -> dict:
-        return await self._post(f"/api/nodes/{node_uuid}/actions/disable")
+        result = await self._post(f"/api/nodes/{node_uuid}/actions/disable")
+        await cache.invalidate(CacheKeys.node(node_uuid))
+        await cache.invalidate(CacheKeys.NODES)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def restart_node(self, node_uuid: str) -> dict:
-        return await self._post(f"/api/nodes/{node_uuid}/actions/restart")
+        result = await self._post(f"/api/nodes/{node_uuid}/actions/restart")
+        await cache.invalidate(CacheKeys.node(node_uuid))
+        await cache.invalidate(CacheKeys.NODES)
+        return result
 
     async def reset_node_traffic(self, node_uuid: str) -> dict:
-        return await self._post(f"/api/nodes/{node_uuid}/actions/reset-traffic")
+        result = await self._post(f"/api/nodes/{node_uuid}/actions/reset-traffic")
+        await cache.invalidate(CacheKeys.node(node_uuid))
+        await cache.invalidate(CacheKeys.NODES)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def update_node(
         self,
@@ -588,14 +650,23 @@ class RemnawaveApiClient:
             payload["consumptionMultiplier"] = consumption_multiplier
         if tags is not None:
             payload["tags"] = tags
-        return await self._patch("/api/nodes", json=payload)
+        result = await self._patch("/api/nodes", json=payload)
+        # Инвалидируем кэш ноды и списка нод
+        await cache.invalidate(CacheKeys.node(node_uuid))
+        await cache.invalidate(CacheKeys.NODES)
+        return result
 
     async def delete_node(self, node_uuid: str) -> dict:
         """Удаление ноды."""
         try:
             response = await self._client.delete(f"/api/nodes/{node_uuid}")
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            # Инвалидируем кэш ноды и списка нод
+            await cache.invalidate(CacheKeys.node(node_uuid))
+            await cache.invalidate(CacheKeys.NODES)
+            await cache.invalidate(CacheKeys.STATS)
+            return result
         except HTTPStatusError as exc:
             status = exc.response.status_code
             if status in (401, 403):
@@ -619,17 +690,45 @@ class RemnawaveApiClient:
         )
 
     # --- Hosts ---
-    async def get_hosts(self) -> dict:
-        return await self._get("/api/hosts")
+    async def get_hosts(self, use_cache: bool = True) -> dict:
+        """Получает список хостов с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.HOSTS)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/hosts")
+        await cache.set(CacheKeys.HOSTS, data, CacheManager.HOSTS_TTL)
+        return data
 
-    async def get_host(self, host_uuid: str) -> dict:
-        return await self._get(f"/api/hosts/{host_uuid}")
+    async def get_host(self, host_uuid: str, use_cache: bool = True) -> dict:
+        """Получает данные хоста с кэшированием."""
+        cache_key = CacheKeys.host(host_uuid)
+        if use_cache:
+            cached = await cache.get(cache_key)
+            if cached is not None:
+                return cached
+        
+        data = await self._get(f"/api/hosts/{host_uuid}")
+        await cache.set(cache_key, data, CacheManager.HOSTS_TTL)
+        return data
 
     async def enable_hosts(self, host_uuids: list[str]) -> dict:
-        return await self._post("/api/hosts/bulk/enable", json={"uuids": host_uuids})
+        result = await self._post("/api/hosts/bulk/enable", json={"uuids": host_uuids})
+        # Инвалидируем кэш хостов
+        await cache.invalidate(CacheKeys.HOSTS)
+        for uuid in host_uuids:
+            await cache.invalidate(CacheKeys.host(uuid))
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def disable_hosts(self, host_uuids: list[str]) -> dict:
-        return await self._post("/api/hosts/bulk/disable", json={"uuids": host_uuids})
+        result = await self._post("/api/hosts/bulk/disable", json={"uuids": host_uuids})
+        await cache.invalidate(CacheKeys.HOSTS)
+        for uuid in host_uuids:
+            await cache.invalidate(CacheKeys.host(uuid))
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def create_host(
         self,
@@ -652,7 +751,11 @@ class RemnawaveApiClient:
         }
         if tag:
             payload["tag"] = tag
-        return await self._post("/api/hosts", json=payload)
+        result = await self._post("/api/hosts", json=payload)
+        # Инвалидируем кэш хостов после создания
+        await cache.invalidate(CacheKeys.HOSTS)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def update_host(
         self,
@@ -675,7 +778,11 @@ class RemnawaveApiClient:
             payload["tag"] = tag
         if inbound is not None:
             payload["inbound"] = inbound
-        return await self._patch("/api/hosts", json=payload)
+        result = await self._patch("/api/hosts", json=payload)
+        # Инвалидируем кэш хоста и списка хостов
+        await cache.invalidate(CacheKeys.host(host_uuid))
+        await cache.invalidate(CacheKeys.HOSTS)
+        return result
 
     # --- Subscriptions ---
     async def get_subscription_info(self, short_uuid: str) -> dict:
@@ -840,18 +947,42 @@ class RemnawaveApiClient:
             raise ApiClientError from exc
 
     # --- Config profiles ---
-    async def get_config_profiles(self) -> dict:
-        return await self._get("/api/config-profiles")
+    async def get_config_profiles(self, use_cache: bool = True) -> dict:
+        """Получает список профилей конфигурации с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.CONFIG_PROFILES)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/config-profiles")
+        await cache.set(CacheKeys.CONFIG_PROFILES, data, CacheManager.CONFIG_PROFILES_TTL)
+        return data
 
     async def get_config_profile_computed(self, profile_uuid: str) -> dict:
         return await self._get(f"/api/config-profiles/{profile_uuid}/computed-config")
 
     # --- Infra billing ---
-    async def get_infra_billing_history(self) -> dict:
-        return await self._get("/api/infra-billing/history")
+    async def get_infra_billing_history(self, use_cache: bool = True) -> dict:
+        """Получает историю биллинга с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.BILLING_HISTORY)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/infra-billing/history")
+        await cache.set(CacheKeys.BILLING_HISTORY, data, CacheManager.DEFAULT_TTL)
+        return data
 
-    async def get_infra_providers(self) -> dict:
-        return await self._get("/api/infra-billing/providers")
+    async def get_infra_providers(self, use_cache: bool = True) -> dict:
+        """Получает список провайдеров с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.PROVIDERS)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/infra-billing/providers")
+        await cache.set(CacheKeys.PROVIDERS, data, CacheManager.PROVIDERS_TTL)
+        return data
 
     async def get_infra_provider(self, provider_uuid: str) -> dict:
         return await self._get(f"/api/infra-billing/providers/{provider_uuid}")
@@ -864,7 +995,9 @@ class RemnawaveApiClient:
             payload["faviconLink"] = favicon_link
         if login_url:
             payload["loginUrl"] = login_url
-        return await self._post("/api/infra-billing/providers", json=payload)
+        result = await self._post("/api/infra-billing/providers", json=payload)
+        await cache.invalidate(CacheKeys.PROVIDERS)
+        return result
 
     async def update_infra_provider(
         self,
@@ -880,13 +1013,17 @@ class RemnawaveApiClient:
             payload["faviconLink"] = favicon_link
         if login_url is not None:
             payload["loginUrl"] = login_url
-        return await self._patch("/api/infra-billing/providers", json=payload)
+        result = await self._patch("/api/infra-billing/providers", json=payload)
+        await cache.invalidate(CacheKeys.PROVIDERS)
+        return result
 
     async def delete_infra_provider(self, provider_uuid: str) -> dict:
         try:
             response = await self._client.delete(f"/api/infra-billing/providers/{provider_uuid}")
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            await cache.invalidate(CacheKeys.PROVIDERS)
+            return result
         except HTTPStatusError as exc:
             status = exc.response.status_code
             if status == 401:
@@ -901,15 +1038,19 @@ class RemnawaveApiClient:
             raise ApiClientError from exc
 
     async def create_infra_billing_record(self, provider_uuid: str, amount: float, billed_at: str) -> dict:
-        return await self._post(
+        result = await self._post(
             "/api/infra-billing/history", json={"providerUuid": provider_uuid, "amount": amount, "billedAt": billed_at}
         )
+        await cache.invalidate(CacheKeys.BILLING_HISTORY)
+        return result
 
     async def delete_infra_billing_record(self, record_uuid: str) -> dict:
         try:
             response = await self._client.delete(f"/api/infra-billing/history/{record_uuid}")
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            await cache.invalidate(CacheKeys.BILLING_HISTORY)
+            return result
         except HTTPStatusError as exc:
             status = exc.response.status_code
             if status == 401:
@@ -931,16 +1072,22 @@ class RemnawaveApiClient:
         payload: dict[str, object] = {"providerUuid": provider_uuid, "nodeUuid": node_uuid}
         if next_billing_at:
             payload["nextBillingAt"] = next_billing_at
-        return await self._post("/api/infra-billing/nodes", json=payload)
+        result = await self._post("/api/infra-billing/nodes", json=payload)
+        await cache.invalidate(CacheKeys.BILLING_NODES)
+        return result
 
     async def update_infra_billing_nodes(self, uuids: list[str], next_billing_at: str) -> dict:
-        return await self._patch("/api/infra-billing/nodes", json={"uuids": uuids, "nextBillingAt": next_billing_at})
+        result = await self._patch("/api/infra-billing/nodes", json={"uuids": uuids, "nextBillingAt": next_billing_at})
+        await cache.invalidate(CacheKeys.BILLING_NODES)
+        return result
 
     async def delete_infra_billing_node(self, record_uuid: str) -> dict:
         try:
             response = await self._client.delete(f"/api/infra-billing/nodes/{record_uuid}")
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            await cache.invalidate(CacheKeys.BILLING_NODES)
+            return result
         except HTTPStatusError as exc:
             status = exc.response.status_code
             if status == 401:
@@ -958,54 +1105,102 @@ class RemnawaveApiClient:
 
     # --- Users bulk ---
     async def bulk_reset_traffic_all_users(self) -> dict:
-        return await self._post("/api/users/bulk/all/reset-traffic")
+        result = await self._post("/api/users/bulk/all/reset-traffic")
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_delete_users_by_status(self, status: str) -> dict:
-        return await self._post("/api/users/bulk/delete-by-status", json={"status": status})
+        result = await self._post("/api/users/bulk/delete-by-status", json={"status": status})
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_delete_users(self, uuids: list[str]) -> dict:
-        return await self._post("/api/users/bulk/delete", json={"uuids": uuids})
+        result = await self._post("/api/users/bulk/delete", json={"uuids": uuids})
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_revoke_subscriptions(self, uuids: list[str]) -> dict:
-        return await self._post("/api/users/bulk/revoke-subscription", json={"uuids": uuids})
+        result = await self._post("/api/users/bulk/revoke-subscription", json={"uuids": uuids})
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_reset_traffic_users(self, uuids: list[str]) -> dict:
-        return await self._post("/api/users/bulk/reset-traffic", json={"uuids": uuids})
+        result = await self._post("/api/users/bulk/reset-traffic", json={"uuids": uuids})
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_extend_users(self, uuids: list[str], days: int) -> dict:
-        return await self._post("/api/users/bulk/extend-expiration-date", json={"uuids": uuids, "extendDays": days})
+        result = await self._post("/api/users/bulk/extend-expiration-date", json={"uuids": uuids, "extendDays": days})
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_extend_all_users(self, days: int) -> dict:
-        return await self._post("/api/users/bulk/all/extend-expiration-date", json={"extendDays": days})
+        result = await self._post("/api/users/bulk/all/extend-expiration-date", json={"extendDays": days})
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_update_users_status(self, uuids: list[str], status: str) -> dict:
-        return await self._post("/api/users/bulk/update", json={"uuids": uuids, "fields": {"status": status}})
+        result = await self._post("/api/users/bulk/update", json={"uuids": uuids, "fields": {"status": status}})
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     # --- Infra billing nodes ---
-    async def get_infra_billing_nodes(self) -> dict:
-        return await self._get("/api/infra-billing/nodes")
+    async def get_infra_billing_nodes(self, use_cache: bool = True) -> dict:
+        """Получает список биллинга нод с кэшированием."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.BILLING_NODES)
+            if cached is not None:
+                return cached
+        
+        data = await self._get("/api/infra-billing/nodes")
+        await cache.set(CacheKeys.BILLING_NODES, data, CacheManager.DEFAULT_TTL)
+        return data
 
     # --- Hosts bulk ---
     async def bulk_enable_hosts(self, uuids: list[str]) -> dict:
-        return await self._post("/api/hosts/bulk/enable", json={"uuids": uuids})
+        result = await self._post("/api/hosts/bulk/enable", json={"uuids": uuids})
+        await cache.invalidate(CacheKeys.HOSTS)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_disable_hosts(self, uuids: list[str]) -> dict:
-        return await self._post("/api/hosts/bulk/disable", json={"uuids": uuids})
+        result = await self._post("/api/hosts/bulk/disable", json={"uuids": uuids})
+        await cache.invalidate(CacheKeys.HOSTS)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def bulk_delete_hosts(self, uuids: list[str]) -> dict:
-        return await self._post("/api/hosts/bulk/delete", json={"uuids": uuids})
+        result = await self._post("/api/hosts/bulk/delete", json={"uuids": uuids})
+        await cache.invalidate(CacheKeys.HOSTS)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     # --- Nodes bulk ---
     async def bulk_nodes_profile_modification(
         self, node_uuids: list[str], profile_uuid: str, inbound_uuids: list[str]
     ) -> dict:
-        return await self._post(
+        result = await self._post(
             "/api/nodes/bulk-actions/profile-modification",
             json={
                 "uuids": node_uuids,
                 "configProfile": {"activeConfigProfileUuid": profile_uuid, "activeInbounds": inbound_uuids},
             },
         )
+        await cache.invalidate(CacheKeys.NODES)
+        await cache.invalidate_pattern("node:")
+        return result
+
+    # --- Cache management ---
+    async def invalidate_cache(self, key: str | None = None) -> None:
+        """Инвалидирует кэш. Если key не указан, очищает весь кэш."""
+        if key:
+            await cache.invalidate(key)
+        else:
+            await cache.invalidate_all()
+    
+    def get_cache_stats(self) -> dict:
+        """Возвращает статистику использования кэша."""
+        return cache.get_stats()
 
     async def close(self) -> None:
         await self._client.aclose()
