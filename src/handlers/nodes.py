@@ -70,7 +70,7 @@ async def _fetch_nodes_with_keyboard(user_id: int | None = None, page: int = 0) 
         data = await api_client.get_nodes()
         nodes = data.get("response", [])
         if not nodes:
-            return _("node.list_empty"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_LIST)])
+            return _("node.list_empty"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_MENU)])
 
         sorted_nodes = sorted(nodes, key=lambda n: n.get("viewPosition", 0))
 
@@ -140,17 +140,17 @@ async def _fetch_nodes_with_keyboard(user_id: int | None = None, page: int = 0) 
             if nav_buttons:
                 rows.append(nav_buttons)
 
-        # Добавляем кнопку "Назад" к списку нод
-        rows.append(nav_row(NavTarget.NODES_LIST))
+        # Добавляем кнопку "Назад" к меню нод
+        rows.append(nav_row(NavTarget.NODES_MENU))
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
         return "\n".join(lines), keyboard
     except UnauthorizedError:
-        return _("errors.unauthorized"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_LIST)])
+        return _("errors.unauthorized"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_MENU)])
     except ApiClientError as exc:
         logger.exception("⚠️ Nodes fetch failed")
         from src.handlers.common import _get_error_message
-        return _get_error_message(exc), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_LIST)])
+        return _get_error_message(exc), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_MENU)])
 
 
 async def _fetch_nodes_realtime_text() -> str:

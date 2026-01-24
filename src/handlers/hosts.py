@@ -90,7 +90,7 @@ async def _fetch_hosts_with_keyboard(user_id: int | None = None, page: int = 0) 
         data = await api_client.get_hosts()
         hosts = data.get("response", [])
         if not hosts:
-            return _("host.list_empty"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.HOSTS_MENU)])
+            return _("host.list_empty"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_MENU)])
 
         sorted_hosts = sorted(hosts, key=lambda h: h.get("viewPosition", 0))
 
@@ -148,16 +148,16 @@ async def _fetch_hosts_with_keyboard(user_id: int | None = None, page: int = 0) 
             if nav_buttons:
                 rows.append(nav_buttons)
 
-        # Добавляем только кнопку "Назад" к списку хостов
-        rows.append(nav_row(NavTarget.HOSTS_MENU))
+        # Добавляем кнопку "Назад" к меню нод/хостов/профилей
+        rows.append(nav_row(NavTarget.NODES_MENU))
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
         return "\n".join(lines), keyboard
     except UnauthorizedError:
-        return _("errors.unauthorized"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.HOSTS_MENU)])
+        return _("errors.unauthorized"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_MENU)])
     except ApiClientError:
         logger.exception("⚠️ Hosts fetch failed")
-        return _("errors.generic"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.HOSTS_MENU)])
+        return _("errors.generic"), InlineKeyboardMarkup(inline_keyboard=[nav_row(NavTarget.NODES_MENU)])
 
 
 async def _send_host_detail(target: Message | CallbackQuery, host_uuid: str, from_callback: bool = False) -> None:
