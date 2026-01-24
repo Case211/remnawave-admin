@@ -158,11 +158,39 @@ class SyncService:
             results["hosts"] = -1
         
         try:
-            # Sync config profiles (less frequently needed, but included in full sync)
+            # Sync config profiles
             results["config_profiles"] = await self.sync_config_profiles()
         except Exception as e:
             logger.error("Failed to sync config profiles: %s", e)
             results["config_profiles"] = -1
+        
+        try:
+            # Sync tokens
+            results["tokens"] = await self.sync_tokens()
+        except Exception as e:
+            logger.error("Failed to sync tokens: %s", e)
+            results["tokens"] = -1
+        
+        try:
+            # Sync templates
+            results["templates"] = await self.sync_templates()
+        except Exception as e:
+            logger.error("Failed to sync templates: %s", e)
+            results["templates"] = -1
+        
+        try:
+            # Sync snippets
+            results["snippets"] = await self.sync_snippets()
+        except Exception as e:
+            logger.error("Failed to sync snippets: %s", e)
+            results["snippets"] = -1
+        
+        try:
+            # Sync squads (internal and external)
+            results["squads"] = await self.sync_squads()
+        except Exception as e:
+            logger.error("Failed to sync squads: %s", e)
+            results["squads"] = -1
         
         logger.debug("Full sync completed: %s", results)
         return results
@@ -347,6 +375,190 @@ class SyncService:
             )
             raise
     
+    async def sync_tokens(self) -> int:
+        """
+        Sync all API tokens from API to database.
+        Returns number of synced tokens.
+        """
+        if not db_service.is_connected:
+            return 0
+        
+        try:
+            response = await api_client.get_tokens()
+            payload = response.get("response", {})
+            
+            # Handle different response formats
+            tokens = []
+            if isinstance(payload, list):
+                tokens = payload
+            elif isinstance(payload, dict):
+                tokens = payload.get("apiKeys") or payload.get("tokens") or []
+            
+            # Clear old tokens and insert new
+            await db_service.delete_all_tokens()
+            
+            total_synced = 0
+            for token in tokens:
+                try:
+                    await db_service.upsert_token({"response": token})
+                    total_synced += 1
+                except Exception as e:
+                    logger.warning("Failed to sync token %s: %s", token.get("uuid"), e)
+            
+            await db_service.update_sync_metadata(
+                key="tokens",
+                status="success",
+                records_synced=total_synced
+            )
+            
+            logger.debug("Synced %d tokens", total_synced)
+            return total_synced
+            
+        except Exception as e:
+            await db_service.update_sync_metadata(
+                key="tokens",
+                status="error",
+                error_message=str(e)
+            )
+            raise
+    
+    async def sync_templates(self) -> int:
+        """
+        Sync all subscription templates from API to database.
+        Returns number of synced templates.
+        """
+        if not db_service.is_connected:
+            return 0
+        
+        try:
+            response = await api_client.get_templates()
+            payload = response.get("response", {})
+            templates = payload.get("subscriptionTemplates", []) if isinstance(payload, dict) else []
+            
+            # Clear old templates and insert new
+            await db_service.delete_all_templates()
+            
+            total_synced = 0
+            for tpl in templates:
+                try:
+                    await db_service.upsert_template({"response": tpl})
+                    total_synced += 1
+                except Exception as e:
+                    logger.warning("Failed to sync template %s: %s", tpl.get("uuid"), e)
+            
+            await db_service.update_sync_metadata(
+                key="templates",
+                status="success",
+                records_synced=total_synced
+            )
+            
+            logger.debug("Synced %d templates", total_synced)
+            return total_synced
+            
+        except Exception as e:
+            await db_service.update_sync_metadata(
+                key="templates",
+                status="error",
+                error_message=str(e)
+            )
+            raise
+    
+    async def sync_snippets(self) -> int:
+        """
+        Sync all snippets from API to database.
+        Returns number of synced snippets.
+        """
+        if not db_service.is_connected:
+            return 0
+        
+        try:
+            response = await api_client.get_snippets()
+            payload = response.get("response", {})
+            snippets = payload.get("snippets", []) if isinstance(payload, dict) else []
+            
+            # Clear old snippets and insert new
+            await db_service.delete_all_snippets()
+            
+            total_synced = 0
+            for snippet in snippets:
+                try:
+                    await db_service.upsert_snippet({"response": snippet})
+                    total_synced += 1
+                except Exception as e:
+                    logger.warning("Failed to sync snippet %s: %s", snippet.get("name"), e)
+            
+            await db_service.update_sync_metadata(
+                key="snippets",
+                status="success",
+                records_synced=total_synced
+            )
+            
+            logger.debug("Synced %d snippets", total_synced)
+            return total_synced
+            
+        except Exception as e:
+            await db_service.update_sync_metadata(
+                key="snippets",
+                status="error",
+                error_message=str(e)
+            )
+            raise
+    
+    async def sync_squads(self) -> int:
+        """
+        Sync all squads (internal and external) from API to database.
+        Returns total number of synced squads.
+        """
+        if not db_service.is_connected:
+            return 0
+        
+        total_synced = 0
+        
+        # Sync internal squads
+        try:
+            response = await api_client.get_internal_squads()
+            payload = response.get("response", {})
+            squads = payload.get("internalSquads", []) if isinstance(payload, dict) else []
+            
+            await db_service.delete_all_internal_squads()
+            
+            for squad in squads:
+                try:
+                    await db_service.upsert_internal_squads({"response": [squad]})
+                    total_synced += 1
+                except Exception as e:
+                    logger.warning("Failed to sync internal squad %s: %s", squad.get("uuid"), e)
+                    
+        except Exception as e:
+            logger.warning("Failed to sync internal squads: %s", e)
+        
+        # Sync external squads
+        try:
+            response = await api_client.get_external_squads()
+            payload = response.get("response", {})
+            squads = payload.get("externalSquads", []) if isinstance(payload, dict) else []
+            
+            await db_service.delete_all_external_squads()
+            
+            for squad in squads:
+                try:
+                    await db_service.upsert_external_squads({"response": [squad]})
+                    total_synced += 1
+                except Exception as e:
+                    logger.warning("Failed to sync external squad %s: %s", squad.get("uuid"), e)
+                    
+        except Exception as e:
+            logger.warning("Failed to sync external squads: %s", e)
+        
+        await db_service.update_sync_metadata(
+            key="squads",
+            status="success",
+            records_synced=total_synced
+        )
+        
+        logger.debug("Synced %d squads (internal + external)", total_synced)
+        return total_synced
+    
     # ==================== Webhook Event Handlers with Diff ====================
     
     async def handle_webhook_event(self, event: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -405,16 +617,11 @@ class SyncService:
             return result
         
         # Get old data from DB before updating
+        # Данные из БД уже в формате API (через _db_row_to_api_format)
         old_db_record = await db_service.get_user_by_uuid(uuid)
-        if old_db_record:
-            # Extract raw_data as old_data
-            raw_data = old_db_record.get("raw_data")
-            if raw_data:
-                if isinstance(raw_data, str):
-                    import json
-                    result["old_data"] = json.loads(raw_data)
-                else:
-                    result["old_data"] = raw_data
+        if old_db_record and old_db_record.get("uuid"):
+            result["old_data"] = old_db_record
+            logger.debug("Found old user data in DB for diff: %s", uuid)
         
         if event == "user.deleted":
             await db_service.delete_user(uuid)
@@ -427,6 +634,7 @@ class SyncService:
             # Calculate changes if we have old data
             if result["old_data"]:
                 result["changes"] = _compare_user_data(result["old_data"], event_data)
+                logger.debug("Calculated %d changes for user %s", len(result["changes"]), uuid)
             else:
                 result["is_new"] = True
         
@@ -446,16 +654,10 @@ class SyncService:
             logger.warning("Node webhook event without UUID: %s", event)
             return result
         
-        # Get old data from DB
+        # Get old data from DB (уже в формате API)
         old_db_record = await db_service.get_node_by_uuid(uuid)
-        if old_db_record:
-            raw_data = old_db_record.get("raw_data")
-            if raw_data:
-                if isinstance(raw_data, str):
-                    import json
-                    result["old_data"] = json.loads(raw_data)
-                else:
-                    result["old_data"] = raw_data
+        if old_db_record and old_db_record.get("uuid"):
+            result["old_data"] = old_db_record
         
         if event == "node.deleted":
             await db_service.delete_node(uuid)
@@ -485,16 +687,10 @@ class SyncService:
             logger.warning("Host webhook event without UUID: %s", event)
             return result
         
-        # Get old data from DB
+        # Get old data from DB (уже в формате API)
         old_db_record = await db_service.get_host_by_uuid(uuid)
-        if old_db_record:
-            raw_data = old_db_record.get("raw_data")
-            if raw_data:
-                if isinstance(raw_data, str):
-                    import json
-                    result["old_data"] = json.loads(raw_data)
-                else:
-                    result["old_data"] = raw_data
+        if old_db_record and old_db_record.get("uuid"):
+            result["old_data"] = old_db_record
         
         if event == "host.deleted":
             await db_service.delete_host(uuid)
@@ -587,12 +783,38 @@ def _compare_user_data(old_data: Dict[str, Any], new_data: Dict[str, Any]) -> Li
         old_val = old_data.get(field)
         new_val = new_data.get(field)
         
-        if old_val != new_val:
+        # Нормализуем значения для сравнения (особенно даты)
+        old_normalized = _normalize_value(old_val)
+        new_normalized = _normalize_value(new_val)
+        
+        if old_normalized != new_normalized:
             old_display = formatter(old_val) if formatter and old_val else (old_val or "—")
             new_display = formatter(new_val) if formatter and new_val else (new_val or "—")
             changes.append(f"• {label}: {old_display} → {new_display}")
+            logger.debug("User diff: %s changed from %r to %r", field, old_val, new_val)
     
     return changes
+
+
+def _normalize_value(value):
+    """Нормализует значение для сравнения."""
+    if value is None:
+        return None
+    
+    # Нормализуем строки дат для сравнения (убираем микросекунды и Z)
+    if isinstance(value, str) and ('T' in value or '-' in value):
+        # Пытаемся нормализовать дату
+        try:
+            # Убираем микросекунды и Z для унифицированного сравнения
+            normalized = value.replace('Z', '+00:00')
+            # Парсим и форматируем обратно без микросекунд
+            from datetime import datetime
+            dt = datetime.fromisoformat(normalized)
+            return dt.strftime("%Y-%m-%dT%H:%M:%S")
+        except (ValueError, AttributeError):
+            pass
+    
+    return value
 
 
 def _compare_node_data(old_data: Dict[str, Any], new_data: Dict[str, Any]) -> List[str]:

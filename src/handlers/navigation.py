@@ -31,6 +31,7 @@ from src.keyboards.main_menu import (
 from src.keyboards.navigation import NavTarget, nav_keyboard, nav_row
 from src.keyboards.providers_menu import providers_menu_keyboard
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from src.services import data_access
 from src.services.database import db_service
 from src.utils.logger import logger
 
@@ -465,7 +466,7 @@ async def _navigate(target: Message | CallbackQuery, destination: str, is_back: 
         
         back_to = USER_DETAIL_BACK_TARGET.get(user_id, NavTarget.USERS_MENU)
         try:
-            user = await api_client.get_user_by_uuid(user_uuid)
+            user = await data_access.get_user_by_uuid_wrapped(user_uuid)
             await _send_user_summary(target, user, back_to=back_to)
         except Exception:
             logger.exception("Failed to navigate to user profile user_uuid=%s", user_uuid)
@@ -726,7 +727,7 @@ async def cb_subs_view(callback: CallbackQuery) -> None:
     # Fallback на API если не найден в БД
     if not user:
         try:
-            user = await api_client.get_user_by_uuid(user_uuid)
+            user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         except UnauthorizedError:
             await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
             return

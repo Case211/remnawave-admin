@@ -37,6 +37,7 @@ from src.keyboards.hwid_devices import hwid_devices_keyboard
 from src.keyboards.hwid_menu import hwid_management_keyboard
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
 from src.services.database import db_service
+from src.services import data_access
 from src.utils.formatters import (
     _esc,
     build_created_user,
@@ -607,12 +608,12 @@ async def _apply_user_update(target: Message | CallbackQuery, user_uuid: str, pa
         # Получаем старое значение пользователя перед обновлением
         old_user = None
         try:
-            old_user = await api_client.get_user_by_uuid(user_uuid)
+            old_user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         except Exception:
             logger.debug("Failed to get old user data for notification user_uuid=%s", user_uuid)
         
         await api_client.update_user(user_uuid, **payload)
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         info = user.get("response", user)
         text = _format_user_edit_snapshot(info, _)
         markup = user_edit_keyboard(user_uuid, back_to=back_to)
@@ -991,33 +992,17 @@ async def _handle_user_create_callback(callback: CallbackQuery) -> None:
 async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None:
     """Отправляет промпт для выбора сквада."""
     data = ctx.setdefault("data", {})
-    squads: list[dict] = []
-    squad_source = "internal"
+    # Получаем squads из БД с fallback на API
     try:
-        res = await api_client.get_internal_squads()
-        squads = res.get("response", {}).get("internalSquads", [])
-        logger.info("📥 Loaded %s internal squads for user_id=%s", len(squads), target.from_user.id)
+        squads, squad_source = await data_access.get_all_squads()
+        logger.info("📥 Loaded %s %s squads for user_id=%s", len(squads), squad_source, target.from_user.id)
     except UnauthorizedError:
         await _send_user_create_prompt(target, _("errors.unauthorized"), users_menu_keyboard(), ctx=ctx)
         return
-    except ApiClientError as exc:
-        logger.warning("⚠️ Failed to load internal squads: %s", exc)
-    except Exception:
-        logger.exception("⚠️ Unexpected error while loading internal squads")
-
-    if not squads:
-        try:
-            res = await api_client.get_external_squads()
-            squads = res.get("response", {}).get("externalSquads", [])
-            squad_source = "external"
-            logger.info("📥 Loaded %s external squads for user_id=%s", len(squads), target.from_user.id)
-        except UnauthorizedError:
-            await _send_user_create_prompt(target, _("errors.unauthorized"), users_menu_keyboard(), ctx=ctx)
-            return
-        except ApiClientError as exc:
-            logger.warning("⚠️ Failed to load external squads: %s", exc)
-        except Exception:
-            logger.exception("⚠️ Unexpected error while loading external squads")
+    except Exception as exc:
+        logger.warning("⚠️ Failed to load squads: %s", exc)
+        squads = []
+        squad_source = "internal"
 
     if not squads:
         await _send_user_create_prompt(
@@ -1042,33 +1027,17 @@ async def _send_squad_prompt(target: Message | CallbackQuery, ctx: dict) -> None
 async def _show_squad_selection_for_edit(callback: CallbackQuery, user_uuid: str, back_to: str) -> None:
     """Показывает список сквадов для выбора при редактировании пользователя."""
     squads: list[dict] = []
-    squad_type = "internal"  # По умолчанию внутренние сквады
-    
+    # Получаем squads из БД с fallback на API
     try:
-        res = await api_client.get_internal_squads()
-        squads = res.get("response", {}).get("internalSquads", [])
-        logger.info("📥 Loaded %s internal squads for edit user_id=%s", len(squads), callback.from_user.id)
+        squads, squad_type = await data_access.get_all_squads()
+        logger.info("📥 Loaded %s %s squads for edit user_id=%s", len(squads), squad_type, callback.from_user.id)
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=user_edit_keyboard(user_uuid, back_to=back_to))
         return
-    except ApiClientError as exc:
-        logger.warning("⚠️ Failed to load internal squads: %s", exc)
-    except Exception:
-        logger.exception("⚠️ Unexpected error while loading internal squads")
-
-    if not squads:
-        try:
-            res = await api_client.get_external_squads()
-            squads = res.get("response", {}).get("externalSquads", [])
-            squad_type = "external"
-            logger.info("📥 Loaded %s external squads for edit user_id=%s", len(squads), callback.from_user.id)
-        except UnauthorizedError:
-            await callback.message.edit_text(_("errors.unauthorized"), reply_markup=user_edit_keyboard(user_uuid, back_to=back_to))
-            return
-        except ApiClientError as exc:
-            logger.warning("⚠️ Failed to load external squads: %s", exc)
-        except Exception:
-            logger.exception("⚠️ Unexpected error while loading external squads")
+    except Exception as exc:
+        logger.warning("⚠️ Failed to load squads: %s", exc)
+        squads = []
+        squad_type = "internal"
 
     if not squads:
         await callback.message.edit_text(
@@ -1135,7 +1104,7 @@ async def cb_user_search_view(callback: CallbackQuery) -> None:
     user_uuid = callback.data.split(":", 2)[2]
     back_to = NavTarget.USER_SEARCH_RESULTS
     try:
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
         return
@@ -1168,7 +1137,7 @@ async def cb_user_actions(callback: CallbackQuery) -> None:
     # Если action отсутствует, просто возвращаемся в профиль пользователя
     if not action:
         try:
-            user = await api_client.get_user_by_uuid(user_uuid)
+            user = await data_access.get_user_by_uuid_wrapped(user_uuid)
             await _send_user_summary(callback, user, back_to=back_to)
         except UnauthorizedError:
             await callback.message.edit_text(_("errors.unauthorized"), reply_markup=main_menu_keyboard())
@@ -1189,7 +1158,7 @@ async def cb_user_actions(callback: CallbackQuery) -> None:
         elif action == "revoke":
             # Показываем подтверждение перед отзывом подписки
             try:
-                user = await api_client.get_user_by_uuid(user_uuid)
+                user = await data_access.get_user_by_uuid_wrapped(user_uuid)
                 user_info = user.get("response", user)
                 username = user_info.get("username", "Unknown")
                 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -1222,7 +1191,7 @@ async def cb_user_actions(callback: CallbackQuery) -> None:
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         summary = build_user_summary(user, _)
         status = user.get("response", user).get("status", "UNKNOWN")
         await _edit_text_safe(
@@ -1255,7 +1224,7 @@ async def cb_user_actions_menu(callback: CallbackQuery) -> None:
     back_to = _get_user_detail_back_target(callback.from_user.id)
     
     try:
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         summary = build_user_summary(user, _)
         status = user.get("response", user).get("status", "UNKNOWN")
         await callback.message.edit_text(
@@ -1281,7 +1250,7 @@ async def cb_user_edit_menu(callback: CallbackQuery) -> None:
     # Кнопка "Назад" должна вести в профиль пользователя, а не в поиск
     back_to = f"user:{user_uuid}"
     try:
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         info = user.get("response", user)
         header = _format_user_edit_snapshot(info, _)
         await callback.message.edit_text(
@@ -1318,7 +1287,7 @@ async def cb_user_edit_field(callback: CallbackQuery) -> None:
 
     # load current user data for context/prompts
     try:
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         info = user.get("response", user)
     except UnauthorizedError:
         await callback.message.edit_text(_("errors.unauthorized"), reply_markup=main_menu_keyboard())
@@ -1430,7 +1399,7 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
 
     try:
         # Получаем информацию о пользователе
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
         short_uuid = user_info.get("shortUuid")
         subscription_url = user_info.get("subscriptionUrl")
@@ -1872,7 +1841,7 @@ async def cb_user_node_configs(callback: CallbackQuery) -> None:
 
     try:
         # Получаем информацию о пользователе
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
         
         # Получаем доступные ноды
@@ -2005,7 +1974,7 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
 
     try:
         # Получаем информацию о пользователе
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
         
         # Проверяем формат callback_data
@@ -2274,7 +2243,7 @@ async def cb_user_happ_link(callback: CallbackQuery) -> None:
 
     try:
         # Получаем информацию о пользователе
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
         subscription_url = user_info.get("subscriptionUrl")
 
@@ -2324,7 +2293,7 @@ async def cb_user_traffic_nodes(callback: CallbackQuery) -> None:
     
     try:
         # Получаем информацию о пользователе
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
         username = user_info.get("username", "n/a")
         
@@ -2549,7 +2518,7 @@ async def cb_user_stats(callback: CallbackQuery) -> None:
 
         else:
             # Показываем меню статистики
-            user = await api_client.get_user_by_uuid(user_uuid)
+            user = await data_access.get_user_by_uuid_wrapped(user_uuid)
             user_info = user.get("response", user)
             username = user_info.get("username", "n/a")
             text = _("user.stats_title").format(username=_esc(username))
@@ -2841,7 +2810,7 @@ async def cb_user_stats_nodes_period(callback: CallbackQuery) -> None:
 
     try:
         # Получаем информацию о пользователе для получения доступных нод
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
 
         # Получаем доступные ноды пользователя
@@ -3009,7 +2978,7 @@ async def cb_user_hwid_menu(callback: CallbackQuery) -> None:
     back_to = _get_user_detail_back_target(callback.from_user.id)
     
     try:
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         info = user.get("response", user)
         username = info.get("username", "n/a")
         hwid_limit = info.get("hwidDeviceLimit")
@@ -3055,7 +3024,7 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
     
     try:
         # Получаем информацию о пользователе
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
         username = user_info.get("username", "n/a")
         hwid_limit = user_info.get("hwidDeviceLimit")
@@ -3147,7 +3116,7 @@ async def cb_hwid_delete(callback: CallbackQuery) -> None:
         await callback.answer(_("hwid.deleted"), show_alert=True)
         # Обновляем список устройств - вызываем функцию напрямую
         # Получаем информацию о пользователе
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
         username = user_info.get("username", "n/a")
         hwid_limit = user_info.get("hwidDeviceLimit")
@@ -3218,7 +3187,7 @@ async def cb_hwid_delete_all(callback: CallbackQuery) -> None:
         await callback.answer(_("hwid.all_deleted"), show_alert=True)
         # Обновляем список устройств - вызываем функцию напрямую
         # Получаем информацию о пользователе
-        user = await api_client.get_user_by_uuid(user_uuid)
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         user_info = user.get("response", user)
         username = user_info.get("username", "n/a")
         hwid_limit = user_info.get("hwidDeviceLimit")

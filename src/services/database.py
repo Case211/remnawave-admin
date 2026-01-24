@@ -838,6 +838,395 @@ class DatabaseService:
             )
             return result == "UPDATE 1"
 
+    # ==================== API Tokens Methods ====================
+    
+    async def upsert_token(self, data: Dict[str, Any]) -> bool:
+        """Upsert an API token."""
+        if not self.is_connected:
+            return False
+        
+        response = data.get("response", data)
+        if isinstance(response, list):
+            for token in response:
+                await self._upsert_single_token(token)
+            return True
+        
+        return await self._upsert_single_token(response)
+    
+    async def _upsert_single_token(self, token: Dict[str, Any]) -> bool:
+        """Upsert a single token."""
+        uuid = token.get("uuid")
+        if not uuid:
+            return False
+        
+        async with self.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO api_tokens (uuid, name, token_hash, created_at, updated_at, raw_data)
+                VALUES ($1, $2, $3, $4, NOW(), $5)
+                ON CONFLICT (uuid) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    token_hash = EXCLUDED.token_hash,
+                    updated_at = NOW(),
+                    raw_data = EXCLUDED.raw_data
+                """,
+                uuid,
+                token.get("name") or token.get("tokenName"),
+                token.get("token") or token.get("tokenHash"),
+                _parse_timestamp(token.get("createdAt")),
+                json.dumps(token)
+            )
+        return True
+    
+    async def get_all_tokens(self) -> List[Dict[str, Any]]:
+        """Get all API tokens."""
+        if not self.is_connected:
+            return []
+        
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM api_tokens ORDER BY name"
+            )
+            return [_db_row_to_api_format(row) for row in rows]
+    
+    async def get_token_by_uuid(self, uuid: str) -> Optional[Dict[str, Any]]:
+        """Get token by UUID."""
+        if not self.is_connected:
+            return None
+        
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM api_tokens WHERE uuid = $1",
+                uuid
+            )
+            return _db_row_to_api_format(row) if row else None
+    
+    async def delete_token_from_db(self, uuid: str) -> bool:
+        """Delete token from DB by UUID."""
+        if not self.is_connected:
+            return False
+        
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM api_tokens WHERE uuid = $1",
+                uuid
+            )
+            return result == "DELETE 1"
+    
+    async def delete_all_tokens(self) -> int:
+        """Delete all tokens. Returns count of deleted records."""
+        if not self.is_connected:
+            return 0
+        
+        async with self.acquire() as conn:
+            result = await conn.execute("DELETE FROM api_tokens")
+            try:
+                return int(result.split()[-1])
+            except (IndexError, ValueError):
+                return 0
+
+    # ==================== Templates Methods ====================
+    
+    async def upsert_template(self, data: Dict[str, Any]) -> bool:
+        """Upsert a subscription template."""
+        if not self.is_connected:
+            return False
+        
+        response = data.get("response", data)
+        if isinstance(response, list):
+            for tpl in response:
+                await self._upsert_single_template(tpl)
+            return True
+        
+        return await self._upsert_single_template(response)
+    
+    async def _upsert_single_template(self, tpl: Dict[str, Any]) -> bool:
+        """Upsert a single template."""
+        uuid = tpl.get("uuid")
+        if not uuid:
+            return False
+        
+        async with self.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO templates (uuid, name, template_type, sort_order, created_at, updated_at, raw_data)
+                VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+                ON CONFLICT (uuid) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    template_type = EXCLUDED.template_type,
+                    sort_order = EXCLUDED.sort_order,
+                    updated_at = NOW(),
+                    raw_data = EXCLUDED.raw_data
+                """,
+                uuid,
+                tpl.get("name"),
+                tpl.get("type") or tpl.get("templateType"),
+                tpl.get("sortOrder") or tpl.get("sort_order"),
+                _parse_timestamp(tpl.get("createdAt")),
+                json.dumps(tpl)
+            )
+        return True
+    
+    async def get_all_templates(self) -> List[Dict[str, Any]]:
+        """Get all subscription templates."""
+        if not self.is_connected:
+            return []
+        
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM templates ORDER BY sort_order, name"
+            )
+            return [_db_row_to_api_format(row) for row in rows]
+    
+    async def get_template_by_uuid(self, uuid: str) -> Optional[Dict[str, Any]]:
+        """Get template by UUID."""
+        if not self.is_connected:
+            return None
+        
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM templates WHERE uuid = $1",
+                uuid
+            )
+            return _db_row_to_api_format(row) if row else None
+    
+    async def delete_template_from_db(self, uuid: str) -> bool:
+        """Delete template from DB by UUID."""
+        if not self.is_connected:
+            return False
+        
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM templates WHERE uuid = $1",
+                uuid
+            )
+            return result == "DELETE 1"
+    
+    async def delete_all_templates(self) -> int:
+        """Delete all templates. Returns count of deleted records."""
+        if not self.is_connected:
+            return 0
+        
+        async with self.acquire() as conn:
+            result = await conn.execute("DELETE FROM templates")
+            try:
+                return int(result.split()[-1])
+            except (IndexError, ValueError):
+                return 0
+
+    # ==================== Snippets Methods ====================
+    
+    async def upsert_snippet(self, data: Dict[str, Any]) -> bool:
+        """Upsert a snippet."""
+        if not self.is_connected:
+            return False
+        
+        response = data.get("response", data)
+        snippets = response.get("snippets", []) if isinstance(response, dict) else response
+        
+        if isinstance(snippets, list):
+            for snippet in snippets:
+                await self._upsert_single_snippet(snippet)
+            return True
+        
+        return await self._upsert_single_snippet(response)
+    
+    async def _upsert_single_snippet(self, snippet: Dict[str, Any]) -> bool:
+        """Upsert a single snippet."""
+        name = snippet.get("name")
+        if not name:
+            return False
+        
+        async with self.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO snippets (name, snippet_data, created_at, updated_at, raw_data)
+                VALUES ($1, $2, $3, NOW(), $4)
+                ON CONFLICT (name) DO UPDATE SET
+                    snippet_data = EXCLUDED.snippet_data,
+                    updated_at = NOW(),
+                    raw_data = EXCLUDED.raw_data
+                """,
+                name,
+                json.dumps(snippet.get("snippet", [])),
+                _parse_timestamp(snippet.get("createdAt")),
+                json.dumps(snippet)
+            )
+        return True
+    
+    async def get_all_snippets(self) -> List[Dict[str, Any]]:
+        """Get all snippets."""
+        if not self.is_connected:
+            return []
+        
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM snippets ORDER BY name"
+            )
+            return [_db_row_to_api_format(row) for row in rows]
+    
+    async def get_snippet_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get snippet by name."""
+        if not self.is_connected:
+            return None
+        
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM snippets WHERE name = $1",
+                name
+            )
+            return _db_row_to_api_format(row) if row else None
+    
+    async def delete_snippet_from_db(self, name: str) -> bool:
+        """Delete snippet from DB by name."""
+        if not self.is_connected:
+            return False
+        
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM snippets WHERE name = $1",
+                name
+            )
+            return result == "DELETE 1"
+    
+    async def delete_all_snippets(self) -> int:
+        """Delete all snippets. Returns count of deleted records."""
+        if not self.is_connected:
+            return 0
+        
+        async with self.acquire() as conn:
+            result = await conn.execute("DELETE FROM snippets")
+            try:
+                return int(result.split()[-1])
+            except (IndexError, ValueError):
+                return 0
+
+    # ==================== Squads Methods ====================
+    
+    async def upsert_internal_squads(self, data: Dict[str, Any]) -> bool:
+        """Upsert internal squads."""
+        if not self.is_connected:
+            return False
+        
+        response = data.get("response", data)
+        squads = response.get("internalSquads", []) if isinstance(response, dict) else response
+        
+        if isinstance(squads, list):
+            for squad in squads:
+                await self._upsert_single_internal_squad(squad)
+            return True
+        
+        return await self._upsert_single_internal_squad(response)
+    
+    async def _upsert_single_internal_squad(self, squad: Dict[str, Any]) -> bool:
+        """Upsert a single internal squad."""
+        uuid = squad.get("uuid")
+        if not uuid:
+            return False
+        
+        async with self.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO internal_squads (uuid, name, description, updated_at, raw_data)
+                VALUES ($1, $2, $3, NOW(), $4)
+                ON CONFLICT (uuid) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    description = EXCLUDED.description,
+                    updated_at = NOW(),
+                    raw_data = EXCLUDED.raw_data
+                """,
+                uuid,
+                squad.get("name"),
+                squad.get("description"),
+                json.dumps(squad)
+            )
+        return True
+    
+    async def upsert_external_squads(self, data: Dict[str, Any]) -> bool:
+        """Upsert external squads."""
+        if not self.is_connected:
+            return False
+        
+        response = data.get("response", data)
+        squads = response.get("externalSquads", []) if isinstance(response, dict) else response
+        
+        if isinstance(squads, list):
+            for squad in squads:
+                await self._upsert_single_external_squad(squad)
+            return True
+        
+        return await self._upsert_single_external_squad(response)
+    
+    async def _upsert_single_external_squad(self, squad: Dict[str, Any]) -> bool:
+        """Upsert a single external squad."""
+        uuid = squad.get("uuid")
+        if not uuid:
+            return False
+        
+        async with self.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO external_squads (uuid, name, description, updated_at, raw_data)
+                VALUES ($1, $2, $3, NOW(), $4)
+                ON CONFLICT (uuid) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    description = EXCLUDED.description,
+                    updated_at = NOW(),
+                    raw_data = EXCLUDED.raw_data
+                """,
+                uuid,
+                squad.get("name"),
+                squad.get("description"),
+                json.dumps(squad)
+            )
+        return True
+    
+    async def get_all_internal_squads(self) -> List[Dict[str, Any]]:
+        """Get all internal squads."""
+        if not self.is_connected:
+            return []
+        
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM internal_squads ORDER BY name"
+            )
+            return [_db_row_to_api_format(row) for row in rows]
+    
+    async def get_all_external_squads(self) -> List[Dict[str, Any]]:
+        """Get all external squads."""
+        if not self.is_connected:
+            return []
+        
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM external_squads ORDER BY name"
+            )
+            return [_db_row_to_api_format(row) for row in rows]
+    
+    async def delete_all_internal_squads(self) -> int:
+        """Delete all internal squads. Returns count of deleted records."""
+        if not self.is_connected:
+            return 0
+        
+        async with self.acquire() as conn:
+            result = await conn.execute("DELETE FROM internal_squads")
+            try:
+                return int(result.split()[-1])
+            except (IndexError, ValueError):
+                return 0
+    
+    async def delete_all_external_squads(self) -> int:
+        """Delete all external squads. Returns count of deleted records."""
+        if not self.is_connected:
+            return 0
+        
+        async with self.acquire() as conn:
+            result = await conn.execute("DELETE FROM external_squads")
+            try:
+                return int(result.split()[-1])
+            except (IndexError, ValueError):
+                return 0
+
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:
     """

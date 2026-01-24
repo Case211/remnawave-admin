@@ -15,6 +15,7 @@ from src.keyboards.template_menu import template_list_keyboard, template_menu_ke
 from src.keyboards.token_actions import token_actions_keyboard
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
 from src.services.database import db_service
+from src.services import data_access
 from src.utils.formatters import (
     build_config_profiles_list,
     build_created_token,
@@ -86,9 +87,11 @@ async def _send_templates(target: Message | CallbackQuery) -> None:
 
 
 async def _send_template_detail(target: Message | CallbackQuery, tpl_uuid: str) -> None:
-    """Отправляет детальную информацию о шаблоне."""
+    """Отправляет детальную информацию о шаблоне (из БД, fallback на API)."""
     try:
-        tpl = await api_client.get_template(tpl_uuid)
+        tpl = await data_access.get_template_by_uuid(tpl_uuid)
+        if not tpl:
+            raise NotFoundError()
     except UnauthorizedError:
         text = _("errors.unauthorized")
         if isinstance(target, CallbackQuery):
@@ -121,11 +124,9 @@ async def _send_template_detail(target: Message | CallbackQuery, tpl_uuid: str) 
 
 
 async def _send_snippet_detail(target: Message | CallbackQuery, name: str) -> None:
-    """Отправляет детальную информацию о сниппете."""
+    """Отправляет детальную информацию о сниппете (из БД, fallback на API)."""
     try:
-        data = await api_client.get_snippets()
-        snippets = data.get("response", {}).get("snippets", [])
-        snippet = next((s for s in snippets if s.get("name") == name), None)
+        snippet = await data_access.get_snippet_by_name(name)
         if not snippet:
             raise NotFoundError()
     except UnauthorizedError:
@@ -193,34 +194,9 @@ async def _upsert_snippet(target: Message, action: str) -> None:
 
 
 async def _fetch_tokens_text() -> str:
-    """Получает текст со списком токенов."""
+    """Получает текст со списком токенов (из БД, fallback на API)."""
     try:
-        data = await api_client.get_tokens()
-        logger.debug("Tokens API response keys: %s", list(data.keys()) if isinstance(data, dict) else "not a dict")
-
-        # Пробуем разные варианты структуры ответа
-        tokens = None
-        if isinstance(data, dict):
-            # Стандартная структура: response.apiKeys
-            tokens = data.get("response", {}).get("apiKeys")
-            if tokens is None:
-                # Альтернативная структура: apiKeys напрямую
-                tokens = data.get("apiKeys")
-            if tokens is None and "response" in data:
-                # Если response есть, но не словарь
-                response = data.get("response")
-                if isinstance(response, list):
-                    tokens = response
-                elif isinstance(response, dict):
-                    tokens = response.get("apiKeys") or response.get("tokens")
-
-        if tokens is None:
-            tokens = []
-
-        if not isinstance(tokens, list):
-            logger.error("Tokens is not a list: %s (type: %s)", tokens, type(tokens))
-            tokens = []
-
+        tokens = await data_access.get_all_tokens()
         logger.info("Fetched %d tokens", len(tokens))
         return build_tokens_list(tokens, _)
     except UnauthorizedError:
@@ -231,10 +207,9 @@ async def _fetch_tokens_text() -> str:
 
 
 async def _fetch_templates_text() -> str:
-    """Получает текст со списком шаблонов."""
+    """Получает текст со списком шаблонов (из БД, fallback на API)."""
     try:
-        data = await api_client.get_templates()
-        templates = data.get("response", {}).get("templates", [])
+        templates = await data_access.get_all_templates()
         return build_templates_list(templates, _)
     except UnauthorizedError:
         return _("errors.unauthorized")
@@ -244,10 +219,9 @@ async def _fetch_templates_text() -> str:
 
 
 async def _fetch_snippets_text() -> str:
-    """Получает текст со списком сниппетов."""
+    """Получает текст со списком сниппетов (из БД, fallback на API)."""
     try:
-        data = await api_client.get_snippets()
-        snippets = data.get("response", {}).get("snippets", [])
+        snippets = await data_access.get_all_snippets()
         return build_snippets_list(snippets, _)
     except UnauthorizedError:
         return _("errors.unauthorized")
@@ -394,9 +368,7 @@ async def cb_token_actions(callback: CallbackQuery) -> None:
         if action == "delete":
             # Показываем подтверждение перед удалением
             try:
-                tokens_data = await api_client.get_tokens()
-                tokens = tokens_data.get("response", {}).get("apiKeys", [])
-                token = next((t for t in tokens if t.get("uuid") == token_uuid), None)
+                token = await data_access.get_token_by_uuid(token_uuid)
                 token_name = token.get("name", "Unknown") if token else "Unknown"
                 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -469,9 +441,8 @@ async def cb_template_actions(callback: CallbackQuery) -> None:
         if action == "delete":
             # Показываем подтверждение перед удалением
             try:
-                data = await api_client.get_template(tpl_uuid)
-                template = data.get("response", data)
-                template_name = template.get("name", "Unknown")
+                template = await data_access.get_template_by_uuid(tpl_uuid)
+                template_name = template.get("name", "Unknown") if template else "Unknown"
                 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [
@@ -502,10 +473,12 @@ async def cb_template_actions(callback: CallbackQuery) -> None:
         elif action == "cancel":
             # Отмена - возвращаемся к деталям шаблона
             try:
-                data = await api_client.get_template(tpl_uuid)
-                template = data.get("response", data)
-                text = build_template_summary(template, _)
-                await _edit_text_safe(callback.message, text, reply_markup=template_actions_keyboard(tpl_uuid))
+                template = await data_access.get_template_by_uuid(tpl_uuid)
+                if template:
+                    text = build_template_summary(template, _)
+                    await _edit_text_safe(callback.message, text, reply_markup=template_actions_keyboard(tpl_uuid))
+                else:
+                    await _send_templates(callback)
             except Exception:
                 await _send_templates(callback)
         elif action == "update_json":
@@ -531,8 +504,10 @@ async def cb_template_view(callback: CallbackQuery) -> None:
     await callback.answer()
     _prefix, tpl_uuid = callback.data.split(":")
     try:
-        data = await api_client.get_template(tpl_uuid)
-        template = data.get("response", data)
+        template = await data_access.get_template_by_uuid(tpl_uuid)
+        if not template:
+            await callback.message.edit_text(_("template.not_found"), reply_markup=main_menu_keyboard())
+            return
         text = build_template_summary(template, _)
         await _edit_text_safe(callback.message, text, reply_markup=template_actions_keyboard(tpl_uuid))
     except UnauthorizedError:
@@ -590,12 +565,15 @@ async def cb_snippet_actions(callback: CallbackQuery) -> None:
         elif action == "cancel":
             # Отмена - возвращаемся к деталям сниппета
             try:
-                data = await api_client.get_snippet(name)
-                snippet = data.get("response", data)
-                content = snippet.get("content", "")
-                text = _("snippet.detail").format(name=name, content=content)
-                from src.keyboards.snippet_actions import snippet_actions_keyboard
-                await _edit_text_safe(callback.message, text, reply_markup=snippet_actions_keyboard(name))
+                snippet = await data_access.get_snippet_by_name(name)
+                if snippet:
+                    content = snippet.get("content", "")
+                    text = _("snippet.detail").format(name=name, content=content)
+                    from src.keyboards.snippet_actions import snippet_actions_keyboard
+                    await _edit_text_safe(callback.message, text, reply_markup=snippet_actions_keyboard(name))
+                else:
+                    text = await _fetch_snippets_text()
+                    await _edit_text_safe(callback.message, text, reply_markup=resources_menu_keyboard())
             except Exception:
                 text = await _fetch_snippets_text()
                 await _edit_text_safe(callback.message, text, reply_markup=resources_menu_keyboard())
