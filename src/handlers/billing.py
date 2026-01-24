@@ -194,28 +194,6 @@ async def _fetch_billing_nodes_stats_text() -> str:
         return _("errors.generic")
 
 
-def _billing_providers_keyboard(providers: list[dict], action_prefix: str, nav_target: str = NavTarget.BILLING_MENU) -> InlineKeyboardMarkup:
-    """Клавиатура для выбора провайдера в биллинге."""
-    rows: list[list[InlineKeyboardButton]] = []
-    for provider in sorted(providers, key=lambda p: p.get("name", ""))[:10]:
-        name = provider.get("name", "n/a")
-        uuid = provider.get("uuid", "")
-        rows.append([InlineKeyboardButton(text=name, callback_data=f"billing:provider:{action_prefix}:{uuid}")])
-    rows.append(nav_row(nav_target))
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def _providers_select_keyboard(providers: list[dict], action: str) -> InlineKeyboardMarkup:
-    """Клавиатура для выбора провайдера для обновления или удаления."""
-    rows: list[list[InlineKeyboardButton]] = []
-    for provider in sorted(providers, key=lambda p: p.get("name", ""))[:10]:
-        name = provider.get("name", "n/a")
-        uuid = provider.get("uuid", "")
-        rows.append([InlineKeyboardButton(text=name, callback_data=f"providers:{action}_select:{uuid}")])
-    rows.append(nav_row(NavTarget.BILLING_OVERVIEW))
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
 def _billing_nodes_keyboard(nodes: list[dict], action_prefix: str, provider_uuid: str = "", nav_target: str = NavTarget.BILLING_NODES_MENU) -> InlineKeyboardMarkup:
     """Клавиатура для выбора ноды в биллинге."""
     rows: list[list[InlineKeyboardButton]] = []

@@ -258,44 +258,6 @@ async def _handle_host_create_input(message: Message, ctx: dict) -> None:
         await _send_clean_message(message, _("errors.generic"), reply_markup=hosts_menu_keyboard())
 
 
-async def _send_host_detail(target: Message | CallbackQuery, host_uuid: str, from_callback: bool = False) -> None:
-    """Отправляет детальную информацию о хосте."""
-    try:
-        host = await api_client.get_host(host_uuid)
-    except UnauthorizedError:
-        text = _("errors.unauthorized")
-        if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=main_menu_keyboard())
-        else:
-            await _send_clean_message(target, text, reply_markup=main_menu_keyboard())
-        return
-    except NotFoundError:
-        text = _("host.not_found")
-        if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=main_menu_keyboard())
-        else:
-            await _send_clean_message(target, text, reply_markup=main_menu_keyboard())
-        return
-    except ApiClientError:
-        logger.exception("⚠️ API client error while fetching host host_uuid=%s", host_uuid)
-        text = _("errors.generic")
-        if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=main_menu_keyboard())
-        else:
-            await _send_clean_message(target, text, reply_markup=main_menu_keyboard())
-        return
-
-    info = host.get("response", host)
-    summary = build_host_summary(host, _)
-    is_disabled = bool(info.get("isDisabled"))
-    keyboard = host_actions_keyboard(info.get("uuid", host_uuid), is_disabled)
-
-    if isinstance(target, CallbackQuery):
-        await target.message.edit_text(summary, reply_markup=keyboard)
-    else:
-        await _send_clean_message(target, summary, reply_markup=keyboard)
-
-
 async def _apply_host_update(target: Message | CallbackQuery, host_uuid: str, payload: dict, back_to: str) -> None:
     """Применяет обновление хоста."""
     try:

@@ -10,6 +10,7 @@ from src.handlers.state import (
     PENDING_INPUT,
     SUBS_PAGE_BY_USER,
     SUBS_PAGE_SIZE,
+    USER_DETAIL_BACK_TARGET,
     USER_SEARCH_CONTEXT,
 )
 from src.keyboards.billing_menu import billing_menu_keyboard
@@ -269,6 +270,22 @@ async def _navigate(target: Message | CallbackQuery, destination: str) -> None:
         return
     if destination == NavTarget.SUBS_LIST:
         await _send_subscriptions_page(target, page=_get_subs_page(user_id))
+        return
+    
+    # Обработка специальных случаев навигации (например, user:{uuid})
+    if destination.startswith("user:"):
+        # Возврат в профиль пользователя
+        user_uuid = destination.split(":", 1)[1]
+        from src.handlers.users import _send_user_summary
+        from src.handlers.state import USER_DETAIL_BACK_TARGET
+        
+        back_to = USER_DETAIL_BACK_TARGET.get(user_id, NavTarget.USERS_MENU)
+        try:
+            user = await api_client.get_user_by_uuid(user_uuid)
+            await _send_user_summary(target, user, back_to=back_to)
+        except Exception:
+            logger.exception("Failed to navigate to user profile user_uuid=%s", user_uuid)
+            await _send_clean_message(target, _("errors.generic"), reply_markup=main_menu_keyboard())
         return
 
     await _send_clean_message(target, _("bot.menu"), reply_markup=main_menu_keyboard())
