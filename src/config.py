@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     notifications_chat_id: int | None = Field(default=None, alias="NOTIFICATIONS_CHAT_ID")
     notifications_topic_id: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ID")
+    # Отдельные топики для разных типов уведомлений (fallback на notifications_topic_id)
+    notifications_topic_users: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_USERS")
+    notifications_topic_nodes: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_NODES")
+    notifications_topic_service: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_SERVICE")
+    notifications_topic_hwid: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_HWID")
+    notifications_topic_crm: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_CRM")
+    notifications_topic_errors: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ERRORS")
     webhook_port: int = Field(default=8080, alias="WEBHOOK_PORT")
     webhook_secret: str | None = Field(default=None, alias="WEBHOOK_SECRET")
     
@@ -33,6 +40,30 @@ class Settings(BaseSettings):
     def database_enabled(self) -> bool:
         """Проверяет, включена ли база данных."""
         return bool(self.database_url)
+
+    def get_topic_for_users(self) -> int | None:
+        """Возвращает топик для пользовательских уведомлений."""
+        return self.notifications_topic_users or self.notifications_topic_id
+
+    def get_topic_for_nodes(self) -> int | None:
+        """Возвращает топик для уведомлений о нодах."""
+        return self.notifications_topic_nodes or self.notifications_topic_id
+
+    def get_topic_for_service(self) -> int | None:
+        """Возвращает топик для сервисных уведомлений."""
+        return self.notifications_topic_service or self.notifications_topic_id
+
+    def get_topic_for_hwid(self) -> int | None:
+        """Возвращает топик для HWID уведомлений."""
+        return self.notifications_topic_hwid or self.notifications_topic_id
+
+    def get_topic_for_crm(self) -> int | None:
+        """Возвращает топик для CRM/биллинг уведомлений."""
+        return self.notifications_topic_crm or self.notifications_topic_id
+
+    def get_topic_for_errors(self) -> int | None:
+        """Возвращает топик для уведомлений об ошибках."""
+        return self.notifications_topic_errors or self.notifications_topic_id
 
     @field_validator("notifications_chat_id", mode="before")
     @classmethod
@@ -58,28 +89,28 @@ class Settings(BaseSettings):
         print(f"DEBUG parse_notifications_chat_id: value type not handled, returning None")
         return None
     
-    @field_validator("notifications_topic_id", mode="before")
+    @field_validator(
+        "notifications_topic_id",
+        "notifications_topic_users",
+        "notifications_topic_nodes",
+        "notifications_topic_service",
+        "notifications_topic_hwid",
+        "notifications_topic_crm",
+        "notifications_topic_errors",
+        mode="before",
+    )
     @classmethod
-    def parse_notifications_topic_id(cls, value):
-        """Парсит NOTIFICATIONS_TOPIC_ID в int или возвращает None."""
-        raw_env_value = os.getenv("NOTIFICATIONS_TOPIC_ID", "NOT_SET")
-        print(f"DEBUG parse_notifications_topic_id: value={repr(value)}, type={type(value)}, raw_env={repr(raw_env_value)}")
-        
+    def parse_notifications_topic(cls, value):
+        """Парсит topic ID в int или возвращает None."""
         if value is None or value == "":
-            print(f"DEBUG parse_notifications_topic_id: value is None or empty, returning None")
             return None
         if isinstance(value, int):
-            print(f"DEBUG parse_notifications_topic_id: value is already int={value}, returning {value}")
             return value
         if isinstance(value, str):
             try:
-                result = int(value)
-                print(f"DEBUG parse_notifications_topic_id: parsed string '{value}' to int={result}")
-                return result
+                return int(value)
             except ValueError:
-                print(f"DEBUG parse_notifications_topic_id: failed to parse '{value}' as int, returning None")
                 return None
-        print(f"DEBUG parse_notifications_topic_id: value type not handled, returning None")
         return None
 
     model_config = SettingsConfigDict(

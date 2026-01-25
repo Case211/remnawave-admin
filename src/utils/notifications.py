@@ -42,11 +42,12 @@ async def send_user_notification(
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return  # Уведомления отключены
     
+    topic_id = settings.get_topic_for_users()
     logger.info(
         "Sending user notification action=%s chat_id=%s topic_id=%s",
         action,
         settings.notifications_chat_id,
-        settings.notifications_topic_id,
+        topic_id,
     )
     
     try:
@@ -275,21 +276,21 @@ async def send_user_notification(
             "text": text,
             "parse_mode": "HTML",
         }
-        
+
         # Добавляем message_thread_id только если он указан
-        if settings.notifications_topic_id is not None:
-            message_kwargs["message_thread_id"] = settings.notifications_topic_id
-        
+        if topic_id is not None:
+            message_kwargs["message_thread_id"] = topic_id
+
         await bot.send_message(**message_kwargs)
         logger.info("User notification sent successfully action=%s chat_id=%s", action, settings.notifications_chat_id)
-        
+
     except Exception as exc:
         logger.exception(
             "Failed to send user notification action=%s user_uuid=%s chat_id=%s topic_id=%s error=%s",
             action,
             info.get("uuid", "unknown"),
             settings.notifications_chat_id,
-            settings.notifications_topic_id,
+            topic_id,
             exc,
         )
 
@@ -299,29 +300,46 @@ async def send_generic_notification(
     title: str,
     message: str,
     emoji: str = "ℹ️",
+    topic_type: str | None = None,
 ) -> None:
-    """Отправляет общее уведомление в Telegram топик."""
+    """Отправляет общее уведомление в Telegram топик.
+
+    Args:
+        topic_type: Тип топика (users, nodes, service, hwid, crm, errors).
+                   Если не указан, используется общий notifications_topic_id.
+    """
     settings = get_settings()
-    
+
     if not settings.notifications_chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
-    
+
+    # Определяем топик по типу
+    topic_getters = {
+        "users": settings.get_topic_for_users,
+        "nodes": settings.get_topic_for_nodes,
+        "service": settings.get_topic_for_service,
+        "hwid": settings.get_topic_for_hwid,
+        "crm": settings.get_topic_for_crm,
+        "errors": settings.get_topic_for_errors,
+    }
+    topic_id = topic_getters.get(topic_type, lambda: settings.notifications_topic_id)()
+
     try:
         text = f"{emoji} <b>{title}</b>\n\n{message}"
-        
+
         message_kwargs = {
             "chat_id": settings.notifications_chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
-        
-        if settings.notifications_topic_id is not None:
-            message_kwargs["message_thread_id"] = settings.notifications_topic_id
-        
+
+        if topic_id is not None:
+            message_kwargs["message_thread_id"] = topic_id
+
         await bot.send_message(**message_kwargs)
-        logger.info("Generic notification sent successfully title=%s", title)
-        
+        logger.info("Generic notification sent successfully title=%s topic_id=%s", title, topic_id)
+
     except Exception as exc:
         logger.exception("Failed to send generic notification title=%s error=%s", title, exc)
 
@@ -335,11 +353,13 @@ async def send_node_notification(
 ) -> None:
     """Отправляет уведомление о событии с нодой с поддержкой изменений."""
     settings = get_settings()
-    
+
     if not settings.notifications_chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
-    
+
+    topic_id = settings.get_topic_for_nodes()
+
     try:
         node_info = node_data.get("response", node_data) if isinstance(node_data, dict) else node_data
         
@@ -391,19 +411,19 @@ async def send_node_notification(
                 lines.append(f"   {_esc(change)}")
         
         text = "\n".join(lines)
-        
+
         message_kwargs = {
             "chat_id": settings.notifications_chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
-        
-        if settings.notifications_topic_id is not None:
-            message_kwargs["message_thread_id"] = settings.notifications_topic_id
-        
+
+        if topic_id is not None:
+            message_kwargs["message_thread_id"] = topic_id
+
         await bot.send_message(**message_kwargs)
-        logger.info("Node notification sent successfully event=%s node_uuid=%s", event, node_uuid)
-        
+        logger.info("Node notification sent successfully event=%s node_uuid=%s topic_id=%s", event, node_uuid, topic_id)
+
     except Exception as exc:
         logger.exception("Failed to send node notification event=%s error=%s", event, exc)
 
@@ -415,11 +435,13 @@ async def send_service_notification(
 ) -> None:
     """Отправляет уведомление о событии сервиса."""
     settings = get_settings()
-    
+
     if not settings.notifications_chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
-    
+
+    topic_id = settings.get_topic_for_service()
+
     try:
         lines = []
         
@@ -458,19 +480,19 @@ async def send_service_notification(
                 lines.append(f"🕒 <b>Последняя проверка:</b> {last_check}")
         
         text = "\n".join(lines)
-        
+
         message_kwargs = {
             "chat_id": settings.notifications_chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
-        
-        if settings.notifications_topic_id is not None:
-            message_kwargs["message_thread_id"] = settings.notifications_topic_id
-        
+
+        if topic_id is not None:
+            message_kwargs["message_thread_id"] = topic_id
+
         await bot.send_message(**message_kwargs)
-        logger.info("Service notification sent successfully event=%s", event)
-        
+        logger.info("Service notification sent successfully event=%s topic_id=%s", event, topic_id)
+
     except Exception as exc:
         logger.exception("Failed to send service notification event=%s error=%s", event, exc)
 
@@ -482,11 +504,13 @@ async def send_hwid_notification(
 ) -> None:
     """Отправляет уведомление о HWID устройстве."""
     settings = get_settings()
-    
+
     if not settings.notifications_chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
-    
+
+    topic_id = settings.get_topic_for_hwid()
+
     try:
         lines = []
         
@@ -517,19 +541,19 @@ async def send_hwid_notification(
                 lines.append(f"📅 <b>Создано:</b> <code>{format_datetime(created_at)}</code>")
         
         text = "\n".join(lines)
-        
+
         message_kwargs = {
             "chat_id": settings.notifications_chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
-        
-        if settings.notifications_topic_id is not None:
-            message_kwargs["message_thread_id"] = settings.notifications_topic_id
-        
+
+        if topic_id is not None:
+            message_kwargs["message_thread_id"] = topic_id
+
         await bot.send_message(**message_kwargs)
-        logger.info("HWID notification sent successfully event=%s", event)
-        
+        logger.info("HWID notification sent successfully event=%s topic_id=%s", event, topic_id)
+
     except Exception as exc:
         logger.exception("Failed to send HWID notification event=%s error=%s", event, exc)
 
@@ -541,11 +565,13 @@ async def send_error_notification(
 ) -> None:
     """Отправляет уведомление об ошибке."""
     settings = get_settings()
-    
+
     if not settings.notifications_chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
-    
+
+    topic_id = settings.get_topic_for_errors()
+
     try:
         lines = []
         
@@ -559,19 +585,19 @@ async def send_error_notification(
             lines.append(f"<b>Сообщение:</b> <code>{_esc(message)}</code>")
         
         text = "\n".join(lines)
-        
+
         message_kwargs = {
             "chat_id": settings.notifications_chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
-        
-        if settings.notifications_topic_id is not None:
-            message_kwargs["message_thread_id"] = settings.notifications_topic_id
-        
+
+        if topic_id is not None:
+            message_kwargs["message_thread_id"] = topic_id
+
         await bot.send_message(**message_kwargs)
-        logger.info("Error notification sent successfully event=%s", event)
-        
+        logger.info("Error notification sent successfully event=%s topic_id=%s", event, topic_id)
+
     except Exception as exc:
         logger.exception("Failed to send error notification event=%s error=%s", event, exc)
 
@@ -583,11 +609,13 @@ async def send_crm_notification(
 ) -> None:
     """Отправляет уведомление о событиях CRM (биллинг инфраструктуры)."""
     settings = get_settings()
-    
+
     if not settings.notifications_chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
-    
+
+    topic_id = settings.get_topic_for_crm()
+
     try:
         lines = []
         
@@ -660,19 +688,19 @@ async def send_crm_notification(
                 lines.append(f"   Последняя оплата: <code>{format_datetime(last_billing_at)}</code>")
         
         text = "\n".join(lines)
-        
+
         message_kwargs = {
             "chat_id": settings.notifications_chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
-        
-        if settings.notifications_topic_id is not None:
-            message_kwargs["message_thread_id"] = settings.notifications_topic_id
-        
+
+        if topic_id is not None:
+            message_kwargs["message_thread_id"] = topic_id
+
         await bot.send_message(**message_kwargs)
-        logger.info("CRM notification sent successfully event=%s", event)
-        
+        logger.info("CRM notification sent successfully event=%s topic_id=%s", event, topic_id)
+
     except Exception as exc:
         logger.exception("Failed to send CRM notification event=%s error=%s", event, exc)
 
