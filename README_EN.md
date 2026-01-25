@@ -64,6 +64,34 @@
 
 ---
 
+## 🆕 What's New
+
+### Version 1.5
+
+**🗄 PostgreSQL Integration**
+- Local data caching to reduce API panel load
+- Automatic data synchronization with configurable interval (`SYNC_INTERVAL_SECONDS`)
+- Real-time updates through webhook events
+
+**📖 Data Reading Optimization**
+- Read operations now use local database: subscriptions, user searches, host lists, node information, panel statistics, configuration profiles
+- Node status continues pulling real-time data from the API
+
+**📋 Diff Notifications**
+- When data changes through the panel, the bot displays exactly what was modified
+- Shows before-and-after values for affected fields
+
+**🔀 Notification Topic Routing**
+- Ability to route different notification types to different Telegram topics
+- Separate topics for: users, nodes, service, HWID, billing, errors
+- Fallback to general topic if specific one is not set
+
+**🛡 Graceful Degradation**
+- System continues functioning through the API if database becomes unavailable
+- Full backward compatibility — PostgreSQL is optional
+
+---
+
 ## 🚀 Quick Start
 
 ### 📋 Prerequisites
@@ -199,9 +227,17 @@ python -m src.main
 | `DEFAULT_LOCALE` | ❌ No | `ru` | Default language (`ru` or `en`) |
 | `LOG_LEVEL` | ❌ No | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `NOTIFICATIONS_CHAT_ID` | ❌ No | - | Group/channel ID for notifications |
-| `NOTIFICATIONS_TOPIC_ID` | ❌ No | - | Topic ID in group (for forums) |
+| `NOTIFICATIONS_TOPIC_ID` | ❌ No | - | Topic ID in group (for forums, fallback) |
+| `NOTIFICATIONS_TOPIC_USERS` | ❌ No | - | Topic for user notifications |
+| `NOTIFICATIONS_TOPIC_NODES` | ❌ No | - | Topic for node notifications |
+| `NOTIFICATIONS_TOPIC_SERVICE` | ❌ No | - | Topic for service notifications |
+| `NOTIFICATIONS_TOPIC_HWID` | ❌ No | - | Topic for HWID notifications |
+| `NOTIFICATIONS_TOPIC_CRM` | ❌ No | - | Topic for billing notifications |
+| `NOTIFICATIONS_TOPIC_ERRORS` | ❌ No | - | Topic for error notifications |
 | `WEBHOOK_SECRET` | ❌ No | - | Secret key for webhook verification (HMAC-SHA256) |
 | `WEBHOOK_PORT` | ❌ No | `8080` | Port for webhook server |
+| `DATABASE_URL` | ❌ No | - | PostgreSQL connection URL |
+| `SYNC_INTERVAL_SECONDS` | ❌ No | `300` | Data sync interval with API (seconds) |
 
 ### Docker Network
 
