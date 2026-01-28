@@ -3,13 +3,15 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.i18n import gettext as _
 
-from src.handlers.common import _edit_text_safe, _not_admin
+from src.handlers.common import _edit_text_safe, _not_admin, _send_clean_message
 from src.handlers.state import PENDING_INPUT
+from src.keyboards.asn_sync_menu import asn_sync_menu_keyboard
 from src.keyboards.main_menu import system_menu_keyboard
 from src.keyboards.navigation import NavTarget, nav_row
 from src.keyboards.stats_menu import stats_menu_keyboard, stats_period_keyboard
 from src.keyboards.system_nodes import system_nodes_keyboard
 from src.services.api_client import ApiClientError, UnauthorizedError, api_client
+from src.services.asn_parser import ASNParser
 from src.services.database import db_service
 from src.utils.formatters import build_bandwidth_stats, format_bytes, format_datetime, format_uptime
 from src.utils.logger import logger
@@ -763,4 +765,190 @@ async def cb_stats_traffic_period(callback: CallbackQuery) -> None:
     except ApiClientError:
         logger.exception("⚠️ Traffic stats period fetch failed period=%s", period)
         await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=stats_menu_keyboard())
+
+
+async def _fetch_asn_sync_status_text() -> str:
+    """Получить статус синхронизации ASN базы."""
+    try:
+        if not db_service.is_connected:
+            return _("asn_sync.db_not_connected")
+        
+        async with db_service.acquire() as conn:
+            # Получаем статистику по ASN базе
+            query = """
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE is_active = true) as active,
+                    MAX(last_synced_at) as last_sync
+                FROM asn_russia
+            """
+            row = await conn.fetchrow(query)
+            
+            total = row['total'] if row else 0
+            active = row['active'] if row else 0
+            last_sync = row['last_sync'] if row else None
+            
+            lines = [
+                f"*{_('asn_sync.status_title')}*",
+                "",
+                f"{_('asn_sync.total_asn')}: *{total}*",
+                f"{_('asn_sync.active_asn')}: *{active}*",
+            ]
+            
+            if last_sync:
+                from datetime import datetime, timezone
+                if isinstance(last_sync, datetime):
+                    last_sync_str = format_datetime(last_sync.isoformat())
+                else:
+                    last_sync_str = format_datetime(str(last_sync))
+                lines.append(f"{_('asn_sync.last_sync')}: {last_sync_str}")
+            else:
+                lines.append(f"{_('asn_sync.last_sync')}: {_('asn_sync.never')}")
+            
+            return "\n".join(lines)
+            
+    except Exception as e:
+        logger.error("Error fetching ASN sync status: %s", e, exc_info=True)
+        return _("errors.generic")
+
+
+@router.callback_query(F.data == "menu:sync_asn")
+async def cb_sync_asn_menu(callback: CallbackQuery) -> None:
+    """Обработчик кнопки 'Синхронизация ASN'."""
+    if await _not_admin(callback):
+        return
+    await callback.answer()
+    text = _("asn_sync.menu_title")
+    await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+
+
+@router.callback_query(F.data.startswith("asn_sync:"))
+async def cb_asn_sync_action(callback: CallbackQuery) -> None:
+    """Обработчик действий синхронизации ASN."""
+    if await _not_admin(callback):
+        return
+    
+    parts = callback.data.split(":")
+    action = parts[1] if len(parts) > 1 else ""
+    
+    if action == "status":
+        await callback.answer()
+        text = await _fetch_asn_sync_status_text()
+        await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+        return
+    
+    if action == "custom":
+        await callback.answer()
+        # Запрашиваем пользовательский лимит
+        user_id = callback.from_user.id
+        PENDING_INPUT[user_id] = {
+            "action": "asn_sync_custom_limit",
+            "message_id": callback.message.message_id
+        }
+        text = _("asn_sync.enter_limit")
+        await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+        return
+    
+    # Запускаем синхронизацию
+    await callback.answer(_("asn_sync.starting"), show_alert=False)
+    
+    # Отправляем сообщение о начале синхронизации
+    status_message = await _send_clean_message(
+        callback.message,
+        _("asn_sync.syncing"),
+        reply_markup=None
+    )
+    
+    try:
+        if not db_service.is_connected:
+            await db_service.connect()
+        
+        parser_service = ASNParser(db_service)
+        
+        try:
+            limit = None
+            if action == "full":
+                limit = None
+            elif action == "limit" and len(parts) >= 3:
+                # Извлекаем лимит из callback_data (формат: asn_sync:limit:500)
+                try:
+                    limit = int(parts[2])
+                except (ValueError, IndexError):
+                    limit = 100
+            
+            # Запускаем синхронизацию в фоне
+            stats = await parser_service.sync_russian_asn_database(limit=limit)
+            
+            # Формируем результат
+            result_text = f"*{_('asn_sync.completed')}*\n\n"
+            result_text += f"{_('asn_sync.total_processed')}: *{stats['total']}*\n"
+            result_text += f"{_('asn_sync.success')}: *{stats['success']}*\n"
+            result_text += f"{_('asn_sync.failed')}: *{stats['failed']}*\n"
+            result_text += f"{_('asn_sync.skipped')}: *{stats['skipped']}*"
+            
+            await _edit_text_safe(status_message, result_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+            
+        finally:
+            await parser_service.close()
+    
+    except Exception as e:
+        logger.error("Error during ASN sync: %s", e, exc_info=True)
+        error_text = f"{_('asn_sync.error')}: {str(e)}"
+        await _edit_text_safe(status_message, error_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+
+
+async def _handle_asn_sync_custom_limit_input(message: Message, ctx: dict) -> None:
+    """Обработчик ввода пользовательского лимита для синхронизации ASN."""
+    from src.handlers.common import _edit_text_safe, _send_clean_message
+    from src.keyboards.asn_sync_menu import asn_sync_menu_keyboard
+    
+    try:
+        limit = int(message.text.strip())
+        if limit <= 0:
+            await _send_clean_message(message, _("asn_sync.invalid_limit"))
+            return
+        
+        # Удаляем из PENDING_INPUT
+        user_id = message.from_user.id
+        if user_id in PENDING_INPUT:
+            del PENDING_INPUT[user_id]
+        
+        # Запускаем синхронизацию
+        status_message = await _send_clean_message(
+            message,
+            _("asn_sync.syncing"),
+            reply_markup=None
+        )
+        
+        try:
+            if not db_service.is_connected:
+                await db_service.connect()
+            
+            parser_service = ASNParser(db_service)
+            
+            try:
+                stats = await parser_service.sync_russian_asn_database(limit=limit)
+                
+                # Формируем результат
+                result_text = f"*{_('asn_sync.completed')}*\n\n"
+                result_text += f"{_('asn_sync.total_processed')}: *{stats['total']}*\n"
+                result_text += f"{_('asn_sync.success')}: *{stats['success']}*\n"
+                result_text += f"{_('asn_sync.failed')}: *{stats['failed']}*\n"
+                result_text += f"{_('asn_sync.skipped')}: *{stats['skipped']}*"
+                
+                await _edit_text_safe(status_message, result_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+                
+            finally:
+                await parser_service.close()
+        
+        except Exception as e:
+            logger.error("Error during ASN sync: %s", e, exc_info=True)
+            error_text = f"{_('asn_sync.error')}: {str(e)}"
+            await _edit_text_safe(status_message, error_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+    
+    except ValueError:
+        await _send_clean_message(message, _("asn_sync.invalid_limit"))
+    except Exception as e:
+        logger.error("Error handling ASN sync custom limit input: %s", e, exc_info=True)
+        await _send_clean_message(message, _("errors.generic"))
 

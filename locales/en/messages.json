@@ -35,6 +35,7 @@
     "bulk_hosts": "🖥📦 Bulk hosts",
     "bulk_nodes": "🛰📦 Bulk nodes",
     "system_nodes": "🛰 Nodes management",
+    "sync_asn": "🔄 Sync ASN",
     "back": "↩️ Back",
     "main_menu": "🏠 Main menu",
     "skip_step": "⏭ Skip step",
@@ -699,5 +700,31 @@
   "hwid.deleted": "✅ Device deleted",
   "hwid.all_deleted": "✅ All devices deleted",
   "hwid.device_not_found": "⚠️ Device not found",
-  "hwid.unlimited": "Unlimited"
+  "hwid.unlimited": "Unlimited",
+
+  "asn_sync": {
+    "menu_title": "🔄 Russian ASN Database Sync",
+    "full_sync": "🔄 Full sync",
+    "limit_100": "📊 Sync 100 ASN",
+    "limit_500": "📊 Sync 500 ASN",
+    "limit_1000": "📊 Sync 1000 ASN",
+    "custom_limit": "✏️ Custom limit",
+    "status": "📈 Status",
+    "status_title": "Russian ASN Database Status",
+    "total_asn": "Total ASN",
+    "active_asn": "Active ASN",
+    "last_sync": "Last sync",
+    "never": "Never",
+    "db_not_connected": "⚠️ Database not connected",
+    "enter_limit": "Enter the number of ASN to sync (positive number):",
+    "invalid_limit": "⚠️ Invalid limit. Enter a positive number.",
+    "starting": "Starting sync...",
+    "syncing": "⏳ Syncing ASN database...\n\nPlease wait.",
+    "completed": "✅ Sync completed",
+    "total_processed": "Total processed",
+    "success": "Success",
+    "failed": "Failed",
+    "skipped": "Skipped",
+    "error": "❌ Sync error"
+  }
 }

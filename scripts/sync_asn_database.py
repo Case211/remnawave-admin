@@ -117,7 +117,7 @@ async def main():
         sys.exit(1)
     
     finally:
-        await db_service.close()
+        await db_service.disconnect()
         logger.info("Database connection closed")
 
 

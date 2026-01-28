@@ -33,7 +33,7 @@ from src.handlers.resources import (
     _show_tokens,
     _upsert_snippet,
 )
-from src.handlers.system import _fetch_bandwidth_text, _fetch_health_text
+from src.handlers.system import _fetch_bandwidth_text, _fetch_health_text, _handle_asn_sync_custom_limit_input
 from src.handlers.users import (
     _create_user,
     _handle_user_create_input,
@@ -116,6 +116,8 @@ async def handle_pending(message: Message) -> None:
         await _handle_host_create_input(message, ctx)
     elif action == "node_edit":
         await _handle_node_edit_input(message, ctx)
+    elif action == "asn_sync_custom_limit":
+        await _handle_asn_sync_custom_limit_input(message, ctx)
     else:
         await _send_clean_message(message, _("errors.generic"))
 
