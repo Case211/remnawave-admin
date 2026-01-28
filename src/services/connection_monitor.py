@@ -48,7 +48,8 @@ class ConnectionMonitor:
     async def get_user_active_connections(
         self,
         user_uuid: str,
-        limit: int = 100
+        limit: int = 100,
+        max_age_minutes: int = 5
     ) -> List[ActiveConnection]:
         """
         Получить список активных (не отключённых) подключений пользователя.
@@ -56,6 +57,8 @@ class ConnectionMonitor:
         Args:
             user_uuid: UUID пользователя
             limit: Максимальное количество записей
+            max_age_minutes: Максимальный возраст подключения в минутах (по умолчанию 5 минут)
+                           Подключения старше этого возраста считаются неактивными
         
         Returns:
             Список активных подключений
@@ -65,7 +68,7 @@ class ConnectionMonitor:
             return []
         
         try:
-            connections_data = await self.db.get_active_connections(user_uuid, limit)
+            connections_data = await self.db.get_user_active_connections(user_uuid, limit, max_age_minutes)
             
             active_connections = []
             for conn_data in connections_data:
@@ -116,8 +119,8 @@ class ConnectionMonitor:
             return None
         
         try:
-            # Получаем активные подключения
-            active_connections = await self.get_user_active_connections(user_uuid, limit=1000)
+            # Получаем активные подключения (только за последние 5 минут)
+            active_connections = await self.get_user_active_connections(user_uuid, limit=1000, max_age_minutes=5)
             active_connections_count = len(active_connections)
             
             # Подсчитываем уникальные IP в окне

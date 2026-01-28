@@ -122,8 +122,11 @@ class TemporalAnalyzer:
         # Считаем уникальные IP и проверяем, действительно ли подключения одновременные
         # Подключения считаются одновременными только если они созданы в пределах окна
         # (2 минуты) - это учитывает нормальное переключение между сетями (Wi-Fi <-> мобильная)
+        # Также учитываем роутинг в приложении - пользователь может периодически подключаться/отключаться
         if len(connections) > 1:
             simultaneous_window_seconds = 120  # Окно для определения одновременности (2 минуты)
+            reconnect_threshold_seconds = 300  # Порог для определения переподключения (5 минут)
+            # Если между подключениями больше 5 минут, это переподключение через роутинг, а не одновременное подключение
             max_connection_age_hours = 24  # Максимальный возраст подключения для учёта
             # Учитываем количество устройств пользователя - если у пользователя несколько устройств,
             # то несколько одновременных подключений могут быть нормальными
@@ -153,6 +156,15 @@ class TemporalAnalyzer:
                 if age_hours > max_connection_age_hours:
                     continue
                 
+                # Пропускаем подключения, которые были неактивны слишком долго (более 5 минут)
+                # Это переподключения через роутинг, а не одновременные подключения
+                age_seconds = (now - conn_time).total_seconds()
+                if age_seconds > reconnect_threshold_seconds:
+                    # Если подключение старше 5 минут и нет других активных подключений,
+                    # это может быть переподключение, но мы всё равно учитываем его для анализа
+                    # (но не как одновременное подключение)
+                    pass
+                
                 valid_connections.append((conn_time, str(conn.ip_address)))
             
             # Если есть валидные подключения, проверяем одновременность
@@ -171,6 +183,15 @@ class TemporalAnalyzer:
                     prev_conn_time = current_group[-1][0]
                     time_diff_seconds = (conn_time - prev_conn_time).total_seconds()
                     
+                    # Если разрыв больше порога переподключения (5 минут), это переподключение через роутинг
+                    # Не считаем это одновременным подключением
+                    if time_diff_seconds > reconnect_threshold_seconds:
+                        # Начинаем новую группу (это переподключение, а не одновременное подключение)
+                        if len(current_group) > 1:
+                            simultaneous_groups.append(current_group)
+                        current_group = [(conn_time, ip)]
+                        continue
+                    
                     # Проверяем, попадает ли подключение в текущую группу
                     # (в пределах окна от самого раннего подключения в группе)
                     earliest_in_group = current_group[0][0]
@@ -179,6 +200,7 @@ class TemporalAnalyzer:
                     # Подключение считается одновременным только если:
                     # 1. Оно в пределах окна от самого раннего подключения в группе
                     # 2. Разрыв между подключениями не слишком большой (не более окна одновременности)
+                    # 3. Разрыв не превышает порог переподключения (уже проверено выше)
                     if (time_diff_from_earliest_seconds <= simultaneous_window_seconds and 
                         time_diff_seconds <= simultaneous_window_seconds):
                         current_group.append((conn_time, ip))
@@ -618,8 +640,9 @@ class IntelligentViolationDetector:
             # Получаем количество устройств пользователя из локальной БД
             user_device_count = await self.db.get_user_devices_count(user_uuid)
             
-            # Получаем активные подключения
-            active_connections = await self.connection_monitor.get_user_active_connections(user_uuid)
+            # Получаем активные подключения (только за последние 5 минут)
+            # Это учитывает роутинг в приложении - старые подключения не считаются активными
+            active_connections = await self.connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
             
             # Получаем историю подключений
             history_days = max(1, window_minutes // (24 * 60) + 1)

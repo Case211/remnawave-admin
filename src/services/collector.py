@@ -224,8 +224,8 @@ async def receive_connections(
             # Закрываем старые подключения (старше 5 минут) для этих пользователей
             for user_uuid in affected_user_uuids:
                 try:
-                    # Получаем активные подключения пользователя
-                    active_connections = await db_service.get_user_active_connections(user_uuid, limit=1000)
+                    # Получаем активные подключения пользователя (только за последние 5 минут)
+                    active_connections = await db_service.get_user_active_connections(user_uuid, limit=1000, max_age_minutes=5)
                     now = datetime.utcnow()
                     closed_count = 0
                     new_ips = new_connections_by_user.get(user_uuid, set())

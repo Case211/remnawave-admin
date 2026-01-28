@@ -846,6 +846,21 @@ class DatabaseService:
                     """,
                     node_uuid, conn_id
                 )
+                
+                # Если пользователь подключается с новым IP, закрываем старые подключения с другими IP
+                # Это учитывает роутинг в приложении - пользователь может переключаться между серверами
+                await conn.execute(
+                    """
+                    UPDATE user_connections
+                    SET disconnected_at = NOW()
+                    WHERE user_uuid = $1
+                    AND ip_address != $2::inet
+                    AND disconnected_at IS NULL
+                    AND connected_at < NOW() - INTERVAL '2 minutes'
+                    """,
+                    user_uuid, ip_address
+                )
+                
                 return conn_id
             else:
                 # Создаём новую запись
@@ -858,14 +873,38 @@ class DatabaseService:
                     user_uuid, ip_address, node_uuid,
                     json.dumps(device_info) if device_info else None
                 )
+                
+                # Если пользователь подключается с новым IP, закрываем старые подключения с другими IP
+                # Это учитывает роутинг в приложении - пользователь может переключаться между серверами
+                await conn.execute(
+                    """
+                    UPDATE user_connections
+                    SET disconnected_at = NOW()
+                    WHERE user_uuid = $1
+                    AND ip_address != $2::inet
+                    AND disconnected_at IS NULL
+                    AND connected_at < NOW() - INTERVAL '2 minutes'
+                    """,
+                    user_uuid, ip_address
+                )
+                
                 return result
     
     async def get_user_active_connections(
         self,
         user_uuid: str,
-        limit: int = 100
+        limit: int = 100,
+        max_age_minutes: int = 5
     ) -> List[Dict[str, Any]]:
-        """Get active (not disconnected) connections for a user."""
+        """
+        Get active (not disconnected) connections for a user.
+        
+        Args:
+            user_uuid: UUID пользователя
+            limit: Максимальное количество записей
+            max_age_minutes: Максимальный возраст подключения в минутах (по умолчанию 5 минут)
+                           Подключения старше этого возраста считаются неактивными
+        """
         if not self.is_connected:
             return []
         
@@ -873,10 +912,12 @@ class DatabaseService:
             rows = await conn.fetch(
                 """
                 SELECT * FROM user_connections 
-                WHERE user_uuid = $1 AND disconnected_at IS NULL
+                WHERE user_uuid = $1 
+                AND disconnected_at IS NULL
+                AND connected_at > NOW() - INTERVAL '%s minutes'
                 ORDER BY connected_at DESC
                 LIMIT $2
-                """,
+                """.replace('%s', str(max_age_minutes)),
                 user_uuid, limit
             )
             return [dict(row) for row in rows]
@@ -1002,7 +1043,8 @@ class DatabaseService:
     async def get_active_connections(
         self,
         user_uuid: str,
-        limit: int = 100
+        limit: int = 100,
+        max_age_minutes: int = 5
     ) -> List[Dict[str, Any]]:
         """
         Get active (not disconnected) connections for a user.
@@ -1011,11 +1053,12 @@ class DatabaseService:
         Args:
             user_uuid: UUID пользователя
             limit: Максимальное количество записей
+            max_age_minutes: Максимальный возраст подключения в минутах
         
         Returns:
             Список активных подключений
         """
-        return await self.get_user_active_connections(user_uuid, limit)
+        return await self.get_user_active_connections(user_uuid, limit, max_age_minutes)
     
     async def close_user_connection(self, connection_id: int) -> bool:
         """Mark a connection as disconnected."""
