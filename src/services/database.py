@@ -1554,91 +1554,8 @@ class DatabaseService:
             logger.error("Error getting user devices count for %s: %s", user_uuid, e, exc_info=True)
             return 1  # По умолчанию 1 устройство
 
-
-def _db_row_to_api_format(row) -> Dict[str, Any]:
-    """
-    Convert database row to API format.
-    If raw_data exists, use it; otherwise build from row fields.
-    """
-    if row is None:
-        return {}
+    # ==================== IP Metadata ====================
     
-    row_dict = dict(row)
-    raw_data = row_dict.get("raw_data")
-    
-    if raw_data:
-        # Use raw_data if available (contains full API response)
-        if isinstance(raw_data, str):
-            try:
-                return json.loads(raw_data)
-            except json.JSONDecodeError:
-                pass
-        elif isinstance(raw_data, dict):
-            return raw_data
-    
-    # Fallback: build from row fields (convert snake_case to camelCase)
-    result = {}
-    field_mapping = {
-        "uuid": "uuid",
-        "short_uuid": "shortUuid",
-        "username": "username",
-        "subscription_uuid": "subscriptionUuid",
-        "telegram_id": "telegramId",
-        "email": "email",
-        "status": "status",
-        "expire_at": "expireAt",
-        "traffic_limit_bytes": "trafficLimitBytes",
-        "used_traffic_bytes": "usedTrafficBytes",
-        "hwid_device_limit": "hwidDeviceLimit",
-        "created_at": "createdAt",
-        "updated_at": "updatedAt",
-        "name": "name",
-        "address": "address",
-        "port": "port",
-        "is_disabled": "isDisabled",
-        "is_connected": "isConnected",
-        "remark": "remark",
-    }
-    
-    for db_field, api_field in field_mapping.items():
-        if db_field in row_dict and row_dict[db_field] is not None:
-            value = row_dict[db_field]
-            # Convert datetime to ISO string
-            if isinstance(value, datetime):
-                value = value.isoformat()
-            # Convert UUID to string
-            elif hasattr(value, 'hex'):
-                value = str(value)
-            result[api_field] = value
-    
-    return result
-
-
-def _parse_timestamp(value: Any) -> Optional[datetime]:
-    """Parse timestamp from various formats."""
-    if value is None:
-        return None
-    
-    if isinstance(value, datetime):
-        return value
-    
-    if isinstance(value, str):
-        try:
-            # Try ISO format
-            return datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            pass
-        
-        try:
-            # Try common format
-            return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
-        except ValueError:
-            pass
-    
-    return None
-
-
-# IP Metadata methods
     async def get_ip_metadata(self, ip_address: str) -> Optional[Dict[str, Any]]:
         """
         Получить метаданные IP адреса из БД.
@@ -1813,6 +1730,89 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
         except Exception as e:
             logger.error("Error checking IP metadata age for %s: %s", ip_address, e, exc_info=True)
             return True  # При ошибке лучше обновить
+
+
+def _db_row_to_api_format(row) -> Dict[str, Any]:
+    """
+    Convert database row to API format.
+    If raw_data exists, use it; otherwise build from row fields.
+    """
+    if row is None:
+        return {}
+    
+    row_dict = dict(row)
+    raw_data = row_dict.get("raw_data")
+    
+    if raw_data:
+        # Use raw_data if available (contains full API response)
+        if isinstance(raw_data, str):
+            try:
+                return json.loads(raw_data)
+            except json.JSONDecodeError:
+                pass
+        elif isinstance(raw_data, dict):
+            return raw_data
+    
+    # Fallback: build from row fields (convert snake_case to camelCase)
+    result = {}
+    field_mapping = {
+        "uuid": "uuid",
+        "short_uuid": "shortUuid",
+        "username": "username",
+        "subscription_uuid": "subscriptionUuid",
+        "telegram_id": "telegramId",
+        "email": "email",
+        "status": "status",
+        "expire_at": "expireAt",
+        "traffic_limit_bytes": "trafficLimitBytes",
+        "used_traffic_bytes": "usedTrafficBytes",
+        "hwid_device_limit": "hwidDeviceLimit",
+        "created_at": "createdAt",
+        "updated_at": "updatedAt",
+        "name": "name",
+        "address": "address",
+        "port": "port",
+        "is_disabled": "isDisabled",
+        "is_connected": "isConnected",
+        "remark": "remark",
+    }
+    
+    for db_field, api_field in field_mapping.items():
+        if db_field in row_dict and row_dict[db_field] is not None:
+            value = row_dict[db_field]
+            # Convert datetime to ISO string
+            if isinstance(value, datetime):
+                value = value.isoformat()
+            # Convert UUID to string
+            elif hasattr(value, 'hex'):
+                value = str(value)
+            result[api_field] = value
+    
+    return result
+
+
+def _parse_timestamp(value: Any) -> Optional[datetime]:
+    """Parse timestamp from various formats."""
+    if value is None:
+        return None
+    
+    if isinstance(value, datetime):
+        return value
+    
+    if isinstance(value, str):
+        try:
+            # Try ISO format
+            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+        
+        try:
+            # Try common format
+            return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    
+    return None
 
 
 # Global database service instance
