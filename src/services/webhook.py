@@ -44,7 +44,11 @@ async def catch_invalid_requests(request: Request, call_next):
         
         # Проверяем путь - если это не наш endpoint, возвращаем 404 без логирования
         # Collector API пути начинаются с /api/v1/connections
-        collector_paths = ["/api/v1/connections/batch", "/api/v1/connections/health"]
+        collector_paths = [
+            "/api/v1/connections/batch",
+            "/api/v1/connections/health",
+            "/api/v1/connections/test"
+        ]
         if request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"] + collector_paths:
             # Для корневого пути возвращаем простой ответ
             if request.url.path == "/":
@@ -52,8 +56,27 @@ async def catch_invalid_requests(request: Request, call_next):
             # Для других путей - 404 без логирования
             return JSONResponse(status_code=404, content={"error": "Not found"})
         
+        # Логируем запросы к Collector API
+        if request.url.path in collector_paths:
+            logger.info(
+                "Collector API request: %s %s from %s",
+                request.method,
+                request.url.path,
+                request.client.host if request.client else "unknown"
+            )
+        
         # Продолжаем обработку валидного запроса
         response = await call_next(request)
+        
+        # Логируем ответ для Collector API
+        if request.url.path in collector_paths:
+            logger.debug(
+                "Collector API response: %s %s -> status %d",
+                request.method,
+                request.url.path,
+                response.status_code
+            )
+        
         return response
     except Exception:
         # Если произошла ошибка при обработке запроса, возвращаем 400 без логирования

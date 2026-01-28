@@ -42,11 +42,15 @@ async def verify_agent_token(authorization: str = Header(..., alias="Authorizati
     Проверяет токен агента из заголовка Authorization: Bearer {token}.
     Возвращает node_uuid если токен валиден.
     """
+    logger.debug("Verifying agent token (length: %d)", len(authorization) if authorization else 0)
+    
     if not authorization.startswith("Bearer "):
+        logger.warning("Invalid authorization header format")
         raise HTTPException(status_code=401, detail="Invalid authorization header format")
     
     token = authorization[7:].strip()  # Убираем "Bearer "
     if not token:
+        logger.warning("Token is empty")
         raise HTTPException(status_code=401, detail="Token is required")
     
     # Проверяем токен в БД
@@ -55,6 +59,7 @@ async def verify_agent_token(authorization: str = Header(..., alias="Authorizati
         logger.warning("Invalid agent token attempted: %s", token[:8] + "...")
         raise HTTPException(status_code=403, detail="Invalid or expired token")
     
+    logger.debug("Agent token verified for node: %s", node_uuid)
     return node_uuid
 
 
@@ -175,18 +180,48 @@ async def receive_connections(
         "node_uuid": node_uuid,
     }
     
-    logger.debug("Sending response: %s", response_data)
-    return JSONResponse(status_code=200, content=response_data)
+    logger.info("Sending response: %s", response_data)
+    
+    # Создаём JSONResponse с явным указанием media_type
+    response = JSONResponse(
+        status_code=200,
+        content=response_data,
+        media_type="application/json"
+    )
+    
+    # Логируем заголовки ответа для отладки
+    logger.debug("Response headers: %s", dict(response.headers))
+    
+    return response
 
 
 @router.get("/health")
 async def collector_health():
     """Проверка здоровья Collector API."""
+    response_data = {
+        "status": "ok",
+        "service": "collector",
+        "database_connected": db_service.is_connected,
+    }
+    logger.info("Health check requested, returning: %s", response_data)
     return JSONResponse(
         status_code=200,
-        content={
-            "status": "ok",
-            "service": "collector",
-            "database_connected": db_service.is_connected,
-        }
+        content=response_data,
+        media_type="application/json"
+    )
+
+
+@router.post("/test")
+async def collector_test():
+    """Тестовый эндпоинт для проверки работы API."""
+    test_data = {
+        "status": "ok",
+        "message": "Collector API is working",
+        "test": True
+    }
+    logger.info("Test endpoint called, returning: %s", test_data)
+    return JSONResponse(
+        status_code=200,
+        content=test_data,
+        media_type="application/json"
     )
