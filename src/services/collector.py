@@ -13,11 +13,13 @@ from pydantic import BaseModel
 
 from src.services.database import db_service
 from src.services.connection_monitor import ConnectionMonitor
+from src.services.violation_detector import IntelligentViolationDetector
 from src.utils.agent_tokens import get_node_by_token
 from src.utils.logger import logger
 
-# Инициализируем ConnectionMonitor
+# Инициализируем сервисы
 connection_monitor = ConnectionMonitor(db_service)
+violation_detector = IntelligentViolationDetector(db_service, connection_monitor)
 
 
 router = APIRouter(prefix="/api/v1/connections", tags=["collector"])
@@ -212,7 +214,7 @@ async def receive_connections(
                 if user_uuid:
                     affected_user_uuids.add(user_uuid)
             
-            # Обновляем статистику для каждого затронутого пользователя
+            # Обновляем статистику и проверяем нарушения для каждого затронутого пользователя
             for user_uuid in affected_user_uuids:
                 try:
                     stats = await connection_monitor.get_user_connection_stats(user_uuid, window_minutes=60)
@@ -224,9 +226,28 @@ async def receive_connections(
                             stats.unique_ips_in_window,
                             stats.simultaneous_connections
                         )
+                    
+                    # Проверяем нарушения
+                    violation_score = await violation_detector.check_user(user_uuid, window_minutes=60)
+                    if violation_score:
+                        if violation_score.total >= violation_detector.THRESHOLDS['monitor']:
+                            logger.warning(
+                                "Violation detected for user %s: score=%.1f, action=%s, reasons=%s",
+                                user_uuid,
+                                violation_score.total,
+                                violation_score.recommended_action.value,
+                                violation_score.reasons[:3]  # Первые 3 причины
+                            )
+                        else:
+                            logger.debug(
+                                "User %s violation check: score=%.1f, action=%s",
+                                user_uuid,
+                                violation_score.total,
+                                violation_score.recommended_action.value
+                            )
                 except Exception as e:
                     logger.warning(
-                        "Error updating connection stats for user %s: %s",
+                        "Error updating connection stats/violations for user %s: %s",
                         user_uuid,
                         e
                     )
