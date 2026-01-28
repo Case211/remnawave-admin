@@ -29,7 +29,7 @@ async def get_node_by_token(db: DatabaseService, token: str) -> Optional[str]:
         return None
     
     try:
-        async with db.pool.acquire() as conn:
+        async with db.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT uuid FROM nodes WHERE agent_token = $1",
                 token
@@ -60,7 +60,7 @@ async def set_node_agent_token(
         token = generate_agent_token()
     
     try:
-        async with db.pool.acquire() as conn:
+        async with db.acquire() as conn:
             await conn.execute(
                 "UPDATE nodes SET agent_token = $1 WHERE uuid = $2",
                 token,
@@ -81,7 +81,7 @@ async def revoke_node_agent_token(db: DatabaseService, node_uuid: str) -> bool:
         return False
     
     try:
-        async with db.pool.acquire() as conn:
+        async with db.acquire() as conn:
             await conn.execute(
                 "UPDATE nodes SET agent_token = NULL WHERE uuid = $1",
                 node_uuid
