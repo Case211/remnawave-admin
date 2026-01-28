@@ -3,7 +3,10 @@
 Скрипт для синхронизации базы ASN по РФ из RIPE Database.
 
 Использование:
-    python scripts/sync_asn_database.py [--limit N] [--full]
+    python3 scripts/sync_asn_database.py [--limit N] [--full]
+    
+    Или из корня проекта:
+    python3 -m scripts.sync_asn_database [--limit N] [--full]
     
 Опции:
     --limit N    Ограничить количество ASN для обработки (для тестирования)
@@ -11,16 +14,48 @@
 """
 import asyncio
 import sys
+import os
 import argparse
 from pathlib import Path
 
 # Добавляем корневую директорию проекта в путь
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+# Получаем абсолютный путь к директории скрипта
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent
 
-from src.services.database import DatabaseService
-from src.services.asn_parser import ASNParser
-from src.utils.logger import logger
+# Добавляем корневую директорию в начало sys.path
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Устанавливаем рабочую директорию на корень проекта
+os.chdir(project_root)
+
+# Проверяем наличие необходимых директорий
+src_dir = project_root / "src"
+if not src_dir.exists():
+    print(f"Ошибка: директория src не найдена в {project_root}")
+    sys.exit(1)
+
+# Теперь импортируем модули
+try:
+    from src.services.database import DatabaseService
+    from src.services.asn_parser import ASNParser
+    from src.utils.logger import logger
+except ImportError as e:
+    print(f"Ошибка импорта: {e}")
+    print(f"Корневая директория проекта: {project_root}")
+    print(f"Текущая рабочая директория: {os.getcwd()}")
+    print(f"sys.path (первые 3 элемента):")
+    for i, path in enumerate(sys.path[:3], 1):
+        print(f"  {i}. {path}")
+    print(f"\nПроверьте:")
+    print(f"  1. Что файл {src_dir / '__init__.py'} существует")
+    print(f"  2. Что файл {src_dir / 'services' / '__init__.py'} существует")
+    print(f"  3. Что файл {src_dir / 'services' / 'database.py'} существует")
+    print(f"\nАльтернативный способ запуска:")
+    print(f"  cd {project_root}")
+    print(f"  python3 -m scripts.sync_asn_database --limit 300")
+    sys.exit(1)
 
 
 async def main():
