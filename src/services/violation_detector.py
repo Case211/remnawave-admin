@@ -15,6 +15,7 @@ from enum import Enum
 
 from src.services.database import DatabaseService
 from src.services.connection_monitor import ConnectionMonitor, ActiveConnection, ConnectionStats
+from src.services.geoip import GeoIPService, IPMetadata, get_geoip_service
 from src.utils.logger import logger
 
 
@@ -400,30 +401,26 @@ class GeoAnalyzer:
         'international': 800, # км/ч (самолёт)
     }
     
-    def __init__(self):
-        # TODO: Интеграция с GeoIP сервисом (MaxMind, ip-api.com и т.д.)
-        # Пока используем заглушку
-        self._geo_cache: Dict[str, Dict[str, str]] = {}
-    
-    def _get_ip_location(self, ip_address: str) -> Optional[Dict[str, str]]:
+    def __init__(self, geoip_service: Optional[GeoIPService] = None):
         """
-        Получить геолокацию IP адреса.
+        Инициализирует GeoAnalyzer.
         
-        TODO: Интегрировать с GeoIP сервисом
+        Args:
+            geoip_service: Сервис для получения геолокации (по умолчанию используется глобальный)
+        """
+        self.geoip = geoip_service or get_geoip_service()
+    
+    async def _get_ip_metadata(self, ip_address: str) -> Optional[IPMetadata]:
+        """
+        Получить метаданные IP адреса.
         
         Args:
             ip_address: IP адрес
         
         Returns:
-            Словарь с 'country', 'city' или None
+            IPMetadata или None
         """
-        # Заглушка - в реальности нужно использовать GeoIP API
-        # Например: ip-api.com, MaxMind GeoIP2, ip2location и т.д.
-        if ip_address in self._geo_cache:
-            return self._geo_cache[ip_address]
-        
-        # Пока возвращаем None - геолокация будет добавлена позже
-        return None
+        return await self.geoip.lookup(ip_address)
     
     def _haversine_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         """
@@ -450,7 +447,7 @@ class GeoAnalyzer:
         
         return R * c
     
-    def analyze(
+    async def analyze(
         self,
         connections: List[ActiveConnection],
         connection_history: List[Dict[str, Any]]
@@ -480,18 +477,20 @@ class GeoAnalyzer:
             if ip:
                 all_ips.add(ip)
         
-        # Получаем геолокацию для каждого IP
-        ip_locations: Dict[str, Dict[str, str]] = {}
+        # Получаем метаданные для каждого IP
+        ip_metadata: Dict[str, IPMetadata] = {}
         for ip in all_ips:
-            location = self._get_ip_location(ip)
-            if location:
-                ip_locations[ip] = location
-                countries.add(location.get("country", ""))
-                cities.add(location.get("city", ""))
+            metadata = await self._get_ip_metadata(ip)
+            if metadata:
+                ip_metadata[ip] = metadata
+                if metadata.country_code:
+                    countries.add(metadata.country_code)
+                if metadata.city:
+                    cities.add(metadata.city)
         
         # Если нет данных о геолокации, возвращаем нулевой скор
         # Не добавляем это в причины, так как отсутствие данных не является нарушением
-        if not ip_locations:
+        if not ip_metadata:
             return GeoScore(
                 score=0.0,
                 reasons=[],
@@ -504,8 +503,8 @@ class GeoAnalyzer:
         active_countries = set()
         for conn in connections:
             ip = str(conn.ip_address)
-            if ip in ip_locations:
-                country = ip_locations[ip].get("country", "")
+            if ip in ip_metadata:
+                country = ip_metadata[ip].country_code
                 if country:
                     active_countries.add(country)
         
@@ -528,16 +527,20 @@ class GeoAnalyzer:
                 prev_ip = str(prev_conn.get("ip_address", ""))
                 curr_ip = str(curr_conn.get("ip_address", ""))
                 
-                if prev_ip not in ip_locations or curr_ip not in ip_locations:
+                if prev_ip not in ip_metadata or curr_ip not in ip_metadata:
                     continue
                 
-                prev_loc = ip_locations[prev_ip]
-                curr_loc = ip_locations[curr_ip]
+                prev_meta = ip_metadata[prev_ip]
+                curr_meta = ip_metadata[curr_ip]
                 
-                prev_country = prev_loc.get("country", "")
-                curr_country = curr_loc.get("country", "")
-                prev_city = prev_loc.get("city", "")
-                curr_city = curr_loc.get("city", "")
+                prev_country = prev_meta.country_code or ""
+                curr_country = curr_meta.country_code or ""
+                prev_city = prev_meta.city or ""
+                curr_city = curr_meta.city or ""
+                prev_lat = prev_meta.latitude
+                prev_lon = prev_meta.longitude
+                curr_lat = curr_meta.latitude
+                curr_lon = curr_meta.longitude
                 
                 # Разные страны
                 if prev_country != curr_country and prev_country and curr_country:
@@ -565,18 +568,32 @@ class GeoAnalyzer:
                             
                             time_diff_hours = (curr_time - prev_time).total_seconds() / 3600
                             
-                            # Проверяем реалистичность перемещения
-                            # TODO: Использовать реальные координаты для вычисления расстояния
-                            # Пока используем эвристику: международное перемещение должно занимать минимум 1 час
-                            if time_diff_hours < 1:
-                                score = max(score, 50.0)
-                                reasons.append(
-                                    f"Нереалистичное перемещение: {prev_country} → {curr_country} за {time_diff_hours:.1f} ч"
-                                )
-                                impossible_travel = True
+                            # Проверяем реалистичность перемещения используя реальные координаты
+                            if prev_lat and prev_lon and curr_lat and curr_lon:
+                                distance_km = self._haversine_distance(prev_lat, prev_lon, curr_lat, curr_lon)
+                                max_distance_km = self.TRAVEL_SPEEDS['international'] * time_diff_hours
+                                
+                                if distance_km > max_distance_km:
+                                    score = max(score, 50.0)
+                                    reasons.append(
+                                        f"Нереалистичное перемещение: {prev_country} → {curr_country} "
+                                        f"({distance_km:.0f} км за {time_diff_hours:.1f} ч, макс: {max_distance_km:.0f} км)"
+                                    )
+                                    impossible_travel = True
+                                else:
+                                    score = max(score, 15.0)
+                                    reasons.append(f"Перемещение между странами: {prev_country} → {curr_country}")
                             else:
-                                score = max(score, 15.0)
-                                reasons.append(f"Перемещение между странами: {prev_country} → {curr_country}")
+                                # Если нет координат, используем эвристику
+                                if time_diff_hours < 1:
+                                    score = max(score, 50.0)
+                                    reasons.append(
+                                        f"Нереалистичное перемещение: {prev_country} → {curr_country} за {time_diff_hours:.1f} ч"
+                                    )
+                                    impossible_travel = True
+                                else:
+                                    score = max(score, 15.0)
+                                    reasons.append(f"Перемещение между странами: {prev_country} → {curr_country}")
                 
                 # Разные города одной страны
                 elif prev_country == curr_country and prev_city != curr_city and prev_city and curr_city:
@@ -590,6 +607,495 @@ class GeoAnalyzer:
             countries=countries,
             cities=cities,
             impossible_travel_detected=impossible_travel
+        )
+
+
+class ASNAnalyzer:
+    """
+    Анализ типа интернет-провайдера (ASN).
+    
+    Правила:
+    - Мобильный оператор = ×0.5 модификатор (снижаем подозрительность)
+    - Домашний провайдер = ×1.0 (стандартный)
+    - Датацентр = ×1.5 (повышенное внимание)
+    - VPN = ×1.2 (может быть легитимно)
+    - Tor = ×2.0 (высокий риск)
+    """
+    
+    def __init__(self, geoip_service: Optional[GeoIPService] = None):
+        """
+        Инициализирует ASNAnalyzer.
+        
+        Args:
+            geoip_service: Сервис для получения метаданных IP (по умолчанию используется глобальный)
+        """
+        self.geoip = geoip_service or get_geoip_service()
+    
+    async def analyze(
+        self,
+        connections: List[ActiveConnection],
+        connection_history: List[Dict[str, Any]]
+    ) -> ASNScore:
+        """
+        Анализирует типы провайдеров для IP адресов.
+        
+        Args:
+            connections: Активные подключения
+            connection_history: История подключений
+        
+        Returns:
+            ASNScore с оценкой и причинами
+        """
+        score = 0.0
+        reasons = []
+        asn_types: Set[str] = set()
+        is_mobile_carrier = False
+        is_datacenter = False
+        is_vpn = False
+        
+        # Собираем уникальные IP
+        all_ips = set()
+        for conn in connections:
+            all_ips.add(str(conn.ip_address))
+        for conn in connection_history:
+            ip = str(conn.get("ip_address", ""))
+            if ip:
+                all_ips.add(ip)
+        
+        # Получаем метаданные для каждого IP
+        ip_metadata: Dict[str, IPMetadata] = {}
+        for ip in all_ips:
+            metadata = await self.geoip.lookup(ip)
+            if metadata:
+                ip_metadata[ip] = metadata
+        
+        if not ip_metadata:
+            return ASNScore(
+                score=0.0,
+                reasons=[],
+                asn_types=asn_types,
+                is_mobile_carrier=False,
+                is_datacenter=False,
+                is_vpn=False
+            )
+        
+        # Анализируем типы провайдеров
+        mobile_count = 0
+        datacenter_count = 0
+        vpn_count = 0
+        residential_count = 0
+        
+        for metadata in ip_metadata.values():
+            if metadata.connection_type:
+                asn_types.add(metadata.connection_type)
+                
+                if metadata.connection_type == 'mobile':
+                    mobile_count += 1
+                    is_mobile_carrier = True
+                elif metadata.connection_type == 'datacenter':
+                    datacenter_count += 1
+                    is_datacenter = True
+                elif metadata.connection_type == 'vpn':
+                    vpn_count += 1
+                    is_vpn = True
+                elif metadata.connection_type == 'residential':
+                    residential_count += 1
+        
+        # Оценка на основе типов провайдеров
+        # Датацентры и VPN в активных подключениях - подозрительно
+        active_ips = {str(conn.ip_address) for conn in connections}
+        active_datacenter_count = sum(
+            1 for ip, meta in ip_metadata.items()
+            if ip in active_ips and meta.connection_type == 'datacenter'
+        )
+        active_vpn_count = sum(
+            1 for ip, meta in ip_metadata.items()
+            if ip in active_ips and meta.connection_type == 'vpn'
+        )
+        
+        if active_datacenter_count > 0:
+            score += 20.0
+            reasons.append(f"Подключения через датацентр ({active_datacenter_count} IP)")
+        
+        if active_vpn_count > 0:
+            score += 10.0
+            reasons.append(f"Подключения через VPN ({active_vpn_count} IP)")
+        
+        # Если все подключения через датацентр/VPN - более подозрительно
+        if len(active_ips) > 0:
+            datacenter_ratio = active_datacenter_count / len(active_ips)
+            if datacenter_ratio > 0.5:
+                score += 15.0
+                reasons.append("Большинство подключений через датацентр")
+        
+        return ASNScore(
+            score=min(score, 100.0),
+            reasons=reasons,
+            asn_types=asn_types,
+            is_mobile_carrier=is_mobile_carrier,
+            is_datacenter=is_datacenter,
+            is_vpn=is_vpn
+        )
+
+
+class UserProfileAnalyzer:
+    """
+    Анализ отклонений от исторического профиля пользователя.
+    
+    Строит baseline на основе истории подключений и сравнивает текущее поведение.
+    """
+    
+    def __init__(self, db_service: DatabaseService):
+        """
+        Инициализирует UserProfileAnalyzer.
+        
+        Args:
+            db_service: Сервис для работы с БД
+        """
+        self.db = db_service
+    
+    async def build_baseline(self, user_uuid: str, days: int = 30) -> Dict[str, Any]:
+        """
+        Строит baseline профиль пользователя на основе истории.
+        
+        Args:
+            user_uuid: UUID пользователя
+            days: Количество дней истории для анализа
+        
+        Returns:
+            Словарь с baseline данными
+        """
+        try:
+            history = await self.db.get_connection_history(user_uuid, days=days)
+            
+            if not history:
+                return {
+                    'typical_countries': [],
+                    'typical_cities': [],
+                    'typical_asns': [],
+                    'avg_daily_unique_ips': 0.0,
+                    'max_daily_unique_ips': 0,
+                    'typical_hours': [],
+                    'avg_session_duration_minutes': 0,
+                    'data_points': 0
+                }
+            
+            # Группируем по дням
+            from collections import defaultdict
+            daily_ips: Dict[str, Set[str]] = defaultdict(set)
+            countries: Set[str] = set()
+            cities: Set[str] = set()
+            asns: Set[str] = set()
+            hours: List[int] = []
+            session_durations: List[float] = []
+            
+            for conn in history:
+                ip = str(conn.get("ip_address", ""))
+                connected_at = conn.get("connected_at")
+                disconnected_at = conn.get("disconnected_at")
+                
+                if connected_at:
+                    if isinstance(connected_at, str):
+                        try:
+                            connected_at = datetime.fromisoformat(connected_at.replace('Z', '+00:00'))
+                        except ValueError:
+                            continue
+                    
+                    if isinstance(connected_at, datetime):
+                        day_key = connected_at.strftime('%Y-%m-%d')
+                        daily_ips[day_key].add(ip)
+                        
+                        hour = connected_at.hour
+                        hours.append(hour)
+                        
+                        # Вычисляем длительность сессии
+                        if disconnected_at:
+                            if isinstance(disconnected_at, str):
+                                try:
+                                    disconnected_at = datetime.fromisoformat(disconnected_at.replace('Z', '+00:00'))
+                                except ValueError:
+                                    disconnected_at = None
+                            
+                            if isinstance(disconnected_at, datetime):
+                                duration_minutes = (disconnected_at - connected_at).total_seconds() / 60
+                                if duration_minutes > 0:
+                                    session_durations.append(duration_minutes)
+            
+            # Вычисляем средние значения
+            daily_unique_ips = [len(ips) for ips in daily_ips.values()]
+            avg_daily_unique_ips = sum(daily_unique_ips) / len(daily_unique_ips) if daily_unique_ips else 0.0
+            max_daily_unique_ips = max(daily_unique_ips) if daily_unique_ips else 0
+            
+            # Типичные часы (часы с наибольшей активностью)
+            from collections import Counter
+            hour_counts = Counter(hours)
+            typical_hours = [hour for hour, _ in hour_counts.most_common(8)]  # Топ-8 часов
+            
+            avg_session_duration = sum(session_durations) / len(session_durations) if session_durations else 0
+            
+            return {
+                'typical_countries': list(countries),
+                'typical_cities': list(cities),
+                'typical_asns': list(asns),
+                'avg_daily_unique_ips': avg_daily_unique_ips,
+                'max_daily_unique_ips': max_daily_unique_ips,
+                'typical_hours': typical_hours,
+                'avg_session_duration_minutes': avg_session_duration,
+                'data_points': len(daily_ips)
+            }
+            
+        except Exception as e:
+            logger.error("Error building baseline for user %s: %s", user_uuid, e, exc_info=True)
+            return {
+                'typical_countries': [],
+                'typical_cities': [],
+                'typical_asns': [],
+                'avg_daily_unique_ips': 0.0,
+                'max_daily_unique_ips': 0,
+                'typical_hours': [],
+                'avg_session_duration_minutes': 0,
+                'data_points': 0
+            }
+    
+    async def analyze(
+        self,
+        user_uuid: str,
+        current_ips: Set[str],
+        current_countries: Set[str],
+        baseline: Optional[Dict[str, Any]] = None
+    ) -> ProfileScore:
+        """
+        Анализирует отклонения от baseline профиля.
+        
+        Args:
+            user_uuid: UUID пользователя
+            current_ips: Текущие уникальные IP
+            current_countries: Текущие страны
+            baseline: Baseline профиль (если None, будет построен автоматически)
+        
+        Returns:
+            ProfileScore с оценкой и причинами
+        """
+        score = 0.0
+        reasons = []
+        deviation = 0.0
+        
+        if baseline is None:
+            baseline = await self.build_baseline(user_uuid, days=30)
+        
+        # Если недостаточно данных для baseline, возвращаем нулевой скор
+        if baseline['data_points'] < 7:  # Минимум неделя данных
+            return ProfileScore(
+                score=0.0,
+                reasons=[],
+                deviation_from_baseline=0.0
+            )
+        
+        # Сравниваем количество уникальных IP
+        current_unique_ips = len(current_ips)
+        avg_daily_ips = baseline['avg_daily_unique_ips']
+        max_daily_ips = baseline['max_daily_unique_ips']
+        
+        if avg_daily_ips > 0:
+            deviation_ratio = current_unique_ips / avg_daily_ips
+            
+            if deviation_ratio > 2.0:
+                score = 45.0
+                reasons.append(f"Аномалия: обычно {avg_daily_ips:.1f} IP/день, сейчас {current_unique_ips}")
+                deviation = deviation_ratio
+            elif deviation_ratio > 1.5:
+                score = 30.0
+                reasons.append(f"Отклонение: обычно {avg_daily_ips:.1f} IP/день, сейчас {current_unique_ips}")
+                deviation = deviation_ratio
+            elif current_unique_ips > max_daily_ips:
+                score = 15.0
+                reasons.append(f"Превышен максимум: обычно макс {max_daily_ips} IP/день, сейчас {current_unique_ips}")
+                deviation = current_unique_ips / max_daily_ips if max_daily_ips > 0 else 0
+        
+        # Проверяем новые страны
+        typical_countries = set(baseline['typical_countries'])
+        new_countries = current_countries - typical_countries
+        
+        if new_countries:
+            score += 20.0
+            reasons.append(f"Новая страна (первый раз): {', '.join(new_countries)}")
+        
+        return ProfileScore(
+            score=min(score, 100.0),
+            reasons=reasons,
+            deviation_from_baseline=deviation
+        )
+
+
+class DeviceFingerprintAnalyzer:
+    """
+    Анализ устройств по fingerprint (User-Agent и другие данные).
+    
+    Правила:
+    - Один fingerprint, разные IP = 0 (один человек, разные сети)
+    - Разные версии одного клиента = +10
+    - Разные клиенты = +25
+    - Разные ОС = +40
+    - > 3 разных fingerprint одновременно = +60
+    """
+    
+    def _extract_fingerprint(self, connection: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        """
+        Извлекает fingerprint из данных подключения.
+        
+        Args:
+            connection: Данные подключения
+        
+        Returns:
+            Словарь с fingerprint данными или None
+        """
+        device_info = connection.get("device_info")
+        user_agent = connection.get("user_agent")
+        
+        if not device_info and not user_agent:
+            return None
+        
+        fingerprint = {}
+        
+        # Парсим User-Agent если доступен
+        if user_agent:
+            fingerprint['user_agent'] = user_agent
+            # Простой парсинг User-Agent для определения ОС и клиента
+            ua_lower = user_agent.lower()
+            
+            # Определяем ОС
+            if 'android' in ua_lower:
+                fingerprint['os_family'] = 'Android'
+            elif 'ios' in ua_lower or 'iphone' in ua_lower or 'ipad' in ua_lower:
+                fingerprint['os_family'] = 'iOS'
+            elif 'windows' in ua_lower:
+                fingerprint['os_family'] = 'Windows'
+            elif 'linux' in ua_lower:
+                fingerprint['os_family'] = 'Linux'
+            elif 'macos' in ua_lower or 'mac os' in ua_lower:
+                fingerprint['os_family'] = 'macOS'
+            else:
+                fingerprint['os_family'] = 'Unknown'
+            
+            # Определяем клиент
+            if 'v2rayng' in ua_lower or 'v2ray' in ua_lower:
+                fingerprint['client_type'] = 'V2RayNG'
+            elif 'shadowrocket' in ua_lower:
+                fingerprint['client_type'] = 'Shadowrocket'
+            elif 'clash' in ua_lower:
+                fingerprint['client_type'] = 'Clash'
+            elif 'surge' in ua_lower:
+                fingerprint['client_type'] = 'Surge'
+            else:
+                fingerprint['client_type'] = 'Unknown'
+        
+        # Используем device_info если доступен
+        if device_info:
+            if isinstance(device_info, dict):
+                fingerprint.update(device_info)
+            elif isinstance(device_info, str):
+                # Пытаемся распарсить JSON строку
+                try:
+                    import json
+                    device_dict = json.loads(device_info)
+                    fingerprint.update(device_dict)
+                except (json.JSONDecodeError, TypeError):
+                    fingerprint['device_info_raw'] = device_info
+        
+        return fingerprint if fingerprint else None
+    
+    def analyze(
+        self,
+        connections: List[ActiveConnection],
+        connection_history: List[Dict[str, Any]]
+    ) -> DeviceScore:
+        """
+        Анализирует fingerprint устройств.
+        
+        Args:
+            connections: Активные подключения
+            connection_history: История подключений
+        
+        Returns:
+            DeviceScore с оценкой и причинами
+        """
+        score = 0.0
+        reasons = []
+        
+        # Собираем все подключения для анализа
+        all_connections = []
+        for conn in connections:
+            all_connections.append({
+                'ip_address': str(conn.ip_address),
+                'device_info': getattr(conn, 'device_info', None),
+                'user_agent': getattr(conn, 'user_agent', None)
+            })
+        
+        for conn in connection_history:
+            all_connections.append(conn)
+        
+        # Извлекаем fingerprint для каждого подключения
+        fingerprints: List[Dict[str, str]] = []
+        for conn in all_connections:
+            fp = self._extract_fingerprint(conn)
+            if fp:
+                fingerprints.append(fp)
+        
+        if not fingerprints:
+            return DeviceScore(
+                score=0.0,
+                reasons=[],
+                unique_fingerprints_count=0,
+                different_os_count=0
+            )
+        
+        # Группируем по уникальным fingerprint
+        unique_fingerprints: List[Dict[str, str]] = []
+        seen_fps = set()
+        
+        for fp in fingerprints:
+            # Создаём ключ для сравнения fingerprint
+            fp_key = (
+                fp.get('os_family', ''),
+                fp.get('client_type', ''),
+                fp.get('user_agent', '')[:100]  # Первые 100 символов User-Agent
+            )
+            
+            if fp_key not in seen_fps:
+                seen_fps.add(fp_key)
+                unique_fingerprints.append(fp)
+        
+        unique_fingerprints_count = len(unique_fingerprints)
+        
+        # Подсчитываем уникальные ОС
+        os_families = set(fp.get('os_family', 'Unknown') for fp in unique_fingerprints)
+        different_os_count = len(os_families)
+        
+        # Подсчитываем уникальные клиенты
+        client_types = set(fp.get('client_type', 'Unknown') for fp in unique_fingerprints)
+        different_clients_count = len(client_types)
+        
+        # Оценка на основе различий
+        if unique_fingerprints_count > 3:
+            score = 60.0
+            reasons.append(f"Много разных устройств одновременно ({unique_fingerprints_count} fingerprint)")
+        elif different_os_count >= 3:
+            score = 40.0
+            reasons.append(f"Разные ОС одновременно: {', '.join(os_families)}")
+        elif different_clients_count >= 2:
+            score = 25.0
+            reasons.append(f"Разные клиенты: {', '.join(client_types)}")
+        elif unique_fingerprints_count > 1:
+            # Проверяем, есть ли разные версии одного клиента
+            if different_clients_count == 1 and unique_fingerprints_count > 1:
+                score = 10.0
+                reasons.append(f"Разные версии одного клиента ({unique_fingerprints_count} fingerprint)")
+        
+        return DeviceScore(
+            score=min(score, 100.0),
+            reasons=reasons,
+            unique_fingerprints_count=unique_fingerprints_count,
+            different_os_count=different_os_count
         )
 
 
@@ -619,11 +1125,23 @@ class IntelligentViolationDetector:
         'hard_block': 95,      # > 95: блокировка + ручная проверка
     }
     
-    def __init__(self, db_service: DatabaseService, connection_monitor: ConnectionMonitor):
+    def __init__(self, db_service: DatabaseService, connection_monitor: ConnectionMonitor, geoip_service: Optional[GeoIPService] = None):
+        """
+        Инициализирует IntelligentViolationDetector.
+        
+        Args:
+            db_service: Сервис для работы с БД
+            connection_monitor: Сервис для мониторинга подключений
+            geoip_service: Сервис для получения геолокации (по умолчанию используется глобальный)
+        """
         self.db = db_service
         self.connection_monitor = connection_monitor
+        geoip = geoip_service or get_geoip_service()
         self.temporal_analyzer = TemporalAnalyzer()
-        self.geo_analyzer = GeoAnalyzer()
+        self.geo_analyzer = GeoAnalyzer(geoip_service=geoip)
+        self.asn_analyzer = ASNAnalyzer(geoip_service=geoip)
+        self.profile_analyzer = UserProfileAnalyzer(db_service)
+        self.device_analyzer = DeviceFingerprintAnalyzer()
     
     async def check_user(self, user_uuid: str, window_minutes: int = 60) -> Optional[ViolationScore]:
         """
@@ -655,13 +1173,19 @@ class IntelligentViolationDetector:
             # Анализируем временные паттерны (передаём количество устройств)
             temporal_score = self.temporal_analyzer.analyze(active_connections, connection_history, user_device_count)
             
-            # Анализируем геолокацию
-            geo_score = self.geo_analyzer.analyze(active_connections, connection_history)
+            # Анализируем геолокацию (async)
+            geo_score = await self.geo_analyzer.analyze(active_connections, connection_history)
             
-            # TODO: Добавить ASN анализ, профильный анализ и анализ устройств
-            asn_score = ASNScore(score=0.0, reasons=[], asn_types=set())
-            profile_score = ProfileScore(score=0.0, reasons=[], deviation_from_baseline=0.0)
-            device_score = DeviceScore(score=0.0, reasons=[], unique_fingerprints_count=0, different_os_count=0)
+            # Анализируем тип провайдера (ASN) (async)
+            asn_score = await self.asn_analyzer.analyze(active_connections, connection_history)
+            
+            # Анализируем отклонения от профиля (async)
+            current_ips = {str(conn.ip_address) for conn in active_connections}
+            current_countries = geo_score.countries
+            profile_score = await self.profile_analyzer.analyze(user_uuid, current_ips, current_countries)
+            
+            # Анализируем fingerprint устройств
+            device_score = self.device_analyzer.analyze(active_connections, connection_history)
             
             # Вычисляем взвешенный скор
             raw_score = (
