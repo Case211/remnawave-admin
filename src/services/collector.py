@@ -12,8 +12,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.services.database import db_service
+from src.services.connection_monitor import ConnectionMonitor
 from src.utils.agent_tokens import get_node_by_token
 from src.utils.logger import logger
+
+# Инициализируем ConnectionMonitor
+connection_monitor = ConnectionMonitor(db_service)
 
 
 router = APIRouter(prefix="/api/v1/connections", tags=["collector"])
@@ -35,6 +39,38 @@ class BatchReport(BaseModel):
     node_uuid: str
     timestamp: datetime
     connections: list[ConnectionReport] = []
+
+
+async def _find_user_uuid_by_identifier(identifier: str) -> Optional[str]:
+    """
+    Вспомогательная функция для поиска user_uuid по различным идентификаторам.
+    
+    Args:
+        identifier: Email или формат "user_XXX" (где XXX - ID пользователя)
+    
+    Returns:
+        UUID пользователя или None
+    """
+    user_uuid = None
+    
+    # Если это формат "user_XXX", извлекаем ID
+    if identifier.startswith("user_"):
+        user_id_str = identifier.replace("user_", "")
+        # Пытаемся найти по short_uuid (может быть числовой ID)
+        user = await db_service.get_user_by_short_uuid(user_id_str)
+        if user:
+            user_uuid = user.get("uuid")
+    
+    # Если не нашли, пытаемся найти по email (обычный формат)
+    if not user_uuid:
+        user_uuid = await db_service.get_user_uuid_by_email(identifier)
+    
+    # Если всё ещё не нашли, пытаемся найти в raw_data по ID
+    if not user_uuid and identifier.startswith("user_"):
+        user_id_str = identifier.replace("user_", "")
+        user_uuid = await db_service.get_user_uuid_by_id_from_raw_data(user_id_str)
+    
+    return user_uuid
 
 
 async def verify_agent_token(authorization: str = Header(..., alias="Authorization")) -> str:
@@ -77,7 +113,8 @@ async def receive_connections(
     
     Записывает подключения в таблицу user_connections.
     """
-    logger.info(
+    # Логируем только на уровне DEBUG для уменьшения шума в логах
+    logger.debug(
         "Received batch request: node_uuid=%s connections_count=%d",
         node_uuid,
         len(report.connections) if report.connections else 0
@@ -107,25 +144,7 @@ async def receive_connections(
     for conn in report.connections:
         try:
             # Пытаемся найти пользователя по разным идентификаторам
-            # Формат из логов может быть: "user_154" (где 154 - ID пользователя)
-            user_uuid = None
-            
-            # Если это формат "user_XXX", извлекаем ID
-            if conn.user_email.startswith("user_"):
-                user_id_str = conn.user_email.replace("user_", "")
-                # Пытаемся найти по short_uuid (может быть числовой ID)
-                user = await db_service.get_user_by_short_uuid(user_id_str)
-                if user:
-                    user_uuid = user.get("uuid")
-            
-            # Если не нашли, пытаемся найти по email (обычный формат)
-            if not user_uuid:
-                user_uuid = await db_service.get_user_uuid_by_email(conn.user_email)
-            
-            # Если всё ещё не нашли, пытаемся найти в raw_data по ID
-            if not user_uuid and conn.user_email.startswith("user_"):
-                user_id_str = conn.user_email.replace("user_", "")
-                user_uuid = await db_service.get_user_uuid_by_id_from_raw_data(user_id_str)
+            user_uuid = await _find_user_uuid_by_identifier(conn.user_email)
             
             if not user_uuid:
                 logger.warning(
@@ -165,13 +184,54 @@ async def receive_connections(
             logger.error("Error processing connection for %s: %s", conn.user_email, e, exc_info=True)
             errors += 1
     
-    logger.info(
-        "Batch processed: node=%s connections=%d processed=%d errors=%d",
-        node_uuid,
-        len(report.connections),
-        processed,
-        errors
-    )
+    # Логируем только если есть ошибки или на уровне DEBUG
+    if errors > 0:
+        logger.warning(
+            "Batch processed with errors: node=%s connections=%d processed=%d errors=%d",
+            node_uuid,
+            len(report.connections),
+            processed,
+            errors
+        )
+    else:
+        logger.debug(
+            "Batch processed: node=%s connections=%d processed=%d",
+            node_uuid,
+            len(report.connections),
+            processed
+        )
+    
+    # После обработки подключений обновляем статистику для затронутых пользователей
+    # (пока только логируем, полная проверка Anti-Abuse будет в следующей фазе)
+    if processed > 0:
+        try:
+            # Собираем UUID пользователей, для которых были записаны подключения
+            affected_user_uuids = set()
+            for conn in report.connections:
+                user_uuid = await _find_user_uuid_by_identifier(conn.user_email)
+                if user_uuid:
+                    affected_user_uuids.add(user_uuid)
+            
+            # Обновляем статистику для каждого затронутого пользователя
+            for user_uuid in affected_user_uuids:
+                try:
+                    stats = await connection_monitor.get_user_connection_stats(user_uuid, window_minutes=60)
+                    if stats:
+                        logger.debug(
+                            "Connection stats for user %s: active=%d, unique_ips=%d, simultaneous=%d",
+                            user_uuid,
+                            stats.active_connections_count,
+                            stats.unique_ips_in_window,
+                            stats.simultaneous_connections
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "Error updating connection stats for user %s: %s",
+                        user_uuid,
+                        e
+                    )
+        except Exception as e:
+            logger.warning("Error updating connection stats after batch processing: %s", e)
     
     response_data = {
         "status": "ok",
@@ -180,7 +240,8 @@ async def receive_connections(
         "node_uuid": node_uuid,
     }
     
-    logger.info("Sending response: %s", response_data)
+    # Логируем ответ только на уровне DEBUG
+    logger.debug("Sending response: %s", response_data)
     
     # Создаём JSONResponse с явным указанием media_type
     response = JSONResponse(

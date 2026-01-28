@@ -105,6 +105,37 @@ docker run -d \
   remnawave-node-agent
 ```
 
+## Настройка Caddy для Admin Bot
+
+**Важно:** Если Admin Bot работает за обратным прокси (Caddy), необходимо настроить проксирование для Collector API.
+
+В конфигурации Caddy для домена Admin Bot добавь правило:
+
+```caddy
+admin.domen.com {
+    # Collector API - проксируем на webhook сервер бота
+    reverse_proxy /api/v1/connections/* bot:8080 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    
+    # Webhook от Remnawave панели
+    reverse_proxy /webhook bot:8080 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+```
+
+**Примечания:**
+- `bot:8080` — имя сервиса Docker и порт webhook сервера (по умолчанию 8080)
+- Правило для `/api/v1/connections/*` должно быть **выше** правила для `/webhook`
+- После изменения конфигурации перезагрузи Caddy: `sudo caddy reload`
+
+📖 **Подробнее:** см. [CADDY_SETUP.md](CADDY_SETUP.md)
+
 ## Контракт с Collector API
 
 Формат запроса (должен совпадать с Admin Bot):
@@ -115,5 +146,3 @@ docker run -d \
   - `node_uuid` — UUID ноды
   - `timestamp` — ISO 8601
   - `connections` — массив объектов: `user_email`, `ip_address`, `node_uuid`, `connected_at`, `disconnected_at?`, `bytes_sent`, `bytes_received`
-
-Подробнее см. `DEVELOPMENT_PLAN.md` и реализацию Collector в Admin Bot.

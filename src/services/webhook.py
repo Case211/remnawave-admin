@@ -56,9 +56,9 @@ async def catch_invalid_requests(request: Request, call_next):
             # Для других путей - 404 без логирования
             return JSONResponse(status_code=404, content={"error": "Not found"})
         
-        # Логируем запросы к Collector API
+        # Логируем запросы к Collector API только на уровне DEBUG
         if request.url.path in collector_paths:
-            logger.info(
+            logger.debug(
                 "Collector API request: %s %s from %s",
                 request.method,
                 request.url.path,

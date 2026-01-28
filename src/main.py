@@ -164,9 +164,23 @@ async def run_webhook_server(bot: Bot, port: int) -> None:
                 return False
             return True
     
-    # Применяем фильтр к логгеру uvicorn
+    # Фильтр для подавления access логов Collector API (слишком частые)
+    class CollectorAPIAccessFilter(logging.Filter):
+        def filter(self, record):
+            message = str(record.getMessage())
+            # Подавляем access логи для Collector API
+            if "/api/v1/connections/" in message:
+                return False
+            return True
+    
+    # Применяем фильтры к логгерам uvicorn
     invalid_request_filter = InvalidRequestFilter()
     uvicorn_logger.addFilter(invalid_request_filter)
+    
+    # Применяем фильтр к access логгеру
+    access_logger = logging.getLogger("uvicorn.access")
+    collector_api_filter = CollectorAPIAccessFilter()
+    access_logger.addFilter(collector_api_filter)
     
     config = uvicorn.Config(
         app=webhook_app,

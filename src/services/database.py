@@ -869,6 +869,122 @@ class DatabaseService:
             )
             return result or 0
     
+    async def get_unique_ips_in_window(
+        self,
+        user_uuid: str,
+        window_minutes: int = 60
+    ) -> int:
+        """
+        Get count of unique IP addresses for a user within a time window.
+        
+        Args:
+            user_uuid: UUID пользователя
+            window_minutes: Временное окно в минутах (по умолчанию 60 минут)
+        
+        Returns:
+            Количество уникальных IP адресов в указанном окне
+        """
+        if not self.is_connected:
+            return 0
+        
+        async with self.acquire() as conn:
+            result = await conn.fetchval(
+                """
+                SELECT COUNT(DISTINCT ip_address) FROM user_connections
+                WHERE user_uuid = $1 
+                AND connected_at > NOW() - INTERVAL '%s minutes'
+                """.replace('%s', str(window_minutes)),
+                user_uuid
+            )
+            return result or 0
+    
+    async def get_simultaneous_connections(
+        self,
+        user_uuid: str
+    ) -> int:
+        """
+        Get count of simultaneous (active, not disconnected) connections for a user.
+        
+        Args:
+            user_uuid: UUID пользователя
+        
+        Returns:
+            Количество одновременных активных подключений
+        """
+        if not self.is_connected:
+            return 0
+        
+        async with self.acquire() as conn:
+            result = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM user_connections
+                WHERE user_uuid = $1 
+                AND disconnected_at IS NULL
+                """,
+                user_uuid
+            )
+            return result or 0
+    
+    async def get_connection_history(
+        self,
+        user_uuid: str,
+        days: int = 7,
+        limit: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """
+        Get connection history for a user.
+        
+        Args:
+            user_uuid: UUID пользователя
+            days: Количество дней истории (по умолчанию 7)
+            limit: Максимальное количество записей (по умолчанию 1000)
+        
+        Returns:
+            Список подключений с информацией об IP, ноде, времени подключения/отключения
+        """
+        if not self.is_connected:
+            return []
+        
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT 
+                    id,
+                    user_uuid,
+                    ip_address,
+                    node_uuid,
+                    connected_at,
+                    disconnected_at,
+                    device_info
+                FROM user_connections
+                WHERE user_uuid = $1 
+                AND connected_at > NOW() - INTERVAL '%s days'
+                ORDER BY connected_at DESC
+                LIMIT $2
+                """.replace('%s', str(days)),
+                user_uuid,
+                limit
+            )
+            return [dict(row) for row in rows]
+    
+    async def get_active_connections(
+        self,
+        user_uuid: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Get active (not disconnected) connections for a user.
+        Alias for get_user_active_connections for consistency with plan.
+        
+        Args:
+            user_uuid: UUID пользователя
+            limit: Максимальное количество записей
+        
+        Returns:
+            Список активных подключений
+        """
+        return await self.get_user_active_connections(user_uuid, limit)
+    
     async def close_user_connection(self, connection_id: int) -> bool:
         """Mark a connection as disconnected."""
         if not self.is_connected:
