@@ -229,6 +229,8 @@ class TemporalAnalyzer:
             simultaneous_count = 0
         
         # Анализ быстрой смены IP в истории
+        # Быстрое переключение между IP само по себе не является нарушением,
+        # если старое подключение было отключено перед новым (нормальное переключение сетей)
         if len(connection_history) > 1:
             # Сортируем по времени подключения
             sorted_history = sorted(
@@ -242,6 +244,7 @@ class TemporalAnalyzer:
                 
                 prev_time = prev_conn.get("connected_at")
                 curr_time = curr_conn.get("connected_at")
+                prev_disconnected = prev_conn.get("disconnected_at")
                 
                 if not prev_time or not curr_time:
                     continue
@@ -257,6 +260,11 @@ class TemporalAnalyzer:
                         curr_time = datetime.fromisoformat(curr_time.replace('Z', '+00:00'))
                     except ValueError:
                         continue
+                if prev_disconnected and isinstance(prev_disconnected, str):
+                    try:
+                        prev_disconnected = datetime.fromisoformat(prev_disconnected.replace('Z', '+00:00'))
+                    except ValueError:
+                        prev_disconnected = None
                 
                 if not isinstance(prev_time, datetime) or not isinstance(curr_time, datetime):
                     continue
@@ -266,22 +274,78 @@ class TemporalAnalyzer:
                     prev_time = prev_time.replace(tzinfo=None)
                 if curr_time.tzinfo:
                     curr_time = curr_time.replace(tzinfo=None)
+                if prev_disconnected and isinstance(prev_disconnected, datetime):
+                    if prev_disconnected.tzinfo:
+                        prev_disconnected = prev_disconnected.replace(tzinfo=None)
                 
-                time_diff = (curr_time - prev_time).total_seconds() / 60  # минуты
+                time_diff_seconds = (curr_time - prev_time).total_seconds()
+                time_diff_minutes = time_diff_seconds / 60
                 
                 prev_ip = str(prev_conn.get("ip_address", ""))
                 curr_ip = str(curr_conn.get("ip_address", ""))
                 
-                # Если IP разные и переключение быстрое (< 1 минуты)
-                if prev_ip != curr_ip and time_diff < 1:
-                    rapid_switches += 1
-                    # Проверяем, есть ли информация о геолокации
-                    # Пока добавляем базовый скор, геолокация будет добавлена позже
-                    if rapid_switches == 1:
-                        score += 10.0
-                        reasons.append(f"Быстрое переключение между IP ({prev_ip} → {curr_ip} за {time_diff:.1f} мин)")
+                # Если IP разные и переключение быстрое (< 30 секунд)
+                if prev_ip != curr_ip and time_diff_seconds < 30:
+                    # Проверяем, было ли старое подключение отключено перед новым
+                    # Если да, это нормальное переключение сетей, не нарушение
+                    is_normal_switch = False
+                    if prev_disconnected and isinstance(prev_disconnected, datetime):
+                        # Если старое подключение отключилось до или в момент нового подключения
+                        if prev_disconnected <= curr_time:
+                            is_normal_switch = True
+                    
+                    # Если старое подключение не отключено, но прошло достаточно времени (> 5 минут),
+                    # считаем его устаревшим (зависшим), а не одновременным
+                    now = datetime.utcnow()
+                    if curr_time.tzinfo:
+                        curr_time_with_tz = curr_time.replace(tzinfo=now.tzinfo if now.tzinfo else None)
                     else:
-                        score += 5.0  # Дополнительные быстрые переключения
+                        curr_time_with_tz = curr_time
+                    time_since_switch = (now - curr_time_with_tz).total_seconds() / 60
+                    
+                    # Если переключение было более 5 минут назад, старое подключение могло "зависнуть"
+                    # и не быть отключено, но это не означает одновременное подключение
+                    is_old_switch = time_since_switch > 5
+                    
+                    # Проверяем, есть ли активные подключения со старым IP в текущий момент
+                    old_ip_still_active_now = False
+                    for conn in connections:
+                        if str(conn.ip_address) == prev_ip:
+                            conn_time = conn.connected_at
+                            if isinstance(conn_time, str):
+                                try:
+                                    conn_time = datetime.fromisoformat(conn_time.replace('Z', '+00:00'))
+                                except ValueError:
+                                    continue
+                            if isinstance(conn_time, datetime):
+                                if conn_time.tzinfo:
+                                    conn_time = conn_time.replace(tzinfo=None)
+                                # Проверяем, что подключение не слишком старое (в пределах 5 минут)
+                                conn_age_minutes = (now - conn_time).total_seconds() / 60
+                                if conn_age_minutes <= 5:
+                                    old_ip_still_active_now = True
+                                    break
+                    
+                    # Быстрое переключение считается нарушением только если:
+                    # 1. Старое подключение не было отключено (или отключилось после нового)
+                    # 2. И есть активные подключения со старым IP СЕЙЧАС (не устаревшие)
+                    # 3. И переключение очень быстрое (< 10 секунд) И происходит много раз
+                    # 4. И это не старое переключение (произошло недавно)
+                    # 5. И есть действительно одновременные подключения (simultaneous_count > 1)
+                    if not is_normal_switch and old_ip_still_active_now and not is_old_switch:
+                        rapid_switches += 1
+                        # Добавляем скор только если есть признаки одновременных подключений
+                        # Быстрое переключение само по себе не является нарушением
+                        if simultaneous_count > 1:
+                            if rapid_switches >= 3:  # Много быстрых переключений при одновременных подключениях
+                                score += 10.0
+                                reasons.append(f"Множественные быстрые переключения между IP ({rapid_switches} раз) при одновременных подключениях")
+                            elif rapid_switches == 1 and time_diff_seconds < 10:
+                                # Очень быстрое переключение (< 10 сек) с активным старым подключением
+                                score += 3.0
+                                reasons.append(f"Быстрое переключение между IP ({prev_ip} → {curr_ip} за {time_diff_seconds:.1f} сек) при одновременных подключениях")
+                    # Если это нормальное переключение (старое отключено) или старое переключение, не считаем нарушением
+                    # Если нет одновременных подключений, быстрое переключение не считается нарушением
         
         return TemporalScore(
             score=min(score, 100.0),  # Максимум 100
