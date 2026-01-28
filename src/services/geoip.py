@@ -114,35 +114,76 @@ class GeoIPService:
                 await asyncio.sleep(self._rate_limit_delay - elapsed)
         self._last_request_time = datetime.utcnow()
     
-    def _classify_asn(self, asn_org: Optional[str], is_mobile: bool, is_hosting: bool) -> tuple[str, bool, bool, bool]:
+    async def _classify_asn(self, asn: Optional[int], asn_org: Optional[str], is_mobile: bool, is_hosting: bool, country_code: Optional[str] = None) -> tuple[str, bool, bool, bool, Optional[str], Optional[str]]:
         """
         Классифицирует тип провайдера на основе ASN организации.
         
+        Использует локальную базу ASN по РФ для более точного определения.
+        
         Returns:
-            (connection_type, is_mobile_carrier, is_datacenter, is_vpn)
+            (connection_type, is_mobile_carrier, is_datacenter, is_vpn, region, city)
         """
+        region = None
+        city = None
+        
+        # Если есть ASN и это Россия - проверяем локальную базу
+        if asn and country_code == 'RU' and self.db and self.db.is_connected:
+            try:
+                asn_record = await self.db.get_asn_record(asn)
+                if asn_record:
+                    # Используем данные из локальной базы
+                    provider_type = asn_record.get('provider_type')
+                    if provider_type:
+                        is_mobile_carrier = provider_type == 'mobile'
+                        is_datacenter = provider_type == 'datacenter'
+                        is_vpn = provider_type == 'vpn'
+                        
+                        # Определяем connection_type
+                        if provider_type == 'mobile':
+                            connection_type = 'mobile'
+                        elif provider_type == 'datacenter':
+                            connection_type = 'datacenter'
+                        elif provider_type == 'vpn':
+                            connection_type = 'vpn'
+                        elif provider_type == 'isp':
+                            connection_type = 'residential'
+                        else:
+                            connection_type = provider_type or 'residential'
+                        
+                        # Извлекаем регион и город из базы ASN
+                        region = asn_record.get('region')
+                        city = asn_record.get('city')
+                        
+                        logger.debug("Using ASN database for AS%d: type=%s, region=%s, city=%s", 
+                                   asn, provider_type, region, city)
+                        
+                        return (connection_type, is_mobile_carrier, is_datacenter, is_vpn, region, city)
+            except Exception as e:
+                logger.debug("Error checking ASN database for AS%d: %s", asn, e)
+        
+        # Fallback: используем эвристику на основе названия организации
         if not asn_org:
-            return ('unknown', False, False, False)
+            return ('unknown', False, False, False, None, None)
         
         asn_lower = asn_org.lower()
         
         # Проверка на VPN
         is_vpn = any(keyword in asn_lower for keyword in self.VPN_KEYWORDS)
         if is_vpn:
-            return ('vpn', False, False, True)
+            return ('vpn', False, False, True, None, None)
         
         # Проверка на мобильный оператор
         is_mobile_carrier = is_mobile or any(carrier in asn_lower for carrier in self.MOBILE_CARRIERS)
         if is_mobile_carrier:
-            return ('mobile', True, False, False)
+            return ('mobile', True, False, False, None, None)
         
         # Проверка на датацентр/хостинг
         is_datacenter = is_hosting or any(keyword in asn_lower for keyword in self.DATACENTER_KEYWORDS)
         if is_datacenter:
-            return ('datacenter', False, True, False)
+            return ('datacenter', False, True, False, None, None)
         
         # По умолчанию - домашний провайдер
-        return ('residential', False, False, False)
+        return ('residential', False, False, False, None, None)
     
     def _metadata_from_db(self, db_row: Dict) -> IPMetadata:
         """Конвертировать строку из БД в IPMetadata."""
@@ -269,22 +310,28 @@ class GeoIPService:
                         except ValueError:
                             pass
             
-            # Классифицируем тип провайдера
+            # Классифицируем тип провайдера (используем локальную базу ASN для РФ)
             asn_org = data.get('asname', '') or data.get('org', '') or data.get('isp', '')
             is_mobile = data.get('mobile', False)
             is_hosting = data.get('hosting', False)
             is_proxy = data.get('proxy', False)
+            country_code = data.get('countryCode')
             
-            connection_type, is_mobile_carrier, is_datacenter, is_vpn = self._classify_asn(
-                asn_org, is_mobile, is_hosting
+            connection_type, is_mobile_carrier, is_datacenter, is_vpn, asn_region, asn_city = await self._classify_asn(
+                asn, asn_org, is_mobile, is_hosting, country_code
             )
+            
+            # Используем регион и город из базы ASN, если они есть (более точные данные для РФ)
+            # Иначе используем данные из API
+            final_region = asn_region or data.get('regionName')
+            final_city = asn_city or data.get('city')
             
             metadata = IPMetadata(
                 ip=ip_address,
-                country_code=data.get('countryCode'),
+                country_code=country_code,
                 country_name=data.get('country'),
-                region=data.get('regionName'),
-                city=data.get('city'),
+                region=final_region,
+                city=final_city,
                 latitude=data.get('lat'),
                 longitude=data.get('lon'),
                 timezone=data.get('timezone'),

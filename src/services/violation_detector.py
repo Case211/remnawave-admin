@@ -612,6 +612,8 @@ class ASNAnalyzer:
     """
     Анализ типа интернет-провайдера (ASN).
     
+    Использует локальную базу ASN по РФ для более точного определения типа провайдера.
+    
     Правила:
     - Мобильный оператор = ×0.5 модификатор (снижаем подозрительность)
     - Домашний провайдер = ×1.0 (стандартный)
@@ -620,14 +622,17 @@ class ASNAnalyzer:
     - Tor = ×2.0 (высокий риск)
     """
     
-    def __init__(self, geoip_service: Optional[GeoIPService] = None):
+    def __init__(self, geoip_service: Optional[GeoIPService] = None, db_service: Optional[DatabaseService] = None):
         """
         Инициализирует ASNAnalyzer.
         
         Args:
             geoip_service: Сервис для получения метаданных IP (по умолчанию используется глобальный)
+            db_service: Сервис для работы с БД (для доступа к базе ASN)
         """
         self.geoip = geoip_service or get_geoip_service()
+        from src.services.database import db_service as global_db_service
+        self.db = db_service or global_db_service
     
     async def analyze(
         self,

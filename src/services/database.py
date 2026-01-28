@@ -1734,6 +1734,206 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error checking IP metadata age for %s: %s", ip_address, e, exc_info=True)
             return True  # При ошибке лучше обновить
+    
+    # ========== Методы для работы с ASN базой по РФ ==========
+    
+    async def get_asn_record(self, asn: int) -> Optional[Dict[str, Any]]:
+        """
+        Получить запись ASN из базы по РФ.
+        
+        Args:
+            asn: Номер ASN
+        
+        Returns:
+            Словарь с данными ASN или None
+        """
+        if not self.is_connected:
+            return None
+        
+        try:
+            async with self.acquire() as conn:
+                query = """
+                    SELECT asn, org_name, org_name_en, provider_type, region, city,
+                           country_code, description, ip_ranges, is_active,
+                           created_at, updated_at, last_synced_at
+                    FROM asn_russia
+                    WHERE asn = $1 AND is_active = true
+                """
+                row = await conn.fetchrow(query, asn)
+                
+                if row:
+                    return dict(row)
+                return None
+            
+        except Exception as e:
+            logger.error("Error getting ASN record %d: %s", asn, e, exc_info=True)
+            return None
+    
+    async def get_asn_by_org_name(self, org_name: str) -> List[Dict[str, Any]]:
+        """
+        Найти ASN по названию организации (поиск по подстроке).
+        
+        Args:
+            org_name: Название организации (или часть)
+        
+        Returns:
+            Список записей ASN
+        """
+        if not self.is_connected:
+            return []
+        
+        try:
+            async with self.acquire() as conn:
+                query = """
+                    SELECT asn, org_name, org_name_en, provider_type, region, city,
+                           country_code, description, is_active
+                    FROM asn_russia
+                    WHERE (LOWER(org_name) LIKE LOWER($1) OR LOWER(org_name_en) LIKE LOWER($1))
+                      AND is_active = true
+                    ORDER BY org_name
+                    LIMIT 100
+                """
+                rows = await conn.fetch(query, f"%{org_name}%")
+                return [dict(row) for row in rows]
+            
+        except Exception as e:
+            logger.error("Error searching ASN by org name '%s': %s", org_name, e, exc_info=True)
+            return []
+    
+    async def save_asn_record(self, asn_record) -> bool:
+        """
+        Сохранить или обновить запись ASN в базе по РФ.
+        
+        Args:
+            asn_record: Объект ASNRecord из asn_parser (или dict с полями)
+        
+        Returns:
+            True если успешно, False при ошибке
+        """
+        if not self.is_connected:
+            return False
+        
+        try:
+            async with self.acquire() as conn:
+                query = """
+                    INSERT INTO asn_russia (
+                        asn, org_name, org_name_en, provider_type, region, city,
+                        country_code, description, ip_ranges, is_active, updated_at
+                    )
+                    VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
+                    )
+                    ON CONFLICT (asn) DO UPDATE SET
+                        org_name = EXCLUDED.org_name,
+                        org_name_en = EXCLUDED.org_name_en,
+                        provider_type = EXCLUDED.provider_type,
+                        region = EXCLUDED.region,
+                        city = EXCLUDED.city,
+                        country_code = EXCLUDED.country_code,
+                        description = EXCLUDED.description,
+                        ip_ranges = EXCLUDED.ip_ranges,
+                        is_active = EXCLUDED.is_active,
+                        updated_at = NOW()
+                """
+                
+                ip_ranges_json = None
+                if asn_record.ip_ranges:
+                    ip_ranges_json = json.dumps(asn_record.ip_ranges)
+                
+                # Поддерживаем как объект ASNRecord, так и dict
+                if hasattr(asn_record, 'asn'):
+                    # Это объект ASNRecord
+                    asn_num = asn_record.asn
+                    org_name = asn_record.org_name
+                    org_name_en = getattr(asn_record, 'org_name_en', None)
+                    provider_type = getattr(asn_record, 'provider_type', None)
+                    region = getattr(asn_record, 'region', None)
+                    city = getattr(asn_record, 'city', None)
+                    country_code = getattr(asn_record, 'country_code', 'RU')
+                    description = getattr(asn_record, 'description', None)
+                    ip_ranges = getattr(asn_record, 'ip_ranges', None)
+                else:
+                    # Это dict
+                    asn_num = asn_record.get('asn')
+                    org_name = asn_record.get('org_name', f'AS{asn_num}')
+                    org_name_en = asn_record.get('org_name_en')
+                    provider_type = asn_record.get('provider_type')
+                    region = asn_record.get('region')
+                    city = asn_record.get('city')
+                    country_code = asn_record.get('country_code', 'RU')
+                    description = asn_record.get('description')
+                    ip_ranges = asn_record.get('ip_ranges')
+                
+                if ip_ranges:
+                    ip_ranges_json = json.dumps(ip_ranges) if not isinstance(ip_ranges, str) else ip_ranges
+                else:
+                    ip_ranges_json = None
+                
+                await conn.execute(
+                    query,
+                    asn_num,
+                    org_name,
+                    org_name_en,
+                    provider_type,
+                    region,
+                    city,
+                    country_code,
+                    description,
+                    ip_ranges_json,
+                    True  # is_active
+                )
+                
+                return True
+            
+        except Exception as e:
+            logger.error("Error saving ASN record %d: %s", asn_record.asn if hasattr(asn_record, 'asn') else '?', e, exc_info=True)
+            return False
+    
+    async def get_asn_by_provider_type(self, provider_type: str) -> List[Dict[str, Any]]:
+        """
+        Получить список ASN по типу провайдера.
+        
+        Args:
+            provider_type: Тип провайдера (mobile/residential/datacenter/vpn/isp)
+        
+        Returns:
+            Список записей ASN
+        """
+        if not self.is_connected:
+            return []
+        
+        try:
+            async with self.acquire() as conn:
+                query = """
+                    SELECT asn, org_name, org_name_en, provider_type, region, city
+                    FROM asn_russia
+                    WHERE provider_type = $1 AND is_active = true
+                    ORDER BY org_name
+                """
+                rows = await conn.fetch(query, provider_type)
+                return [dict(row) for row in rows]
+            
+        except Exception as e:
+            logger.error("Error getting ASN by provider type '%s': %s", provider_type, e, exc_info=True)
+            return []
+    
+    async def update_asn_sync_time(self):
+        """Обновить время последней синхронизации ASN базы."""
+        if not self.is_connected:
+            return
+        
+        try:
+            async with self.acquire() as conn:
+                # Обновляем время синхронизации для всех активных записей
+                query = """
+                    UPDATE asn_russia
+                    SET last_synced_at = NOW()
+                    WHERE is_active = true
+                """
+                await conn.execute(query)
+            
+        except Exception as e:
+            logger.error("Error updating ASN sync time: %s", e, exc_info=True)
 
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:
