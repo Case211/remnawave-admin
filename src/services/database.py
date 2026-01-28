@@ -1388,6 +1388,58 @@ class DatabaseService:
                 return int(result.split()[-1])
             except (IndexError, ValueError):
                 return 0
+    
+    # ==================== User Devices (HWID) ====================
+    # Используем данные из users.raw_data вместо отдельной таблицы
+    
+    async def get_user_devices_count(self, user_uuid: str) -> int:
+        """
+        Получить количество устройств пользователя из локальной БД.
+        Использует данные из users.raw_data (синхронизированные из API).
+        
+        Args:
+            user_uuid: UUID пользователя
+        
+        Returns:
+            Количество устройств пользователя
+        """
+        if not self.is_connected:
+            return 1  # По умолчанию 1 устройство
+        
+        try:
+            async with self.acquire() as conn:
+                # Получаем raw_data пользователя, где могут быть данные об устройствах
+                row = await conn.fetchrow(
+                    "SELECT raw_data FROM users WHERE uuid = $1",
+                    user_uuid
+                )
+                
+                if row and row.get("raw_data"):
+                    raw_data = row["raw_data"]
+                    if isinstance(raw_data, str):
+                        try:
+                            raw_data = json.loads(raw_data)
+                        except json.JSONDecodeError:
+                            pass
+                    
+                    if isinstance(raw_data, dict):
+                        # Проверяем различные возможные поля с данными об устройствах
+                        # Может быть в response.devices или напрямую devicesCount
+                        response = raw_data.get("response", raw_data)
+                        devices_count = response.get("devicesCount")
+                        if devices_count is not None:
+                            return max(1, int(devices_count))
+                        
+                        # Или может быть массив devices
+                        devices = response.get("devices", [])
+                        if isinstance(devices, list) and len(devices) > 0:
+                            return len(devices)
+                
+                # Если данных нет, возвращаем 1 по умолчанию
+                return 1
+        except Exception as e:
+            logger.error("Error getting user devices count for %s: %s", user_uuid, e, exc_info=True)
+            return 1  # По умолчанию 1 устройство
 
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:
@@ -1471,59 +1523,6 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
             pass
     
     return None
-    
-    # ==================== User Devices (HWID) ====================
-    # Используем данные из users.raw_data вместо отдельной таблицы
-    
-    async def get_user_devices_count(self, user_uuid: str) -> int:
-        """
-        Получить количество устройств пользователя из локальной БД.
-        Использует данные из users.raw_data (синхронизированные из API).
-        
-        Args:
-            user_uuid: UUID пользователя
-        
-        Returns:
-            Количество устройств пользователя
-        """
-        if not self.is_connected:
-            return 1  # По умолчанию 1 устройство
-        
-        try:
-            async with self.acquire() as conn:
-                # Получаем raw_data пользователя, где могут быть данные об устройствах
-                row = await conn.fetchrow(
-                    "SELECT raw_data FROM users WHERE uuid = $1",
-                    user_uuid
-                )
-                
-                if row and row.get("raw_data"):
-                    raw_data = row["raw_data"]
-                    if isinstance(raw_data, str):
-                        try:
-                            raw_data = json.loads(raw_data)
-                        except json.JSONDecodeError:
-                            pass
-                    
-                    if isinstance(raw_data, dict):
-                        # Проверяем различные возможные поля с данными об устройствах
-                        # Может быть в response.devices или напрямую devicesCount
-                        response = raw_data.get("response", raw_data)
-                        devices_count = response.get("devicesCount")
-                        if devices_count is not None:
-                            return max(1, int(devices_count))
-                        
-                        # Или может быть массив devices
-                        devices = response.get("devices", [])
-                        if isinstance(devices, list) and len(devices) > 0:
-                            return len(devices)
-                
-                # Если данных нет, возвращаем 1 по умолчанию
-                return 1
-        except Exception as e:
-            logger.error("Error getting user devices count for %s: %s", user_uuid, e, exc_info=True)
-            return 1  # По умолчанию 1 устройство
-    
 
 
 # Global database service instance
