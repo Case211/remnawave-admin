@@ -39,9 +39,15 @@ async def run_migrations() -> bool:
         
         def _run_migrations_sync():
             """Синхронная функция для запуска в executor."""
-            engine = create_engine(db_url)
-            
+            engine = None
             try:
+                # Создаём engine с явным управлением пулом соединений
+                engine = create_engine(
+                    db_url,
+                    pool_pre_ping=True,  # Проверка соединений перед использованием
+                    pool_recycle=3600,    # Переиспользование соединений каждый час
+                )
+                
                 # Проверяем текущую версию
                 with engine.connect() as conn:
                     context = MigrationContext.configure(conn)
@@ -64,7 +70,17 @@ async def run_migrations() -> bool:
                 
                 # Запускаем миграции
                 logger.info("🔄 Running database migrations...")
-                command.upgrade(alembic_cfg, "head")
+                # Используем наш engine для миграций, чтобы контролировать соединения
+                connection = engine.connect()
+                try:
+                    alembic_cfg.attributes['connection'] = connection
+                    command.upgrade(alembic_cfg, "head")
+                    connection.commit()
+                except Exception as e:
+                    connection.rollback()
+                    raise
+                finally:
+                    connection.close()
                 
                 # Проверяем новую версию
                 with engine.connect() as conn:
@@ -75,11 +91,15 @@ async def run_migrations() -> bool:
                 return True
                 
             finally:
-                engine.dispose()
+                # Явно закрываем все соединения и освобождаем ресурсы
+                if engine:
+                    engine.dispose(close=True)  # close=True закрывает все соединения в пуле
         
         # Запускаем в thread pool чтобы не блокировать event loop
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, _run_migrations_sync)
+        result = await loop.run_in_executor(None, _run_migrations_sync)
+        logger.info("🔄 Migration function completed, result: %s", result)
+        return result
         
     except Exception as e:
         logger.error("❌ Failed to run database migrations: %s", e)
@@ -217,9 +237,12 @@ async def main() -> None:
         logger.info("🗄️ Connecting to PostgreSQL database...")
         
         # Сначала запускаем автоматические миграции
+        logger.info("🔄 Starting database migrations check...")
         migrations_ok = await run_migrations()
         if not migrations_ok:
             logger.warning("⚠️ Migrations failed, but continuing...")
+        else:
+            logger.info("✅ Migrations check completed successfully, continuing bot startup...")
         
         # Затем подключаемся через asyncpg для работы бота
         db_connected = await db_service.connect()
