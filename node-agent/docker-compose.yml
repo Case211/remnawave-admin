@@ -23,8 +23,8 @@ services:
     
     # Сеть для подключения к Admin Bot
     # Вариант 1: Если Admin Bot в той же сети (раскомментируй)
-    # networks:
-    #   - remnawave-network
+    networks:
+      - remnawave-network
     
     # Вариант 2: Если Admin Bot на хосте (используй host.docker.internal)
     # В .env укажи: AGENT_COLLECTOR_URL=http://host.docker.internal:8000
@@ -37,10 +37,10 @@ services:
         max-size: "10m"
         max-file: "3"
 
-# Раскомментируй если используешь сеть remnawave-network
-# networks:
-#   remnawave-network:
-#     # Используем внешнюю сеть (если Admin Bot уже запущен)
-#     external: true
-#     # ИЛИ создаём новую сеть (раскомментируй если сети нет):
-#     # external: false
+# Секция networks должна быть на верхнем уровне (не внутри services)
+networks:
+  remnawave-network:
+    # Используем внешнюю сеть (если Admin Bot уже запущен)
+    external: true
+    # ИЛИ создаём новую сеть (раскомментируй если сети нет):
+    # external: false
