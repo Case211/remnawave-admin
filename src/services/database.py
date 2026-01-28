@@ -1638,5 +1638,182 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
     return None
 
 
+# IP Metadata methods
+    async def get_ip_metadata(self, ip_address: str) -> Optional[Dict[str, Any]]:
+        """
+        Получить метаданные IP адреса из БД.
+        
+        Args:
+            ip_address: IP адрес
+        
+        Returns:
+            Словарь с метаданными или None
+        """
+        if not self.is_connected:
+            return None
+        
+        try:
+            query = """
+                SELECT ip_address, country_code, country_name, region, city,
+                       latitude, longitude, timezone, asn, asn_org,
+                       connection_type, is_proxy, is_vpn, is_tor, is_hosting, is_mobile,
+                       created_at, updated_at, last_checked_at
+                FROM ip_metadata
+                WHERE ip_address = $1
+            """
+            row = await self.pool.fetchrow(query, ip_address)
+            
+            if row:
+                return dict(row)
+            return None
+            
+        except Exception as e:
+            logger.error("Error getting IP metadata for %s: %s", ip_address, e, exc_info=True)
+            return None
+    
+    async def get_ip_metadata_batch(self, ip_addresses: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        Получить метаданные для нескольких IP адресов из БД.
+        
+        Args:
+            ip_addresses: Список IP адресов
+        
+        Returns:
+            Словарь {ip: metadata}
+        """
+        if not self.is_connected or not ip_addresses:
+            return {}
+        
+        try:
+            query = """
+                SELECT ip_address, country_code, country_name, region, city,
+                       latitude, longitude, timezone, asn, asn_org,
+                       connection_type, is_proxy, is_vpn, is_tor, is_hosting, is_mobile,
+                       created_at, updated_at, last_checked_at
+                FROM ip_metadata
+                WHERE ip_address = ANY($1::text[])
+            """
+            rows = await self.pool.fetch(query, ip_addresses)
+            
+            result = {}
+            for row in rows:
+                result[row['ip_address']] = dict(row)
+            
+            return result
+            
+        except Exception as e:
+            logger.error("Error getting IP metadata batch: %s", e, exc_info=True)
+            return {}
+    
+    async def save_ip_metadata(
+        self,
+        ip_address: str,
+        country_code: Optional[str] = None,
+        country_name: Optional[str] = None,
+        region: Optional[str] = None,
+        city: Optional[str] = None,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        timezone: Optional[str] = None,
+        asn: Optional[int] = None,
+        asn_org: Optional[str] = None,
+        connection_type: Optional[str] = None,
+        is_proxy: bool = False,
+        is_vpn: bool = False,
+        is_tor: bool = False,
+        is_hosting: bool = False,
+        is_mobile: bool = False
+    ) -> bool:
+        """
+        Сохранить или обновить метаданные IP адреса в БД.
+        
+        Args:
+            ip_address: IP адрес
+            ... остальные параметры метаданных
+        
+        Returns:
+            True если успешно, False при ошибке
+        """
+        if not self.is_connected:
+            return False
+        
+        try:
+            query = """
+                INSERT INTO ip_metadata (
+                    ip_address, country_code, country_name, region, city,
+                    latitude, longitude, timezone, asn, asn_org,
+                    connection_type, is_proxy, is_vpn, is_tor, is_hosting, is_mobile,
+                    last_checked_at, updated_at
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW()
+                )
+                ON CONFLICT (ip_address) DO UPDATE SET
+                    country_code = EXCLUDED.country_code,
+                    country_name = EXCLUDED.country_name,
+                    region = EXCLUDED.region,
+                    city = EXCLUDED.city,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    timezone = EXCLUDED.timezone,
+                    asn = EXCLUDED.asn,
+                    asn_org = EXCLUDED.asn_org,
+                    connection_type = EXCLUDED.connection_type,
+                    is_proxy = EXCLUDED.is_proxy,
+                    is_vpn = EXCLUDED.is_vpn,
+                    is_tor = EXCLUDED.is_tor,
+                    is_hosting = EXCLUDED.is_hosting,
+                    is_mobile = EXCLUDED.is_mobile,
+                    last_checked_at = NOW(),
+                    updated_at = NOW()
+            """
+            
+            await self.pool.execute(
+                query,
+                ip_address, country_code, country_name, region, city,
+                latitude, longitude, timezone, asn, asn_org,
+                connection_type, is_proxy, is_vpn, is_tor, is_hosting, is_mobile
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error("Error saving IP metadata for %s: %s", ip_address, e, exc_info=True)
+            return False
+    
+    async def should_refresh_ip_metadata(self, ip_address: str, max_age_days: int = 30) -> bool:
+        """
+        Проверить, нужно ли обновить метаданные IP (если они старые или отсутствуют).
+        
+        Args:
+            ip_address: IP адрес
+            max_age_days: Максимальный возраст данных в днях (по умолчанию 30)
+        
+        Returns:
+            True если нужно обновить, False если данные актуальны
+        """
+        if not self.is_connected:
+            return True
+        
+        try:
+            query = """
+                SELECT last_checked_at
+                FROM ip_metadata
+                WHERE ip_address = $1
+            """
+            row = await self.pool.fetchrow(query, ip_address)
+            
+            if not row or not row['last_checked_at']:
+                return True  # Нет данных - нужно получить
+            
+            from datetime import timedelta
+            age = datetime.now(timezone.utc) - row['last_checked_at']
+            return age > timedelta(days=max_age_days)
+            
+        except Exception as e:
+            logger.error("Error checking IP metadata age for %s: %s", ip_address, e, exc_info=True)
+            return True  # При ошибке лучше обновить
+
+
 # Global database service instance
 db_service = DatabaseService()

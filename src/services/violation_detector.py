@@ -477,16 +477,14 @@ class GeoAnalyzer:
             if ip:
                 all_ips.add(ip)
         
-        # Получаем метаданные для каждого IP
-        ip_metadata: Dict[str, IPMetadata] = {}
-        for ip in all_ips:
-            metadata = await self._get_ip_metadata(ip)
-            if metadata:
-                ip_metadata[ip] = metadata
-                if metadata.country_code:
-                    countries.add(metadata.country_code)
-                if metadata.city:
-                    cities.add(metadata.city)
+        # Получаем метаданные для всех IP одним batch запросом (оптимизировано)
+        ip_metadata: Dict[str, IPMetadata] = await self.geoip.lookup_batch(list(all_ips))
+        
+        for ip, metadata in ip_metadata.items():
+            if metadata.country_code:
+                countries.add(metadata.country_code)
+            if metadata.city:
+                cities.add(metadata.city)
         
         # Если нет данных о геолокации, возвращаем нулевой скор
         # Не добавляем это в причины, так как отсутствие данных не является нарушением
@@ -662,12 +660,8 @@ class ASNAnalyzer:
             if ip:
                 all_ips.add(ip)
         
-        # Получаем метаданные для каждого IP
-        ip_metadata: Dict[str, IPMetadata] = {}
-        for ip in all_ips:
-            metadata = await self.geoip.lookup(ip)
-            if metadata:
-                ip_metadata[ip] = metadata
+        # Получаем метаданные для всех IP одним batch запросом (оптимизировано)
+        ip_metadata: Dict[str, IPMetadata] = await self.geoip.lookup_batch(list(all_ips))
         
         if not ip_metadata:
             return ASNScore(

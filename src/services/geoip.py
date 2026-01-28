@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 
 import httpx
 from src.config import get_settings
+from src.services.database import DatabaseService, db_service as global_db_service
 from src.utils.logger import logger
 
 
@@ -76,10 +77,18 @@ class GeoIPService:
         'hide.me', 'vpn', 'proxy', 'anonymizer'
     }
     
-    def __init__(self):
+    def __init__(self, db_service: Optional[DatabaseService] = None):
+        """
+        Инициализирует GeoIP сервис.
+        
+        Args:
+            db_service: Сервис для работы с БД (по умолчанию используется глобальный)
+        """
         self.settings = get_settings()
+        self.db = db_service or global_db_service
         self._cache: Dict[str, tuple[IPMetadata, datetime]] = {}
-        self._cache_ttl = timedelta(hours=24)  # Кэш на 24 часа
+        self._cache_ttl = timedelta(hours=24)  # Кэш в памяти на 24 часа
+        self._db_cache_ttl_days = 30  # Кэш в БД на 30 дней
         self._rate_limit_delay = 1.5  # Задержка между запросами (45 запросов/мин = ~1.3 сек/запрос)
         self._last_request_time: Optional[datetime] = None
         self._client: Optional[httpx.AsyncClient] = None
@@ -135,9 +144,63 @@ class GeoIPService:
         # По умолчанию - домашний провайдер
         return ('residential', False, False, False)
     
+    def _metadata_from_db(self, db_row: Dict) -> IPMetadata:
+        """Конвертировать строку из БД в IPMetadata."""
+        return IPMetadata(
+            ip=db_row['ip_address'],
+            country_code=db_row.get('country_code'),
+            country_name=db_row.get('country_name'),
+            region=db_row.get('region'),
+            city=db_row.get('city'),
+            latitude=float(db_row['latitude']) if db_row.get('latitude') is not None else None,
+            longitude=float(db_row['longitude']) if db_row.get('longitude') is not None else None,
+            timezone=db_row.get('timezone'),
+            asn=db_row.get('asn'),
+            asn_org=db_row.get('asn_org'),
+            connection_type=db_row.get('connection_type'),
+            is_proxy=db_row.get('is_proxy', False),
+            is_vpn=db_row.get('is_vpn', False),
+            is_tor=db_row.get('is_tor', False),
+            is_hosting=db_row.get('is_hosting', False),
+            is_mobile=db_row.get('is_mobile', False)
+        )
+    
+    async def _save_metadata_to_db(self, metadata: IPMetadata) -> bool:
+        """Сохранить метаданные в БД."""
+        if not self.db or not self.db.is_connected:
+            return False
+        
+        try:
+            return await self.db.save_ip_metadata(
+                ip_address=metadata.ip,
+                country_code=metadata.country_code,
+                country_name=metadata.country_name,
+                region=metadata.region,
+                city=metadata.city,
+                latitude=metadata.latitude,
+                longitude=metadata.longitude,
+                timezone=metadata.timezone,
+                asn=metadata.asn,
+                asn_org=metadata.asn_org,
+                connection_type=metadata.connection_type,
+                is_proxy=metadata.is_proxy,
+                is_vpn=metadata.is_vpn,
+                is_tor=metadata.is_tor,
+                is_hosting=metadata.is_hosting,
+                is_mobile=metadata.is_mobile
+            )
+        except Exception as e:
+            logger.error("Error saving IP metadata to DB for %s: %s", metadata.ip, e, exc_info=True)
+            return False
+    
     async def lookup(self, ip_address: str, use_cache: bool = True) -> Optional[IPMetadata]:
         """
         Получить метаданные IP адреса.
+        
+        Использует трёхуровневое кэширование:
+        1. БД (30 дней) - персистентное хранилище
+        2. In-Memory (24 часа) - быстрый доступ
+        3. Внешний API - только если данных нет
         
         Args:
             ip_address: IP адрес для поиска
@@ -146,16 +209,35 @@ class GeoIPService:
         Returns:
             IPMetadata или None при ошибке
         """
-        # Проверяем кэш
-        if use_cache and ip_address in self._cache:
-            metadata, cached_at = self._cache[ip_address]
-            if datetime.utcnow() - cached_at < self._cache_ttl:
-                return metadata
-        
         # Пропускаем приватные IP
         if ip_address.startswith(('127.', '192.168.', '10.', '172.16.')):
             return IPMetadata(ip=ip_address, country_code='PRIVATE', country_name='Private Network')
         
+        # Уровень 1: Проверяем in-memory кэш
+        if use_cache and ip_address in self._cache:
+            metadata, cached_at = self._cache[ip_address]
+            if datetime.utcnow() - cached_at < self._cache_ttl:
+                logger.debug("GeoIP in-memory cache hit for %s", ip_address)
+                return metadata
+        
+        # Уровень 2: Проверяем БД (если данные свежие)
+        if use_cache and self.db and self.db.is_connected:
+            # Проверяем, нужно ли обновлять данные из БД
+            should_refresh = await self.db.should_refresh_ip_metadata(
+                ip_address, max_age_days=self._db_cache_ttl_days
+            )
+            
+            if not should_refresh:
+                # Данные в БД свежие - используем их
+                db_row = await self.db.get_ip_metadata(ip_address)
+                if db_row:
+                    metadata = self._metadata_from_db(db_row)
+                    # Сохраняем в in-memory кэш для быстрого доступа
+                    self._cache[ip_address] = (metadata, datetime.utcnow())
+                    logger.debug("GeoIP DB cache hit for %s", ip_address)
+                    return metadata
+        
+        # Уровень 3: Запрос к внешнему API
         try:
             await self._rate_limit()
             
@@ -216,8 +298,11 @@ class GeoIPService:
                 is_mobile=is_mobile_carrier
             )
             
-            # Сохраняем в кэш
+            # Сохраняем в оба кэша: in-memory и БД
             self._cache[ip_address] = (metadata, datetime.utcnow())
+            await self._save_metadata_to_db(metadata)
+            
+            logger.debug("GeoIP API lookup for %s: %s, %s", ip_address, metadata.country_code, metadata.city)
             
             return metadata
             
@@ -232,6 +317,11 @@ class GeoIPService:
         """
         Получить метаданные для нескольких IP адресов.
         
+        Оптимизированная версия с трёхуровневым кэшированием:
+        1. In-Memory кэш (24 часа)
+        2. БД кэш (30 дней) - batch запрос
+        3. Внешний API - только для отсутствующих
+        
         Args:
             ip_addresses: Список IP адресов
         
@@ -239,11 +329,68 @@ class GeoIPService:
             Словарь {ip: IPMetadata}
         """
         results = {}
+        ips_to_check_db = []
+        ips_to_fetch_api = []
         
+        now = datetime.utcnow()
+        
+        # Уровень 1: Проверяем in-memory кэш для всех IP
         for ip in ip_addresses:
-            metadata = await self.lookup(ip)
-            if metadata:
-                results[ip] = metadata
+            # Пропускаем приватные IP
+            if ip.startswith(('127.', '192.168.', '10.', '172.16.')):
+                results[ip] = IPMetadata(ip=ip, country_code='PRIVATE', country_name='Private Network')
+                continue
+            
+            if ip in self._cache:
+                metadata, cached_at = self._cache[ip]
+                if now - cached_at < self._cache_ttl:
+                    results[ip] = metadata
+                    logger.debug("GeoIP batch in-memory cache hit for %s", ip)
+                    continue
+            
+            ips_to_check_db.append(ip)
+        
+        # Уровень 2: Проверяем БД batch запросом (если есть IP для проверки)
+        db_hits = 0
+        if ips_to_check_db and self.db and self.db.is_connected:
+            # Получаем все доступные метаданные из БД одним запросом
+            db_results = await self.db.get_ip_metadata_batch(ips_to_check_db)
+            
+            for ip in ips_to_check_db:
+                db_row = db_results.get(ip)
+                
+                if db_row:
+                    # Проверяем, свежие ли данные в БД
+                    should_refresh = await self.db.should_refresh_ip_metadata(
+                        ip, max_age_days=self._db_cache_ttl_days
+                    )
+                    
+                    if not should_refresh:
+                        # Данные свежие - используем их
+                        metadata = self._metadata_from_db(db_row)
+                        results[ip] = metadata
+                        # Сохраняем в in-memory кэш
+                        self._cache[ip] = (metadata, datetime.utcnow())
+                        logger.debug("GeoIP batch DB cache hit for %s", ip)
+                        db_hits += 1
+                        continue
+                
+                # Данных нет или они устарели - нужно запросить у API
+                ips_to_fetch_api.append(ip)
+        else:
+            # БД недоступна - все IP идут в API
+            ips_to_fetch_api = ips_to_check_db
+        
+        # Уровень 3: Запросы к внешнему API только для отсутствующих IP
+        if ips_to_fetch_api:
+            in_memory_hits = len(results) - db_hits
+            logger.info("GeoIP batch lookup: %d IPs from cache (in-memory: %d, DB: %d), %d IPs to fetch from API", 
+                       len(results), in_memory_hits, db_hits, len(ips_to_fetch_api))
+            
+            for ip in ips_to_fetch_api:
+                metadata = await self.lookup(ip, use_cache=False)  # use_cache=False так как уже проверили все уровни
+                if metadata:
+                    results[ip] = metadata
         
         return results
     
@@ -256,9 +403,14 @@ class GeoIPService:
 _geoip_service: Optional[GeoIPService] = None
 
 
-def get_geoip_service() -> GeoIPService:
-    """Получить глобальный экземпляр GeoIP сервиса."""
+def get_geoip_service(db_service: Optional[DatabaseService] = None) -> GeoIPService:
+    """
+    Получить глобальный экземпляр GeoIP сервиса.
+    
+    Args:
+        db_service: Опциональный DB сервис (по умолчанию используется глобальный)
+    """
     global _geoip_service
     if _geoip_service is None:
-        _geoip_service = GeoIPService()
+        _geoip_service = GeoIPService(db_service=db_service)
     return _geoip_service
