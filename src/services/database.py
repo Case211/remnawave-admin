@@ -201,6 +201,18 @@ class DatabaseService:
             )
             return _db_row_to_api_format(row) if row else None
     
+    async def get_user_uuid_by_email(self, email: str) -> Optional[str]:
+        """Находит user_uuid по email. Возвращает UUID или None."""
+        if not self.is_connected or not email:
+            return None
+        
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT uuid FROM users WHERE email = $1 LIMIT 1",
+                email
+            )
+            return str(row["uuid"]) if row else None
+    
     async def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user by username (case-insensitive) with raw_data in API format."""
         if not self.is_connected:

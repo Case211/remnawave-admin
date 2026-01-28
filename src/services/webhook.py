@@ -21,9 +21,13 @@ from src.utils.notifications import (
     send_crm_notification,
     send_generic_notification,
 )
+from src.services.collector import router as collector_router
 
 
 app = FastAPI(title="Remnawave Admin Webhook")
+
+# Подключаем Collector API роутер
+app.include_router(collector_router)
 
 
 @app.middleware("http")
@@ -39,7 +43,9 @@ async def catch_invalid_requests(request: Request, call_next):
             return JSONResponse(status_code=405, content={"error": "Method not allowed"})
         
         # Проверяем путь - если это не наш endpoint, возвращаем 404 без логирования
-        if request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"]:
+        # Collector API пути начинаются с /api/v1/connections
+        collector_paths = ["/api/v1/connections/batch", "/api/v1/connections/health"]
+        if request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"] + collector_paths:
             # Для корневого пути возвращаем простой ответ
             if request.url.path == "/":
                 return JSONResponse(status_code=200, content={"service": "remnawave-admin-webhook", "status": "ok"})
