@@ -226,19 +226,36 @@ class TemporalAnalyzer:
                 # Если есть действительно одновременные подключения с разных IP
                 if max_simultaneous_ips > 1:
                     simultaneous_count = max_simultaneous_ips
-                    # Учитываем количество устройств пользователя
-                    # Если количество одновременных подключений не превышает количество устройств + 1,
-                    # это может быть нормальным (например, переключение между сетями)
-                    if simultaneous_count > max_allowed_simultaneous + 1:
-                        if simultaneous_count > 3:
+                    # Учитываем количество устройств пользователя с буфером для переключения сетей
+                    # Буфер +2 учитывает:
+                    # - Переключение WiFi <-> Mobile (кратковременно 2 IP от одного устройства)
+                    # - Роутинг с несколькими точками выхода
+                    # - Погрешности определения времени отключения
+                    network_switch_buffer = 2
+                    effective_threshold = max_allowed_simultaneous + network_switch_buffer
+
+                    # Если пользователь имеет много устройств (3+), даём дополнительный буфер
+                    # т.к. несколько устройств могут одновременно переключать сети
+                    if user_device_count >= 3:
+                        effective_threshold += 1
+
+                    if simultaneous_count > effective_threshold:
+                        # Значительное превышение - вероятно шаринг
+                        excess = simultaneous_count - effective_threshold
+                        if excess >= 3 or simultaneous_count > 5:
+                            # Сильное превышение - высокий скор
                             score = 100.0
-                            reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (> 3, устройств: {user_device_count})")
-                        else:
+                            reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, лимит: {effective_threshold}, устройств: {user_device_count})")
+                        elif excess >= 2:
+                            # Умеренное превышение
                             score = 80.0
-                            reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (устройств: {user_device_count})")
-                    # Если количество подключений соответствует количеству устройств или немного больше,
-                    # это может быть нормальным (переключение сетей, несколько устройств)
-                    # Не добавляем скор, но оставляем для статистики
+                            reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, лимит: {effective_threshold}, устройств: {user_device_count})")
+                        else:
+                            # Минимальное превышение на 1 - может быть ложное срабатывание
+                            # Используем низкий скор, чтобы не блокировать сразу
+                            score = 40.0
+                            reasons.append(f"Возможно избыточные подключения: {simultaneous_count} IP (лимит: {effective_threshold}, устройств: {user_device_count})")
+                    # Если количество подключений в пределах нормы - не добавляем скор
                 else:
                     # Если нет одновременных подключений, используем количество уникальных IP для статистики
                     simultaneous_count = len(set(ip for _, ip in valid_connections))
@@ -385,30 +402,173 @@ class TemporalAnalyzer:
 class GeoAnalyzer:
     """
     Анализ географического распределения IP.
-    
+
     Правила:
     - Все IP из одного города = 0
-    - IP из разных городов одной страны = +5
+    - IP из одной агломерации (пригороды) = 0 (нормально)
+    - IP из разных городов одной страны (далеко) = +5
     - IP из разных стран, последовательно, реалистично = +15
     - IP из разных стран, нереалистичное время = +50
     - IP из разных стран одновременно = +90
     """
-    
+
     # Скорости перемещения (км/ч)
     TRAVEL_SPEEDS = {
         'same_city': 50,      # км/ч (такси/метро)
         'same_country': 200,  # км/ч (поезд/машина)
         'international': 800, # км/ч (самолёт)
     }
+
+    # Агломерации и пригороды - города, которые считаются одной локацией
+    # Ключ - название агломерации, значение - список городов (включая центр)
+    METROPOLITAN_AREAS = {
+        # Свердловская область
+        'yekaterinburg': [
+            'yekaterinburg', 'ekaterinburg', 'sredneuralsk', 'verkhnyaya pyshma',
+            'aramil', 'berezovsky', 'pervouralsk', 'revda', 'polevskoy',
+            'sredneuralsk', 'verkhniaya pyshma', 'koltsovo', 'sysert'
+        ],
+        # Московская область
+        'moscow': [
+            'moscow', 'moskva', 'zelenograd', 'khimki', 'mytishchi', 'korolev',
+            'lyubertsy', 'krasnogorsk', 'balashikha', 'podolsk', 'odintsovo',
+            'shchyolkovo', 'dolgoprudny', 'reutov', 'lobnya', 'zhukovsky',
+            'elektrostal', 'pushkino', 'sergiev posad', 'noginsk', 'orekhovo-zuyevo',
+            'fryazino', 'ivanteevka', 'vidnoye', 'domodedovo', 'vnukovo'
+        ],
+        # Санкт-Петербург
+        'saint_petersburg': [
+            'saint petersburg', 'st. petersburg', 'st petersburg', 'petersburg',
+            'sankt-peterburg', 'pushkin', 'kolpino', 'petrodvorets', 'lomonosov',
+            'zelenogorsk', 'sestroretsk', 'kronstadt', 'gatchina', 'vsevolozhsk',
+            'tosno', 'kirishi', 'kirovsk', 'murino', 'kudrovo'
+        ],
+        # Казань
+        'kazan': [
+            'kazan', 'vysokaya gora', 'zelenodolsk', 'laishevo', 'pestretsy'
+        ],
+        # Новосибирск
+        'novosibirsk': [
+            'novosibirsk', 'berdsk', 'akademgorodok', 'ob', 'koltsovo'
+        ],
+        # Нижний Новгород
+        'nizhny_novgorod': [
+            'nizhny novgorod', 'nizhnij novgorod', 'bor', 'dzerzhinsk', 'kstovo'
+        ],
+        # Самара
+        'samara': [
+            'samara', 'togliatti', 'tolyatti', 'syzran', 'novokuybyshevsk', 'chapayevsk'
+        ],
+        # Ростов-на-Дону
+        'rostov': [
+            'rostov-on-don', 'rostov-na-donu', 'bataysk', 'aksay', 'novocherkassk', 'taganrog'
+        ],
+        # Красноярск
+        'krasnoyarsk': [
+            'krasnoyarsk', 'divnogorsk', 'sosnovoborsk', 'zheleznogorsk'
+        ],
+        # Челябинск
+        'chelyabinsk': [
+            'chelyabinsk', 'kopeysk', 'kopeisk', 'zlatoust', 'miass'
+        ],
+        # Уфа
+        'ufa': [
+            'ufa', 'sterlitamak', 'salavat', 'neftekamsk'
+        ],
+        # Пермь
+        'perm': [
+            'perm', 'krasnokamsk', 'chusovoy', 'lysva', 'berezniki'
+        ],
+        # Волгоград
+        'volgograd': [
+            'volgograd', 'volzhsky', 'volzhskiy', 'kamyshin'
+        ],
+        # Воронеж
+        'voronezh': [
+            'voronezh', 'novovoronezh', 'semiluki'
+        ],
+        # Краснодар
+        'krasnodar': [
+            'krasnodar', 'goryachy klyuch', 'dinskaya', 'korenovsk'
+        ],
+        # Сочи
+        'sochi': [
+            'sochi', 'adler', 'lazarevskoye', 'krasnaya polyana', 'dagomys', 'khosta'
+        ],
+    }
+
+    # Минимальное расстояние (км), при котором города считаются "далеко" друг от друга
+    MIN_DISTANCE_FOR_DIFFERENT_CITIES = 100
     
     def __init__(self, geoip_service: Optional[GeoIPService] = None):
         """
         Инициализирует GeoAnalyzer.
-        
+
         Args:
             geoip_service: Сервис для получения геолокации (по умолчанию используется глобальный)
         """
         self.geoip = geoip_service or get_geoip_service()
+        # Строим обратный индекс: город -> агломерация
+        self._city_to_metro: Dict[str, str] = {}
+        for metro_name, cities in self.METROPOLITAN_AREAS.items():
+            for city in cities:
+                self._city_to_metro[city.lower()] = metro_name
+
+    def _normalize_city_name(self, city: str) -> str:
+        """
+        Нормализует название города для сравнения.
+
+        Убирает диакритику, приводит к нижнему регистру, убирает лишние символы.
+        """
+        if not city:
+            return ""
+        # Приводим к нижнему регистру и убираем лишние пробелы
+        normalized = city.lower().strip()
+        # Убираем распространённые суффиксы
+        for suffix in [' city', ' gorod', ' oblast', ' region']:
+            if normalized.endswith(suffix):
+                normalized = normalized[:-len(suffix)].strip()
+        return normalized
+
+    def _get_metro_area(self, city: str) -> Optional[str]:
+        """
+        Возвращает название агломерации для города или None, если город не в агломерации.
+        """
+        if not city:
+            return None
+        normalized = self._normalize_city_name(city)
+        return self._city_to_metro.get(normalized)
+
+    def _are_cities_in_same_metro(self, city1: str, city2: str) -> bool:
+        """
+        Проверяет, находятся ли два города в одной агломерации.
+
+        Args:
+            city1: Первый город
+            city2: Второй город
+
+        Returns:
+            True если города в одной агломерации или это один и тот же город
+        """
+        if not city1 or not city2:
+            return False
+
+        normalized1 = self._normalize_city_name(city1)
+        normalized2 = self._normalize_city_name(city2)
+
+        # Если названия идентичны после нормализации
+        if normalized1 == normalized2:
+            return True
+
+        # Проверяем агломерации
+        metro1 = self._city_to_metro.get(normalized1)
+        metro2 = self._city_to_metro.get(normalized2)
+
+        # Если оба города в одной агломерации
+        if metro1 and metro2 and metro1 == metro2:
+            return True
+
+        return False
     
     async def _get_ip_metadata(self, ip_address: str) -> Optional[IPMetadata]:
         """
@@ -595,9 +755,39 @@ class GeoAnalyzer:
                 
                 # Разные города одной страны
                 elif prev_country == curr_country and prev_city != curr_city and prev_city and curr_city:
-                    score = max(score, 5.0)
-                    if not reasons:
-                        reasons.append(f"Разные города одной страны: {prev_city} → {curr_city}")
+                    # Проверяем, находятся ли города в одной агломерации (пригороды)
+                    # Если да, это нормальное поведение - не добавляем скор
+                    if self._are_cities_in_same_metro(prev_city, curr_city):
+                        # Города в одной агломерации - это нормально (пригороды, районы города)
+                        # Не добавляем скор и не добавляем причину
+                        pass
+                    else:
+                        # Города в разных регионах - проверяем расстояние
+                        # Если есть координаты, проверяем реальное расстояние
+                        if prev_lat and prev_lon and curr_lat and curr_lon:
+                            distance_km = self._haversine_distance(prev_lat, prev_lon, curr_lat, curr_lon)
+                            # Градуированная оценка по расстоянию:
+                            # < 50 км: 0 (очень близко, вероятно погрешность GeoIP или пригород)
+                            # 50-100 км: 2 (умеренно близко)
+                            # > 100 км: 5 (разные регионы)
+                            if distance_km <= 50:
+                                # Очень близко - игнорируем (возможно погрешность GeoIP)
+                                pass
+                            elif distance_km <= self.MIN_DISTANCE_FOR_DIFFERENT_CITIES:
+                                # Умеренно близко - минимальный скор
+                                score = max(score, 2.0)
+                                if not reasons:
+                                    reasons.append(f"Близкие города: {prev_city} → {curr_city} ({distance_km:.0f} км)")
+                            else:
+                                # Далеко - стандартный скор
+                                score = max(score, 5.0)
+                                if not reasons:
+                                    reasons.append(f"Разные города одной страны: {prev_city} → {curr_city} ({distance_km:.0f} км)")
+                        else:
+                            # Нет координат - добавляем минимальный скор на всякий случай
+                            score = max(score, 3.0)
+                            if not reasons:
+                                reasons.append(f"Разные города одной страны: {prev_city} → {curr_city}")
         
         return GeoScore(
             score=min(score, 100.0),
@@ -842,7 +1032,9 @@ class UserProfileAnalyzer:
                 return {
                     'typical_countries': [],
                     'typical_cities': [],
+                    'typical_regions': [],
                     'typical_asns': [],
+                    'known_ips': [],
                     'avg_daily_unique_ips': 0.0,
                     'max_daily_unique_ips': 0,
                     'typical_hours': [],
@@ -853,31 +1045,52 @@ class UserProfileAnalyzer:
             # Группируем по дням
             from collections import defaultdict
             daily_ips: Dict[str, Set[str]] = defaultdict(set)
+            all_known_ips: Set[str] = set()  # Все IP, которые пользователь использовал
             countries: Set[str] = set()
             cities: Set[str] = set()
+            regions: Set[str] = set()  # Регионы (области)
             asns: Set[str] = set()
             hours: List[int] = []
             session_durations: List[float] = []
-            
+
             for conn in history:
                 ip = str(conn.get("ip_address", ""))
                 connected_at = conn.get("connected_at")
                 disconnected_at = conn.get("disconnected_at")
-                
+
+                # Собираем известные IP
+                if ip:
+                    all_known_ips.add(ip)
+
+                # Собираем гео-данные если есть в истории
+                country = conn.get("country") or conn.get("country_code")
+                city = conn.get("city")
+                region = conn.get("region")
+                asn = conn.get("asn") or conn.get("asn_org")
+
+                if country:
+                    countries.add(str(country))
+                if city:
+                    cities.add(str(city))
+                if region:
+                    regions.add(str(region))
+                if asn:
+                    asns.add(str(asn))
+
                 if connected_at:
                     if isinstance(connected_at, str):
                         try:
                             connected_at = datetime.fromisoformat(connected_at.replace('Z', '+00:00'))
                         except ValueError:
                             continue
-                    
+
                     if isinstance(connected_at, datetime):
                         day_key = connected_at.strftime('%Y-%m-%d')
                         daily_ips[day_key].add(ip)
-                        
+
                         hour = connected_at.hour
                         hours.append(hour)
-                        
+
                         # Вычисляем длительность сессии
                         if disconnected_at:
                             if isinstance(disconnected_at, str):
@@ -885,7 +1098,7 @@ class UserProfileAnalyzer:
                                     disconnected_at = datetime.fromisoformat(disconnected_at.replace('Z', '+00:00'))
                                 except ValueError:
                                     disconnected_at = None
-                            
+
                             if isinstance(disconnected_at, datetime):
                                 duration_minutes = (disconnected_at - connected_at).total_seconds() / 60
                                 if duration_minutes > 0:
@@ -906,20 +1119,24 @@ class UserProfileAnalyzer:
             return {
                 'typical_countries': list(countries),
                 'typical_cities': list(cities),
+                'typical_regions': list(regions),
                 'typical_asns': list(asns),
+                'known_ips': list(all_known_ips),  # IP, которые пользователь уже использовал
                 'avg_daily_unique_ips': avg_daily_unique_ips,
                 'max_daily_unique_ips': max_daily_unique_ips,
                 'typical_hours': typical_hours,
                 'avg_session_duration_minutes': avg_session_duration,
                 'data_points': len(daily_ips)
             }
-            
+
         except Exception as e:
             logger.error("Error building baseline for user %s: %s", user_uuid, e, exc_info=True)
             return {
                 'typical_countries': [],
                 'typical_cities': [],
+                'typical_regions': [],
                 'typical_asns': [],
+                'known_ips': [],
                 'avg_daily_unique_ips': 0.0,
                 'max_daily_unique_ips': 0,
                 'typical_hours': [],
@@ -961,14 +1178,34 @@ class UserProfileAnalyzer:
                 deviation_from_baseline=0.0
             )
         
+        # Проверяем, сколько текущих IP уже известны пользователю
+        known_ips = set(baseline.get('known_ips', []))
+        if current_ips and known_ips:
+            known_current_ips = current_ips & known_ips
+            known_ratio = len(known_current_ips) / len(current_ips) if current_ips else 0
+
+            # Если все или большинство IP известны, это очень хороший знак
+            if known_ratio >= 0.8:
+                # Почти все IP известны - минимальный скор
+                # Это означает, что пользователь использует те же IP, что и раньше
+                return ProfileScore(
+                    score=0.0,
+                    reasons=[],
+                    deviation_from_baseline=0.0
+                )
+            elif known_ratio >= 0.5:
+                # Половина IP известны - снижаем потенциальный скор
+                # Будем применять модификатор 0.5 к итоговому скору
+                pass  # Продолжаем анализ, но учтём это позже
+
         # Сравниваем количество уникальных IP
         current_unique_ips = len(current_ips)
         avg_daily_ips = baseline['avg_daily_unique_ips']
         max_daily_ips = baseline['max_daily_unique_ips']
-        
+
         if avg_daily_ips > 0:
             deviation_ratio = current_unique_ips / avg_daily_ips
-            
+
             if deviation_ratio > 2.0:
                 score = 45.0
                 reasons.append(f"Аномалия: обычно {avg_daily_ips:.1f} IP/день, сейчас {current_unique_ips}")
@@ -981,14 +1218,20 @@ class UserProfileAnalyzer:
                 score = 15.0
                 reasons.append(f"Превышен максимум: обычно макс {max_daily_ips} IP/день, сейчас {current_unique_ips}")
                 deviation = current_unique_ips / max_daily_ips if max_daily_ips > 0 else 0
-        
-        # Проверяем новые страны
-        typical_countries = set(baseline['typical_countries'])
-        new_countries = current_countries - typical_countries
-        
-        if new_countries:
-            score += 20.0
-            reasons.append(f"Новая страна (первый раз): {', '.join(new_countries)}")
+
+        # Проверяем новые страны (только если baseline содержит страны)
+        typical_countries = set(baseline.get('typical_countries', []))
+        if typical_countries:  # Только если есть данные о типичных странах
+            new_countries = current_countries - typical_countries
+            if new_countries:
+                score += 20.0
+                reasons.append(f"Новая страна (первый раз): {', '.join(new_countries)}")
+
+        # Если половина IP известны, снижаем скор
+        if current_ips and known_ips:
+            known_ratio = len(current_ips & known_ips) / len(current_ips)
+            if known_ratio >= 0.5:
+                score *= 0.5  # Снижаем на 50% если половина IP известны
         
         return ProfileScore(
             score=min(score, 100.0),
@@ -1295,10 +1538,41 @@ class IntelligentViolationDetector:
                 elif asn_score.is_vpn:
                     raw_score *= 1.8  # Сильно повышаем для VPN
             
-            # Если есть действительно одновременные подключения (скор > 0), минимум 85
-            # Проверяем, что temporal_score > 0, что означает обнаружение одновременных подключений
-            if temporal_score.score > 0 and temporal_score.simultaneous_connections_count > 1:
-                raw_score = max(raw_score, 85.0)
+            # Детекция паттерна переключения сетей (Mobile <-> WiFi)
+            # Если обнаружен такой паттерн, значительно снижаем скор,
+            # т.к. это нормальное поведение пользователя
+            is_network_switch = self._detect_network_switch_pattern(asn_score.asn_types)
+            if is_network_switch:
+                # Снижаем скор на 50% если это похоже на переключение сетей
+                score_before_switch = raw_score
+                raw_score *= 0.5
+                logger.debug(
+                    "Network switch pattern detected (mobile + home ISP), reducing score: %.2f -> %.2f",
+                    score_before_switch, raw_score
+                )
+
+            # Проверяем, от одного ли провайдера (ASN) все IP
+            # Если да, это снижает вероятность шаринга
+            is_same_asn, asn_ratio = await self._check_same_asn_pattern(active_connections, connection_history)
+            if is_same_asn and asn_ratio >= 0.8:
+                # Все IP от одного провайдера - снижаем скор
+                score_before_asn = raw_score
+                raw_score *= 0.7  # 30% снижение
+                logger.debug(
+                    "Same ASN pattern detected (%.0f%% from same provider), reducing score: %.2f -> %.2f",
+                    asn_ratio * 100, score_before_asn, raw_score
+                )
+
+            # Если есть серьёзные одновременные подключения (высокий скор), устанавливаем минимум
+            # Но только если temporal_score достаточно высокий (80+), что указывает на реальное нарушение
+            # Не применяем минимум для пограничных случаев (переключение сетей, несколько устройств)
+            # И не применяем если обнаружен паттерн переключения сетей
+            if not is_network_switch:
+                if temporal_score.score >= 80.0 and temporal_score.simultaneous_connections_count > 1:
+                    raw_score = max(raw_score, 85.0)
+                elif temporal_score.score >= 40.0 and temporal_score.simultaneous_connections_count > 1:
+                    # Пограничные случаи - устанавливаем минимум для мониторинга, но не блокировки
+                    raw_score = max(raw_score, 50.0)
             
             # Определяем рекомендуемое действие
             recommended_action = self._get_action(raw_score)
@@ -1337,6 +1611,80 @@ class IntelligentViolationDetector:
             )
             return None
     
+    def _detect_network_switch_pattern(self, asn_types: Set[str]) -> bool:
+        """
+        Определить, выглядит ли паттерн подключений как переключение сетей (WiFi <-> Mobile).
+
+        Паттерн переключения сетей:
+        - Есть мобильный провайдер (mobile, mobile_isp) И
+        - Есть домашний/проводной провайдер (fixed, isp, residential, regional_isp)
+
+        Это типичная ситуация когда пользователь переключается между WiFi дома и мобильным интернетом.
+
+        Args:
+            asn_types: Множество типов провайдеров в подключениях
+
+        Returns:
+            True если паттерн похож на переключение сетей
+        """
+        mobile_types = {'mobile', 'mobile_isp'}
+        home_types = {'fixed', 'isp', 'residential', 'regional_isp'}
+
+        has_mobile = bool(asn_types & mobile_types)
+        has_home = bool(asn_types & home_types)
+
+        return has_mobile and has_home
+
+    async def _check_same_asn_pattern(
+        self,
+        connections: List[ActiveConnection],
+        connection_history: List[Dict[str, Any]]
+    ) -> tuple[bool, float]:
+        """
+        Проверить, принадлежат ли IP одному провайдеру (ASN).
+
+        Если все или большинство IP от одного провайдера, это снижает вероятность шаринга,
+        т.к. один пользователь обычно использует одного провайдера (особенно мобильного).
+
+        Returns:
+            Tuple (is_same_asn, ratio) где:
+            - is_same_asn: True если большинство IP от одного провайдера
+            - ratio: доля IP от основного провайдера (0.0 - 1.0)
+        """
+        # Собираем все уникальные IP
+        all_ips = set()
+        for conn in connections:
+            all_ips.add(str(conn.ip_address))
+        for conn in connection_history[-10:]:  # Последние 10 записей
+            ip = str(conn.get("ip_address", ""))
+            if ip:
+                all_ips.add(ip)
+
+        if len(all_ips) <= 1:
+            return True, 1.0
+
+        # Получаем ASN для каждого IP
+        ip_metadata = await self.geo_analyzer.geoip.lookup_batch(list(all_ips))
+
+        asn_counts: Dict[Optional[int], int] = {}
+        for ip, meta in ip_metadata.items():
+            asn = meta.asn
+            asn_counts[asn] = asn_counts.get(asn, 0) + 1
+
+        if not asn_counts:
+            return False, 0.0
+
+        # Находим самый частый ASN
+        max_asn_count = max(asn_counts.values())
+        total_ips = len(ip_metadata)
+
+        ratio = max_asn_count / total_ips if total_ips > 0 else 0.0
+
+        # Считаем "один провайдер" если >= 70% IP от него
+        is_same_asn = ratio >= 0.7
+
+        return is_same_asn, ratio
+
     def _get_action(self, score: float) -> ViolationAction:
         """Определить рекомендуемое действие на основе скора."""
         if score < self.THRESHOLDS['no_action']:
