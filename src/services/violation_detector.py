@@ -1032,7 +1032,9 @@ class UserProfileAnalyzer:
                 return {
                     'typical_countries': [],
                     'typical_cities': [],
+                    'typical_regions': [],
                     'typical_asns': [],
+                    'known_ips': [],
                     'avg_daily_unique_ips': 0.0,
                     'max_daily_unique_ips': 0,
                     'typical_hours': [],
@@ -1043,31 +1045,52 @@ class UserProfileAnalyzer:
             # Группируем по дням
             from collections import defaultdict
             daily_ips: Dict[str, Set[str]] = defaultdict(set)
+            all_known_ips: Set[str] = set()  # Все IP, которые пользователь использовал
             countries: Set[str] = set()
             cities: Set[str] = set()
+            regions: Set[str] = set()  # Регионы (области)
             asns: Set[str] = set()
             hours: List[int] = []
             session_durations: List[float] = []
-            
+
             for conn in history:
                 ip = str(conn.get("ip_address", ""))
                 connected_at = conn.get("connected_at")
                 disconnected_at = conn.get("disconnected_at")
-                
+
+                # Собираем известные IP
+                if ip:
+                    all_known_ips.add(ip)
+
+                # Собираем гео-данные если есть в истории
+                country = conn.get("country") or conn.get("country_code")
+                city = conn.get("city")
+                region = conn.get("region")
+                asn = conn.get("asn") or conn.get("asn_org")
+
+                if country:
+                    countries.add(str(country))
+                if city:
+                    cities.add(str(city))
+                if region:
+                    regions.add(str(region))
+                if asn:
+                    asns.add(str(asn))
+
                 if connected_at:
                     if isinstance(connected_at, str):
                         try:
                             connected_at = datetime.fromisoformat(connected_at.replace('Z', '+00:00'))
                         except ValueError:
                             continue
-                    
+
                     if isinstance(connected_at, datetime):
                         day_key = connected_at.strftime('%Y-%m-%d')
                         daily_ips[day_key].add(ip)
-                        
+
                         hour = connected_at.hour
                         hours.append(hour)
-                        
+
                         # Вычисляем длительность сессии
                         if disconnected_at:
                             if isinstance(disconnected_at, str):
@@ -1075,7 +1098,7 @@ class UserProfileAnalyzer:
                                     disconnected_at = datetime.fromisoformat(disconnected_at.replace('Z', '+00:00'))
                                 except ValueError:
                                     disconnected_at = None
-                            
+
                             if isinstance(disconnected_at, datetime):
                                 duration_minutes = (disconnected_at - connected_at).total_seconds() / 60
                                 if duration_minutes > 0:
@@ -1096,20 +1119,24 @@ class UserProfileAnalyzer:
             return {
                 'typical_countries': list(countries),
                 'typical_cities': list(cities),
+                'typical_regions': list(regions),
                 'typical_asns': list(asns),
+                'known_ips': list(all_known_ips),  # IP, которые пользователь уже использовал
                 'avg_daily_unique_ips': avg_daily_unique_ips,
                 'max_daily_unique_ips': max_daily_unique_ips,
                 'typical_hours': typical_hours,
                 'avg_session_duration_minutes': avg_session_duration,
                 'data_points': len(daily_ips)
             }
-            
+
         except Exception as e:
             logger.error("Error building baseline for user %s: %s", user_uuid, e, exc_info=True)
             return {
                 'typical_countries': [],
                 'typical_cities': [],
+                'typical_regions': [],
                 'typical_asns': [],
+                'known_ips': [],
                 'avg_daily_unique_ips': 0.0,
                 'max_daily_unique_ips': 0,
                 'typical_hours': [],
@@ -1151,14 +1178,34 @@ class UserProfileAnalyzer:
                 deviation_from_baseline=0.0
             )
         
+        # Проверяем, сколько текущих IP уже известны пользователю
+        known_ips = set(baseline.get('known_ips', []))
+        if current_ips and known_ips:
+            known_current_ips = current_ips & known_ips
+            known_ratio = len(known_current_ips) / len(current_ips) if current_ips else 0
+
+            # Если все или большинство IP известны, это очень хороший знак
+            if known_ratio >= 0.8:
+                # Почти все IP известны - минимальный скор
+                # Это означает, что пользователь использует те же IP, что и раньше
+                return ProfileScore(
+                    score=0.0,
+                    reasons=[],
+                    deviation_from_baseline=0.0
+                )
+            elif known_ratio >= 0.5:
+                # Половина IP известны - снижаем потенциальный скор
+                # Будем применять модификатор 0.5 к итоговому скору
+                pass  # Продолжаем анализ, но учтём это позже
+
         # Сравниваем количество уникальных IP
         current_unique_ips = len(current_ips)
         avg_daily_ips = baseline['avg_daily_unique_ips']
         max_daily_ips = baseline['max_daily_unique_ips']
-        
+
         if avg_daily_ips > 0:
             deviation_ratio = current_unique_ips / avg_daily_ips
-            
+
             if deviation_ratio > 2.0:
                 score = 45.0
                 reasons.append(f"Аномалия: обычно {avg_daily_ips:.1f} IP/день, сейчас {current_unique_ips}")
@@ -1171,14 +1218,20 @@ class UserProfileAnalyzer:
                 score = 15.0
                 reasons.append(f"Превышен максимум: обычно макс {max_daily_ips} IP/день, сейчас {current_unique_ips}")
                 deviation = current_unique_ips / max_daily_ips if max_daily_ips > 0 else 0
-        
-        # Проверяем новые страны
-        typical_countries = set(baseline['typical_countries'])
-        new_countries = current_countries - typical_countries
-        
-        if new_countries:
-            score += 20.0
-            reasons.append(f"Новая страна (первый раз): {', '.join(new_countries)}")
+
+        # Проверяем новые страны (только если baseline содержит страны)
+        typical_countries = set(baseline.get('typical_countries', []))
+        if typical_countries:  # Только если есть данные о типичных странах
+            new_countries = current_countries - typical_countries
+            if new_countries:
+                score += 20.0
+                reasons.append(f"Новая страна (первый раз): {', '.join(new_countries)}")
+
+        # Если половина IP известны, снижаем скор
+        if current_ips and known_ips:
+            known_ratio = len(current_ips & known_ips) / len(current_ips)
+            if known_ratio >= 0.5:
+                score *= 0.5  # Снижаем на 50% если половина IP известны
         
         return ProfileScore(
             score=min(score, 100.0),
