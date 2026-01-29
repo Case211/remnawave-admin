@@ -1,5 +1,6 @@
 """Утилиты для отправки уведомлений в Telegram топики."""
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Dict
 
 from aiogram import Bot
 from aiogram.types import Message
@@ -7,6 +8,32 @@ from aiogram.types import Message
 from src.config import get_settings
 from src.utils.formatters import format_bytes, format_datetime
 from src.utils.logger import logger
+
+
+# Кэш для throttling уведомлений о нарушениях
+# Ключ: user_uuid, Значение: datetime последнего уведомления
+_violation_notification_cache: Dict[str, datetime] = {}
+
+# Минимальный интервал между уведомлениями для одного пользователя (минуты)
+VIOLATION_NOTIFICATION_COOLDOWN_MINUTES = 15
+
+
+def _cleanup_notification_cache() -> None:
+    """Очищает устаревшие записи из кэша уведомлений (старше 1 часа)."""
+    global _violation_notification_cache
+    now = datetime.utcnow()
+    max_age = timedelta(hours=1)
+
+    expired_keys = [
+        key for key, timestamp in _violation_notification_cache.items()
+        if now - timestamp > max_age
+    ]
+
+    for key in expired_keys:
+        del _violation_notification_cache[key]
+
+    if expired_keys:
+        logger.debug("Cleaned up %d expired notification cache entries", len(expired_keys))
 
 
 async def _get_squad_name_by_uuid(squad_uuid: str) -> str:
@@ -710,21 +737,41 @@ async def send_violation_notification(
     user_uuid: str,
     violation_score: dict,
     user_info: dict | None = None,
+    force: bool = False,
 ) -> None:
     """Отправляет уведомление о нарушении в Telegram топик.
-    
+
     Args:
         bot: Экземпляр бота для отправки сообщений
         user_uuid: UUID пользователя
         violation_score: Словарь с данными о нарушении (ViolationScore)
         user_info: Опциональная информация о пользователе из БД
+        force: Если True, игнорирует throttling и отправляет уведомление в любом случае
     """
     settings = get_settings()
-    
+
     if not settings.notifications_chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
-    
+
+    # Throttling: проверяем, не было ли недавно уведомления для этого пользователя
+    now = datetime.utcnow()
+    if not force and user_uuid in _violation_notification_cache:
+        last_notification = _violation_notification_cache[user_uuid]
+        cooldown = timedelta(minutes=VIOLATION_NOTIFICATION_COOLDOWN_MINUTES)
+
+        if now - last_notification < cooldown:
+            minutes_remaining = ((last_notification + cooldown) - now).total_seconds() / 60
+            logger.debug(
+                "Violation notification throttled for user %s (cooldown: %.1f min remaining)",
+                user_uuid,
+                minutes_remaining
+            )
+            return
+
+    # Очищаем старые записи из кэша (старше 1 часа)
+    _cleanup_notification_cache()
+
     # Используем топик для нарушений (подозреваемых пользователей)
     topic_id = settings.get_topic_for_violations()
     
@@ -893,14 +940,19 @@ async def send_violation_notification(
             message_kwargs["message_thread_id"] = topic_id
         
         await bot.send_message(**message_kwargs)
+
+        # Обновляем кэш после успешной отправки
+        _violation_notification_cache[user_uuid] = datetime.utcnow()
+
         logger.info(
-            "Violation notification sent successfully user_uuid=%s score=%.1f action=%s topic_id=%s",
+            "Violation notification sent successfully user_uuid=%s score=%.1f action=%s topic_id=%s cooldown=%d_min",
             user_uuid,
             total_score,
             action_name,
-            topic_id
+            topic_id,
+            VIOLATION_NOTIFICATION_COOLDOWN_MINUTES
         )
-    
+
     except Exception as exc:
         logger.exception(
             "Failed to send violation notification user_uuid=%s error=%s",
