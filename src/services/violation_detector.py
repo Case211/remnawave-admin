@@ -227,11 +227,20 @@ class TemporalAnalyzer:
                 if max_simultaneous_ips > 1:
                     simultaneous_count = max_simultaneous_ips
                     # Учитываем количество устройств пользователя с буфером для переключения сетей
-                    # Буфер +2 учитывает:
+                    # Буфер учитывает:
                     # - Переключение WiFi <-> Mobile (кратковременно 2 IP от одного устройства)
                     # - Роутинг с несколькими точками выхода
                     # - Погрешности определения времени отключения
-                    network_switch_buffer = 2
+                    #
+                    # ВАЖНО: Буфер должен быть меньше для маленьких лимитов,
+                    # иначе пользователь с лимитом 1 устройство может использовать 3 IP без детекции!
+                    if user_device_count <= 1:
+                        network_switch_buffer = 1  # Маленький буфер для лимита 1 устройство
+                    elif user_device_count == 2:
+                        network_switch_buffer = 1  # Маленький буфер для лимита 2 устройства
+                    else:
+                        network_switch_buffer = 2  # Стандартный буфер для 3+ устройств
+
                     effective_threshold = max_allowed_simultaneous + network_switch_buffer
 
                     # Если пользователь имеет много устройств (3+), даём дополнительный буфер
@@ -239,23 +248,36 @@ class TemporalAnalyzer:
                     if user_device_count >= 3:
                         effective_threshold += 1
 
+                    # ПЕРВАЯ ПРОВЕРКА: Базовое превышение лимита устройств
+                    # Если количество одновременных IP > лимита устройств, это уже подозрительно
+                    # (даже если с буфером всё ещё ок)
+                    if simultaneous_count > max_allowed_simultaneous:
+                        excess_over_limit = simultaneous_count - max_allowed_simultaneous
+                        if excess_over_limit >= 2:
+                            # Превышение лимита на 2+ - это почти наверняка шаринг
+                            score = max(score, 70.0)
+                            reasons.append(f"Превышение лимита устройств: {simultaneous_count} IP одновременно при лимите {max_allowed_simultaneous} устройств (превышение на {excess_over_limit})")
+                        else:
+                            # Превышение на 1 - может быть переключение сетей, но заслуживает мониторинга
+                            score = max(score, 55.0)
+                            reasons.append(f"Возможное превышение лимита: {simultaneous_count} IP при лимите {max_allowed_simultaneous} устройств")
+
+                    # ВТОРАЯ ПРОВЕРКА: Превышение с учётом буфера (более серьёзное нарушение)
                     if simultaneous_count > effective_threshold:
                         # Значительное превышение - вероятно шаринг
                         excess = simultaneous_count - effective_threshold
                         if excess >= 3 or simultaneous_count > 5:
                             # Сильное превышение - высокий скор
                             score = 100.0
-                            reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, лимит: {effective_threshold}, устройств: {user_device_count})")
+                            reasons.append(f"Множественные одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
                         elif excess >= 2:
                             # Умеренное превышение
-                            score = 80.0
-                            reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, лимит: {effective_threshold}, устройств: {user_device_count})")
+                            score = max(score, 85.0)
+                            reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
                         else:
-                            # Минимальное превышение на 1 - может быть ложное срабатывание
-                            # Используем низкий скор, чтобы не блокировать сразу
-                            score = 40.0
-                            reasons.append(f"Возможно избыточные подключения: {simultaneous_count} IP (лимит: {effective_threshold}, устройств: {user_device_count})")
-                    # Если количество подключений в пределах нормы - не добавляем скор
+                            # Минимальное превышение на 1 - добавляем к скору
+                            score = max(score, 65.0)
+                            reasons.append(f"Избыточные подключения: {simultaneous_count} IP (порог: {effective_threshold}, устройств: {user_device_count})")
                 else:
                     # Если нет одновременных подключений, используем количество уникальных IP для статистики
                     simultaneous_count = len(set(ip for _, ip in valid_connections))
