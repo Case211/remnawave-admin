@@ -293,32 +293,19 @@ async def receive_connections(
                     # Проверяем нарушения
                     violation_score = await violation_detector.check_user(user_uuid, window_minutes=60)
                     if violation_score:
-                        # Логируем все проверки нарушений для отладки
-                        logger.info(
-                            "Violation check for user %s: score=%.1f (threshold=%d), action=%s, reasons_count=%d",
-                            user_uuid,
-                            violation_score.total,
-                            violation_detector.THRESHOLDS['monitor'],
-                            violation_score.recommended_action.value,
-                            len(violation_score.reasons)
-                        )
-
                         if violation_score.total >= violation_detector.THRESHOLDS['monitor']:
                             logger.warning(
-                                "🚨 Violation detected for user %s: score=%.1f, action=%s, reasons=%s",
+                                "Violation detected for user %s: score=%.1f, action=%s, reasons=%s",
                                 user_uuid,
                                 violation_score.total,
                                 violation_score.recommended_action.value,
-                                violation_score.reasons[:3]  # Первые 3 причины
+                                violation_score.reasons[:3]
                             )
 
                             # Отправляем уведомление в Telegram топик
                             try:
                                 bot: Bot | None = getattr(request.app.state, 'bot', None)
                                 if bot:
-                                    logger.info("Bot available, sending violation notification for user %s", user_uuid)
-
-                                    # Преобразуем ViolationScore в словарь для функции уведомлений
                                     violation_dict = {
                                         'total': violation_score.total,
                                         'recommended_action': violation_score.recommended_action,
@@ -326,33 +313,26 @@ async def receive_connections(
                                         'breakdown': violation_score.breakdown,
                                         'confidence': violation_score.confidence,
                                     }
-
-                                    # Получаем информацию о пользователе из БД
                                     user_info = await db_service.get_user_by_uuid(user_uuid)
-
-                                    # Отправляем уведомление асинхронно (не блокируем обработку запроса)
                                     await send_violation_notification(
                                         bot=bot,
                                         user_uuid=user_uuid,
                                         violation_score=violation_dict,
                                         user_info=user_info
                                     )
-                                    logger.info("Violation notification sent for user %s", user_uuid)
                                 else:
-                                    logger.warning("⚠️ Bot NOT available in app.state, cannot send violation notification for user %s", user_uuid)
+                                    logger.debug("Bot not available in app.state, skipping notification")
                             except Exception as notify_error:
-                                logger.error(
-                                    "❌ Failed to send violation notification for user %s: %s",
+                                logger.warning(
+                                    "Failed to send violation notification for user %s: %s",
                                     user_uuid,
-                                    notify_error,
-                                    exc_info=True
+                                    notify_error
                                 )
                         else:
-                            logger.info(
-                                "User %s violation score %.1f below threshold %d, no notification",
+                            logger.debug(
+                                "User %s: score=%.1f (below threshold)",
                                 user_uuid,
-                                violation_score.total,
-                                violation_detector.THRESHOLDS['monitor']
+                                violation_score.total
                             )
                 except Exception as e:
                     logger.warning(
