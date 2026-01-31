@@ -828,7 +828,7 @@ class DatabaseService:
                 """
                 SELECT id FROM user_connections
                 WHERE user_uuid = $1 
-                AND ip_address = $2::inet
+                AND ip_address = $2
                 AND disconnected_at IS NULL
                 ORDER BY connected_at DESC
                 LIMIT 1
@@ -889,13 +889,13 @@ class DatabaseService:
                     UPDATE user_connections
                     SET disconnected_at = NOW()
                     WHERE user_uuid = $1
-                    AND ip_address != $2::inet
+                    AND ip_address != $2
                     AND disconnected_at IS NULL
                     AND connected_at < NOW() - INTERVAL '2 minutes'
                     """,
                     user_uuid, ip_address
                 )
-                
+
                 return conn_id
             else:
                 # Создаём новую запись
@@ -904,7 +904,7 @@ class DatabaseService:
                 result = await conn.fetchval(
                     """
                     INSERT INTO user_connections (user_uuid, ip_address, node_uuid, device_info, connected_at)
-                    VALUES ($1, $2::inet, $3, $4, $5)
+                    VALUES ($1, $2, $3, $4, $5)
                     RETURNING id
                     """,
                     user_uuid, ip_address, node_uuid,
@@ -919,13 +919,13 @@ class DatabaseService:
                     UPDATE user_connections
                     SET disconnected_at = NOW()
                     WHERE user_uuid = $1
-                    AND ip_address != $2::inet
+                    AND ip_address != $2
                     AND disconnected_at IS NULL
                     AND connected_at < NOW() - INTERVAL '2 minutes'
                     """,
                     user_uuid, ip_address
                 )
-                
+
                 return result
     
     async def get_user_active_connections(
