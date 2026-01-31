@@ -2,6 +2,7 @@ from aiogram import Dispatcher
 
 from src.handlers.basic import router as basic_router
 from src.handlers.billing import router as billing_router
+from src.handlers.bot_config import router as bot_config_router
 from src.handlers.bulk import router as bulk_router
 from src.handlers.commands import router as commands_router
 from src.handlers.errors import errors_handler
@@ -27,6 +28,7 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.include_router(billing_router)
     dp.include_router(bulk_router)
     dp.include_router(system_router)
+    dp.include_router(bot_config_router)
     # Старый basic_router оставляем для обратной совместимости (временно)
     dp.include_router(basic_router)
     dp.errors.register(errors_handler)

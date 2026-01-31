@@ -299,14 +299,13 @@ async def receive_connections(
                                 user_uuid,
                                 violation_score.total,
                                 violation_score.recommended_action.value,
-                                violation_score.reasons[:3]  # Первые 3 причины
+                                violation_score.reasons[:3]
                             )
-                            
+
                             # Отправляем уведомление в Telegram топик
                             try:
                                 bot: Bot | None = getattr(request.app.state, 'bot', None)
                                 if bot:
-                                    # Преобразуем ViolationScore в словарь для функции уведомлений
                                     violation_dict = {
                                         'total': violation_score.total,
                                         'recommended_action': violation_score.recommended_action,
@@ -335,6 +334,7 @@ async def receive_connections(
                                             logger.debug("Failed to get GeoIP data for notification: %s", geo_error)
 
                                     # Отправляем уведомление асинхронно (не блокируем обработку запроса)
+                                    user_info = await db_service.get_user_by_uuid(user_uuid)
                                     await send_violation_notification(
                                         bot=bot,
                                         user_uuid=user_uuid,
@@ -344,20 +344,18 @@ async def receive_connections(
                                         ip_metadata=ip_metadata,
                                     )
                                 else:
-                                    logger.debug("Bot not available in app.state, skipping violation notification")
+                                    logger.debug("Bot not available in app.state, skipping notification")
                             except Exception as notify_error:
                                 logger.warning(
                                     "Failed to send violation notification for user %s: %s",
                                     user_uuid,
-                                    notify_error,
-                                    exc_info=True
+                                    notify_error
                                 )
                         else:
                             logger.debug(
-                                "User %s violation check: score=%.1f, action=%s",
+                                "User %s: score=%.1f (below threshold)",
                                 user_uuid,
-                                violation_score.total,
-                                violation_score.recommended_action.value
+                                violation_score.total
                             )
                 except Exception as e:
                     logger.warning(

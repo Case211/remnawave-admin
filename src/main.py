@@ -8,6 +8,7 @@ import uvicorn
 
 from src.config import get_settings
 from src.services.api_client import api_client
+from src.services.config_service import config_service
 from src.services.database import db_service
 from src.services.sync import sync_service
 from src.services.health_check import PanelHealthChecker
@@ -304,6 +305,15 @@ async def main() -> None:
     # Сохраняем health checker в состоянии диспетчера для доступа из обработчиков
     dp["health_checker"] = health_checker
     
+    # Инициализируем сервис динамической конфигурации (если БД подключена)
+    if db_connected:
+        logger.info("⚙️ Initializing dynamic config service...")
+        config_initialized = await config_service.initialize()
+        if config_initialized:
+            logger.info("✅ Dynamic config service initialized")
+        else:
+            logger.warning("⚠️ Dynamic config service initialization failed, using .env only")
+
     # Запускаем сервис синхронизации (если БД подключена)
     if db_connected:
         logger.info("🔄 Starting data sync service...")

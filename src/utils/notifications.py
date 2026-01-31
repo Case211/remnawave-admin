@@ -757,7 +757,7 @@ async def send_violation_notification(
     settings = get_settings()
 
     if not settings.notifications_chat_id:
-        logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
+        logger.debug("Violation notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
 
     # Throttling: проверяем, не было ли недавно уведомления для этого пользователя
@@ -767,11 +767,9 @@ async def send_violation_notification(
         cooldown = timedelta(minutes=VIOLATION_NOTIFICATION_COOLDOWN_MINUTES)
 
         if now - last_notification < cooldown:
-            minutes_remaining = ((last_notification + cooldown) - now).total_seconds() / 60
             logger.debug(
-                "Violation notification throttled for user %s (cooldown: %.1f min remaining)",
-                user_uuid,
-                minutes_remaining
+                "Violation notification throttled for user %s (cooldown active)",
+                user_uuid
             )
             return
 
