@@ -466,6 +466,11 @@ For questions and issues, create an [issue](https://github.com/case211/remnawave
 
 Join our Telegram chat - https://t.me/remnawave_admin
 
+Support author donation:
+
+TON: UQDDe-jyFTbQsPHqyojdFeO1_m7uPF-q1w0g_MfbSOd3l1sC
+USDT TRC20: TGyHJj2PsYSUwkBbWdc7BFfsAxsE6SGGJP
+BTC: bc1qusrj5rxd3kv6eepzpdn0muy6zsl3c24xunz2xn
 ---
 
 <div align="center">
