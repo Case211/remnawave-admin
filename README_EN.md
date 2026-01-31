@@ -55,6 +55,20 @@
 - 📶 Traffic statistics
 - 🔔 Event notifications via webhook
 
+### 🛡 Anti-Abuse System
+- 🔍 Multi-factor connection analysis for detecting account abuse
+- 🌍 Geographic analysis with "impossible travel" detection
+- 📱 Device and VPN client analysis
+- 📊 User behavioral profiling
+- ⚡ Automatic actions based on scoring thresholds
+- 📡 Integration with Node Agent for data collection
+
+### ⚙️ Dynamic Settings
+- 🔧 Change bot settings without restart
+- 📂 Categories: General, Notifications, Violations, Collector, Limits
+- 🔒 Protection of .env settings from overwrite
+- ✅ Type and value validation
+
 ### 🌐 Additional Features
 - 🌍 Russian and English language support
 - 🔔 Webhook notifications for events (user creation, modification, deletion)
@@ -65,6 +79,39 @@
 ---
 
 ## 🆕 What's New
+
+### Version 1.6
+
+**⚙️ Dynamic Settings**
+- Change bot settings without restart via Telegram interface
+- Setting categories: General, Notifications, Sync, Violations, Collector API, Limits, Appearance
+- Value priority: environment variables > database > default values
+- Type validation (string, int, float, bool, JSON)
+- Secret value protection (masked in UI)
+- Protection of .env settings from overwrite (read-only)
+
+**🛡 Anti-Abuse System (Violation Detector)**
+- Multi-factor analysis for detecting account abuse
+- **Temporal analysis**: detection of simultaneous connections from different IPs
+- **Geographic analysis**:
+  - Recognition of 60+ Russian metropolitan areas
+  - "Impossible travel" detection (Haversine distance)
+  - Travel speed calculation (city: 50 km/h, country: 200 km/h, international: 800 km/h)
+- **ASN/Provider analysis**: provider type classification (mobile, ISP, hosting, VPN)
+- **User profile**: building 30-day behavioral profile
+- **Device analysis**: OS and VPN client detection from User-Agent
+- Scoring system with weights and thresholds for automatic actions
+- Detailed violation notifications
+
+**📡 Node Agent Integration**
+- Collector API for receiving connection data from Node Agent
+- Generation and management of authentication tokens for nodes
+- Batch processing of connection data
+- Automatic violation checking on data receipt
+
+**🔔 Violation Notifications**
+- Separate topic for violation notifications (`NOTIFICATIONS_TOPIC_VIOLATIONS`)
+- Detailed reports: devices, OS, countries, cities, action, confidence
 
 ### Version 1.5
 
@@ -234,6 +281,7 @@ python -m src.main
 | `NOTIFICATIONS_TOPIC_HWID` | ❌ No | - | Topic for HWID notifications |
 | `NOTIFICATIONS_TOPIC_CRM` | ❌ No | - | Topic for billing notifications |
 | `NOTIFICATIONS_TOPIC_ERRORS` | ❌ No | - | Topic for error notifications |
+| `NOTIFICATIONS_TOPIC_VIOLATIONS` | ❌ No | - | Topic for violation notifications |
 | `WEBHOOK_SECRET` | ❌ No | - | Secret key for webhook verification (HMAC-SHA256) |
 | `WEBHOOK_PORT` | ❌ No | `8080` | Port for webhook server |
 | `DATABASE_URL` | ❌ No | - | PostgreSQL connection URL |
@@ -260,6 +308,7 @@ docker network create remnawave-network
 | `/health` | Show system health status |
 | `/stats` | Show panel and server statistics |
 | `/bandwidth` | Show traffic statistics |
+| `/config` | Manage bot settings (dynamic settings) |
 
 ### User Management Commands
 
