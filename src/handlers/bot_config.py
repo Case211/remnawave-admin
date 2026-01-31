@@ -274,23 +274,61 @@ async def process_config_input(message: Message, state: FSMContext) -> None:
 
     value = message.text.strip() if message.text else ""
 
+    # Валидация по допустимым опциям (если заданы)
+    if item.options:
+        if value not in item.options:
+            options_str = ", ".join(f"`{o}`" for o in item.options)
+            await message.answer(
+                f"❌ *Недопустимое значение*\n\n"
+                f"Введено: `{value}`\n"
+                f"Допустимые значения: {options_str}\n\n"
+                f"_Попробуйте снова или /cancel для отмены_",
+                parse_mode="Markdown"
+            )
+            return
+
     # Валидация типа
+    import json as json_module
     try:
         if item.value_type.value == "int":
-            int(value)
+            parsed_int = int(value)
+            # Проверка на отрицательные значения для некоторых настроек
+            if parsed_int < 0 and item.key in (
+                "sync_interval_seconds", "violations_max_ips_per_hour",
+                "violations_max_simultaneous", "search_results_limit",
+                "pagination_page_size", "max_bulk_operations",
+                "collector_batch_size", "collector_connection_timeout_minutes"
+            ):
+                raise ValueError(_("bot_config.validation_positive_required"))
         elif item.value_type.value == "float":
-            float(value)
+            parsed_float = float(value)
+            if parsed_float < 0 and "multiplier" not in item.key:
+                raise ValueError(_("bot_config.validation_positive_required"))
         elif item.value_type.value == "bool":
             if value.lower() not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
-                raise ValueError("Invalid boolean")
+                raise ValueError(_("bot_config.validation_bool_hint"))
         elif item.value_type.value == "json":
-            import json
-            json.loads(value)
-    except (ValueError, json.JSONDecodeError) as e:
+            json_module.loads(value)
+    except ValueError as e:
+        type_hints = {
+            "int": "целое число (например: 10, 100, 500)",
+            "float": "число (например: 1.5, 2.0)",
+            "bool": "true/false, yes/no, on/off, 1/0",
+            "json": "JSON объект (например: {})",
+        }
+        hint = type_hints.get(item.value_type.value, "")
         await message.answer(
             f"❌ *Ошибка валидации*\n\n"
-            f"Ожидается тип: `{item.value_type.value}`\n"
-            f"Ошибка: {str(e)}\n\n"
+            f"Введено: `{value}`\n"
+            f"Ожидается: _{hint}_\n\n"
+            f"_Попробуйте снова или /cancel для отмены_",
+            parse_mode="Markdown"
+        )
+        return
+    except json_module.JSONDecodeError:
+        await message.answer(
+            f"❌ *Некорректный JSON*\n\n"
+            f"Введённое значение не является валидным JSON.\n\n"
             f"_Попробуйте снова или /cancel для отмены_",
             parse_mode="Markdown"
         )
@@ -362,16 +400,39 @@ async def show_all_settings(callback: CallbackQuery) -> None:
 
     lines = [f"*{_('bot_config.all_settings_title')}*", ""]
 
+    # Собираем все источники для динамической легенды
+    sources_used: set[str] = set()
+    settings_data: list[tuple] = []
+
     current_category = None
     for item in sorted(all_items.values(), key=lambda x: (x.category.value, x.sort_order)):
+        display_value, source = _format_config_value(item)
+        source_key = source.split()[0].lower() if source else ""
+        sources_used.add(source_key)
+        settings_data.append((item, display_value, source_key))
+
+    # Добавляем динамическую легенду (только используемые источники)
+    legend_parts = []
+    if "env" in sources_used:
+        legend_parts.append("🔒 .env")
+    if "db" in sources_used:
+        legend_parts.append("💾 изменено")
+    if "default" in sources_used:
+        legend_parts.append("📋 по умолчанию")
+
+    if legend_parts:
+        lines.append(f"_{' • '.join(legend_parts)}_")
+        lines.append("")
+
+    # Выводим настройки
+    for item, display_value, source_key in settings_data:
         if item.category.value != current_category:
             current_category = item.category.value
             emoji = CATEGORY_EMOJI.get(current_category, "📁")
             name = CATEGORY_NAMES.get(current_category, current_category.title())
             lines.append(f"\n*{emoji} {name}*")
 
-        display_value, source = _format_config_value(item)
-        source_icon = {"env": "🔒", "db": "💾", "default": "📋"}.get(source.split()[0].lower() if source else "", "⚪")
+        source_icon = {"env": "🔒", "db": "💾", "default": "📋"}.get(source_key, "⚪")
         lines.append(f"  {source_icon} {item.display_name or item.key}: `{display_value}`")
 
     # Ограничиваем длину сообщения

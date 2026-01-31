@@ -761,6 +761,8 @@
     "env_locked": "🔒 Value set in .env",
     "input_cancelled": "❌ Input cancelled",
     "input_error": "❌ Input error",
-    "all_settings_title": "📋 All bot settings"
+    "all_settings_title": "📋 All bot settings",
+    "validation_positive_required": "Value must be a positive number",
+    "validation_bool_hint": "Use: true/false, yes/no, on/off or 1/0"
   }
 }
