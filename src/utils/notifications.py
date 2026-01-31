@@ -846,20 +846,17 @@ async def send_violation_notification(
                 # Используем короткие UUID
                 nodes_used = {uuid[:8] for uuid in node_uuids}
 
-        # Собираем информацию об устройствах
-        devices_info = []
+        # Собираем информацию об устройствах (конкретные ОС и клиенты)
+        os_list = []
+        client_list = []
         if breakdown and "device" in breakdown:
             device_data = breakdown["device"]
             if isinstance(device_data, dict):
-                unique_fp = device_data.get("unique_fingerprints_count", 0)
-                os_count = device_data.get("different_os_count", 0)
-                if unique_fp > 0 or os_count > 0:
-                    devices_info.append(f"{unique_fp} устройств, {os_count} ОС")
-            elif hasattr(device_data, 'unique_fingerprints_count'):
-                unique_fp = device_data.unique_fingerprints_count
-                os_count = device_data.different_os_count if hasattr(device_data, 'different_os_count') else 0
-                if unique_fp > 0 or os_count > 0:
-                    devices_info.append(f"{unique_fp} устройств, {os_count} ОС")
+                os_list = device_data.get("os_list") or []
+                client_list = device_data.get("client_list") or []
+            elif hasattr(device_data, 'os_list'):
+                os_list = device_data.os_list or []
+                client_list = getattr(device_data, 'client_list', None) or []
 
         # Формируем сообщение
         lines = []
@@ -912,9 +909,29 @@ async def send_violation_notification(
 
         lines.append("")
 
-        # Устройства
-        if devices_info:
-            lines.append(f"📲 Устройства: {', '.join(devices_info)}")
+        # Устройства (конкретные ОС и клиенты)
+        if os_list or client_list:
+            # Формируем строку с комбинацией ОС и клиентов
+            device_parts = []
+            if os_list and client_list and len(os_list) == len(client_list):
+                # Если количество ОС и клиентов совпадает, объединяем их
+                for i, os_name in enumerate(os_list):
+                    client_name = client_list[i] if i < len(client_list) else ""
+                    if client_name:
+                        device_parts.append(f"{os_name} ({client_name})")
+                    else:
+                        device_parts.append(os_name)
+            else:
+                # Выводим отдельно
+                if os_list:
+                    device_parts.append(f"ОС: {', '.join(os_list)}")
+                if client_list:
+                    device_parts.append(f"Клиенты: {', '.join(client_list)}")
+
+            if device_parts:
+                lines.append(f"📲 Устройства: {'; '.join(device_parts)}")
+            else:
+                lines.append(f"📲 Устройства: —")
         else:
             lines.append(f"📲 Устройства: —")
 

@@ -74,6 +74,8 @@ class DeviceScore:
     reasons: List[str]
     unique_fingerprints_count: int = 0
     different_os_count: int = 0
+    os_list: List[str] = None  # Список конкретных ОС (Android, iOS, Windows...)
+    client_list: List[str] = None  # Список конкретных клиентов (V2RayNG, Shadowrocket...)
 
 
 @dataclass
@@ -1446,14 +1448,16 @@ class DeviceFingerprintAnalyzer:
         
         unique_fingerprints_count = len(unique_fingerprints)
         
-        # Подсчитываем уникальные ОС
+        # Подсчитываем уникальные ОС (исключаем Unknown)
         os_families = set(fp.get('os_family', 'Unknown') for fp in unique_fingerprints)
+        os_families_known = sorted([os for os in os_families if os and os != 'Unknown'])
         different_os_count = len(os_families)
-        
-        # Подсчитываем уникальные клиенты
+
+        # Подсчитываем уникальные клиенты (исключаем Unknown)
         client_types = set(fp.get('client_type', 'Unknown') for fp in unique_fingerprints)
+        client_types_known = sorted([client for client in client_types if client and client != 'Unknown'])
         different_clients_count = len(client_types)
-        
+
         # Оценка на основе различий
         if unique_fingerprints_count > 3:
             score = 60.0
@@ -1469,12 +1473,14 @@ class DeviceFingerprintAnalyzer:
             if different_clients_count == 1 and unique_fingerprints_count > 1:
                 score = 10.0
                 reasons.append(f"Разные версии одного клиента ({unique_fingerprints_count} fingerprint)")
-        
+
         return DeviceScore(
             score=min(score, 100.0),
             reasons=reasons,
             unique_fingerprints_count=unique_fingerprints_count,
-            different_os_count=different_os_count
+            different_os_count=different_os_count,
+            os_list=os_families_known if os_families_known else None,
+            client_list=client_types_known if client_types_known else None
         )
 
 
