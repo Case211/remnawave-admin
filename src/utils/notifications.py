@@ -909,31 +909,71 @@ async def send_violation_notification(
 
         lines.append("")
 
-        # Устройства (конкретные ОС и клиенты)
-        if os_list or client_list:
-            # Формируем строку с комбинацией ОС и клиентов
-            device_parts = []
-            if os_list and client_list and len(os_list) == len(client_list):
-                # Если количество ОС и клиентов совпадает, объединяем их
-                for i, os_name in enumerate(os_list):
-                    client_name = client_list[i] if i < len(client_list) else ""
-                    if client_name:
-                        device_parts.append(f"{os_name} ({client_name})")
-                    else:
-                        device_parts.append(os_name)
-            else:
-                # Выводим отдельно
-                if os_list:
-                    device_parts.append(f"ОС: {', '.join(os_list)}")
-                if client_list:
-                    device_parts.append(f"Клиенты: {', '.join(client_list)}")
+        # Получаем HWID устройства из БД
+        hwid_devices = []
+        try:
+            from src.services.database import db_service
+            hwid_devices = await db_service.get_user_hwid_devices(user_uuid)
+        except Exception as hwid_error:
+            logger.debug("Failed to get HWID devices for user %s: %s", user_uuid, hwid_error)
 
-            if device_parts:
-                lines.append(f"📲 Устройства: {'; '.join(device_parts)}")
+        # Устройства (HWID из БД)
+        if hwid_devices:
+            hwid_count = len(hwid_devices)
+            device_parts = []
+            for device in hwid_devices[:5]:  # Показываем максимум 5 устройств
+                platform = device.get("platform", "unknown")
+                os_version = device.get("os_version", "")
+                app_version = device.get("app_version", "")
+
+                # Форматируем название платформы
+                platform_names = {
+                    "android": "Android",
+                    "ios": "iOS",
+                    "windows": "Windows",
+                    "macos": "macOS",
+                    "linux": "Linux",
+                }
+                platform_display = platform_names.get(platform.lower(), platform) if platform else "Unknown"
+
+                # Собираем строку устройства
+                device_str = platform_display
+                if os_version:
+                    device_str += f" {os_version}"
+                if app_version:
+                    device_str += f" (v{app_version})"
+
+                device_parts.append(device_str)
+
+            if hwid_count > 5:
+                device_parts.append(f"... и ещё {hwid_count - 5}")
+
+            lines.append(f"📲 Устройства ({hwid_count}/{device_limit}):")
+            for part in device_parts:
+                lines.append(f"   {_esc(part)}")
+        else:
+            # Если нет HWID устройств, показываем данные из breakdown (ОС и клиенты из user-agent)
+            if os_list or client_list:
+                device_parts = []
+                if os_list and client_list and len(os_list) == len(client_list):
+                    for i, os_name in enumerate(os_list):
+                        client_name = client_list[i] if i < len(client_list) else ""
+                        if client_name:
+                            device_parts.append(f"{os_name} ({client_name})")
+                        else:
+                            device_parts.append(os_name)
+                else:
+                    if os_list:
+                        device_parts.append(f"ОС: {', '.join(os_list)}")
+                    if client_list:
+                        device_parts.append(f"Клиенты: {', '.join(client_list)}")
+
+                if device_parts:
+                    lines.append(f"📲 Устройства (по UA): {'; '.join(device_parts)}")
+                else:
+                    lines.append(f"📲 Устройства: —")
             else:
                 lines.append(f"📲 Устройства: —")
-        else:
-            lines.append(f"📲 Устройства: —")
 
         # Время в нарушении
         if violation_duration_sec > 0:
