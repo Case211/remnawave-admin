@@ -257,6 +257,89 @@ def format_uptime(seconds: float | int | None) -> str:
     return " ".join(parts) or "0m"
 
 
+# Маппинг платформ в понятные названия
+PLATFORM_NAMES = {
+    "android": "Android",
+    "ios": "iOS",
+    "windows": "Windows",
+    "macos": "macOS",
+    "linux": "Linux",
+    "unknown": "Unknown",
+}
+
+
+def format_hwid_device(device: dict, index: int | None = None, show_hwid: bool = True) -> str:
+    """
+    Форматирует информацию об HWID устройстве для отображения.
+
+    Args:
+        device: Словарь с данными устройства (hwid, platform, osVersion, appVersion, createdAt)
+        index: Номер устройства (опционально)
+        show_hwid: Показывать ли HWID
+
+    Returns:
+        Отформатированная строка с информацией об устройстве
+    """
+    hwid = device.get("hwid", "")
+    platform = device.get("platform", "unknown")
+    os_version = device.get("osVersion") or device.get("os_version", "")
+    app_version = device.get("appVersion") or device.get("app_version", "")
+    created_at = device.get("createdAt") or device.get("created_at")
+
+    # Форматируем платформу
+    platform_display = PLATFORM_NAMES.get(platform.lower() if platform else "unknown", platform or "Unknown")
+
+    # Собираем строку устройства
+    parts = []
+
+    # Номер устройства
+    prefix = f"{index}. " if index is not None else ""
+
+    # Платформа + версия ОС
+    device_str = platform_display
+    if os_version:
+        device_str += f" {os_version}"
+
+    parts.append(device_str)
+
+    # Версия приложения
+    if app_version:
+        parts.append(f"v{app_version}")
+
+    # Дата добавления
+    if created_at:
+        created_str = format_datetime(created_at)
+        parts.append(f"📅 {created_str}")
+
+    # HWID (укороченный)
+    if show_hwid and hwid:
+        hwid_short = hwid[:16] + "..." if len(hwid) > 16 else hwid
+        parts.append(f"ID: {hwid_short}")
+
+    return f"{prefix}{' | '.join(parts)}"
+
+
+def format_hwid_devices_list(devices: list[dict], max_devices: int = 10) -> list[str]:
+    """
+    Форматирует список HWID устройств.
+
+    Args:
+        devices: Список устройств
+        max_devices: Максимальное количество устройств для отображения
+
+    Returns:
+        Список строк с информацией об устройствах
+    """
+    lines = []
+    for idx, device in enumerate(devices[:max_devices], 1):
+        lines.append(format_hwid_device(device, index=idx))
+
+    if len(devices) > max_devices:
+        lines.append(f"... и ещё {len(devices) - max_devices} устройств")
+
+    return lines
+
+
 def build_user_summary(user: dict, t: Callable[[str], str]) -> str:
     """Форматирует информацию о пользователе для отображения в профиле."""
     info = user.get("response", user)
