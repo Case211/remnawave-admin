@@ -1,6 +1,7 @@
 """Обработчики команд бота."""
 from aiogram import F, Router
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from aiogram.utils.i18n import gettext as _
 
@@ -60,22 +61,32 @@ async def cmd_start(message: Message) -> None:
 
 
 @router.message(F.text & ~F.text.startswith("/"))
-async def handle_pending(message: Message) -> None:
+async def handle_pending(message: Message, state: FSMContext) -> None:
     """Обработчик текстовых сообщений (не команд) для ожидаемого ввода."""
     if await _not_admin(message):
         return
     user_id = message.from_user.id
     from src.utils.logger import logger
     in_pending = user_id in PENDING_INPUT
+
+    # Проверяем FSM состояние (например, ConfigInputState.waiting_value)
+    fsm_state = await state.get_state()
+
     logger.info(
-        "handle_pending: user_id=%s in_PENDING_INPUT=%s text='%s'",
-        user_id, in_pending, message.text[:50] if message.text else None
+        "handle_pending: user_id=%s in_PENDING_INPUT=%s fsm_state=%s text='%s'",
+        user_id, in_pending, fsm_state, message.text[:50] if message.text else None
     )
+
+    # Если есть активное FSM состояние - пропускаем, пусть FSM обработчик сам обработает
+    if fsm_state is not None:
+        logger.info("handle_pending: skipping - FSM state active: %s", fsm_state)
+        return
+
     if not in_pending:
-        # Если это не ожидаемый ввод, удаляем сообщение
+        # Если это не ожидаемый ввод и нет FSM состояния, удаляем сообщение
         from src.handlers.common import _cleanup_message
         import asyncio
-        logger.info("handle_pending: deleting message - not in PENDING_INPUT")
+        logger.info("handle_pending: deleting message - not in PENDING_INPUT and no FSM state")
         asyncio.create_task(_cleanup_message(message, delay=0.0))
         return
     
