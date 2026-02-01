@@ -6,7 +6,7 @@ from aiogram import Bot
 from aiogram.types import Message
 
 from src.config import get_settings
-from src.utils.formatters import format_bytes, format_datetime
+from src.utils.formatters import format_bytes, format_datetime, format_provider_name
 from src.utils.logger import logger
 
 
@@ -888,7 +888,8 @@ async def send_violation_notification(
                 if ip_metadata and ip in ip_metadata:
                     meta = ip_metadata[ip]
                     if hasattr(meta, 'asn_org') and meta.asn_org:
-                        provider_info = meta.asn_org
+                        # Преобразуем техническое название в понятное
+                        provider_info = format_provider_name(meta.asn_org)
                     if hasattr(meta, 'country_code') and meta.country_code:
                         country_code = meta.country_code
 
