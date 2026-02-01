@@ -32,6 +32,7 @@ CATEGORY_NAMES = {
     "notifications": "Уведомления",
     "sync": "Синхронизация",
     "violations": "Детектор нарушений",
+    "reports": "Отчёты по нарушениям",
     "collector": "Collector API",
     "limits": "Лимиты",
     "appearance": "Внешний вид",

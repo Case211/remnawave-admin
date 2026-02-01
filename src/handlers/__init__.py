@@ -10,6 +10,7 @@ from src.handlers.filters import router as filters_router
 from src.handlers.hosts import router as hosts_router
 from src.handlers.navigation import router as navigation_router
 from src.handlers.nodes import router as nodes_router
+from src.handlers.reports import router as reports_router
 from src.handlers.resources import router as resources_router
 from src.handlers.system import router as system_router
 from src.handlers.users import router as users_router
@@ -28,6 +29,7 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.include_router(billing_router)
     dp.include_router(bulk_router)
     dp.include_router(system_router)
+    dp.include_router(reports_router)
     dp.include_router(bot_config_router)
     # Старый basic_router оставляем для обратной совместимости (временно)
     dp.include_router(basic_router)
