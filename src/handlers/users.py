@@ -44,6 +44,8 @@ from src.utils.formatters import (
     build_user_summary,
     format_bytes,
     format_datetime,
+    format_hwid_device,
+    format_hwid_devices_list,
 )
 from src.utils.logger import logger
 from src.utils.notifications import send_user_notification
@@ -2981,12 +2983,31 @@ async def cb_user_hwid_menu(callback: CallbackQuery) -> None:
         devices_data = await api_client.get_user_hwid_devices(user_uuid)
         devices = devices_data.get("response", {}).get("devices", [])
         
-        text = (
-            f"<b>{_('user.hwid_management')}</b>\n\n"
-            f"👤 <b>{_esc(username)}</b>\n"
-            f"📊 Лимит: <code>{_esc(hwid_limit_display)}</code>\n"
-            f"📱 Устройств: <code>{len(devices)}</code>"
-        )
+        lines = [
+            f"<b>{_('user.hwid_management')}</b>",
+            "",
+            f"👤 <b>{_esc(username)}</b>",
+            f"📊 Лимит: <code>{_esc(hwid_limit_display)}</code>",
+            f"📱 Устройств: <code>{len(devices)}/{hwid_limit_display}</code>",
+        ]
+
+        # Показываем краткую информацию об устройствах (до 3 штук)
+        if devices:
+            lines.append("")
+            lines.append("<b>📲 Устройства:</b>")
+            for device in devices[:3]:
+                platform = device.get("platform", "unknown")
+                os_version = device.get("osVersion", "")
+                platform_names = {"android": "Android", "ios": "iOS", "windows": "Windows", "macos": "macOS", "linux": "Linux"}
+                platform_display = platform_names.get(platform.lower() if platform else "unknown", platform or "Unknown")
+                device_str = platform_display
+                if os_version:
+                    device_str += f" {os_version}"
+                lines.append(f"   • {_esc(device_str)}")
+            if len(devices) > 3:
+                lines.append(f"   <i>... и ещё {len(devices) - 3}</i>")
+
+        text = "\n".join(lines)
         
         await callback.message.edit_text(
             text,
@@ -3045,17 +3066,10 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
             lines.append(f"<b>{_('hwid.devices_list')}</b>")
             lines.append("")
             lines.append(f"<i>{_('hwid.click_to_delete')}</i>")
-            for idx, device in enumerate(devices[:10], 1):  # Показываем до 10 устройств
-                hwid = device.get("hwid", "n/a")
-                created_at = device.get("createdAt")
-                created_str = format_datetime(created_at) if created_at else "—"
-                lines.append(
-                    _("hwid.device_item").format(
-                        index=idx,
-                        hwid=_esc(hwid[:40] + "..." if len(hwid) > 40 else hwid),
-                        created=_esc(created_str)
-                    )
-                )
+            # Используем форматтер для красивого отображения устройств
+            device_lines = format_hwid_devices_list(devices, max_devices=10)
+            for line in device_lines:
+                lines.append(f"   {_esc(line)}")
         
         text = "\n".join(lines)
         await callback.message.edit_text(
@@ -3135,18 +3149,11 @@ async def cb_hwid_delete(callback: CallbackQuery) -> None:
         else:
             lines.append("")
             lines.append(f"<b>{_('hwid.devices_list')}</b>")
-            for idx, device in enumerate(devices[:10], 1):
-                device_hwid = device.get("hwid", "n/a")
-                created_at = device.get("createdAt")
-                created_str = format_datetime(created_at) if created_at else "—"
-                lines.append(
-                    _("hwid.device_item").format(
-                        index=idx,
-                        hwid=_esc(device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid),
-                        created=_esc(created_str)
-                    )
-                )
-        
+            # Используем форматтер для красивого отображения устройств
+            device_lines = format_hwid_devices_list(devices, max_devices=10)
+            for line in device_lines:
+                lines.append(f"   {_esc(line)}")
+
         text = "\n".join(lines)
         await callback.message.edit_text(
             text,
@@ -3206,18 +3213,11 @@ async def cb_hwid_delete_all(callback: CallbackQuery) -> None:
         else:
             lines.append("")
             lines.append(f"<b>{_('hwid.devices_list')}</b>")
-            for idx, device in enumerate(devices[:10], 1):
-                device_hwid = device.get("hwid", "n/a")
-                created_at = device.get("createdAt")
-                created_str = format_datetime(created_at) if created_at else "—"
-                lines.append(
-                    _("hwid.device_item").format(
-                        index=idx,
-                        hwid=_esc(device_hwid[:40] + "..." if len(device_hwid) > 40 else device_hwid),
-                        created=_esc(created_str)
-                    )
-                )
-        
+            # Используем форматтер для красивого отображения устройств
+            device_lines = format_hwid_devices_list(devices, max_devices=10)
+            for line in device_lines:
+                lines.append(f"   {_esc(line)}")
+
         text = "\n".join(lines)
         await callback.message.edit_text(
             text,
