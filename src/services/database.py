@@ -104,6 +104,23 @@ CREATE TABLE IF NOT EXISTS user_connections (
 CREATE INDEX IF NOT EXISTS idx_user_connections_user ON user_connections(user_uuid, connected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_connections_ip ON user_connections(ip_address);
 CREATE INDEX IF NOT EXISTS idx_user_connections_node ON user_connections(node_uuid);
+
+-- HWID устройства пользователей
+CREATE TABLE IF NOT EXISTS user_hwid_devices (
+    id SERIAL PRIMARY KEY,
+    user_uuid UUID NOT NULL,
+    hwid VARCHAR(255) NOT NULL,
+    platform VARCHAR(50),
+    os_version VARCHAR(100),
+    app_version VARCHAR(50),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hwid_devices_user_hwid ON user_hwid_devices(user_uuid, hwid);
+CREATE INDEX IF NOT EXISTS idx_hwid_devices_user_uuid ON user_hwid_devices(user_uuid);
+CREATE INDEX IF NOT EXISTS idx_hwid_devices_platform ON user_hwid_devices(platform);
 """
 
 
@@ -2533,6 +2550,280 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error getting reports history: %s", e, exc_info=True)
             return []
+
+
+    # ==================== HWID Devices ====================
+
+    async def upsert_hwid_device(
+        self,
+        user_uuid: str,
+        hwid: str,
+        platform: Optional[str] = None,
+        os_version: Optional[str] = None,
+        app_version: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None
+    ) -> bool:
+        """
+        Добавить или обновить HWID устройство.
+
+        Returns:
+            True если успешно
+        """
+        if not self.is_connected:
+            return False
+
+        try:
+            async with self.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO user_hwid_devices (
+                        user_uuid, hwid, platform, os_version, app_version,
+                        created_at, updated_at, synced_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, NOW()), NOW())
+                    ON CONFLICT (user_uuid, hwid) DO UPDATE SET
+                        platform = COALESCE(EXCLUDED.platform, user_hwid_devices.platform),
+                        os_version = COALESCE(EXCLUDED.os_version, user_hwid_devices.os_version),
+                        app_version = COALESCE(EXCLUDED.app_version, user_hwid_devices.app_version),
+                        updated_at = COALESCE(EXCLUDED.updated_at, NOW()),
+                        synced_at = NOW()
+                    """,
+                    user_uuid, hwid, platform, os_version, app_version, created_at, updated_at
+                )
+                return True
+
+        except Exception as e:
+            logger.error("Error upserting HWID device for user %s: %s", user_uuid, e, exc_info=True)
+            return False
+
+    async def delete_hwid_device(self, user_uuid: str, hwid: str) -> bool:
+        """
+        Удалить HWID устройство.
+
+        Returns:
+            True если успешно
+        """
+        if not self.is_connected:
+            return False
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    "DELETE FROM user_hwid_devices WHERE user_uuid = $1 AND hwid = $2",
+                    user_uuid, hwid
+                )
+                return "DELETE" in result
+
+        except Exception as e:
+            logger.error("Error deleting HWID device for user %s: %s", user_uuid, e, exc_info=True)
+            return False
+
+    async def delete_all_user_hwid_devices(self, user_uuid: str) -> int:
+        """
+        Удалить все HWID устройства пользователя.
+
+        Returns:
+            Количество удалённых записей
+        """
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    "DELETE FROM user_hwid_devices WHERE user_uuid = $1",
+                    user_uuid
+                )
+                # Parse "DELETE X" to get count
+                if result and "DELETE" in result:
+                    try:
+                        return int(result.split()[1])
+                    except (IndexError, ValueError):
+                        return 0
+                return 0
+
+        except Exception as e:
+            logger.error("Error deleting all HWID devices for user %s: %s", user_uuid, e, exc_info=True)
+            return 0
+
+    async def get_user_hwid_devices(self, user_uuid: str) -> List[Dict[str, Any]]:
+        """
+        Получить список HWID устройств пользователя.
+
+        Returns:
+            Список устройств с полями: hwid, platform, os_version, app_version, created_at, updated_at
+        """
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT hwid, platform, os_version, app_version, created_at, updated_at
+                    FROM user_hwid_devices
+                    WHERE user_uuid = $1
+                    ORDER BY created_at DESC
+                    """,
+                    user_uuid
+                )
+                return [dict(row) for row in rows]
+
+        except Exception as e:
+            logger.error("Error getting HWID devices for user %s: %s", user_uuid, e, exc_info=True)
+            return []
+
+    async def get_user_hwid_devices_count(self, user_uuid: str) -> int:
+        """
+        Получить количество HWID устройств пользователя.
+
+        Returns:
+            Количество устройств
+        """
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.fetchval(
+                    "SELECT COUNT(*) FROM user_hwid_devices WHERE user_uuid = $1",
+                    user_uuid
+                )
+                return result or 0
+
+        except Exception as e:
+            logger.error("Error getting HWID devices count for user %s: %s", user_uuid, e, exc_info=True)
+            return 0
+
+    async def sync_user_hwid_devices(
+        self,
+        user_uuid: str,
+        devices: List[Dict[str, Any]]
+    ) -> int:
+        """
+        Синхронизировать HWID устройства пользователя.
+        Удаляет старые устройства и добавляет новые.
+
+        Args:
+            user_uuid: UUID пользователя
+            devices: Список устройств из API
+
+        Returns:
+            Количество синхронизированных устройств
+        """
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                async with conn.transaction():
+                    # Получаем текущие HWID
+                    current_hwids = set()
+                    rows = await conn.fetch(
+                        "SELECT hwid FROM user_hwid_devices WHERE user_uuid = $1",
+                        user_uuid
+                    )
+                    current_hwids = {row['hwid'] for row in rows}
+
+                    # Собираем новые HWID
+                    new_hwids = set()
+                    for device in devices:
+                        hwid = device.get('hwid')
+                        if hwid:
+                            new_hwids.add(hwid)
+
+                    # Удаляем устройства, которых больше нет
+                    to_delete = current_hwids - new_hwids
+                    if to_delete:
+                        await conn.execute(
+                            "DELETE FROM user_hwid_devices WHERE user_uuid = $1 AND hwid = ANY($2)",
+                            user_uuid, list(to_delete)
+                        )
+                        logger.debug("Deleted %d old HWID devices for user %s", len(to_delete), user_uuid)
+
+                    # Добавляем/обновляем устройства
+                    synced = 0
+                    for device in devices:
+                        hwid = device.get('hwid')
+                        if not hwid:
+                            continue
+
+                        platform = device.get('platform')
+                        os_version = device.get('osVersion')
+                        app_version = device.get('appVersion')
+                        created_at = _parse_timestamp(device.get('createdAt'))
+                        updated_at = _parse_timestamp(device.get('updatedAt'))
+
+                        await conn.execute(
+                            """
+                            INSERT INTO user_hwid_devices (
+                                user_uuid, hwid, platform, os_version, app_version,
+                                created_at, updated_at, synced_at
+                            )
+                            VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, NOW()), NOW())
+                            ON CONFLICT (user_uuid, hwid) DO UPDATE SET
+                                platform = COALESCE(EXCLUDED.platform, user_hwid_devices.platform),
+                                os_version = COALESCE(EXCLUDED.os_version, user_hwid_devices.os_version),
+                                app_version = COALESCE(EXCLUDED.app_version, user_hwid_devices.app_version),
+                                updated_at = COALESCE(EXCLUDED.updated_at, NOW()),
+                                synced_at = NOW()
+                            """,
+                            user_uuid, hwid, platform, os_version, app_version, created_at, updated_at
+                        )
+                        synced += 1
+
+                    return synced
+
+        except Exception as e:
+            logger.error("Error syncing HWID devices for user %s: %s", user_uuid, e, exc_info=True)
+            return 0
+
+    async def get_all_hwid_devices_stats(self) -> Dict[str, Any]:
+        """
+        Получить статистику по всем HWID устройствам.
+
+        Returns:
+            Словарь со статистикой: total_devices, unique_users, by_platform
+        """
+        if not self.is_connected:
+            return {'total_devices': 0, 'unique_users': 0, 'by_platform': {}}
+
+        try:
+            async with self.acquire() as conn:
+                # Общая статистика
+                stats = await conn.fetchrow(
+                    """
+                    SELECT
+                        COUNT(*) as total_devices,
+                        COUNT(DISTINCT user_uuid) as unique_users
+                    FROM user_hwid_devices
+                    """
+                )
+
+                # Статистика по платформам
+                platform_rows = await conn.fetch(
+                    """
+                    SELECT
+                        COALESCE(platform, 'unknown') as platform,
+                        COUNT(*) as count
+                    FROM user_hwid_devices
+                    GROUP BY platform
+                    ORDER BY count DESC
+                    """
+                )
+
+                by_platform = {row['platform']: row['count'] for row in platform_rows}
+
+                return {
+                    'total_devices': stats['total_devices'] if stats else 0,
+                    'unique_users': stats['unique_users'] if stats else 0,
+                    'by_platform': by_platform
+                }
+
+        except Exception as e:
+            logger.error("Error getting HWID devices stats: %s", e, exc_info=True)
+            return {'total_devices': 0, 'unique_users': 0, 'by_platform': {}}
 
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:
