@@ -12,6 +12,7 @@ from src.services.config_service import config_service
 from src.services.database import db_service
 from src.services.sync import sync_service
 from src.services.health_check import PanelHealthChecker
+from src.services.report_scheduler import init_report_scheduler
 from src.services.webhook import app as webhook_app
 from src.utils.auth import AdminMiddleware
 from src.utils.i18n import get_i18n_middleware
@@ -319,15 +320,27 @@ async def main() -> None:
         logger.info("🔄 Starting data sync service...")
         await sync_service.start()
 
+    # Запускаем планировщик отчётов (если БД подключена)
+    report_scheduler = None
+    if db_connected:
+        logger.info("📊 Starting report scheduler...")
+        report_scheduler = init_report_scheduler(bot)
+        await report_scheduler.start()
+
     logger.info("🤖 Starting bot")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        # Останавливаем планировщик отчётов
+        if report_scheduler and report_scheduler.is_running:
+            logger.info("📊 Stopping report scheduler")
+            await report_scheduler.stop()
+
         # Останавливаем sync service
         if sync_service.is_running:
             logger.info("🔄 Stopping sync service")
             await sync_service.stop()
-        
+
         # Останавливаем health checker
         logger.info("🏥 Stopping panel health checker")
         health_checker.stop()
@@ -336,7 +349,7 @@ async def main() -> None:
             await health_checker_task
         except asyncio.CancelledError:
             pass
-        
+
         # Останавливаем webhook сервер при остановке бота
         if webhook_task:
             logger.info("🌐 Stopping webhook server")
@@ -345,7 +358,7 @@ async def main() -> None:
                 await webhook_task
             except asyncio.CancelledError:
                 pass
-        
+
         # Закрываем подключение к базе данных
         if db_service.is_connected:
             logger.info("🗄️ Closing database connection")

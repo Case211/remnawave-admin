@@ -14,8 +14,9 @@ CATEGORY_EMOJI = {
     ConfigCategory.NOTIFICATIONS.value: "🔔",
     ConfigCategory.SYNC.value: "🔄",
     ConfigCategory.VIOLATIONS.value: "🚨",
+    ConfigCategory.REPORTS.value: "📊",
     ConfigCategory.COLLECTOR.value: "📡",
-    ConfigCategory.LIMITS.value: "📊",
+    ConfigCategory.LIMITS.value: "📈",
     ConfigCategory.APPEARANCE.value: "🎨",
 }
 
@@ -41,6 +42,7 @@ def bot_config_categories_keyboard(categories: List[str]) -> InlineKeyboardMarku
         "notifications": _("bot_config.cat_notifications"),
         "sync": _("bot_config.cat_sync"),
         "violations": _("bot_config.cat_violations"),
+        "reports": _("bot_config.cat_reports"),
         "collector": _("bot_config.cat_collector"),
         "limits": _("bot_config.cat_limits"),
         "appearance": _("bot_config.cat_appearance"),

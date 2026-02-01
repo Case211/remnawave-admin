@@ -1947,6 +1947,594 @@ class DatabaseService:
             logger.error("Error updating ASN sync time: %s", e, exc_info=True)
 
 
+    # ==================== Violations ====================
+
+    async def save_violation(
+        self,
+        user_uuid: str,
+        score: float,
+        recommended_action: str,
+        username: Optional[str] = None,
+        email: Optional[str] = None,
+        telegram_id: Optional[int] = None,
+        confidence: Optional[float] = None,
+        temporal_score: Optional[float] = None,
+        geo_score: Optional[float] = None,
+        asn_score: Optional[float] = None,
+        profile_score: Optional[float] = None,
+        device_score: Optional[float] = None,
+        ip_addresses: Optional[List[str]] = None,
+        countries: Optional[List[str]] = None,
+        cities: Optional[List[str]] = None,
+        asn_types: Optional[List[str]] = None,
+        os_list: Optional[List[str]] = None,
+        client_list: Optional[List[str]] = None,
+        reasons: Optional[List[str]] = None,
+        simultaneous_connections: Optional[int] = None,
+        unique_ips_count: Optional[int] = None,
+        device_limit: Optional[int] = None,
+        impossible_travel: bool = False,
+        is_mobile: bool = False,
+        is_datacenter: bool = False,
+        is_vpn: bool = False,
+        raw_breakdown: Optional[str] = None
+    ) -> Optional[int]:
+        """
+        Сохранить нарушение в базу данных.
+
+        Returns:
+            ID созданной записи или None при ошибке
+        """
+        if not self.is_connected:
+            return None
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.fetchval(
+                    """
+                    INSERT INTO violations (
+                        user_uuid, username, email, telegram_id,
+                        score, recommended_action, confidence,
+                        temporal_score, geo_score, asn_score, profile_score, device_score,
+                        ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
+                        simultaneous_connections, unique_ips_count, device_limit,
+                        impossible_travel, is_mobile, is_datacenter, is_vpn,
+                        raw_breakdown, detected_at
+                    )
+                    VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                        $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+                        $23, $24, $25, $26, $27, NOW()
+                    )
+                    RETURNING id
+                    """,
+                    user_uuid, username, email, telegram_id,
+                    score, recommended_action, confidence,
+                    temporal_score, geo_score, asn_score, profile_score, device_score,
+                    ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
+                    simultaneous_connections, unique_ips_count, device_limit,
+                    impossible_travel, is_mobile, is_datacenter, is_vpn,
+                    raw_breakdown
+                )
+                return result
+
+        except Exception as e:
+            logger.error("Error saving violation for user %s: %s", user_uuid, e, exc_info=True)
+            return None
+
+    async def get_violations_for_period(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        min_score: float = 0.0,
+        limit: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """
+        Получить нарушения за указанный период.
+
+        Args:
+            start_date: Начало периода
+            end_date: Конец периода
+            min_score: Минимальный скор (по умолчанию 0)
+            limit: Максимальное количество записей
+
+        Returns:
+            Список нарушений
+        """
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT * FROM violations
+                    WHERE detected_at >= $1
+                    AND detected_at < $2
+                    AND score >= $3
+                    ORDER BY detected_at DESC
+                    LIMIT $4
+                    """,
+                    start_date, end_date, min_score, limit
+                )
+                return [dict(row) for row in rows]
+
+        except Exception as e:
+            logger.error("Error getting violations for period: %s", e, exc_info=True)
+            return []
+
+    async def get_violations_stats_for_period(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        min_score: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        Получить статистику нарушений за период.
+
+        Returns:
+            Словарь со статистикой
+        """
+        if not self.is_connected:
+            return {
+                'total': 0,
+                'critical': 0,
+                'warning': 0,
+                'monitor': 0,
+                'unique_users': 0,
+                'avg_score': 0.0,
+                'max_score': 0.0
+            }
+
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        COUNT(*) as total,
+                        COUNT(*) FILTER (WHERE score >= 80) as critical,
+                        COUNT(*) FILTER (WHERE score >= 50 AND score < 80) as warning,
+                        COUNT(*) FILTER (WHERE score >= 30 AND score < 50) as monitor,
+                        COUNT(DISTINCT user_uuid) as unique_users,
+                        COALESCE(AVG(score), 0) as avg_score,
+                        COALESCE(MAX(score), 0) as max_score
+                    FROM violations
+                    WHERE detected_at >= $1
+                    AND detected_at < $2
+                    AND score >= $3
+                    """,
+                    start_date, end_date, min_score
+                )
+                return dict(row) if row else {
+                    'total': 0,
+                    'critical': 0,
+                    'warning': 0,
+                    'monitor': 0,
+                    'unique_users': 0,
+                    'avg_score': 0.0,
+                    'max_score': 0.0
+                }
+
+        except Exception as e:
+            logger.error("Error getting violations stats: %s", e, exc_info=True)
+            return {
+                'total': 0,
+                'critical': 0,
+                'warning': 0,
+                'monitor': 0,
+                'unique_users': 0,
+                'avg_score': 0.0,
+                'max_score': 0.0
+            }
+
+    async def get_top_violators_for_period(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        min_score: float = 30.0,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Получить топ нарушителей за период.
+
+        Returns:
+            Список пользователей с количеством и максимальным скором нарушений
+        """
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        user_uuid,
+                        MAX(username) as username,
+                        MAX(email) as email,
+                        MAX(telegram_id) as telegram_id,
+                        COUNT(*) as violations_count,
+                        MAX(score) as max_score,
+                        AVG(score) as avg_score,
+                        MAX(detected_at) as last_violation_at,
+                        ARRAY_AGG(DISTINCT recommended_action) as actions
+                    FROM violations
+                    WHERE detected_at >= $1
+                    AND detected_at < $2
+                    AND score >= $3
+                    GROUP BY user_uuid
+                    ORDER BY violations_count DESC, max_score DESC
+                    LIMIT $4
+                    """,
+                    start_date, end_date, min_score, limit
+                )
+                return [dict(row) for row in rows]
+
+        except Exception as e:
+            logger.error("Error getting top violators: %s", e, exc_info=True)
+            return []
+
+    async def get_violations_by_country(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        min_score: float = 30.0
+    ) -> Dict[str, int]:
+        """
+        Получить распределение нарушений по странам.
+
+        Returns:
+            Словарь {страна: количество}
+        """
+        if not self.is_connected:
+            return {}
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        UNNEST(countries) as country,
+                        COUNT(*) as count
+                    FROM violations
+                    WHERE detected_at >= $1
+                    AND detected_at < $2
+                    AND score >= $3
+                    AND countries IS NOT NULL
+                    GROUP BY country
+                    ORDER BY count DESC
+                    """,
+                    start_date, end_date, min_score
+                )
+                return {row['country']: row['count'] for row in rows}
+
+        except Exception as e:
+            logger.error("Error getting violations by country: %s", e, exc_info=True)
+            return {}
+
+    async def get_violations_by_action(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        min_score: float = 0.0
+    ) -> Dict[str, int]:
+        """
+        Получить распределение нарушений по рекомендуемым действиям.
+
+        Returns:
+            Словарь {действие: количество}
+        """
+        if not self.is_connected:
+            return {}
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        recommended_action,
+                        COUNT(*) as count
+                    FROM violations
+                    WHERE detected_at >= $1
+                    AND detected_at < $2
+                    AND score >= $3
+                    GROUP BY recommended_action
+                    ORDER BY count DESC
+                    """,
+                    start_date, end_date, min_score
+                )
+                return {row['recommended_action']: row['count'] for row in rows}
+
+        except Exception as e:
+            logger.error("Error getting violations by action: %s", e, exc_info=True)
+            return {}
+
+    async def get_violations_by_asn_type(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        min_score: float = 30.0
+    ) -> Dict[str, int]:
+        """
+        Получить распределение нарушений по типам провайдеров.
+
+        Returns:
+            Словарь {тип: количество}
+        """
+        if not self.is_connected:
+            return {}
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        UNNEST(asn_types) as asn_type,
+                        COUNT(*) as count
+                    FROM violations
+                    WHERE detected_at >= $1
+                    AND detected_at < $2
+                    AND score >= $3
+                    AND asn_types IS NOT NULL
+                    GROUP BY asn_type
+                    ORDER BY count DESC
+                    """,
+                    start_date, end_date, min_score
+                )
+                return {row['asn_type']: row['count'] for row in rows}
+
+        except Exception as e:
+            logger.error("Error getting violations by ASN type: %s", e, exc_info=True)
+            return {}
+
+    async def get_user_violations(
+        self,
+        user_uuid: str,
+        days: int = 30,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Получить историю нарушений пользователя.
+
+        Args:
+            user_uuid: UUID пользователя
+            days: Количество дней истории
+            limit: Максимальное количество записей
+
+        Returns:
+            Список нарушений
+        """
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT * FROM violations
+                    WHERE user_uuid = $1
+                    AND detected_at > NOW() - INTERVAL '%s days'
+                    ORDER BY detected_at DESC
+                    LIMIT $2
+                    """.replace('%s', str(days)),
+                    user_uuid, limit
+                )
+                return [dict(row) for row in rows]
+
+        except Exception as e:
+            logger.error("Error getting user violations: %s", e, exc_info=True)
+            return []
+
+    async def update_violation_action(
+        self,
+        violation_id: int,
+        action_taken: str,
+        admin_telegram_id: int
+    ) -> bool:
+        """
+        Обновить принятое действие по нарушению.
+
+        Args:
+            violation_id: ID нарушения
+            action_taken: Принятое действие
+            admin_telegram_id: Telegram ID администратора
+
+        Returns:
+            True если успешно
+        """
+        if not self.is_connected:
+            return False
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    UPDATE violations
+                    SET action_taken = $1,
+                        action_taken_at = NOW(),
+                        action_taken_by = $2
+                    WHERE id = $3
+                    """,
+                    action_taken, admin_telegram_id, violation_id
+                )
+                return result == "UPDATE 1"
+
+        except Exception as e:
+            logger.error("Error updating violation action: %s", e, exc_info=True)
+            return False
+
+    async def mark_violation_notified(self, violation_id: int) -> bool:
+        """Отметить нарушение как отправленное в уведомлении."""
+        if not self.is_connected:
+            return False
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    UPDATE violations
+                    SET notified_at = NOW()
+                    WHERE id = $1
+                    """,
+                    violation_id
+                )
+                return result == "UPDATE 1"
+
+        except Exception as e:
+            logger.error("Error marking violation as notified: %s", e, exc_info=True)
+            return False
+
+    # ==================== Violation Reports ====================
+
+    async def save_violation_report(
+        self,
+        report_type: str,
+        period_start: datetime,
+        period_end: datetime,
+        total_violations: int,
+        critical_count: int,
+        warning_count: int,
+        monitor_count: int,
+        unique_users: int,
+        prev_total_violations: Optional[int] = None,
+        trend_percent: Optional[float] = None,
+        top_violators: Optional[str] = None,
+        by_country: Optional[str] = None,
+        by_action: Optional[str] = None,
+        by_asn_type: Optional[str] = None,
+        message_text: Optional[str] = None
+    ) -> Optional[int]:
+        """
+        Сохранить отчёт в базу данных.
+
+        Returns:
+            ID созданного отчёта или None при ошибке
+        """
+        if not self.is_connected:
+            return None
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.fetchval(
+                    """
+                    INSERT INTO violation_reports (
+                        report_type, period_start, period_end,
+                        total_violations, critical_count, warning_count, monitor_count, unique_users,
+                        prev_total_violations, trend_percent,
+                        top_violators, by_country, by_action, by_asn_type,
+                        message_text, generated_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
+                    RETURNING id
+                    """,
+                    report_type, period_start, period_end,
+                    total_violations, critical_count, warning_count, monitor_count, unique_users,
+                    prev_total_violations, trend_percent,
+                    top_violators, by_country, by_action, by_asn_type,
+                    message_text
+                )
+                return result
+
+        except Exception as e:
+            logger.error("Error saving violation report: %s", e, exc_info=True)
+            return None
+
+    async def mark_report_sent(self, report_id: int) -> bool:
+        """Отметить отчёт как отправленный."""
+        if not self.is_connected:
+            return False
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    UPDATE violation_reports
+                    SET sent_at = NOW()
+                    WHERE id = $1
+                    """,
+                    report_id
+                )
+                return result == "UPDATE 1"
+
+        except Exception as e:
+            logger.error("Error marking report as sent: %s", e, exc_info=True)
+            return False
+
+    async def get_last_report(self, report_type: str) -> Optional[Dict[str, Any]]:
+        """
+        Получить последний отчёт указанного типа.
+
+        Args:
+            report_type: Тип отчёта (daily/weekly/monthly)
+
+        Returns:
+            Данные отчёта или None
+        """
+        if not self.is_connected:
+            return None
+
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT * FROM violation_reports
+                    WHERE report_type = $1
+                    ORDER BY period_end DESC
+                    LIMIT 1
+                    """,
+                    report_type
+                )
+                return dict(row) if row else None
+
+        except Exception as e:
+            logger.error("Error getting last report: %s", e, exc_info=True)
+            return None
+
+    async def get_reports_history(
+        self,
+        report_type: Optional[str] = None,
+        limit: int = 30
+    ) -> List[Dict[str, Any]]:
+        """
+        Получить историю отчётов.
+
+        Args:
+            report_type: Тип отчёта (опционально)
+            limit: Максимальное количество записей
+
+        Returns:
+            Список отчётов
+        """
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                if report_type:
+                    rows = await conn.fetch(
+                        """
+                        SELECT * FROM violation_reports
+                        WHERE report_type = $1
+                        ORDER BY period_end DESC
+                        LIMIT $2
+                        """,
+                        report_type, limit
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """
+                        SELECT * FROM violation_reports
+                        ORDER BY period_end DESC
+                        LIMIT $1
+                        """,
+                        limit
+                    )
+                return [dict(row) for row in rows]
+
+        except Exception as e:
+            logger.error("Error getting reports history: %s", e, exc_info=True)
+            return []
+
+
 def _db_row_to_api_format(row) -> Dict[str, Any]:
     """
     Convert database row to API format.
