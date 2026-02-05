@@ -1,6 +1,6 @@
 """Обработчики команд бота."""
 from aiogram import F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from aiogram.utils.i18n import gettext as _
@@ -60,27 +60,24 @@ async def cmd_start(message: Message) -> None:
     await _send_clean_message(message, menu_text, reply_markup=main_menu_keyboard(), parse_mode="HTML")
 
 
-@router.message(F.text & ~F.text.startswith("/"))
+@router.message(F.text & ~F.text.startswith("/"), StateFilter(None))
 async def handle_pending(message: Message, state: FSMContext) -> None:
-    """Обработчик текстовых сообщений (не команд) для ожидаемого ввода."""
+    """Обработчик текстовых сообщений (не команд) для ожидаемого ввода.
+
+    Важно: StateFilter(None) гарантирует что этот обработчик срабатывает только
+    когда нет активного FSM состояния. Это позволяет FSM-обработчикам (например,
+    в bot_config.py для ConfigInputState) корректно обрабатывать свои сообщения.
+    """
     if await _not_admin(message):
         return
     user_id = message.from_user.id
     from src.utils.logger import logger
     in_pending = user_id in PENDING_INPUT
 
-    # Проверяем FSM состояние (например, ConfigInputState.waiting_value)
-    fsm_state = await state.get_state()
-
     logger.info(
-        "handle_pending: user_id=%s in_PENDING_INPUT=%s fsm_state=%s text='%s'",
-        user_id, in_pending, fsm_state, message.text[:50] if message.text else None
+        "handle_pending: user_id=%s in_PENDING_INPUT=%s text='%s'",
+        user_id, in_pending, message.text[:50] if message.text else None
     )
-
-    # Если есть активное FSM состояние - пропускаем, пусть FSM обработчик сам обработает
-    if fsm_state is not None:
-        logger.info("handle_pending: skipping - FSM state active: %s", fsm_state)
-        return
 
     if not in_pending:
         # Если это не ожидаемый ввод и нет FSM состояния, удаляем сообщение
