@@ -122,3 +122,25 @@ async def get_optional_admin(
         return await get_current_admin(credentials)
     except HTTPException:
         return None
+
+
+async def get_db():
+    """
+    Dependency for database access.
+
+    Returns:
+        DatabaseService instance
+    """
+    from src.services.database import db_service
+    return db_service
+
+
+async def get_api_client():
+    """
+    Dependency for API client access.
+
+    Returns:
+        RemnavaveAPIClient instance
+    """
+    from src.services.api_client import api_client
+    return api_client

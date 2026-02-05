@@ -8,6 +8,7 @@ import Layout from './components/layout/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Users from './pages/Users'
+import UserDetail from './pages/UserDetail'
 import Nodes from './pages/Nodes'
 import Violations from './pages/Violations'
 import Settings from './pages/Settings'
@@ -44,7 +45,7 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/users" element={<Users />} />
-                  <Route path="/users/:uuid" element={<Users />} />
+                  <Route path="/users/:uuid" element={<UserDetail />} />
                   <Route path="/nodes" element={<Nodes />} />
                   <Route path="/violations" element={<Violations />} />
                   <Route path="/settings" element={<Settings />} />

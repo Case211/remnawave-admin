@@ -27,6 +27,25 @@ from web.backend.schemas.node import (
     NodeUpdate,
     NodeStats,
 )
+from web.backend.schemas.host import (
+    HostBase,
+    HostListItem,
+    HostDetail,
+    HostCreate,
+    HostUpdate,
+    HostListResponse,
+)
+from web.backend.schemas.violation import (
+    ViolationAction,
+    ViolationSeverity,
+    ViolationBase,
+    ViolationListItem,
+    ViolationDetail,
+    ViolationListResponse,
+    ViolationStats,
+    ViolationUserSummary,
+    ResolveViolationRequest,
+)
 
 __all__ = [
     # Common
@@ -53,4 +72,21 @@ __all__ = [
     "NodeCreate",
     "NodeUpdate",
     "NodeStats",
+    # Host
+    "HostBase",
+    "HostListItem",
+    "HostDetail",
+    "HostCreate",
+    "HostUpdate",
+    "HostListResponse",
+    # Violation
+    "ViolationAction",
+    "ViolationSeverity",
+    "ViolationBase",
+    "ViolationListItem",
+    "ViolationDetail",
+    "ViolationListResponse",
+    "ViolationStats",
+    "ViolationUserSummary",
+    "ResolveViolationRequest",
 ]
