@@ -1,6 +1,6 @@
 services:
   # ===========================================
-  # Core Services (always running)
+  # Основные сервисы
   # ===========================================
 
   bot:
@@ -16,7 +16,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       NOTIFICATIONS_CHAT_ID: ${NOTIFICATIONS_CHAT_ID:-}
       NOTIFICATIONS_TOPIC_ID: ${NOTIFICATIONS_TOPIC_ID:-}
-      # Отдельные топики для разных типов уведомлений (fallback на NOTIFICATIONS_TOPIC_ID)
       NOTIFICATIONS_TOPIC_USERS: ${NOTIFICATIONS_TOPIC_USERS:-}
       NOTIFICATIONS_TOPIC_NODES: ${NOTIFICATIONS_TOPIC_NODES:-}
       NOTIFICATIONS_TOPIC_SERVICE: ${NOTIFICATIONS_TOPIC_SERVICE:-}
@@ -25,7 +24,6 @@ services:
       NOTIFICATIONS_TOPIC_ERRORS: ${NOTIFICATIONS_TOPIC_ERRORS:-}
       WEBHOOK_PORT: ${WEBHOOK_PORT:-8080}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
-      # Database configuration (optional - remove DATABASE_URL to disable)
       DATABASE_URL: ${DATABASE_URL:-}
       DB_POOL_MIN_SIZE: ${DB_POOL_MIN_SIZE:-2}
       DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-10}
@@ -57,10 +55,9 @@ services:
       retries: 5
 
   # ===========================================
-  # Web Panel Services (optional, use --profile)
+  # Веб-панель (опционально, --profile web)
   # ===========================================
 
-  # Web Panel Backend API
   web-backend:
     build:
       context: .
@@ -72,7 +69,7 @@ services:
       - WEB_SECRET_KEY=${WEB_SECRET_KEY:?WEB_SECRET_KEY is required for web panel}
       - WEB_HOST=0.0.0.0
       - WEB_PORT=8081
-      - WEB_CORS_ORIGINS=${WEB_CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      - WEB_CORS_ORIGINS=${WEB_CORS_ORIGINS:-}
       - BOT_TOKEN=${BOT_TOKEN}
       - DATABASE_URL=${DATABASE_URL}
       - API_BASE_URL=${API_BASE_URL}
@@ -92,30 +89,7 @@ services:
       retries: 3
     profiles:
       - web
-      - web-dev
 
-  # Web Panel Frontend (development with Vite hot-reload)
-  web-frontend-dev:
-    image: node:20-alpine
-    container_name: remnawave-web-frontend-dev
-    working_dir: /app
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
-    environment:
-      - VITE_API_URL=http://localhost:${WEB_BACKEND_PORT:-8081}
-      - VITE_WS_URL=ws://localhost:${WEB_BACKEND_PORT:-8081}
-      - VITE_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
-      - VITE_DEBUG=true
-    ports:
-      - "${WEB_FRONTEND_PORT:-3000}:3000"
-    volumes:
-      - ./web/frontend:/app
-      - web_frontend_node_modules:/app/node_modules
-    networks:
-      - remnawave-network
-    profiles:
-      - web-dev
-
-  # Web Panel Frontend (production build with nginx)
   web-frontend:
     build:
       context: ./web/frontend
@@ -133,52 +107,8 @@ services:
     profiles:
       - web
 
-  # ===========================================
-  # Reverse Proxy (optional, use --profile)
-  # ===========================================
-
-  # Nginx reverse proxy
-  nginx:
-    image: nginx:alpine
-    container_name: remnawave-nginx
-    restart: unless-stopped
-    ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
-    volumes:
-      - ./web/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./web/nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - web-backend
-    networks:
-      - remnawave-network
-    profiles:
-      - nginx
-
-  # Caddy reverse proxy (auto HTTPS)
-  caddy:
-    image: caddy:alpine
-    container_name: remnawave-caddy
-    restart: unless-stopped
-    ports:
-      - "${CADDY_HTTP_PORT:-80}:80"
-      - "${CADDY_HTTPS_PORT:-443}:443"
-    volumes:
-      - ./web/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - web-backend
-    networks:
-      - remnawave-network
-    profiles:
-      - caddy
-
 volumes:
   postgres_data:
-  web_frontend_node_modules:
-  caddy_data:
-  caddy_config:
 
 networks:
   remnawave-network:

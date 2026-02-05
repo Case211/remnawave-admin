@@ -27,11 +27,6 @@ def verify_telegram_auth(auth_data: Dict[str, Any]) -> Tuple[bool, str]:
     """
     settings = get_web_settings()
 
-    # Development bypass - allows testing without real Telegram auth
-    if settings.debug and auth_data.get('hash') == 'dev_bypass':
-        logger.warning("Telegram auth: DEVELOPMENT BYPASS - do not use in production!")
-        return True, ""
-
     # Work with a copy to not modify the original
     data = dict(auth_data)
 

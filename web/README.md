@@ -1,137 +1,223 @@
-# Remnawave Admin Web Panel
+# Веб-панель Remnawave Admin
 
-Web-based admin panel for Remnawave bot management.
+Веб-интерфейс для управления Remnawave ботом.
 
-## Structure
+## Структура
 
 ```
 web/
-├── backend/          # FastAPI backend
-│   ├── api/          # API endpoints (auth, users, nodes, analytics)
-│   ├── core/         # Core functionality (config, security)
-│   ├── schemas/      # Pydantic schemas
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/         # React + TypeScript frontend
+├── backend/          # FastAPI бэкенд
+│   ├── api/          # API эндпоинты
+│   ├── core/         # Конфигурация, безопасность
+│   ├── schemas/      # Pydantic схемы
+│   └── Dockerfile
+├── frontend/         # React + TypeScript фронтенд
 │   ├── src/
-│   │   ├── api/      # API client
-│   │   ├── components/
-│   │   ├── pages/
-│   │   └── store/
-│   ├── Dockerfile
-│   └── package.json
-├── nginx/            # Nginx reverse proxy config
-├── caddy/            # Caddy reverse proxy config
-├── docker-compose.yml  # Standalone web dev
+│   └── Dockerfile
 └── README.md
 ```
 
-## Quick Start
+## Быстрый старт
 
-### Option 1: Run with Bot (Recommended)
-
-Use the main `docker-compose.yml` to run bot + web panel together. They share the same database.
+### 1. Настройка .env
 
 ```bash
-# Development (bot + web panel with hot-reload)
-docker compose --profile web-dev up
+# Скопируйте .env.example в .env и настройте:
+cp .env.example .env
 
-# Production (bot + web panel production build)
-docker compose --profile web up
-
-# Production with Caddy (auto HTTPS)
-docker compose --profile web --profile caddy up -d
-
-# Production with Nginx
-docker compose --profile web --profile nginx up -d
+# Сгенерируйте секретный ключ для JWT:
+openssl rand -hex 32
 ```
 
-### Option 2: Standalone Web Development
-
-Use `web/docker-compose.yml` for web panel development without the bot. Creates its own PostgreSQL instance.
-
-```bash
-docker compose -f web/docker-compose.yml up
-```
-
-## Ports
-
-| Service | Port | Description |
-|---------|------|-------------|
-| Frontend | 3000 | React dev server / Nginx |
-| Backend | 8081 | FastAPI API |
-| PostgreSQL | 5432 | Database |
-| Nginx/Caddy | 80/443 | Reverse proxy |
-
-## Configuration
-
-Copy `.env.example` to `.env` and configure:
-
+Обязательные переменные для веб-панели:
 ```env
-# Required for web panel
-WEB_SECRET_KEY=your_jwt_secret_key_here   # openssl rand -hex 32
-TELEGRAM_BOT_USERNAME=your_bot_username    # Without @
-ADMINS=123456789,987654321                 # Telegram IDs
-
-# Optional
-WEB_DEBUG=true                             # Enable dev bypass
+WEB_SECRET_KEY=ваш_сгенерированный_ключ
+TELEGRAM_BOT_USERNAME=username_вашего_бота
+ADMINS=123456789  # Ваш Telegram ID
 ```
 
-## Authentication
+### 2. Запуск
 
-Uses Telegram Login Widget. Only users listed in `ADMINS` can access the panel.
+```bash
+# Бот + веб-панель
+docker compose --profile web up -d
 
-### Development Bypass
+# Или только бот (без веб-панели)
+docker compose up -d
+```
 
-When `WEB_DEBUG=true`:
+### 3. Настройка домена
 
-1. On login page, click "Show Development Bypass"
-2. Enter your Telegram ID
-3. Click "Dev Login"
+Настройте домен в Telegram BotFather:
+1. Откройте @BotFather
+2. /mybots → выберите бота → Bot Settings → Domain
+3. Добавьте ваш домен (например: `admin.yourdomain.com`)
 
-This bypasses Telegram signature verification for local testing.
+## Порты
 
-## Architecture
+| Сервис | Порт | Описание |
+|--------|------|----------|
+| Frontend | 3000 | React (Nginx) |
+| Backend | 8081 | FastAPI API |
+| PostgreSQL | 5432 | База данных |
+
+## Архитектура
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Browser                               │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Caddy / Nginx (reverse proxy)                   │
-│                    :80 / :443                                │
-└─────────────────────────────────────────────────────────────┘
-                    │                   │
-                    ▼                   ▼
-┌─────────────────────────┐  ┌─────────────────────────┐
-│   Frontend (React)      │  │   Backend (FastAPI)     │
-│        :3000            │  │        :8081            │
-└─────────────────────────┘  └─────────────────────────┘
-                                        │
-                                        ▼
                     ┌─────────────────────────────────────┐
-                    │        PostgreSQL (shared)          │
-                    │             :5432                   │
-                    └─────────────────────────────────────┘
-                                        ▲
-                                        │
-                    ┌─────────────────────────────────────┐
-                    │     Telegram Bot (Python)           │
-                    │           :8080                     │
-                    └─────────────────────────────────────┘
+                    │        PostgreSQL (общая БД)        │
+                    └────────────────┬────────────────────┘
+                                     │
+              ┌──────────────────────┼──────────────────────┐
+              │                      │                      │
+              ▼                      ▼                      ▼
+        ┌───────────┐         ┌───────────┐         ┌───────────┐
+        │    Bot    │         │  Backend  │         │ Frontend  │
+        │   :8080   │         │   :8081   │         │   :3000   │
+        └───────────┘         └───────────┘         └───────────┘
 ```
 
-## API Endpoints
+## Настройка реверс-прокси
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v2/auth/telegram` | POST | Telegram login |
-| `/api/v2/auth/refresh` | POST | Refresh token |
-| `/api/v2/auth/me` | GET | Current admin info |
-| `/api/v2/users` | GET | List users |
-| `/api/v2/users/{id}` | GET | Get user |
-| `/api/v2/nodes` | GET | List nodes |
-| `/api/v2/analytics/*` | GET | Analytics data |
-| `/api/v2/health` | GET | Health check |
+### Вариант 1: Caddy (рекомендуется)
+
+Caddy автоматически получает SSL сертификаты от Let's Encrypt.
+
+Создайте файл `Caddyfile`:
+
+```caddyfile
+admin.yourdomain.com {
+    # Frontend
+    handle {
+        reverse_proxy web-frontend:80
+    }
+
+    # Backend API
+    handle /api/* {
+        reverse_proxy web-backend:8081
+    }
+
+    # WebSocket
+    handle /ws/* {
+        reverse_proxy web-backend:8081
+    }
+}
+```
+
+Запуск:
+```bash
+docker run -d \
+  --name caddy \
+  --network remnawave-network \
+  -p 80:80 -p 443:443 \
+  -v $(pwd)/Caddyfile:/etc/caddy/Caddyfile \
+  -v caddy_data:/data \
+  caddy:alpine
+```
+
+### Вариант 2: Nginx
+
+Создайте файл `nginx.conf`:
+
+```nginx
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream backend {
+        server web-backend:8081;
+    }
+
+    upstream frontend {
+        server web-frontend:80;
+    }
+
+    server {
+        listen 80;
+        server_name admin.yourdomain.com;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name admin.yourdomain.com;
+
+        ssl_certificate /etc/nginx/ssl/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+
+        # Frontend
+        location / {
+            proxy_pass http://frontend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+
+        # Backend API
+        location /api/ {
+            proxy_pass http://backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # WebSocket
+        location /ws/ {
+            proxy_pass http://backend;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+        }
+    }
+}
+```
+
+Запуск:
+```bash
+docker run -d \
+  --name nginx \
+  --network remnawave-network \
+  -p 80:80 -p 443:443 \
+  -v $(pwd)/nginx.conf:/etc/nginx/nginx.conf:ro \
+  -v $(pwd)/ssl:/etc/nginx/ssl:ro \
+  nginx:alpine
+```
+
+## Аутентификация
+
+Используется Telegram Login Widget. Доступ имеют только пользователи из списка `ADMINS`.
+
+### Как узнать свой Telegram ID
+
+1. Напишите боту @userinfobot в Telegram
+2. Он пришлёт ваш ID
+3. Добавьте его в `ADMINS` в .env
+
+## API эндпоинты
+
+| Эндпоинт | Метод | Описание |
+|----------|-------|----------|
+| `/api/v2/auth/telegram` | POST | Вход через Telegram |
+| `/api/v2/auth/refresh` | POST | Обновление токена |
+| `/api/v2/auth/me` | GET | Информация о текущем админе |
+| `/api/v2/users` | GET | Список пользователей |
+| `/api/v2/nodes` | GET | Список нод |
+| `/api/v2/health` | GET | Проверка здоровья |
+
+## Частые проблемы
+
+### "Not an admin" при входе
+
+Убедитесь, что ваш Telegram ID добавлен в `ADMINS` в .env файле.
+
+### Telegram Login Widget не работает
+
+1. Проверьте, что `TELEGRAM_BOT_USERNAME` указан правильно (без @)
+2. Убедитесь, что домен добавлен в настройках бота в BotFather
+3. Сайт должен работать по HTTPS
+
+### Ошибка подключения к базе данных
+
+Убедитесь, что `DATABASE_URL` в .env совпадает с `POSTGRES_USER` и `POSTGRES_PASSWORD`.
