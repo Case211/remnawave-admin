@@ -351,6 +351,64 @@ async def receive_connections(
                                     user_uuid,
                                     notify_error
                                 )
+
+                            # Сохраняем violation в БД для статистики и отчётов
+                            try:
+                                breakdown = violation_score.breakdown
+                                temporal = breakdown.get('temporal')
+                                geo = breakdown.get('geo')
+                                asn = breakdown.get('asn')
+                                profile = breakdown.get('profile')
+                                device = breakdown.get('device')
+
+                                # Собираем IP адреса из активных подключений
+                                ip_addresses = list(set(str(c.ip_address) for c in active_connections)) if active_connections else None
+
+                                # Получаем данные о пользователе для записи
+                                username = user_info.get('username') if user_info else None
+                                email = user_info.get('email') if user_info else None
+                                telegram_id = user_info.get('telegram_id') if user_info else None
+                                device_limit = user_info.get('hwidDeviceLimit', 1) if user_info else 1
+
+                                await db_service.save_violation(
+                                    user_uuid=user_uuid,
+                                    score=violation_score.total,
+                                    recommended_action=violation_score.recommended_action.value,
+                                    username=username,
+                                    email=email,
+                                    telegram_id=telegram_id,
+                                    confidence=violation_score.confidence,
+                                    temporal_score=temporal.score if temporal else None,
+                                    geo_score=geo.score if geo else None,
+                                    asn_score=asn.score if asn else None,
+                                    profile_score=profile.score if profile else None,
+                                    device_score=device.score if device else None,
+                                    ip_addresses=ip_addresses,
+                                    countries=list(geo.countries) if geo and geo.countries else None,
+                                    cities=list(geo.cities) if geo and geo.cities else None,
+                                    asn_types=list(asn.asn_types) if asn and asn.asn_types else None,
+                                    os_list=device.os_list if device else None,
+                                    client_list=device.client_list if device else None,
+                                    reasons=violation_score.reasons[:10] if violation_score.reasons else None,
+                                    simultaneous_connections=temporal.simultaneous_connections_count if temporal else None,
+                                    unique_ips_count=len(ip_addresses) if ip_addresses else None,
+                                    device_limit=device_limit,
+                                    impossible_travel=geo.impossible_travel_detected if geo else False,
+                                    is_mobile=asn.is_mobile_carrier if asn else False,
+                                    is_datacenter=asn.is_datacenter if asn else False,
+                                    is_vpn=asn.is_vpn if asn else False,
+                                )
+                                logger.debug(
+                                    "Violation saved to DB for user %s: score=%.1f",
+                                    user_uuid,
+                                    violation_score.total
+                                )
+                            except Exception as save_error:
+                                logger.warning(
+                                    "Failed to save violation to DB for user %s: %s",
+                                    user_uuid,
+                                    save_error
+                                )
                         else:
                             logger.debug(
                                 "User %s: score=%.1f (below threshold)",
