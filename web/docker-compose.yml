@@ -1,15 +1,15 @@
 version: '3.8'
 
 # Remnawave Admin Web Panel - Docker Compose
-# Usage:
-#   Development: docker compose -f docker-compose.web.yml up
-#   Production:  docker compose -f docker-compose.web.yml -f docker-compose.web.prod.yml up -d
+# Usage (run from project root):
+#   Development: docker compose -f web/docker-compose.yml up
+#   Production:  docker compose -f web/docker-compose.yml -f web/docker-compose.prod.yml up -d
 
 services:
   # Backend API
   web-backend:
     build:
-      context: .
+      context: ..
       dockerfile: web/backend/Dockerfile
     container_name: remnawave-web-backend
     restart: unless-stopped
@@ -28,8 +28,8 @@ services:
       - "${WEB_BACKEND_PORT:-8081}:8081"
     volumes:
       # Mount source for development hot-reload
-      - ./src:/app/src:ro
-      - ./web/backend:/app/web/backend:ro
+      - ../src:/app/src:ro
+      - ./backend:/app/web/backend:ro
     depends_on:
       - postgres
     networks:
@@ -53,7 +53,7 @@ services:
     ports:
       - "${WEB_FRONTEND_PORT:-3000}:3000"
     volumes:
-      - ./web/frontend:/app
+      - ./frontend:/app
       - /app/node_modules
     networks:
       - remnawave-network
@@ -63,7 +63,7 @@ services:
   # Frontend (production build)
   web-frontend:
     build:
-      context: ./web/frontend
+      context: ./frontend
       dockerfile: Dockerfile
       args:
         - VITE_API_URL=${VITE_API_URL:-}
