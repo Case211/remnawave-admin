@@ -1,4 +1,5 @@
 """Auth API endpoints."""
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 
 from web.backend.api.deps import get_current_admin, AdminUser
@@ -17,6 +18,7 @@ from web.backend.schemas.auth import (
 )
 from web.backend.schemas.common import SuccessResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -26,23 +28,40 @@ async def telegram_login(data: TelegramAuthData):
     Authenticate via Telegram Login Widget.
 
     Verifies the data signature and creates JWT tokens.
+
+    For development testing (when WEB_DEBUG=true), you can bypass Telegram auth
+    by sending hash="dev_bypass" - the signature verification will be skipped.
     """
+    settings = get_web_settings()
+
     # Convert to dict for verification
     auth_dict = data.model_dump()
 
+    logger.info(f"Login attempt from Telegram user {data.id} ({data.username or data.first_name})")
+
     # Verify Telegram signature
-    if not verify_telegram_auth(auth_dict.copy()):
-        raise HTTPException(status_code=401, detail="Invalid Telegram auth data")
+    is_valid, error_message = verify_telegram_auth(auth_dict)
+    if not is_valid:
+        logger.warning(f"Auth failed for user {data.id}: {error_message}")
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid Telegram auth data: {error_message}"
+        )
 
     # Check if user is in admins list
-    settings = get_web_settings()
     if data.id not in settings.admins:
-        raise HTTPException(status_code=403, detail="Not an admin")
+        logger.warning(f"User {data.id} is not in admins list: {settings.admins}")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Not an admin. Your Telegram ID ({data.id}) is not in the allowed list."
+        )
 
     # Create tokens
     username = data.username or data.first_name
     access_token = create_access_token(data.id, username)
     refresh_token = create_refresh_token(data.id)
+
+    logger.info(f"Login successful for user {data.id} ({username})")
 
     return TokenResponse(
         access_token=access_token,

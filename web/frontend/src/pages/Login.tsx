@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { TelegramUser } from '../api/auth'
@@ -12,10 +12,15 @@ declare global {
   }
 }
 
+const IS_DEV = import.meta.env.DEV || import.meta.env.VITE_DEBUG === 'true'
+
 export default function Login() {
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { login, isAuthenticated, isLoading, error, clearError } = useAuthStore()
+  const [devTelegramId, setDevTelegramId] = useState('')
+  const [devUsername, setDevUsername] = useState('dev_admin')
+  const [showDevBypass, setShowDevBypass] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -60,6 +65,33 @@ export default function Login() {
     }
   }, [isAuthenticated, navigate, login])
 
+  const handleDevBypass = async () => {
+    if (!devTelegramId) {
+      return
+    }
+
+    const telegramId = parseInt(devTelegramId, 10)
+    if (isNaN(telegramId)) {
+      return
+    }
+
+    // Create fake TelegramUser with dev_bypass hash
+    const devUser: TelegramUser = {
+      id: telegramId,
+      first_name: devUsername || 'Dev',
+      username: devUsername || 'dev_admin',
+      auth_date: Math.floor(Date.now() / 1000),
+      hash: 'dev_bypass',
+    }
+
+    try {
+      await login(devUser)
+      navigate('/')
+    } catch (err) {
+      console.error('Dev login failed:', err)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-950 p-4">
       <div className="w-full max-w-md">
@@ -85,7 +117,7 @@ export default function Login() {
           {/* Error message */}
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <p className="text-sm text-red-400 text-center">{error}</p>
+              <p className="text-sm text-red-400 text-center whitespace-pre-wrap">{error}</p>
               <button
                 onClick={clearError}
                 className="mt-2 text-xs text-red-400 hover:text-red-300 mx-auto block"
@@ -97,13 +129,73 @@ export default function Login() {
 
           {/* Loading state */}
           {isLoading && (
-            <div className="flex justify-center mb-6">
+            <div className="flex flex-col items-center mb-6">
               <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="mt-2 text-sm text-gray-400">Authenticating...</p>
             </div>
           )}
 
           {/* Telegram Login Widget container */}
-          <div ref={containerRef} className="flex justify-center" />
+          {!isLoading && (
+            <div ref={containerRef} className="flex justify-center" />
+          )}
+
+          {/* Dev Bypass (only in development) */}
+          {IS_DEV && (
+            <div className="mt-8 pt-6 border-t border-dark-700">
+              <button
+                onClick={() => setShowDevBypass(!showDevBypass)}
+                className="w-full text-xs text-gray-500 hover:text-gray-400 flex items-center justify-center gap-2"
+              >
+                <span>{showDevBypass ? 'Hide' : 'Show'} Development Bypass</span>
+                <svg
+                  className={`w-4 h-4 transform transition-transform ${showDevBypass ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showDevBypass && (
+                <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <p className="text-xs text-yellow-400 mb-3 text-center">
+                    Development only! Bypasses Telegram signature verification.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Telegram ID</label>
+                      <input
+                        type="text"
+                        value={devTelegramId}
+                        onChange={(e) => setDevTelegramId(e.target.value)}
+                        placeholder="Enter your Telegram ID"
+                        className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Username (optional)</label>
+                      <input
+                        type="text"
+                        value={devUsername}
+                        onChange={(e) => setDevUsername(e.target.value)}
+                        placeholder="Username"
+                        className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
+                      />
+                    </div>
+                    <button
+                      onClick={handleDevBypass}
+                      disabled={!devTelegramId || isLoading}
+                      className="w-full py-2 px-4 bg-yellow-600 hover:bg-yellow-500 disabled:bg-yellow-800 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      {isLoading ? 'Logging in...' : 'Dev Login'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Footer */}
           <p className="mt-8 text-center text-xs text-gray-600">
