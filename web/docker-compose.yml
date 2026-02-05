@@ -1,9 +1,12 @@
-version: '3.8'
-
-# Remnawave Admin Web Panel - Docker Compose
-# Usage (run from project root):
-#   Development: docker compose -f web/docker-compose.yml up
-#   Production:  docker compose -f web/docker-compose.yml -f web/docker-compose.prod.yml up -d
+# Standalone Web Panel Development
+# Use this when developing web panel WITHOUT the bot running
+#
+# Usage:
+#   docker compose -f web/docker-compose.yml up
+#
+# For running with bot, use main docker-compose.yml:
+#   docker compose --profile web-dev up     # Development
+#   docker compose --profile web up         # Production
 
 services:
   # Backend API
@@ -15,25 +18,24 @@ services:
     restart: unless-stopped
     environment:
       - WEB_DEBUG=${WEB_DEBUG:-true}
-      - WEB_SECRET_KEY=${WEB_SECRET_KEY}
+      - WEB_SECRET_KEY=${WEB_SECRET_KEY:-dev_secret_key_change_in_production}
       - WEB_HOST=0.0.0.0
       - WEB_PORT=8081
       - WEB_CORS_ORIGINS=${WEB_CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
-      - BOT_TOKEN=${BOT_TOKEN}
-      - DATABASE_URL=${DATABASE_URL}
-      - API_BASE_URL=${API_BASE_URL}
-      - API_TOKEN=${API_TOKEN}
-      - ADMINS=${ADMINS}
+      - BOT_TOKEN=${BOT_TOKEN:-}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://remnawave:remnawave@postgres:5432/remnawave}
+      - API_BASE_URL=${API_BASE_URL:-http://localhost:3000}
+      - API_TOKEN=${API_TOKEN:-}
+      - ADMINS=${ADMINS:-}
     ports:
       - "${WEB_BACKEND_PORT:-8081}:8081"
     volumes:
-      # Mount source for development hot-reload
-      - ../src:/app/src:ro
       - ./backend:/app/web/backend:ro
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
-      - remnawave-network
+      - web-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/api/v2/health"]
       interval: 30s
@@ -41,7 +43,7 @@ services:
       retries: 3
 
   # Frontend (development with Vite)
-  web-frontend-dev:
+  web-frontend:
     image: node:20-alpine
     container_name: remnawave-web-frontend-dev
     working_dir: /app
@@ -49,98 +51,41 @@ services:
     environment:
       - VITE_API_URL=http://localhost:${WEB_BACKEND_PORT:-8081}
       - VITE_WS_URL=ws://localhost:${WEB_BACKEND_PORT:-8081}
-      - VITE_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
+      - VITE_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
+      - VITE_DEBUG=true
     ports:
       - "${WEB_FRONTEND_PORT:-3000}:3000"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - web_node_modules:/app/node_modules
     networks:
-      - remnawave-network
-    profiles:
-      - dev
+      - web-network
 
-  # Frontend (production build)
-  web-frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=${VITE_API_URL:-}
-        - VITE_WS_URL=${VITE_WS_URL:-}
-        - VITE_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
-    container_name: remnawave-web-frontend
-    restart: unless-stopped
-    ports:
-      - "${WEB_FRONTEND_PORT:-3000}:80"
-    networks:
-      - remnawave-network
-    profiles:
-      - prod
-
-  # PostgreSQL (shared with bot)
+  # PostgreSQL (standalone for web panel dev)
   postgres:
-    image: postgres:15-alpine
-    container_name: remnawave-postgres
+    image: postgres:16-alpine
+    container_name: remnawave-web-postgres
     restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-remnawave}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-remnawave}
       - POSTGRES_DB=${POSTGRES_DB:-remnawave}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - web_postgres_data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     networks:
-      - remnawave-network
+      - web-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-remnawave}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-remnawave}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Nginx reverse proxy (optional)
-  nginx:
-    image: nginx:alpine
-    container_name: remnawave-nginx
-    restart: unless-stopped
-    ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - web-backend
-    networks:
-      - remnawave-network
-    profiles:
-      - nginx
-
-  # Caddy reverse proxy (alternative to nginx)
-  caddy:
-    image: caddy:alpine
-    container_name: remnawave-caddy
-    restart: unless-stopped
-    ports:
-      - "${CADDY_HTTP_PORT:-80}:80"
-      - "${CADDY_HTTPS_PORT:-443}:443"
-    volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - web-backend
-    networks:
-      - remnawave-network
-    profiles:
-      - caddy
-
 volumes:
-  postgres-data:
-  caddy-data:
-  caddy-config:
+  web_postgres_data:
+  web_node_modules:
 
 networks:
-  remnawave-network:
+  web-network:
     driver: bridge
