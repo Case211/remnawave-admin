@@ -1,0 +1,26 @@
+# Remnawave Admin Web Panel - Backend Dependencies
+
+# Web framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Validation
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# Database (uses same as bot)
+asyncpg>=0.29.0
+
+# HTTP client
+aiohttp>=3.9.0
+
+# WebSocket
+websockets>=12.0
+
+# Utilities
+python-dotenv>=1.0.0
+python-multipart>=0.0.6

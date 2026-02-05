@@ -1,0 +1,146 @@
+version: '3.8'
+
+# Remnawave Admin Web Panel - Docker Compose
+# Usage:
+#   Development: docker compose -f docker-compose.web.yml up
+#   Production:  docker compose -f docker-compose.web.yml -f docker-compose.web.prod.yml up -d
+
+services:
+  # Backend API
+  web-backend:
+    build:
+      context: .
+      dockerfile: web/backend/Dockerfile
+    container_name: remnawave-web-backend
+    restart: unless-stopped
+    environment:
+      - WEB_DEBUG=${WEB_DEBUG:-true}
+      - WEB_SECRET_KEY=${WEB_SECRET_KEY}
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=8081
+      - WEB_CORS_ORIGINS=${WEB_CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      - BOT_TOKEN=${BOT_TOKEN}
+      - DATABASE_URL=${DATABASE_URL}
+      - API_BASE_URL=${API_BASE_URL}
+      - API_TOKEN=${API_TOKEN}
+      - ADMINS=${ADMINS}
+    ports:
+      - "${WEB_BACKEND_PORT:-8081}:8081"
+    volumes:
+      # Mount source for development hot-reload
+      - ./src:/app/src:ro
+      - ./web/backend:/app/web/backend:ro
+    depends_on:
+      - postgres
+    networks:
+      - remnawave-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v2/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend (development with Vite)
+  web-frontend-dev:
+    image: node:20-alpine
+    container_name: remnawave-web-frontend-dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      - VITE_API_URL=http://localhost:${WEB_BACKEND_PORT:-8081}
+      - VITE_WS_URL=ws://localhost:${WEB_BACKEND_PORT:-8081}
+      - VITE_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
+    ports:
+      - "${WEB_FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./web/frontend:/app
+      - /app/node_modules
+    networks:
+      - remnawave-network
+    profiles:
+      - dev
+
+  # Frontend (production build)
+  web-frontend:
+    build:
+      context: ./web/frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-}
+        - VITE_WS_URL=${VITE_WS_URL:-}
+        - VITE_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
+    container_name: remnawave-web-frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_FRONTEND_PORT:-3000}:80"
+    networks:
+      - remnawave-network
+    profiles:
+      - prod
+
+  # PostgreSQL (shared with bot)
+  postgres:
+    image: postgres:15-alpine
+    container_name: remnawave-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-remnawave}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-remnawave}
+      - POSTGRES_DB=${POSTGRES_DB:-remnawave}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - remnawave-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-remnawave}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: remnawave-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - web-backend
+    networks:
+      - remnawave-network
+    profiles:
+      - nginx
+
+  # Caddy reverse proxy (alternative to nginx)
+  caddy:
+    image: caddy:alpine
+    container_name: remnawave-caddy
+    restart: unless-stopped
+    ports:
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web-backend
+    networks:
+      - remnawave-network
+    profiles:
+      - caddy
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  remnawave-network:
+    driver: bridge
