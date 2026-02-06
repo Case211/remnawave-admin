@@ -55,17 +55,10 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       >
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-6 border-b border-dark-400/10">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(135deg, #0d9488 0%, #06b6d4 100%)',
-              }}
-            >
-              <span className="text-white font-bold text-sm">R</span>
-            </div>
+          <Link to="/" onClick={handleNavClick} className="flex items-center gap-2.5 hover:opacity-90 transition-opacity duration-200">
+            <img src="/logo.svg" alt="Remnawave" className="w-8 h-8 rounded-lg" />
             <span className="text-lg font-display font-bold text-white">Remnawave</span>
-          </div>
+          </Link>
           {/* Mobile close button */}
           <button
             onClick={onClose}
