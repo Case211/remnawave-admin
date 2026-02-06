@@ -4,6 +4,7 @@ Remnawave Admin Web Panel - FastAPI Application.
 This is the main entry point for the web panel backend.
 It provides REST API and WebSocket endpoints for the admin dashboard.
 """
+import os
 import sys
 from pathlib import Path
 
@@ -28,9 +29,11 @@ async def lifespan(app: FastAPI):
     print(f"🚀 Starting Remnawave Admin Web API on {settings.host}:{settings.port}")
     print(f"📝 Debug mode: {settings.debug}")
     print(f"🔗 CORS origins: {settings.cors_origins}")
+    print(f"👥 Admins raw: {repr(settings.admins_raw)}, parsed: {settings.admins}")
 
-    # Connect to database if configured
-    if settings.database_url:
+    # Connect to database if configured (check env var directly to avoid Settings attr issues)
+    database_url = os.environ.get("DATABASE_URL") or getattr(settings, "database_url", None)
+    if database_url:
         try:
             from src.services.database import db_service
             connected = await db_service.connect()
@@ -40,6 +43,8 @@ async def lifespan(app: FastAPI):
                 print("⚠️ Database connection failed, running without database")
         except Exception as e:
             print(f"⚠️ Database connection error: {e}")
+    else:
+        print("ℹ️ DATABASE_URL not set, running without database")
 
     yield
 

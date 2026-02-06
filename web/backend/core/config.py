@@ -4,11 +4,18 @@ from functools import lru_cache
 from typing import List, Optional
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class WebSettings(BaseSettings):
     """Settings for web panel."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        populate_by_name=True,
+        extra="ignore",
+    )
 
     # App
     debug: bool = Field(default=False, alias="WEB_DEBUG")
@@ -40,6 +47,14 @@ class WebSettings(BaseSettings):
     # Admins list (shared with bot)
     admins_raw: str = Field(default="", alias="ADMINS")
 
+    @field_validator("admins_raw", mode="before")
+    @classmethod
+    def coerce_admins_to_str(cls, v):
+        """Ensure admins_raw is always a string (env vars may be parsed as int)."""
+        if v is None:
+            return ""
+        return str(v)
+
     @property
     def cors_origins(self) -> List[str]:
         """Parse CORS origins from comma-separated string."""
@@ -53,7 +68,7 @@ class WebSettings(BaseSettings):
         if not self.admins_raw:
             return []
         admins = []
-        for admin_id in self.admins_raw.split(","):
+        for admin_id in str(self.admins_raw).split(","):
             admin_id = admin_id.strip()
             if admin_id:
                 try:
@@ -61,10 +76,6 @@ class WebSettings(BaseSettings):
                 except ValueError:
                     pass
         return admins
-
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
 
 
 @lru_cache()
