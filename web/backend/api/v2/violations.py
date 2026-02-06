@@ -50,71 +50,77 @@ async def list_violations(
     - **user_uuid**: Фильтр по пользователю
     - **resolved**: Фильтр по статусу разрешения
     """
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=days)
+    try:
+        if not db.is_connected:
+            return ViolationListResponse(items=[], total=0, page=page, per_page=per_page, pages=1)
 
-    # Получаем нарушения из БД
-    violations = await db.get_violations_for_period(
-        start_date=start_date,
-        end_date=end_date,
-        min_score=min_score,
-    )
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
 
-    # Фильтрация
-    if user_uuid:
-        violations = [v for v in violations if v.get('user_uuid') == user_uuid]
+        # Получаем нарушения из БД
+        violations = await db.get_violations_for_period(
+            start_date=start_date,
+            end_date=end_date,
+            min_score=min_score,
+        )
 
-    if severity:
-        severity_map = {
-            'low': (0, 40),
-            'medium': (40, 60),
-            'high': (60, 80),
-            'critical': (80, 101),
-        }
-        if severity in severity_map:
-            min_s, max_s = severity_map[severity]
-            violations = [v for v in violations if min_s <= v.get('score', 0) < max_s]
+        # Фильтрация
+        if user_uuid:
+            violations = [v for v in violations if v.get('user_uuid') == user_uuid]
 
-    if resolved is not None:
-        if resolved:
-            violations = [v for v in violations if v.get('action_taken')]
-        else:
-            violations = [v for v in violations if not v.get('action_taken')]
+        if severity:
+            severity_map = {
+                'low': (0, 40),
+                'medium': (40, 60),
+                'high': (60, 80),
+                'critical': (80, 101),
+            }
+            if severity in severity_map:
+                min_s, max_s = severity_map[severity]
+                violations = [v for v in violations if min_s <= v.get('score', 0) < max_s]
 
-    # Сортировка по дате (новые первыми)
-    violations.sort(key=lambda x: x.get('detected_at', datetime.min), reverse=True)
+        if resolved is not None:
+            if resolved:
+                violations = [v for v in violations if v.get('action_taken')]
+            else:
+                violations = [v for v in violations if not v.get('action_taken')]
 
-    # Пагинация
-    total = len(violations)
-    start = (page - 1) * per_page
-    end = start + per_page
-    items_raw = violations[start:end]
+        # Сортировка по дате (новые первыми)
+        violations.sort(key=lambda x: x.get('detected_at', datetime.min), reverse=True)
 
-    # Преобразуем в модели
-    items = []
-    for v in items_raw:
-        items.append(ViolationListItem(
-            id=v.get('id'),
-            user_uuid=v.get('user_uuid'),
-            username=v.get('username'),
-            email=v.get('email'),
-            telegram_id=v.get('telegram_id'),
-            score=v.get('score', 0),
-            recommended_action=v.get('recommended_action', 'no_action'),
-            confidence=v.get('confidence', 0),
-            detected_at=v.get('detected_at'),
-            severity=get_severity(v.get('score', 0)),
-            action_taken=v.get('action_taken'),
-            notified=v.get('notified_at') is not None,
-        ))
+        # Пагинация
+        total = len(violations)
+        start = (page - 1) * per_page
+        end = start + per_page
+        items_raw = violations[start:end]
 
-    return ViolationListResponse(
-        items=items,
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=(total + per_page - 1) // per_page if total > 0 else 1,
-    )
+        # Преобразуем в модели
+        items = []
+        for v in items_raw:
+            items.append(ViolationListItem(
+                id=v.get('id'),
+                user_uuid=v.get('user_uuid'),
+                username=v.get('username'),
+                email=v.get('email'),
+                telegram_id=v.get('telegram_id'),
+                score=v.get('score', 0),
+                recommended_action=v.get('recommended_action', 'no_action'),
+                confidence=v.get('confidence', 0),
+                detected_at=v.get('detected_at'),
+                severity=get_severity(v.get('score', 0)),
+                action_taken=v.get('action_taken'),
+                notified=v.get('notified_at') is not None,
+            ))
+
+        return ViolationListResponse(
+            items=items,
+            total=total,
+            page=page,
+            per_page=per_page,
+            pages=(total + per_page - 1) // per_page if total > 0 else 1,
+        )
+    except Exception:
+        return ViolationListResponse(items=[], total=0, page=page, per_page=per_page, pages=1)
 
 
 @router.get("/stats", response_model=ViolationStats)
@@ -125,42 +131,61 @@ async def get_violation_stats(
     db: DatabaseService = Depends(get_db),
 ):
     """Статистика нарушений за период."""
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=days)
+    try:
+        if not db.is_connected:
+            return ViolationStats(
+                total=0, critical=0, high=0, medium=0, low=0,
+                unique_users=0, avg_score=0.0, max_score=0.0,
+            )
 
-    # Базовая статистика
-    stats = await db.get_violations_stats_for_period(
-        start_date=start_date,
-        end_date=end_date,
-        min_score=min_score,
-    )
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
 
-    # По странам
-    by_country = await db.get_violations_by_country(
-        start_date=start_date,
-        end_date=end_date,
-        min_score=min_score,
-    )
+        # Базовая статистика
+        stats = await db.get_violations_stats_for_period(
+            start_date=start_date,
+            end_date=end_date,
+            min_score=min_score,
+        )
 
-    # По действиям
-    by_action = await db.get_violations_by_action(
-        start_date=start_date,
-        end_date=end_date,
-        min_score=min_score,
-    )
+        # По странам
+        by_country = await db.get_violations_by_country(
+            start_date=start_date,
+            end_date=end_date,
+            min_score=min_score,
+        )
 
-    return ViolationStats(
-        total=stats.get('total', 0),
-        critical=stats.get('critical', 0),
-        high=stats.get('high', 0),
-        medium=stats.get('medium', 0),
-        low=stats.get('low', 0),
-        unique_users=stats.get('unique_users', 0),
-        avg_score=stats.get('avg_score', 0),
-        max_score=stats.get('max_score', 0),
-        by_action=by_action,
-        by_country=by_country,
-    )
+        # По действиям
+        by_action = await db.get_violations_by_action(
+            start_date=start_date,
+            end_date=end_date,
+            min_score=min_score,
+        )
+
+        # DB returns 'warning'/'monitor' but schema expects 'high'/'medium'/'low'
+        total = stats.get('total', 0)
+        critical = stats.get('critical', 0)
+        high = stats.get('warning', stats.get('high', 0))
+        medium = stats.get('monitor', stats.get('medium', 0))
+        low = max(0, total - critical - high - medium)
+
+        return ViolationStats(
+            total=total,
+            critical=critical,
+            high=high,
+            medium=medium,
+            low=low,
+            unique_users=stats.get('unique_users', 0),
+            avg_score=float(stats.get('avg_score', 0)),
+            max_score=float(stats.get('max_score', 0)),
+            by_action=by_action,
+            by_country=by_country,
+        )
+    except Exception:
+        return ViolationStats(
+            total=0, critical=0, high=0, medium=0, low=0,
+            unique_users=0, avg_score=0.0, max_score=0.0,
+        )
 
 
 @router.get("/pending", response_model=ViolationListResponse)

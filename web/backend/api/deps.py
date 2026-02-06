@@ -1,4 +1,5 @@
 """API dependencies for web panel."""
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,6 +9,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from web.backend.core.config import get_web_settings
 from web.backend.core.security import decode_token
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
 
@@ -49,7 +51,16 @@ async def get_current_admin(
 
     # Verify admin is in admins list
     settings = get_web_settings()
-    if telegram_id not in settings.admins:
+    admins_list = settings.admins
+    logger.info(
+        f"Admin check: telegram_id={telegram_id}, "
+        f"admins_raw={repr(settings.admins_raw)}, "
+        f"admins_list={admins_list}"
+    )
+    if telegram_id not in admins_list:
+        logger.warning(
+            f"Admin check FAILED: {telegram_id} not in {admins_list}"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not an admin",

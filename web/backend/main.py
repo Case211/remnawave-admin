@@ -4,6 +4,7 @@ Remnawave Admin Web Panel - FastAPI Application.
 This is the main entry point for the web panel backend.
 It provides REST API and WebSocket endpoints for the admin dashboard.
 """
+import os
 import sys
 from pathlib import Path
 
@@ -28,10 +29,33 @@ async def lifespan(app: FastAPI):
     print(f"🚀 Starting Remnawave Admin Web API on {settings.host}:{settings.port}")
     print(f"📝 Debug mode: {settings.debug}")
     print(f"🔗 CORS origins: {settings.cors_origins}")
+    print(f"👥 Admins raw: {repr(settings.admins_raw)}, parsed: {settings.admins}")
+
+    # Connect to database if configured (check env var directly to avoid Settings attr issues)
+    database_url = os.environ.get("DATABASE_URL") or getattr(settings, "database_url", None)
+    if database_url:
+        try:
+            from src.services.database import db_service
+            connected = await db_service.connect()
+            if connected:
+                print("✅ Database connection established")
+            else:
+                print("⚠️ Database connection failed, running without database")
+        except Exception as e:
+            print(f"⚠️ Database connection error: {e}")
+    else:
+        print("ℹ️ DATABASE_URL not set, running without database")
 
     yield
 
     # Shutdown
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            await db_service.disconnect()
+            print("🔌 Database connection closed")
+    except Exception:
+        pass
     print("👋 Shutting down Remnawave Admin Web API")
 
 
@@ -47,6 +71,7 @@ def create_app() -> FastAPI:
         redoc_url="/api/redoc" if settings.debug else None,
         openapi_url="/api/openapi.json" if settings.debug else None,
         lifespan=lifespan,
+        redirect_slashes=False,
     )
 
     # CORS middleware

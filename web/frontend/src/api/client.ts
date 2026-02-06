@@ -1,12 +1,33 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
+import { getAuthState } from '../store/authBridge'
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+/**
+ * Get the API base URL.
+ * If VITE_API_URL is empty, use relative path (recommended for same-domain nginx proxy).
+ * If VITE_API_URL is set to http:// but page is on https://, auto-upgrade to https://
+ * to prevent Mixed Content browser errors.
+ */
+function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL || ''
+  if (!envUrl) return '/api/v2'
+
+  // Auto-fix Mixed Content: upgrade http:// to https:// if page is served over HTTPS
+  if (
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:' &&
+    envUrl.startsWith('http://')
+  ) {
+    return envUrl.replace('http://', 'https://') + '/api/v2'
+  }
+
+  return `${envUrl}/api/v2`
+}
 
 /**
  * Axios client with interceptors for auth
  */
 const client = axios.create({
-  baseURL: `${API_URL}/api/v2`,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,21 +35,15 @@ const client = axios.create({
 })
 
 /**
- * Request interceptor - add auth token
+ * Request interceptor - add auth token from Zustand store (in-memory).
+ * Reading from the store directly is more reliable than localStorage
+ * (avoids timing issues with persist middleware).
  */
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Get token from localStorage (zustand persist)
-    const authData = localStorage.getItem('remnawave-auth')
-    if (authData) {
-      try {
-        const { state } = JSON.parse(authData)
-        if (state?.accessToken) {
-          config.headers.Authorization = `Bearer ${state.accessToken}`
-        }
-      } catch {
-        // Ignore parse errors
-      }
+    const auth = getAuthState()
+    if (auth?.accessToken) {
+      config.headers.Authorization = `Bearer ${auth.accessToken}`
     }
     return config
   },
@@ -47,33 +62,25 @@ client.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
 
-      const authData = localStorage.getItem('remnawave-auth')
-      if (authData) {
+      const auth = getAuthState()
+      if (auth?.refreshToken) {
         try {
-          const { state } = JSON.parse(authData)
-          if (state?.refreshToken) {
-            // Try to refresh
-            const response = await axios.post(`${API_URL}/api/v2/auth/refresh`, {
-              refresh_token: state.refreshToken,
-            })
+          const response = await axios.post(`${getApiBaseUrl()}/auth/refresh`, {
+            refresh_token: auth.refreshToken,
+          })
 
-            const { access_token, refresh_token } = response.data
+          const { access_token, refresh_token } = response.data
 
-            // Update tokens in localStorage
-            const newState = {
-              ...state,
-              accessToken: access_token,
-              refreshToken: refresh_token,
-            }
-            localStorage.setItem('remnawave-auth', JSON.stringify({ state: newState }))
+          // Update tokens in Zustand store (will also persist to localStorage)
+          auth.setTokens(access_token, refresh_token)
 
-            // Retry original request
-            originalRequest.headers.Authorization = `Bearer ${access_token}`
-            return client(originalRequest)
-          }
+          // Retry original request
+          originalRequest.headers.Authorization = `Bearer ${access_token}`
+          return client(originalRequest)
         } catch {
           // Refresh failed - clear auth and redirect to login
-          localStorage.removeItem('remnawave-auth')
+          const currentAuth = getAuthState()
+          currentAuth?.logout()
           window.location.href = '/login'
         }
       }

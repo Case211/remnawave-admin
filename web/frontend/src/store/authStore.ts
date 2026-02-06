@@ -1,6 +1,37 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import { authApi, TelegramUser } from '../api/auth'
+import { registerAuthGetter } from './authBridge'
+
+// Safe localStorage wrapper to prevent quota errors
+const safeLocalStorage: StateStorage = {
+  getItem: (name) => {
+    try {
+      return localStorage.getItem(name)
+    } catch {
+      return null
+    }
+  },
+  setItem: (name, value) => {
+    try {
+      localStorage.setItem(name, value)
+    } catch {
+      try {
+        localStorage.removeItem(name)
+        localStorage.setItem(name, value)
+      } catch {
+        // Storage full — ignore
+      }
+    }
+  },
+  removeItem: (name) => {
+    try {
+      localStorage.removeItem(name)
+    } catch {
+      // Ignore
+    }
+  },
+}
 
 interface User {
   telegramId: number
@@ -83,6 +114,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'remnawave-auth',
+      storage: createJSONStorage(() => safeLocalStorage),
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
@@ -92,3 +124,6 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+// Register auth getter for axios interceptor (avoids circular dependency)
+registerAuthGetter(() => useAuthStore.getState())
