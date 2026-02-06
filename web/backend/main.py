@@ -22,7 +22,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from web.backend.core.config import get_web_settings
-from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket, settings
+from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
+from web.backend.api.v2 import settings as settings_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -185,7 +186,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router, prefix="/api/v2/analytics", tags=["analytics"])
     app.include_router(violations.router, prefix="/api/v2/violations", tags=["violations"])
     app.include_router(hosts.router, prefix="/api/v2/hosts", tags=["hosts"])
-    app.include_router(settings.router, prefix="/api/v2/settings", tags=["settings"])
+    app.include_router(settings_api.router, prefix="/api/v2/settings", tags=["settings"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
 
     # Health check endpoint

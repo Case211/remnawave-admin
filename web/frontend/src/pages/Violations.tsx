@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -15,18 +15,19 @@ import {
 } from 'react-icons/hi'
 import client from '../api/client'
 
-// Types
+// Types matching backend ViolationListItem
 interface Violation {
   id: number
   user_uuid: string
   username: string | null
+  email: string | null
+  telegram_id: number | null
   score: number
   severity: string
-  reasons: string[]
-  details: Record<string, unknown> | null
+  recommended_action: string
+  confidence: number
   action_taken: string | null
-  resolved_by: string | null
-  resolved_at: string | null
+  notified: boolean
   detected_at: string
 }
 
@@ -98,12 +99,27 @@ function getActionConfig(action: string | null): { label: string; class: string 
   if (!action) return { label: 'Ожидает', class: 'badge-warning' }
 
   const config: Record<string, { label: string; class: string }> = {
+    block: { label: 'Заблокирован', class: 'badge-danger' },
     blocked: { label: 'Заблокирован', class: 'badge-danger' },
+    warn: { label: 'Предупреждён', class: 'badge-info' },
     warned: { label: 'Предупреждён', class: 'badge-info' },
+    ignore: { label: 'Отклонено', class: 'badge-gray' },
     dismissed: { label: 'Отклонено', class: 'badge-gray' },
     resolved: { label: 'Разрешено', class: 'badge-success' },
   }
   return config[action] || { label: action, class: 'badge-gray' }
+}
+
+function getRecommendedActionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    'no_action': 'Нет действий',
+    'monitor': 'Мониторинг',
+    'warn': 'Предупреждение',
+    'soft_block': 'Мягкая блокировка',
+    'temp_block': 'Временная блокировка',
+    'hard_block': 'Жёсткая блокировка',
+  }
+  return labels[action] || action
 }
 
 // Severity badge component
@@ -179,7 +195,13 @@ function ViolationCard({
             <SeverityBadge severity={violation.severity} />
             <ActionBadge action={violation.action_taken} />
           </div>
-          <p className="text-sm text-gray-400 mb-2">{violation.reasons.join(', ')}</p>
+          <p className="text-sm text-gray-400 mb-1">
+            Рекомендация: {getRecommendedActionLabel(violation.recommended_action)}
+            {violation.confidence > 0 && <span className="text-gray-500"> ({violation.confidence}%)</span>}
+          </p>
+          {violation.email && (
+            <p className="text-xs text-gray-500 mb-1">{violation.email}</p>
+          )}
           <p className="text-xs text-gray-500">{formatTimeAgo(violation.detected_at)}</p>
         </div>
 
@@ -218,11 +240,10 @@ function ViolationCard({
       )}
 
       {/* Resolved info */}
-      {!isPending && violation.resolved_at && (
+      {!isPending && (
         <div className="mt-4 pt-4 border-t border-dark-700 flex items-center justify-between text-xs text-gray-500">
           <span>
-            Решено: {formatTimeAgo(violation.resolved_at)}
-            {violation.resolved_by && ` (${violation.resolved_by})`}
+            Действие: {getActionConfig(violation.action_taken).label}
           </span>
           <button
             onClick={onView}
@@ -414,13 +435,13 @@ export default function Violations() {
               key={violation.id}
               violation={violation}
               onBlock={() =>
-                resolveViolation.mutate({ id: violation.id, action: 'blocked' })
+                resolveViolation.mutate({ id: violation.id, action: 'block' })
               }
               onWarn={() =>
-                resolveViolation.mutate({ id: violation.id, action: 'warned' })
+                resolveViolation.mutate({ id: violation.id, action: 'warn' })
               }
               onDismiss={() =>
-                resolveViolation.mutate({ id: violation.id, action: 'dismissed' })
+                resolveViolation.mutate({ id: violation.id, action: 'ignore' })
               }
               onView={() => navigate(`/users/${violation.user_uuid}`)}
             />

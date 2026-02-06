@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard'
 import Users from './pages/Users'
 import UserDetail from './pages/UserDetail'
 import Nodes from './pages/Nodes'
+import Hosts from './pages/Hosts'
 import Violations from './pages/Violations'
 import Settings from './pages/Settings'
 
@@ -47,6 +48,7 @@ export default function App() {
                   <Route path="/users" element={<Users />} />
                   <Route path="/users/:uuid" element={<UserDetail />} />
                   <Route path="/nodes" element={<Nodes />} />
+                  <Route path="/hosts" element={<Hosts />} />
                   <Route path="/violations" element={<Violations />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

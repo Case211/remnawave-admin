@@ -3,6 +3,7 @@ import {
   HiHome,
   HiUsers,
   HiServer,
+  HiGlobe,
   HiShieldExclamation,
   HiCog,
   HiLogout,
@@ -14,6 +15,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: HiHome },
   { name: 'Users', href: '/users', icon: HiUsers },
   { name: 'Nodes', href: '/nodes', icon: HiServer },
+  { name: 'Hosts', href: '/hosts', icon: HiGlobe },
   { name: 'Violations', href: '/violations', icon: HiShieldExclamation },
   { name: 'Settings', href: '/settings', icon: HiCog },
 ]
