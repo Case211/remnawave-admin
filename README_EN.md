@@ -297,7 +297,78 @@ docker network create remnawave-network
 
 ---
 
-## 📱 Bot Commands
+## 📋 Logging
+
+The bot uses a two-tier logging system: **files** for full history and **console** (docker logs) for critical events only.
+
+### What you see in `docker compose logs`
+
+Live logs only show **WARNING** and **ERROR** — things that require attention:
+
+```
+14:27:02 | WARNING | bot        | ⏳ Timeout GET /api/users (1/3), retry in 0.5s
+14:27:05 | ERROR   | bot        | ❌ Network error GET /api/users after 3 attempts
+14:27:10 | WARNING | web        | ⚠️ Database connection failed
+```
+
+```bash
+# Watch live logs for all services
+docker compose --profile web logs -f
+
+# Bot only
+docker compose logs -f bot
+```
+
+### Log Files
+
+Detailed logs are saved in Docker volume `adminbot_logs` (mounted at `/app/logs` inside containers):
+
+| File | Level | Contents |
+|------|-------|----------|
+| `adminbot_INFO.log` | INFO+ | Everything: API calls, sync, webhooks, user actions, errors |
+| `adminbot_WARNING.log` | WARNING+ | Problems only: timeouts, connection errors, failures |
+| `web_INFO.log` | INFO+ | Detailed web backend logs |
+| `web_WARNING.log` | WARNING+ | Web backend problems |
+
+### Rotation
+
+- **File size**: up to 50 MB
+- **Backup count**: 5
+- **Compression**: gzip (`.1.gz`, `.2.gz`, ... `.5.gz`)
+- **Total per log type**: ~300 MB (50 MB current + 5 × ~50 MB compressed)
+
+### How to read log files
+
+```bash
+# Connect to volume and read logs
+docker compose exec bot cat /app/logs/adminbot_INFO.log
+
+# Last 100 lines
+docker compose exec bot tail -100 /app/logs/adminbot_INFO.log
+
+# Search for errors
+docker compose exec bot grep "ERROR" /app/logs/adminbot_WARNING.log
+
+# Follow file in real time
+docker compose exec bot tail -f /app/logs/adminbot_INFO.log
+
+# Check file sizes
+docker compose exec bot ls -lh /app/logs/
+```
+
+### Log Level Configuration
+
+The `LOG_LEVEL` variable controls the minimum level written to files:
+
+```env
+LOG_LEVEL=INFO      # Default — all INFO, WARNING, ERROR
+LOG_LEVEL=DEBUG     # Maximum detail (for debugging)
+LOG_LEVEL=WARNING   # Problems only
+```
+
+> **Note:** Console (`docker compose logs`) always shows WARNING+ only, regardless of `LOG_LEVEL`. For the full picture, check the log files.
+
+---
 
 ### Basic Commands
 
@@ -411,7 +482,11 @@ Detailed setup instructions are available in [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md
 
 2. **Check logs for errors:**
    ```bash
+   # Live logs (WARNING and ERROR only)
    docker compose logs -f bot
+
+   # Full logs from file (INFO+)
+   docker compose exec bot tail -100 /app/logs/adminbot_INFO.log
    ```
 
 3. **Check environment variables:**
