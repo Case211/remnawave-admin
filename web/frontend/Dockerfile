@@ -8,8 +8,8 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install all dependencies
-RUN npm ci
+# Install all dependencies and verify vite is available
+RUN npm ci && echo "Installed packages:" && ls node_modules/.bin/vite
 
 # Copy source code and configs (explicit list to never overwrite node_modules)
 COPY src ./src
@@ -24,8 +24,8 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 ENV VITE_TELEGRAM_BOT_USERNAME=$VITE_TELEGRAM_BOT_USERNAME
 
-# Build
-RUN npm run build
+# Build using explicit path to vite binary
+RUN ./node_modules/.bin/vite build
 
 # Production stage - minimal nginx image
 FROM nginx:alpine
