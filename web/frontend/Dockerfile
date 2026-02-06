@@ -1,18 +1,24 @@
 # Remnawave Admin Web Panel - Frontend Dockerfile
 
-# Build stage
-FROM node:20-alpine AS build
+# Build stage - use slim (Debian) instead of alpine for stable npm behavior
+FROM node:20-slim AS build
 
 WORKDIR /app
+
+# Increase Node.js memory limit to prevent npm OOM crashes
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install all dependencies
-RUN npm ci
+# Install dependencies and verify vite binary exists
+RUN npm ci --no-audit --no-fund && \
+    test -f node_modules/.bin/vite && echo "vite OK" || \
+    (echo "ERROR: vite not found after npm ci" && ls node_modules/.bin/ && exit 1)
 
 # Copy source code and configs
-COPY . .
+COPY src ./src
+COPY index.html vite.config.ts tsconfig.json tsconfig.node.json postcss.config.js tailwind.config.js ./
 
 # Build arguments for environment variables
 ARG VITE_API_URL
