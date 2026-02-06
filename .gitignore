@@ -5,6 +5,8 @@ __pycache__/
 dist/
 .DS_Store
 *.log
+*.log.*.gz
+logs/
 node_modules/
 log_error.json
 IMPROVEMENTS.md

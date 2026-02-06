@@ -4,8 +4,12 @@ Remnawave Admin Web Panel - FastAPI Application.
 This is the main entry point for the web panel backend.
 It provides REST API and WebSocket endpoints for the admin dashboard.
 """
+import gzip
+import logging
 import os
+import shutil
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # Add project root to path for importing src modules
@@ -21,15 +25,102 @@ from web.backend.core.config import get_web_settings
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 
 
+# ── Logging setup ─────────────────────────────────────────────────
+
+_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_CONSOLE_DATEFMT = "%H:%M:%S"
+_FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
+_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+_BACKUP_COUNT = 5
+_LOG_DIR = Path("/app/logs")
+
+
+class _CompressedRotatingFileHandler(RotatingFileHandler):
+    """RotatingFileHandler с gzip-сжатием ротированных файлов."""
+
+    def doRollover(self):
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+
+        for i in range(self.backupCount - 1, 0, -1):
+            sfn = self.rotation_filename(f"{self.baseFilename}.{i}.gz")
+            dfn = self.rotation_filename(f"{self.baseFilename}.{i + 1}.gz")
+            if os.path.exists(sfn):
+                if os.path.exists(dfn):
+                    os.remove(dfn)
+                os.rename(sfn, dfn)
+
+        dfn = self.rotation_filename(f"{self.baseFilename}.1.gz")
+        if os.path.exists(dfn):
+            os.remove(dfn)
+        if os.path.exists(self.baseFilename):
+            with open(self.baseFilename, "rb") as f_in:
+                with gzip.open(dfn, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            with open(self.baseFilename, "w"):
+                pass
+
+        if not self.delay:
+            self.stream = self._open()
+
+
+def _setup_web_logging():
+    """Настраивает логирование для web backend."""
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(logging.DEBUG)
+
+    fmt = logging.Formatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT)
+
+    # Console: WARNING+ только
+    console = logging.StreamHandler()
+    console.setLevel(logging.WARNING)
+    console.setFormatter(fmt)
+    root.addHandler(console)
+
+    # File handlers
+    try:
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        file_fmt = logging.Formatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT)
+
+        info_h = _CompressedRotatingFileHandler(
+            str(_LOG_DIR / "web_INFO.log"),
+            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
+        )
+        info_h.setLevel(logging.INFO)
+        info_h.setFormatter(file_fmt)
+        root.addHandler(info_h)
+
+        warn_h = _CompressedRotatingFileHandler(
+            str(_LOG_DIR / "web_WARNING.log"),
+            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
+        )
+        warn_h.setLevel(logging.WARNING)
+        warn_h.setFormatter(file_fmt)
+        root.addHandler(warn_h)
+    except OSError as exc:
+        console.setLevel(logging.INFO)
+        root.warning("⚠️ Cannot create log files (%s), logging to console only", exc)
+
+    # Подавляем шумные логгеры
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("asyncpg").setLevel(logging.WARNING)
+
+
+_setup_web_logging()
+logger = logging.getLogger("web")
+
+
+# ── FastAPI app ───────────────────────────────────────────────────
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    # Startup
     settings = get_web_settings()
-    print(f"🚀 Starting Remnawave Admin Web API on {settings.host}:{settings.port}")
-    print(f"📝 Debug mode: {settings.debug}")
-    print(f"🔗 CORS origins: {settings.cors_origins}")
-    print(f"👥 Admins raw: {repr(settings.admins_raw)}, parsed: {settings.admins}")
+    logger.info("🚀 Web API starting on %s:%s", settings.host, settings.port)
 
     # Connect to database if configured
     database_url = os.environ.get("DATABASE_URL") or getattr(settings, "database_url", None)
@@ -38,15 +129,13 @@ async def lifespan(app: FastAPI):
             from src.services.database import db_service
             connected = await db_service.connect(database_url=database_url)
             if connected:
-                print("✅ Database connection established")
+                logger.info("✅ Database connected")
             else:
-                print("⚠️ Database connection failed, running without database")
+                logger.warning("⚠️ Database connection failed")
         except Exception as e:
-            print(f"⚠️ Database connection error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("⚠️ Database error: %s", e)
     else:
-        print("ℹ️ DATABASE_URL not set, running without database")
+        logger.info("🗄️ No DATABASE_URL, running without database")
 
     yield
 
@@ -55,7 +144,6 @@ async def lifespan(app: FastAPI):
         from src.services.database import db_service
         if db_service.is_connected:
             await db_service.disconnect()
-            print("🔌 Database connection closed")
     except Exception:
         pass
     try:
@@ -63,7 +151,7 @@ async def lifespan(app: FastAPI):
         await close_client()
     except Exception:
         pass
-    print("👋 Shutting down Remnawave Admin Web API")
+    logger.info("👋 Web API stopped")
 
 
 def create_app() -> FastAPI:

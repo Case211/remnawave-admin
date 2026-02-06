@@ -47,8 +47,8 @@ class PanelHealthChecker:
             self.last_status = True
             self.consecutive_failures = 0
             
-            logger.info(
-                "✅ Panel health check: OK | duration=%.2fms",
+            logger.debug(
+                "✅ Panel health: OK | %.0fms",
                 duration
             )
             return True
@@ -59,7 +59,7 @@ class PanelHealthChecker:
             
             error_type = type(exc).__name__
             logger.warning(
-                "❌ Panel health check: FAILED | error=%s | consecutive_failures=%d",
+                "❌ Panel health: FAIL | %s | failures=%d",
                 error_type,
                 self.consecutive_failures
             )
@@ -85,7 +85,7 @@ class PanelHealthChecker:
             
             error_type = type(exc).__name__
             logger.error(
-                "❌ Panel health check: UNEXPECTED ERROR | error=%s | consecutive_failures=%d",
+                "❌ Panel health: ERROR | %s | failures=%d",
                 error_type,
                 self.consecutive_failures,
                 exc_info=exc
@@ -128,14 +128,11 @@ class PanelHealthChecker:
             )
             
             logger.info(
-                "📢 Sent panel unavailable notification | consecutive_failures=%d",
+                "📢 Sent panel unavailable notification | failures=%d",
                 self.consecutive_failures
             )
         except Exception as exc:
-            logger.exception(
-                "Failed to send panel unavailable notification | error=%s",
-                exc
-            )
+            logger.error("Failed to send unavailable notification: %s", exc)
     
     async def start(self) -> None:
         """Запускает периодическую проверку панели."""
@@ -144,10 +141,7 @@ class PanelHealthChecker:
             return
         
         self.is_running = True
-        logger.info(
-            "🏥 Starting panel health checker | interval=%ds",
-            self.check_interval
-        )
+        logger.info("🏥 Health checker started | interval=%ds", self.check_interval)
         
         # Первая проверка сразу при старте
         await self.check_panel_health()
@@ -164,7 +158,7 @@ class PanelHealthChecker:
             return
         
         self.is_running = False
-        logger.info("🏥 Stopping panel health checker")
+        logger.info("🏥 Health checker stopped")
     
     def get_status(self) -> dict:
         """

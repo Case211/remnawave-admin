@@ -52,15 +52,8 @@ async def get_current_admin(
     # Verify admin is in admins list
     settings = get_web_settings()
     admins_list = settings.admins
-    logger.info(
-        f"Admin check: telegram_id={telegram_id}, "
-        f"admins_raw={repr(settings.admins_raw)}, "
-        f"admins_list={admins_list}"
-    )
     if telegram_id not in admins_list:
-        logger.warning(
-            f"Admin check FAILED: {telegram_id} not in {admins_list}"
-        )
+        logger.warning("🚫 Access denied: telegram_id=%d", telegram_id)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not an admin",

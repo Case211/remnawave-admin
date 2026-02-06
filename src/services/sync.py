@@ -55,7 +55,7 @@ class SyncService:
             return
         
         self._running = True
-        logger.info("🔄 Starting sync service (interval: %d seconds)", settings.sync_interval_seconds)
+        logger.info("🔄 Sync service started (interval: %ds)", settings.sync_interval_seconds)
         
         # Run initial sync
         await self._run_initial_sync()
@@ -82,10 +82,9 @@ class SyncService:
     
     async def _run_initial_sync(self) -> None:
         """Run initial synchronization of all data."""
-        logger.info("🔄 Running initial data sync...")
+        logger.info("🔄 Running initial sync...")
 
         try:
-            # Sync in parallel where possible
             results = await asyncio.gather(
                 self.sync_users(),
                 self.sync_nodes(),
@@ -94,17 +93,17 @@ class SyncService:
                 self.sync_all_hwid_devices(),
                 return_exceptions=True
             )
-            
-            # Log results
+
             sync_names = ["users", "nodes", "hosts", "config_profiles", "hwid_devices"]
+            summary = []
             for name, result in zip(sync_names, results):
                 if isinstance(result, Exception):
-                    logger.error("Initial sync of %s failed: %s", name, result)
+                    logger.error("Sync %s failed: %s", name, result)
                 else:
-                    logger.info("Initial sync of %s: %d records", name, result)
-            
+                    summary.append(f"{name}={result}")
+
             self._initial_sync_done = True
-            logger.info("✅ Initial sync completed")
+            logger.info("✅ Initial sync done: %s", ", ".join(summary))
             
         except Exception as e:
             logger.error("❌ Initial sync failed: %s", e)
@@ -907,7 +906,7 @@ class SyncService:
                 records_synced=total_synced
             )
 
-            logger.info("Synced %d HWID devices total", total_synced)
+            logger.debug("Synced %d HWID devices total", total_synced)
             return total_synced
 
         except Exception as e:
