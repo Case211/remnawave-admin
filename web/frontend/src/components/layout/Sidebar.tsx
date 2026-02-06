@@ -11,6 +11,38 @@ import {
 } from 'react-icons/hi'
 import { useAuthStore } from '../../store/authStore'
 
+function RemnawaveLogo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="logoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#0a1628" />
+          <stop offset="100%" stopColor="#0d1f3c" />
+        </linearGradient>
+        <linearGradient id="logoRing" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#67e8f9" />
+          <stop offset="100%" stopColor="#06b6d4" />
+        </linearGradient>
+        <linearGradient id="logoWave" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#22d3ee" />
+          <stop offset="50%" stopColor="#67e8f9" />
+          <stop offset="100%" stopColor="#06b6d4" />
+        </linearGradient>
+      </defs>
+      <circle cx="32" cy="32" r="31" fill="url(#logoBg)" />
+      <circle cx="32" cy="32" r="26" fill="none" stroke="url(#logoRing)" strokeWidth="1.5" opacity="0.8" />
+      <path
+        d="M12,32 L19,32 L23,22 L28,44 L32,16 L36,46 L40,22 L44,32 L52,32"
+        fill="none"
+        stroke="url(#logoWave)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HiHome },
   { name: 'Users', href: '/users', icon: HiUsers },
@@ -56,7 +88,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-6 border-b border-dark-400/10">
           <Link to="/" onClick={handleNavClick} className="flex items-center gap-2.5 hover:opacity-90 transition-opacity duration-200">
-            <img src="/logo.svg" alt="Remnawave" className="w-8 h-8 rounded-lg" />
+            <RemnawaveLogo className="w-8 h-8 flex-shrink-0" />
             <span className="text-lg font-display font-bold text-white">Remnawave</span>
           </Link>
           {/* Mobile close button */}
