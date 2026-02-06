@@ -83,7 +83,7 @@ class SyncService:
     async def _run_initial_sync(self) -> None:
         """Run initial synchronization of all data."""
         logger.info("🔄 Running initial data sync...")
-        
+
         try:
             # Sync in parallel where possible
             results = await asyncio.gather(
@@ -91,11 +91,12 @@ class SyncService:
                 self.sync_nodes(),
                 self.sync_hosts(),
                 self.sync_config_profiles(),
+                self.sync_all_hwid_devices(),
                 return_exceptions=True
             )
             
             # Log results
-            sync_names = ["users", "nodes", "hosts", "config_profiles"]
+            sync_names = ["users", "nodes", "hosts", "config_profiles", "hwid_devices"]
             for name, result in zip(sync_names, results):
                 if isinstance(result, Exception):
                     logger.error("Initial sync of %s failed: %s", name, result)
@@ -191,7 +192,14 @@ class SyncService:
         except Exception as e:
             logger.error("Failed to sync squads: %s", e)
             results["squads"] = -1
-        
+
+        try:
+            # Sync HWID devices
+            results["hwid_devices"] = await self.sync_all_hwid_devices()
+        except Exception as e:
+            logger.error("Failed to sync HWID devices: %s", e)
+            results["hwid_devices"] = -1
+
         logger.debug("Full sync completed: %s", results)
         return results
     
@@ -594,6 +602,8 @@ class SyncService:
                 return await self._handle_node_webhook_with_diff(event, event_data)
             elif event.startswith("host."):
                 return await self._handle_host_webhook_with_diff(event, event_data)
+            elif event.startswith("user_hwid_devices."):
+                return await self._handle_hwid_webhook(event, event_data)
             else:
                 logger.debug("Unhandled webhook event for sync: %s", event)
                 return result
@@ -706,8 +716,69 @@ class SyncService:
         
         return result
     
+    async def _handle_hwid_webhook(self, event: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle HWID device webhook events."""
+        result = {
+            "old_data": None,
+            "new_data": event_data,
+            "changes": [],
+            "is_new": False
+        }
+
+        # Извлекаем данные о пользователе и устройстве
+        user_data = event_data.get("user", {})
+        hwid_data = event_data.get("hwidDevice", {})
+
+        user_uuid = user_data.get("uuid")
+        hwid = hwid_data.get("hwid")
+
+        if not user_uuid or not hwid:
+            logger.warning("HWID webhook event without user UUID or HWID: %s", event)
+            return result
+
+        if event == "user_hwid_devices.added":
+            # Добавляем устройство в БД
+            platform = hwid_data.get("platform")
+            os_version = hwid_data.get("osVersion")
+            app_version = hwid_data.get("appVersion")
+            created_at = hwid_data.get("createdAt")
+            updated_at = hwid_data.get("updatedAt")
+
+            from datetime import datetime
+            created_dt = None
+            updated_dt = None
+            if created_at:
+                try:
+                    created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                except (ValueError, AttributeError):
+                    pass
+            if updated_at:
+                try:
+                    updated_dt = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                except (ValueError, AttributeError):
+                    pass
+
+            await db_service.upsert_hwid_device(
+                user_uuid=user_uuid,
+                hwid=hwid,
+                platform=platform,
+                os_version=os_version,
+                app_version=app_version,
+                created_at=created_dt,
+                updated_at=updated_dt
+            )
+            result["is_new"] = True
+            logger.info("Added HWID device %s for user %s (webhook)", hwid[:20], user_uuid)
+
+        elif event == "user_hwid_devices.deleted":
+            # Удаляем устройство из БД
+            await db_service.delete_hwid_device(user_uuid=user_uuid, hwid=hwid)
+            logger.info("Deleted HWID device %s for user %s (webhook)", hwid[:20], user_uuid)
+
+        return result
+
     # ==================== On-Demand Sync ====================
-    
+
     async def sync_single_user(self, uuid: str) -> bool:
         """
         Sync a single user from API to database.
@@ -749,7 +820,7 @@ class SyncService:
         """
         if not db_service.is_connected:
             return False
-        
+
         try:
             host = await api_client.get_host(uuid)
             await db_service.upsert_host(host)
@@ -758,6 +829,95 @@ class SyncService:
         except Exception as e:
             logger.warning("Failed to sync single host %s: %s", uuid, e)
             return False
+
+    async def sync_user_hwid_devices(self, user_uuid: str) -> int:
+        """
+        Sync HWID devices for a single user from API to database.
+        Returns number of synced devices.
+        """
+        if not db_service.is_connected:
+            return 0
+
+        try:
+            response = await api_client.get_user_hwid_devices(user_uuid)
+            devices = response.get("response", [])
+
+            if not devices:
+                # Если устройств нет - удаляем все из БД
+                await db_service.delete_all_user_hwid_devices(user_uuid)
+                return 0
+
+            synced = await db_service.sync_user_hwid_devices(user_uuid, devices)
+            logger.debug("Synced %d HWID devices for user %s", synced, user_uuid)
+            return synced
+
+        except Exception as e:
+            logger.warning("Failed to sync HWID devices for user %s: %s", user_uuid, e)
+            return 0
+
+    async def sync_all_hwid_devices(self) -> int:
+        """
+        Sync HWID devices for all users with device limit > 0.
+        Returns total number of synced devices.
+        """
+        if not db_service.is_connected:
+            return 0
+
+        total_synced = 0
+        start = 0
+        page_size = 100
+
+        try:
+            while True:
+                # Получаем устройства из API с пагинацией
+                response = await api_client.get_all_hwid_devices(start=start, size=page_size)
+                payload = response.get("response", {})
+                devices = payload.get("devices", []) if isinstance(payload, dict) else []
+                total = payload.get("total", 0) if isinstance(payload, dict) else 0
+
+                if not devices:
+                    break
+
+                # Группируем устройства по пользователям
+                devices_by_user: Dict[str, List[Dict]] = {}
+                for device in devices:
+                    user_uuid = device.get("userUuid")
+                    if user_uuid:
+                        if user_uuid not in devices_by_user:
+                            devices_by_user[user_uuid] = []
+                        devices_by_user[user_uuid].append(device)
+
+                # Синхронизируем устройства по пользователям
+                for user_uuid, user_devices in devices_by_user.items():
+                    try:
+                        synced = await db_service.sync_user_hwid_devices(user_uuid, user_devices)
+                        total_synced += synced
+                    except Exception as e:
+                        logger.warning("Failed to sync HWID devices for user %s: %s", user_uuid, e)
+
+                # Проверяем, достигли ли конца
+                start += page_size
+                if start >= total or len(devices) < page_size:
+                    break
+
+            # Обновляем метаданные синхронизации
+            await db_service.update_sync_metadata(
+                key="hwid_devices",
+                status="success",
+                records_synced=total_synced
+            )
+
+            logger.info("Synced %d HWID devices total", total_synced)
+            return total_synced
+
+        except Exception as e:
+            await db_service.update_sync_metadata(
+                key="hwid_devices",
+                status="error",
+                error_message=str(e)
+            )
+            logger.error("Failed to sync all HWID devices: %s", e)
+            return total_synced
 
 
 # ==================== Data Comparison Functions ====================

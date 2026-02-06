@@ -6,7 +6,7 @@ from aiogram import Bot
 from aiogram.types import Message
 
 from src.config import get_settings
-from src.utils.formatters import format_bytes, format_datetime
+from src.utils.formatters import format_bytes, format_datetime, format_provider_name
 from src.utils.logger import logger
 
 
@@ -112,7 +112,7 @@ async def send_user_notification(
         user_uuid = info.get("uuid", "")
         short_uuid = info.get("shortUuid", "")
         if user_uuid:
-            lines.append(f"   UUID: <code>{user_uuid[:8]}...</code>")
+            lines.append(f"   UUID: <code>{user_uuid}</code>")
         if short_uuid:
             lines.append(f"   Short UUID: <code>{short_uuid}</code>")
         
@@ -551,21 +551,55 @@ async def send_hwid_notification(
         
         # Информация о пользователе
         user_data = event_data.get("user", {})
-        hwid_data = event_data.get("hwidDevice", {})
-        
+        # Webhook может прислать hwidDevice или hwidUserDevice
+        hwid_data = event_data.get("hwidDevice", {}) or event_data.get("hwidUserDevice", {})
+
         if user_data:
             username = user_data.get("username", "n/a")
             user_uuid = user_data.get("uuid", "n/a")
+            telegram_id = user_data.get("telegramId")
+            status = user_data.get("status", "—")
+            description = user_data.get("description", "")
+            hwid_device_limit = user_data.get("hwidDeviceLimit", 0)
+
             lines.append(f"👤 <b>Пользователь:</b> <code>{_esc(username)}</code>")
-            lines.append(f"🆔 <b>UUID:</b> <code>{user_uuid[:8]}...</code>")
-        
+            lines.append(f"🆔 <b>UUID:</b> <code>{user_uuid}</code>")
+
+            if telegram_id is not None:
+                lines.append(f"📱 <b>TG ID:</b> <code>{telegram_id}</code>")
+
+            lines.append(f"📊 <b>Статус:</b> <code>{status}</code>")
+
+            if description:
+                lines.append(f"📝 <b>Описание:</b> <code>{_esc(description[:100])}</code>")
+
+            # Информация о лимите устройств
+            limit_display = "∞" if hwid_device_limit == 0 else str(hwid_device_limit)
+            lines.append(f"📲 <b>Лимит устройств:</b> <code>{limit_display}</code>")
+
+            lines.append("")
+
         if hwid_data:
+            lines.append("💻 <b>Информация об устройстве</b>")
             hwid = hwid_data.get("hwid", "—")
+            platform = hwid_data.get("platform", "—")
+            os_version = hwid_data.get("osVersion", "—")
+            device_model = hwid_data.get("deviceModel", "—")
+            user_agent = hwid_data.get("userAgent", "—")
             created_at = hwid_data.get("createdAt")
+
             if hwid != "—":
-                lines.append(f"💻 <b>HWID:</b> <code>{_esc(hwid[:40])}...</code>")
+                lines.append(f"   HWID: <code>{_esc(hwid)}</code>")
+            if platform != "—":
+                lines.append(f"   Платформа: <code>{_esc(platform)}</code>")
+            if os_version != "—":
+                lines.append(f"   Версия ОС: <code>{_esc(os_version)}</code>")
+            if device_model != "—":
+                lines.append(f"   Модель: <code>{_esc(device_model)}</code>")
+            if user_agent != "—":
+                lines.append(f"   User-Agent: <code>{_esc(user_agent[:60])}</code>")
             if created_at:
-                lines.append(f"📅 <b>Создано:</b> <code>{format_datetime(created_at)}</code>")
+                lines.append(f"   Добавлено: <code>{format_datetime(created_at)}</code>")
         
         text = "\n".join(lines)
 
@@ -645,7 +679,7 @@ async def send_crm_notification(
 
     try:
         lines = []
-        
+
         event_titles = {
             "crm.infra_billing_node_payment_in_7_days": "📅 <b>Оплата ноды через 7 дней</b>",
             "crm.infra_billing_node_payment_in_48hrs": "⏰ <b>Оплата ноды через 48 часов</b>",
@@ -655,65 +689,91 @@ async def send_crm_notification(
             "crm.infra_billing_node_payment_overdue_48hrs": "⚠️ <b>Оплата ноды просрочена на 48 часов</b>",
             "crm.infra_billing_node_payment_overdue_7_days": "🚨 <b>Оплата ноды просрочена на 7 дней</b>",
         }
-        
+
         lines.append(event_titles.get(event, f"💰 <b>Событие CRM: {event}</b>"))
         lines.append("")
-        
-        # Информация о ноде
-        node_data = event_data.get("node", {})
-        provider_data = event_data.get("provider", {})
-        billing_data = event_data.get("billingNode", {})
-        
-        if node_data:
+
+        # Webhook может прислать данные в двух форматах:
+        # 1. Плоский формат: {nodeName, providerName, loginUrl, nextBillingAt}
+        # 2. Вложенный формат: {node: {...}, provider: {...}, billingNode: {...}}
+
+        # Проверяем плоский формат (приоритет)
+        node_name = event_data.get("nodeName")
+        provider_name = event_data.get("providerName")
+        login_url = event_data.get("loginUrl")
+        next_billing_at = event_data.get("nextBillingAt")
+
+        if node_name or provider_name:
+            # Плоский формат webhook
             lines.append("🖥 <b>Информация о ноде</b>")
-            node_name = node_data.get("name", "n/a")
-            node_uuid = node_data.get("uuid", "")
-            node_address = node_data.get("address", "")
-            node_port = node_data.get("port")
-            node_country = node_data.get("countryCode", "")
-            
-            lines.append(f"   Название: <code>{_esc(node_name)}</code>")
-            if node_uuid:
-                lines.append(f"   UUID: <code>{node_uuid[:8]}...</code>")
-            if node_address:
-                lines.append(f"   Адрес: <code>{_esc(node_address)}</code>")
-            if node_port:
-                lines.append(f"   Порт: <code>{node_port}</code>")
-            if node_country:
-                lines.append(f"   Страна: <code>{node_country}</code>")
+            if node_name:
+                lines.append(f"   Название: <code>{_esc(node_name)}</code>")
             lines.append("")
-        
-        # Информация о провайдере
-        if provider_data:
-            lines.append("🏢 <b>Провайдер</b>")
-            provider_name = provider_data.get("name", "n/a")
-            provider_uuid = provider_data.get("uuid", "")
-            lines.append(f"   Название: <code>{_esc(provider_name)}</code>")
-            if provider_uuid:
-                lines.append(f"   UUID: <code>{provider_uuid[:8]}...</code>")
-            lines.append("")
-        
-        # Информация об оплате
-        if billing_data:
-            lines.append("💰 <b>Информация об оплате</b>")
-            amount = billing_data.get("amount")
-            currency = billing_data.get("currency", "")
-            next_billing_at = billing_data.get("nextBillingAt")
-            last_billing_at = billing_data.get("lastBillingAt")
-            billing_interval = billing_data.get("billingInterval", "")
-            
-            if amount is not None:
-                amount_str = f"{amount}"
-                if currency:
-                    amount_str += f" {currency}"
-                lines.append(f"   Сумма: <code>{amount_str}</code>")
-            if billing_interval:
-                lines.append(f"   Интервал: <code>{billing_interval}</code>")
+
+            if provider_name:
+                lines.append("🏢 <b>Провайдер</b>")
+                lines.append(f"   Название: <code>{_esc(provider_name)}</code>")
+                if login_url:
+                    lines.append(f"   Личный кабинет: {_esc(login_url)}")
+                lines.append("")
+
             if next_billing_at:
+                lines.append("💰 <b>Информация об оплате</b>")
                 lines.append(f"   Следующая оплата: <code>{format_datetime(next_billing_at)}</code>")
-            if last_billing_at:
-                lines.append(f"   Последняя оплата: <code>{format_datetime(last_billing_at)}</code>")
-        
+        else:
+            # Вложенный формат (для совместимости)
+            node_data = event_data.get("node", {})
+            provider_data = event_data.get("provider", {})
+            billing_data = event_data.get("billingNode", {})
+
+            if node_data:
+                lines.append("🖥 <b>Информация о ноде</b>")
+                node_name = node_data.get("name", "n/a")
+                node_uuid = node_data.get("uuid", "")
+                node_address = node_data.get("address", "")
+                node_port = node_data.get("port")
+                node_country = node_data.get("countryCode", "")
+
+                lines.append(f"   Название: <code>{_esc(node_name)}</code>")
+                if node_uuid:
+                    lines.append(f"   UUID: <code>{node_uuid}</code>")
+                if node_address:
+                    lines.append(f"   Адрес: <code>{_esc(node_address)}</code>")
+                if node_port:
+                    lines.append(f"   Порт: <code>{node_port}</code>")
+                if node_country:
+                    lines.append(f"   Страна: <code>{node_country}</code>")
+                lines.append("")
+
+            if provider_data:
+                lines.append("🏢 <b>Провайдер</b>")
+                provider_name = provider_data.get("name", "n/a")
+                provider_uuid = provider_data.get("uuid", "")
+                lines.append(f"   Название: <code>{_esc(provider_name)}</code>")
+                if provider_uuid:
+                    lines.append(f"   UUID: <code>{provider_uuid}</code>")
+                lines.append("")
+
+            if billing_data:
+                lines.append("💰 <b>Информация об оплате</b>")
+                amount = billing_data.get("amount")
+                currency = billing_data.get("currency", "")
+                next_billing_at = billing_data.get("nextBillingAt")
+                last_billing_at = billing_data.get("lastBillingAt")
+                billing_interval = billing_data.get("billingInterval", "")
+
+                if amount is not None:
+                    amount_str = f"{amount}"
+                    if currency:
+                        amount_str += f" {currency}"
+                    lines.append(f"   Сумма: <code>{amount_str}</code>")
+                if billing_interval:
+                    lines.append(f"   Интервал: <code>{billing_interval}</code>")
+                if next_billing_at:
+                    lines.append(f"   Следующая оплата: <code>{format_datetime(next_billing_at)}</code>")
+                if last_billing_at:
+                    lines.append(f"   Последняя оплата: <code>{format_datetime(last_billing_at)}</code>")
+
         text = "\n".join(lines)
 
         message_kwargs = {
@@ -888,7 +948,8 @@ async def send_violation_notification(
                 if ip_metadata and ip in ip_metadata:
                     meta = ip_metadata[ip]
                     if hasattr(meta, 'asn_org') and meta.asn_org:
-                        provider_info = meta.asn_org
+                        # Преобразуем техническое название в понятное
+                        provider_info = format_provider_name(meta.asn_org)
                     if hasattr(meta, 'country_code') and meta.country_code:
                         country_code = meta.country_code
 
@@ -909,31 +970,71 @@ async def send_violation_notification(
 
         lines.append("")
 
-        # Устройства (конкретные ОС и клиенты)
-        if os_list or client_list:
-            # Формируем строку с комбинацией ОС и клиентов
-            device_parts = []
-            if os_list and client_list and len(os_list) == len(client_list):
-                # Если количество ОС и клиентов совпадает, объединяем их
-                for i, os_name in enumerate(os_list):
-                    client_name = client_list[i] if i < len(client_list) else ""
-                    if client_name:
-                        device_parts.append(f"{os_name} ({client_name})")
-                    else:
-                        device_parts.append(os_name)
-            else:
-                # Выводим отдельно
-                if os_list:
-                    device_parts.append(f"ОС: {', '.join(os_list)}")
-                if client_list:
-                    device_parts.append(f"Клиенты: {', '.join(client_list)}")
+        # Получаем HWID устройства из БД
+        hwid_devices = []
+        try:
+            from src.services.database import db_service
+            hwid_devices = await db_service.get_user_hwid_devices(user_uuid)
+        except Exception as hwid_error:
+            logger.debug("Failed to get HWID devices for user %s: %s", user_uuid, hwid_error)
 
-            if device_parts:
-                lines.append(f"📲 Устройства: {'; '.join(device_parts)}")
+        # Устройства (HWID из БД)
+        if hwid_devices:
+            hwid_count = len(hwid_devices)
+            device_parts = []
+            for device in hwid_devices[:5]:  # Показываем максимум 5 устройств
+                platform = device.get("platform", "unknown")
+                os_version = device.get("os_version", "")
+                app_version = device.get("app_version", "")
+
+                # Форматируем название платформы
+                platform_names = {
+                    "android": "Android",
+                    "ios": "iOS",
+                    "windows": "Windows",
+                    "macos": "macOS",
+                    "linux": "Linux",
+                }
+                platform_display = platform_names.get(platform.lower(), platform) if platform else "Unknown"
+
+                # Собираем строку устройства
+                device_str = platform_display
+                if os_version:
+                    device_str += f" {os_version}"
+                if app_version:
+                    device_str += f" (v{app_version})"
+
+                device_parts.append(device_str)
+
+            if hwid_count > 5:
+                device_parts.append(f"... и ещё {hwid_count - 5}")
+
+            lines.append(f"📲 Устройства ({hwid_count}/{device_limit}):")
+            for part in device_parts:
+                lines.append(f"   {_esc(part)}")
+        else:
+            # Если нет HWID устройств, показываем данные из breakdown (ОС и клиенты из user-agent)
+            if os_list or client_list:
+                device_parts = []
+                if os_list and client_list and len(os_list) == len(client_list):
+                    for i, os_name in enumerate(os_list):
+                        client_name = client_list[i] if i < len(client_list) else ""
+                        if client_name:
+                            device_parts.append(f"{os_name} ({client_name})")
+                        else:
+                            device_parts.append(os_name)
+                else:
+                    if os_list:
+                        device_parts.append(f"ОС: {', '.join(os_list)}")
+                    if client_list:
+                        device_parts.append(f"Клиенты: {', '.join(client_list)}")
+
+                if device_parts:
+                    lines.append(f"📲 Устройства (по UA): {'; '.join(device_parts)}")
+                else:
+                    lines.append(f"📲 Устройства: —")
             else:
                 lines.append(f"📲 Устройства: —")
-        else:
-            lines.append(f"📲 Устройства: —")
 
         # Время в нарушении
         if violation_duration_sec > 0:

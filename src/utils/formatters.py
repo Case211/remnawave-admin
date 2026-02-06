@@ -1,11 +1,208 @@
 from datetime import datetime
 from typing import Any, Callable
 import html
+import re
 
 
 NA = "n/a"
 def _esc(value: Any) -> str:
     return html.escape("" if value is None else str(value))
+
+
+# Маппинг технических названий ASN в понятные названия провайдеров
+# Ключи в lowercase для case-insensitive matching
+PROVIDER_NAME_MAP = {
+    # МТС
+    "mts": "МТС",
+    "mts-as": "МТС",
+    "mts-pjsc": "МТС",
+    "mts llc": "МТС",
+    "mobile telesystems": "МТС",
+    "мтс": "МТС",
+
+    # МегаФон
+    "megafon": "МегаФон",
+    "megafon-as": "МегаФон",
+    "megafon-pjsc": "МегаФон",
+    "mf-kavkaz": "МегаФон",
+    "mf-kavkaz-as": "МегаФон",
+    "mf-ural": "МегаФон",
+    "mf-ural-as": "МегаФон",
+    "mf-siberia": "МегаФон",
+    "mf-siberia-as": "МегаФон",
+    "mf-northwest": "МегаФон",
+    "mf-nw-as": "МегаФон",
+    "мегафон": "МегаФон",
+    "scartel": "МегаФон",
+    "scartel-as": "МегаФон",
+
+    # Билайн
+    "beeline": "Билайн",
+    "beeline-as": "Билайн",
+    "vimpelcom": "Билайн",
+    "vympelkom": "Билайн",
+    "vimpelcom-as": "Билайн",
+    "билайн": "Билайн",
+    "вымпелком": "Билайн",
+
+    # Теле2
+    "tele2": "Теле2",
+    "tele2-as": "Теле2",
+    "t2-mobile": "Теле2",
+    "t2 mobile": "Теле2",
+    "теле2": "Теле2",
+
+    # Ростелеком
+    "rostelecom": "Ростелеком",
+    "rostelecom-as": "Ростелеком",
+    "ростелеком": "Ростелеком",
+    "rtk-as": "Ростелеком",
+    "rtcomm": "Ростелеком",
+    "rtcomm-as": "Ростелеком",
+
+    # ТТК (Транстелеком) - дочка Ростелекома
+    "ttk": "ТТК",
+    "ttk-rtl": "ТТК (Ростелеком)",
+    "ttk-as": "ТТК",
+    "transtelecom": "ТТК",
+    "transtelecom-as": "ТТК",
+
+    # ER-Telecom / Дом.ру
+    "er-telecom": "Дом.ру",
+    "er-telecom-as": "Дом.ру",
+    "ertelecom": "Дом.ру",
+    "dom-ru": "Дом.ру",
+    "domru": "Дом.ру",
+    "дом.ру": "Дом.ру",
+    "дом.ru": "Дом.ру",
+
+    # Yota
+    "yota": "Yota",
+    "yota-as": "Yota",
+    "йота": "Yota",
+
+    # МГТС
+    "mgts": "МГТС",
+    "mgts-as": "МГТС",
+    "мгтс": "МГТС",
+
+    # Акадо
+    "akado": "Акадо",
+    "akado-as": "Акадо",
+    "акадо": "Акадо",
+
+    # NetByNet
+    "netbynet": "NetByNet",
+    "netbynet-as": "NetByNet",
+    "нетбайнет": "NetByNet",
+
+    # 2КОМ
+    "2kom": "2КОМ",
+    "2com": "2КОМ",
+
+    # Selectel (хостинг)
+    "selectel": "Selectel",
+    "selectel-as": "Selectel",
+    "селектел": "Selectel",
+
+    # Timeweb (хостинг)
+    "timeweb": "Timeweb",
+    "timeweb-as": "Timeweb",
+    "таймвеб": "Timeweb",
+
+    # Yandex
+    "yandex": "Яндекс",
+    "yandex-as": "Яндекс",
+    "яндекс": "Яндекс",
+    "yandexcloud": "Яндекс.Облако",
+
+    # Mail.ru / VK
+    "mailru": "VK (Mail.ru)",
+    "mail.ru": "VK (Mail.ru)",
+    "mail-ru-as": "VK (Mail.ru)",
+    "vk": "VK",
+    "vkontakte": "VK",
+
+    # Триколор
+    "tricolor": "Триколор",
+    "триколор": "Триколор",
+
+    # SkyNet / СкайНет
+    "skynet": "SkyNet",
+    "skynet-as": "SkyNet",
+
+    # Связьинвест
+    "svyazinvest": "Связьинвест",
+    "связьинвест": "Связьинвест",
+}
+
+# Паттерны для поиска провайдеров (regex)
+PROVIDER_PATTERNS = [
+    (re.compile(r'\bмтс\b', re.I), "МТС"),
+    (re.compile(r'\bmts\b', re.I), "МТС"),
+    (re.compile(r'\bмегафон\b', re.I), "МегаФон"),
+    (re.compile(r'\bmegafon\b', re.I), "МегаФон"),
+    (re.compile(r'\bmf[-_]', re.I), "МегаФон"),
+    (re.compile(r'\bбилайн\b', re.I), "Билайн"),
+    (re.compile(r'\bbeeline\b', re.I), "Билайн"),
+    (re.compile(r'\bvimpel', re.I), "Билайн"),
+    (re.compile(r'\bтеле2\b', re.I), "Теле2"),
+    (re.compile(r'\btele2\b', re.I), "Теле2"),
+    (re.compile(r'\bt2[-_]mobile', re.I), "Теле2"),
+    (re.compile(r'\bросте?леком\b', re.I), "Ростелеком"),
+    (re.compile(r'\brostelecom\b', re.I), "Ростелеком"),
+    (re.compile(r'\brtcomm\b', re.I), "Ростелеком"),
+    (re.compile(r'\bttk[-_]?rtl\b', re.I), "ТТК (Ростелеком)"),
+    (re.compile(r'\bttk\b', re.I), "ТТК"),
+    (re.compile(r'\btranstelecom\b', re.I), "ТТК"),
+    (re.compile(r'\ber[-_]?telecom\b', re.I), "Дом.ру"),
+    (re.compile(r'\bdom[-_.]?ru\b', re.I), "Дом.ру"),
+    (re.compile(r'\byota\b', re.I), "Yota"),
+    (re.compile(r'\bйота\b', re.I), "Yota"),
+    (re.compile(r'\bmgts\b', re.I), "МГТС"),
+    (re.compile(r'\bakado\b', re.I), "Акадо"),
+    (re.compile(r'\bnetbynet\b', re.I), "NetByNet"),
+    (re.compile(r'\bselectel\b', re.I), "Selectel"),
+    (re.compile(r'\btimeweb\b', re.I), "Timeweb"),
+    (re.compile(r'\byandex\b', re.I), "Яндекс"),
+    (re.compile(r'\bmail\.?ru\b', re.I), "VK (Mail.ru)"),
+]
+
+
+def format_provider_name(asn_org: str | None) -> str:
+    """
+    Преобразует техническое название ASN организации в понятное название провайдера.
+
+    Args:
+        asn_org: Техническое название организации из ASN (например, "MF-KAVKAZ-AS")
+
+    Returns:
+        Понятное название провайдера (например, "МегаФон") или оригинальное название
+    """
+    if not asn_org:
+        return ""
+
+    # Нормализуем для поиска
+    org_lower = asn_org.lower().strip()
+
+    # Проверяем точное совпадение
+    if org_lower in PROVIDER_NAME_MAP:
+        return PROVIDER_NAME_MAP[org_lower]
+
+    # Убираем суффиксы типа "-AS", " LLC", " PJSC"
+    org_cleaned = re.sub(r'[-_]?(as|llc|pjsc|ltd|inc|jsc|ooo|oao|zao)$', '', org_lower, flags=re.I).strip()
+    if org_cleaned in PROVIDER_NAME_MAP:
+        return PROVIDER_NAME_MAP[org_cleaned]
+
+    # Проверяем паттерны
+    for pattern, name in PROVIDER_PATTERNS:
+        if pattern.search(asn_org):
+            return name
+
+    # Если не нашли, возвращаем оригинал (но укорачиваем если длинный)
+    if len(asn_org) > 25:
+        return asn_org[:22] + "..."
+    return asn_org
 
 
 def escape_markdown(text: str) -> str:
@@ -58,6 +255,89 @@ def format_uptime(seconds: float | int | None) -> str:
     if minutes:
         parts.append(f"{minutes}m")
     return " ".join(parts) or "0m"
+
+
+# Маппинг платформ в понятные названия
+PLATFORM_NAMES = {
+    "android": "Android",
+    "ios": "iOS",
+    "windows": "Windows",
+    "macos": "macOS",
+    "linux": "Linux",
+    "unknown": "Unknown",
+}
+
+
+def format_hwid_device(device: dict, index: int | None = None, show_hwid: bool = True) -> str:
+    """
+    Форматирует информацию об HWID устройстве для отображения.
+
+    Args:
+        device: Словарь с данными устройства (hwid, platform, osVersion, appVersion, createdAt)
+        index: Номер устройства (опционально)
+        show_hwid: Показывать ли HWID
+
+    Returns:
+        Отформатированная строка с информацией об устройстве
+    """
+    hwid = device.get("hwid", "")
+    platform = device.get("platform", "unknown")
+    os_version = device.get("osVersion") or device.get("os_version", "")
+    app_version = device.get("appVersion") or device.get("app_version", "")
+    created_at = device.get("createdAt") or device.get("created_at")
+
+    # Форматируем платформу
+    platform_display = PLATFORM_NAMES.get(platform.lower() if platform else "unknown", platform or "Unknown")
+
+    # Собираем строку устройства
+    parts = []
+
+    # Номер устройства
+    prefix = f"{index}. " if index is not None else ""
+
+    # Платформа + версия ОС
+    device_str = platform_display
+    if os_version:
+        device_str += f" {os_version}"
+
+    parts.append(device_str)
+
+    # Версия приложения
+    if app_version:
+        parts.append(f"v{app_version}")
+
+    # Дата добавления
+    if created_at:
+        created_str = format_datetime(created_at)
+        parts.append(f"📅 {created_str}")
+
+    # HWID (укороченный)
+    if show_hwid and hwid:
+        hwid_short = hwid[:16] + "..." if len(hwid) > 16 else hwid
+        parts.append(f"ID: {hwid_short}")
+
+    return f"{prefix}{' | '.join(parts)}"
+
+
+def format_hwid_devices_list(devices: list[dict], max_devices: int = 10) -> list[str]:
+    """
+    Форматирует список HWID устройств.
+
+    Args:
+        devices: Список устройств
+        max_devices: Максимальное количество устройств для отображения
+
+    Returns:
+        Список строк с информацией об устройствах
+    """
+    lines = []
+    for idx, device in enumerate(devices[:max_devices], 1):
+        lines.append(format_hwid_device(device, index=idx))
+
+    if len(devices) > max_devices:
+        lines.append(f"... и ещё {len(devices) - max_devices} устройств")
+
+    return lines
 
 
 def build_user_summary(user: dict, t: Callable[[str], str]) -> str:
