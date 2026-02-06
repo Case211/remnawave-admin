@@ -140,28 +140,51 @@ class DatabaseService:
         """Check if database connection is established."""
         return self._pool is not None and not self._pool._closed
     
-    async def connect(self) -> bool:
+    async def connect(self, database_url: str = None) -> bool:
         """
         Initialize database connection pool.
         Returns True if connection successful, False otherwise.
+
+        Args:
+            database_url: Optional database URL. If not provided, reads from
+                          DATABASE_URL env var or Settings.
         """
         import os
-        settings = get_settings()
-        database_url = getattr(settings, 'database_url', None) or os.environ.get('DATABASE_URL')
+
+        # Get database URL: parameter > env var > settings (fallback)
+        if not database_url:
+            database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            try:
+                settings = get_settings()
+                database_url = getattr(settings, 'database_url', None)
+            except Exception as e:
+                logger.debug("Could not load Settings for database_url: %s", e)
+
         if not database_url:
             logger.warning("DATABASE_URL not configured, database features disabled")
             return False
-        
+
+        # Get pool size settings
+        min_size = int(os.environ.get('DB_POOL_MIN_SIZE', 2))
+        max_size = int(os.environ.get('DB_POOL_MAX_SIZE', 10))
+        try:
+            settings = get_settings()
+            min_size = getattr(settings, 'db_pool_min_size', min_size)
+            max_size = getattr(settings, 'db_pool_max_size', max_size)
+        except Exception:
+            pass
+
         async with self._lock:
             if self._pool is not None:
                 return True
-            
+
             try:
                 logger.info("Connecting to PostgreSQL database...")
                 self._pool = await asyncpg.create_pool(
                     dsn=database_url,
-                    min_size=getattr(settings, 'db_pool_min_size', 2),
-                    max_size=getattr(settings, 'db_pool_max_size', 10),
+                    min_size=min_size,
+                    max_size=max_size,
                     command_timeout=30,
                 )
                 

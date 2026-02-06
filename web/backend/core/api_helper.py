@@ -1,0 +1,152 @@
+"""Lightweight API helper for fetching data from Remnawave API.
+
+This module provides direct API access without depending on the bot's Settings.
+Uses WebSettings (API_BASE_URL, API_TOKEN) for configuration.
+"""
+import logging
+from typing import Any, Dict, List, Optional
+
+import httpx
+
+from web.backend.core.config import get_web_settings
+
+logger = logging.getLogger(__name__)
+
+_client: Optional[httpx.AsyncClient] = None
+
+# camelCase to snake_case mapping for common Remnawave API fields
+_CAMEL_TO_SNAKE = {
+    "shortUuid": "short_uuid",
+    "subscriptionUuid": "subscription_uuid",
+    "telegramId": "telegram_id",
+    "expireAt": "expire_at",
+    "trafficLimitBytes": "traffic_limit_bytes",
+    "usedTrafficBytes": "used_traffic_bytes",
+    "hwidDeviceLimit": "hwid_device_limit",
+    "createdAt": "created_at",
+    "updatedAt": "updated_at",
+    "onlineAt": "online_at",
+    "subLastUserAgent": "sub_last_user_agent",
+    "isDisabled": "is_disabled",
+    "isConnected": "is_connected",
+    "trafficUsedBytes": "traffic_used_bytes",
+    "usersOnline": "users_online",
+}
+
+
+def _normalize(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize API response dict: add snake_case aliases for camelCase keys.
+
+    Preserves original keys and adds snake_case equivalents so the data
+    works with both pydantic schemas (snake_case) and raw access (camelCase).
+    """
+    result = dict(data)
+    for camel, snake in _CAMEL_TO_SNAKE.items():
+        if camel in result and snake not in result:
+            result[snake] = result[camel]
+    return result
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Get or create the shared httpx client."""
+    global _client
+    if _client is None or _client.is_closed:
+        settings = get_web_settings()
+        base_url = str(settings.api_base_url).rstrip("/")
+        headers = {"Content-Type": "application/json"}
+        if settings.api_token:
+            headers["Authorization"] = f"Bearer {settings.api_token}"
+        # Add proxy headers for internal requests
+        if base_url.startswith("http://"):
+            headers["X-Forwarded-Proto"] = "https"
+            headers["X-Forwarded-For"] = "127.0.0.1"
+            headers["X-Real-IP"] = "127.0.0.1"
+        _client = httpx.AsyncClient(
+            base_url=base_url,
+            headers=headers,
+            timeout=httpx.Timeout(connect=15.0, read=30.0, write=15.0, pool=10.0),
+            follow_redirects=True,
+        )
+    return _client
+
+
+async def api_get(path: str, params: dict = None) -> Optional[Dict[str, Any]]:
+    """Make a GET request to the Remnawave API.
+
+    Returns the parsed JSON response or None on error.
+    """
+    try:
+        client = _get_client()
+        resp = await client.get(path, params=params)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logger.warning("API request failed: %s %s: %s", "GET", path, e)
+        return None
+
+
+async def fetch_users_from_api(size: int = 500) -> List[Dict[str, Any]]:
+    """Fetch users list from the Remnawave API.
+
+    Returns normalized dicts with both camelCase and snake_case keys.
+    """
+    all_users = []
+    start = 0
+    while True:
+        data = await api_get("/api/users", params={"start": start, "size": size})
+        if not data:
+            break
+        response = data.get("response", data)
+        users = response.get("users", []) if isinstance(response, dict) else []
+        if not users:
+            break
+        all_users.extend(_normalize(u) for u in users)
+        total = response.get("total", 0)
+        start += size
+        if start >= total:
+            break
+    return all_users
+
+
+async def fetch_nodes_from_api() -> List[Dict[str, Any]]:
+    """Fetch nodes list from the Remnawave API.
+
+    Returns normalized dicts with both camelCase and snake_case keys.
+    """
+    data = await api_get("/api/nodes")
+    if not data:
+        return []
+    response = data.get("response", data)
+    if isinstance(response, list):
+        items = response
+    elif isinstance(response, dict):
+        items = response.get("nodes", response) if "nodes" in response else [response]
+    else:
+        return []
+    return [_normalize(n) for n in items if isinstance(n, dict)]
+
+
+async def fetch_hosts_from_api() -> List[Dict[str, Any]]:
+    """Fetch hosts list from the Remnawave API.
+
+    Returns normalized dicts with both camelCase and snake_case keys.
+    """
+    data = await api_get("/api/hosts")
+    if not data:
+        return []
+    response = data.get("response", data)
+    if isinstance(response, list):
+        items = response
+    elif isinstance(response, dict):
+        items = response.get("hosts", response) if "hosts" in response else [response]
+    else:
+        return []
+    return [_normalize(h) for h in items if isinstance(h, dict)]
+
+
+async def close_client():
+    """Close the shared httpx client."""
+    global _client
+    if _client and not _client.is_closed:
+        await _client.aclose()
+        _client = None

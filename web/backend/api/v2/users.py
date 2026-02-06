@@ -1,4 +1,5 @@
 """Users API endpoints."""
+import logging
 import sys
 from pathlib import Path
 from typing import Optional, List
@@ -9,10 +10,26 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser
+from web.backend.core.api_helper import fetch_users_from_api
 from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+async def _get_users_list():
+    """Get users from DB, fall back to API."""
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            users = await db_service.get_all_users()
+            if users:
+                return users
+    except Exception as e:
+        logger.debug("DB users fetch failed: %s", e)
+    return await fetch_users_from_api()
 
 
 @router.get("/", response_model=PaginatedResponse[UserListItem])
@@ -29,34 +46,47 @@ async def list_users(
     List users with pagination and filtering.
     """
     try:
-        from src.services.database import db_service
+        users = await _get_users_list()
 
-        # Get all users from cache
-        users = await db_service.get_all_users()
+        # Normalize field names for both DB (snake_case) and API (camelCase) formats
+        def _get(u, *keys, default=''):
+            for k in keys:
+                v = u.get(k)
+                if v is not None:
+                    return v
+            return default
 
         # Filter
         if search:
             search_lower = search.lower()
             users = [
                 u for u in users
-                if search_lower in (u.get('username') or '').lower()
-                or search_lower in (u.get('email') or '').lower()
-                or search_lower in (u.get('uuid') or '').lower()
-                or search_lower in (u.get('short_uuid') or '').lower()
+                if search_lower in str(_get(u, 'username')).lower()
+                or search_lower in str(_get(u, 'email')).lower()
+                or search_lower in str(_get(u, 'uuid')).lower()
+                or search_lower in str(_get(u, 'short_uuid', 'shortUuid')).lower()
             ]
 
         if status:
-            users = [u for u in users if u.get('status') == status]
+            users = [u for u in users if _get(u, 'status') == status]
 
         # Sort
         reverse = sort_order == "desc"
-        users.sort(key=lambda x: x.get(sort_by) or '', reverse=reverse)
+        # Handle camelCase field names from API
+        sort_key_map = {
+            'created_at': ('created_at', 'createdAt'),
+            'username': ('username',),
+            'status': ('status',),
+            'expire_at': ('expire_at', 'expireAt'),
+        }
+        sort_keys = sort_key_map.get(sort_by, (sort_by,))
+        users.sort(key=lambda x: _get(x, *sort_keys) or '', reverse=reverse)
 
         # Paginate
         total = len(users)
-        start = (page - 1) * per_page
-        end = start + per_page
-        items = users[start:end]
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        items = users[start_idx:end_idx]
 
         # Convert to schema
         user_items = [UserListItem(**u) for u in items]
@@ -69,8 +99,8 @@ async def list_users(
             pages=(total + per_page - 1) // per_page if total > 0 else 1,
         )
 
-    except ImportError:
-        # Database service not available
+    except Exception as e:
+        logger.error("Error listing users: %s", e)
         return PaginatedResponse(
             items=[],
             total=0,
