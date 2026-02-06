@@ -58,45 +58,72 @@ export default function Login() {
   }, [isAuthenticated, navigate, login])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-dark-950 p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-dark-900 rounded-2xl border border-dark-700 p-8 shadow-xl">
-          {/* Логотип */}
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{
+        background: 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%)',
+      }}
+    >
+      <div className="w-full max-w-md animate-fade-in">
+        <div
+          className="rounded-2xl p-8 border border-dark-400/20"
+          style={{
+            background: 'linear-gradient(135deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 0.95) 100%)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px -10px rgba(13, 148, 136, 0.15)',
+            backdropFilter: 'blur(12px)',
+          }}
+        >
+          {/* Logo */}
           <div className="flex justify-center mb-8">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{
+                  background: 'linear-gradient(135deg, #0d9488 0%, #06b6d4 100%)',
+                  boxShadow: '0 0 30px -5px rgba(13, 148, 136, 0.4)',
+                }}
+              >
                 <span className="text-white font-bold text-xl">R</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white">Remnawave</h1>
-                <p className="text-sm text-gray-500">Панель администратора</p>
+                <h1 className="text-2xl font-display font-bold text-white">Remnawave</h1>
+                <p className="text-sm text-dark-200">Панель администратора</p>
               </div>
             </div>
           </div>
 
-          {/* Описание */}
-          <p className="text-center text-gray-400 mb-8">
+          {/* Description */}
+          <p className="text-center text-dark-200 mb-8">
             Войдите через Telegram для доступа к панели управления
           </p>
 
-          {/* Ошибка */}
+          {/* Error */}
           {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <div
+              className="mb-6 p-4 rounded-lg border"
+              style={{
+                background: 'linear-gradient(135deg, rgba(250, 82, 82, 0.15) 0%, rgba(239, 68, 68, 0.1) 100%)',
+                borderColor: 'rgba(250, 82, 82, 0.3)',
+              }}
+            >
               <p className="text-sm text-red-400 text-center whitespace-pre-wrap">{error}</p>
               <button
                 onClick={clearError}
-                className="mt-2 text-xs text-red-400 hover:text-red-300 mx-auto block"
+                className="mt-2 text-xs text-red-400 hover:text-red-300 mx-auto block transition-all duration-200"
               >
                 Закрыть
               </button>
             </div>
           )}
 
-          {/* Загрузка */}
+          {/* Loading */}
           {isLoading && (
             <div className="flex flex-col items-center mb-6">
-              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="mt-2 text-sm text-gray-400">Авторизация...</p>
+              <div
+                className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                style={{ borderColor: '#0d9488', borderTopColor: 'transparent' }}
+              ></div>
+              <p className="mt-2 text-sm text-dark-200">Авторизация...</p>
             </div>
           )}
 
@@ -105,8 +132,8 @@ export default function Login() {
             <div ref={containerRef} className="flex justify-center" />
           )}
 
-          {/* Футер */}
-          <p className="mt-8 text-center text-xs text-gray-600">
+          {/* Footer */}
+          <p className="mt-8 text-center text-xs text-dark-300">
             Доступ только для авторизованных администраторов
           </p>
         </div>

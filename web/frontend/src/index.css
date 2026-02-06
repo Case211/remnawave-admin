@@ -2,31 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base styles */
+/* Base styles - Remnawave design language */
 @layer base {
   html {
     @apply antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
-    @apply bg-dark-950 text-gray-100 min-h-screen;
+    @apply bg-dark-800 text-dark-50 min-h-screen;
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling - teal/cyan gradient like Remnawave */
   ::-webkit-scrollbar {
     @apply w-2 h-2;
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-dark-900;
+    @apply bg-dark-800;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-dark-600 rounded-full;
+    border-radius: 9999px;
+    background: linear-gradient(180deg, #0d9488 0%, #06b6d4 100%);
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-dark-500;
+    background: linear-gradient(180deg, #14b8a6 0%, #22d3ee 100%);
   }
 
   /* Mobile: use thin scrollbars */
@@ -35,64 +38,97 @@
       @apply w-1 h-1;
     }
   }
+
+  /* Selection color */
+  ::selection {
+    background: rgba(6, 182, 212, 0.3);
+  }
 }
 
 /* Component styles */
 @layer components {
-  /* Card */
+  /* Card - diagonal gradient background with fadeIn animation */
   .card {
-    @apply bg-dark-800 rounded-lg border border-dark-700 p-4;
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+    @apply rounded-lg border border-dark-400/20 p-4 animate-fade-in;
+  }
+
+  .card:hover {
+    @apply border-dark-400/30;
+  }
+
+  /* Glass card variant */
+  .card-glass {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    @apply rounded-lg p-4 animate-fade-in backdrop-blur-sm;
   }
 
   /* Button variants */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-900 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed;
+    transition: all 0.2s ease;
   }
 
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+    @apply btn bg-primary-600 text-white hover:bg-primary-500;
+    box-shadow: 0 0 20px -5px rgba(6, 182, 212, 0.3);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 0 30px -5px rgba(6, 182, 212, 0.5);
   }
 
   .btn-secondary {
-    @apply btn bg-dark-700 text-gray-200 hover:bg-dark-600 focus:ring-dark-500;
+    @apply btn bg-dark-600 text-dark-100 hover:bg-dark-500 border border-dark-400/20;
   }
 
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+    @apply btn bg-red-600/80 text-white hover:bg-red-500;
   }
 
   .btn-ghost {
-    @apply btn bg-transparent text-gray-300 hover:bg-dark-700 focus:ring-dark-500;
+    @apply btn bg-transparent text-dark-100 hover:bg-dark-600;
   }
 
-  /* Input */
+  /* Input - dark field with cyan focus ring */
   .input {
-    @apply w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors;
+    @apply w-full px-3 py-2 bg-dark-800 border border-dark-400/20 rounded-lg text-dark-50 placeholder-dark-200 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/50;
+    transition: all 0.2s ease;
   }
 
-  /* Badge */
+  .input:hover {
+    @apply border-dark-400/30;
+  }
+
+  /* Badge - gradient variants like Remnawave */
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium border;
   }
 
   .badge-success {
-    @apply badge bg-green-500/20 text-green-400;
+    background: linear-gradient(135deg, rgba(64, 192, 87, 0.15) 0%, rgba(34, 197, 94, 0.1) 100%);
+    @apply badge border-green-500/30 text-green-400;
   }
 
   .badge-warning {
-    @apply badge bg-yellow-500/20 text-yellow-400;
+    background: linear-gradient(135deg, rgba(250, 176, 5, 0.15) 0%, rgba(234, 179, 8, 0.1) 100%);
+    @apply badge border-yellow-500/30 text-yellow-400;
   }
 
   .badge-danger {
-    @apply badge bg-red-500/20 text-red-400;
+    background: linear-gradient(135deg, rgba(250, 82, 82, 0.15) 0%, rgba(239, 68, 68, 0.1) 100%);
+    @apply badge border-red-500/30 text-red-400;
   }
 
   .badge-info {
-    @apply badge bg-blue-500/20 text-blue-400;
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%);
+    @apply badge border-cyan-500/30 text-cyan-400;
   }
 
   .badge-gray {
-    @apply badge bg-gray-500/20 text-gray-400;
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.15) 0%, rgba(107, 114, 128, 0.1) 100%);
+    @apply badge border-gray-500/30 text-gray-400;
   }
 
   /* Table */
@@ -101,15 +137,20 @@
   }
 
   .table th {
-    @apply px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider bg-dark-900;
+    @apply px-4 py-3 text-xs font-medium text-dark-200 uppercase tracking-wider;
+    background: rgba(13, 17, 23, 0.8);
   }
 
   .table td {
-    @apply px-4 py-3 border-t border-dark-700;
+    @apply px-4 py-3 border-t border-dark-400/10;
   }
 
   .table tbody tr {
-    @apply hover:bg-dark-800/50 transition-colors;
+    transition: all 0.15s ease;
+  }
+
+  .table tbody tr:hover {
+    background: rgba(33, 38, 45, 0.5);
   }
 
   /* Mobile table - smaller padding */
@@ -125,7 +166,7 @@
 
   /* Page header - responsive */
   .page-header {
-    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between animate-fade-in;
   }
 
   .page-header-title {
@@ -135,12 +176,61 @@
   .page-header-actions {
     @apply flex items-center gap-2 flex-shrink-0;
   }
+
+  /* Dropdown menu */
+  .dropdown-menu {
+    @apply absolute right-0 top-full mt-1 w-44 rounded-lg py-1 z-20 border border-dark-400/20 animate-fade-in;
+    background: rgba(22, 27, 34, 0.98);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .dropdown-item {
+    @apply w-full px-3 py-2 text-left text-sm text-dark-100 flex items-center gap-2;
+    transition: all 0.15s ease;
+  }
+
+  .dropdown-item:hover {
+    background: rgba(33, 38, 45, 0.8);
+  }
+
+  /* Shimmer skeleton */
+  .skeleton {
+    @apply relative overflow-hidden bg-dark-600 rounded;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.04) 50%, transparent 100%);
+    animation: shimmer 1.5s infinite;
+  }
 }
 
 /* Utilities */
 @layer utilities {
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-primary-600;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-primary-500;
+  }
+
+  .text-gradient-teal {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #0d9488, #06b6d4);
+  }
+
+  /* Glass surface */
+  .glass {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Glow effects */
+  .glow-teal {
+    box-shadow: 0 0 30px -5px rgba(20, 184, 166, 0.3);
+  }
+
+  .glow-teal-hover:hover {
+    box-shadow: 0 0 30px -5px rgba(20, 184, 166, 0.3);
   }
 
   /* Safe area insets for notch devices */
