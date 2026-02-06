@@ -5,13 +5,16 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
+# Increase Node.js memory limit to prevent npm OOM crashes
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install all dependencies and verify vite is available
-RUN npm ci && echo "Installed packages:" && ls node_modules/.bin/vite
+# Install dependencies (npm install is more stable than npm ci under low memory)
+RUN npm install --no-audit --no-fund
 
-# Copy source code and configs (explicit list to never overwrite node_modules)
+# Copy source code and configs
 COPY src ./src
 COPY index.html vite.config.ts tsconfig.json tsconfig.node.json postcss.config.js tailwind.config.js ./
 
@@ -24,8 +27,8 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 ENV VITE_TELEGRAM_BOT_USERNAME=$VITE_TELEGRAM_BOT_USERNAME
 
-# Build using explicit path to vite binary
-RUN ./node_modules/.bin/vite build
+# Build
+RUN npm run build
 
 # Production stage - minimal nginx image
 FROM nginx:alpine
