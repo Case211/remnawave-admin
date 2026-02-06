@@ -99,8 +99,8 @@ function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-300">{formatBytes(used)}</span>
-        <span className="text-gray-500">
+        <span className="text-dark-100">{formatBytes(used)}</span>
+        <span className="text-dark-200">
           {limit ? `/ ${formatBytes(limit)}` : '∞'}
         </span>
       </div>
@@ -146,13 +146,13 @@ function UserActions({
             className="fixed inset-0 z-10"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full mt-1 w-40 bg-dark-800 border border-dark-600 rounded-lg shadow-xl z-20 py-1">
+          <div className="dropdown-menu w-40">
             <button
               onClick={() => {
                 navigate(`/users/${user.uuid}`)
                 setOpen(false)
               }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-dark-700 flex items-center gap-2"
+              className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
             >
               <HiEye className="w-4 h-4" /> Просмотр
             </button>
@@ -161,18 +161,18 @@ function UserActions({
                 navigate(`/users/${user.uuid}?edit=1`)
                 setOpen(false)
               }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-dark-700 flex items-center gap-2"
+              className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
             >
               <HiPencil className="w-4 h-4" /> Редактировать
             </button>
-            <div className="border-t border-dark-600 my-1" />
+            <div className="border-t border-dark-400/20 my-1" />
             {user.status === 'disabled' ? (
               <button
                 onClick={() => {
                   onEnable()
                   setOpen(false)
                 }}
-                className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-700 flex items-center gap-2"
+                className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-600 flex items-center gap-2"
               >
                 <HiCheck className="w-4 h-4" /> Включить
               </button>
@@ -182,7 +182,7 @@ function UserActions({
                   onDisable()
                   setOpen(false)
                 }}
-                className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-700 flex items-center gap-2"
+                className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-600 flex items-center gap-2"
               >
                 <HiBan className="w-4 h-4" /> Отключить
               </button>
@@ -194,7 +194,7 @@ function UserActions({
                 }
                 setOpen(false)
               }}
-              className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-700 flex items-center gap-2"
+              className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-600 flex items-center gap-2"
             >
               <HiTrash className="w-4 h-4" /> Удалить
             </button>
@@ -225,7 +225,7 @@ function SortHeader({
   return (
     <button
       onClick={() => onSort(field)}
-      className={`flex items-center gap-1 hover:text-white transition-colors ${
+      className={`flex items-center gap-1 hover:text-white transition-all duration-200 ${
         isActive ? 'text-primary-400' : ''
       }`}
     >
@@ -260,7 +260,7 @@ function MobileUserCard({
             {user.username || user.short_uuid}
           </p>
           {user.email && (
-            <p className="text-xs text-gray-500 truncate">{user.email}</p>
+            <p className="text-xs text-dark-200 truncate">{user.email}</p>
           )}
         </div>
         <div className="flex items-center gap-2 ml-2" onClick={(e) => e.stopPropagation()}>
@@ -279,7 +279,7 @@ function MobileUserCard({
           limit={user.traffic_limit_bytes}
         />
       </div>
-      <div className="flex items-center justify-between text-xs text-gray-500">
+      <div className="flex items-center justify-between text-xs text-dark-200">
         <span>Истекает: {formatDate(user.expire_at)}</span>
         <span>Создан: {formatDate(user.created_at)}</span>
       </div>
@@ -372,7 +372,7 @@ export default function Users() {
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Пользователи</h1>
-          <p className="text-gray-400 mt-1 text-sm md:text-base">
+          <p className="text-dark-200 mt-1 text-sm md:text-base">
             Управление пользователями и подписками
           </p>
         </div>
@@ -382,7 +382,7 @@ export default function Users() {
       <div className="card">
         <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
           <div className="flex-1 relative">
-            <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+            <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
             <input
               type="text"
               value={search}
@@ -418,7 +418,7 @@ export default function Users() {
       <div className="md:hidden space-y-3">
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="card animate-pulse">
+            <div key={i} className="card animate-fade-in">
               <div className="flex items-center justify-between mb-3">
                 <div className="h-4 w-32 bg-dark-700 rounded" />
                 <div className="h-5 w-20 bg-dark-700 rounded" />
@@ -431,7 +431,7 @@ export default function Users() {
             </div>
           ))
         ) : users.length === 0 ? (
-          <div className="card text-center py-8 text-gray-500">
+          <div className="card text-center py-8 text-dark-200">
             {debouncedSearch || status
               ? 'Пользователи не найдены'
               : 'Нет пользователей'}
@@ -502,26 +502,26 @@ export default function Users() {
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
                     <td>
-                      <div className="h-4 w-32 bg-dark-700 animate-pulse rounded" />
+                      <div className="h-4 w-32 skeleton rounded" />
                     </td>
                     <td>
-                      <div className="h-5 w-20 bg-dark-700 animate-pulse rounded" />
+                      <div className="h-5 w-20 skeleton rounded" />
                     </td>
                     <td>
-                      <div className="h-4 w-24 bg-dark-700 animate-pulse rounded" />
+                      <div className="h-4 w-24 skeleton rounded" />
                     </td>
                     <td>
-                      <div className="h-4 w-20 bg-dark-700 animate-pulse rounded" />
+                      <div className="h-4 w-20 skeleton rounded" />
                     </td>
                     <td>
-                      <div className="h-4 w-20 bg-dark-700 animate-pulse rounded" />
+                      <div className="h-4 w-20 skeleton rounded" />
                     </td>
                     <td></td>
                   </tr>
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-gray-500">
+                  <td colSpan={6} className="text-center py-8 text-dark-200">
                     {debouncedSearch || status
                       ? 'Пользователи не найдены'
                       : 'Нет пользователей'}
@@ -531,7 +531,7 @@ export default function Users() {
                 users.map((user) => (
                   <tr
                     key={user.uuid}
-                    className="cursor-pointer hover:bg-dark-700/50"
+                    className="cursor-pointer hover:bg-dark-600/50"
                     onClick={() => navigate(`/users/${user.uuid}`)}
                   >
                     <td>
@@ -540,7 +540,7 @@ export default function Users() {
                           {user.username || user.short_uuid}
                         </span>
                         {user.email && (
-                          <p className="text-xs text-gray-500">{user.email}</p>
+                          <p className="text-xs text-dark-200">{user.email}</p>
                         )}
                       </div>
                     </td>
@@ -553,10 +553,10 @@ export default function Users() {
                         limit={user.traffic_limit_bytes}
                       />
                     </td>
-                    <td className="text-gray-400 text-sm">
+                    <td className="text-dark-200 text-sm">
                       {formatDate(user.expire_at)}
                     </td>
-                    <td className="text-gray-500 text-sm">
+                    <td className="text-dark-200 text-sm">
                       {formatDate(user.created_at)}
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
@@ -577,7 +577,7 @@ export default function Users() {
 
       {/* Pagination */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        <p className="text-sm text-gray-400 order-2 sm:order-1">
+        <p className="text-sm text-dark-200 order-2 sm:order-1">
           {total > 0 ? (
             <>
               Показано {(page - 1) * perPage + 1}-
@@ -595,7 +595,7 @@ export default function Users() {
           >
             <HiChevronLeft className="w-5 h-5" />
           </button>
-          <span className="text-sm text-gray-400 min-w-[80px] text-center">
+          <span className="text-sm text-dark-200 min-w-[80px] text-center">
             {page} / {pages}
           </span>
           <button

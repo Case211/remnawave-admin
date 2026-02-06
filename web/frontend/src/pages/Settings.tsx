@@ -160,16 +160,16 @@ export default function Settings() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-sm text-white">{label}</p>
-              {item.is_readonly && <HiLockClosed className="w-3 h-3 text-gray-600" title="Только для чтения" />}
+              {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" title="Только для чтения" />}
               {item.is_env_override && <HiLightningBolt className="w-3 h-3 text-yellow-500" title={`Переопределено: ${item.env_var_name}`} />}
               {wasSaved && <HiCheck className="w-4 h-4 text-green-400" />}
             </div>
-            {item.description && <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>}
+            {item.description && <p className="text-xs text-dark-200 mt-0.5">{item.description}</p>}
           </div>
           <button
             onClick={() => isEditable && handleValueChange(item.key, boolValue ? 'false' : 'true')}
             disabled={!isEditable}
-            className={`w-12 h-6 rounded-full relative transition-colors ${
+            className={`w-12 h-6 rounded-full relative transition-all duration-200 ${
               boolValue ? 'bg-primary-600' : 'bg-dark-600'
             } ${!isEditable ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           >
@@ -187,8 +187,8 @@ export default function Settings() {
       return (
         <div key={item.key} className="py-2">
           <div className="flex items-center gap-2 mb-1">
-            <label className="block text-sm text-gray-400">{label}</label>
-            {item.is_readonly && <HiLockClosed className="w-3 h-3 text-gray-600" />}
+            <label className="block text-sm text-dark-200">{label}</label>
+            {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
             {item.is_env_override && <HiLightningBolt className="w-3 h-3 text-yellow-500" title={`Переопределено: ${item.env_var_name}`} />}
             {wasSaved && <HiCheck className="w-4 h-4 text-green-400" />}
           </div>
@@ -200,7 +200,7 @@ export default function Settings() {
             disabled={!isEditable}
             step={item.value_type === 'float' ? '0.1' : '1'}
           />
-          {item.description && <p className="text-xs text-gray-500 mt-1">{item.description}</p>}
+          {item.description && <p className="text-xs text-dark-200 mt-1">{item.description}</p>}
         </div>
       )
     }
@@ -209,8 +209,8 @@ export default function Settings() {
       return (
         <div key={item.key} className="py-2">
           <div className="flex items-center gap-2 mb-1">
-            <label className="block text-sm text-gray-400">{label}</label>
-            {item.is_readonly && <HiLockClosed className="w-3 h-3 text-gray-600" />}
+            <label className="block text-sm text-dark-200">{label}</label>
+            {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
             {item.is_env_override && <HiLightningBolt className="w-3 h-3 text-yellow-500" />}
             {wasSaved && <HiCheck className="w-4 h-4 text-green-400" />}
           </div>
@@ -224,7 +224,7 @@ export default function Settings() {
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
-          {item.description && <p className="text-xs text-gray-500 mt-1">{item.description}</p>}
+          {item.description && <p className="text-xs text-dark-200 mt-1">{item.description}</p>}
         </div>
       )
     }
@@ -233,8 +233,8 @@ export default function Settings() {
     return (
       <div key={item.key} className="py-2">
         <div className="flex items-center gap-2 mb-1">
-          <label className="block text-sm text-gray-400">{label}</label>
-          {item.is_readonly && <HiLockClosed className="w-3 h-3 text-gray-600" />}
+          <label className="block text-sm text-dark-200">{label}</label>
+          {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
           {item.is_env_override && <HiLightningBolt className="w-3 h-3 text-yellow-500" title={`Переопределено: ${item.env_var_name}`} />}
           {wasSaved && <HiCheck className="w-4 h-4 text-green-400" />}
         </div>
@@ -246,7 +246,7 @@ export default function Settings() {
           disabled={!isEditable}
           placeholder={item.default_value || ''}
         />
-        {item.description && <p className="text-xs text-gray-500 mt-1">{item.description}</p>}
+        {item.description && <p className="text-xs text-dark-200 mt-1">{item.description}</p>}
       </div>
     )
   }
@@ -257,7 +257,7 @@ export default function Settings() {
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Настройки</h1>
-          <p className="text-gray-400 mt-1 text-sm md:text-base">Конфигурация панели администратора</p>
+          <p className="text-dark-200 mt-1 text-sm md:text-base">Конфигурация панели администратора</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -299,7 +299,7 @@ export default function Settings() {
           <h2 className="text-base md:text-lg font-semibold text-white mb-3">Статус синхронизации</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {syncItems.map((item) => (
-              <div key={item.key} className="bg-dark-900/50 rounded-lg p-3">
+              <div key={item.key} className="bg-dark-800/50 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-white capitalize">{item.key}</span>
                   <span className={`w-2 h-2 rounded-full ${
@@ -307,12 +307,12 @@ export default function Settings() {
                     item.sync_status === 'error' ? 'bg-red-500' : 'bg-yellow-500'
                   }`}></span>
                 </div>
-                <div className="text-xs text-gray-400 flex items-center gap-1">
+                <div className="text-xs text-dark-200 flex items-center gap-1">
                   <HiClock className="w-3 h-3" />
                   {item.last_sync_at ? formatTimeAgo(item.last_sync_at) : 'Никогда'}
                 </div>
                 {item.records_synced > 0 && (
-                  <div className="text-xs text-gray-500 mt-0.5">
+                  <div className="text-xs text-dark-200 mt-0.5">
                     {item.records_synced} записей
                   </div>
                 )}
@@ -331,7 +331,7 @@ export default function Settings() {
       {settingsLoading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card animate-pulse">
+            <div key={i} className="card animate-fade-in">
               <div className="h-6 w-40 bg-dark-700 rounded mb-4"></div>
               <div className="space-y-4">
                 <div className="h-10 bg-dark-700 rounded"></div>
@@ -357,8 +357,8 @@ export default function Settings() {
       ) : (
         <div className="card text-center py-12">
           <HiExclamation className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-          <p className="text-gray-400">Настройки не найдены</p>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-dark-200">Настройки не найдены</p>
+          <p className="text-sm text-dark-200 mt-1">
             Убедитесь, что база данных подключена и бот хотя бы раз запускался
           </p>
           <button
@@ -373,8 +373,8 @@ export default function Settings() {
 
       {/* Unsaved changes indicator */}
       {hasChanges && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-dark-800 border border-primary-500/50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-3 z-50">
-          <span className="text-sm text-gray-300">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 border border-primary-500/30 rounded-lg px-4 py-3 flex items-center gap-3 z-50 animate-fade-in" style={{ background: 'rgba(22, 27, 34, 0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 20px -5px rgba(13, 148, 136, 0.3)' }}>
+          <span className="text-sm text-dark-100">
             Несохранённые изменения: {Object.keys(editedValues).length}
           </span>
           <button

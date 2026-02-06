@@ -66,7 +66,7 @@ function getSeverityColor(severity: string): string {
     case 'medium':
       return 'text-yellow-400 bg-yellow-500/10'
     default:
-      return 'text-gray-400 bg-gray-500/10'
+      return 'text-dark-200 bg-gray-500/10'
   }
 }
 
@@ -165,7 +165,7 @@ export default function UserDetail() {
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <button
             onClick={() => navigate('/users')}
-            className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-dark-700 flex-shrink-0"
+            className="p-2 text-dark-200 hover:text-white rounded-lg hover:bg-dark-600 flex-shrink-0"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -180,7 +180,7 @@ export default function UserDetail() {
                 {user.status}
               </span>
             </div>
-            <p className="text-xs md:text-sm text-gray-400 truncate">{user.uuid}</p>
+            <p className="text-xs md:text-sm text-dark-200 truncate">{user.uuid}</p>
           </div>
         </div>
 
@@ -227,29 +227,29 @@ export default function UserDetail() {
         {/* Основная информация */}
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
           {/* Профиль */}
-          <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Профиль</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-gray-400">Username</p>
+                <p className="text-sm text-dark-200">Username</p>
                 <p className="text-white">{user.username || '—'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Email</p>
+                <p className="text-sm text-dark-200">Email</p>
                 <p className="text-white truncate">{user.email || '—'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Telegram ID</p>
+                <p className="text-sm text-dark-200">Telegram ID</p>
                 <p className="text-white">{user.telegram_id || '—'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Создан</p>
+                <p className="text-sm text-dark-200">Создан</p>
                 <p className="text-white">
                   {format(new Date(user.created_at), 'dd MMM yyyy HH:mm', { locale: ru })}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Истекает</p>
+                <p className="text-sm text-dark-200">Истекает</p>
                 <p className="text-white">
                   {user.expire_at
                     ? format(new Date(user.expire_at), 'dd MMM yyyy HH:mm', { locale: ru })
@@ -257,7 +257,7 @@ export default function UserDetail() {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-400">Последняя активность</p>
+                <p className="text-sm text-dark-200">Последняя активность</p>
                 <p className="text-white">
                   {user.online_at
                     ? format(new Date(user.online_at), 'dd MMM yyyy HH:mm', { locale: ru })
@@ -268,19 +268,19 @@ export default function UserDetail() {
           </div>
 
           {/* Трафик */}
-          <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Трафик</h2>
             <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-400">Использовано</span>
+                  <span className="text-dark-200">Использовано</span>
                   <span className="text-white text-xs sm:text-sm">
                     {formatBytes(user.used_traffic_bytes)}
                     {user.traffic_limit_bytes && ` / ${formatBytes(user.traffic_limit_bytes)}`}
                   </span>
                 </div>
                 {user.traffic_limit_bytes && (
-                  <div className="w-full bg-dark-700 rounded-full h-2">
+                  <div className="w-full bg-dark-600 rounded-full h-2">
                     <div
                       className={`h-2 rounded-full ${
                         trafficPercent > 90 ? 'bg-red-500' : trafficPercent > 70 ? 'bg-yellow-500' : 'bg-primary-500'
@@ -290,13 +290,13 @@ export default function UserDetail() {
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-dark-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-dark-400/10">
                 <div>
-                  <p className="text-sm text-gray-400">Лимит устройств (HWID)</p>
+                  <p className="text-sm text-dark-200">Лимит устройств (HWID)</p>
                   <p className="text-white">{user.hwid_device_limit}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-400">User-Agent</p>
+                  <p className="text-sm text-dark-200">User-Agent</p>
                   <p className="text-white text-sm truncate">{user.sub_last_user_agent || '—'}</p>
                 </div>
               </div>
@@ -305,7 +305,7 @@ export default function UserDetail() {
 
           {/* Нарушения */}
           {violations && violations.length > 0 && (
-            <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+            <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
               <h2 className="text-base md:text-lg font-semibold text-white mb-4">
                 Нарушения ({violations.length})
               </h2>
@@ -320,9 +320,9 @@ export default function UserDetail() {
                         {v.severity}
                       </span>
                       <span className="text-white text-sm">Score: {v.score.toFixed(1)}</span>
-                      <span className="text-gray-400 text-sm">{v.recommended_action}</span>
+                      <span className="text-dark-200 text-sm">{v.recommended_action}</span>
                     </div>
-                    <span className="text-gray-400 text-xs sm:text-sm flex-shrink-0">
+                    <span className="text-dark-200 text-xs sm:text-sm flex-shrink-0">
                       {format(new Date(v.detected_at), 'dd.MM.yyyy HH:mm')}
                     </span>
                   </div>
@@ -335,13 +335,13 @@ export default function UserDetail() {
         {/* Боковая панель */}
         <div className="space-y-4 md:space-y-6">
           {/* Anti-Abuse */}
-          <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Anti-Abuse</h2>
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-400">Trust Score</p>
+                <p className="text-sm text-dark-200">Trust Score</p>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-dark-700 rounded-full h-2">
+                  <div className="flex-1 bg-dark-600 rounded-full h-2">
                     <div
                       className={`h-2 rounded-full ${
                         (user.trust_score || 100) >= 70
@@ -357,32 +357,32 @@ export default function UserDetail() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-dark-700 rounded-lg p-3 text-center">
+                <div className="bg-dark-600 rounded-lg p-3 text-center">
                   <p className="text-xl md:text-2xl font-bold text-white">{user.violation_count_30d}</p>
-                  <p className="text-xs text-gray-400">Нарушений (30д)</p>
+                  <p className="text-xs text-dark-200">Нарушений (30д)</p>
                 </div>
-                <div className="bg-dark-700 rounded-lg p-3 text-center">
+                <div className="bg-dark-600 rounded-lg p-3 text-center">
                   <p className="text-xl md:text-2xl font-bold text-white">{user.active_connections}</p>
-                  <p className="text-xs text-gray-400">Подключений</p>
+                  <p className="text-xs text-dark-200">Подключений</p>
                 </div>
               </div>
-              <div className="bg-dark-700 rounded-lg p-3 text-center">
+              <div className="bg-dark-600 rounded-lg p-3 text-center">
                 <p className="text-xl md:text-2xl font-bold text-white">{user.unique_ips_24h}</p>
-                <p className="text-xs text-gray-400">Уникальных IP (24ч)</p>
+                <p className="text-xs text-dark-200">Уникальных IP (24ч)</p>
               </div>
             </div>
           </div>
 
           {/* Подписка */}
-          <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Подписка</h2>
             {user.subscription_uuid ? (
               <div className="space-y-2">
-                <p className="text-xs text-gray-400">UUID подписки</p>
+                <p className="text-xs text-dark-200">UUID подписки</p>
                 <p className="text-white text-sm font-mono break-all">{user.subscription_uuid}</p>
               </div>
             ) : (
-              <p className="text-gray-400">Нет активной подписки</p>
+              <p className="text-dark-200">Нет активной подписки</p>
             )}
           </div>
         </div>

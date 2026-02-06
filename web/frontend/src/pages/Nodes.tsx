@@ -113,13 +113,13 @@ function NodeCard({
               <HiStatusOnline className="w-6 h-6 text-green-400" />
             ) : (
               <HiStatusOffline
-                className={`w-6 h-6 ${node.is_disabled ? 'text-gray-400' : 'text-red-400'}`}
+                className={`w-6 h-6 ${node.is_disabled ? 'text-dark-200' : 'text-red-400'}`}
               />
             )}
           </div>
           <div>
             <h3 className="font-semibold text-white">{node.name}</h3>
-            <p className="text-sm text-gray-500 flex items-center gap-1 truncate">
+            <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
               <HiGlobe className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="truncate">{node.address}:{node.port}</span>
             </p>
@@ -144,30 +144,30 @@ function NodeCard({
                   className="fixed inset-0 z-10"
                   onClick={() => setMenuOpen(false)}
                 />
-                <div className="absolute right-0 top-full mt-1 w-44 bg-dark-800 border border-dark-600 rounded-lg shadow-xl z-20 py-1">
+                <div className="dropdown-menu">
                   <button
                     onClick={() => {
                       onRestart()
                       setMenuOpen(false)
                     }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-dark-700 flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
                   >
                     <HiRefresh className="w-4 h-4" /> Перезапустить
                   </button>
                   <button
                     onClick={() => setMenuOpen(false)}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-dark-700 flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
                   >
                     <HiPencil className="w-4 h-4" /> Редактировать
                   </button>
-                  <div className="border-t border-dark-600 my-1" />
+                  <div className="border-t border-dark-400/20 my-1" />
                   {node.is_disabled ? (
                     <button
                       onClick={() => {
                         onEnable()
                         setMenuOpen(false)
                       }}
-                      className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-700 flex items-center gap-2"
+                      className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-600 flex items-center gap-2"
                     >
                       <HiPlay className="w-4 h-4" /> Включить
                     </button>
@@ -177,7 +177,7 @@ function NodeCard({
                         onDisable()
                         setMenuOpen(false)
                       }}
-                      className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-700 flex items-center gap-2"
+                      className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-600 flex items-center gap-2"
                     >
                       <HiStop className="w-4 h-4" /> Отключить
                     </button>
@@ -189,7 +189,7 @@ function NodeCard({
                       }
                       setMenuOpen(false)
                     }}
-                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-700 flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-600 flex items-center gap-2"
                   >
                     <HiTrash className="w-4 h-4" /> Удалить
                   </button>
@@ -202,15 +202,15 @@ function NodeCard({
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4">
-        <div className="text-center p-2 md:p-3 bg-dark-900/50 rounded-lg">
-          <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
+        <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
+          <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
             <HiUsers className="w-3.5 h-3.5" />
             <span className="text-[10px] md:text-xs">Онлайн</span>
           </div>
           <p className="text-base md:text-lg font-semibold text-white">{node.users_online}</p>
         </div>
-        <div className="text-center p-2 md:p-3 bg-dark-900/50 rounded-lg">
-          <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
+        <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
+          <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
             <HiChartBar className="w-3.5 h-3.5" />
             <span className="text-[10px] md:text-xs">Сегодня</span>
           </div>
@@ -218,8 +218,8 @@ function NodeCard({
             {formatBytes(node.traffic_today_bytes)}
           </p>
         </div>
-        <div className="text-center p-2 md:p-3 bg-dark-900/50 rounded-lg">
-          <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
+        <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
+          <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
             <HiChartBar className="w-3.5 h-3.5" />
             <span className="text-[10px] md:text-xs">Всего</span>
           </div>
@@ -230,13 +230,13 @@ function NodeCard({
       </div>
 
       {/* Footer info */}
-      <div className="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-dark-700">
+      <div className="flex items-center justify-between text-xs text-dark-200 pt-3 border-t border-dark-400/10">
         <div className="flex items-center gap-1">
           <HiClock className="w-3.5 h-3.5" />
           {formatTimeAgo(node.last_seen_at)}
         </div>
         {node.xray_version && (
-          <span className="text-gray-600">Xray {node.xray_version}</span>
+          <span className="text-dark-300">Xray {node.xray_version}</span>
         )}
       </div>
 
@@ -253,7 +253,7 @@ function NodeCard({
 // Loading skeleton
 function NodeSkeleton() {
   return (
-    <div className="card animate-pulse">
+    <div className="card animate-fade-in">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 bg-dark-700 rounded-lg" />
@@ -266,7 +266,7 @@ function NodeSkeleton() {
       </div>
       <div className="grid grid-cols-3 gap-4 mb-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="p-3 bg-dark-900/50 rounded-lg">
+          <div key={i} className="p-3 bg-dark-800/50 rounded-lg">
             <div className="h-3 w-12 bg-dark-700 rounded mx-auto mb-2" />
             <div className="h-5 w-8 bg-dark-700 rounded mx-auto" />
           </div>
@@ -329,7 +329,7 @@ export default function Nodes() {
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Ноды</h1>
-          <p className="text-gray-400 mt-1 text-sm md:text-base">Управление серверами</p>
+          <p className="text-dark-200 mt-1 text-sm md:text-base">Управление серверами</p>
         </div>
         <button
           onClick={() => refetch()}
@@ -344,31 +344,31 @@ export default function Nodes() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
         <div className="card text-center">
-          <p className="text-xs md:text-sm text-gray-400">Всего</p>
+          <p className="text-xs md:text-sm text-dark-200">Всего</p>
           <p className="text-xl md:text-2xl font-bold text-white mt-1">
             {isLoading ? '-' : totalNodes}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-xs md:text-sm text-gray-400">Онлайн</p>
+          <p className="text-xs md:text-sm text-dark-200">Онлайн</p>
           <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
             {isLoading ? '-' : onlineNodes}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-xs md:text-sm text-gray-400">Офлайн</p>
+          <p className="text-xs md:text-sm text-dark-200">Офлайн</p>
           <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
             {isLoading ? '-' : offlineNodes}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-xs md:text-sm text-gray-400">Отключены</p>
-          <p className="text-xl md:text-2xl font-bold text-gray-400 mt-1">
+          <p className="text-xs md:text-sm text-dark-200">Отключены</p>
+          <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
             {isLoading ? '-' : disabledNodes}
           </p>
         </div>
         <div className="card text-center col-span-2 sm:col-span-1">
-          <p className="text-xs md:text-sm text-gray-400">Пользователей</p>
+          <p className="text-xs md:text-sm text-dark-200">Пользователей</p>
           <p className="text-xl md:text-2xl font-bold text-primary-400 mt-1">
             {isLoading ? '-' : totalUsersOnline}
           </p>
@@ -382,8 +382,8 @@ export default function Nodes() {
           Array.from({ length: 4 }).map((_, i) => <NodeSkeleton key={i} />)
         ) : nodes.length === 0 ? (
           <div className="col-span-full card text-center py-12">
-            <HiStatusOffline className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400">Нет добавленных нод</p>
+            <HiStatusOffline className="w-12 h-12 text-dark-300 mx-auto mb-3" />
+            <p className="text-dark-200">Нет добавленных нод</p>
           </div>
         ) : (
           nodes.map((node) => (

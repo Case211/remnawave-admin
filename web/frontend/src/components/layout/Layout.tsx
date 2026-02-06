@@ -10,7 +10,7 @@ export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-dark-800">
       {/* Sidebar */}
       <Sidebar
         mobileOpen={sidebarOpen}
@@ -22,8 +22,13 @@ export default function Layout({ children }: LayoutProps) {
         {/* Header */}
         <Header onMenuToggle={() => setSidebarOpen(true)} />
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto bg-dark-950 p-4 md:p-6">
+        {/* Page content - diagonal gradient background */}
+        <main
+          className="flex-1 overflow-y-auto p-4 md:p-6"
+          style={{
+            background: 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%)',
+          }}
+        >
           {children}
         </main>
       </div>

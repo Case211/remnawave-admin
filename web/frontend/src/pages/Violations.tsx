@@ -90,9 +90,9 @@ function getSeverityConfig(severity: string): { label: string; class: string; ic
     critical: { label: 'Критический', class: 'badge-danger', icon: 'text-red-400' },
     high: { label: 'Высокий', class: 'badge-warning', icon: 'text-yellow-400' },
     medium: { label: 'Средний', class: 'badge-info', icon: 'text-blue-400' },
-    low: { label: 'Низкий', class: 'badge-gray', icon: 'text-gray-400' },
+    low: { label: 'Низкий', class: 'badge-gray', icon: 'text-dark-200' },
   }
-  return config[severity] || { label: severity, class: 'badge-gray', icon: 'text-gray-400' }
+  return config[severity] || { label: severity, class: 'badge-gray', icon: 'text-dark-200' }
 }
 
 function getActionConfig(action: string | null): { label: string; class: string } {
@@ -144,7 +144,7 @@ function ScoreIndicator({ score }: { score: number }) {
   return (
     <div className={`px-3 py-2 rounded-lg ${bgClass} text-center`}>
       <p className={`text-2xl font-bold ${colorClass}`}>{score}</p>
-      <p className="text-xs text-gray-500">Score</p>
+      <p className="text-xs text-dark-200">Score</p>
     </div>
   )
 }
@@ -195,14 +195,14 @@ function ViolationCard({
             <SeverityBadge severity={violation.severity} />
             <ActionBadge action={violation.action_taken} />
           </div>
-          <p className="text-sm text-gray-400 mb-1">
+          <p className="text-sm text-dark-200 mb-1">
             Рекомендация: {getRecommendedActionLabel(violation.recommended_action)}
-            {violation.confidence > 0 && <span className="text-gray-500"> ({violation.confidence}%)</span>}
+            {violation.confidence > 0 && <span className="text-dark-200"> ({violation.confidence}%)</span>}
           </p>
           {violation.email && (
-            <p className="text-xs text-gray-500 mb-1">{violation.email}</p>
+            <p className="text-xs text-dark-200 mb-1">{violation.email}</p>
           )}
-          <p className="text-xs text-gray-500">{formatTimeAgo(violation.detected_at)}</p>
+          <p className="text-xs text-dark-200">{formatTimeAgo(violation.detected_at)}</p>
         </div>
 
         {/* Score */}
@@ -211,7 +211,7 @@ function ViolationCard({
 
       {/* Actions */}
       {isPending && (
-        <div className="mt-4 pt-4 border-t border-dark-700 flex flex-wrap gap-2">
+        <div className="mt-4 pt-4 border-t border-dark-400/10 flex flex-wrap gap-2">
           <button
             onClick={onBlock}
             className="btn-danger text-xs sm:text-sm flex items-center gap-1"
@@ -241,7 +241,7 @@ function ViolationCard({
 
       {/* Resolved info */}
       {!isPending && (
-        <div className="mt-4 pt-4 border-t border-dark-700 flex items-center justify-between text-xs text-gray-500">
+        <div className="mt-4 pt-4 border-t border-dark-400/10 flex items-center justify-between text-xs text-dark-200">
           <span>
             Действие: {getActionConfig(violation.action_taken).label}
           </span>
@@ -260,7 +260,7 @@ function ViolationCard({
 // Loading skeleton
 function ViolationSkeleton() {
   return (
-    <div className="card animate-pulse">
+    <div className="card animate-fade-in">
       <div className="flex items-start gap-4">
         <div className="w-11 h-11 bg-dark-700 rounded-lg" />
         <div className="flex-1">
@@ -326,7 +326,7 @@ export default function Violations() {
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Нарушения</h1>
-          <p className="text-gray-400 mt-1 text-sm md:text-base">
+          <p className="text-dark-200 mt-1 text-sm md:text-base">
             Система анти-абуза и управление нарушениями
           </p>
         </div>
@@ -353,7 +353,7 @@ export default function Violations() {
         <div className="card">
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 md:gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Уровень</label>
+              <label className="block text-sm text-dark-200 mb-1">Уровень</label>
               <select
                 value={severity}
                 onChange={(e) => {
@@ -370,7 +370,7 @@ export default function Violations() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Период</label>
+              <label className="block text-sm text-dark-200 mb-1">Период</label>
               <select
                 value={days}
                 onChange={(e) => {
@@ -392,25 +392,25 @@ export default function Violations() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Критические</p>
+          <p className="text-sm text-dark-200">Критические</p>
           <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
             {stats?.critical ?? '-'}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Высокие</p>
+          <p className="text-sm text-dark-200">Высокие</p>
           <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">
             {stats?.high ?? '-'}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Средние</p>
+          <p className="text-sm text-dark-200">Средние</p>
           <p className="text-xl md:text-2xl font-bold text-blue-400 mt-1">
             {stats?.medium ?? '-'}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Низкие</p>
+          <p className="text-sm text-dark-200">Низкие</p>
           <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
             {stats?.low ?? '-'}
           </p>
@@ -424,8 +424,8 @@ export default function Violations() {
         ) : violations.length === 0 ? (
           <div className="card text-center py-12">
             <HiCheck className="w-12 h-12 text-green-500 mx-auto mb-3" />
-            <p className="text-gray-400">Нарушений не обнаружено</p>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-dark-200">Нарушений не обнаружено</p>
+            <p className="text-sm text-dark-200 mt-1">
               За выбранный период нет записей о нарушениях
             </p>
           </div>
@@ -452,7 +452,7 @@ export default function Violations() {
       {/* Pagination */}
       {total > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-sm text-gray-400 order-2 sm:order-1">
+          <p className="text-sm text-dark-200 order-2 sm:order-1">
             Показано {(page - 1) * perPage + 1}-
             {Math.min(page * perPage, total)} из {total}
           </p>
@@ -464,7 +464,7 @@ export default function Violations() {
             >
               <HiChevronLeft className="w-5 h-5" />
             </button>
-            <span className="text-sm text-gray-400 min-w-[80px] text-center">
+            <span className="text-sm text-dark-200 min-w-[80px] text-center">
               {page} / {pages}
             </span>
             <button

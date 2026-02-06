@@ -57,7 +57,7 @@ function getSecurityColor(security: string | null): string {
   if (!security || security === 'none') return 'text-red-400'
   if (security === 'reality') return 'text-green-400'
   if (security === 'tls' || security === 'xtls') return 'text-blue-400'
-  return 'text-gray-400'
+  return 'text-dark-200'
 }
 
 // Host card component
@@ -81,14 +81,14 @@ function HostCard({
         <div className="flex items-center gap-3 min-w-0">
           <div className={`p-2.5 rounded-lg ${host.is_disabled ? 'bg-gray-500/10' : 'bg-green-500/10'}`}>
             {host.is_disabled ? (
-              <HiStatusOffline className="w-5 h-5 text-gray-400" />
+              <HiStatusOffline className="w-5 h-5 text-dark-200" />
             ) : (
               <HiStatusOnline className="w-5 h-5 text-green-400" />
             )}
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-white truncate">{host.remark || 'Без имени'}</h3>
-            <p className="text-sm text-gray-500 flex items-center gap-1 truncate">
+            <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
               <HiGlobe className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="truncate">{host.address}:{host.port}</span>
             </p>
@@ -112,19 +112,19 @@ function HostCard({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 w-44 bg-dark-800 border border-dark-600 rounded-lg shadow-xl z-20 py-1">
-                  <div className="border-t border-dark-600 my-1" />
+                <div className="dropdown-menu">
+                  <div className="border-t border-dark-400/20 my-1" />
                   {host.is_disabled ? (
                     <button
                       onClick={() => { onEnable(); setMenuOpen(false) }}
-                      className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-700 flex items-center gap-2"
+                      className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-600 flex items-center gap-2"
                     >
                       <HiPlay className="w-4 h-4" /> Включить
                     </button>
                   ) : (
                     <button
                       onClick={() => { onDisable(); setMenuOpen(false) }}
-                      className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-700 flex items-center gap-2"
+                      className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-600 flex items-center gap-2"
                     >
                       <HiStop className="w-4 h-4" /> Отключить
                     </button>
@@ -134,7 +134,7 @@ function HostCard({
                       if (confirm('Удалить хост?')) onDelete()
                       setMenuOpen(false)
                     }}
-                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-700 flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-600 flex items-center gap-2"
                   >
                     <HiTrash className="w-4 h-4" /> Удалить
                   </button>
@@ -147,39 +147,39 @@ function HostCard({
 
       {/* Details */}
       <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="bg-dark-900/50 rounded-lg p-2">
-          <span className="text-gray-500 text-xs">Безопасность</span>
+        <div className="bg-dark-800/50 rounded-lg p-2">
+          <span className="text-dark-200 text-xs">Безопасность</span>
           <p className={`font-medium ${getSecurityColor(host.security)}`}>
             {host.security === 'reality' && <HiShieldCheck className="w-3.5 h-3.5 inline mr-1" />}
             {host.security === 'tls' && <HiLockClosed className="w-3.5 h-3.5 inline mr-1" />}
             {getSecurityLabel(host.security)}
           </p>
         </div>
-        <div className="bg-dark-900/50 rounded-lg p-2">
-          <span className="text-gray-500 text-xs">SNI</span>
+        <div className="bg-dark-800/50 rounded-lg p-2">
+          <span className="text-dark-200 text-xs">SNI</span>
           <p className="font-medium text-white truncate">{host.sni || '-'}</p>
         </div>
         {host.host && (
-          <div className="bg-dark-900/50 rounded-lg p-2">
-            <span className="text-gray-500 text-xs">Host</span>
+          <div className="bg-dark-800/50 rounded-lg p-2">
+            <span className="text-dark-200 text-xs">Host</span>
             <p className="font-medium text-white truncate">{host.host}</p>
           </div>
         )}
         {host.path && (
-          <div className="bg-dark-900/50 rounded-lg p-2">
-            <span className="text-gray-500 text-xs">Path</span>
+          <div className="bg-dark-800/50 rounded-lg p-2">
+            <span className="text-dark-200 text-xs">Path</span>
             <p className="font-medium text-white truncate font-mono text-xs">{host.path}</p>
           </div>
         )}
         {host.alpn && (
-          <div className="bg-dark-900/50 rounded-lg p-2">
-            <span className="text-gray-500 text-xs">ALPN</span>
+          <div className="bg-dark-800/50 rounded-lg p-2">
+            <span className="text-dark-200 text-xs">ALPN</span>
             <p className="font-medium text-white truncate">{host.alpn}</p>
           </div>
         )}
         {host.fingerprint && (
-          <div className="bg-dark-900/50 rounded-lg p-2">
-            <span className="text-gray-500 text-xs">Fingerprint</span>
+          <div className="bg-dark-800/50 rounded-lg p-2">
+            <span className="text-dark-200 text-xs">Fingerprint</span>
             <p className="font-medium text-white truncate">{host.fingerprint}</p>
           </div>
         )}
@@ -191,7 +191,7 @@ function HostCard({
 // Loading skeleton
 function HostSkeleton() {
   return (
-    <div className="card animate-pulse">
+    <div className="card animate-fade-in">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-dark-700 rounded-lg" />
@@ -247,7 +247,7 @@ export default function Hosts() {
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Хосты</h1>
-          <p className="text-gray-400 mt-1 text-sm md:text-base">Управление хостами подключений</p>
+          <p className="text-dark-200 mt-1 text-sm md:text-base">Управление хостами подключений</p>
         </div>
         <button
           onClick={() => refetch()}
@@ -262,20 +262,20 @@ export default function Hosts() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 md:gap-4">
         <div className="card text-center">
-          <p className="text-xs md:text-sm text-gray-400">Всего</p>
+          <p className="text-xs md:text-sm text-dark-200">Всего</p>
           <p className="text-xl md:text-2xl font-bold text-white mt-1">
             {isLoading ? '-' : totalHosts}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-xs md:text-sm text-gray-400">Активные</p>
+          <p className="text-xs md:text-sm text-dark-200">Активные</p>
           <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
             {isLoading ? '-' : activeHosts}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-xs md:text-sm text-gray-400">Отключены</p>
-          <p className="text-xl md:text-2xl font-bold text-gray-400 mt-1">
+          <p className="text-xs md:text-sm text-dark-200">Отключены</p>
+          <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
             {isLoading ? '-' : disabledHosts}
           </p>
         </div>
@@ -287,8 +287,8 @@ export default function Hosts() {
           Array.from({ length: 4 }).map((_, i) => <HostSkeleton key={i} />)
         ) : hosts.length === 0 ? (
           <div className="col-span-full card text-center py-12">
-            <HiGlobe className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400">Нет хостов</p>
+            <HiGlobe className="w-12 h-12 text-dark-300 mx-auto mb-3" />
+            <p className="text-dark-200">Нет хостов</p>
           </div>
         ) : (
           hosts.map((host) => (
