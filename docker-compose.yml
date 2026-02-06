@@ -59,9 +59,7 @@ services:
   # ===========================================
 
   web-backend:
-    build:
-      context: .
-      dockerfile: web/backend/Dockerfile
+    image: ghcr.io/case211/remnawave-admin-web-backend:latest
     container_name: remnawave-web-backend
     restart: unless-stopped
     environment:
@@ -91,19 +89,17 @@ services:
       - web
 
   web-frontend:
-    build:
-      context: ./web/frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=${VITE_API_URL:-}
-        - VITE_WS_URL=${VITE_WS_URL:-}
-        - VITE_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
+    image: ghcr.io/case211/remnawave-admin-web-frontend:latest
     container_name: remnawave-web-frontend
     restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
     ports:
       - "${WEB_FRONTEND_PORT:-3000}:80"
     networks:
       - remnawave-network
+    depends_on:
+      - web-backend
     profiles:
       - web
 

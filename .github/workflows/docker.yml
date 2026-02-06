@@ -1,4 +1,4 @@
-name: Build and Publish Docker image
+name: Build and Publish Docker images
 
 on:
   push:
@@ -14,12 +14,24 @@ jobs:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      matrix:
+        include:
+          - image_suffix: ""
+            context: .
+            dockerfile: ./Dockerfile
+          - image_suffix: "-web-backend"
+            context: .
+            dockerfile: ./web/backend/Dockerfile
+          - image_suffix: "-web-frontend"
+            context: ./web/frontend
+            dockerfile: ./web/frontend/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Prepare image name (lowercase owner)
-        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/remnawave-admin" >> $GITHUB_ENV
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/remnawave-admin${{ matrix.image_suffix }}" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -37,8 +49,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:latest
