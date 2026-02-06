@@ -28,6 +28,8 @@ services:
       DB_POOL_MIN_SIZE: ${DB_POOL_MIN_SIZE:-2}
       DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-10}
       SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-300}
+    volumes:
+      - adminbot_logs:/app/logs
     ports:
       - "${WEBHOOK_PORT:-8080}:${WEBHOOK_PORT:-8080}"
     networks:
@@ -73,6 +75,8 @@ services:
       - API_BASE_URL=${API_BASE_URL}
       - API_TOKEN=${API_TOKEN}
       - ADMINS=${ADMINS}
+    volumes:
+      - adminbot_logs:/app/logs
     ports:
       - "${WEB_BACKEND_PORT:-8081}:8081"
     networks:
@@ -105,6 +109,7 @@ services:
 
 volumes:
   postgres_data:
+  adminbot_logs:
 
 networks:
   remnawave-network:

@@ -4,9 +4,12 @@ Remnawave Admin Web Panel - FastAPI Application.
 This is the main entry point for the web panel backend.
 It provides REST API and WebSocket endpoints for the admin dashboard.
 """
+import gzip
 import logging
 import os
+import shutil
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # Add project root to path for importing src modules
@@ -22,22 +25,96 @@ from web.backend.core.config import get_web_settings
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 
 
-# Настраиваем логирование в едином формате
-_LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
-_LOG_DATEFMT = "%H:%M:%S"
+# ── Logging setup ─────────────────────────────────────────────────
 
-logging.basicConfig(
-    level=logging.INFO,
-    format=_LOG_FORMAT,
-    datefmt=_LOG_DATEFMT,
-)
-# Подавляем шумные логгеры
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("asyncpg").setLevel(logging.WARNING)
+_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_CONSOLE_DATEFMT = "%H:%M:%S"
+_FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
+_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+_BACKUP_COUNT = 5
+_LOG_DIR = Path("/app/logs")
 
+
+class _CompressedRotatingFileHandler(RotatingFileHandler):
+    """RotatingFileHandler с gzip-сжатием ротированных файлов."""
+
+    def doRollover(self):
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+
+        for i in range(self.backupCount - 1, 0, -1):
+            sfn = self.rotation_filename(f"{self.baseFilename}.{i}.gz")
+            dfn = self.rotation_filename(f"{self.baseFilename}.{i + 1}.gz")
+            if os.path.exists(sfn):
+                if os.path.exists(dfn):
+                    os.remove(dfn)
+                os.rename(sfn, dfn)
+
+        dfn = self.rotation_filename(f"{self.baseFilename}.1.gz")
+        if os.path.exists(dfn):
+            os.remove(dfn)
+        if os.path.exists(self.baseFilename):
+            with open(self.baseFilename, "rb") as f_in:
+                with gzip.open(dfn, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            with open(self.baseFilename, "w"):
+                pass
+
+        if not self.delay:
+            self.stream = self._open()
+
+
+def _setup_web_logging():
+    """Настраивает логирование для web backend."""
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(logging.DEBUG)
+
+    fmt = logging.Formatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT)
+
+    # Console: WARNING+ только
+    console = logging.StreamHandler()
+    console.setLevel(logging.WARNING)
+    console.setFormatter(fmt)
+    root.addHandler(console)
+
+    # File handlers
+    try:
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        file_fmt = logging.Formatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT)
+
+        info_h = _CompressedRotatingFileHandler(
+            str(_LOG_DIR / "web_INFO.log"),
+            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
+        )
+        info_h.setLevel(logging.INFO)
+        info_h.setFormatter(file_fmt)
+        root.addHandler(info_h)
+
+        warn_h = _CompressedRotatingFileHandler(
+            str(_LOG_DIR / "web_WARNING.log"),
+            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
+        )
+        warn_h.setLevel(logging.WARNING)
+        warn_h.setFormatter(file_fmt)
+        root.addHandler(warn_h)
+    except OSError as exc:
+        console.setLevel(logging.INFO)
+        root.warning("⚠️ Cannot create log files (%s), logging to console only", exc)
+
+    # Подавляем шумные логгеры
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("asyncpg").setLevel(logging.WARNING)
+
+
+_setup_web_logging()
 logger = logging.getLogger("web")
 
+
+# ── FastAPI app ───────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

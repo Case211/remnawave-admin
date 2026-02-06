@@ -1,9 +1,15 @@
+import gzip
 import logging
+import os
+import shutil
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any, Optional
+
 from src.config import get_settings
 
 
-# Короткие имена для сторонних логгеров, чтобы вывод был единообразным
+# Короткие имена для сторонних логгеров
 _LOGGER_NAME_MAP = {
     "remnawave-admin-bot": "bot",
     "uvicorn.error": "uvicorn",
@@ -21,42 +27,125 @@ _LOGGER_NAME_MAP = {
     "sqlalchemy": "db",
 }
 
+# Формат для консоли (кратко)
+_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_CONSOLE_DATEFMT = "%H:%M:%S"
+
+# Формат для файлов (подробно, с датой)
+_FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
+
+# Ротация: 50 MB, 5 файлов, с gzip-сжатием
+_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+_BACKUP_COUNT = 5
+_LOG_DIR = Path("/app/logs")
+
+
+class CompressedRotatingFileHandler(RotatingFileHandler):
+    """RotatingFileHandler с gzip-сжатием ротированных файлов."""
+
+    def doRollover(self):
+        """Ротация + сжатие старых файлов."""
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+
+        # Сдвигаем существующие .gz файлы
+        for i in range(self.backupCount - 1, 0, -1):
+            sfn = self.rotation_filename(f"{self.baseFilename}.{i}.gz")
+            dfn = self.rotation_filename(f"{self.baseFilename}.{i + 1}.gz")
+            if os.path.exists(sfn):
+                if os.path.exists(dfn):
+                    os.remove(dfn)
+                os.rename(sfn, dfn)
+
+        # Сжимаем текущий лог в .1.gz
+        dfn = self.rotation_filename(f"{self.baseFilename}.1.gz")
+        if os.path.exists(dfn):
+            os.remove(dfn)
+        if os.path.exists(self.baseFilename):
+            with open(self.baseFilename, "rb") as f_in:
+                with gzip.open(dfn, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            # Очищаем текущий файл
+            with open(self.baseFilename, "w"):
+                pass
+
+        if not self.delay:
+            self.stream = self._open()
+
 
 class CleanFormatter(logging.Formatter):
     """Компактный форматтер с короткими именами логгеров."""
 
     def format(self, record: logging.LogRecord) -> str:
-        # Сокращаем имя логгера
+        # Сохраняем оригинальное имя и подставляем короткое
+        original_name = record.name
         name = record.name
         for prefix, short in _LOGGER_NAME_MAP.items():
             if name == prefix or name.startswith(prefix + "."):
                 record.name = short
                 break
         else:
-            # Для неизвестных — берём последнюю часть имени
             if "." in name:
                 record.name = name.rsplit(".", 1)[-1]
 
-        return super().format(record)
+        result = super().format(record)
+        record.name = original_name  # восстанавливаем для других хэндлеров
+        return result
+
+
+def _ensure_log_dir() -> Path:
+    """Создаёт директорию для логов если не существует."""
+    log_dir = _LOG_DIR
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
 
 
 def setup_logger() -> logging.Logger:
     settings = get_settings()
     level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
-    # Удаляем стандартные обработчики
     root = logging.getLogger()
     root.handlers.clear()
-    root.setLevel(level)
+    root.setLevel(logging.DEBUG)  # root ловит всё, фильтрация на хэндлерах
 
-    handler = logging.StreamHandler()
-    handler.setLevel(level)
-    formatter = CleanFormatter(
-        fmt="%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    handler.setFormatter(formatter)
-    root.addHandler(handler)
+    # === Console handler: только WARNING+ (для docker compose logs) ===
+    console = logging.StreamHandler()
+    console.setLevel(logging.WARNING)
+    console.setFormatter(CleanFormatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT))
+    root.addHandler(console)
+
+    # === File handlers: подробные логи с ротацией ===
+    try:
+        log_dir = _ensure_log_dir()
+
+        # INFO+ файл
+        info_handler = CompressedRotatingFileHandler(
+            filename=str(log_dir / "adminbot_INFO.log"),
+            maxBytes=_MAX_BYTES,
+            backupCount=_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        info_handler.setLevel(logging.INFO)
+        info_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
+        root.addHandler(info_handler)
+
+        # WARNING+ файл
+        warn_handler = CompressedRotatingFileHandler(
+            filename=str(log_dir / "adminbot_WARNING.log"),
+            maxBytes=_MAX_BYTES,
+            backupCount=_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        warn_handler.setLevel(logging.WARNING)
+        warn_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
+        root.addHandler(warn_handler)
+
+    except OSError as exc:
+        # Если не удалось создать файлы (read-only FS и т.п.) — работаем только с консолью
+        console.setLevel(level)  # fallback: показываем всё в консоли
+        root.warning("⚠️ Cannot create log files (%s), logging to console only", exc)
 
     # Подавляем шумные сторонние логгеры
     logging.getLogger("httpx").setLevel(logging.WARNING)
