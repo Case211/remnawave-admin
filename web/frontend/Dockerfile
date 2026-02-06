@@ -1,15 +1,18 @@
 # Remnawave Admin Web Panel - Frontend Dockerfile
 
 # Build stage
-FROM node:20-alpine as build
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 
-# Install ALL dependencies including devDependencies (needed for build)
-RUN if [ -f package-lock.json ]; then npm ci --include=dev; else npm install; fi
+# Install ALL dependencies (including devDependencies for TypeScript build)
+RUN npm ci
+
+# Verify TypeScript is installed
+RUN npx tsc --version
 
 # Copy source code
 COPY . .
