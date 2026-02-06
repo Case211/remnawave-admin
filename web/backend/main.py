@@ -31,18 +31,20 @@ async def lifespan(app: FastAPI):
     print(f"🔗 CORS origins: {settings.cors_origins}")
     print(f"👥 Admins raw: {repr(settings.admins_raw)}, parsed: {settings.admins}")
 
-    # Connect to database if configured (check env var directly to avoid Settings attr issues)
+    # Connect to database if configured
     database_url = os.environ.get("DATABASE_URL") or getattr(settings, "database_url", None)
     if database_url:
         try:
             from src.services.database import db_service
-            connected = await db_service.connect()
+            connected = await db_service.connect(database_url=database_url)
             if connected:
                 print("✅ Database connection established")
             else:
                 print("⚠️ Database connection failed, running without database")
         except Exception as e:
             print(f"⚠️ Database connection error: {e}")
+            import traceback
+            traceback.print_exc()
     else:
         print("ℹ️ DATABASE_URL not set, running without database")
 
@@ -54,6 +56,11 @@ async def lifespan(app: FastAPI):
         if db_service.is_connected:
             await db_service.disconnect()
             print("🔌 Database connection closed")
+    except Exception:
+        pass
+    try:
+        from web.backend.core.api_helper import close_client
+        await close_client()
     except Exception:
         pass
     print("👋 Shutting down Remnawave Admin Web API")

@@ -1,4 +1,5 @@
 """Nodes API endpoints."""
+import logging
 import sys
 from pathlib import Path
 from typing import Optional, List
@@ -9,10 +10,26 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser
+from web.backend.core.api_helper import fetch_nodes_from_api
 from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeUpdate
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+async def _get_nodes_list():
+    """Get nodes from DB, fall back to API."""
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            nodes = await db_service.get_all_nodes()
+            if nodes:
+                return nodes
+    except Exception as e:
+        logger.debug("DB nodes fetch failed: %s", e)
+    return await fetch_nodes_from_api()
 
 
 @router.get("/", response_model=PaginatedResponse[NodeListItem])
@@ -27,10 +44,7 @@ async def list_nodes(
     List nodes with pagination and filtering.
     """
     try:
-        from src.services.database import db_service
-
-        # Get all nodes from cache
-        nodes = await db_service.get_all_nodes()
+        nodes = await _get_nodes_list()
 
         # Filter
         if search:
@@ -42,7 +56,10 @@ async def list_nodes(
             ]
 
         if is_connected is not None:
-            nodes = [n for n in nodes if n.get('is_connected') == is_connected]
+            nodes = [
+                n for n in nodes
+                if bool(n.get('is_connected') or n.get('isConnected')) == is_connected
+            ]
 
         # Sort by name
         nodes.sort(key=lambda x: x.get('name') or '')
@@ -64,7 +81,8 @@ async def list_nodes(
             pages=(total + per_page - 1) // per_page if total > 0 else 1,
         )
 
-    except ImportError:
+    except Exception as e:
+        logger.error("Error listing nodes: %s", e)
         return PaginatedResponse(
             items=[],
             total=0,
