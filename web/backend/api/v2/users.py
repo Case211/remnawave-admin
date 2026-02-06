@@ -19,12 +19,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _ensure_snake_case(user: dict) -> dict:
+    """Ensure user dict has snake_case keys for pydantic schemas."""
+    result = dict(user)
+    mappings = {
+        'shortUuid': 'short_uuid',
+        'subscriptionUuid': 'subscription_uuid',
+        'telegramId': 'telegram_id',
+        'expireAt': 'expire_at',
+        'trafficLimitBytes': 'traffic_limit_bytes',
+        'usedTrafficBytes': 'used_traffic_bytes',
+        'hwidDeviceLimit': 'hwid_device_limit',
+        'createdAt': 'created_at',
+        'updatedAt': 'updated_at',
+        'onlineAt': 'online_at',
+        'subLastUserAgent': 'sub_last_user_agent',
+    }
+    for camel, snake in mappings.items():
+        if camel in result and snake not in result:
+            result[snake] = result[camel]
+    return result
+
+
 async def _get_users_list():
     """Get users from DB, fall back to API."""
     try:
         from src.services.database import db_service
         if db_service.is_connected:
-            users = await db_service.get_all_users()
+            users = await db_service.get_all_users(limit=50000)
             if users:
                 return users
     except Exception as e:
@@ -42,13 +64,12 @@ async def list_users(
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    List users with pagination and filtering.
-    """
+    """List users with pagination and filtering."""
     try:
         users = await _get_users_list()
+        # Normalize all users to have snake_case keys
+        users = [_ensure_snake_case(u) for u in users]
 
-        # Normalize field names for both DB (snake_case) and API (camelCase) formats
         def _get(u, *keys, default=''):
             for k in keys:
                 v = u.get(k)
@@ -64,7 +85,8 @@ async def list_users(
                 if search_lower in str(_get(u, 'username')).lower()
                 or search_lower in str(_get(u, 'email')).lower()
                 or search_lower in str(_get(u, 'uuid')).lower()
-                or search_lower in str(_get(u, 'short_uuid', 'shortUuid')).lower()
+                or search_lower in str(_get(u, 'short_uuid')).lower()
+                or search_lower in str(_get(u, 'telegram_id')).lower()
             ]
 
         if status:
@@ -72,12 +94,11 @@ async def list_users(
 
         # Sort
         reverse = sort_order == "desc"
-        # Handle camelCase field names from API
         sort_key_map = {
-            'created_at': ('created_at', 'createdAt'),
+            'created_at': ('created_at',),
             'username': ('username',),
             'status': ('status',),
-            'expire_at': ('expire_at', 'expireAt'),
+            'expire_at': ('expire_at',),
         }
         sort_keys = sort_key_map.get(sort_by, (sort_by,))
         users.sort(key=lambda x: _get(x, *sort_keys) or '', reverse=reverse)
@@ -89,7 +110,12 @@ async def list_users(
         items = users[start_idx:end_idx]
 
         # Convert to schema
-        user_items = [UserListItem(**u) for u in items]
+        user_items = []
+        for u in items:
+            try:
+                user_items.append(UserListItem(**u))
+            except Exception as e:
+                logger.debug("Failed to parse user %s: %s", u.get('uuid', '?'), e)
 
         return PaginatedResponse(
             items=user_items,
@@ -115,20 +141,64 @@ async def get_user(
     user_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Get detailed user information.
-    """
+    """Get detailed user information with anti-abuse data from DB."""
     try:
-        from src.services.api_client import api_client
+        # Try to get user from DB first, then API
+        user_data = None
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                user_data = await db_service.get_user_by_uuid(user_uuid)
+        except Exception:
+            pass
 
-        user = await api_client.get_user(user_uuid)
-        if not user:
+        if not user_data:
+            try:
+                from src.services.api_client import api_client
+                user_data = await api_client.get_user(user_uuid)
+            except ImportError:
+                raise HTTPException(status_code=503, detail="API service not available")
+
+        if not user_data:
             raise HTTPException(status_code=404, detail="User not found")
 
-        return UserDetail(**user)
+        # Normalize to snake_case
+        user_data = _ensure_snake_case(user_data)
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        # Enrich with anti-abuse data from DB
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                # Violation count for last 30 days
+                violations = await db_service.get_user_violations(
+                    user_uuid=user_uuid, days=30, limit=1000
+                )
+                user_data['violation_count_30d'] = len(violations)
+
+                # Active connections
+                active_conns = await db_service.get_user_active_connections(user_uuid)
+                user_data['active_connections'] = len(active_conns)
+
+                # Unique IPs in last 24 hours
+                unique_ips = await db_service.get_user_unique_ips_count(user_uuid, since_hours=24)
+                user_data['unique_ips_24h'] = unique_ips
+
+                # Trust score: 100 minus avg violation score (if any recent violations)
+                if violations:
+                    avg_score = sum(v.get('score', 0) for v in violations) / len(violations)
+                    user_data['trust_score'] = max(0, int(100 - avg_score))
+                else:
+                    user_data['trust_score'] = 100
+        except Exception as e:
+            logger.debug("Failed to enrich user with anti-abuse data: %s", e)
+
+        return UserDetail(**user_data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting user %s: %s", user_uuid, e)
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.post("/", response_model=UserDetail)
@@ -136,9 +206,7 @@ async def create_user(
     data: UserCreate,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Create a new user.
-    """
+    """Create a new user."""
     try:
         from src.services.api_client import api_client
 
@@ -149,7 +217,7 @@ async def create_user(
             hwid_device_limit=data.hwid_device_limit,
         )
 
-        return UserDetail(**user)
+        return UserDetail(**_ensure_snake_case(user))
 
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
@@ -163,16 +231,14 @@ async def update_user(
     data: UserUpdate,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Update user fields.
-    """
+    """Update user fields."""
     try:
         from src.services.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True)
         user = await api_client.update_user(user_uuid, **update_data)
 
-        return UserDetail(**user)
+        return UserDetail(**_ensure_snake_case(user))
 
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
@@ -185,9 +251,7 @@ async def delete_user(
     user_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Delete a user.
-    """
+    """Delete a user."""
     try:
         from src.services.api_client import api_client
 
@@ -205,9 +269,7 @@ async def enable_user(
     user_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Enable a disabled user.
-    """
+    """Enable a disabled user."""
     try:
         from src.services.api_client import api_client
 
@@ -225,9 +287,7 @@ async def disable_user(
     user_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Disable a user.
-    """
+    """Disable a user."""
     try:
         from src.services.api_client import api_client
 
@@ -245,9 +305,7 @@ async def reset_user_traffic(
     user_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Reset user's traffic usage.
-    """
+    """Reset user's traffic usage."""
     try:
         from src.services.api_client import api_client
 
@@ -265,9 +323,7 @@ async def revoke_user_subscription(
     user_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Revoke user's subscription (regenerate subscription UUID).
-    """
+    """Revoke user's subscription (regenerate subscription UUID)."""
     try:
         from src.services.api_client import api_client
 

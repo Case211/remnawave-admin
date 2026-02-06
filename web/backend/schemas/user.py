@@ -2,23 +2,24 @@
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class UserBase(BaseModel):
     """Base user fields."""
+    model_config = ConfigDict(extra='ignore')
 
     username: Optional[str] = None
     email: Optional[str] = None
     telegram_id: Optional[int] = None
-    status: str
+    status: str = 'active'
 
 
 class UserListItem(UserBase):
     """User item in list."""
 
     uuid: str
-    short_uuid: str
+    short_uuid: Optional[str] = None
     expire_at: Optional[datetime] = None
     traffic_limit_bytes: Optional[int] = None
     used_traffic_bytes: int = 0
