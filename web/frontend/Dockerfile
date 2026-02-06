@@ -16,8 +16,9 @@ RUN npm ci --no-audit --no-fund && \
     test -f node_modules/.bin/vite && echo "vite OK" || \
     (echo "ERROR: vite not found after npm ci" && ls node_modules/.bin/ && exit 1)
 
-# Copy source code and configs
+# Copy source code, public assets, and configs
 COPY src ./src
+COPY public ./public
 COPY index.html vite.config.ts tsconfig.json tsconfig.node.json postcss.config.js tailwind.config.js ./
 
 # Build (no VITE_* args needed — config is injected at runtime via config.js)
