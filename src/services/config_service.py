@@ -536,7 +536,7 @@ class DynamicConfigService:
             await self._ensure_default_configs()
 
             self._initialized = True
-            logger.info("Dynamic config service initialized with %d settings", len(self._cache))
+            logger.info("✅ Dynamic config: %d settings loaded", len(self._cache))
             return True
 
         except Exception as e:

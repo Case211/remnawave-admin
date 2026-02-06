@@ -118,29 +118,18 @@ class RemnawaveApiClient:
         """Выполняет GET запрос с retry для сетевых ошибок."""
         from src.utils.logger import log_api_call, log_api_error
         import time
-        
-        full_url = f"{self._client.base_url}{url}"
+
         last_exc = None
         start_time = time.time()
-        
+
         for attempt in range(max_retries):
-            attempt_start_time = time.time()
             try:
-                logger.debug("GET request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
                 response = await self._client.get(url, params=params)
-                attempt_duration_ms = (time.time() - attempt_start_time) * 1000
-                total_duration_ms = (time.time() - start_time) * 1000
+                duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
-                if attempt > 0:
-                    logger.info(
-                        "GET %s succeeded on attempt %d/%d | attempt_duration=%.2fms | total_duration=%.2fms",
-                        url, attempt + 1, max_retries, attempt_duration_ms, total_duration_ms
-                    )
-                log_api_call("GET", url, status_code=response.status_code, duration_ms=total_duration_ms)
+                log_api_call("GET", url, status_code=response.status_code, duration_ms=duration_ms)
                 return response.json()
             except HTTPStatusError as exc:
-                attempt_duration_ms = (time.time() - attempt_start_time) * 1000
-                total_duration_ms = (time.time() - start_time) * 1000
                 log_api_error("GET", url, exc, status_code=exc.response.status_code)
                 status = exc.response.status_code
                 if status in (401, 403):
@@ -151,75 +140,46 @@ class RemnawaveApiClient:
                     raise RateLimitError(f"Rate limit exceeded on {url}") from exc
                 if status >= 500:
                     raise ServerError(f"Server error {status} on {url}", status_code=status) from exc
-                # 308 Permanent Redirect обычно означает HTTP -> HTTPS
-                if status == 308:
-                    https_url = full_url.replace("http://", "https://")
-                    logger.error(
-                        "API returned 308 Permanent Redirect. "
-                        "Please use HTTPS in API_BASE_URL. "
-                        "Current: %s -> Should be: %s",
-                        full_url, https_url
-                    )
-                logger.warning("API error %s on GET %s: %s", status, full_url, exc.response.text)
                 raise ApiClientError(f"API error {status}", code=f"ERR_API_{status}") from exc
             except httpx.ReadTimeout as exc:
                 last_exc = exc
-                attempt_duration_ms = (time.time() - attempt_start_time) * 1000
-                total_duration_ms = (time.time() - start_time) * 1000
-                error_type = type(exc).__name__
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
-                    logger.warning(
-                        "Timeout on GET %s: %s | attempt_duration=%.2fms | total_duration=%.2fms | retrying in %.1fs (attempt %d/%d)",
-                        full_url, exc, attempt_duration_ms, total_duration_ms, delay, attempt + 1, max_retries
-                    )
+                    logger.warning("⏳ Timeout GET %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
                     await asyncio.sleep(delay)
                 else:
-                    logger.error(
-                        "Timeout on GET %s after %d attempts | total_duration=%.2fms",
-                        full_url, max_retries, total_duration_ms
-                    )
+                    logger.error("❌ Timeout GET %s after %d attempts", url, max_retries)
                     raise TimeoutError(f"Request timeout on {url}") from exc
             except (httpx.RemoteProtocolError, httpx.ConnectError) as exc:
                 last_exc = exc
-                error_type = type(exc).__name__
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
-                    logger.warning(
-                        "Network error on GET %s: %s (%s), retrying in %.1fs (attempt %d/%d)",
-                        full_url, exc, error_type, delay, attempt + 1, max_retries
-                    )
+                    logger.warning("⏳ Network error GET %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("Network error on GET %s after %d attempts: %s", full_url, max_retries, exc)
+                    logger.error("❌ Network error GET %s after %d attempts", url, max_retries)
                     raise NetworkError(f"Connection failed to {url}") from exc
             except httpx.HTTPError as exc:
-                error_type = type(exc).__name__
-                logger.warning("HTTP client error on GET %s: %s (%s)", full_url, exc, error_type)
-                raise ApiClientError(f"HTTP error: {error_type}", code="ERR_HTTP_001") from exc
-        
-        # Если все попытки исчерпаны, выбрасываем ошибку сети
+                raise ApiClientError(f"HTTP error: {type(exc).__name__}", code="ERR_HTTP_001") from exc
+
         raise NetworkError(f"Failed to connect to {url} after {max_retries} attempts") from last_exc
 
     async def _post(self, url: str, json: dict | None = None, max_retries: int = 3) -> dict:
         """Выполняет POST запрос с retry для сетевых ошибок."""
         from src.utils.logger import log_api_call, log_api_error
         import time
-        
-        full_url = f"{self._client.base_url}{url}"
+
         last_exc = None
         start_time = time.time()
-        
+
         for attempt in range(max_retries):
             try:
-                logger.debug("POST request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
                 response = await self._client.post(url, json=json)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("POST", url, status_code=response.status_code, duration_ms=duration_ms)
                 return response.json()
             except HTTPStatusError as exc:
-                duration_ms = (time.time() - start_time) * 1000
                 log_api_error("POST", url, exc, status_code=exc.response.status_code)
                 status = exc.response.status_code
                 if status in (401, 403):
@@ -229,7 +189,6 @@ class RemnawaveApiClient:
                 if status == 429:
                     raise RateLimitError(f"Rate limit exceeded on {url}") from exc
                 if status == 400 or status == 422:
-                    # Пробуем извлечь информацию об ошибке валидации из ответа
                     try:
                         error_data = exc.response.json()
                         error_msg = error_data.get("message", str(exc))
@@ -239,61 +198,46 @@ class RemnawaveApiClient:
                         raise ValidationError(f"Validation error on {url}") from exc
                 if status >= 500:
                     raise ServerError(f"Server error {status} on {url}", status_code=status) from exc
-                logger.warning("API error %s on POST %s: %s", status, full_url, exc.response.text)
                 raise ApiClientError(f"API error {status}", code=f"ERR_API_{status}") from exc
             except httpx.ReadTimeout as exc:
                 last_exc = exc
-                error_type = type(exc).__name__
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
-                    logger.warning(
-                        "Timeout on POST %s: %s, retrying in %.1fs (attempt %d/%d)",
-                        full_url, exc, delay, attempt + 1, max_retries
-                    )
+                    logger.warning("⏳ Timeout POST %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("Timeout on POST %s after %d attempts", full_url, max_retries)
+                    logger.error("❌ Timeout POST %s after %d attempts", url, max_retries)
                     raise TimeoutError(f"Request timeout on {url}") from exc
             except (httpx.RemoteProtocolError, httpx.ConnectError) as exc:
                 last_exc = exc
-                error_type = type(exc).__name__
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
-                    logger.warning(
-                        "Network error on POST %s: %s (%s), retrying in %.1fs (attempt %d/%d)",
-                        full_url, exc, error_type, delay, attempt + 1, max_retries
-                    )
+                    logger.warning("⏳ Network error POST %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("Network error on POST %s after %d attempts: %s", full_url, max_retries, exc)
+                    logger.error("❌ Network error POST %s after %d attempts", url, max_retries)
                     raise NetworkError(f"Connection failed to {url}") from exc
             except httpx.HTTPError as exc:
-                error_type = type(exc).__name__
-                logger.warning("HTTP client error on POST %s: %s (%s)", full_url, exc, error_type)
-                raise ApiClientError(f"HTTP error: {error_type}", code="ERR_HTTP_001") from exc
-        
-        # Если все попытки исчерпаны, выбрасываем ошибку сети
+                raise ApiClientError(f"HTTP error: {type(exc).__name__}", code="ERR_HTTP_001") from exc
+
         raise NetworkError(f"Failed to connect to {url} after {max_retries} attempts") from last_exc
 
     async def _patch(self, url: str, json: dict | None = None, max_retries: int = 3) -> dict:
         """Выполняет PATCH запрос с retry для сетевых ошибок."""
         from src.utils.logger import log_api_call, log_api_error
         import time
-        
-        full_url = f"{self._client.base_url}{url}"
+
         last_exc = None
         start_time = time.time()
-        
+
         for attempt in range(max_retries):
             try:
-                logger.debug("PATCH request to %s (attempt %d/%d)", full_url, attempt + 1, max_retries)
                 response = await self._client.patch(url, json=json)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("PATCH", url, status_code=response.status_code, duration_ms=duration_ms)
                 return response.json()
             except HTTPStatusError as exc:
-                duration_ms = (time.time() - start_time) * 1000
                 log_api_error("PATCH", url, exc, status_code=exc.response.status_code)
                 status = exc.response.status_code
                 if status in (401, 403):
@@ -303,7 +247,6 @@ class RemnawaveApiClient:
                 if status == 429:
                     raise RateLimitError(f"Rate limit exceeded on {url}") from exc
                 if status == 400 or status == 422:
-                    # Пробуем извлечь информацию об ошибке валидации из ответа
                     try:
                         error_data = exc.response.json()
                         error_msg = error_data.get("message", str(exc))
@@ -313,40 +256,28 @@ class RemnawaveApiClient:
                         raise ValidationError(f"Validation error on {url}") from exc
                 if status >= 500:
                     raise ServerError(f"Server error {status} on {url}", status_code=status) from exc
-                logger.warning("API error %s on PATCH %s: %s", status, full_url, exc.response.text)
                 raise ApiClientError(f"API error {status}", code=f"ERR_API_{status}") from exc
             except httpx.ReadTimeout as exc:
                 last_exc = exc
-                error_type = type(exc).__name__
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
-                    logger.warning(
-                        "Timeout on PATCH %s: %s, retrying in %.1fs (attempt %d/%d)",
-                        full_url, exc, delay, attempt + 1, max_retries
-                    )
+                    logger.warning("⏳ Timeout PATCH %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("Timeout on PATCH %s after %d attempts", full_url, max_retries)
+                    logger.error("❌ Timeout PATCH %s after %d attempts", url, max_retries)
                     raise TimeoutError(f"Request timeout on {url}") from exc
             except (httpx.RemoteProtocolError, httpx.ConnectError) as exc:
                 last_exc = exc
-                error_type = type(exc).__name__
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
-                    logger.warning(
-                        "Network error on PATCH %s: %s (%s), retrying in %.1fs (attempt %d/%d)",
-                        full_url, exc, error_type, delay, attempt + 1, max_retries
-                    )
+                    logger.warning("⏳ Network error PATCH %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("Network error on PATCH %s after %d attempts: %s", full_url, max_retries, exc)
+                    logger.error("❌ Network error PATCH %s after %d attempts", url, max_retries)
                     raise NetworkError(f"Connection failed to {url}") from exc
             except httpx.HTTPError as exc:
-                error_type = type(exc).__name__
-                logger.warning("HTTP client error on PATCH %s: %s (%s)", full_url, exc, error_type)
-                raise ApiClientError(f"HTTP error: {error_type}", code="ERR_HTTP_001") from exc
-        
-        # Если все попытки исчерпаны, выбрасываем ошибку сети
+                raise ApiClientError(f"HTTP error: {type(exc).__name__}", code="ERR_HTTP_001") from exc
+
         raise NetworkError(f"Failed to connect to {url} after {max_retries} attempts") from last_exc
 
     # --- Settings ---
@@ -412,30 +343,19 @@ class RemnawaveApiClient:
         """Выполняет GET запрос с кастомным таймаутом и retry для сетевых ошибок."""
         from src.utils.logger import log_api_call, log_api_error
         import time
-        
-        full_url = f"{self._client.base_url}{url}"
+
         last_exc = None
         start_time = time.time()
         custom_timeout = httpx.Timeout(timeout, connect=15.0, read=timeout, write=15.0, pool=10.0)
-        
+
         for attempt in range(max_retries):
-            attempt_start_time = time.time()
             try:
-                logger.debug("GET request to %s with timeout %.1fs (attempt %d/%d)", full_url, timeout, attempt + 1, max_retries)
                 response = await self._client.get(url, timeout=custom_timeout)
-                attempt_duration_ms = (time.time() - attempt_start_time) * 1000
-                total_duration_ms = (time.time() - start_time) * 1000
+                duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
-                if attempt > 0:
-                    logger.info(
-                        "GET %s succeeded on attempt %d/%d | attempt_duration=%.2fms | total_duration=%.2fms",
-                        url, attempt + 1, max_retries, attempt_duration_ms, total_duration_ms
-                    )
-                log_api_call("GET", url, status_code=response.status_code, duration_ms=total_duration_ms)
+                log_api_call("GET", url, status_code=response.status_code, duration_ms=duration_ms)
                 return response.json()
             except HTTPStatusError as exc:
-                attempt_duration_ms = (time.time() - attempt_start_time) * 1000
-                total_duration_ms = (time.time() - start_time) * 1000
                 log_api_error("GET", url, exc, status_code=exc.response.status_code)
                 status = exc.response.status_code
                 if status in (401, 403):
@@ -446,44 +366,28 @@ class RemnawaveApiClient:
                     raise RateLimitError(f"Rate limit exceeded on {url}") from exc
                 if status >= 500:
                     raise ServerError(f"Server error {status} on {url}", status_code=status) from exc
-                logger.warning("API error %s on GET %s: %s", status, full_url, exc.response.text)
                 raise ApiClientError(f"API error {status}", code=f"ERR_API_{status}") from exc
             except httpx.ReadTimeout as exc:
                 last_exc = exc
-                attempt_duration_ms = (time.time() - attempt_start_time) * 1000
-                total_duration_ms = (time.time() - start_time) * 1000
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
-                    logger.warning(
-                        "Timeout on GET %s: %s | attempt_duration=%.2fms | total_duration=%.2fms | retrying in %.1fs (attempt %d/%d)",
-                        full_url, exc, attempt_duration_ms, total_duration_ms, delay, attempt + 1, max_retries
-                    )
+                    logger.warning("⏳ Timeout GET %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
                     await asyncio.sleep(delay)
                 else:
-                    logger.error(
-                        "Timeout on GET %s after %d attempts | total_duration=%.2fms",
-                        full_url, max_retries, total_duration_ms
-                    )
+                    logger.error("❌ Timeout GET %s after %d attempts", url, max_retries)
                     raise TimeoutError(f"Request timeout on {url}") from exc
             except (httpx.RemoteProtocolError, httpx.ConnectError) as exc:
                 last_exc = exc
-                error_type = type(exc).__name__
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
-                    logger.warning(
-                        "Network error on GET %s: %s (%s), retrying in %.1fs (attempt %d/%d)",
-                        full_url, exc, error_type, delay, attempt + 1, max_retries
-                    )
+                    logger.warning("⏳ Network error GET %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("Network error on GET %s after %d attempts: %s", full_url, max_retries, exc)
+                    logger.error("❌ Network error GET %s after %d attempts", url, max_retries)
                     raise NetworkError(f"Connection failed to {url}") from exc
             except httpx.HTTPError as exc:
-                error_type = type(exc).__name__
-                logger.warning("HTTP client error on GET %s: %s (%s)", full_url, exc, error_type)
-                raise ApiClientError(f"HTTP error: {error_type}", code="ERR_HTTP_001") from exc
-        
-        # Если все попытки исчерпаны, выбрасываем ошибку сети
+                raise ApiClientError(f"HTTP error: {type(exc).__name__}", code="ERR_HTTP_001") from exc
+
         raise NetworkError(f"Failed to connect to {url} after {max_retries} attempts") from last_exc
 
     async def create_user(

@@ -50,12 +50,10 @@ class AdminMiddleware(BaseMiddleware):
         
         # Проверяем, является ли пользователь администратором
         if not is_admin(user_id):
-            settings = get_settings()
             logger.warning(
-                "🚫 Unauthorized access attempt user_id=%s event_type=%s allowed_admins=%s",
+                "🚫 Unauthorized: user_id=%s event=%s",
                 user_id,
                 type(event).__name__,
-                settings.allowed_admins,
             )
             # Для CallbackQuery отправляем ответ с ошибкой
             if isinstance(event, CallbackQuery):

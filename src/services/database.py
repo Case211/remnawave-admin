@@ -180,7 +180,7 @@ class DatabaseService:
                 return True
 
             try:
-                logger.info("Connecting to PostgreSQL database...")
+                logger.debug("Connecting to PostgreSQL...")
                 self._pool = await asyncpg.create_pool(
                     dsn=database_url,
                     min_size=min_size,
@@ -192,7 +192,7 @@ class DatabaseService:
                 await self._init_schema()
                 self._initialized = True
                 
-                logger.info("✅ Database connection established successfully")
+                logger.info("✅ Database connection established")
                 return True
                 
             except Exception as e:
@@ -204,11 +204,10 @@ class DatabaseService:
         """Close database connection pool."""
         async with self._lock:
             if self._pool is not None:
-                logger.info("Closing database connection pool...")
                 await self._pool.close()
                 self._pool = None
                 self._initialized = False
-                logger.info("Database connection closed")
+                logger.info("🗄️ Database disconnected")
     
     async def _init_schema(self) -> None:
         """Initialize database schema (create tables if not exist)."""
@@ -217,7 +216,7 @@ class DatabaseService:
         
         async with self._pool.acquire() as conn:
             await conn.execute(SCHEMA_SQL)
-            logger.info("Database schema initialized")
+            logger.debug("Database schema initialized")
     
     @asynccontextmanager
     async def acquire(self):

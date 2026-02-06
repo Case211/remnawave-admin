@@ -220,17 +220,10 @@ async def remnawave_webhook(request: Request):
     try:
         # Парсим JSON из прочитанного тела
         data = json.loads(body.decode('utf-8'))
-        logger.info("Received webhook from Remnawave panel: %s", data)
-        
-        # Определяем тип события (официальные события из events.ts)
         event = data.get("event", "")
         timestamp = data.get("timestamp")
-        
-        logger.info(
-            "Processing webhook event=%s timestamp=%s",
-            event,
-            timestamp
-        )
+
+        logger.info("📩 Webhook: %s", event)
         
         # Получаем данные события
         event_data = data.get("data", {})
@@ -336,13 +329,7 @@ async def _handle_user_event(bot: Bot, event: str, event_data: dict, diff_result
         old_user_info = diff_result.get("old_data")
         changes = diff_result.get("changes")
     
-    logger.info(
-        "Sending user notification event=%s action=%s user_uuid=%s changes=%s",
-        event,
-        action,
-        user_uuid,
-        len(changes) if changes else 0
-    )
+    logger.debug("User notification: event=%s action=%s uuid=%s", event, action, user_uuid)
     
     await send_user_notification(
         bot=bot,
@@ -369,11 +356,7 @@ async def _handle_node_event(bot: Bot, event: str, event_data: dict, diff_result
         old_node_data = diff_result.get("old_data")
         changes = diff_result.get("changes")
     
-    logger.info(
-        "Sending node notification event=%s changes=%s",
-        event,
-        len(changes) if changes else 0
-    )
+    logger.debug("Node notification: event=%s", event)
     
     await send_node_notification(
         bot=bot,
@@ -386,7 +369,7 @@ async def _handle_node_event(bot: Bot, event: str, event_data: dict, diff_result
 
 async def _handle_service_event(bot: Bot, event: str, event_data: dict) -> None:
     """Обрабатывает события сервиса."""
-    logger.info("Sending service notification event=%s", event)
+    logger.debug("Service notification: event=%s", event)
     
     await send_service_notification(
         bot=bot,
@@ -397,7 +380,7 @@ async def _handle_service_event(bot: Bot, event: str, event_data: dict) -> None:
 
 async def _handle_hwid_event(bot: Bot, event: str, event_data: dict) -> None:
     """Обрабатывает события HWID устройств."""
-    logger.info("Sending HWID notification event=%s", event)
+    logger.debug("HWID notification: event=%s", event)
     
     # Данные об устройствах уже синхронизируются через sync_service в users.raw_data
     # При следующей синхронизации пользователя количество устройств будет обновлено
@@ -411,7 +394,7 @@ async def _handle_hwid_event(bot: Bot, event: str, event_data: dict) -> None:
 
 async def _handle_error_event(bot: Bot, event: str, event_data: dict) -> None:
     """Обрабатывает события ошибок."""
-    logger.info("Sending error notification event=%s", event)
+    logger.debug("Error notification: event=%s", event)
     
     await send_error_notification(
         bot=bot,
@@ -422,7 +405,7 @@ async def _handle_error_event(bot: Bot, event: str, event_data: dict) -> None:
 
 async def _handle_crm_event(bot: Bot, event: str, event_data: dict) -> None:
     """Обрабатывает события CRM (биллинг инфраструктуры)."""
-    logger.info("Sending CRM notification event=%s", event)
+    logger.debug("CRM notification: event=%s", event)
     
     await send_crm_notification(
         bot=bot,

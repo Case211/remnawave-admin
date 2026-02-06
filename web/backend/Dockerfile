@@ -28,5 +28,5 @@ ENV PYTHONUNBUFFERED=1
 # Expose port
 EXPOSE 8081
 
-# Run the application
-CMD ["python", "-m", "uvicorn", "web.backend.main:app", "--host", "0.0.0.0", "--port", "8081"]
+# Run the application (--no-access-log to avoid duplicate logging, format configured in main.py)
+CMD ["python", "-m", "uvicorn", "web.backend.main:app", "--host", "0.0.0.0", "--port", "8081", "--no-access-log", "--log-level", "warning"]

@@ -4,6 +4,7 @@ Remnawave Admin Web Panel - FastAPI Application.
 This is the main entry point for the web panel backend.
 It provides REST API and WebSocket endpoints for the admin dashboard.
 """
+import logging
 import os
 import sys
 from pathlib import Path
@@ -21,15 +22,28 @@ from web.backend.core.config import get_web_settings
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 
 
+# Настраиваем логирование в едином формате
+_LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_LOG_DATEFMT = "%H:%M:%S"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format=_LOG_FORMAT,
+    datefmt=_LOG_DATEFMT,
+)
+# Подавляем шумные логгеры
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("asyncpg").setLevel(logging.WARNING)
+
+logger = logging.getLogger("web")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    # Startup
     settings = get_web_settings()
-    print(f"🚀 Starting Remnawave Admin Web API on {settings.host}:{settings.port}")
-    print(f"📝 Debug mode: {settings.debug}")
-    print(f"🔗 CORS origins: {settings.cors_origins}")
-    print(f"👥 Admins raw: {repr(settings.admins_raw)}, parsed: {settings.admins}")
+    logger.info("🚀 Web API starting on %s:%s", settings.host, settings.port)
 
     # Connect to database if configured
     database_url = os.environ.get("DATABASE_URL") or getattr(settings, "database_url", None)
@@ -38,15 +52,13 @@ async def lifespan(app: FastAPI):
             from src.services.database import db_service
             connected = await db_service.connect(database_url=database_url)
             if connected:
-                print("✅ Database connection established")
+                logger.info("✅ Database connected")
             else:
-                print("⚠️ Database connection failed, running without database")
+                logger.warning("⚠️ Database connection failed")
         except Exception as e:
-            print(f"⚠️ Database connection error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("⚠️ Database error: %s", e)
     else:
-        print("ℹ️ DATABASE_URL not set, running without database")
+        logger.info("🗄️ No DATABASE_URL, running without database")
 
     yield
 
@@ -55,7 +67,6 @@ async def lifespan(app: FastAPI):
         from src.services.database import db_service
         if db_service.is_connected:
             await db_service.disconnect()
-            print("🔌 Database connection closed")
     except Exception:
         pass
     try:
@@ -63,7 +74,7 @@ async def lifespan(app: FastAPI):
         await close_client()
     except Exception:
         pass
-    print("👋 Shutting down Remnawave Admin Web API")
+    logger.info("👋 Web API stopped")
 
 
 def create_app() -> FastAPI:

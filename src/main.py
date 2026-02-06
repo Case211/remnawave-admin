@@ -1,6 +1,5 @@
 import asyncio
 import sys
-from contextlib import asynccontextmanager
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -63,15 +62,13 @@ async def run_migrations() -> bool:
                 script = ScriptDirectory.from_config(alembic_cfg)
                 head_rev = script.get_current_head()
                 
-                logger.info("📊 Database revision: current=%s, head=%s", current_rev or "None", head_rev)
-                
-                # Если уже на head — пропускаем
+                logger.info("📊 DB revision: current=%s, head=%s", current_rev or "None", head_rev)
+
                 if current_rev == head_rev:
-                    logger.info("✅ Database is up to date, no migrations needed")
+                    logger.info("✅ Database up to date")
                     return True
-                
-                # Запускаем миграции
-                logger.info("🔄 Running database migrations...")
+
+                logger.info("🔄 Running migrations...")
                 # Используем наш engine для миграций, чтобы контролировать соединения
                 connection = engine.connect()
                 try:
@@ -88,7 +85,7 @@ async def run_migrations() -> bool:
                 with engine.connect() as conn:
                     context = MigrationContext.configure(conn)
                     new_rev = context.get_current_revision()
-                    logger.info("✅ Migrations completed: %s → %s", current_rev or "None", new_rev)
+                    logger.info("✅ Migrated: %s → %s", current_rev or "None", new_rev)
                 
                 return True
                 
@@ -100,12 +97,10 @@ async def run_migrations() -> bool:
         # Запускаем в thread pool чтобы не блокировать event loop
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, _run_migrations_sync)
-        logger.info("🔄 Migration function completed, result: %s", result)
         return result
-        
+
     except Exception as e:
-        logger.error("❌ Failed to run database migrations: %s", e)
-        logger.warning("⚠️ Bot will continue without database migrations. You may need to run them manually.")
+        logger.error("❌ Migration failed: %s", e)
         return False
 
 
@@ -114,129 +109,78 @@ async def check_api_connection() -> bool:
     from src.config import get_settings
     settings = get_settings()
     max_attempts = 5
-    delay = 3  # секунды между попытками
-    
+    delay = 3
+
     api_url = str(settings.api_base_url).rstrip("/")
-    logger.info("🔍 Checking API connection to: %s", api_url)
-    
+    logger.info("🔗 Connecting to API: %s", api_url)
+
     for attempt in range(1, max_attempts + 1):
         try:
-            logger.info("Attempting connection... (attempt %d/%d)", attempt, max_attempts)
             await api_client.get_health()
-            logger.info("✅ API connection successful")
+            logger.info("✅ API connection OK")
             return True
         except Exception as exc:
-            error_msg = str(exc)
-            error_type = type(exc).__name__
             logger.warning(
-                "❌ API connection failed (attempt %d/%d) [%s]: %s",
-                attempt, max_attempts, error_type, error_msg
+                "❌ API connection failed (%d/%d): %s",
+                attempt, max_attempts, exc
             )
             if attempt < max_attempts:
-                logger.info("⏳ Retrying in %d seconds...", delay)
                 await asyncio.sleep(delay)
             else:
-                logger.error("❌ All connection attempts failed")
                 logger.error(
-                    "💡 Troubleshooting tips:\n"
-                    "  1. Check that API_BASE_URL is correct (should be http://remnawave:3000 for Docker)\n"
-                    "  2. Verify that both containers are in the same Docker network (remnawave-network)\n"
-                    "  3. Ensure the API container (remnawave) is running and healthy\n"
-                    "  4. Check API_TOKEN is set correctly in .env file"
+                    "❌ Cannot connect to API. Check API_BASE_URL and API_TOKEN"
                 )
                 return False
-    
+
     return False
 
 
 async def run_webhook_server(bot: Bot, port: int) -> None:
     """Запускает webhook сервер в фоновом режиме."""
-    # Сохраняем бот в состоянии приложения для доступа из webhook handlers и collector API
     webhook_app.state.bot = bot
-    
-    # Настраиваем логирование uvicorn для подавления предупреждений о некорректных запросах
-    import logging
-    uvicorn_logger = logging.getLogger("uvicorn.error")
-    
-    # Создаем фильтр для подавления предупреждений "Invalid HTTP request"
-    class InvalidRequestFilter(logging.Filter):
+
+    import logging as _logging
+
+    # Фильтр для подавления шумных логов uvicorn
+    class _UvicornNoiseFilter(_logging.Filter):
         def filter(self, record):
-            # Подавляем предупреждения о некорректных HTTP-запросах
-            if "Invalid HTTP request" in str(record.getMessage()):
+            msg = str(record.getMessage())
+            if "Invalid HTTP request" in msg:
+                return False
+            if "/api/v1/connections/" in msg:
                 return False
             return True
-    
-    # Фильтр для подавления access логов Collector API (слишком частые)
-    class CollectorAPIAccessFilter(logging.Filter):
-        def filter(self, record):
-            message = str(record.getMessage())
-            # Подавляем access логи для Collector API
-            if "/api/v1/connections/" in message:
-                return False
-            return True
-    
-    # Применяем фильтры к логгерам uvicorn
-    invalid_request_filter = InvalidRequestFilter()
-    uvicorn_logger.addFilter(invalid_request_filter)
-    
-    # Применяем фильтр к access логгеру
-    access_logger = logging.getLogger("uvicorn.access")
-    collector_api_filter = CollectorAPIAccessFilter()
-    access_logger.addFilter(collector_api_filter)
-    
+
+    _filter = _UvicornNoiseFilter()
+    _logging.getLogger("uvicorn.error").addFilter(_filter)
+    _logging.getLogger("uvicorn.access").addFilter(_filter)
+
     config = uvicorn.Config(
         app=webhook_app,
         host="0.0.0.0",
         port=port,
-        log_level="info",
-        access_log=True,
-        # Отключаем логирование некорректных запросов на уровне uvicorn
-        log_config=None,  # Используем нашу собственную конфигурацию логирования
+        log_level="warning",
+        access_log=False,
+        log_config=None,
     )
     server = uvicorn.Server(config)
-    
-    logger.info("🌐 Starting webhook server on port %d", port)
     await server.serve()
 
 
 async def main() -> None:
-    import os
-    # Логируем сырое значение переменной окружения для отладки
-    raw_admins_env = os.getenv("ADMINS", "NOT_SET")
-    logger.info("🔍 DEBUG: Raw ADMINS env var: %s", repr(raw_admins_env))
-    
     settings = get_settings()
-    
-    # Логируем загруженных администраторов для отладки
-    logger.info(
-        "🔐 Loaded admin configuration: admins=%s allowed_admins=%s",
-        settings.admins,
-        settings.allowed_admins,
-    )
-    if not settings.allowed_admins:
-        logger.warning(
-            "⚠️ WARNING: No administrators configured! "
-            "Set ADMINS environment variable with comma-separated user IDs (e.g., ADMINS=123456789,987654321)"
-        )
-    
-    # Логируем настройки уведомлений
-    raw_chat_id = os.getenv("NOTIFICATIONS_CHAT_ID", "NOT_SET")
-    raw_topic_id = os.getenv("NOTIFICATIONS_TOPIC_ID", "NOT_SET")
-    logger.info(
-        "📢 Notifications config: raw_chat_id=%s raw_topic_id=%s parsed_chat_id=%s parsed_topic_id=%s",
-        repr(raw_chat_id),
-        repr(raw_topic_id),
-        settings.notifications_chat_id,
-        settings.notifications_topic_id,
-    )
-    if settings.notifications_chat_id:
-        logger.info(
-            "📢 Notifications enabled: chat_id=%s topic_id=%s",
-            settings.notifications_chat_id,
-            settings.notifications_topic_id,
-        )
+
+    # Конфигурация администраторов
+    if settings.allowed_admins:
+        logger.info("🔐 Admins: %s", settings.allowed_admins)
     else:
-        logger.warning("📢 Notifications disabled: NOTIFICATIONS_CHAT_ID not set or invalid")
+        logger.warning("⚠️ No administrators configured! Set ADMINS env var")
+
+    # Уведомления
+    if settings.notifications_chat_id:
+        logger.info("📢 Notifications: chat_id=%s", settings.notifications_chat_id)
+    else:
+        logger.info("📢 Notifications disabled")
 
     # Проверяем подключение к API перед стартом
     if not await check_api_connection():
@@ -250,27 +194,15 @@ async def main() -> None:
     # Подключаемся к базе данных (если настроена)
     db_connected = False
     if settings.database_enabled:
-        logger.info("🗄️ Connecting to PostgreSQL database...")
-        
-        # Сначала запускаем автоматические миграции
-        logger.info("🔄 Starting database migrations check...")
-        migrations_ok = await run_migrations()
-        if not migrations_ok:
-            logger.warning("⚠️ Migrations failed, but continuing...")
-        else:
-            logger.info("✅ Migrations check completed successfully, continuing bot startup...")
-        
-        # Затем подключаемся через asyncpg для работы бота
+        logger.info("🗄️ Connecting to PostgreSQL...")
+        await run_migrations()
         db_connected = await db_service.connect()
         if db_connected:
-            logger.info("✅ Database connection established")
+            logger.info("✅ Database connected")
         else:
-            logger.warning(
-                "⚠️ Database connection failed. Bot will work without local caching. "
-                "Check DATABASE_URL in your .env file."
-            )
+            logger.warning("⚠️ Database connection failed, running without cache")
     else:
-        logger.info("🗄️ Database not configured (DATABASE_URL not set), running without local cache")
+        logger.info("🗄️ Database not configured, running without cache")
 
     # parse_mode is left as default (None) to avoid HTML parsing issues with plain text translations
     bot = Bot(token=settings.bot_token)
@@ -290,79 +222,53 @@ async def main() -> None:
     # Запускаем webhook сервер в фоне, если настроен порт
     webhook_task = None
     if settings.webhook_port:
-        logger.info(
-            "🌐 Webhook server will be started on port %d (WEBHOOK_SECRET=%s)",
-            settings.webhook_port,
-            "configured" if settings.webhook_secret else "not set (insecure!)"
-        )
+        logger.info("🌐 Webhook on port %d", settings.webhook_port)
         webhook_task = asyncio.create_task(run_webhook_server(bot, settings.webhook_port))
-    else:
-        logger.info("🌐 Webhook server disabled (WEBHOOK_PORT not set)")
 
     # Запускаем health checker для панели
     health_checker = PanelHealthChecker(bot, check_interval=60)
     health_checker_task = asyncio.create_task(health_checker.start())
-    
-    # Сохраняем health checker в состоянии диспетчера для доступа из обработчиков
     dp["health_checker"] = health_checker
-    
-    # Инициализируем сервис динамической конфигурации (если БД подключена)
+
+    # Инициализируем сервисы (если БД подключена)
     if db_connected:
-        logger.info("⚙️ Initializing dynamic config service...")
         config_initialized = await config_service.initialize()
         if config_initialized:
-            logger.info("✅ Dynamic config service initialized")
-        else:
-            logger.warning("⚠️ Dynamic config service initialization failed, using .env only")
+            logger.info("✅ Dynamic config initialized")
 
-    # Запускаем сервис синхронизации (если БД подключена)
-    if db_connected:
-        logger.info("🔄 Starting data sync service...")
+        logger.info("🔄 Starting sync service...")
         await sync_service.start()
 
-    # Запускаем планировщик отчётов (если БД подключена)
-    report_scheduler = None
-    if db_connected:
-        logger.info("📊 Starting report scheduler...")
         report_scheduler = init_report_scheduler(bot)
         await report_scheduler.start()
+        logger.info("📊 Report scheduler started")
+    else:
+        report_scheduler = None
 
-    logger.info("🤖 Starting bot")
+    logger.info("🤖 Bot started")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
-        # Останавливаем планировщик отчётов
+        logger.info("Shutting down...")
         if report_scheduler and report_scheduler.is_running:
-            logger.info("📊 Stopping report scheduler")
             await report_scheduler.stop()
-
-        # Останавливаем sync service
         if sync_service.is_running:
-            logger.info("🔄 Stopping sync service")
             await sync_service.stop()
-
-        # Останавливаем health checker
-        logger.info("🏥 Stopping panel health checker")
         health_checker.stop()
         health_checker_task.cancel()
         try:
             await health_checker_task
         except asyncio.CancelledError:
             pass
-
-        # Останавливаем webhook сервер при остановке бота
         if webhook_task:
-            logger.info("🌐 Stopping webhook server")
             webhook_task.cancel()
             try:
                 await webhook_task
             except asyncio.CancelledError:
                 pass
-
-        # Закрываем подключение к базе данных
         if db_service.is_connected:
-            logger.info("🗄️ Closing database connection")
             await db_service.disconnect()
+        logger.info("👋 Bot stopped")
 
 
 if __name__ == "__main__":
