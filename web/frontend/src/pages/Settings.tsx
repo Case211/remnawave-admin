@@ -4,19 +4,19 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
-          <p className="text-gray-400 mt-1">Configure your admin panel</p>
+          <h1 className="page-header-title">Settings</h1>
+          <p className="text-gray-400 mt-1 text-sm md:text-base">Configure your admin panel</p>
         </div>
-        <div className="flex gap-2">
+        <div className="page-header-actions">
           <button className="btn-secondary">
-            <HiRefresh className="w-5 h-5 mr-2" />
-            Reset
+            <HiRefresh className="w-5 h-5 sm:mr-2" />
+            <span className="hidden sm:inline">Reset</span>
           </button>
           <button className="btn-primary">
-            <HiSave className="w-5 h-5 mr-2" />
-            Save Changes
+            <HiSave className="w-5 h-5 sm:mr-2" />
+            <span className="hidden sm:inline">Save Changes</span>
           </button>
         </div>
       </div>

@@ -28,6 +28,13 @@
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-dark-500;
   }
+
+  /* Mobile: use thin scrollbars */
+  @media (max-width: 768px) {
+    ::-webkit-scrollbar {
+      @apply w-1 h-1;
+    }
+  }
 }
 
 /* Component styles */
@@ -104,11 +111,44 @@
   .table tbody tr {
     @apply hover:bg-dark-800/50 transition-colors;
   }
+
+  /* Mobile table - smaller padding */
+  @media (max-width: 768px) {
+    .table th {
+      @apply px-3 py-2 text-[10px];
+    }
+
+    .table td {
+      @apply px-3 py-2;
+    }
+  }
+
+  /* Page header - responsive */
+  .page-header {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .page-header-title {
+    @apply text-xl md:text-2xl font-bold text-white;
+  }
+
+  .page-header-actions {
+    @apply flex items-center gap-2 flex-shrink-0;
+  }
 }
 
 /* Utilities */
 @layer utilities {
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-primary-600;
+  }
+
+  /* Safe area insets for notch devices */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
   }
 }

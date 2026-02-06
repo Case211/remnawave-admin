@@ -119,9 +119,9 @@ function NodeCard({
           </div>
           <div>
             <h3 className="font-semibold text-white">{node.name}</h3>
-            <p className="text-sm text-gray-500 flex items-center gap-1">
-              <HiGlobe className="w-3.5 h-3.5" />
-              {node.address}:{node.port}
+            <p className="text-sm text-gray-500 flex items-center gap-1 truncate">
+              <HiGlobe className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{node.address}:{node.port}</span>
             </p>
           </div>
         </div>
@@ -201,29 +201,29 @@ function NodeCard({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <div className="text-center p-3 bg-dark-900/50 rounded-lg">
+      <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4">
+        <div className="text-center p-2 md:p-3 bg-dark-900/50 rounded-lg">
           <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
-            <HiUsers className="w-4 h-4" />
-            <span className="text-xs">Онлайн</span>
+            <HiUsers className="w-3.5 h-3.5" />
+            <span className="text-[10px] md:text-xs">Онлайн</span>
           </div>
-          <p className="text-lg font-semibold text-white">{node.users_online}</p>
+          <p className="text-base md:text-lg font-semibold text-white">{node.users_online}</p>
         </div>
-        <div className="text-center p-3 bg-dark-900/50 rounded-lg">
+        <div className="text-center p-2 md:p-3 bg-dark-900/50 rounded-lg">
           <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
-            <HiChartBar className="w-4 h-4" />
-            <span className="text-xs">Сегодня</span>
+            <HiChartBar className="w-3.5 h-3.5" />
+            <span className="text-[10px] md:text-xs">Сегодня</span>
           </div>
-          <p className="text-lg font-semibold text-white">
+          <p className="text-sm md:text-lg font-semibold text-white">
             {formatBytes(node.traffic_today_bytes)}
           </p>
         </div>
-        <div className="text-center p-3 bg-dark-900/50 rounded-lg">
+        <div className="text-center p-2 md:p-3 bg-dark-900/50 rounded-lg">
           <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
-            <HiChartBar className="w-4 h-4" />
-            <span className="text-xs">Всего</span>
+            <HiChartBar className="w-3.5 h-3.5" />
+            <span className="text-[10px] md:text-xs">Всего</span>
           </div>
-          <p className="text-lg font-semibold text-white">
+          <p className="text-sm md:text-lg font-semibold text-white">
             {formatBytes(node.traffic_total_bytes)}
           </p>
         </div>
@@ -326,50 +326,50 @@ export default function Nodes() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-white">Ноды</h1>
-          <p className="text-gray-400 mt-1">Управление серверами</p>
+          <h1 className="page-header-title">Ноды</h1>
+          <p className="text-gray-400 mt-1 text-sm md:text-base">Управление серверами</p>
         </div>
         <button
           onClick={() => refetch()}
-          className="btn-secondary flex items-center gap-2"
+          className="btn-secondary flex items-center gap-2 self-start sm:self-auto"
           disabled={isLoading}
         >
           <HiRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Обновить
+          <span className="hidden sm:inline">Обновить</span>
         </button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Всего</p>
-          <p className="text-2xl font-bold text-white mt-1">
+          <p className="text-xs md:text-sm text-gray-400">Всего</p>
+          <p className="text-xl md:text-2xl font-bold text-white mt-1">
             {isLoading ? '-' : totalNodes}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Онлайн</p>
-          <p className="text-2xl font-bold text-green-400 mt-1">
+          <p className="text-xs md:text-sm text-gray-400">Онлайн</p>
+          <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
             {isLoading ? '-' : onlineNodes}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Офлайн</p>
-          <p className="text-2xl font-bold text-red-400 mt-1">
+          <p className="text-xs md:text-sm text-gray-400">Офлайн</p>
+          <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
             {isLoading ? '-' : offlineNodes}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Отключены</p>
-          <p className="text-2xl font-bold text-gray-400 mt-1">
+          <p className="text-xs md:text-sm text-gray-400">Отключены</p>
+          <p className="text-xl md:text-2xl font-bold text-gray-400 mt-1">
             {isLoading ? '-' : disabledNodes}
           </p>
         </div>
-        <div className="card text-center">
-          <p className="text-sm text-gray-400">Пользователей</p>
-          <p className="text-2xl font-bold text-primary-400 mt-1">
+        <div className="card text-center col-span-2 sm:col-span-1">
+          <p className="text-xs md:text-sm text-gray-400">Пользователей</p>
+          <p className="text-xl md:text-2xl font-bold text-primary-400 mt-1">
             {isLoading ? '-' : totalUsersOnline}
           </p>
         </div>
