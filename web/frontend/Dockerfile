@@ -11,8 +11,9 @@ COPY package.json package-lock.json ./
 # Install all dependencies
 RUN npm ci
 
-# Copy source code and configs
-COPY . .
+# Copy source code and configs (explicit list to never overwrite node_modules)
+COPY src ./src
+COPY index.html vite.config.ts tsconfig.json tsconfig.node.json postcss.config.js tailwind.config.js ./
 
 # Build arguments for environment variables
 ARG VITE_API_URL
