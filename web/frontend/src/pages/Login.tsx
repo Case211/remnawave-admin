@@ -33,9 +33,9 @@ export default function Login() {
       },
     }
 
-    const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME
+    const botUsername = (window as any).__ENV?.TELEGRAM_BOT_USERNAME || import.meta.env.VITE_TELEGRAM_BOT_USERNAME
     if (!botUsername) {
-      console.error('VITE_TELEGRAM_BOT_USERNAME is not set')
+      console.error('TELEGRAM_BOT_USERNAME is not set')
       return
     }
 

@@ -20,16 +20,7 @@ RUN npm ci --no-audit --no-fund && \
 COPY src ./src
 COPY index.html vite.config.ts tsconfig.json tsconfig.node.json postcss.config.js tailwind.config.js ./
 
-# Build arguments for environment variables
-ARG VITE_API_URL
-ARG VITE_WS_URL
-ARG VITE_TELEGRAM_BOT_USERNAME
-
-ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_WS_URL=$VITE_WS_URL
-ENV VITE_TELEGRAM_BOT_USERNAME=$VITE_TELEGRAM_BOT_USERNAME
-
-# Build
+# Build (no VITE_* args needed — config is injected at runtime via config.js)
 RUN npm run build
 
 # Production stage - minimal nginx image
@@ -37,6 +28,9 @@ FROM nginx:alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
