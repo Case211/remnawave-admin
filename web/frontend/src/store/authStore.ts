@@ -1,6 +1,37 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, type StateStorage } from 'zustand/middleware'
 import { authApi, TelegramUser } from '../api/auth'
+
+// Safe localStorage wrapper to prevent kQuotaBytesPerItem errors
+const safeStorage: StateStorage = {
+  getItem: (name) => {
+    try {
+      return localStorage.getItem(name)
+    } catch {
+      return null
+    }
+  },
+  setItem: (name, value) => {
+    try {
+      localStorage.setItem(name, value)
+    } catch {
+      // Quota exceeded — clear stale data and retry
+      try {
+        localStorage.removeItem(name)
+        localStorage.setItem(name, value)
+      } catch {
+        // Storage completely full — ignore
+      }
+    }
+  },
+  removeItem: (name) => {
+    try {
+      localStorage.removeItem(name)
+    } catch {
+      // Ignore
+    }
+  },
+}
 
 interface User {
   telegramId: number
@@ -83,6 +114,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'remnawave-auth',
+      storage: safeStorage,
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,

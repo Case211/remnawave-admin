@@ -1,12 +1,32 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+/**
+ * Get the API base URL.
+ * If VITE_API_URL is empty, use relative path (recommended for same-domain nginx proxy).
+ * If VITE_API_URL is set to http:// but page is on https://, auto-upgrade to https://
+ * to prevent Mixed Content browser errors.
+ */
+function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL || ''
+  if (!envUrl) return '/api/v2'
+
+  // Auto-fix Mixed Content: upgrade http:// to https:// if page is served over HTTPS
+  if (
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:' &&
+    envUrl.startsWith('http://')
+  ) {
+    return envUrl.replace('http://', 'https://') + '/api/v2'
+  }
+
+  return `${envUrl}/api/v2`
+}
 
 /**
  * Axios client with interceptors for auth
  */
 const client = axios.create({
-  baseURL: `${API_URL}/api/v2`,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -52,8 +72,8 @@ client.interceptors.response.use(
         try {
           const { state } = JSON.parse(authData)
           if (state?.refreshToken) {
-            // Try to refresh
-            const response = await axios.post(`${API_URL}/api/v2/auth/refresh`, {
+            // Try to refresh (use same baseURL as the main client)
+            const response = await axios.post(`${getApiBaseUrl()}/auth/refresh`, {
               refresh_token: state.refreshToken,
             })
 
