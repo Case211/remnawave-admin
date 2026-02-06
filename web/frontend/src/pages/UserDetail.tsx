@@ -159,35 +159,37 @@ export default function UserDetail() {
     : 0
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Заголовок */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <button
             onClick={() => navigate('/users')}
-            className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-dark-700"
+            className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-dark-700 flex-shrink-0"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-white">
-              {user.username || user.email || user.short_uuid}
-            </h1>
-            <p className="text-sm text-gray-400">{user.uuid}</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg md:text-2xl font-bold text-white truncate">
+                {user.username || user.email || user.short_uuid}
+              </h1>
+              <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(user.status)} text-white flex-shrink-0`}>
+                {user.status}
+              </span>
+            </div>
+            <p className="text-xs md:text-sm text-gray-400 truncate">{user.uuid}</p>
           </div>
-          <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(user.status)} text-white`}>
-            {user.status}
-          </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {user.status === 'active' ? (
             <button
               onClick={() => disableMutation.mutate()}
               disabled={disableMutation.isPending}
-              className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-800 text-white rounded-lg text-sm"
+              className="px-3 md:px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-800 text-white rounded-lg text-sm"
             >
               Отключить
             </button>
@@ -195,7 +197,7 @@ export default function UserDetail() {
             <button
               onClick={() => enableMutation.mutate()}
               disabled={enableMutation.isPending}
-              className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white rounded-lg text-sm"
+              className="px-3 md:px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white rounded-lg text-sm"
             >
               Включить
             </button>
@@ -203,7 +205,7 @@ export default function UserDetail() {
           <button
             onClick={() => resetTrafficMutation.mutate()}
             disabled={resetTrafficMutation.isPending}
-            className="px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:bg-primary-800 text-white rounded-lg text-sm"
+            className="px-3 md:px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:bg-primary-800 text-white rounded-lg text-sm"
           >
             Сбросить трафик
           </button>
@@ -214,27 +216,27 @@ export default function UserDetail() {
               }
             }}
             disabled={deleteMutation.isPending}
-            className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-red-400 rounded-lg text-sm"
+            className="px-3 md:px-4 py-2 bg-dark-700 hover:bg-dark-600 text-red-400 rounded-lg text-sm"
           >
             Удалить
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Основная информация */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
           {/* Профиль */}
-          <div className="bg-dark-800 rounded-xl border border-dark-700 p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Профиль</h2>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Профиль</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-400">Username</p>
                 <p className="text-white">{user.username || '—'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-400">Email</p>
-                <p className="text-white">{user.email || '—'}</p>
+                <p className="text-white truncate">{user.email || '—'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-400">Telegram ID</p>
@@ -266,13 +268,13 @@ export default function UserDetail() {
           </div>
 
           {/* Трафик */}
-          <div className="bg-dark-800 rounded-xl border border-dark-700 p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Трафик</h2>
+          <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Трафик</h2>
             <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-gray-400">Использовано</span>
-                  <span className="text-white">
+                  <span className="text-white text-xs sm:text-sm">
                     {formatBytes(user.used_traffic_bytes)}
                     {user.traffic_limit_bytes && ` / ${formatBytes(user.traffic_limit_bytes)}`}
                   </span>
@@ -288,7 +290,7 @@ export default function UserDetail() {
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-dark-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-dark-700">
                 <div>
                   <p className="text-sm text-gray-400">Лимит устройств (HWID)</p>
                   <p className="text-white">{user.hwid_device_limit}</p>
@@ -303,24 +305,24 @@ export default function UserDetail() {
 
           {/* Нарушения */}
           {violations && violations.length > 0 && (
-            <div className="bg-dark-800 rounded-xl border border-dark-700 p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">
+            <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+              <h2 className="text-base md:text-lg font-semibold text-white mb-4">
                 Нарушения ({violations.length})
               </h2>
               <div className="space-y-3">
                 {violations.slice(0, 5).map((v) => (
                   <div
                     key={v.id}
-                    className="flex items-center justify-between p-3 bg-dark-700 rounded-lg"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-dark-700 rounded-lg"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <span className={`px-2 py-1 rounded text-xs font-medium ${getSeverityColor(v.severity)}`}>
                         {v.severity}
                       </span>
-                      <span className="text-white">Score: {v.score.toFixed(1)}</span>
+                      <span className="text-white text-sm">Score: {v.score.toFixed(1)}</span>
                       <span className="text-gray-400 text-sm">{v.recommended_action}</span>
                     </div>
-                    <span className="text-gray-400 text-sm">
+                    <span className="text-gray-400 text-xs sm:text-sm flex-shrink-0">
                       {format(new Date(v.detected_at), 'dd.MM.yyyy HH:mm')}
                     </span>
                   </div>
@@ -331,10 +333,10 @@ export default function UserDetail() {
         </div>
 
         {/* Боковая панель */}
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
           {/* Anti-Abuse */}
-          <div className="bg-dark-800 rounded-xl border border-dark-700 p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Anti-Abuse</h2>
+          <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Anti-Abuse</h2>
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-gray-400">Trust Score</p>
@@ -356,24 +358,24 @@ export default function UserDetail() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-dark-700 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-white">{user.violation_count_30d}</p>
+                  <p className="text-xl md:text-2xl font-bold text-white">{user.violation_count_30d}</p>
                   <p className="text-xs text-gray-400">Нарушений (30д)</p>
                 </div>
                 <div className="bg-dark-700 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-white">{user.active_connections}</p>
+                  <p className="text-xl md:text-2xl font-bold text-white">{user.active_connections}</p>
                   <p className="text-xs text-gray-400">Подключений</p>
                 </div>
               </div>
               <div className="bg-dark-700 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-white">{user.unique_ips_24h}</p>
+                <p className="text-xl md:text-2xl font-bold text-white">{user.unique_ips_24h}</p>
                 <p className="text-xs text-gray-400">Уникальных IP (24ч)</p>
               </div>
             </div>
           </div>
 
           {/* Подписка */}
-          <div className="bg-dark-800 rounded-xl border border-dark-700 p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Подписка</h2>
+          <div className="bg-dark-800 rounded-xl border border-dark-700 p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Подписка</h2>
             {user.subscription_uuid ? (
               <div className="space-y-2">
                 <p className="text-xs text-gray-400">UUID подписки</p>

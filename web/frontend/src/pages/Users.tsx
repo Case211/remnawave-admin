@@ -235,6 +235,58 @@ function SortHeader({
   )
 }
 
+// Mobile user card component
+function MobileUserCard({
+  user,
+  onNavigate,
+  onEnable,
+  onDisable,
+  onDelete,
+}: {
+  user: UserListItem
+  onNavigate: () => void
+  onEnable: () => void
+  onDisable: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div
+      className="card cursor-pointer active:bg-dark-700/50"
+      onClick={onNavigate}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-white truncate">
+            {user.username || user.short_uuid}
+          </p>
+          {user.email && (
+            <p className="text-xs text-gray-500 truncate">{user.email}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 ml-2" onClick={(e) => e.stopPropagation()}>
+          <StatusBadge status={user.status} />
+          <UserActions
+            user={user}
+            onEnable={onEnable}
+            onDisable={onDisable}
+            onDelete={onDelete}
+          />
+        </div>
+      </div>
+      <div className="mb-3">
+        <TrafficBar
+          used={user.used_traffic_bytes}
+          limit={user.traffic_limit_bytes}
+        />
+      </div>
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span>Истекает: {formatDate(user.expire_at)}</span>
+        <span>Создан: {formatDate(user.created_at)}</span>
+      </div>
+    </div>
+  )
+}
+
 export default function Users() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -315,12 +367,12 @@ export default function Users() {
   const pages = data?.pages ?? 1
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-white">Пользователи</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="page-header-title">Пользователи</h1>
+          <p className="text-gray-400 mt-1 text-sm md:text-base">
             Управление пользователями и подписками
           </p>
         </div>
@@ -328,7 +380,7 @@ export default function Users() {
 
       {/* Filters */}
       <div className="card">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
           <div className="flex-1 relative">
             <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
             <input
@@ -339,29 +391,67 @@ export default function Users() {
               className="input pl-10"
             />
           </div>
-          <select
-            value={status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            className="input w-full sm:w-48"
-          >
-            <option value="">Все статусы</option>
-            <option value="active">Активные</option>
-            <option value="disabled">Отключённые</option>
-            <option value="limited">Ограниченные</option>
-            <option value="expired">Истёкшие</option>
-          </select>
-          <button
-            onClick={() => refetch()}
-            className="btn-secondary"
-            disabled={isLoading}
-          >
-            <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex gap-2">
+            <select
+              value={status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              className="input flex-1 sm:w-48 sm:flex-none"
+            >
+              <option value="">Все статусы</option>
+              <option value="active">Активные</option>
+              <option value="disabled">Отключённые</option>
+              <option value="limited">Ограниченные</option>
+              <option value="expired">Истёкшие</option>
+            </select>
+            <button
+              onClick={() => refetch()}
+              className="btn-secondary flex-shrink-0"
+              disabled={isLoading}
+            >
+              <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Users table */}
-      <div className="card p-0 overflow-hidden">
+      {/* Mobile: User cards */}
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="card animate-pulse">
+              <div className="flex items-center justify-between mb-3">
+                <div className="h-4 w-32 bg-dark-700 rounded" />
+                <div className="h-5 w-20 bg-dark-700 rounded" />
+              </div>
+              <div className="h-4 w-full bg-dark-700 rounded mb-3" />
+              <div className="flex justify-between">
+                <div className="h-3 w-24 bg-dark-700 rounded" />
+                <div className="h-3 w-24 bg-dark-700 rounded" />
+              </div>
+            </div>
+          ))
+        ) : users.length === 0 ? (
+          <div className="card text-center py-8 text-gray-500">
+            {debouncedSearch || status
+              ? 'Пользователи не найдены'
+              : 'Нет пользователей'}
+          </div>
+        ) : (
+          users.map((user) => (
+            <MobileUserCard
+              key={user.uuid}
+              user={user}
+              onNavigate={() => navigate(`/users/${user.uuid}`)}
+              onEnable={() => enableUser.mutate(user.uuid)}
+              onDisable={() => disableUser.mutate(user.uuid)}
+              onDelete={() => deleteUser.mutate(user.uuid)}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Desktop: Users table */}
+      <div className="card p-0 overflow-hidden hidden md:block">
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
@@ -486,8 +576,8 @@ export default function Users() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-400">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <p className="text-sm text-gray-400 order-2 sm:order-1">
           {total > 0 ? (
             <>
               Показано {(page - 1) * perPage + 1}-
@@ -497,7 +587,7 @@ export default function Users() {
             'Нет данных'
           )}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 order-1 sm:order-2">
           <button
             onClick={() => setPage(page - 1)}
             disabled={page <= 1}

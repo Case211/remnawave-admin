@@ -147,10 +147,10 @@ function ViolationCard({
 
   return (
     <div className="card">
-      <div className="flex items-start gap-4">
-        {/* Icon */}
+      <div className="flex items-start gap-3 md:gap-4">
+        {/* Icon - hidden on very small screens */}
         <div
-          className={`p-2.5 rounded-lg ${
+          className={`hidden sm:block p-2.5 rounded-lg flex-shrink-0 ${
             violation.severity === 'critical'
               ? 'bg-red-500/10'
               : violation.severity === 'high'
@@ -187,27 +187,27 @@ function ViolationCard({
         <div className="mt-4 pt-4 border-t border-dark-700 flex flex-wrap gap-2">
           <button
             onClick={onBlock}
-            className="btn-danger text-sm flex items-center gap-1"
+            className="btn-danger text-xs sm:text-sm flex items-center gap-1"
           >
-            <HiBan className="w-4 h-4" /> Заблокировать
+            <HiBan className="w-4 h-4" /> <span className="hidden sm:inline">Заблокировать</span><span className="sm:hidden">Блок</span>
           </button>
           <button
             onClick={onWarn}
-            className="btn-secondary text-sm flex items-center gap-1"
+            className="btn-secondary text-xs sm:text-sm flex items-center gap-1"
           >
-            <HiExclamation className="w-4 h-4" /> Предупредить
+            <HiExclamation className="w-4 h-4" /> <span className="hidden sm:inline">Предупредить</span><span className="sm:hidden">Пред.</span>
           </button>
           <button
             onClick={onDismiss}
-            className="btn-ghost text-sm flex items-center gap-1"
+            className="btn-ghost text-xs sm:text-sm flex items-center gap-1"
           >
             <HiX className="w-4 h-4" /> Отклонить
           </button>
           <button
             onClick={onView}
-            className="btn-ghost text-sm flex items-center gap-1 ml-auto"
+            className="btn-ghost text-xs sm:text-sm flex items-center gap-1 ml-auto"
           >
-            <HiEye className="w-4 h-4" /> Подробнее
+            <HiEye className="w-4 h-4" /> <span className="hidden sm:inline">Подробнее</span>
           </button>
         </div>
       )}
@@ -297,20 +297,20 @@ export default function Violations() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-white">Нарушения</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="page-header-title">Нарушения</h1>
+          <p className="text-gray-400 mt-1 text-sm md:text-base">
             Система анти-абуза и управление нарушениями
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="page-header-actions">
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`btn-secondary flex items-center gap-2 ${showFilters ? 'ring-2 ring-primary-500' : ''}`}
           >
             <HiFilter className="w-4 h-4" />
-            Фильтры
+            <span className="hidden sm:inline">Фильтры</span>
           </button>
           <button
             onClick={() => refetch()}
@@ -325,7 +325,7 @@ export default function Violations() {
       {/* Filters panel */}
       {showFilters && (
         <div className="card">
-          <div className="flex flex-wrap gap-4">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 md:gap-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">Уровень</label>
               <select
@@ -334,7 +334,7 @@ export default function Violations() {
                   setSeverity(e.target.value)
                   setPage(1)
                 }}
-                className="input w-40"
+                className="input w-full sm:w-40"
               >
                 <option value="">Все</option>
                 <option value="critical">Критический</option>
@@ -351,7 +351,7 @@ export default function Violations() {
                   setDays(Number(e.target.value))
                   setPage(1)
                 }}
-                className="input w-40"
+                className="input w-full sm:w-40"
               >
                 <option value={1}>Сегодня</option>
                 <option value={7}>Неделя</option>
@@ -367,25 +367,25 @@ export default function Violations() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card text-center">
           <p className="text-sm text-gray-400">Всего</p>
-          <p className="text-2xl font-bold text-white mt-1">
+          <p className="text-xl md:text-2xl font-bold text-white mt-1">
             {stats?.total ?? '-'}
           </p>
         </div>
         <div className="card text-center">
           <p className="text-sm text-gray-400">Ожидают</p>
-          <p className="text-2xl font-bold text-yellow-400 mt-1">
+          <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">
             {stats?.pending ?? '-'}
           </p>
         </div>
         <div className="card text-center">
           <p className="text-sm text-gray-400">Заблокировано</p>
-          <p className="text-2xl font-bold text-red-400 mt-1">
+          <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
             {stats?.by_action?.blocked ?? '-'}
           </p>
         </div>
         <div className="card text-center">
           <p className="text-sm text-gray-400">Отклонено</p>
-          <p className="text-2xl font-bold text-green-400 mt-1">
+          <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
             {stats?.by_action?.dismissed ?? '-'}
           </p>
         </div>
@@ -425,12 +425,12 @@ export default function Violations() {
 
       {/* Pagination */}
       {total > 0 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-400">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-sm text-gray-400 order-2 sm:order-1">
             Показано {(page - 1) * perPage + 1}-
             {Math.min(page * perPage, total)} из {total}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 order-1 sm:order-2">
             <button
               onClick={() => setPage(page - 1)}
               disabled={page <= 1}

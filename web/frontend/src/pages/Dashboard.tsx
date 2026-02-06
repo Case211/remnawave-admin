@@ -107,7 +107,7 @@ function StatCard({ title, value, icon: Icon, color, subtitle, onClick, loading 
           {loading ? (
             <div className="h-8 w-20 bg-dark-700 animate-pulse rounded mt-1"></div>
           ) : (
-            <p className="text-2xl font-bold text-white mt-1">{value}</p>
+            <p className="text-xl md:text-2xl font-bold text-white mt-1">{value}</p>
           )}
           {subtitle && (
             <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
@@ -198,18 +198,18 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-white">Панель управления</h1>
-          <p className="text-gray-400 mt-1">Обзор системы Remnawave</p>
+          <h1 className="page-header-title">Панель управления</h1>
+          <p className="text-gray-400 mt-1 text-sm md:text-base">Обзор системы Remnawave</p>
         </div>
         <button
           onClick={() => refetchOverview()}
-          className="btn-secondary flex items-center gap-2"
+          className="btn-secondary flex items-center gap-2 self-start sm:self-auto"
           disabled={isLoading}
         >
           <HiRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Обновить
+          <span className="hidden sm:inline">Обновить</span>
         </button>
       </div>
 
@@ -256,8 +256,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Traffic chart - takes 2 columns */}
         <div className="card lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Трафик за неделю</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <h2 className="text-base md:text-lg font-semibold text-white">Трафик за неделю</h2>
             <div className="flex items-center gap-4 text-xs">
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-primary-500"></span>
@@ -272,7 +272,7 @@ export default function Dashboard() {
           {trafficLoading ? (
             <ChartSkeleton />
           ) : (
-            <ResponsiveContainer width="100%" height={256}>
+            <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={trafficChartData}>
                 <defs>
                   <linearGradient id="colorUpload" x1="0" y1="0" x2="0" y2="1">
@@ -315,11 +315,11 @@ export default function Dashboard() {
 
         {/* Violations by severity */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-white mb-4">Нарушения по уровню</h2>
+          <h2 className="text-base md:text-lg font-semibold text-white mb-4">Нарушения по уровню</h2>
           {violationsLoading ? (
             <ChartSkeleton />
           ) : (
-            <ResponsiveContainer width="100%" height={256}>
+            <ResponsiveContainer width="100%" height={200}>
               <BarChart data={violationsChartData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis type="number" stroke="#9ca3af" fontSize={12} />
@@ -342,8 +342,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent activity */}
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Последняя активность</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
+            <h2 className="text-base md:text-lg font-semibold text-white">Последняя активность</h2>
             <span className="text-xs text-gray-500">Обновляется в реальном времени</span>
           </div>
           <div className="space-y-3">
@@ -380,7 +380,7 @@ export default function Dashboard() {
 
         {/* Quick actions */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-white mb-4">Быстрые действия</h2>
+          <h2 className="text-base md:text-lg font-semibold text-white mb-4">Быстрые действия</h2>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => navigate('/users')}
