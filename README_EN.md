@@ -321,7 +321,7 @@ docker compose logs -f bot
 
 ### Log Files
 
-Detailed logs are saved in Docker volume `adminbot_logs` (mounted at `/app/logs` inside containers):
+Detailed logs are saved in the `./logs/` directory next to `docker-compose.yml` (mounted at `/app/logs` inside containers):
 
 | File | Level | Contents |
 |------|-------|----------|
@@ -340,20 +340,20 @@ Detailed logs are saved in Docker volume `adminbot_logs` (mounted at `/app/logs`
 ### How to read log files
 
 ```bash
-# Connect to volume and read logs
-docker compose exec bot cat /app/logs/adminbot_INFO.log
+# Read logs directly from host
+cat ./logs/adminbot_INFO.log
 
 # Last 100 lines
-docker compose exec bot tail -100 /app/logs/adminbot_INFO.log
+tail -100 ./logs/adminbot_INFO.log
 
 # Search for errors
-docker compose exec bot grep "ERROR" /app/logs/adminbot_WARNING.log
+grep "ERROR" ./logs/adminbot_WARNING.log
 
 # Follow file in real time
-docker compose exec bot tail -f /app/logs/adminbot_INFO.log
+tail -f ./logs/adminbot_INFO.log
 
 # Check file sizes
-docker compose exec bot ls -lh /app/logs/
+ls -lh ./logs/
 ```
 
 ### Log Level Configuration
