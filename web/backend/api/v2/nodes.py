@@ -19,6 +19,35 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _ensure_node_snake_case(node: dict) -> dict:
+    """Ensure node dict has snake_case keys for pydantic schemas."""
+    result = dict(node)
+    mappings = {
+        'isDisabled': 'is_disabled',
+        'isConnected': 'is_connected',
+        'isXrayRunning': 'is_xray_running',
+        'xrayVersion': 'xray_version',
+        'trafficLimitBytes': 'traffic_limit_bytes',
+        'trafficUsedBytes': 'traffic_used_bytes',
+        'trafficTotalBytes': 'traffic_total_bytes',
+        'trafficTodayBytes': 'traffic_today_bytes',
+        'usersOnline': 'users_online',
+        'createdAt': 'created_at',
+        'updatedAt': 'updated_at',
+        'lastSeenAt': 'last_seen_at',
+        'cpuUsage': 'cpu_usage',
+        'memoryUsage': 'memory_usage',
+        'uptimeSeconds': 'uptime_seconds',
+    }
+    for camel, snake in mappings.items():
+        if camel in result and snake not in result:
+            result[snake] = result[camel]
+    # Fallback: traffic_total_bytes = traffic_used_bytes if not present
+    if 'traffic_total_bytes' not in result and 'traffic_used_bytes' in result:
+        result['traffic_total_bytes'] = result['traffic_used_bytes']
+    return result
+
+
 async def _get_nodes_list():
     """Get nodes from DB, fall back to API."""
     try:
@@ -40,11 +69,10 @@ async def list_nodes(
     is_connected: Optional[bool] = Query(None, description="Filter by connection status"),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    List nodes with pagination and filtering.
-    """
+    """List nodes with pagination and filtering."""
     try:
         nodes = await _get_nodes_list()
+        nodes = [_ensure_node_snake_case(n) for n in nodes]
 
         # Filter
         if search:
@@ -58,7 +86,7 @@ async def list_nodes(
         if is_connected is not None:
             nodes = [
                 n for n in nodes
-                if bool(n.get('is_connected') or n.get('isConnected')) == is_connected
+                if bool(n.get('is_connected')) == is_connected
             ]
 
         # Sort by name
@@ -71,7 +99,12 @@ async def list_nodes(
         items = nodes[start:end]
 
         # Convert to schema
-        node_items = [NodeListItem(**n) for n in items]
+        node_items = []
+        for n in items:
+            try:
+                node_items.append(NodeListItem(**n))
+            except Exception as e:
+                logger.debug("Failed to parse node %s: %s", n.get('uuid', '?'), e)
 
         return PaginatedResponse(
             items=node_items,
@@ -97,18 +130,27 @@ async def get_node(
     node_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Get detailed node information.
-    """
+    """Get detailed node information."""
     try:
-        from src.services.api_client import api_client
+        node_data = None
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                node_data = await db_service.get_node_by_uuid(node_uuid)
+        except Exception:
+            pass
 
-        node = await api_client.get_node(node_uuid)
-        if not node:
+        if not node_data:
+            from src.services.api_client import api_client
+            node_data = await api_client.get_node(node_uuid)
+
+        if not node_data:
             raise HTTPException(status_code=404, detail="Node not found")
 
-        return NodeDetail(**node)
+        return NodeDetail(**_ensure_node_snake_case(node_data))
 
+    except HTTPException:
+        raise
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
 
@@ -118,9 +160,7 @@ async def create_node(
     data: NodeCreate,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Create a new node.
-    """
+    """Create a new node."""
     try:
         from src.services.api_client import api_client
 
@@ -130,7 +170,7 @@ async def create_node(
             port=data.port,
         )
 
-        return NodeDetail(**node)
+        return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
@@ -144,16 +184,14 @@ async def update_node(
     data: NodeUpdate,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Update node fields.
-    """
+    """Update node fields."""
     try:
         from src.services.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True)
         node = await api_client.update_node(node_uuid, **update_data)
 
-        return NodeDetail(**node)
+        return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
@@ -166,9 +204,7 @@ async def delete_node(
     node_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Delete a node.
-    """
+    """Delete a node."""
     try:
         from src.services.api_client import api_client
 
@@ -186,9 +222,7 @@ async def restart_node(
     node_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Restart a node.
-    """
+    """Restart a node."""
     try:
         from src.services.api_client import api_client
 
@@ -206,9 +240,7 @@ async def enable_node(
     node_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Enable a disabled node.
-    """
+    """Enable a disabled node."""
     try:
         from src.services.api_client import api_client
 
@@ -226,9 +258,7 @@ async def disable_node(
     node_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """
-    Disable a node.
-    """
+    """Disable a node."""
     try:
         from src.services.api_client import api_client
 

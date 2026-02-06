@@ -1,14 +1,15 @@
 """Node schemas for web panel API."""
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class NodeBase(BaseModel):
     """Base node fields."""
+    model_config = ConfigDict(extra='ignore')
 
-    name: str
-    address: str
+    name: str = ''
+    address: str = ''
     port: int = 443
 
 
@@ -18,10 +19,17 @@ class NodeListItem(NodeBase):
     uuid: str
     is_disabled: bool = False
     is_connected: bool = False
+    is_xray_running: bool = False
+    xray_version: Optional[str] = None
+    message: Optional[str] = None
     traffic_limit_bytes: Optional[int] = None
     traffic_used_bytes: int = 0
+    traffic_total_bytes: int = 0
+    traffic_today_bytes: int = 0
     users_online: int = 0
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -34,7 +42,6 @@ class NodeDetail(NodeListItem):
     cpu_usage: Optional[float] = None
     memory_usage: Optional[float] = None
     uptime_seconds: Optional[int] = None
-    last_seen_at: Optional[datetime] = None
 
 
 class NodeCreate(BaseModel):

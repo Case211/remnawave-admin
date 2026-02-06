@@ -220,7 +220,7 @@ async def get_top_violators(
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
 
-    violators = await db.get_top_violators(
+    violators = await db.get_top_violators_for_period(
         start_date=start_date,
         end_date=end_date,
         min_score=min_score,
@@ -285,7 +285,7 @@ async def get_violation(
         reasons=violation.get('reasons', []),
         countries=violation.get('countries', []),
         asn_types=violation.get('asn_types', []),
-        ips=violation.get('ips', []),
+        ips=violation.get('ip_addresses', violation.get('ips', [])),
         action_taken=violation.get('action_taken'),
         action_taken_at=violation.get('action_taken_at'),
         action_taken_by=violation.get('action_taken_by'),

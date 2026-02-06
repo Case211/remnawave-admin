@@ -1,5 +1,6 @@
 """Analytics API endpoints."""
 import logging
+from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
 from fastapi import APIRouter, Depends, Query
@@ -23,9 +24,12 @@ class OverviewStats(BaseModel):
     total_nodes: int = 0
     online_nodes: int = 0
     offline_nodes: int = 0
+    disabled_nodes: int = 0
     total_hosts: int = 0
     violations_today: int = 0
     violations_week: int = 0
+    total_traffic_bytes: int = 0
+    users_online: int = 0
 
 
 class TrafficStats(BaseModel):
@@ -42,7 +46,7 @@ async def _get_users_data() -> List[Dict[str, Any]]:
     try:
         from src.services.database import db_service
         if db_service.is_connected:
-            users = await db_service.get_all_users()
+            users = await db_service.get_all_users(limit=50000)
             if users:
                 return users
     except Exception as e:
@@ -82,6 +86,32 @@ async def _get_hosts_data() -> List[Dict[str, Any]]:
     return await fetch_hosts_from_api()
 
 
+async def _get_violation_counts() -> Dict[str, int]:
+    """Get violation counts for today and this week from DB."""
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            now = datetime.utcnow()
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            week_start = today_start - timedelta(days=7)
+
+            today_stats = await db_service.get_violations_stats_for_period(
+                start_date=today_start,
+                end_date=now,
+            )
+            week_stats = await db_service.get_violations_stats_for_period(
+                start_date=week_start,
+                end_date=now,
+            )
+            return {
+                'today': today_stats.get('total', 0),
+                'week': week_stats.get('total', 0),
+            }
+    except Exception as e:
+        logger.debug("DB violation counts fetch failed: %s", e)
+    return {'today': 0, 'week': 0}
+
+
 def _get_user_status(user: Dict[str, Any]) -> str:
     """Extract user status from user data (handles both DB and API formats)."""
     return user.get('status') or user.get('Status') or ''
@@ -92,9 +122,23 @@ def _is_node_connected(node: Dict[str, Any]) -> bool:
     return bool(node.get('is_connected') or node.get('isConnected'))
 
 
+def _is_node_disabled(node: Dict[str, Any]) -> bool:
+    """Check if node is disabled (handles both DB and API formats)."""
+    return bool(node.get('is_disabled') or node.get('isDisabled'))
+
+
 def _get_traffic_bytes(user: Dict[str, Any]) -> int:
     """Extract used traffic bytes from user data (handles both DB and API formats)."""
     val = user.get('used_traffic_bytes') or user.get('usedTrafficBytes') or 0
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return 0
+
+
+def _get_users_online(node: Dict[str, Any]) -> int:
+    """Extract users online from node data."""
+    val = node.get('users_online') or node.get('usersOnline') or 0
     try:
         return int(val)
     except (ValueError, TypeError):
@@ -110,6 +154,7 @@ async def get_overview(
         users = await _get_users_data()
         nodes = await _get_nodes_data()
         hosts = await _get_hosts_data()
+        violations = await _get_violation_counts()
 
         # Calculate user stats
         total_users = len(users)
@@ -119,11 +164,16 @@ async def get_overview(
 
         # Calculate node stats
         total_nodes = len(nodes)
-        online_nodes = sum(1 for n in nodes if _is_node_connected(n))
-        offline_nodes = total_nodes - online_nodes
+        disabled_nodes = sum(1 for n in nodes if _is_node_disabled(n))
+        online_nodes = sum(1 for n in nodes if _is_node_connected(n) and not _is_node_disabled(n))
+        offline_nodes = total_nodes - online_nodes - disabled_nodes
 
         # Calculate host stats
         total_hosts = len(hosts)
+
+        # Calculate total traffic and users online
+        total_traffic_bytes = sum(_get_traffic_bytes(u) for u in users)
+        users_online = sum(_get_users_online(n) for n in nodes)
 
         return OverviewStats(
             total_users=total_users,
@@ -133,9 +183,12 @@ async def get_overview(
             total_nodes=total_nodes,
             online_nodes=online_nodes,
             offline_nodes=offline_nodes,
+            disabled_nodes=disabled_nodes,
             total_hosts=total_hosts,
-            violations_today=0,
-            violations_week=0,
+            violations_today=violations['today'],
+            violations_week=violations['week'],
+            total_traffic_bytes=total_traffic_bytes,
+            users_online=users_online,
         )
 
     except Exception as e:
@@ -151,14 +204,11 @@ async def get_traffic_stats(
     try:
         users = await _get_users_data()
 
-        # Calculate total traffic
+        # Calculate total traffic from all users
         total_bytes = sum(_get_traffic_bytes(u) for u in users)
 
         return TrafficStats(
             total_bytes=total_bytes,
-            today_bytes=0,
-            week_bytes=0,
-            month_bytes=0,
         )
 
     except Exception as e:

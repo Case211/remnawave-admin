@@ -22,20 +22,25 @@ interface Violation {
   username: string | null
   score: number
   severity: string
-  reason: string
+  reasons: string[]
   details: Record<string, unknown> | null
   action_taken: string | null
   resolved_by: string | null
   resolved_at: string | null
-  created_at: string
+  detected_at: string
 }
 
 interface ViolationStats {
   total: number
-  pending: number
-  resolved: number
-  by_severity: Record<string, number>
+  critical: number
+  high: number
+  medium: number
+  low: number
+  unique_users: number
+  avg_score: number
+  max_score: number
   by_action: Record<string, number>
+  by_country: Record<string, number>
 }
 
 interface PaginatedResponse {
@@ -174,8 +179,8 @@ function ViolationCard({
             <SeverityBadge severity={violation.severity} />
             <ActionBadge action={violation.action_taken} />
           </div>
-          <p className="text-sm text-gray-400 mb-2">{violation.reason}</p>
-          <p className="text-xs text-gray-500">{formatTimeAgo(violation.created_at)}</p>
+          <p className="text-sm text-gray-400 mb-2">{violation.reasons.join(', ')}</p>
+          <p className="text-xs text-gray-500">{formatTimeAgo(violation.detected_at)}</p>
         </div>
 
         {/* Score */}
@@ -366,27 +371,27 @@ export default function Violations() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Всего</p>
-          <p className="text-xl md:text-2xl font-bold text-white mt-1">
-            {stats?.total ?? '-'}
-          </p>
-        </div>
-        <div className="card text-center">
-          <p className="text-sm text-gray-400">Ожидают</p>
-          <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">
-            {stats?.pending ?? '-'}
-          </p>
-        </div>
-        <div className="card text-center">
-          <p className="text-sm text-gray-400">Заблокировано</p>
+          <p className="text-sm text-gray-400">Критические</p>
           <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
-            {stats?.by_action?.blocked ?? '-'}
+            {stats?.critical ?? '-'}
           </p>
         </div>
         <div className="card text-center">
-          <p className="text-sm text-gray-400">Отклонено</p>
+          <p className="text-sm text-gray-400">Высокие</p>
+          <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">
+            {stats?.high ?? '-'}
+          </p>
+        </div>
+        <div className="card text-center">
+          <p className="text-sm text-gray-400">Средние</p>
+          <p className="text-xl md:text-2xl font-bold text-blue-400 mt-1">
+            {stats?.medium ?? '-'}
+          </p>
+        </div>
+        <div className="card text-center">
+          <p className="text-sm text-gray-400">Низкие</p>
           <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
-            {stats?.by_action?.dismissed ?? '-'}
+            {stats?.low ?? '-'}
           </p>
         </div>
       </div>

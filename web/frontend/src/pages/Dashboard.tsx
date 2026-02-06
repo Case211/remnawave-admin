@@ -10,8 +10,6 @@ import {
   HiCog,
 } from 'react-icons/hi'
 import {
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   XAxis,
@@ -19,10 +17,11 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Cell,
 } from 'recharts'
 import client from '../api/client'
 
-// Types
+// Types matching backend responses
 interface OverviewStats {
   total_users: number
   active_users: number
@@ -31,17 +30,25 @@ interface OverviewStats {
   total_nodes: number
   online_nodes: number
   offline_nodes: number
+  disabled_nodes: number
   total_hosts: number
   violations_today: number
   violations_week: number
+  total_traffic_bytes: number
+  users_online: number
 }
 
 interface ViolationStats {
   total: number
-  pending: number
-  resolved: number
-  by_severity: Record<string, number>
+  critical: number
+  high: number
+  medium: number
+  low: number
+  unique_users: number
+  avg_score: number
+  max_score: number
   by_action: Record<string, number>
+  by_country: Record<string, number>
 }
 
 interface TrafficStats {
@@ -140,6 +147,13 @@ function ChartSkeleton() {
   )
 }
 
+const SEVERITY_COLORS: Record<string, string> = {
+  low: '#22c55e',
+  medium: '#f59e0b',
+  high: '#f97316',
+  critical: '#ef4444',
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
 
@@ -147,7 +161,7 @@ export default function Dashboard() {
   const { data: overview, isLoading: overviewLoading, refetch: refetchOverview } = useQuery({
     queryKey: ['overview'],
     queryFn: fetchOverview,
-    refetchInterval: 30000, // Обновлять каждые 30 сек
+    refetchInterval: 30000,
   })
 
   const { data: violationStats, isLoading: violationsLoading } = useQuery({
@@ -162,36 +176,36 @@ export default function Dashboard() {
     refetchInterval: 60000,
   })
 
-  // Mock data for charts (will be replaced with real time-series data)
-  const trafficChartData = [
-    { name: 'Пн', upload: 4000, download: 2400 },
-    { name: 'Вт', upload: 3000, download: 1398 },
-    { name: 'Ср', upload: 2000, download: 9800 },
-    { name: 'Чт', upload: 2780, download: 3908 },
-    { name: 'Пт', upload: 1890, download: 4800 },
-    { name: 'Сб', upload: 2390, download: 3800 },
-    { name: 'Вс', upload: 3490, download: 4300 },
-  ]
-
-  const violationsChartData = violationStats?.by_severity
-    ? Object.entries(violationStats.by_severity).map(([name, value]) => ({
-        name: name === 'low' ? 'Низкий' : name === 'medium' ? 'Средний' : name === 'high' ? 'Высокий' : 'Критический',
-        value,
-      }))
+  // Build violations chart from real stats
+  const violationsChartData = violationStats
+    ? [
+        { name: 'Низкий', value: violationStats.low, key: 'low' },
+        { name: 'Средний', value: violationStats.medium, key: 'medium' },
+        { name: 'Высокий', value: violationStats.high, key: 'high' },
+        { name: 'Критический', value: violationStats.critical, key: 'critical' },
+      ]
     : [
-        { name: 'Низкий', value: 0 },
-        { name: 'Средний', value: 0 },
-        { name: 'Высокий', value: 0 },
-        { name: 'Критический', value: 0 },
+        { name: 'Низкий', value: 0, key: 'low' },
+        { name: 'Средний', value: 0, key: 'medium' },
+        { name: 'Высокий', value: 0, key: 'high' },
+        { name: 'Критический', value: 0, key: 'critical' },
       ]
 
-  // Recent activity (mock for now, will come from WebSocket)
-  const recentActivity = [
-    { type: 'connection', message: 'Новое подключение из Москвы', time: '2 мин назад' },
-    { type: 'violation', message: 'Обнаружено нарушение (score: 78)', time: '5 мин назад' },
-    { type: 'block', message: 'Пользователь заблокирован (авто, 24ч)', time: '12 мин назад' },
-    { type: 'node', message: 'Нода DE-1 перезапущена', time: '1 час назад' },
-  ]
+  // Build violations by action list
+  const actionLabels: Record<string, string> = {
+    'no_action': 'Нет действий',
+    'monitor': 'Мониторинг',
+    'warn': 'Предупреждение',
+    'soft_block': 'Мягкая блок.',
+    'temp_block': 'Врем. блок.',
+    'hard_block': 'Жёсткая блок.',
+  }
+  const actionChartData = violationStats?.by_action
+    ? Object.entries(violationStats.by_action).map(([name, value]) => ({
+        name: actionLabels[name] || name,
+        value,
+      }))
+    : []
 
   const isLoading = overviewLoading || violationsLoading || trafficLoading
 
@@ -220,7 +234,7 @@ export default function Dashboard() {
           value={overview?.total_users.toLocaleString() ?? '-'}
           icon={HiUsers}
           color="blue"
-          subtitle={overview ? `${overview.active_users} активных` : undefined}
+          subtitle={overview ? `${overview.active_users} активных, ${overview.expired_users} истекших` : undefined}
           onClick={() => navigate('/users')}
           loading={overviewLoading}
         />
@@ -229,93 +243,40 @@ export default function Dashboard() {
           value={overview ? `${overview.online_nodes}/${overview.total_nodes}` : '-'}
           icon={HiServer}
           color="green"
-          subtitle={overview?.offline_nodes ? `${overview.offline_nodes} офлайн` : 'Все онлайн'}
+          subtitle={overview ? `${overview.offline_nodes} офлайн, ${overview.disabled_nodes} отключ.${overview.users_online ? `, ${overview.users_online} онлайн` : ''}` : undefined}
           onClick={() => navigate('/nodes')}
           loading={overviewLoading}
         />
         <StatCard
-          title="Нарушения сегодня"
-          value={overview?.violations_today ?? violationStats?.total ?? 0}
+          title="Нарушения"
+          value={overview?.violations_today ?? 0}
           icon={HiShieldExclamation}
-          color={violationStats && violationStats.pending > 0 ? 'red' : 'yellow'}
-          subtitle={violationStats?.pending ? `${violationStats.pending} ожидают` : undefined}
+          color={overview && overview.violations_today > 0 ? 'red' : 'yellow'}
+          subtitle={overview ? `Сегодня: ${overview.violations_today}, за неделю: ${overview.violations_week}` : undefined}
           onClick={() => navigate('/violations')}
-          loading={violationsLoading}
+          loading={overviewLoading}
         />
         <StatCard
           title="Общий трафик"
-          value={trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
+          value={overview ? formatBytes(overview.total_traffic_bytes) : trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
           icon={HiStatusOnline}
           color="purple"
-          subtitle={trafficStats?.today_bytes ? `Сегодня: ${formatBytes(trafficStats.today_bytes)}` : undefined}
-          loading={trafficLoading}
+          loading={overviewLoading && trafficLoading}
         />
       </div>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Traffic chart - takes 2 columns */}
+        {/* Violations by severity */}
         <div className="card lg:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-            <h2 className="text-base md:text-lg font-semibold text-white">Трафик за неделю</h2>
-            <div className="flex items-center gap-4 text-xs">
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-primary-500"></span>
-                Загрузка
+            <h2 className="text-base md:text-lg font-semibold text-white">Нарушения по уровню (за 7 дней)</h2>
+            {violationStats && (
+              <span className="text-xs text-gray-500">
+                Всего: {violationStats.total} | Уникальных: {violationStats.unique_users}
               </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-green-500"></span>
-                Скачивание
-              </span>
-            </div>
+            )}
           </div>
-          {trafficLoading ? (
-            <ChartSkeleton />
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={trafficChartData}>
-                <defs>
-                  <linearGradient id="colorUpload" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorDownload" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} />
-                <YAxis stroke="#9ca3af" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1f2937',
-                    border: '1px solid #374151',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="upload"
-                  stroke="#6366f1"
-                  fillOpacity={1}
-                  fill="url(#colorUpload)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="download"
-                  stroke="#22c55e"
-                  fillOpacity={1}
-                  fill="url(#colorDownload)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* Violations by severity */}
-        <div className="card">
-          <h2 className="text-base md:text-lg font-semibold text-white mb-4">Нарушения по уровню</h2>
           {violationsLoading ? (
             <ChartSkeleton />
           ) : (
@@ -323,7 +284,7 @@ export default function Dashboard() {
               <BarChart data={violationsChartData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis type="number" stroke="#9ca3af" fontSize={12} />
-                <YAxis dataKey="name" type="category" stroke="#9ca3af" fontSize={12} width={80} />
+                <YAxis dataKey="name" type="category" stroke="#9ca3af" fontSize={12} width={100} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#1f2937',
@@ -331,51 +292,106 @@ export default function Dashboard() {
                     borderRadius: '8px',
                   }}
                 />
-                <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {violationsChartData.map((entry) => (
+                    <Cell key={entry.key} fill={SEVERITY_COLORS[entry.key] || '#f59e0b'} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Violations by action */}
+        <div className="card">
+          <h2 className="text-base md:text-lg font-semibold text-white mb-4">По рекомендации</h2>
+          {violationsLoading ? (
+            <ChartSkeleton />
+          ) : actionChartData.length > 0 ? (
+            <div className="space-y-3">
+              {actionChartData.map((item) => (
+                <div key={item.name} className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">{item.name}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 h-2 bg-dark-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary-500 rounded-full"
+                        style={{
+                          width: `${violationStats && violationStats.total > 0 ? (item.value / violationStats.total) * 100 : 0}%`
+                        }}
+                      />
+                    </div>
+                    <span className="text-sm text-white font-mono w-8 text-right">{item.value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-48 flex items-center justify-center">
+              <span className="text-gray-500 text-sm">Нет данных</span>
+            </div>
+          )}
+          {violationStats && violationStats.max_score > 0 && (
+            <div className="mt-4 pt-4 border-t border-dark-700 space-y-1">
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>Средний скор</span>
+                <span className="text-white">{violationStats.avg_score.toFixed(1)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>Максимальный скор</span>
+                <span className="text-white">{violationStats.max_score.toFixed(1)}</span>
+              </div>
+            </div>
           )}
         </div>
       </div>
 
       {/* Main content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent activity */}
+        {/* Statistics summary */}
         <div className="card">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
-            <h2 className="text-base md:text-lg font-semibold text-white">Последняя активность</h2>
-            <span className="text-xs text-gray-500">Обновляется в реальном времени</span>
-          </div>
+          <h2 className="text-base md:text-lg font-semibold text-white mb-4">Сводка</h2>
           <div className="space-y-3">
-            {recentActivity.map((item, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-3 py-2 border-b border-dark-700 last:border-0"
-              >
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    item.type === 'connection'
-                      ? 'bg-green-500'
-                      : item.type === 'violation'
-                        ? 'bg-yellow-500'
-                        : item.type === 'block'
-                          ? 'bg-red-500'
-                          : 'bg-blue-500'
-                  }`}
-                ></span>
-                <span className="flex-1 text-sm text-gray-300">{item.message}</span>
-                <span className="text-xs text-gray-500">{item.time}</span>
+            <div className="flex items-center justify-between py-2 border-b border-dark-700">
+              <span className="text-sm text-gray-400">Активные пользователи</span>
+              <span className="text-sm text-white font-semibold">{overview?.active_users ?? '-'}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-dark-700">
+              <span className="text-sm text-gray-400">Отключённые пользователи</span>
+              <span className="text-sm text-white font-semibold">{overview?.disabled_users ?? '-'}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-dark-700">
+              <span className="text-sm text-gray-400">Истёкшие подписки</span>
+              <span className="text-sm text-white font-semibold">{overview?.expired_users ?? '-'}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-dark-700">
+              <span className="text-sm text-gray-400">Пользователи онлайн</span>
+              <span className="text-sm text-green-400 font-semibold">{overview?.users_online ?? '-'}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-dark-700">
+              <span className="text-sm text-gray-400">Хосты</span>
+              <span className="text-sm text-white font-semibold">{overview?.total_hosts ?? '-'}</span>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <span className="text-sm text-gray-400">Общий трафик</span>
+              <span className="text-sm text-purple-400 font-semibold">
+                {overview ? formatBytes(overview.total_traffic_bytes) : '-'}
+              </span>
+            </div>
+          </div>
+          {violationStats && violationStats.by_country && Object.keys(violationStats.by_country).length > 0 && (
+            <div className="mt-4 pt-4 border-t border-dark-700">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">Нарушения по странам</h3>
+              <div className="space-y-1">
+                {Object.entries(violationStats.by_country).slice(0, 5).map(([country, count]) => (
+                  <div key={country} className="flex items-center justify-between">
+                    <span className="text-xs text-gray-300">{country}</span>
+                    <span className="text-xs text-white font-mono">{count}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="mt-4 pt-4 border-t border-dark-700">
-            <button
-              onClick={() => navigate('/violations')}
-              className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1"
-            >
-              Показать все нарушения <HiExternalLink className="w-4 h-4" />
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Quick actions */}
@@ -419,22 +435,28 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-400">API</span>
                 <span className="flex items-center gap-2 text-sm">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  <span className="text-green-400">Работает</span>
+                  <span className={`w-2 h-2 rounded-full ${overview ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                  <span className={overview ? 'text-green-400' : 'text-red-400'}>
+                    {overview ? 'Работает' : 'Недоступен'}
+                  </span>
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-400">WebSocket</span>
+                <span className="text-sm text-gray-400">Ноды</span>
                 <span className="flex items-center gap-2 text-sm">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  <span className="text-green-400">Подключен</span>
+                  <span className={`w-2 h-2 rounded-full ${overview && overview.online_nodes > 0 ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+                  <span className={overview && overview.online_nodes > 0 ? 'text-green-400' : 'text-yellow-400'}>
+                    {overview ? `${overview.online_nodes} онлайн` : '-'}
+                  </span>
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-400">База данных</span>
                 <span className="flex items-center gap-2 text-sm">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  <span className="text-green-400">Доступна</span>
+                  <span className={`w-2 h-2 rounded-full ${violationStats !== undefined ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+                  <span className={violationStats !== undefined ? 'text-green-400' : 'text-yellow-400'}>
+                    {violationStats !== undefined ? 'Доступна' : 'Проверка...'}
+                  </span>
                 </span>
               </div>
             </div>
