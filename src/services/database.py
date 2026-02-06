@@ -147,8 +147,6 @@ class DatabaseService:
         """
         import os
         settings = get_settings()
-        
-       # Support both Settings with and without database_url field
         database_url = getattr(settings, 'database_url', None) or os.environ.get('DATABASE_URL')
         if not database_url:
             logger.warning("DATABASE_URL not configured, database features disabled")

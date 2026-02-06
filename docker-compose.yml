@@ -1,4 +1,8 @@
 services:
+  # ===========================================
+  # Основные сервисы
+  # ===========================================
+
   bot:
     image: ghcr.io/case211/remnawave-admin:latest
     restart: unless-stopped
@@ -12,7 +16,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       NOTIFICATIONS_CHAT_ID: ${NOTIFICATIONS_CHAT_ID:-}
       NOTIFICATIONS_TOPIC_ID: ${NOTIFICATIONS_TOPIC_ID:-}
-      # Отдельные топики для разных типов уведомлений (fallback на NOTIFICATIONS_TOPIC_ID)
       NOTIFICATIONS_TOPIC_USERS: ${NOTIFICATIONS_TOPIC_USERS:-}
       NOTIFICATIONS_TOPIC_NODES: ${NOTIFICATIONS_TOPIC_NODES:-}
       NOTIFICATIONS_TOPIC_SERVICE: ${NOTIFICATIONS_TOPIC_SERVICE:-}
@@ -21,7 +24,6 @@ services:
       NOTIFICATIONS_TOPIC_ERRORS: ${NOTIFICATIONS_TOPIC_ERRORS:-}
       WEBHOOK_PORT: ${WEBHOOK_PORT:-8080}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
-      # Database configuration (optional - remove DATABASE_URL to disable)
       DATABASE_URL: ${DATABASE_URL:-}
       DB_POOL_MIN_SIZE: ${DB_POOL_MIN_SIZE:-2}
       DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-10}
@@ -33,8 +35,6 @@ services:
     depends_on:
       remnawave-admin-db:
         condition: service_healthy
-    # Бот будет ждать, пока API будет доступен (но не блокирует старт, если API еще не готов)
-    # Повторные попытки подключения реализованы в коде бота
 
   remnawave-admin-db:
     container_name: remnawave-admin-db
@@ -53,6 +53,59 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ===========================================
+  # Веб-панель (опционально, --profile web)
+  # ===========================================
+
+  web-backend:
+    build:
+      context: .
+      dockerfile: web/backend/Dockerfile
+    container_name: remnawave-web-backend
+    restart: unless-stopped
+    environment:
+      - WEB_DEBUG=${WEB_DEBUG:-false}
+      - WEB_SECRET_KEY=${WEB_SECRET_KEY:?WEB_SECRET_KEY is required for web panel}
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=8081
+      - WEB_CORS_ORIGINS=${WEB_CORS_ORIGINS:-}
+      - BOT_TOKEN=${BOT_TOKEN}
+      - DATABASE_URL=${DATABASE_URL}
+      - API_BASE_URL=${API_BASE_URL}
+      - API_TOKEN=${API_TOKEN}
+      - ADMINS=${ADMINS}
+    ports:
+      - "${WEB_BACKEND_PORT:-8081}:8081"
+    networks:
+      - remnawave-network
+    depends_on:
+      remnawave-admin-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v2/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - web
+
+  web-frontend:
+    build:
+      context: ./web/frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-}
+        - VITE_WS_URL=${VITE_WS_URL:-}
+        - VITE_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
+    container_name: remnawave-web-frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_FRONTEND_PORT:-3000}:80"
+    networks:
+      - remnawave-network
+    profiles:
+      - web
 
 volumes:
   postgres_data:
