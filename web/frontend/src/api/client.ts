@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
+import { getAuthState } from '../store/authBridge'
 
 /**
  * Get the API base URL.
@@ -34,21 +35,15 @@ const client = axios.create({
 })
 
 /**
- * Request interceptor - add auth token
+ * Request interceptor - add auth token from Zustand store (in-memory).
+ * Reading from the store directly is more reliable than localStorage
+ * (avoids timing issues with persist middleware).
  */
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Get token from localStorage (zustand persist)
-    const authData = localStorage.getItem('remnawave-auth')
-    if (authData) {
-      try {
-        const { state } = JSON.parse(authData)
-        if (state?.accessToken) {
-          config.headers.Authorization = `Bearer ${state.accessToken}`
-        }
-      } catch {
-        // Ignore parse errors
-      }
+    const auth = getAuthState()
+    if (auth?.accessToken) {
+      config.headers.Authorization = `Bearer ${auth.accessToken}`
     }
     return config
   },
@@ -67,33 +62,25 @@ client.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
 
-      const authData = localStorage.getItem('remnawave-auth')
-      if (authData) {
+      const auth = getAuthState()
+      if (auth?.refreshToken) {
         try {
-          const { state } = JSON.parse(authData)
-          if (state?.refreshToken) {
-            // Try to refresh (use same baseURL as the main client)
-            const response = await axios.post(`${getApiBaseUrl()}/auth/refresh`, {
-              refresh_token: state.refreshToken,
-            })
+          const response = await axios.post(`${getApiBaseUrl()}/auth/refresh`, {
+            refresh_token: auth.refreshToken,
+          })
 
-            const { access_token, refresh_token } = response.data
+          const { access_token, refresh_token } = response.data
 
-            // Update tokens in localStorage
-            const newState = {
-              ...state,
-              accessToken: access_token,
-              refreshToken: refresh_token,
-            }
-            localStorage.setItem('remnawave-auth', JSON.stringify({ state: newState }))
+          // Update tokens in Zustand store (will also persist to localStorage)
+          auth.setTokens(access_token, refresh_token)
 
-            // Retry original request
-            originalRequest.headers.Authorization = `Bearer ${access_token}`
-            return client(originalRequest)
-          }
+          // Retry original request
+          originalRequest.headers.Authorization = `Bearer ${access_token}`
+          return client(originalRequest)
         } catch {
           // Refresh failed - clear auth and redirect to login
-          localStorage.removeItem('remnawave-auth')
+          const currentAuth = getAuthState()
+          currentAuth?.logout()
           window.location.href = '/login'
         }
       }
