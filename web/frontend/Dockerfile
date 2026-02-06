@@ -8,11 +8,10 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install ALL dependencies (including devDependencies for TypeScript build)
+# Install ALL dependencies (ensure devDependencies are included for build)
+# NODE_ENV=development ensures devDependencies are installed
+ENV NODE_ENV=development
 RUN npm ci
-
-# Verify TypeScript is installed
-RUN npx tsc --version
 
 # Copy source code
 COPY . .
@@ -27,7 +26,8 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 ENV VITE_TELEGRAM_BOT_USERNAME=$VITE_TELEGRAM_BOT_USERNAME
 
-# Build the application
+# Build the application (uses local node_modules/.bin/tsc)
+ENV NODE_ENV=production
 RUN npm run build
 
 # Production stage
