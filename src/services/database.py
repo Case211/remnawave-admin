@@ -145,9 +145,12 @@ class DatabaseService:
         Initialize database connection pool.
         Returns True if connection successful, False otherwise.
         """
+        import os
         settings = get_settings()
         
-        if not settings.database_url:
+       # Support both Settings with and without database_url field
+        database_url = getattr(settings, 'database_url', None) or os.environ.get('DATABASE_URL')
+        if not database_url:
             logger.warning("DATABASE_URL not configured, database features disabled")
             return False
         
@@ -158,9 +161,9 @@ class DatabaseService:
             try:
                 logger.info("Connecting to PostgreSQL database...")
                 self._pool = await asyncpg.create_pool(
-                    dsn=settings.database_url,
-                    min_size=settings.db_pool_min_size,
-                    max_size=settings.db_pool_max_size,
+                    dsn=database_url,
+                    min_size=getattr(settings, 'db_pool_min_size', 2),
+                    max_size=getattr(settings, 'db_pool_max_size', 10),
                     command_timeout=30,
                 )
                 
