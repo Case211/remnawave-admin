@@ -18,6 +18,7 @@ _client: Optional[httpx.AsyncClient] = None
 _CAMEL_TO_SNAKE = {
     "shortUuid": "short_uuid",
     "subscriptionUuid": "subscription_uuid",
+    "subscriptionUrl": "subscription_url",
     "telegramId": "telegram_id",
     "expireAt": "expire_at",
     "trafficLimitBytes": "traffic_limit_bytes",
