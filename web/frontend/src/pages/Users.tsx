@@ -45,6 +45,7 @@ const fetchUsers = async (params: {
   per_page: number
   search?: string
   status?: string
+  traffic_type?: string
   sort_by: string
   sort_order: string
 }): Promise<PaginatedResponse> => {
@@ -96,22 +97,33 @@ function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
   const percent = getTrafficPercent(used, limit)
   const colorClass =
     percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-yellow-500' : 'bg-green-500'
+  const isUnlimited = !limit
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-dark-100">{formatBytes(used)}</span>
-        <span className="text-dark-200">
-          {limit ? `/ ${formatBytes(limit)}` : '∞'}
-        </span>
-      </div>
-      {limit && (
-        <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
-          <div
-            className={`h-full ${colorClass} transition-all`}
-            style={{ width: `${percent}%` }}
-          />
+      {isUnlimited ? (
+        /* Unlimited: solid gradient bar with centered text */
+        <div className="relative h-5 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[11px] font-medium text-primary-200">
+              {formatBytes(used)} / ∞
+            </span>
+          </div>
         </div>
+      ) : (
+        /* Limited: standard progress bar */
+        <>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-dark-100">{formatBytes(used)}</span>
+            <span className="text-dark-200">/ {formatBytes(limit)}</span>
+          </div>
+          <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+            <div
+              className={`h-full ${colorClass} transition-all`}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </>
       )}
     </div>
   )
@@ -298,6 +310,7 @@ export default function Users() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState('')
+  const [trafficType, setTrafficType] = useState('')
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('desc')
 
@@ -312,13 +325,14 @@ export default function Users() {
 
   // Fetch users
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['users', page, perPage, debouncedSearch, status, sortBy, sortOrder],
+    queryKey: ['users', page, perPage, debouncedSearch, status, trafficType, sortBy, sortOrder],
     queryFn: () =>
       fetchUsers({
         page,
         per_page: perPage,
         search: debouncedSearch || undefined,
         status: status || undefined,
+        traffic_type: trafficType || undefined,
         sort_by: sortBy,
         sort_order: sortOrder,
       }),
@@ -364,6 +378,12 @@ export default function Users() {
     setPage(1)
   }
 
+  // Handle traffic type filter
+  const handleTrafficTypeChange = (newType: string) => {
+    setTrafficType(newType)
+    setPage(1)
+  }
+
   const users = data?.items ?? []
   const total = data?.total ?? 0
   const pages = data?.pages ?? 1
@@ -382,22 +402,31 @@ export default function Users() {
 
       {/* Filters */}
       <div className="card">
-        <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
-          <div className="flex-1 relative">
-            <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по имени, email, UUID..."
-              className="input pl-10"
-            />
+        <div className="flex flex-col gap-3 md:gap-4">
+          <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+            <div className="flex-1 relative">
+              <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по имени, email, UUID..."
+                className="input pl-10"
+              />
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="btn-secondary flex-shrink-0 hidden sm:flex"
+              disabled={isLoading}
+            >
+              <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <select
               value={status}
               onChange={(e) => handleStatusChange(e.target.value)}
-              className="input flex-1 sm:w-48 sm:flex-none"
+              className="input flex-1 sm:flex-none sm:w-44"
             >
               <option value="">Все статусы</option>
               <option value="active">Активные</option>
@@ -405,9 +434,18 @@ export default function Users() {
               <option value="limited">Ограниченные</option>
               <option value="expired">Истёкшие</option>
             </select>
+            <select
+              value={trafficType}
+              onChange={(e) => handleTrafficTypeChange(e.target.value)}
+              className="input flex-1 sm:flex-none sm:w-44"
+            >
+              <option value="">Весь трафик</option>
+              <option value="unlimited">Безлимитные</option>
+              <option value="limited">С лимитом</option>
+            </select>
             <button
               onClick={() => refetch()}
-              className="btn-secondary flex-shrink-0"
+              className="btn-secondary flex-shrink-0 sm:hidden"
               disabled={isLoading}
             >
               <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -448,7 +486,7 @@ export default function Users() {
           ))
         ) : users.length === 0 ? (
           <div className="card text-center py-8 text-dark-200">
-            {debouncedSearch || status
+            {debouncedSearch || status || trafficType
               ? 'Пользователи не найдены'
               : 'Нет пользователей'}
           </div>
@@ -490,7 +528,15 @@ export default function Users() {
                     onSort={handleSort}
                   />
                 </th>
-                <th>Трафик</th>
+                <th>
+                  <SortHeader
+                    label="Трафик"
+                    field="used_traffic_bytes"
+                    currentSort={sortBy}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                  />
+                </th>
                 <th>
                   <SortHeader
                     label="Истекает"
