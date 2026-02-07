@@ -59,6 +59,20 @@ class JsonI18n(I18n):
         return translations
 
 
+def _get_bot_language() -> str:
+    """Get bot language from config_service (DB > .env > default)."""
+    try:
+        from src.services.config_service import config_service
+        if config_service._initialized:
+            lang = config_service.get("bot_language")
+            if lang:
+                return lang
+    except Exception:
+        pass
+    # Fallback to static settings
+    return get_settings().default_locale
+
+
 def get_i18n() -> I18n:
     settings = get_settings()
     return JsonI18n(path=BASE_LOCALES_PATH, default_locale=settings.default_locale, domain="messages")
@@ -69,6 +83,9 @@ def get_i18n_middleware() -> I18nMiddleware:
 
     class SimpleI18nMiddleware(I18nMiddleware):
         async def get_locale(self, event, data) -> str:  # type: ignore[override]
+            # Динамически читаем язык из config_service (БД) при каждом запросе
+            default_lang = _get_bot_language()
+
             user = getattr(event, "from_user", None)
             if user:
                 lang = getattr(user, "language_code", None)
@@ -78,10 +95,11 @@ def get_i18n_middleware() -> I18nMiddleware:
                     base_lang = lang.split("-")[0]
                     if base_lang in self.i18n.available_locales:
                         return base_lang
-            return self.i18n.default_locale
+
+            return default_lang
 
         async def __call__(self, handler, event, data):  # type: ignore[override]
-            current_locale = await self.get_locale(event=event, data=data) or self.i18n.default_locale
+            current_locale = await self.get_locale(event=event, data=data) or _get_bot_language()
 
             if self.i18n_key:
                 data[self.i18n_key] = self.i18n
