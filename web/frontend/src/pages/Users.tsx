@@ -14,6 +14,10 @@ import {
   HiBan,
   HiSortAscending,
   HiSortDescending,
+  HiFilter,
+  HiX,
+  HiChevronDown,
+  HiChevronUp,
 } from 'react-icons/hi'
 import client from '../api/client'
 
@@ -29,6 +33,7 @@ interface UserListItem {
   used_traffic_bytes: number
   hwid_device_limit: number
   created_at: string | null
+  online_at: string | null
 }
 
 interface PaginatedResponse {
@@ -46,6 +51,9 @@ const fetchUsers = async (params: {
   search?: string
   status?: string
   traffic_type?: string
+  expire_filter?: string
+  online_filter?: string
+  traffic_usage?: string
   sort_by: string
   sort_order: string
 }): Promise<PaginatedResponse> => {
@@ -70,6 +78,22 @@ function formatDate(dateStr: string | null): string {
     month: '2-digit',
     year: 'numeric',
   })
+}
+
+function formatRelativeDate(dateStr: string | null): string {
+  if (!dateStr) return '—'
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMin < 1) return 'Только что'
+  if (diffMin < 60) return `${diffMin} мин назад`
+  if (diffHours < 24) return `${diffHours} ч назад`
+  if (diffDays < 7) return `${diffDays} дн назад`
+  return formatDate(dateStr)
 }
 
 function getTrafficPercent(used: number, limit: number | null): number {
@@ -125,6 +149,28 @@ function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// Online indicator
+function OnlineIndicator({ onlineAt }: { onlineAt: string | null }) {
+  if (!onlineAt) return <span className="text-dark-300 text-xs">Нет данных</span>
+
+  const date = new Date(onlineAt)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = diffMs / 3600000
+
+  let dotColor = 'bg-gray-500'
+  if (diffHours < 1) dotColor = 'bg-green-500'
+  else if (diffHours < 24) dotColor = 'bg-yellow-500'
+  else if (diffHours < 168) dotColor = 'bg-orange-500'
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`w-1.5 h-1.5 rounded-full ${dotColor} flex-shrink-0`} />
+      <span className="text-dark-200 text-xs">{formatRelativeDate(onlineAt)}</span>
     </div>
   )
 }
@@ -293,8 +339,8 @@ function MobileUserCard({
         />
       </div>
       <div className="flex items-center justify-between text-xs text-dark-200">
+        <OnlineIndicator onlineAt={user.online_at} />
         <span>Истекает: {formatDate(user.expire_at)}</span>
-        <span>Создан: {formatDate(user.created_at)}</span>
       </div>
     </div>
   )
@@ -306,26 +352,33 @@ export default function Users() {
 
   // State
   const [page, setPage] = useState(1)
-  const [perPage] = useState(20)
+  const [perPage, setPerPage] = useState(20)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState('')
   const [trafficType, setTrafficType] = useState('')
+  const [expireFilter, setExpireFilter] = useState('')
+  const [onlineFilter, setOnlineFilter] = useState('')
+  const [trafficUsage, setTrafficUsage] = useState('')
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('desc')
+  const [showFilters, setShowFilters] = useState(false)
+
+  // Count active filters (excluding search)
+  const activeFilterCount = [status, trafficType, expireFilter, onlineFilter, trafficUsage].filter(Boolean).length
 
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
-      setPage(1) // Reset page on search
+      setPage(1)
     }, 300)
     return () => clearTimeout(timer)
   }, [search])
 
   // Fetch users
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['users', page, perPage, debouncedSearch, status, trafficType, sortBy, sortOrder],
+    queryKey: ['users', page, perPage, debouncedSearch, status, trafficType, expireFilter, onlineFilter, trafficUsage, sortBy, sortOrder],
     queryFn: () =>
       fetchUsers({
         page,
@@ -333,6 +386,9 @@ export default function Users() {
         search: debouncedSearch || undefined,
         status: status || undefined,
         traffic_type: trafficType || undefined,
+        expire_filter: expireFilter || undefined,
+        online_filter: onlineFilter || undefined,
+        traffic_usage: trafficUsage || undefined,
         sort_by: sortBy,
         sort_order: sortOrder,
       }),
@@ -372,17 +428,18 @@ export default function Users() {
     setPage(1)
   }
 
-  // Handle status filter
-  const handleStatusChange = (newStatus: string) => {
-    setStatus(newStatus)
+  // Reset all filters
+  const resetFilters = () => {
+    setSearch('')
+    setStatus('')
+    setTrafficType('')
+    setExpireFilter('')
+    setOnlineFilter('')
+    setTrafficUsage('')
     setPage(1)
   }
 
-  // Handle traffic type filter
-  const handleTrafficTypeChange = (newType: string) => {
-    setTrafficType(newType)
-    setPage(1)
-  }
+  const hasAnyFilter = activeFilterCount > 0 || debouncedSearch
 
   const users = data?.items ?? []
   const total = data?.total ?? 0
@@ -400,57 +457,204 @@ export default function Users() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Search + Filter toggle */}
       <div className="card">
-        <div className="flex flex-col gap-3 md:gap-4">
-          <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+        <div className="flex flex-col gap-3">
+          {/* Row 1: Search + filter toggle + refresh */}
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 relative">
               <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск по имени, email, UUID..."
+                placeholder="Поиск по имени, email, UUID, Telegram ID..."
                 className="input pl-10"
               />
             </div>
-            <button
-              onClick={() => refetch()}
-              className="btn-secondary flex-shrink-0 hidden sm:flex"
-              disabled={isLoading}
-            >
-              <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`btn-secondary flex items-center gap-2 flex-1 sm:flex-none ${
+                  activeFilterCount > 0 ? 'border-primary-500/50 text-primary-400' : ''
+                }`}
+              >
+                <HiFilter className="w-4 h-4" />
+                <span className="sm:inline">Фильтры</span>
+                {activeFilterCount > 0 && (
+                  <span className="bg-primary-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+                {showFilters ? <HiChevronUp className="w-4 h-4" /> : <HiChevronDown className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => refetch()}
+                className="btn-secondary flex-shrink-0"
+                disabled={isLoading}
+              >
+                <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <select
-              value={status}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className="input flex-1 sm:flex-none sm:w-44"
-            >
-              <option value="">Все статусы</option>
-              <option value="active">Активные</option>
-              <option value="disabled">Отключённые</option>
-              <option value="limited">Ограниченные</option>
-              <option value="expired">Истёкшие</option>
-            </select>
-            <select
-              value={trafficType}
-              onChange={(e) => handleTrafficTypeChange(e.target.value)}
-              className="input flex-1 sm:flex-none sm:w-44"
-            >
-              <option value="">Весь трафик</option>
-              <option value="unlimited">Безлимитные</option>
-              <option value="limited">С лимитом</option>
-            </select>
-            <button
-              onClick={() => refetch()}
-              className="btn-secondary flex-shrink-0 sm:hidden"
-              disabled={isLoading}
-            >
-              <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+
+          {/* Row 2: Expandable filters */}
+          {showFilters && (
+            <div className="pt-3 border-t border-dark-400/20 space-y-3 animate-fade-in">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* Status */}
+                <div>
+                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Статус</label>
+                  <select
+                    value={status}
+                    onChange={(e) => { setStatus(e.target.value); setPage(1) }}
+                    className="input text-sm"
+                  >
+                    <option value="">Все статусы</option>
+                    <option value="active">Активные</option>
+                    <option value="disabled">Отключённые</option>
+                    <option value="limited">Ограниченные</option>
+                    <option value="expired">Истёкшие</option>
+                  </select>
+                </div>
+
+                {/* Traffic type */}
+                <div>
+                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Тип трафика</label>
+                  <select
+                    value={trafficType}
+                    onChange={(e) => { setTrafficType(e.target.value); setPage(1) }}
+                    className="input text-sm"
+                  >
+                    <option value="">Любой</option>
+                    <option value="unlimited">Безлимитные</option>
+                    <option value="limited">С лимитом</option>
+                  </select>
+                </div>
+
+                {/* Traffic usage */}
+                <div>
+                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Расход трафика</label>
+                  <select
+                    value={trafficUsage}
+                    onChange={(e) => { setTrafficUsage(e.target.value); setPage(1) }}
+                    className="input text-sm"
+                  >
+                    <option value="">Любой расход</option>
+                    <option value="above_90">Более 90% лимита</option>
+                    <option value="above_70">Более 70% лимита</option>
+                    <option value="above_50">Более 50% лимита</option>
+                    <option value="zero">Без трафика (0)</option>
+                  </select>
+                </div>
+
+                {/* Expiration */}
+                <div>
+                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Срок действия</label>
+                  <select
+                    value={expireFilter}
+                    onChange={(e) => { setExpireFilter(e.target.value); setPage(1) }}
+                    className="input text-sm"
+                  >
+                    <option value="">Любой срок</option>
+                    <option value="expiring_7d">Истекает за 7 дней</option>
+                    <option value="expiring_30d">Истекает за 30 дней</option>
+                    <option value="expired">Уже истёк</option>
+                    <option value="no_expiry">Бессрочные</option>
+                  </select>
+                </div>
+
+                {/* Online status */}
+                <div>
+                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Активность</label>
+                  <select
+                    value={onlineFilter}
+                    onChange={(e) => { setOnlineFilter(e.target.value); setPage(1) }}
+                    className="input text-sm"
+                  >
+                    <option value="">Любая активность</option>
+                    <option value="online_24h">Были онлайн за 24ч</option>
+                    <option value="online_7d">Были онлайн за 7 дней</option>
+                    <option value="online_30d">Были онлайн за 30 дней</option>
+                    <option value="never">Никогда не подключались</option>
+                  </select>
+                </div>
+
+                {/* Per page */}
+                <div>
+                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">На странице</label>
+                  <select
+                    value={perPage}
+                    onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1) }}
+                    className="input text-sm"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Reset button */}
+              {hasAnyFilter && (
+                <div className="flex items-center justify-between pt-2">
+                  <p className="text-xs text-dark-300">
+                    Найдено: <span className="text-white font-medium">{total.toLocaleString()}</span> пользователей
+                  </p>
+                  <button
+                    onClick={resetFilters}
+                    className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                  >
+                    <HiX className="w-3 h-3" />
+                    Сбросить все фильтры
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Active filters chips (when panel is collapsed) */}
+          {!showFilters && activeFilterCount > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {status && (
+                <FilterChip
+                  label={`Статус: ${({ active: 'Активные', disabled: 'Отключённые', limited: 'Ограниченные', expired: 'Истёкшие' } as Record<string, string>)[status] || status}`}
+                  onRemove={() => { setStatus(''); setPage(1) }}
+                />
+              )}
+              {trafficType && (
+                <FilterChip
+                  label={`Трафик: ${trafficType === 'unlimited' ? 'Безлимит' : 'С лимитом'}`}
+                  onRemove={() => { setTrafficType(''); setPage(1) }}
+                />
+              )}
+              {trafficUsage && (
+                <FilterChip
+                  label={`Расход: ${({ above_90: '>90%', above_70: '>70%', above_50: '>50%', zero: '0' } as Record<string, string>)[trafficUsage] || trafficUsage}`}
+                  onRemove={() => { setTrafficUsage(''); setPage(1) }}
+                />
+              )}
+              {expireFilter && (
+                <FilterChip
+                  label={`Срок: ${({ expiring_7d: '7 дней', expiring_30d: '30 дней', expired: 'Истёк', no_expiry: 'Бессрочные' } as Record<string, string>)[expireFilter] || expireFilter}`}
+                  onRemove={() => { setExpireFilter(''); setPage(1) }}
+                />
+              )}
+              {onlineFilter && (
+                <FilterChip
+                  label={`Онлайн: ${({ online_24h: '24ч', online_7d: '7д', online_30d: '30д', never: 'Никогда' } as Record<string, string>)[onlineFilter] || onlineFilter}`}
+                  onRemove={() => { setOnlineFilter(''); setPage(1) }}
+                />
+              )}
+              <button
+                onClick={resetFilters}
+                className="text-[11px] text-dark-300 hover:text-primary-400 ml-1"
+              >
+                Сбросить все
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -486,7 +690,7 @@ export default function Users() {
           ))
         ) : users.length === 0 ? (
           <div className="card text-center py-8 text-dark-200">
-            {debouncedSearch || status || trafficType
+            {hasAnyFilter
               ? 'Пользователи не найдены'
               : 'Нет пользователей'}
           </div>
@@ -539,6 +743,15 @@ export default function Users() {
                 </th>
                 <th>
                   <SortHeader
+                    label="Активность"
+                    field="online_at"
+                    currentSort={sortBy}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                  />
+                </th>
+                <th>
+                  <SortHeader
                     label="Истекает"
                     field="expire_at"
                     currentSort={sortBy}
@@ -578,13 +791,16 @@ export default function Users() {
                     <td>
                       <div className="h-4 w-20 skeleton rounded" />
                     </td>
+                    <td>
+                      <div className="h-4 w-20 skeleton rounded" />
+                    </td>
                     <td></td>
                   </tr>
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-dark-200">
-                    {debouncedSearch || status
+                  <td colSpan={7} className="text-center py-8 text-dark-200">
+                    {hasAnyFilter
                       ? 'Пользователи не найдены'
                       : 'Нет пользователей'}
                   </td>
@@ -614,6 +830,9 @@ export default function Users() {
                         used={user.used_traffic_bytes}
                         limit={user.traffic_limit_bytes}
                       />
+                    </td>
+                    <td>
+                      <OnlineIndicator onlineAt={user.online_at} />
                     </td>
                     <td className="text-dark-200 text-sm">
                       {formatDate(user.expire_at)}
@@ -670,5 +889,17 @@ export default function Users() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Filter chip component
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary-500/10 border border-primary-500/20 text-[11px] text-primary-300">
+      {label}
+      <button onClick={onRemove} className="hover:text-white ml-0.5">
+        <HiX className="w-3 h-3" />
+      </button>
+    </span>
   )
 }
