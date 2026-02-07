@@ -74,24 +74,15 @@ class Settings(BaseSettings):
     @classmethod
     def parse_notifications_chat_id(cls, value):
         """Парсит NOTIFICATIONS_CHAT_ID в int или возвращает None."""
-        raw_env_value = os.getenv("NOTIFICATIONS_CHAT_ID", "NOT_SET")
-        print(f"DEBUG parse_notifications_chat_id: value={repr(value)}, type={type(value)}, raw_env={repr(raw_env_value)}")
-        
         if value is None or value == "":
-            print(f"DEBUG parse_notifications_chat_id: value is None or empty, returning None")
             return None
         if isinstance(value, int):
-            print(f"DEBUG parse_notifications_chat_id: value is already int={value}, returning {value}")
             return value
         if isinstance(value, str):
             try:
-                result = int(value)
-                print(f"DEBUG parse_notifications_chat_id: parsed string '{value}' to int={result}")
-                return result
+                return int(value)
             except ValueError:
-                print(f"DEBUG parse_notifications_chat_id: failed to parse '{value}' as int, returning None")
                 return None
-        print(f"DEBUG parse_notifications_chat_id: value type not handled, returning None")
         return None
     
     @field_validator(
