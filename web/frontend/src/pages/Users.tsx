@@ -695,21 +695,22 @@ export default function Users() {
               : 'Нет пользователей'}
           </div>
         ) : (
-          users.map((user) => (
-            <MobileUserCard
-              key={user.uuid}
-              user={user}
-              onNavigate={() => navigate(`/users/${user.uuid}`)}
-              onEnable={() => enableUser.mutate(user.uuid)}
-              onDisable={() => disableUser.mutate(user.uuid)}
-              onDelete={() => deleteUser.mutate(user.uuid)}
-            />
+          users.map((user, i) => (
+            <div key={user.uuid} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.04}s` }}>
+              <MobileUserCard
+                user={user}
+                onNavigate={() => navigate(`/users/${user.uuid}`)}
+                onEnable={() => enableUser.mutate(user.uuid)}
+                onDisable={() => disableUser.mutate(user.uuid)}
+                onDelete={() => deleteUser.mutate(user.uuid)}
+              />
+            </div>
           ))
         )}
       </div>
 
       {/* Desktop: Users table */}
-      <div className="card p-0 overflow-hidden hidden md:block">
+      <div className="card p-0 overflow-hidden hidden md:block animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
@@ -857,7 +858,7 @@ export default function Users() {
       </div>
 
       {/* Pagination */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in" style={{ animationDelay: '0.15s' }}>
         <p className="text-sm text-dark-200 order-2 sm:order-1">
           {total > 0 ? (
             <>

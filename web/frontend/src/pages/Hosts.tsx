@@ -261,19 +261,19 @@ export default function Hosts() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <p className="text-xs md:text-sm text-dark-200">Всего</p>
           <p className="text-xl md:text-2xl font-bold text-white mt-1">
             {isLoading ? '-' : totalHosts}
           </p>
         </div>
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <p className="text-xs md:text-sm text-dark-200">Активные</p>
           <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
             {isLoading ? '-' : activeHosts}
           </p>
         </div>
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <p className="text-xs md:text-sm text-dark-200">Отключены</p>
           <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
             {isLoading ? '-' : disabledHosts}
@@ -291,14 +291,15 @@ export default function Hosts() {
             <p className="text-dark-200">Нет хостов</p>
           </div>
         ) : (
-          hosts.map((host) => (
-            <HostCard
-              key={host.uuid}
-              host={host}
-              onEnable={() => enableHost.mutate(host.uuid)}
-              onDisable={() => disableHost.mutate(host.uuid)}
-              onDelete={() => deleteHost.mutate(host.uuid)}
-            />
+          hosts.map((host, i) => (
+            <div key={host.uuid} className="animate-fade-in-up" style={{ animationDelay: `${0.1 + i * 0.06}s` }}>
+              <HostCard
+                host={host}
+                onEnable={() => enableHost.mutate(host.uuid)}
+                onDisable={() => disableHost.mutate(host.uuid)}
+                onDelete={() => deleteHost.mutate(host.uuid)}
+              />
+            </div>
           ))
         )}
       </div>

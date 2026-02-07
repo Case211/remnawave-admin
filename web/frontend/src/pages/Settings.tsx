@@ -302,7 +302,7 @@ export default function Settings() {
 
       {/* Sync status */}
       {syncItems.length > 0 && (
-        <div className="card">
+        <div className="card animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <h2 className="text-base md:text-lg font-semibold text-white mb-3">Статус синхронизации</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {syncItems.map((item) => (
@@ -349,16 +349,16 @@ export default function Settings() {
             const isOpen = openCategories[category] ?? false
             const editedCount = items.filter((item) => item.key in editedValues).length
             return (
-              <div key={category} className="card p-0 overflow-hidden">
+              <div key={category} className="card p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: `${0.05 * (Object.keys(categories).indexOf(category))}s` }}>
                 <button
                   onClick={() => toggleCategory(category)}
                   className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-dark-700/30 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     {isOpen ? (
-                      <HiChevronDown className="w-5 h-5 text-dark-200" />
+                      <HiChevronDown className="w-5 h-5 text-dark-200 transition-transform duration-200" />
                     ) : (
-                      <HiChevronRight className="w-5 h-5 text-dark-200" />
+                      <HiChevronRight className="w-5 h-5 text-dark-200 transition-transform duration-200" />
                     )}
                     <h2 className="text-base font-semibold text-white">
                       {categoryLabels[category] || category}
@@ -372,7 +372,7 @@ export default function Settings() {
                   )}
                 </button>
                 {isOpen && (
-                  <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50">
+                  <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50 animate-fade-in-down">
                     <div className="divide-y divide-dark-700/50">
                       {items.map((item) => renderConfigItem(item))}
                     </div>

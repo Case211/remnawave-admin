@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   HiUsers,
   HiServer,
@@ -8,6 +8,7 @@ import {
   HiRefresh,
   HiExternalLink,
   HiCog,
+  HiTrendingUp,
 } from 'react-icons/hi'
 import {
   BarChart,
@@ -75,11 +76,12 @@ const fetchTrafficStats = async (): Promise<TrafficStats> => {
 }
 
 // Utility functions
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 Б'
+function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes || bytes <= 0) return '0 Б'
   const k = 1024
   const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
+  if (i < 0 || i >= sizes.length) return '0 Б'
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
@@ -92,9 +94,10 @@ interface StatCardProps {
   subtitle?: string
   onClick?: () => void
   loading?: boolean
+  index?: number
 }
 
-function StatCard({ title, value, icon: Icon, color, subtitle, onClick, loading }: StatCardProps) {
+function StatCard({ title, value, icon: Icon, color, subtitle, onClick, loading, index = 0 }: StatCardProps) {
   const colorConfig = {
     cyan: {
       bg: 'rgba(34, 211, 238, 0.15)',
@@ -127,9 +130,9 @@ function StatCard({ title, value, icon: Icon, color, subtitle, onClick, loading 
 
   return (
     <div
-      className={`card group ${onClick ? 'cursor-pointer glow-teal-hover' : ''}`}
+      className={`card group animate-fade-in-up ${onClick ? 'cursor-pointer glow-teal-hover' : ''}`}
       onClick={onClick}
-      style={{ transition: 'all 0.2s ease' }}
+      style={{ transition: 'all 0.2s ease', animationDelay: `${index * 0.07}s` }}
     >
       <div className="flex items-center justify-between">
         <div>
@@ -188,15 +191,16 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   // Fetch data
-  const { data: overview, isLoading: overviewLoading, refetch: refetchOverview } = useQuery({
+  const { data: overview, isLoading: overviewLoading, isError: overviewError } = useQuery({
     queryKey: ['overview'],
     queryFn: fetchOverview,
     refetchInterval: 30000,
   })
 
-  const { data: violationStats, isLoading: violationsLoading } = useQuery({
+  const { data: violationStats, isLoading: violationsLoading, isError: violationsError } = useQuery({
     queryKey: ['violationStats'],
     queryFn: fetchViolationStats,
     refetchInterval: 30000,
@@ -207,6 +211,13 @@ export default function Dashboard() {
     queryFn: fetchTrafficStats,
     refetchInterval: 60000,
   })
+
+  // Refresh ALL dashboard queries
+  const handleRefreshAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['overview'] })
+    queryClient.invalidateQueries({ queryKey: ['violationStats'] })
+    queryClient.invalidateQueries({ queryKey: ['trafficStats'] })
+  }
 
   // Build violations chart from real stats
   const violationsChartData = violationStats
@@ -241,6 +252,11 @@ export default function Dashboard() {
 
   const isLoading = overviewLoading || violationsLoading || trafficLoading
 
+  // Build traffic subtitle from trafficStats
+  const trafficSubtitle = trafficStats
+    ? `Сегодня: ${formatBytes(trafficStats.today_bytes)}, за неделю: ${formatBytes(trafficStats.week_bytes)}`
+    : undefined
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -250,7 +266,7 @@ export default function Dashboard() {
           <p className="text-dark-200 mt-1 text-sm md:text-base">Обзор системы Remnawave</p>
         </div>
         <button
-          onClick={() => refetchOverview()}
+          onClick={handleRefreshAll}
           className="btn-secondary flex items-center gap-2 self-start sm:self-auto"
           disabled={isLoading}
         >
@@ -259,16 +275,31 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {/* Error banner */}
+      {(overviewError || violationsError) && (
+        <div className="card border border-red-500/30 bg-red-500/10 animate-fade-in-down">
+          <div className="flex items-center justify-between">
+            <p className="text-red-400 text-sm">
+              Ошибка загрузки данных. Некоторые показатели могут быть недоступны.
+            </p>
+            <button onClick={handleRefreshAll} className="btn-secondary text-sm">
+              Повторить
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Stats grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Всего пользователей"
-          value={overview?.total_users.toLocaleString() ?? '-'}
+          value={overview?.total_users != null ? overview.total_users.toLocaleString() : '-'}
           icon={HiUsers}
           color="cyan"
           subtitle={overview ? `${overview.active_users} активных, ${overview.expired_users} истекших` : undefined}
           onClick={() => navigate('/users')}
           loading={overviewLoading}
+          index={0}
         />
         <StatCard
           title="Активные ноды"
@@ -278,29 +309,33 @@ export default function Dashboard() {
           subtitle={overview ? `${overview.offline_nodes} офлайн, ${overview.disabled_nodes} отключ.${overview.users_online ? `, ${overview.users_online} онлайн` : ''}` : undefined}
           onClick={() => navigate('/nodes')}
           loading={overviewLoading}
+          index={1}
         />
         <StatCard
           title="Нарушения"
-          value={overview?.violations_today ?? 0}
+          value={overview ? `${overview.violations_today}` : '-'}
           icon={HiShieldExclamation}
           color={overview && overview.violations_today > 0 ? 'red' : 'yellow'}
           subtitle={overview ? `Сегодня: ${overview.violations_today}, за неделю: ${overview.violations_week}` : undefined}
           onClick={() => navigate('/violations')}
           loading={overviewLoading}
+          index={2}
         />
         <StatCard
           title="Общий трафик"
           value={overview ? formatBytes(overview.total_traffic_bytes) : trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
-          icon={HiStatusOnline}
+          icon={HiTrendingUp}
           color="violet"
+          subtitle={trafficSubtitle}
           loading={overviewLoading && trafficLoading}
+          index={3}
         />
       </div>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Violations by severity */}
-        <div className="card lg:col-span-2">
+        <div className="card lg:col-span-2 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <h2 className="text-base md:text-lg font-semibold text-white">Нарушения по уровню (за 7 дней)</h2>
             {violationStats && (
@@ -336,19 +371,19 @@ export default function Dashboard() {
         </div>
 
         {/* Violations by action */}
-        <div className="card">
+        <div className="card animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h2 className="text-base md:text-lg font-semibold text-white mb-4">По рекомендации</h2>
           {violationsLoading ? (
             <ChartSkeleton />
           ) : actionChartData.length > 0 ? (
             <div className="space-y-3">
-              {actionChartData.map((item) => (
-                <div key={item.name} className="flex items-center justify-between">
+              {actionChartData.map((item, i) => (
+                <div key={item.name} className="flex items-center justify-between animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
                   <span className="text-sm text-dark-100">{item.name}</span>
                   <div className="flex items-center gap-2">
                     <div className="w-24 h-2 bg-dark-600 rounded-full overflow-hidden">
                       <div
-                        className="h-full rounded-full"
+                        className="h-full rounded-full transition-all duration-500"
                         style={{
                           width: `${violationStats && violationStats.total > 0 ? (item.value / violationStats.total) * 100 : 0}%`,
                           background: 'linear-gradient(90deg, #0d9488, #06b6d4)',
@@ -383,7 +418,7 @@ export default function Dashboard() {
       {/* Main content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Statistics summary */}
-        <div className="card">
+        <div className="card animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
           <h2 className="text-base md:text-lg font-semibold text-white mb-4">Сводка</h2>
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
@@ -406,12 +441,34 @@ export default function Dashboard() {
               <span className="text-sm text-dark-200">Хосты</span>
               <span className="text-sm text-white font-semibold">{overview?.total_hosts ?? '-'}</span>
             </div>
-            <div className="flex items-center justify-between py-2">
+            <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
               <span className="text-sm text-dark-200">Общий трафик</span>
               <span className="text-sm text-violet-400 font-semibold">
                 {overview ? formatBytes(overview.total_traffic_bytes) : '-'}
               </span>
             </div>
+            {trafficStats && (
+              <>
+                <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
+                  <span className="text-sm text-dark-200">Трафик сегодня</span>
+                  <span className="text-sm text-cyan-400 font-semibold">
+                    {formatBytes(trafficStats.today_bytes)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
+                  <span className="text-sm text-dark-200">Трафик за неделю</span>
+                  <span className="text-sm text-cyan-400 font-semibold">
+                    {formatBytes(trafficStats.week_bytes)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-dark-200">Трафик за месяц</span>
+                  <span className="text-sm text-cyan-400 font-semibold">
+                    {formatBytes(trafficStats.month_bytes)}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
           {violationStats && violationStats.by_country && Object.keys(violationStats.by_country).length > 0 && (
             <div className="mt-4 pt-4 border-t border-dark-400/10">
@@ -429,33 +486,37 @@ export default function Dashboard() {
         </div>
 
         {/* Quick actions */}
-        <div className="card">
+        <div className="card animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
           <h2 className="text-base md:text-lg font-semibold text-white mb-4">Быстрые действия</h2>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => navigate('/users')}
-              className="btn-secondary py-4 flex flex-col items-center gap-2 glow-teal-hover"
+              className="btn-secondary py-4 flex flex-col items-center gap-2 glow-teal-hover animate-fade-in-up"
+              style={{ animationDelay: '0.32s' }}
             >
               <HiUsers className="w-6 h-6" />
               <span>Пользователи</span>
             </button>
             <button
               onClick={() => navigate('/nodes')}
-              className="btn-secondary py-4 flex flex-col items-center gap-2 glow-teal-hover"
+              className="btn-secondary py-4 flex flex-col items-center gap-2 glow-teal-hover animate-fade-in-up"
+              style={{ animationDelay: '0.36s' }}
             >
               <HiServer className="w-6 h-6" />
               <span>Ноды</span>
             </button>
             <button
               onClick={() => navigate('/violations')}
-              className="btn-secondary py-4 flex flex-col items-center gap-2 glow-teal-hover"
+              className="btn-secondary py-4 flex flex-col items-center gap-2 glow-teal-hover animate-fade-in-up"
+              style={{ animationDelay: '0.4s' }}
             >
               <HiShieldExclamation className="w-6 h-6" />
               <span>Нарушения</span>
             </button>
             <button
               onClick={() => navigate('/settings')}
-              className="btn-secondary py-4 flex flex-col items-center gap-2 glow-teal-hover"
+              className="btn-secondary py-4 flex flex-col items-center gap-2 glow-teal-hover animate-fade-in-up"
+              style={{ animationDelay: '0.44s' }}
             >
               <HiCog className="w-6 h-6" />
               <span>Настройки</span>
@@ -470,14 +531,14 @@ export default function Dashboard() {
                 <span className="text-sm text-dark-200">API</span>
                 <span className="flex items-center gap-2 text-sm">
                   <span
-                    className="w-2 h-2 rounded-full"
+                    className={`w-2 h-2 rounded-full ${overview && !overviewError ? 'animate-pulse' : ''}`}
                     style={{
-                      background: overview ? '#0d9488' : '#fa5252',
-                      boxShadow: overview ? '0 0 6px rgba(13, 148, 136, 0.5)' : '0 0 6px rgba(250, 82, 82, 0.5)',
+                      background: overview && !overviewError ? '#0d9488' : '#fa5252',
+                      boxShadow: overview && !overviewError ? '0 0 6px rgba(13, 148, 136, 0.5)' : '0 0 6px rgba(250, 82, 82, 0.5)',
                     }}
                   ></span>
-                  <span className={overview ? 'text-green-400' : 'text-red-400'}>
-                    {overview ? 'Работает' : 'Недоступен'}
+                  <span className={overview && !overviewError ? 'text-green-400' : 'text-red-400'}>
+                    {overviewLoading ? 'Проверка...' : overview && !overviewError ? 'Работает' : 'Недоступен'}
                   </span>
                 </span>
               </div>
@@ -502,12 +563,12 @@ export default function Dashboard() {
                   <span
                     className="w-2 h-2 rounded-full"
                     style={{
-                      background: violationStats !== undefined ? '#0d9488' : '#fab005',
-                      boxShadow: violationStats !== undefined ? '0 0 6px rgba(13, 148, 136, 0.5)' : '0 0 6px rgba(250, 176, 5, 0.5)',
+                      background: violationStats !== undefined && !violationsError ? '#0d9488' : '#fab005',
+                      boxShadow: violationStats !== undefined && !violationsError ? '0 0 6px rgba(13, 148, 136, 0.5)' : '0 0 6px rgba(250, 176, 5, 0.5)',
                     }}
                   ></span>
-                  <span className={violationStats !== undefined ? 'text-green-400' : 'text-yellow-400'}>
-                    {violationStats !== undefined ? 'Доступна' : 'Проверка...'}
+                  <span className={violationStats !== undefined && !violationsError ? 'text-green-400' : 'text-yellow-400'}>
+                    {violationsLoading ? 'Проверка...' : violationStats !== undefined && !violationsError ? 'Доступна' : 'Недоступна'}
                   </span>
                 </span>
               </div>

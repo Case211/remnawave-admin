@@ -8,6 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from web.backend.core.config import get_web_settings
 from web.backend.core.security import decode_token
+from web.backend.core.token_blacklist import token_blacklist
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer()
@@ -38,6 +39,15 @@ async def get_current_admin(
         HTTPException: If authentication fails
     """
     token = credentials.credentials
+
+    # Check if token has been blacklisted (logout)
+    if token_blacklist.is_blacklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     payload = decode_token(token)
 
     if not payload or payload.get("type") != "access":
@@ -85,6 +95,10 @@ async def get_current_admin_ws(
     if not token:
         await websocket.close(code=4001, reason="Missing token")
         raise HTTPException(status_code=401, detail="Missing token")
+
+    if token_blacklist.is_blacklisted(token):
+        await websocket.close(code=4001, reason="Token revoked")
+        raise HTTPException(status_code=401, detail="Token revoked")
 
     payload = decode_token(token)
 

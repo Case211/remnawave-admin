@@ -47,6 +47,15 @@ class WebSettings(BaseSettings):
     # Admins list (shared with bot)
     admins_raw: str = Field(default="", alias="ADMINS")
 
+    @field_validator("jwt_algorithm", mode="before")
+    @classmethod
+    def validate_jwt_algorithm(cls, v):
+        """Only allow secure HMAC-based JWT algorithms."""
+        allowed = {"HS256", "HS384", "HS512"}
+        if v not in allowed:
+            raise ValueError(f"JWT algorithm must be one of {allowed}, got: {v}")
+        return v
+
     @field_validator("admins_raw", mode="before")
     @classmethod
     def coerce_admins_to_str(cls, v):

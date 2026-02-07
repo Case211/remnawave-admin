@@ -326,7 +326,7 @@ export default function UserDetail() {
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between animate-fade-in-up">
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <button
             onClick={() => navigate('/users')}
@@ -417,7 +417,7 @@ export default function UserDetail() {
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
 
           {/* Block: General info / Edit form */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">
               {isEditing ? 'Редактирование' : 'Общая информация'}
             </h2>
@@ -576,7 +576,7 @@ export default function UserDetail() {
           </div>
 
           {/* Block: Traffic */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Трафик</h2>
             <div className="space-y-4">
               <div>
@@ -634,7 +634,7 @@ export default function UserDetail() {
           </div>
 
           {/* Block: Device & Client */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Устройство и клиент</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -660,7 +660,7 @@ export default function UserDetail() {
 
           {/* Block: Violations */}
           {violations && violations.length > 0 && (
-            <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
+            <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
               <h2 className="text-base md:text-lg font-semibold text-white mb-4">
                 Нарушения ({violations.length})
               </h2>
@@ -691,7 +691,7 @@ export default function UserDetail() {
         <div className="space-y-4 md:space-y-6">
 
           {/* Block: Subscription */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Подписка</h2>
             <div className="space-y-3">
               {user.subscription_url ? (
@@ -734,7 +734,7 @@ export default function UserDetail() {
           </div>
 
           {/* Block: Anti-Abuse */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
+          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Anti-Abuse</h2>
             <div className="space-y-4">
               <div>

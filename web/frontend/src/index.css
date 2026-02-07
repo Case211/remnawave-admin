@@ -164,9 +164,9 @@
     }
   }
 
-  /* Page header - responsive */
+  /* Page header - responsive with slide-up animation */
   .page-header {
-    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between animate-fade-in;
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between animate-fade-in-up;
   }
 
   .page-header-title {
@@ -179,10 +179,11 @@
 
   /* Dropdown menu */
   .dropdown-menu {
-    @apply absolute right-0 top-full mt-1 w-44 rounded-lg py-1 z-20 border border-dark-400/20 animate-fade-in;
+    @apply absolute right-0 top-full mt-1 w-44 rounded-lg py-1 z-20 border border-dark-400/20 animate-scale-in;
     background: rgba(22, 27, 34, 0.98);
     backdrop-filter: blur(12px);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    transform-origin: top right;
   }
 
   .dropdown-item {
@@ -232,6 +233,16 @@
   .glow-teal-hover:hover {
     box-shadow: 0 0 30px -5px rgba(20, 184, 166, 0.3);
   }
+
+  /* Stagger animation delays for grid/list children */
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
+  .stagger-6 { animation-delay: 0.3s; }
+  .stagger-7 { animation-delay: 0.35s; }
+  .stagger-8 { animation-delay: 0.4s; }
 
   /* Safe area insets for notch devices */
   .pb-safe {
