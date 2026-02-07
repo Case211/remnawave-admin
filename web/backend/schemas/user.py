@@ -2,7 +2,7 @@
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class UserBase(BaseModel):
@@ -22,9 +22,24 @@ class UserListItem(UserBase):
     short_uuid: Optional[str] = None
     expire_at: Optional[datetime] = None
     traffic_limit_bytes: Optional[int] = None
-    used_traffic_bytes: int = 0
-    hwid_device_limit: int = 0
+    used_traffic_bytes: Optional[int] = 0
+    hwid_device_limit: Optional[int] = 0
     created_at: Optional[datetime] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _coerce_nulls(cls, values):
+        """Coerce None to 0 for numeric fields that the API may return as null."""
+        if isinstance(values, dict):
+            if values.get('used_traffic_bytes') is None:
+                values['used_traffic_bytes'] = 0
+            if values.get('hwid_device_limit') is None:
+                values['hwid_device_limit'] = 0
+            # Normalize status to lowercase (Remnawave API returns ACTIVE, DISABLED, etc.)
+            status = values.get('status')
+            if isinstance(status, str):
+                values['status'] = status.lower()
+        return values
 
     class Config:
         from_attributes = True

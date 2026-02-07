@@ -38,6 +38,9 @@ def _ensure_snake_case(user: dict) -> dict:
     for camel, snake in mappings.items():
         if camel in result and snake not in result:
             result[snake] = result[camel]
+    # Normalize status to lowercase (Remnawave API returns ACTIVE, DISABLED, etc.)
+    if isinstance(result.get('status'), str):
+        result['status'] = result['status'].lower()
     return result
 
 
@@ -48,10 +51,20 @@ async def _get_users_list():
         if db_service.is_connected:
             users = await db_service.get_all_users(limit=50000)
             if users:
+                logger.debug("Loaded %d users from database", len(users))
                 return users
+            else:
+                logger.info("Database connected but no users found, trying API")
     except Exception as e:
-        logger.debug("DB users fetch failed: %s", e)
-    return await fetch_users_from_api()
+        logger.warning("DB users fetch failed: %s", e)
+
+    try:
+        users = await fetch_users_from_api()
+        logger.debug("Loaded %d users from API", len(users))
+        return users
+    except Exception as e:
+        logger.warning("API users fetch failed: %s", e)
+        return []
 
 
 @router.get("/", response_model=PaginatedResponse[UserListItem])
@@ -90,7 +103,8 @@ async def list_users(
             ]
 
         if status:
-            users = [u for u in users if _get(u, 'status') == status]
+            status_lower = status.lower()
+            users = [u for u in users if str(_get(u, 'status')).lower() == status_lower]
 
         # Sort
         reverse = sort_order == "desc"
@@ -111,11 +125,18 @@ async def list_users(
 
         # Convert to schema
         user_items = []
+        parse_errors = 0
         for u in items:
             try:
                 user_items.append(UserListItem(**u))
             except Exception as e:
-                logger.debug("Failed to parse user %s: %s", u.get('uuid', '?'), e)
+                parse_errors += 1
+                if parse_errors <= 3:
+                    logger.warning("Failed to parse user %s: %s (keys: %s)",
+                                   u.get('uuid', '?'), e, list(u.keys())[:10])
+
+        if parse_errors > 0:
+            logger.warning("Failed to parse %d/%d users on page %d", parse_errors, len(items), page)
 
         return PaginatedResponse(
             items=user_items,
@@ -126,7 +147,7 @@ async def list_users(
         )
 
     except Exception as e:
-        logger.error("Error listing users: %s", e)
+        logger.error("Error listing users: %s", e, exc_info=True)
         return PaginatedResponse(
             items=[],
             total=0,
