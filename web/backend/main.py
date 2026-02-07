@@ -167,7 +167,6 @@ def create_app() -> FastAPI:
         redoc_url="/api/redoc" if settings.debug else None,
         openapi_url="/api/openapi.json" if settings.debug else None,
         lifespan=lifespan,
-        redirect_slashes=False,
     )
 
     # CORS middleware
