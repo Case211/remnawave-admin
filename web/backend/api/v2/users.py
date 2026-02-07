@@ -67,7 +67,7 @@ async def _get_users_list():
         return []
 
 
-@router.get("/", response_model=PaginatedResponse[UserListItem])
+@router.get("", response_model=PaginatedResponse[UserListItem])
 async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
@@ -222,7 +222,7 @@ async def get_user(
         raise HTTPException(status_code=500, detail="Internal error")
 
 
-@router.post("/", response_model=UserDetail)
+@router.post("", response_model=UserDetail)
 async def create_user(
     data: UserCreate,
     admin: AdminUser = Depends(get_current_admin),

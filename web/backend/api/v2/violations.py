@@ -29,7 +29,7 @@ def get_severity(score: float) -> ViolationSeverity:
     return ViolationSeverity.LOW
 
 
-@router.get("/", response_model=ViolationListResponse)
+@router.get("", response_model=ViolationListResponse)
 async def list_violations(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
