@@ -69,19 +69,25 @@ class _CompressedRotatingFileHandler(RotatingFileHandler):
 
 def _setup_web_logging():
     """Настраивает логирование для web backend."""
+    import os
+
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(logging.DEBUG)
 
+    # Determine console log level from environment (default: INFO)
+    console_level_name = os.environ.get("WEB_LOG_LEVEL", "INFO").upper()
+    console_level = getattr(logging, console_level_name, logging.INFO)
+
     fmt = logging.Formatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT)
 
-    # Console: WARNING+ только
+    # Console: INFO+ by default (visible in docker-compose logs)
     console = logging.StreamHandler()
-    console.setLevel(logging.WARNING)
+    console.setLevel(console_level)
     console.setFormatter(fmt)
     root.addHandler(console)
 
-    # File handlers
+    # File handlers (optional, for persistent logs)
     try:
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         file_fmt = logging.Formatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT)
@@ -102,13 +108,13 @@ def _setup_web_logging():
         warn_h.setFormatter(file_fmt)
         root.addHandler(warn_h)
     except OSError as exc:
-        console.setLevel(logging.INFO)
         root.warning("⚠️ Cannot create log files (%s), logging to console only", exc)
 
     # Подавляем шумные логгеры
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 
 _setup_web_logging()
