@@ -22,6 +22,14 @@ router = APIRouter()
 def _ensure_snake_case(user: dict) -> dict:
     """Ensure user dict has snake_case keys for pydantic schemas."""
     result = dict(user)
+    # Flatten nested userTraffic fields to root level
+    # Remnawave API returns usedTrafficBytes, onlineAt etc. inside userTraffic object
+    user_traffic = result.get('userTraffic')
+    if isinstance(user_traffic, dict):
+        for key in ('usedTrafficBytes', 'lifetimeUsedTrafficBytes', 'onlineAt',
+                     'firstConnectedAt', 'lastConnectedNodeUuid'):
+            if key in user_traffic and key not in result:
+                result[key] = user_traffic[key]
     mappings = {
         'shortUuid': 'short_uuid',
         'subscriptionUuid': 'subscription_uuid',
