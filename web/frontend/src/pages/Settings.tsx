@@ -8,6 +8,8 @@ import {
   HiClock,
   HiLockClosed,
   HiLightningBolt,
+  HiChevronDown,
+  HiChevronRight,
 } from 'react-icons/hi'
 import client from '../api/client'
 
@@ -90,6 +92,7 @@ export default function Settings() {
   const [editedValues, setEditedValues] = useState<Record<string, string>>({})
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({})
 
   // Fetch settings
   const { data: settingsData, isLoading: settingsLoading, refetch: refetchSettings } = useQuery({
@@ -125,6 +128,10 @@ export default function Settings() {
   const syncItems = syncData?.items || []
   const hasChanges = Object.keys(editedValues).length > 0
 
+  const toggleCategory = (category: string) => {
+    setOpenCategories((prev) => ({ ...prev, [category]: !prev[category] }))
+  }
+
   const handleValueChange = (key: string, value: string) => {
     setEditedValues((prev) => ({ ...prev, [key]: value }))
   }
@@ -156,7 +163,7 @@ export default function Settings() {
     if (item.value_type === 'bool') {
       const boolValue = displayValue === 'true'
       return (
-        <div key={item.key} className="flex items-center justify-between py-2">
+        <div key={item.key} className="flex items-center justify-between py-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-sm text-white">{label}</p>
@@ -185,7 +192,7 @@ export default function Settings() {
 
     if (item.value_type === 'int' || item.value_type === 'float') {
       return (
-        <div key={item.key} className="py-2">
+        <div key={item.key} className="py-3">
           <div className="flex items-center gap-2 mb-1">
             <label className="block text-sm text-dark-200">{label}</label>
             {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
@@ -207,7 +214,7 @@ export default function Settings() {
 
     if (item.options && item.options.length > 0) {
       return (
-        <div key={item.key} className="py-2">
+        <div key={item.key} className="py-3">
           <div className="flex items-center gap-2 mb-1">
             <label className="block text-sm text-dark-200">{label}</label>
             {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
@@ -231,7 +238,7 @@ export default function Settings() {
 
     // Default: string input
     return (
-      <div key={item.key} className="py-2">
+      <div key={item.key} className="py-3">
         <div className="flex items-center gap-2 mb-1">
           <label className="block text-sm text-dark-200">{label}</label>
           {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
@@ -327,32 +334,53 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Settings grouped by category */}
+      {/* Settings as accordion */}
       {settingsLoading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="card animate-fade-in">
-              <div className="h-6 w-40 bg-dark-700 rounded mb-4"></div>
-              <div className="space-y-4">
-                <div className="h-10 bg-dark-700 rounded"></div>
-                <div className="h-10 bg-dark-700 rounded"></div>
-                <div className="h-10 bg-dark-700 rounded"></div>
-              </div>
+              <div className="h-6 w-40 bg-dark-700 rounded"></div>
             </div>
           ))}
         </div>
       ) : Object.keys(categories).length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {Object.entries(categories).map(([category, items]) => (
-            <div key={category} className="card">
-              <h2 className="text-lg font-semibold text-white mb-3">
-                {categoryLabels[category] || category}
-              </h2>
-              <div className="divide-y divide-dark-700">
-                {items.map((item) => renderConfigItem(item))}
+        <div className="space-y-2">
+          {Object.entries(categories).map(([category, items]) => {
+            const isOpen = openCategories[category] ?? false
+            const editedCount = items.filter((item) => item.key in editedValues).length
+            return (
+              <div key={category} className="card p-0 overflow-hidden">
+                <button
+                  onClick={() => toggleCategory(category)}
+                  className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-dark-700/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    {isOpen ? (
+                      <HiChevronDown className="w-5 h-5 text-dark-200" />
+                    ) : (
+                      <HiChevronRight className="w-5 h-5 text-dark-200" />
+                    )}
+                    <h2 className="text-base font-semibold text-white">
+                      {categoryLabels[category] || category}
+                    </h2>
+                    <span className="text-xs text-dark-300">{items.length}</span>
+                  </div>
+                  {editedCount > 0 && (
+                    <span className="text-xs bg-primary-600/20 text-primary-400 px-2 py-0.5 rounded-full">
+                      {editedCount} изменено
+                    </span>
+                  )}
+                </button>
+                {isOpen && (
+                  <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50">
+                    <div className="divide-y divide-dark-700/50">
+                      {items.map((item) => renderConfigItem(item))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       ) : (
         <div className="card text-center py-12">
