@@ -13,8 +13,12 @@ from web.backend.schemas.violation import (
     ViolationUserSummary,
     ResolveViolationRequest,
     ViolationSeverity,
+    IPLookupRequest,
+    IPLookupResponse,
+    IPInfo,
 )
 from src.services.database import DatabaseService
+from src.services.geoip import get_geoip_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -255,6 +259,42 @@ async def get_top_violators(
         except Exception as e:
             logger.warning("Skipping top violator row: %s", e)
     return items
+
+
+@router.post("/ip-lookup", response_model=IPLookupResponse)
+async def lookup_ips(
+    data: IPLookupRequest,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Получить информацию о провайдерах по списку IP адресов."""
+    if not data.ips:
+        return IPLookupResponse(results={})
+
+    # Ограничиваем количество IP за один запрос
+    ips = data.ips[:50]
+
+    try:
+        geoip = get_geoip_service()
+        metadata_map = await geoip.lookup_batch(ips)
+
+        results = {}
+        for ip, meta in metadata_map.items():
+            results[ip] = IPInfo(
+                ip=ip,
+                asn_org=meta.asn_org or None,
+                country=meta.country_name or meta.country_code or None,
+                city=meta.city or None,
+                connection_type=meta.connection_type or None,
+                is_vpn=meta.is_vpn,
+                is_proxy=meta.is_proxy,
+                is_hosting=meta.is_hosting,
+                is_mobile=meta.is_mobile,
+            )
+
+        return IPLookupResponse(results=results)
+    except Exception as e:
+        logger.error("Error during IP lookup: %s", e, exc_info=True)
+        return IPLookupResponse(results={})
 
 
 @router.get("/{violation_id}", response_model=ViolationDetail)

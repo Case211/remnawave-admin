@@ -109,3 +109,26 @@ class ViolationUserSummary(BaseModel):
     avg_score: float
     last_violation_at: datetime
     actions: List[str] = []
+
+
+class IPLookupRequest(BaseModel):
+    """Запрос на поиск информации по IP."""
+    ips: List[str]
+
+
+class IPInfo(BaseModel):
+    """Информация об IP адресе."""
+    ip: str
+    asn_org: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    connection_type: Optional[str] = None
+    is_vpn: bool = False
+    is_proxy: bool = False
+    is_hosting: bool = False
+    is_mobile: bool = False
+
+
+class IPLookupResponse(BaseModel):
+    """Ответ с информацией по IP адресам."""
+    results: Dict[str, IPInfo]
