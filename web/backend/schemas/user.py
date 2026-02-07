@@ -25,6 +25,7 @@ class UserListItem(UserBase):
     used_traffic_bytes: Optional[int] = 0
     hwid_device_limit: Optional[int] = 0
     created_at: Optional[datetime] = None
+    online_at: Optional[datetime] = None
 
     @model_validator(mode='before')
     @classmethod

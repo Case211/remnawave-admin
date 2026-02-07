@@ -1,6 +1,7 @@
 """Users API endpoints."""
 import logging
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List
 
@@ -76,6 +77,21 @@ async def _get_users_list():
         return []
 
 
+def _parse_dt(val) -> Optional[datetime]:
+    """Parse a datetime value from various formats."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val
+    if isinstance(val, str):
+        try:
+            # Try ISO format
+            return datetime.fromisoformat(val.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
 @router.get("", response_model=PaginatedResponse[UserListItem])
 async def list_users(
     page: int = Query(1, ge=1),
@@ -83,6 +99,9 @@ async def list_users(
     search: Optional[str] = Query(None, description="Search by username, email, or UUID"),
     status: Optional[str] = Query(None, description="Filter by status"),
     traffic_type: Optional[str] = Query(None, description="Filter by traffic type: unlimited, limited"),
+    expire_filter: Optional[str] = Query(None, description="Filter by expiration: expiring_7d, expiring_30d, expired, no_expiry"),
+    online_filter: Optional[str] = Query(None, description="Filter by online status: online_24h, online_7d, online_30d, never"),
+    traffic_usage: Optional[str] = Query(None, description="Filter by traffic usage: above_90, above_70, above_50, zero"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
     admin: AdminUser = Depends(get_current_admin),
@@ -93,6 +112,8 @@ async def list_users(
         # Normalize all users to have snake_case keys
         users = [_ensure_snake_case(u) for u in users]
 
+        now = datetime.now(timezone.utc)
+
         def _get(u, *keys, default=''):
             for k in keys:
                 v = u.get(k)
@@ -100,7 +121,7 @@ async def list_users(
                     return v
             return default
 
-        # Filter
+        # Filter: search
         if search:
             search_lower = search.lower()
             users = [
@@ -112,16 +133,76 @@ async def list_users(
                 or search_lower in str(_get(u, 'telegram_id')).lower()
             ]
 
+        # Filter: status
         if status:
             status_lower = status.lower()
             users = [u for u in users if str(_get(u, 'status')).lower() == status_lower]
 
-        # Filter by traffic type
+        # Filter: traffic type
         if traffic_type:
             if traffic_type == 'unlimited':
                 users = [u for u in users if u.get('traffic_limit_bytes') is None or u.get('traffic_limit_bytes') == 0]
             elif traffic_type == 'limited':
                 users = [u for u in users if u.get('traffic_limit_bytes') is not None and u.get('traffic_limit_bytes') > 0]
+
+        # Filter: expiration
+        if expire_filter:
+            def _expire_match(u):
+                expire = _parse_dt(u.get('expire_at'))
+                if expire_filter == 'no_expiry':
+                    return expire is None
+                if expire is None:
+                    return False
+                # Ensure timezone-aware comparison
+                if expire.tzinfo is None:
+                    expire = expire.replace(tzinfo=timezone.utc)
+                if expire_filter == 'expired':
+                    return expire < now
+                if expire_filter == 'expiring_7d':
+                    return now <= expire <= now + timedelta(days=7)
+                if expire_filter == 'expiring_30d':
+                    return now <= expire <= now + timedelta(days=30)
+                return True
+            users = [u for u in users if _expire_match(u)]
+
+        # Filter: online status
+        if online_filter:
+            def _online_match(u):
+                online = _parse_dt(u.get('online_at'))
+                if online_filter == 'never':
+                    return online is None
+                if online is None:
+                    return False
+                if online.tzinfo is None:
+                    online = online.replace(tzinfo=timezone.utc)
+                if online_filter == 'online_24h':
+                    return online >= now - timedelta(hours=24)
+                if online_filter == 'online_7d':
+                    return online >= now - timedelta(days=7)
+                if online_filter == 'online_30d':
+                    return online >= now - timedelta(days=30)
+                return True
+            users = [u for u in users if _online_match(u)]
+
+        # Filter: traffic usage percentage
+        if traffic_usage:
+            def _traffic_usage_match(u):
+                used = u.get('used_traffic_bytes', 0) or 0
+                limit = u.get('traffic_limit_bytes')
+                if traffic_usage == 'zero':
+                    return used == 0
+                # Percentage-based filters only apply to limited users
+                if not limit or limit == 0:
+                    return False
+                pct = (used / limit) * 100
+                if traffic_usage == 'above_90':
+                    return pct >= 90
+                if traffic_usage == 'above_70':
+                    return pct >= 70
+                if traffic_usage == 'above_50':
+                    return pct >= 50
+                return True
+            users = [u for u in users if _traffic_usage_match(u)]
 
         # Sort
         reverse = sort_order == "desc"
@@ -130,18 +211,28 @@ async def list_users(
             'username': ('username',),
             'status': ('status',),
             'expire_at': ('expire_at',),
+            'online_at': ('online_at',),
         }
 
         if sort_by == 'used_traffic_bytes':
             users.sort(key=lambda x: x.get('used_traffic_bytes', 0) or 0, reverse=reverse)
         elif sort_by == 'traffic_limit_bytes':
-            # Sort unlimited (None) users last for ascending, first for descending
             def _traffic_limit_key(u):
                 val = u.get('traffic_limit_bytes')
                 if val is None or val == 0:
                     return float('inf') if not reverse else -1
                 return val
             users.sort(key=_traffic_limit_key, reverse=reverse)
+        elif sort_by == 'hwid_device_limit':
+            users.sort(key=lambda x: x.get('hwid_device_limit', 0) or 0, reverse=reverse)
+        elif sort_by in ('online_at', 'expire_at'):
+            # Date fields: None values go to end
+            def _date_sort_key(u):
+                val = _parse_dt(u.get(sort_by))
+                if val is None:
+                    return '' if not reverse else 'zzzz'
+                return val.isoformat()
+            users.sort(key=_date_sort_key, reverse=reverse)
         else:
             sort_keys = sort_key_map.get(sort_by, (sort_by,))
             users.sort(key=lambda x: _get(x, *sort_keys) or '', reverse=reverse)
