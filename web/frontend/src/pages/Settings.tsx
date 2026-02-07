@@ -1,8 +1,6 @@
-import { useState } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  HiSave,
-  HiRefresh,
   HiCheck,
   HiExclamation,
   HiClock,
@@ -10,6 +8,10 @@ import {
   HiLightningBolt,
   HiChevronDown,
   HiChevronRight,
+  HiSearch,
+  HiRefresh,
+  HiDatabase,
+  HiX,
 } from 'react-icons/hi'
 import client from '../api/client'
 
@@ -24,9 +26,11 @@ interface ConfigItem {
   description: string | null
   default_value: string | null
   env_var_name: string | null
+  env_value: string | null
   is_secret: boolean
   is_readonly: boolean
   is_env_override: boolean
+  source: string // "db" | "env" | "default" | "none"
   options: string[] | null
   sort_order: number
 }
@@ -58,6 +62,10 @@ const updateSetting = async ({ key, value }: { key: string; value: string }): Pr
   await client.put(`/settings/${key}`, { value })
 }
 
+const resetSetting = async (key: string): Promise<void> => {
+  await client.delete(`/settings/${key}`)
+}
+
 // Category labels in Russian
 const categoryLabels: Record<string, string> = {
   'general': 'Общие',
@@ -68,6 +76,22 @@ const categoryLabels: Record<string, string> = {
   'collector': 'Коллектор данных',
   'limits': 'Лимиты',
   'appearance': 'Внешний вид',
+}
+
+const categoryIcons: Record<string, string> = {
+  'general': 'cog',
+  'notifications': 'bell',
+  'sync': 'refresh',
+  'violations': 'shield',
+  'reports': 'document',
+  'collector': 'server',
+  'limits': 'adjustments',
+  'appearance': 'color-swatch',
+}
+
+const subcategoryLabels: Record<string, string> = {
+  'topics': 'Топики уведомлений',
+  'weights': 'Веса компонентов скора',
 }
 
 function formatTimeAgo(dateStr: string): string {
@@ -87,12 +111,69 @@ function formatTimeAgo(dateStr: string): string {
   })
 }
 
+function SourceBadge({ source }: { source: string }) {
+  if (source === 'db') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-400 border border-primary-500/20" title="Значение из БД (наивысший приоритет)">
+        <HiDatabase className="w-2.5 h-2.5" />
+        БД
+      </span>
+    )
+  }
+  if (source === 'env') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" title="Значение из .env файла (fallback)">
+        <HiLightningBolt className="w-2.5 h-2.5" />
+        .env
+      </span>
+    )
+  }
+  if (source === 'default') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-dark-600/50 text-dark-200 border border-dark-500/20" title="Значение по умолчанию">
+        По умолч.
+      </span>
+    )
+  }
+  return null
+}
+
+// Debounce hook for auto-save on text/number inputs
+function useDebounce(callback: (key: string, value: string) => void, delay: number) {
+  const timeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  const debouncedFn = useCallback(
+    (key: string, value: string) => {
+      if (timeoutRef.current[key]) {
+        clearTimeout(timeoutRef.current[key])
+      }
+      timeoutRef.current[key] = setTimeout(() => {
+        callback(key, value)
+        delete timeoutRef.current[key]
+      }, delay)
+    },
+    [callback, delay],
+  )
+
+  // Cancel pending on unmount
+  useEffect(() => {
+    const refs = timeoutRef.current
+    return () => {
+      Object.values(refs).forEach(clearTimeout)
+    }
+  }, [])
+
+  return debouncedFn
+}
+
 export default function Settings() {
   const queryClient = useQueryClient()
-  const [editedValues, setEditedValues] = useState<Record<string, string>>({})
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({})
+  const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set())
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
+  const [errorKeys, setErrorKeys] = useState<Record<string, string>>({})
+  const [pendingValues, setPendingValues] = useState<Record<string, string>>({})
 
   // Fetch settings
   const { data: settingsData, isLoading: settingsLoading, refetch: refetchSettings } = useQuery({
@@ -107,125 +188,224 @@ export default function Settings() {
     refetchInterval: 15000,
   })
 
-  // Save individual setting
+  // Save mutation — auto-save individual setting
   const saveMutation = useMutation({
     mutationFn: updateSetting,
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] })
-      const newEdited = { ...editedValues }
-      delete newEdited[variables.key]
-      setEditedValues(newEdited)
-      setSaveSuccess(variables.key)
-      setSaveError(null)
-      setTimeout(() => setSaveSuccess(null), 2000)
+    onMutate: ({ key }) => {
+      setSavingKeys((prev) => new Set(prev).add(key))
+      setErrorKeys((prev) => { const n = { ...prev }; delete n[key]; return n })
     },
-    onError: (error: Error, variables) => {
-      setSaveError(`${variables.key}: ${error.message}`)
+    onSuccess: (_data, { key }) => {
+      setSavingKeys((prev) => { const n = new Set(prev); n.delete(key); return n })
+      setSavedKeys((prev) => new Set(prev).add(key))
+      setPendingValues((prev) => { const n = { ...prev }; delete n[key]; return n })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
+    },
+    onError: (error: Error, { key }) => {
+      setSavingKeys((prev) => { const n = new Set(prev); n.delete(key); return n })
+      setErrorKeys((prev) => ({ ...prev, [key]: error.message }))
+    },
+  })
+
+  // Reset mutation
+  const resetMutation = useMutation({
+    mutationFn: resetSetting,
+    onSuccess: (_data, key) => {
+      setPendingValues((prev) => { const n = { ...prev }; delete n[key]; return n })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      setSavedKeys((prev) => new Set(prev).add(key))
+      setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
     },
   })
 
   const categories = settingsData?.categories || {}
   const syncItems = syncData?.items || []
-  const hasChanges = Object.keys(editedValues).length > 0
 
   const toggleCategory = (category: string) => {
     setOpenCategories((prev) => ({ ...prev, [category]: !prev[category] }))
   }
 
-  const handleValueChange = (key: string, value: string) => {
-    setEditedValues((prev) => ({ ...prev, [key]: value }))
-  }
-
-  const handleSaveAll = () => {
-    for (const [key, value] of Object.entries(editedValues)) {
+  // Immediate save for bool/select — user clicks toggle and it saves right away
+  const saveImmediately = useCallback(
+    (key: string, value: string) => {
       saveMutation.mutate({ key, value })
-    }
+    },
+    [saveMutation],
+  )
+
+  // Debounced save for text/number — saves 800ms after user stops typing
+  const saveDebounced = useDebounce(
+    useCallback(
+      (key: string, value: string) => {
+        saveMutation.mutate({ key, value })
+      },
+      [saveMutation],
+    ),
+    800,
+  )
+
+  const handleTextChange = (key: string, value: string) => {
+    setPendingValues((prev) => ({ ...prev, [key]: value }))
+    saveDebounced(key, value)
   }
 
-  const handleReset = () => {
-    setEditedValues({})
-    setSaveError(null)
+  const handleBoolToggle = (key: string, currentValue: boolean) => {
+    const newVal = currentValue ? 'false' : 'true'
+    setPendingValues((prev) => ({ ...prev, [key]: newVal }))
+    saveImmediately(key, newVal)
+  }
+
+  const handleSelectChange = (key: string, value: string) => {
+    setPendingValues((prev) => ({ ...prev, [key]: value }))
+    saveImmediately(key, value)
+  }
+
+  const handleReset = (key: string) => {
+    resetMutation.mutate(key)
   }
 
   const getDisplayValue = (item: ConfigItem): string => {
-    if (item.key in editedValues) {
-      return editedValues[item.key]
-    }
+    if (item.key in pendingValues) return pendingValues[item.key]
     return item.value || ''
+  }
+
+  // Filter items by search
+  const matchesSearch = (item: ConfigItem): boolean => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (
+      (item.display_name?.toLowerCase().includes(q) ?? false) ||
+      item.key.toLowerCase().includes(q) ||
+      (item.description?.toLowerCase().includes(q) ?? false) ||
+      (item.env_var_name?.toLowerCase().includes(q) ?? false)
+    )
   }
 
   const renderConfigItem = (item: ConfigItem) => {
     const displayValue = getDisplayValue(item)
     const label = item.display_name || item.key
-    const isEditable = !item.is_readonly && !item.is_env_override
-    const wasSaved = saveSuccess === item.key
+    const isEditable = !item.is_readonly
+    const isSaving = savingKeys.has(item.key)
+    const wasSaved = savedKeys.has(item.key)
+    const hasError = item.key in errorKeys
+    const canReset = item.source === 'db' && !item.is_readonly
+
+    const statusIcon = isSaving ? (
+      <HiRefresh className="w-3.5 h-3.5 text-primary-400 animate-spin" />
+    ) : wasSaved ? (
+      <HiCheck className="w-3.5 h-3.5 text-green-400" />
+    ) : hasError ? (
+      <HiExclamation className="w-3.5 h-3.5 text-red-400" title={errorKeys[item.key]} />
+    ) : null
 
     if (item.value_type === 'bool') {
       const boolValue = displayValue === 'true'
       return (
-        <div key={item.key} className="flex items-center justify-between py-3">
+        <div key={item.key} className="flex items-center justify-between py-3 group">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm text-white">{label}</p>
               {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" title="Только для чтения" />}
-              {item.is_env_override && <HiLightningBolt className="w-3 h-3 text-yellow-500" title={`Переопределено: ${item.env_var_name}`} />}
-              {wasSaved && <HiCheck className="w-4 h-4 text-green-400" />}
+              <SourceBadge source={item.source} />
+              {statusIcon}
             </div>
             {item.description && <p className="text-xs text-dark-200 mt-0.5">{item.description}</p>}
+            {item.is_env_override && item.source !== 'env' && (
+              <p className="text-[10px] text-yellow-500/60 mt-0.5">
+                .env: {item.env_var_name} = {item.env_value || '(set)'}
+              </p>
+            )}
           </div>
-          <button
-            onClick={() => isEditable && handleValueChange(item.key, boolValue ? 'false' : 'true')}
-            disabled={!isEditable}
-            className={`w-12 h-6 rounded-full relative transition-all duration-200 ${
-              boolValue ? 'bg-primary-600' : 'bg-dark-600'
-            } ${!isEditable ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-          >
-            <span
-              className={`absolute top-1 w-4 h-4 rounded-full transition-all ${
-                boolValue ? 'right-1 bg-white' : 'left-1 bg-gray-400'
-              }`}
-            ></span>
-          </button>
+          <div className="flex items-center gap-2">
+            {canReset && (
+              <button
+                onClick={() => handleReset(item.key)}
+                className="text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Сбросить (использовать .env или значение по умолчанию)"
+              >
+                <HiX className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              onClick={() => isEditable && handleBoolToggle(item.key, boolValue)}
+              disabled={!isEditable || isSaving}
+              className={`w-12 h-6 rounded-full relative transition-all duration-200 ${
+                boolValue ? 'bg-primary-600' : 'bg-dark-600'
+              } ${!isEditable ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              <span
+                className={`absolute top-1 w-4 h-4 rounded-full transition-all ${
+                  boolValue ? 'right-1 bg-white' : 'left-1 bg-gray-400'
+                }`}
+              ></span>
+            </button>
+          </div>
         </div>
       )
     }
 
     if (item.value_type === 'int' || item.value_type === 'float') {
       return (
-        <div key={item.key} className="py-3">
-          <div className="flex items-center gap-2 mb-1">
+        <div key={item.key} className="py-3 group">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <label className="block text-sm text-dark-200">{label}</label>
             {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
-            {item.is_env_override && <HiLightningBolt className="w-3 h-3 text-yellow-500" title={`Переопределено: ${item.env_var_name}`} />}
-            {wasSaved && <HiCheck className="w-4 h-4 text-green-400" />}
+            <SourceBadge source={item.source} />
+            {statusIcon}
+            {canReset && (
+              <button
+                onClick={() => handleReset(item.key)}
+                className="text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Сбросить"
+              >
+                <HiX className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <input
             type="number"
             className="input w-full"
             value={displayValue}
-            onChange={(e) => handleValueChange(item.key, e.target.value)}
-            disabled={!isEditable}
+            onChange={(e) => handleTextChange(item.key, e.target.value)}
+            disabled={!isEditable || isSaving}
             step={item.value_type === 'float' ? '0.1' : '1'}
           />
-          {item.description && <p className="text-xs text-dark-200 mt-1">{item.description}</p>}
+          <div className="flex items-center gap-2 mt-1">
+            {item.description && <p className="text-xs text-dark-200 flex-1">{item.description}</p>}
+            {item.is_env_override && item.source !== 'env' && (
+              <p className="text-[10px] text-yellow-500/60 whitespace-nowrap">
+                .env: {item.env_value}
+              </p>
+            )}
+          </div>
         </div>
       )
     }
 
     if (item.options && item.options.length > 0) {
       return (
-        <div key={item.key} className="py-3">
-          <div className="flex items-center gap-2 mb-1">
+        <div key={item.key} className="py-3 group">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <label className="block text-sm text-dark-200">{label}</label>
             {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
-            {item.is_env_override && <HiLightningBolt className="w-3 h-3 text-yellow-500" />}
-            {wasSaved && <HiCheck className="w-4 h-4 text-green-400" />}
+            <SourceBadge source={item.source} />
+            {statusIcon}
+            {canReset && (
+              <button
+                onClick={() => handleReset(item.key)}
+                className="text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Сбросить"
+              >
+                <HiX className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <select
             className="input w-full"
             value={displayValue}
-            onChange={(e) => handleValueChange(item.key, e.target.value)}
-            disabled={!isEditable}
+            onChange={(e) => handleSelectChange(item.key, e.target.value)}
+            disabled={!isEditable || isSaving}
           >
             {item.options.map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
@@ -238,25 +418,93 @@ export default function Settings() {
 
     // Default: string input
     return (
-      <div key={item.key} className="py-3">
-        <div className="flex items-center gap-2 mb-1">
+      <div key={item.key} className="py-3 group">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           <label className="block text-sm text-dark-200">{label}</label>
           {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
-          {item.is_env_override && <HiLightningBolt className="w-3 h-3 text-yellow-500" title={`Переопределено: ${item.env_var_name}`} />}
-          {wasSaved && <HiCheck className="w-4 h-4 text-green-400" />}
+          <SourceBadge source={item.source} />
+          {statusIcon}
+          {canReset && (
+            <button
+              onClick={() => handleReset(item.key)}
+              className="text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Сбросить"
+            >
+              <HiX className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
         <input
           type={item.is_secret ? 'password' : 'text'}
           className="input w-full"
           value={displayValue}
-          onChange={(e) => handleValueChange(item.key, e.target.value)}
-          disabled={!isEditable}
+          onChange={(e) => handleTextChange(item.key, e.target.value)}
+          disabled={!isEditable || isSaving}
           placeholder={item.default_value || ''}
         />
-        {item.description && <p className="text-xs text-dark-200 mt-1">{item.description}</p>}
+        <div className="flex items-center gap-2 mt-1">
+          {item.description && <p className="text-xs text-dark-200 flex-1">{item.description}</p>}
+          {item.is_env_override && item.source !== 'env' && (
+            <p className="text-[10px] text-yellow-500/60 whitespace-nowrap">
+              .env: {item.env_value}
+            </p>
+          )}
+        </div>
       </div>
     )
   }
+
+  // Group items by subcategory within a category
+  const renderCategoryItems = (items: ConfigItem[]) => {
+    const filtered = items.filter(matchesSearch)
+    if (filtered.length === 0) return null
+
+    // Separate into subcategories
+    const mainItems = filtered.filter((i) => !i.subcategory)
+    const subcategories: Record<string, ConfigItem[]> = {}
+    for (const item of filtered) {
+      if (item.subcategory) {
+        if (!subcategories[item.subcategory]) subcategories[item.subcategory] = []
+        subcategories[item.subcategory].push(item)
+      }
+    }
+
+    return (
+      <>
+        {mainItems.length > 0 && (
+          <div className="divide-y divide-dark-700/50">
+            {mainItems.map((item) => renderConfigItem(item))}
+          </div>
+        )}
+        {Object.entries(subcategories).map(([sub, subItems]) => (
+          <div key={sub} className="mt-3">
+            <div className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-1 px-1">
+              {subcategoryLabels[sub] || sub}
+            </div>
+            <div className="bg-dark-800/30 rounded-lg px-3 divide-y divide-dark-700/30">
+              {subItems.map((item) => renderConfigItem(item))}
+            </div>
+          </div>
+        ))}
+      </>
+    )
+  }
+
+  // Count filtered items per category
+  const filteredCounts = Object.entries(categories).reduce(
+    (acc, [cat, items]) => {
+      acc[cat] = items.filter(matchesSearch).length
+      return acc
+    },
+    {} as Record<string, number>,
+  )
+
+  const totalFiltered = Object.values(filteredCounts).reduce((a, b) => a + b, 0)
+
+  // Auto-open categories when searching
+  const effectiveOpenCategories = search
+    ? Object.fromEntries(Object.entries(filteredCounts).map(([cat, count]) => [cat, count > 0]))
+    : openCategories
 
   return (
     <div className="space-y-6">
@@ -264,45 +512,47 @@ export default function Settings() {
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Настройки</h1>
-          <p className="text-dark-200 mt-1 text-sm md:text-base">Конфигурация панели администратора</p>
+          <p className="text-dark-200 mt-1 text-sm md:text-base">
+            Конфигурация бота и панели. Приоритет: БД {'>'} .env {'>'} по умолчанию
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleReset}
-            className="btn-secondary flex items-center gap-1"
-            disabled={!hasChanges}
-          >
-            <HiRefresh className="w-4 h-4" />
-            <span className="hidden sm:inline">Сбросить</span>
-          </button>
-          <button
-            onClick={handleSaveAll}
-            className="btn-primary flex items-center gap-1"
-            disabled={!hasChanges || saveMutation.isPending}
-          >
-            {saveMutation.isPending ? (
-              <HiRefresh className="w-4 h-4 animate-spin" />
-            ) : (
-              <HiSave className="w-4 h-4" />
-            )}
-            <span className="hidden sm:inline">Сохранить</span>
-          </button>
-        </div>
+        <button
+          onClick={() => refetchSettings()}
+          className="btn-secondary flex items-center gap-1"
+        >
+          <HiRefresh className="w-4 h-4" />
+          <span className="hidden sm:inline">Обновить</span>
+        </button>
       </div>
 
-      {/* Error display */}
-      {saveError && (
-        <div className="card border-red-500/50 bg-red-500/10">
-          <div className="flex items-center gap-2 text-red-400">
-            <HiExclamation className="w-5 h-5" />
-            <span className="text-sm">{saveError}</span>
-          </div>
-        </div>
-      )}
+      {/* Search */}
+      <div className="relative animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+        <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300" />
+        <input
+          type="text"
+          placeholder="Поиск настроек..."
+          className="input w-full pl-10 pr-10"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-300 hover:text-dark-100"
+          >
+            <HiX className="w-4 h-4" />
+          </button>
+        )}
+        {search && (
+          <p className="text-xs text-dark-200 mt-1 ml-1">
+            Найдено: {totalFiltered} настроек
+          </p>
+        )}
+      </div>
 
       {/* Sync status */}
-      {syncItems.length > 0 && (
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+      {syncItems.length > 0 && !search && (
+        <div className="card animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <h2 className="text-base md:text-lg font-semibold text-white mb-3">Статус синхронизации</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {syncItems.map((item) => (
@@ -339,17 +589,22 @@ export default function Settings() {
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="card animate-fade-in">
-              <div className="h-6 w-40 bg-dark-700 rounded"></div>
+              <div className="h-6 w-40 bg-dark-700 rounded animate-pulse"></div>
             </div>
           ))}
         </div>
       ) : Object.keys(categories).length > 0 ? (
         <div className="space-y-2">
-          {Object.entries(categories).map(([category, items]) => {
-            const isOpen = openCategories[category] ?? false
-            const editedCount = items.filter((item) => item.key in editedValues).length
+          {Object.entries(categories).map(([category, items], catIdx) => {
+            const isOpen = effectiveOpenCategories[category] ?? false
+            const filteredCount = filteredCounts[category] || 0
+            const dbCount = items.filter((i) => i.source === 'db').length
+
+            // Hide categories with no matches when searching
+            if (search && filteredCount === 0) return null
+
             return (
-              <div key={category} className="card p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: `${0.05 * (Object.keys(categories).indexOf(category))}s` }}>
+              <div key={category} className="card p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: `${0.05 * catIdx}s` }}>
                 <button
                   onClick={() => toggleCategory(category)}
                   className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-dark-700/30 transition-colors"
@@ -363,19 +618,21 @@ export default function Settings() {
                     <h2 className="text-base font-semibold text-white">
                       {categoryLabels[category] || category}
                     </h2>
-                    <span className="text-xs text-dark-300">{items.length}</span>
-                  </div>
-                  {editedCount > 0 && (
-                    <span className="text-xs bg-primary-600/20 text-primary-400 px-2 py-0.5 rounded-full">
-                      {editedCount} изменено
+                    <span className="text-xs text-dark-300">
+                      {search ? `${filteredCount}/${items.length}` : items.length}
                     </span>
-                  )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dbCount > 0 && (
+                      <span className="text-[10px] bg-primary-500/10 text-primary-400 px-1.5 py-0.5 rounded border border-primary-500/20">
+                        {dbCount} в БД
+                      </span>
+                    )}
+                  </div>
                 </button>
                 {isOpen && (
                   <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50 animate-fade-in-down">
-                    <div className="divide-y divide-dark-700/50">
-                      {items.map((item) => renderConfigItem(item))}
-                    </div>
+                    {renderCategoryItems(items)}
                   </div>
                 )}
               </div>
@@ -399,22 +656,35 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Unsaved changes indicator */}
-      {hasChanges && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 border border-primary-500/30 rounded-lg px-4 py-3 flex items-center gap-3 z-50 animate-fade-in" style={{ background: 'rgba(22, 27, 34, 0.95)', backdropFilter: 'blur(12px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 20px -5px rgba(13, 148, 136, 0.3)' }}>
-          <span className="text-sm text-dark-100">
-            Несохранённые изменения: {Object.keys(editedValues).length}
-          </span>
-          <button
-            onClick={handleSaveAll}
-            className="btn-primary text-sm py-1.5 px-3"
-            disabled={saveMutation.isPending}
-          >
-            Сохранить
-          </button>
-          <button onClick={handleReset} className="btn-ghost text-sm py-1.5 px-3">
-            Отмена
-          </button>
+      {/* Legend */}
+      {!settingsLoading && Object.keys(categories).length > 0 && !search && (
+        <div className="card animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+          <h3 className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-2">Приоритет значений</h3>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-dark-200">
+            <div className="flex items-center gap-1.5">
+              <SourceBadge source="db" />
+              <span>— установлено в БД (главный)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <SourceBadge source="env" />
+              <span>— из .env файла (fallback)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <SourceBadge source="default" />
+              <span>— значение по умолчанию</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <HiLockClosed className="w-3 h-3 text-dark-400" />
+              <span>— только чтение</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <HiX className="w-3 h-3 text-dark-400" />
+              <span>— сбросить к fallback</span>
+            </div>
+          </div>
+          <p className="text-[11px] text-dark-300 mt-2">
+            Настройки применяются мгновенно после изменения. Для сброса наведите на настройку и нажмите X.
+          </p>
         </div>
       )}
     </div>
