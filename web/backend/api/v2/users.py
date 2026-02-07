@@ -82,6 +82,7 @@ async def list_users(
     per_page: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None, description="Search by username, email, or UUID"),
     status: Optional[str] = Query(None, description="Filter by status"),
+    traffic_type: Optional[str] = Query(None, description="Filter by traffic type: unlimited, limited"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
     admin: AdminUser = Depends(get_current_admin),
@@ -115,6 +116,13 @@ async def list_users(
             status_lower = status.lower()
             users = [u for u in users if str(_get(u, 'status')).lower() == status_lower]
 
+        # Filter by traffic type
+        if traffic_type:
+            if traffic_type == 'unlimited':
+                users = [u for u in users if u.get('traffic_limit_bytes') is None or u.get('traffic_limit_bytes') == 0]
+            elif traffic_type == 'limited':
+                users = [u for u in users if u.get('traffic_limit_bytes') is not None and u.get('traffic_limit_bytes') > 0]
+
         # Sort
         reverse = sort_order == "desc"
         sort_key_map = {
@@ -123,8 +131,20 @@ async def list_users(
             'status': ('status',),
             'expire_at': ('expire_at',),
         }
-        sort_keys = sort_key_map.get(sort_by, (sort_by,))
-        users.sort(key=lambda x: _get(x, *sort_keys) or '', reverse=reverse)
+
+        if sort_by == 'used_traffic_bytes':
+            users.sort(key=lambda x: x.get('used_traffic_bytes', 0) or 0, reverse=reverse)
+        elif sort_by == 'traffic_limit_bytes':
+            # Sort unlimited (None) users last for ascending, first for descending
+            def _traffic_limit_key(u):
+                val = u.get('traffic_limit_bytes')
+                if val is None or val == 0:
+                    return float('inf') if not reverse else -1
+                return val
+            users.sort(key=_traffic_limit_key, reverse=reverse)
+        else:
+            sort_keys = sort_key_map.get(sort_by, (sort_by,))
+            users.sort(key=lambda x: _get(x, *sort_keys) or '', reverse=reverse)
 
         # Paginate
         total = len(users)

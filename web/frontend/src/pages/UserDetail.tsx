@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -34,6 +34,15 @@ interface Violation {
   recommended_action: string
   detected_at: string
   severity: string
+}
+
+interface EditFormData {
+  status: string
+  traffic_limit_bytes: number | null
+  traffic_limit_gb: string
+  is_unlimited: boolean
+  expire_at: string
+  hwid_device_limit: string
 }
 
 function formatBytes(bytes: number): string {
@@ -113,11 +122,42 @@ function parseUserAgent(ua: string | null): { os: string; app: string; raw: stri
   return { os, app, raw: ua }
 }
 
+function bytesToGb(bytes: number | null): string {
+  if (!bytes) return ''
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2)
+}
+
+function gbToBytes(gb: string): number | null {
+  const val = parseFloat(gb)
+  if (isNaN(val) || val <= 0) return null
+  return Math.round(val * 1024 * 1024 * 1024)
+}
+
+function formatDateForInput(dateStr: string | null): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  // Format as YYYY-MM-DDTHH:mm for datetime-local input
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export default function UserDetail() {
   const { uuid } = useParams<{ uuid: string }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
+  const [isEditing, setIsEditing] = useState(searchParams.get('edit') === '1')
+  const [editForm, setEditForm] = useState<EditFormData>({
+    status: '',
+    traffic_limit_bytes: null,
+    traffic_limit_gb: '',
+    is_unlimited: false,
+    expire_at: '',
+    hwid_device_limit: '',
+  })
+  const [editError, setEditError] = useState('')
+  const [editSuccess, setEditSuccess] = useState(false)
 
   // Fetch user data
   const { data: user, isLoading, error } = useQuery<UserDetailData>({
@@ -139,6 +179,20 @@ export default function UserDetail() {
     enabled: !!uuid,
   })
 
+  // Initialize edit form when user data loads
+  useEffect(() => {
+    if (user) {
+      setEditForm({
+        status: user.status,
+        traffic_limit_bytes: user.traffic_limit_bytes,
+        traffic_limit_gb: bytesToGb(user.traffic_limit_bytes),
+        is_unlimited: !user.traffic_limit_bytes,
+        expire_at: formatDateForInput(user.expire_at),
+        hwid_device_limit: String(user.hwid_device_limit),
+      })
+    }
+  }, [user])
+
   // Mutations
   const enableMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/enable`) },
@@ -156,6 +210,86 @@ export default function UserDetail() {
     mutationFn: async () => { await client.delete(`/users/${uuid}`) },
     onSuccess: () => { navigate('/users') },
   })
+
+  const updateUserMutation = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => {
+      const response = await client.patch(`/users/${uuid}`, data)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user', uuid] })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      setEditSuccess(true)
+      setEditError('')
+      setTimeout(() => setEditSuccess(false), 3000)
+      setIsEditing(false)
+      setSearchParams({})
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      setEditError(err.response?.data?.detail || err.message || 'Ошибка сохранения')
+    },
+  })
+
+  const handleSave = () => {
+    setEditError('')
+    const updateData: Record<string, unknown> = {}
+
+    // Status
+    if (user && editForm.status !== user.status) {
+      updateData.status = editForm.status
+    }
+
+    // Traffic limit
+    const newTrafficLimit = editForm.is_unlimited ? null : gbToBytes(editForm.traffic_limit_gb)
+    if (user && newTrafficLimit !== user.traffic_limit_bytes) {
+      updateData.traffic_limit_bytes = newTrafficLimit
+    }
+
+    // Expire at
+    if (editForm.expire_at) {
+      const newExpire = new Date(editForm.expire_at).toISOString()
+      if (user && newExpire !== user.expire_at) {
+        updateData.expire_at = newExpire
+      }
+    } else if (user?.expire_at) {
+      updateData.expire_at = null
+    }
+
+    // HWID device limit
+    const newHwid = parseInt(editForm.hwid_device_limit, 10)
+    if (!isNaN(newHwid) && user && newHwid !== user.hwid_device_limit) {
+      updateData.hwid_device_limit = newHwid
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      setIsEditing(false)
+      setSearchParams({})
+      return
+    }
+
+    updateUserMutation.mutate(updateData)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setSearchParams({})
+    setEditError('')
+    if (user) {
+      setEditForm({
+        status: user.status,
+        traffic_limit_bytes: user.traffic_limit_bytes,
+        traffic_limit_gb: bytesToGb(user.traffic_limit_bytes),
+        is_unlimited: !user.traffic_limit_bytes,
+        expire_at: formatDateForInput(user.expire_at),
+        hwid_device_limit: String(user.hwid_device_limit),
+      })
+    }
+  }
+
+  const handleStartEdit = () => {
+    setIsEditing(true)
+    setSearchParams({ edit: '1' })
+  }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -216,78 +350,229 @@ export default function UserDetail() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {user.status === 'active' ? (
-            <button onClick={() => disableMutation.mutate()} disabled={disableMutation.isPending}
-              className="px-3 md:px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-800 text-white rounded-lg text-sm">
-              Отключить
-            </button>
+          {isEditing ? (
+            <>
+              <button
+                onClick={handleSave}
+                disabled={updateUserMutation.isPending}
+                className="px-3 md:px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white rounded-lg text-sm"
+              >
+                {updateUserMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                disabled={updateUserMutation.isPending}
+                className="px-3 md:px-4 py-2 bg-dark-700 hover:bg-dark-600 text-dark-100 rounded-lg text-sm"
+              >
+                Отмена
+              </button>
+            </>
           ) : (
-            <button onClick={() => enableMutation.mutate()} disabled={enableMutation.isPending}
-              className="px-3 md:px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white rounded-lg text-sm">
-              Включить
-            </button>
+            <>
+              <button
+                onClick={handleStartEdit}
+                className="px-3 md:px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg text-sm"
+              >
+                Редактировать
+              </button>
+              {user.status === 'active' ? (
+                <button onClick={() => disableMutation.mutate()} disabled={disableMutation.isPending}
+                  className="px-3 md:px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-800 text-white rounded-lg text-sm">
+                  Отключить
+                </button>
+              ) : (
+                <button onClick={() => enableMutation.mutate()} disabled={enableMutation.isPending}
+                  className="px-3 md:px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white rounded-lg text-sm">
+                  Включить
+                </button>
+              )}
+              <button onClick={() => resetTrafficMutation.mutate()} disabled={resetTrafficMutation.isPending}
+                className="px-3 md:px-4 py-2 bg-dark-700 hover:bg-dark-600 text-primary-400 rounded-lg text-sm">
+                Сбросить трафик
+              </button>
+              <button onClick={() => { if (confirm('Удалить пользователя?')) deleteMutation.mutate() }}
+                disabled={deleteMutation.isPending}
+                className="px-3 md:px-4 py-2 bg-dark-700 hover:bg-dark-600 text-red-400 rounded-lg text-sm">
+                Удалить
+              </button>
+            </>
           )}
-          <button onClick={() => resetTrafficMutation.mutate()} disabled={resetTrafficMutation.isPending}
-            className="px-3 md:px-4 py-2 bg-primary-600 hover:bg-primary-500 disabled:bg-primary-800 text-white rounded-lg text-sm">
-            Сбросить трафик
-          </button>
-          <button onClick={() => { if (confirm('Удалить пользователя?')) deleteMutation.mutate() }}
-            disabled={deleteMutation.isPending}
-            className="px-3 md:px-4 py-2 bg-dark-700 hover:bg-dark-600 text-red-400 rounded-lg text-sm">
-            Удалить
-          </button>
         </div>
       </div>
+
+      {/* Edit success/error messages */}
+      {editSuccess && (
+        <div className="card border border-green-500/30 bg-green-500/10 py-3">
+          <p className="text-green-400 text-sm">Изменения сохранены</p>
+        </div>
+      )}
+      {editError && (
+        <div className="card border border-red-500/30 bg-red-500/10 py-3">
+          <p className="text-red-400 text-sm">{editError}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Main column */}
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
 
-          {/* Block: General info */}
+          {/* Block: General info / Edit form */}
           <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6">
-            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Общая информация</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-dark-200">Username</p>
-                <p className="text-white">{user.username || '—'}</p>
+            <h2 className="text-base md:text-lg font-semibold text-white mb-4">
+              {isEditing ? 'Редактирование' : 'Общая информация'}
+            </h2>
+
+            {isEditing ? (
+              /* Edit form */
+              <div className="space-y-5">
+                {/* Status */}
+                <div>
+                  <label className="block text-sm text-dark-200 mb-1.5">Статус</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="input"
+                  >
+                    <option value="active">Активен</option>
+                    <option value="disabled">Отключён</option>
+                    <option value="limited">Ограничен</option>
+                    <option value="expired">Истёк</option>
+                  </select>
+                </div>
+
+                {/* Traffic limit */}
+                <div>
+                  <label className="block text-sm text-dark-200 mb-1.5">Лимит трафика</label>
+                  <div className="flex items-center gap-3 mb-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editForm.is_unlimited}
+                        onChange={(e) => setEditForm({
+                          ...editForm,
+                          is_unlimited: e.target.checked,
+                          traffic_limit_gb: e.target.checked ? '' : editForm.traffic_limit_gb,
+                        })}
+                        className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                      />
+                      <span className="text-sm text-dark-100">Безлимитный</span>
+                    </label>
+                  </div>
+                  {!editForm.is_unlimited && (
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={editForm.traffic_limit_gb}
+                        onChange={(e) => setEditForm({ ...editForm, traffic_limit_gb: e.target.value })}
+                        placeholder="Введите лимит"
+                        className="input pr-12"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Expire date */}
+                <div>
+                  <label className="block text-sm text-dark-200 mb-1.5">Дата истечения</label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.expire_at}
+                    onChange={(e) => setEditForm({ ...editForm, expire_at: e.target.value })}
+                    className="input"
+                  />
+                  {editForm.expire_at && (
+                    <button
+                      onClick={() => setEditForm({ ...editForm, expire_at: '' })}
+                      className="text-xs text-dark-200 hover:text-primary-400 mt-1"
+                    >
+                      Убрать дату (бессрочно)
+                    </button>
+                  )}
+                </div>
+
+                {/* HWID limit */}
+                <div>
+                  <label className="block text-sm text-dark-200 mb-1.5">Лимит устройств (HWID)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editForm.hwid_device_limit}
+                    onChange={(e) => setEditForm({ ...editForm, hwid_device_limit: e.target.value })}
+                    className="input"
+                  />
+                </div>
+
+                {/* Read-only fields */}
+                <div className="pt-3 border-t border-dark-400/10">
+                  <p className="text-xs text-dark-300 mb-3">Информация (только чтение)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-dark-200">Username</p>
+                      <p className="text-white text-sm">{user.username || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-dark-200">Email</p>
+                      <p className="text-white text-sm truncate">{user.email || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-dark-200">Telegram ID</p>
+                      <p className="text-white text-sm">{user.telegram_id || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-dark-200">Short UUID</p>
+                      <p className="text-white text-sm font-mono">{user.short_uuid || '—'}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-dark-200">Email</p>
-                <p className="text-white truncate">{user.email || '—'}</p>
+            ) : (
+              /* View mode */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-dark-200">Username</p>
+                  <p className="text-white">{user.username || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-dark-200">Email</p>
+                  <p className="text-white truncate">{user.email || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-dark-200">Telegram ID</p>
+                  <p className="text-white">{user.telegram_id || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-dark-200">Short UUID</p>
+                  <p className="text-white font-mono">{user.short_uuid || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-dark-200">Создан</p>
+                  <p className="text-white">
+                    {user.created_at
+                      ? format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                      : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-dark-200">Истекает</p>
+                  <p className="text-white">
+                    {user.expire_at
+                      ? format(new Date(user.expire_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                      : 'Бессрочно'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-dark-200">Последняя активность</p>
+                  <p className="text-white">
+                    {user.online_at
+                      ? format(new Date(user.online_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                      : '—'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-dark-200">Telegram ID</p>
-                <p className="text-white">{user.telegram_id || '—'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-dark-200">Short UUID</p>
-                <p className="text-white font-mono">{user.short_uuid || '—'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-dark-200">Создан</p>
-                <p className="text-white">
-                  {user.created_at
-                    ? format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                    : '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-dark-200">Истекает</p>
-                <p className="text-white">
-                  {user.expire_at
-                    ? format(new Date(user.expire_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                    : 'Бессрочно'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-dark-200">Последняя активность</p>
-                <p className="text-white">
-                  {user.online_at
-                    ? format(new Date(user.online_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                    : '—'}
-                </p>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Block: Traffic */}
@@ -295,27 +580,42 @@ export default function UserDetail() {
             <h2 className="text-base md:text-lg font-semibold text-white mb-4">Трафик</h2>
             <div className="space-y-4">
               <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-dark-200">Использовано</span>
-                  <span className="text-white text-xs sm:text-sm">
-                    {formatBytes(user.used_traffic_bytes)}
-                    {user.traffic_limit_bytes ? ` / ${formatBytes(user.traffic_limit_bytes)}` : ' / Безлимит'}
-                  </span>
-                </div>
-                <div className="w-full bg-dark-600 rounded-full h-2.5">
-                  <div
-                    className={`h-2.5 rounded-full transition-all ${
-                      user.traffic_limit_bytes
-                        ? trafficPercent > 90 ? 'bg-red-500' : trafficPercent > 70 ? 'bg-yellow-500' : 'bg-primary-500'
-                        : 'bg-primary-500'
-                    }`}
-                    style={{ width: user.traffic_limit_bytes ? `${trafficPercent}%` : '0%' }}
-                  />
-                </div>
-                {user.traffic_limit_bytes && (
-                  <p className="text-xs text-dark-300 mt-1">
-                    {trafficPercent.toFixed(1)}% использовано
-                  </p>
+                {user.traffic_limit_bytes ? (
+                  /* Limited user: standard progress bar */
+                  <>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-dark-200">Использовано</span>
+                      <span className="text-white text-xs sm:text-sm">
+                        {formatBytes(user.used_traffic_bytes)} / {formatBytes(user.traffic_limit_bytes)}
+                      </span>
+                    </div>
+                    <div className="w-full bg-dark-600 rounded-full h-2.5">
+                      <div
+                        className={`h-2.5 rounded-full transition-all ${
+                          trafficPercent > 90 ? 'bg-red-500' : trafficPercent > 70 ? 'bg-yellow-500' : 'bg-primary-500'
+                        }`}
+                        style={{ width: `${trafficPercent}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-dark-300 mt-1">
+                      {trafficPercent.toFixed(1)}% использовано
+                    </p>
+                  </>
+                ) : (
+                  /* Unlimited user: solid gradient bar with centered text */
+                  <>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-dark-200">Использовано</span>
+                      <span className="text-primary-400 text-xs sm:text-sm font-medium">Безлимит</span>
+                    </div>
+                    <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-sm font-medium text-primary-200">
+                          {formatBytes(user.used_traffic_bytes)} / ∞
+                        </span>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-4 pt-3 border-t border-dark-400/10">
