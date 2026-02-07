@@ -25,4 +25,6 @@ COPY alembic ./alembic
 COPY alembic.ini .
 COPY scripts ./scripts
 
+RUN mkdir -p /app/logs
+
 CMD ["python", "-m", "src.main"]

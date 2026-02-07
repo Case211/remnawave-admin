@@ -2,6 +2,7 @@ import gzip
 import logging
 import os
 import shutil
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional
@@ -120,9 +121,12 @@ def setup_logger() -> logging.Logger:
     try:
         log_dir = _ensure_log_dir()
 
+        info_path = log_dir / "adminbot_INFO.log"
+        warn_path = log_dir / "adminbot_WARNING.log"
+
         # INFO+ файл
         info_handler = CompressedRotatingFileHandler(
-            filename=str(log_dir / "adminbot_INFO.log"),
+            filename=str(info_path),
             maxBytes=_MAX_BYTES,
             backupCount=_BACKUP_COUNT,
             encoding="utf-8",
@@ -133,7 +137,7 @@ def setup_logger() -> logging.Logger:
 
         # WARNING+ файл
         warn_handler = CompressedRotatingFileHandler(
-            filename=str(log_dir / "adminbot_WARNING.log"),
+            filename=str(warn_path),
             maxBytes=_MAX_BYTES,
             backupCount=_BACKUP_COUNT,
             encoding="utf-8",
@@ -142,10 +146,25 @@ def setup_logger() -> logging.Logger:
         warn_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
         root.addHandler(warn_handler)
 
+        # Проверяем, что файлы действительно созданы и доступны для записи
+        _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
+        print(
+            f"[LOGGING] File logging active: {log_dir} "
+            f"(writable={_verify_ok})",
+            file=sys.stderr,
+            flush=True,
+        )
+
     except OSError as exc:
         # Если не удалось создать файлы (read-only FS и т.п.) — работаем только с консолью
         console.setLevel(level)  # fallback: показываем всё в консоли
-        root.warning("⚠️ Cannot create log files (%s), logging to console only", exc)
+        root.warning("Cannot create log files (%s), logging to console only", exc)
+        print(
+            f"[LOGGING] File logging DISABLED: {exc}. "
+            f"Check that the volume mount is correct (./logs:/app/logs, NOT .logs:/app/logs)",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # Подавляем шумные сторонние логгеры
     logging.getLogger("httpx").setLevel(logging.WARNING)

@@ -92,8 +92,11 @@ def _setup_web_logging():
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         file_fmt = logging.Formatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT)
 
+        info_path = _LOG_DIR / "web_INFO.log"
+        warn_path = _LOG_DIR / "web_WARNING.log"
+
         info_h = _CompressedRotatingFileHandler(
-            str(_LOG_DIR / "web_INFO.log"),
+            str(info_path),
             maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
         )
         info_h.setLevel(logging.INFO)
@@ -101,14 +104,28 @@ def _setup_web_logging():
         root.addHandler(info_h)
 
         warn_h = _CompressedRotatingFileHandler(
-            str(_LOG_DIR / "web_WARNING.log"),
+            str(warn_path),
             maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
         )
         warn_h.setLevel(logging.WARNING)
         warn_h.setFormatter(file_fmt)
         root.addHandler(warn_h)
+
+        _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
+        print(
+            f"[LOGGING] File logging active: {_LOG_DIR} "
+            f"(writable={_verify_ok})",
+            file=sys.stderr,
+            flush=True,
+        )
     except OSError as exc:
-        root.warning("⚠️ Cannot create log files (%s), logging to console only", exc)
+        root.warning("Cannot create log files (%s), logging to console only", exc)
+        print(
+            f"[LOGGING] File logging DISABLED: {exc}. "
+            f"Check that the volume mount is correct (./logs:/app/logs, NOT .logs:/app/logs)",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # Подавляем шумные логгеры
     logging.getLogger("httpx").setLevel(logging.WARNING)
