@@ -61,7 +61,7 @@ async def _get_nodes_list():
     return await fetch_nodes_from_api()
 
 
-@router.get("/", response_model=PaginatedResponse[NodeListItem])
+@router.get("", response_model=PaginatedResponse[NodeListItem])
 async def list_nodes(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
@@ -155,7 +155,7 @@ async def get_node(
         raise HTTPException(status_code=503, detail="API service not available")
 
 
-@router.post("/", response_model=NodeDetail)
+@router.post("", response_model=NodeDetail)
 async def create_node(
     data: NodeCreate,
     admin: AdminUser = Depends(get_current_admin),

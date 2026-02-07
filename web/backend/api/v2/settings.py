@@ -45,7 +45,7 @@ class ConfigByCategoryResponse(BaseModel):
     categories: Dict[str, List[ConfigItemResponse]]
 
 
-@router.get("/", response_model=ConfigByCategoryResponse)
+@router.get("", response_model=ConfigByCategoryResponse)
 async def get_all_settings(
     admin: AdminUser = Depends(get_current_admin),
 ):

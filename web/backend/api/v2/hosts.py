@@ -14,7 +14,7 @@ from web.backend.schemas.host import (
 router = APIRouter()
 
 
-@router.get("/", response_model=HostListResponse)
+@router.get("", response_model=HostListResponse)
 async def list_hosts(
     admin: AdminUser = Depends(get_current_admin),
     api_client=Depends(get_api_client),
@@ -81,7 +81,7 @@ async def get_host(
     )
 
 
-@router.post("/", response_model=HostDetail)
+@router.post("", response_model=HostDetail)
 async def create_host(
     data: HostCreate,
     admin: AdminUser = Depends(get_current_admin),
