@@ -162,6 +162,34 @@ async def fetch_hosts_from_api() -> List[Dict[str, Any]]:
     return [_normalize(h) for h in items if isinstance(h, dict)]
 
 
+async def fetch_bandwidth_stats() -> Optional[Dict[str, Any]]:
+    """Fetch bandwidth statistics from the Remnawave API.
+
+    Returns response with bandwidthLastTwoDays, bandwidthLastSevenDays,
+    bandwidthLast30Days, bandwidthCalendarMonth, bandwidthCurrentYear.
+    Each has 'current', 'previous', 'difference' (string byte values).
+    """
+    data = await api_get("/api/system/stats/bandwidth")
+    if not data:
+        return None
+    return data.get("response", data)
+
+
+async def fetch_nodes_realtime_usage() -> List[Dict[str, Any]]:
+    """Fetch real-time per-node bandwidth usage from the Remnawave API.
+
+    Returns list of dicts with nodeUuid, nodeName, totalBytes,
+    downloadBytes, uploadBytes, downloadSpeedBps, uploadSpeedBps, totalSpeedBps.
+    """
+    data = await api_get("/api/bandwidth-stats/nodes/realtime")
+    if not data:
+        return []
+    response = data.get("response", data)
+    if isinstance(response, list):
+        return response
+    return []
+
+
 async def close_client():
     """Close the shared httpx client."""
     global _client

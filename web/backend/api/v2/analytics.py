@@ -6,7 +6,10 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, Query
 
 from web.backend.api.deps import get_current_admin, AdminUser
-from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api, _normalize
+from web.backend.core.api_helper import (
+    fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api,
+    fetch_bandwidth_stats, fetch_nodes_realtime_usage, _normalize,
+)
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -205,11 +208,20 @@ async def get_overview(
         # Calculate host stats
         total_hosts = len(hosts)
 
-        # Calculate total traffic from users + nodes
-        user_traffic = sum(_get_traffic_bytes(u) for u in users)
-        node_traffic = sum(_get_node_traffic(n) for n in nodes)
-        # Use the larger value — user traffic is typically cumulative, node traffic is per-node
-        total_traffic_bytes = max(user_traffic, node_traffic)
+        # Get total traffic from Remnawave bandwidth stats API
+        total_traffic_bytes = 0
+        bw_stats = await fetch_bandwidth_stats()
+        if bw_stats:
+            current_year = bw_stats.get('bandwidthCurrentYear', {})
+            try:
+                total_traffic_bytes = int(current_year.get('current') or 0)
+            except (ValueError, TypeError):
+                pass
+        # Fallback to user/node traffic sums if bandwidth API unavailable
+        if not total_traffic_bytes:
+            user_traffic = sum(_get_traffic_bytes(u) for u in users)
+            node_traffic = sum(_get_node_traffic(n) for n in nodes)
+            total_traffic_bytes = max(user_traffic, node_traffic)
         users_online = sum(_get_users_online(n) for n in nodes)
 
         return OverviewStats(
@@ -233,64 +245,64 @@ async def get_overview(
         return OverviewStats()
 
 
+def _parse_bandwidth_bytes(val: Any) -> int:
+    """Parse a bandwidth value (string or number) to int bytes."""
+    if not val:
+        return 0
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return 0
+
+
 @router.get("/traffic", response_model=TrafficStats)
 async def get_traffic_stats(
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Get traffic statistics with time breakdowns."""
+    """Get traffic statistics with time breakdowns.
+
+    Uses the Remnawave /api/system/stats/bandwidth endpoint for accurate
+    per-period traffic data, and /api/bandwidth-stats/nodes/realtime for today.
+    """
     try:
-        users = await _get_users_data()
-        nodes = await _get_nodes_data()
+        # Fetch bandwidth stats from Remnawave API — gives real per-period data
+        bw_stats = await fetch_bandwidth_stats()
 
-        # Total traffic from users
-        user_traffic = sum(_get_traffic_bytes(u) for u in users)
-        node_traffic = sum(_get_node_traffic(n) for n in nodes)
-        total_bytes = max(user_traffic, node_traffic)
-
-        # Per-node today traffic (if available from API)
         today_bytes = 0
-        for n in nodes:
-            val = n.get('traffic_today_bytes') or n.get('trafficTodayBytes') or 0
-            try:
-                today_bytes += int(val)
-            except (ValueError, TypeError):
-                pass
-
-        # Try to get time-based stats from connection logs in DB
         week_bytes = 0
         month_bytes = 0
-        try:
-            from src.services.database import db_service
-            if db_service.is_connected:
-                now = datetime.utcnow()
-                week_start = now - timedelta(days=7)
-                month_start = now - timedelta(days=30)
+        total_bytes = 0
 
-                async with db_service.acquire() as conn:
-                    # Try connection_logs table for per-period traffic
-                    row = await conn.fetchrow(
-                        """
-                        SELECT
-                            COALESCE(SUM(CASE WHEN created_at >= $1 THEN traffic_bytes ELSE 0 END), 0) as week_bytes,
-                            COALESCE(SUM(CASE WHEN created_at >= $2 THEN traffic_bytes ELSE 0 END), 0) as month_bytes
-                        FROM connection_logs
-                        WHERE created_at >= $2
-                        """,
-                        week_start,
-                        month_start,
-                    )
-                    if row:
-                        week_bytes = int(row['week_bytes'])
-                        month_bytes = int(row['month_bytes'])
-        except Exception:
-            # connection_logs table may not exist — that's OK, use fallback
-            pass
+        if bw_stats:
+            # bandwidthLastTwoDays.current = traffic over last 2 days (best proxy for "today")
+            last_two_days = bw_stats.get('bandwidthLastTwoDays', {})
+            today_bytes = _parse_bandwidth_bytes(last_two_days.get('current'))
 
-        # If no connection logs, estimate from total (rough fallback)
-        if not week_bytes and not month_bytes and total_bytes > 0:
-            # Use total as month approximation when we have no per-period data
-            month_bytes = total_bytes
-            week_bytes = total_bytes
+            # bandwidthLastSevenDays.current = traffic over last 7 days
+            last_seven = bw_stats.get('bandwidthLastSevenDays', {})
+            week_bytes = _parse_bandwidth_bytes(last_seven.get('current'))
+
+            # bandwidthLast30Days.current = traffic over last 30 days
+            last_30 = bw_stats.get('bandwidthLast30Days', {})
+            month_bytes = _parse_bandwidth_bytes(last_30.get('current'))
+
+            # bandwidthCurrentYear.current = traffic for current year
+            current_year = bw_stats.get('bandwidthCurrentYear', {})
+            total_bytes = _parse_bandwidth_bytes(current_year.get('current'))
+
+        # If bandwidth stats API failed, fall back to node/user traffic totals
+        if not total_bytes:
+            users = await _get_users_data()
+            nodes = await _get_nodes_data()
+            user_traffic = sum(_get_traffic_bytes(u) for u in users)
+            node_traffic = sum(_get_node_traffic(n) for n in nodes)
+            total_bytes = max(user_traffic, node_traffic)
+
+        # Try to get more accurate "today" from realtime node stats
+        if not today_bytes:
+            realtime = await fetch_nodes_realtime_usage()
+            for node_rt in realtime:
+                today_bytes += _parse_bandwidth_bytes(node_rt.get('totalBytes'))
 
         return TrafficStats(
             total_bytes=total_bytes,
