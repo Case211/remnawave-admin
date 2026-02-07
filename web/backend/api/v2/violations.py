@@ -1,4 +1,5 @@
 """Violations API endpoints."""
+import logging
 from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional
 from datetime import datetime, timedelta
@@ -15,6 +16,7 @@ from web.backend.schemas.violation import (
 )
 from src.services.database import DatabaseService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -27,6 +29,25 @@ def get_severity(score: float) -> ViolationSeverity:
     elif score >= 40:
         return ViolationSeverity.MEDIUM
     return ViolationSeverity.LOW
+
+
+def _row_to_list_item(v: dict) -> ViolationListItem:
+    """Convert a DB row dict to ViolationListItem (handles UUID→str, None defaults)."""
+    score = float(v.get('score', 0) or 0)
+    return ViolationListItem(
+        id=int(v.get('id', 0)),
+        user_uuid=str(v.get('user_uuid', '')),
+        username=v.get('username'),
+        email=v.get('email'),
+        telegram_id=v.get('telegram_id'),
+        score=score,
+        recommended_action=v.get('recommended_action') or 'no_action',
+        confidence=float(v.get('confidence', 0) or 0),
+        detected_at=v.get('detected_at') or datetime.utcnow(),
+        severity=get_severity(score),
+        action_taken=v.get('action_taken'),
+        notified=v.get('notified_at') is not None,
+    )
 
 
 @router.get("", response_model=ViolationListResponse)
@@ -66,7 +87,7 @@ async def list_violations(
 
         # Фильтрация
         if user_uuid:
-            violations = [v for v in violations if v.get('user_uuid') == user_uuid]
+            violations = [v for v in violations if str(v.get('user_uuid', '')) == user_uuid]
 
         if severity:
             severity_map = {
@@ -97,20 +118,10 @@ async def list_violations(
         # Преобразуем в модели
         items = []
         for v in items_raw:
-            items.append(ViolationListItem(
-                id=v.get('id'),
-                user_uuid=v.get('user_uuid'),
-                username=v.get('username'),
-                email=v.get('email'),
-                telegram_id=v.get('telegram_id'),
-                score=v.get('score', 0),
-                recommended_action=v.get('recommended_action', 'no_action'),
-                confidence=v.get('confidence', 0),
-                detected_at=v.get('detected_at'),
-                severity=get_severity(v.get('score', 0)),
-                action_taken=v.get('action_taken'),
-                notified=v.get('notified_at') is not None,
-            ))
+            try:
+                items.append(_row_to_list_item(v))
+            except Exception as item_err:
+                logger.warning("Skipping violation row id=%s: %s", v.get('id'), item_err)
 
         return ViolationListResponse(
             items=items,
@@ -119,7 +130,8 @@ async def list_violations(
             per_page=per_page,
             pages=(total + per_page - 1) // per_page if total > 0 else 1,
         )
-    except Exception:
+    except Exception as e:
+        logger.error("Error listing violations: %s", e, exc_info=True)
         return ViolationListResponse(items=[], total=0, page=page, per_page=per_page, pages=1)
 
 
@@ -181,7 +193,8 @@ async def get_violation_stats(
             by_action=by_action,
             by_country=by_country,
         )
-    except Exception:
+    except Exception as e:
+        logger.error("Error getting violation stats: %s", e, exc_info=True)
         return ViolationStats(
             total=0, critical=0, high=0, medium=0, low=0,
             unique_users=0, avg_score=0.0, max_score=0.0,
@@ -227,18 +240,21 @@ async def get_top_violators(
         limit=limit,
     )
 
-    return [
-        ViolationUserSummary(
-            user_uuid=v.get('user_uuid'),
-            username=v.get('username'),
-            violations_count=v.get('violations_count', 0),
-            max_score=v.get('max_score', 0),
-            avg_score=v.get('avg_score', 0),
-            last_violation_at=v.get('last_violation_at'),
-            actions=v.get('actions', []),
-        )
-        for v in violators
-    ]
+    items = []
+    for v in violators:
+        try:
+            items.append(ViolationUserSummary(
+                user_uuid=str(v.get('user_uuid', '')),
+                username=v.get('username'),
+                violations_count=v.get('violations_count', 0),
+                max_score=float(v.get('max_score', 0) or 0),
+                avg_score=float(v.get('avg_score', 0) or 0),
+                last_violation_at=v.get('last_violation_at') or datetime.utcnow(),
+                actions=v.get('actions') or [],
+            ))
+        except Exception as e:
+            logger.warning("Skipping top violator row: %s", e)
+    return items
 
 
 @router.get("/{violation_id}", response_model=ViolationDetail)
@@ -260,7 +276,7 @@ async def get_violation(
 
     violation = None
     for v in violations:
-        if v.get('id') == violation_id:
+        if int(v.get('id', 0)) == violation_id:
             violation = v
             break
 
@@ -268,15 +284,15 @@ async def get_violation(
         raise HTTPException(status_code=404, detail="Violation not found")
 
     return ViolationDetail(
-        id=violation.get('id'),
-        user_uuid=violation.get('user_uuid'),
+        id=int(violation.get('id', 0)),
+        user_uuid=str(violation.get('user_uuid', '')),
         username=violation.get('username'),
         email=violation.get('email'),
         telegram_id=violation.get('telegram_id'),
-        score=violation.get('score', 0),
-        recommended_action=violation.get('recommended_action', 'no_action'),
-        confidence=violation.get('confidence', 0),
-        detected_at=violation.get('detected_at'),
+        score=float(violation.get('score', 0) or 0),
+        recommended_action=violation.get('recommended_action') or 'no_action',
+        confidence=float(violation.get('confidence', 0) or 0),
+        detected_at=violation.get('detected_at') or datetime.utcnow(),
         temporal_score=violation.get('temporal_score', 0),
         geo_score=violation.get('geo_score', 0),
         asn_score=violation.get('asn_score', 0),
@@ -290,7 +306,7 @@ async def get_violation(
         action_taken_at=violation.get('action_taken_at'),
         action_taken_by=violation.get('action_taken_by'),
         notified_at=violation.get('notified_at'),
-        raw_data=violation.get('raw_data'),
+        raw_data=violation.get('raw_breakdown') or violation.get('raw_data'),
     )
 
 
@@ -336,19 +352,9 @@ async def get_user_violations(
 
     items = []
     for v in violations:
-        items.append(ViolationListItem(
-            id=v.get('id'),
-            user_uuid=v.get('user_uuid'),
-            username=v.get('username'),
-            email=v.get('email'),
-            telegram_id=v.get('telegram_id'),
-            score=v.get('score', 0),
-            recommended_action=v.get('recommended_action', 'no_action'),
-            confidence=v.get('confidence', 0),
-            detected_at=v.get('detected_at'),
-            severity=get_severity(v.get('score', 0)),
-            action_taken=v.get('action_taken'),
-            notified=v.get('notified_at') is not None,
-        ))
+        try:
+            items.append(_row_to_list_item(v))
+        except Exception as e:
+            logger.warning("Skipping user violation row id=%s: %s", v.get('id'), e)
 
     return items
