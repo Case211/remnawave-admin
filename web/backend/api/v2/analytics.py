@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, Query
 
 from web.backend.api.deps import get_current_admin, AdminUser
-from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api
+from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api, _normalize
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -42,32 +42,33 @@ class TrafficStats(BaseModel):
 
 
 async def _get_users_data() -> List[Dict[str, Any]]:
-    """Get users from DB, fall back to API if DB is empty/unavailable."""
+    """Get users from DB (normalized), fall back to API if DB is empty/unavailable."""
     try:
         from src.services.database import db_service
         if db_service.is_connected:
             users = await db_service.get_all_users(limit=50000)
             if users:
-                return users
+                # Normalize: flatten nested userTraffic, add snake_case aliases
+                return [_normalize(u) for u in users]
     except Exception as e:
         logger.debug("DB users fetch failed: %s", e)
 
-    # Fall back to Remnawave API
+    # Fall back to Remnawave API (already normalized)
     return await fetch_users_from_api()
 
 
 async def _get_nodes_data() -> List[Dict[str, Any]]:
-    """Get nodes from DB, fall back to API if DB is empty/unavailable."""
+    """Get nodes from DB (normalized), fall back to API if DB is empty/unavailable."""
     try:
         from src.services.database import db_service
         if db_service.is_connected:
             nodes = await db_service.get_all_nodes()
             if nodes:
-                return nodes
+                return [_normalize(n) for n in nodes]
     except Exception as e:
         logger.debug("DB nodes fetch failed: %s", e)
 
-    # Fall back to Remnawave API
+    # Fall back to Remnawave API (already normalized)
     return await fetch_nodes_from_api()
 
 
@@ -113,8 +114,11 @@ async def _get_violation_counts() -> Dict[str, int]:
 
 
 def _get_user_status(user: Dict[str, Any]) -> str:
-    """Extract user status from user data (handles both DB and API formats)."""
-    return user.get('status') or user.get('Status') or ''
+    """Extract user status from user data (handles both DB and API formats).
+    Always returns lowercase for consistent comparison.
+    """
+    status = user.get('status') or user.get('Status') or ''
+    return status.lower().strip()
 
 
 def _is_node_connected(node: Dict[str, Any]) -> bool:
@@ -128,8 +132,38 @@ def _is_node_disabled(node: Dict[str, Any]) -> bool:
 
 
 def _get_traffic_bytes(user: Dict[str, Any]) -> int:
-    """Extract used traffic bytes from user data (handles both DB and API formats)."""
-    val = user.get('used_traffic_bytes') or user.get('usedTrafficBytes') or 0
+    """Extract used traffic bytes from user data (handles all formats)."""
+    # Direct fields (snake_case or camelCase)
+    val = user.get('used_traffic_bytes') or user.get('usedTrafficBytes')
+    # Nested userTraffic object (raw API response from DB)
+    if not val:
+        user_traffic = user.get('userTraffic')
+        if isinstance(user_traffic, dict):
+            val = user_traffic.get('usedTrafficBytes') or user_traffic.get('used_traffic_bytes')
+    # Lifetime traffic as fallback
+    if not val:
+        val = user.get('lifetimeUsedTrafficBytes')
+        if not val:
+            user_traffic = user.get('userTraffic')
+            if isinstance(user_traffic, dict):
+                val = user_traffic.get('lifetimeUsedTrafficBytes')
+    if not val:
+        return 0
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return 0
+
+
+def _get_node_traffic(node: Dict[str, Any]) -> int:
+    """Extract traffic bytes from node data."""
+    val = (
+        node.get('traffic_used_bytes')
+        or node.get('trafficUsedBytes')
+        or node.get('traffic_total_bytes')
+        or node.get('trafficTotalBytes')
+        or 0
+    )
     try:
         return int(val)
     except (ValueError, TypeError):
@@ -156,7 +190,7 @@ async def get_overview(
         hosts = await _get_hosts_data()
         violations = await _get_violation_counts()
 
-        # Calculate user stats
+        # Calculate user stats (case-insensitive status comparison)
         total_users = len(users)
         active_users = sum(1 for u in users if _get_user_status(u) == 'active')
         disabled_users = sum(1 for u in users if _get_user_status(u) == 'disabled')
@@ -171,8 +205,11 @@ async def get_overview(
         # Calculate host stats
         total_hosts = len(hosts)
 
-        # Calculate total traffic and users online
-        total_traffic_bytes = sum(_get_traffic_bytes(u) for u in users)
+        # Calculate total traffic from users + nodes
+        user_traffic = sum(_get_traffic_bytes(u) for u in users)
+        node_traffic = sum(_get_node_traffic(n) for n in nodes)
+        # Use the larger value — user traffic is typically cumulative, node traffic is per-node
+        total_traffic_bytes = max(user_traffic, node_traffic)
         users_online = sum(_get_users_online(n) for n in nodes)
 
         return OverviewStats(
@@ -200,15 +237,66 @@ async def get_overview(
 async def get_traffic_stats(
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Get traffic statistics."""
+    """Get traffic statistics with time breakdowns."""
     try:
         users = await _get_users_data()
+        nodes = await _get_nodes_data()
 
-        # Calculate total traffic from all users
-        total_bytes = sum(_get_traffic_bytes(u) for u in users)
+        # Total traffic from users
+        user_traffic = sum(_get_traffic_bytes(u) for u in users)
+        node_traffic = sum(_get_node_traffic(n) for n in nodes)
+        total_bytes = max(user_traffic, node_traffic)
+
+        # Per-node today traffic (if available from API)
+        today_bytes = 0
+        for n in nodes:
+            val = n.get('traffic_today_bytes') or n.get('trafficTodayBytes') or 0
+            try:
+                today_bytes += int(val)
+            except (ValueError, TypeError):
+                pass
+
+        # Try to get time-based stats from connection logs in DB
+        week_bytes = 0
+        month_bytes = 0
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                now = datetime.utcnow()
+                week_start = now - timedelta(days=7)
+                month_start = now - timedelta(days=30)
+
+                async with db_service.acquire() as conn:
+                    # Try connection_logs table for per-period traffic
+                    row = await conn.fetchrow(
+                        """
+                        SELECT
+                            COALESCE(SUM(CASE WHEN created_at >= $1 THEN traffic_bytes ELSE 0 END), 0) as week_bytes,
+                            COALESCE(SUM(CASE WHEN created_at >= $2 THEN traffic_bytes ELSE 0 END), 0) as month_bytes
+                        FROM connection_logs
+                        WHERE created_at >= $2
+                        """,
+                        week_start,
+                        month_start,
+                    )
+                    if row:
+                        week_bytes = int(row['week_bytes'])
+                        month_bytes = int(row['month_bytes'])
+        except Exception:
+            # connection_logs table may not exist — that's OK, use fallback
+            pass
+
+        # If no connection logs, estimate from total (rough fallback)
+        if not week_bytes and not month_bytes and total_bytes > 0:
+            # Use total as month approximation when we have no per-period data
+            month_bytes = total_bytes
+            week_bytes = total_bytes
 
         return TrafficStats(
             total_bytes=total_bytes,
+            today_bytes=today_bytes,
+            week_bytes=week_bytes,
+            month_bytes=month_bytes,
         )
 
     except Exception as e:
