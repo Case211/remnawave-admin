@@ -350,7 +350,7 @@ export default function Violations() {
 
       {/* Filters panel */}
       {showFilters && (
-        <div className="card">
+        <div className="card animate-fade-in-down">
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 md:gap-4">
             <div>
               <label className="block text-sm text-dark-200 mb-1">Уровень</label>
@@ -391,25 +391,25 @@ export default function Violations() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <p className="text-sm text-dark-200">Критические</p>
           <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
             {stats?.critical ?? '-'}
           </p>
         </div>
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <p className="text-sm text-dark-200">Высокие</p>
           <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">
             {stats?.high ?? '-'}
           </p>
         </div>
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <p className="text-sm text-dark-200">Средние</p>
           <p className="text-xl md:text-2xl font-bold text-blue-400 mt-1">
             {stats?.medium ?? '-'}
           </p>
         </div>
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <p className="text-sm text-dark-200">Низкие</p>
           <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
             {stats?.low ?? '-'}
@@ -430,9 +430,9 @@ export default function Violations() {
             </p>
           </div>
         ) : (
-          violations.map((violation) => (
+          violations.map((violation, i) => (
+            <div key={violation.id} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.05}s` }}>
             <ViolationCard
-              key={violation.id}
               violation={violation}
               onBlock={() =>
                 resolveViolation.mutate({ id: violation.id, action: 'block' })
@@ -445,6 +445,7 @@ export default function Violations() {
               }
               onView={() => navigate(`/users/${violation.user_uuid}`)}
             />
+            </div>
           ))
         )}
       </div>

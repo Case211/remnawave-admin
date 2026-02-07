@@ -41,11 +41,12 @@ const fetchNodes = async (): Promise<Node[]> => {
 }
 
 // Utility functions
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 Б'
+function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes || bytes <= 0) return '0 Б'
   const k = 1024
   const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
+  if (i < 0 || i >= sizes.length) return '0 Б'
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
@@ -343,31 +344,31 @@ export default function Nodes() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <p className="text-xs md:text-sm text-dark-200">Всего</p>
           <p className="text-xl md:text-2xl font-bold text-white mt-1">
             {isLoading ? '-' : totalNodes}
           </p>
         </div>
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <p className="text-xs md:text-sm text-dark-200">Онлайн</p>
           <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
             {isLoading ? '-' : onlineNodes}
           </p>
         </div>
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <p className="text-xs md:text-sm text-dark-200">Офлайн</p>
           <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
             {isLoading ? '-' : offlineNodes}
           </p>
         </div>
-        <div className="card text-center">
+        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <p className="text-xs md:text-sm text-dark-200">Отключены</p>
           <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
             {isLoading ? '-' : disabledNodes}
           </p>
         </div>
-        <div className="card text-center col-span-2 sm:col-span-1">
+        <div className="card text-center col-span-2 sm:col-span-1 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
           <p className="text-xs md:text-sm text-dark-200">Пользователей</p>
           <p className="text-xl md:text-2xl font-bold text-primary-400 mt-1">
             {isLoading ? '-' : totalUsersOnline}
@@ -386,15 +387,16 @@ export default function Nodes() {
             <p className="text-dark-200">Нет добавленных нод</p>
           </div>
         ) : (
-          nodes.map((node) => (
-            <NodeCard
-              key={node.uuid}
-              node={node}
-              onRestart={() => restartNode.mutate(node.uuid)}
-              onEnable={() => enableNode.mutate(node.uuid)}
-              onDisable={() => disableNode.mutate(node.uuid)}
-              onDelete={() => deleteNode.mutate(node.uuid)}
-            />
+          nodes.map((node, i) => (
+            <div key={node.uuid} className="animate-fade-in-up" style={{ animationDelay: `${0.1 + i * 0.06}s` }}>
+              <NodeCard
+                node={node}
+                onRestart={() => restartNode.mutate(node.uuid)}
+                onEnable={() => enableNode.mutate(node.uuid)}
+                onDisable={() => disableNode.mutate(node.uuid)}
+                onDelete={() => deleteNode.mutate(node.uuid)}
+              />
+            </div>
           ))
         )}
       </div>
