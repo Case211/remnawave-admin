@@ -25,6 +25,7 @@ def _ensure_snake_case(user: dict) -> dict:
     mappings = {
         'shortUuid': 'short_uuid',
         'subscriptionUuid': 'subscription_uuid',
+        'subscriptionUrl': 'subscription_url',
         'telegramId': 'telegram_id',
         'expireAt': 'expire_at',
         'trafficLimitBytes': 'traffic_limit_bytes',
