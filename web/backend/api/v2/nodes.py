@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser
-from web.backend.core.api_helper import fetch_nodes_from_api, _normalize
+from web.backend.core.api_helper import fetch_nodes_from_api, fetch_nodes_realtime_usage, _normalize
 from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeUpdate
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 
@@ -74,6 +74,20 @@ async def list_nodes(
     try:
         nodes = await _get_nodes_list()
         nodes = [_ensure_node_snake_case(n) for n in nodes]
+
+        # Enrich with realtime bandwidth data for per-node today traffic
+        try:
+            realtime = await fetch_nodes_realtime_usage()
+            rt_map = {r.get('nodeUuid'): r for r in realtime}
+            for n in nodes:
+                rt = rt_map.get(n.get('uuid'))
+                if rt:
+                    try:
+                        n['traffic_today_bytes'] = int(rt.get('totalBytes') or 0)
+                    except (ValueError, TypeError):
+                        pass
+        except Exception as e:
+            logger.debug("Realtime bandwidth fetch failed: %s", e)
 
         # Filter
         if search:
