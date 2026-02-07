@@ -78,6 +78,7 @@ function getTrafficPercent(used: number, limit: number | null): number {
 
 // Status badge component
 function StatusBadge({ status }: { status: string }) {
+  const normalizedStatus = status.toLowerCase()
   const statusConfig: Record<string, { label: string; class: string }> = {
     active: { label: 'Активен', class: 'badge-success' },
     disabled: { label: 'Отключён', class: 'badge-danger' },
@@ -85,7 +86,7 @@ function StatusBadge({ status }: { status: string }) {
     expired: { label: 'Истёк', class: 'badge-gray' },
   }
 
-  const config = statusConfig[status] || { label: status, class: 'badge-gray' }
+  const config = statusConfig[normalizedStatus] || { label: status, class: 'badge-gray' }
 
   return <span className={config.class}>{config.label}</span>
 }
@@ -310,7 +311,7 @@ export default function Users() {
   }, [search])
 
   // Fetch users
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['users', page, perPage, debouncedSearch, status, sortBy, sortOrder],
     queryFn: () =>
       fetchUsers({
@@ -321,6 +322,7 @@ export default function Users() {
         sort_by: sortBy,
         sort_order: sortOrder,
       }),
+    retry: 2,
   })
 
   // Mutations
@@ -413,6 +415,20 @@ export default function Users() {
           </div>
         </div>
       </div>
+
+      {/* Error state */}
+      {isError && (
+        <div className="card border border-red-500/30 bg-red-500/10">
+          <div className="flex items-center justify-between">
+            <p className="text-red-400 text-sm">
+              Ошибка загрузки пользователей: {(error as Error)?.message || 'Неизвестная ошибка'}
+            </p>
+            <button onClick={() => refetch()} className="btn-secondary text-sm">
+              Повторить
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile: User cards */}
       <div className="md:hidden space-y-3">
