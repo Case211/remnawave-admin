@@ -438,6 +438,10 @@ class DatabaseService:
             logger.warning("Cannot upsert user without UUID")
             return
         
+        # Extract traffic data from nested userTraffic object
+        user_traffic = response.get("userTraffic") or {}
+        used_traffic = user_traffic.get("usedTrafficBytes") or response.get("usedTrafficBytes")
+
         async with self.acquire() as conn:
             await conn.execute(
                 """
@@ -469,7 +473,7 @@ class DatabaseService:
                 response.get("status"),
                 _parse_timestamp(response.get("expireAt")),
                 response.get("trafficLimitBytes"),
-                response.get("usedTrafficBytes"),
+                used_traffic,
                 response.get("hwidDeviceLimit"),
                 _parse_timestamp(response.get("createdAt")),
                 json.dumps(response),

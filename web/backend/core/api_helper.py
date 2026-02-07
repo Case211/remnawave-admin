@@ -40,8 +40,16 @@ def _normalize(data: Dict[str, Any]) -> Dict[str, Any]:
 
     Preserves original keys and adds snake_case equivalents so the data
     works with both pydantic schemas (snake_case) and raw access (camelCase).
+    Also flattens nested userTraffic object to root level.
     """
     result = dict(data)
+    # Flatten nested userTraffic fields to root level
+    user_traffic = result.get("userTraffic")
+    if isinstance(user_traffic, dict):
+        for key in ("usedTrafficBytes", "lifetimeUsedTrafficBytes", "onlineAt",
+                     "firstConnectedAt", "lastConnectedNodeUuid"):
+            if key in user_traffic and key not in result:
+                result[key] = user_traffic[key]
     for camel, snake in _CAMEL_TO_SNAKE.items():
         if camel in result and snake not in result:
             result[snake] = result[camel]
