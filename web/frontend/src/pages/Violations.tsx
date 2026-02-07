@@ -102,6 +102,18 @@ interface TopViolator {
   actions: string[]
 }
 
+interface IPInfo {
+  ip: string
+  asn_org: string | null
+  country: string | null
+  city: string | null
+  connection_type: string | null
+  is_vpn: boolean
+  is_proxy: boolean
+  is_hosting: boolean
+  is_mobile: boolean
+}
+
 // ── API ──────────────────────────────────────────────────────────
 
 const fetchViolations = async (params: {
@@ -137,6 +149,12 @@ const fetchViolationDetail = async (id: number): Promise<ViolationDetail> => {
 const fetchTopViolators = async (days: number): Promise<TopViolator[]> => {
   const { data } = await client.get('/violations/top-violators', { params: { days, limit: 15 } })
   return data
+}
+
+const fetchIPLookup = async (ips: string[]): Promise<Record<string, IPInfo>> => {
+  if (!ips.length) return {}
+  const { data } = await client.post('/violations/ip-lookup', { ips })
+  return data.results || {}
 }
 
 // ── Utilities ────────────────────────────────────────────────────
@@ -254,6 +272,32 @@ function getScoreBg(score: number): string {
   if (score >= 60) return 'bg-yellow-500/20'
   if (score >= 40) return 'bg-blue-500/20'
   return 'bg-green-500/20'
+}
+
+function getConnectionTypeLabel(type: string | null): string | null {
+  if (!type) return null
+  const labels: Record<string, string> = {
+    residential: 'Домашний',
+    mobile: 'Мобильный',
+    mobile_isp: 'Моб. оператор',
+    datacenter: 'Датацентр',
+    hosting: 'Хостинг',
+    vpn: 'VPN',
+    unknown: 'Неизвестно',
+  }
+  return labels[type] || type
+}
+
+function getConnectionTypeBadge(info: IPInfo): { label: string; cls: string } | null {
+  if (info.is_vpn) return { label: 'VPN', cls: 'text-red-400 bg-red-500/10 border-red-500/30' }
+  if (info.is_proxy) return { label: 'Proxy', cls: 'text-orange-400 bg-orange-500/10 border-orange-500/30' }
+  if (info.is_hosting) return { label: 'Хостинг', cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' }
+  if (info.is_mobile) return { label: 'Моб.', cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' }
+  const typeLabel = getConnectionTypeLabel(info.connection_type)
+  if (typeLabel && info.connection_type !== 'unknown') {
+    return { label: typeLabel, cls: 'text-dark-200 bg-dark-600/50 border-dark-400/30' }
+  }
+  return null
 }
 
 // ── Score bar component ──────────────────────────────────────────
@@ -440,6 +484,12 @@ function ViolationDetailPanel({
   const { data: detail, isLoading } = useQuery({
     queryKey: ['violationDetail', violationId],
     queryFn: () => fetchViolationDetail(violationId),
+  })
+
+  const { data: ipInfo } = useQuery({
+    queryKey: ['ipLookup', detail?.ips],
+    queryFn: () => fetchIPLookup(detail!.ips),
+    enabled: !!detail && detail.ips.length > 0,
   })
 
   if (isLoading) {
@@ -637,15 +687,42 @@ function ViolationDetailPanel({
           <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
             IP-адреса ({detail.ips.length})
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-            {detail.ips.map((ip, i) => (
-              <code
-                key={i}
-                className="text-xs bg-dark-800/80 text-dark-100 px-2 py-1.5 rounded font-mono"
-              >
-                {ip}
-              </code>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {detail.ips.map((ip, i) => {
+              const info = ipInfo?.[ip]
+              const badge = info ? getConnectionTypeBadge(info) : null
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 bg-dark-800/80 rounded px-3 py-2"
+                >
+                  <code className="text-xs text-dark-100 font-mono flex-shrink-0">{ip}</code>
+                  {info ? (
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      {info.asn_org && (
+                        <span className="text-xs text-primary-400 truncate max-w-[160px]" title={info.asn_org}>
+                          {info.asn_org}
+                        </span>
+                      )}
+                      {info.city && info.country && (
+                        <span className="text-xs text-dark-200 truncate max-w-[120px]" title={`${info.city}, ${info.country}`}>
+                          {info.city}
+                        </span>
+                      )}
+                      {badge && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badge.cls}`}>
+                          {badge.label}
+                        </span>
+                      )}
+                    </div>
+                  ) : ipInfo ? (
+                    <span className="text-xs text-dark-300">—</span>
+                  ) : (
+                    <span className="text-xs text-dark-300 animate-pulse">...</span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
