@@ -1,15 +1,17 @@
 """Auth API endpoints."""
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 
 from web.backend.api.deps import get_current_admin, AdminUser
 from web.backend.core.config import get_web_settings
+from web.backend.core.rate_limit import limiter
 from web.backend.core.security import (
     verify_telegram_auth,
     create_access_token,
     create_refresh_token,
     decode_token,
 )
+from web.backend.core.token_blacklist import token_blacklist
 from web.backend.schemas.auth import (
     TelegramAuthData,
     TokenResponse,
@@ -23,26 +25,24 @@ router = APIRouter()
 
 
 @router.post("/telegram", response_model=TokenResponse)
-async def telegram_login(data: TelegramAuthData):
+@limiter.limit("5/minute")
+async def telegram_login(request: Request, data: TelegramAuthData):
     """
     Authenticate via Telegram Login Widget.
 
     Verifies the data signature and creates JWT tokens.
-
-    For development testing (when WEB_DEBUG=true), you can bypass Telegram auth
-    by sending hash="dev_bypass" - the signature verification will be skipped.
     """
     settings = get_web_settings()
 
     # Convert to dict for verification
     auth_dict = data.model_dump()
 
-    logger.info(f"Login attempt from Telegram user {data.id} ({data.username or data.first_name})")
+    logger.info("Login attempt from Telegram user (id=%d)", data.id)
 
     # Verify Telegram signature
     is_valid, error_message = verify_telegram_auth(auth_dict)
     if not is_valid:
-        logger.warning(f"Auth failed for user {data.id}: {error_message}")
+        logger.warning("Auth verification failed for user id=%d: %s", data.id, error_message)
         raise HTTPException(
             status_code=401,
             detail=f"Invalid Telegram auth data: {error_message}"
@@ -53,7 +53,7 @@ async def telegram_login(data: TelegramAuthData):
         logger.warning(f"User {data.id} is not in admins list: {settings.admins}")
         raise HTTPException(
             status_code=403,
-            detail=f"Not an admin. Your Telegram ID ({data.id}) is not in the allowed list."
+            detail="Access denied"
         )
 
     # Create tokens
@@ -61,7 +61,7 @@ async def telegram_login(data: TelegramAuthData):
     access_token = create_access_token(data.id, username)
     refresh_token = create_refresh_token(data.id)
 
-    logger.info(f"Login successful for user {data.id} ({username})")
+    logger.info("Login successful for user id=%d", data.id)
 
     return TokenResponse(
         access_token=access_token,
@@ -71,7 +71,8 @@ async def telegram_login(data: TelegramAuthData):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_tokens(data: RefreshRequest):
+@limiter.limit("10/minute")
+async def refresh_tokens(request: Request, data: RefreshRequest):
     """
     Refresh access token using refresh token.
     """
@@ -111,11 +112,16 @@ async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
 
 
 @router.post("/logout", response_model=SuccessResponse)
-async def logout(admin: AdminUser = Depends(get_current_admin)):
-    """
-    Logout (client should delete tokens).
-
-    Note: In a more complete implementation, we would add
-    the token to a blacklist.
-    """
+async def logout(
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Logout and invalidate the current access token."""
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        payload = decode_token(token)
+        if payload and "exp" in payload:
+            token_blacklist.add(token, float(payload["exp"]))
+            logger.info("Token blacklisted for user id=%d", admin.telegram_id)
     return SuccessResponse(message="Logged out successfully")

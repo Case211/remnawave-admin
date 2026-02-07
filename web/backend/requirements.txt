@@ -21,6 +21,9 @@ aiohttp>=3.9.0
 # WebSocket
 websockets>=12.0
 
+# Rate limiting
+slowapi>=0.1.9
+
 # Utilities
 python-dotenv>=1.0.0
 python-multipart>=0.0.6
