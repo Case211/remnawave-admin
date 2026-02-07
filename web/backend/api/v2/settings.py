@@ -1,8 +1,11 @@
 """Settings API endpoints - CRUD for bot_config table."""
+import json
 import logging
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -28,9 +31,11 @@ class ConfigItemResponse(BaseModel):
     description: Optional[str] = None
     default_value: Optional[str] = None
     env_var_name: Optional[str] = None
+    env_value: Optional[str] = None
     is_secret: bool = False
     is_readonly: bool = False
     is_env_override: bool = False
+    source: str = "default"  # "db", "env", "default"
     options: Optional[List[str]] = None
     sort_order: int = 0
 
@@ -45,12 +50,35 @@ class ConfigByCategoryResponse(BaseModel):
     categories: Dict[str, List[ConfigItemResponse]]
 
 
+def _determine_source(db_value: Optional[str], env_var_name: Optional[str], default_value: Optional[str]) -> str:
+    """Determine effective value source. Priority: DB > .env > default."""
+    if db_value is not None:
+        return "db"
+    if env_var_name:
+        env_val = os.getenv(env_var_name)
+        if env_val is not None and env_val != "":
+            return "env"
+    if default_value is not None:
+        return "default"
+    return "none"
+
+
+def _effective_value(db_value: Optional[str], env_var_name: Optional[str], default_value: Optional[str]) -> Optional[str]:
+    """Get effective value based on priority: DB > .env > default."""
+    if db_value is not None:
+        return db_value
+    if env_var_name:
+        env_val = os.getenv(env_var_name)
+        if env_val is not None and env_val != "":
+            return env_val
+    return default_value
+
+
 @router.get("", response_model=ConfigByCategoryResponse)
 async def get_all_settings(
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Get all settings grouped by category."""
-    import os
+    """Get all settings grouped by category. Priority: DB > .env > default."""
     try:
         from src.services.database import db_service
         if not db_service.is_connected:
@@ -76,23 +104,33 @@ async def get_all_settings(
             # Parse options
             options = None
             if row_dict.get('options_json'):
-                import json
                 try:
                     options = json.loads(row_dict['options_json'])
                 except Exception:
                     pass
 
-            # Check if env var overrides
-            is_env_override = False
-            if row_dict.get('env_var_name'):
-                env_val = os.getenv(row_dict['env_var_name'])
+            db_value = row_dict.get('value')
+            env_var_name = row_dict.get('env_var_name')
+            default_value = row_dict.get('default_value')
+
+            source = _determine_source(db_value, env_var_name, default_value)
+            effective = _effective_value(db_value, env_var_name, default_value)
+
+            # Check if env var exists (informational, not blocking)
+            has_env = False
+            env_display = None
+            if env_var_name:
+                env_val = os.getenv(env_var_name)
                 if env_val is not None and env_val != "":
-                    is_env_override = True
+                    has_env = True
+                    env_display = env_val
 
             # Mask secret values
-            display_value = row_dict.get('value')
+            display_value = effective
             if row_dict.get('is_secret') and display_value:
                 display_value = display_value[:3] + '***' if len(display_value) > 3 else '***'
+                if env_display:
+                    env_display = env_display[:3] + '***' if len(env_display) > 3 else '***'
 
             item = ConfigItemResponse(
                 key=row_dict['key'],
@@ -102,11 +140,13 @@ async def get_all_settings(
                 subcategory=row_dict.get('subcategory'),
                 display_name=row_dict.get('display_name'),
                 description=row_dict.get('description'),
-                default_value=row_dict.get('default_value'),
-                env_var_name=row_dict.get('env_var_name'),
+                default_value=default_value,
+                env_var_name=env_var_name,
+                env_value=env_display,
                 is_secret=row_dict.get('is_secret', False),
                 is_readonly=row_dict.get('is_readonly', False),
-                is_env_override=is_env_override,
+                is_env_override=has_env,
+                source=source,
                 options=options,
                 sort_order=row_dict.get('sort_order', 0),
             )
@@ -130,8 +170,7 @@ async def update_setting(
     data: ConfigUpdateRequest,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Update a single setting value."""
-    import os
+    """Update a single setting value. DB takes priority over .env."""
     try:
         from src.services.database import db_service
         if not db_service.is_connected:
@@ -150,27 +189,19 @@ async def update_setting(
         if row['is_readonly']:
             raise HTTPException(status_code=403, detail="Setting is read-only")
 
-        # Check if env var overrides
-        if row.get('env_var_name'):
-            env_val = os.getenv(row['env_var_name'])
-            if env_val is not None and env_val != "":
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Setting is overridden by env variable {row['env_var_name']}"
-                )
-
-        # Update in DB
+        # Update in DB (no env blocking — DB takes priority now)
         async with db_service.acquire() as conn:
             await conn.execute(
                 "UPDATE bot_config SET value = $2, updated_at = NOW() WHERE key = $1",
                 key, data.value
             )
 
-        # Also update config_service cache if available
+        # Update config_service cache for immediate effect
         try:
             from src.services.config_service import config_service
             if key in config_service._cache:
                 config_service._cache[key].value = data.value
+                config_service._cache[key].updated_at = datetime.utcnow()
         except Exception:
             pass
 
@@ -180,6 +211,54 @@ async def update_setting(
         raise
     except Exception as e:
         logger.error("Error updating setting %s: %s", key, e)
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
+@router.delete("/{key}")
+async def reset_setting(
+    key: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Reset a setting to default (remove DB value, fallback to .env or default)."""
+    try:
+        from src.services.database import db_service
+        if not db_service.is_connected:
+            raise HTTPException(status_code=503, detail="Database not connected")
+
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT key, is_readonly FROM bot_config WHERE key = $1",
+                key
+            )
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Setting not found")
+
+        if row['is_readonly']:
+            raise HTTPException(status_code=403, detail="Setting is read-only")
+
+        # Set value to NULL — fallback to .env or default
+        async with db_service.acquire() as conn:
+            await conn.execute(
+                "UPDATE bot_config SET value = NULL, updated_at = NOW() WHERE key = $1",
+                key
+            )
+
+        # Update config_service cache
+        try:
+            from src.services.config_service import config_service
+            if key in config_service._cache:
+                config_service._cache[key].value = None
+                config_service._cache[key].updated_at = datetime.utcnow()
+        except Exception:
+            pass
+
+        return {"status": "ok", "key": key, "reset": True}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error resetting setting %s: %s", key, e)
         raise HTTPException(status_code=500, detail="Internal error")
 
 

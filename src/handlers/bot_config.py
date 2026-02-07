@@ -86,12 +86,12 @@ def _format_item_details(item: ConfigItem) -> str:
 
     lines.append(f"*Тип:* `{item.value_type.value}`")
 
-    # Предупреждение если значение установлено через .env
+    # Информация о .env значении (теперь не блокирует редактирование)
     if item.env_var_name:
         env_val = os.getenv(item.env_var_name)
         if env_val:
             lines.append("")
-            lines.append("⚠️ _Значение задано в .env и не может быть изменено через бота_")
+            lines.append(f"ℹ️ _.env fallback: `{item.env_var_name}`_")
 
     return "\n".join(lines)
 
@@ -194,14 +194,7 @@ async def set_config_value(callback: CallbackQuery) -> None:
         await callback.answer(_("bot_config.not_found"), show_alert=True)
         return
 
-    # Проверяем, не установлено ли значение через .env
-    if item.env_var_name:
-        env_val = os.getenv(item.env_var_name)
-        if env_val:
-            await callback.answer(_("bot_config.env_locked"), show_alert=True)
-            return
-
-    # Устанавливаем значение
+    # Устанавливаем значение (БД имеет приоритет над .env)
     success = await config_service.set(key, value)
 
     if success:
@@ -222,14 +215,7 @@ async def request_config_input(callback: CallbackQuery, state: FSMContext) -> No
         await callback.answer(_("bot_config.not_found"), show_alert=True)
         return
 
-    # Проверяем .env
-    if item.env_var_name:
-        env_val = os.getenv(item.env_var_name)
-        if env_val:
-            await callback.answer(_("bot_config.env_locked"), show_alert=True)
-            return
-
-    # Сохраняем контекст и просим ввод
+    # Сохраняем контекст и просим ввод (БД имеет приоритет над .env)
     await state.set_state(ConfigInputState.waiting_value)
     await state.update_data(config_key=key, message_id=callback.message.message_id)
 

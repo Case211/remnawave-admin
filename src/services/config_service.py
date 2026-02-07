@@ -186,6 +186,33 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "env_var_name": "NOTIFICATIONS_TOPIC_ERRORS",
         "sort_order": 15,
     },
+    {
+        "key": "notifications_throttle_seconds",
+        "value_type": "int",
+        "category": "notifications",
+        "display_name": "Троттлинг (сек)",
+        "description": "Минимальный интервал между однотипными уведомлениями",
+        "default_value": "60",
+        "sort_order": 20,
+    },
+    {
+        "key": "notifications_quiet_hours_start",
+        "value_type": "string",
+        "category": "notifications",
+        "display_name": "Тихие часы: начало",
+        "description": "Начало периода без уведомлений (HH:MM UTC, пусто = выключено)",
+        "default_value": "",
+        "sort_order": 21,
+    },
+    {
+        "key": "notifications_quiet_hours_end",
+        "value_type": "string",
+        "category": "notifications",
+        "display_name": "Тихие часы: конец",
+        "description": "Конец периода без уведомлений (HH:MM UTC)",
+        "default_value": "",
+        "sort_order": 22,
+    },
 
     # === SYNC ===
     {
@@ -224,6 +251,33 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Синхронизировать хосты с API",
         "default_value": "true",
         "sort_order": 4,
+    },
+    {
+        "key": "sync_retry_count",
+        "value_type": "int",
+        "category": "sync",
+        "display_name": "Кол-во повторов",
+        "description": "Количество попыток при ошибке синхронизации",
+        "default_value": "3",
+        "sort_order": 5,
+    },
+    {
+        "key": "sync_retry_delay_seconds",
+        "value_type": "int",
+        "category": "sync",
+        "display_name": "Задержка повтора (сек)",
+        "description": "Задержка между повторными попытками синхронизации",
+        "default_value": "10",
+        "sort_order": 6,
+    },
+    {
+        "key": "sync_full_interval_hours",
+        "value_type": "int",
+        "category": "sync",
+        "display_name": "Полная синхронизация (ч)",
+        "description": "Интервал полной пересинхронизации данных (часы)",
+        "default_value": "6",
+        "sort_order": 7,
     },
 
     # === VIOLATIONS ===
@@ -271,6 +325,101 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Сохранять историю нарушений в базу данных",
         "default_value": "true",
         "sort_order": 5,
+    },
+    {
+        "key": "violations_auto_disable_score",
+        "value_type": "float",
+        "category": "violations",
+        "display_name": "Скор автоотключения",
+        "description": "Минимальный скор для автоматического отключения пользователя (0-100)",
+        "default_value": "80.0",
+        "sort_order": 6,
+    },
+    {
+        "key": "violations_cooldown_minutes",
+        "value_type": "int",
+        "category": "violations",
+        "display_name": "Кулдаун (мин)",
+        "description": "Минимальный интервал между проверками одного пользователя",
+        "default_value": "30",
+        "sort_order": 7,
+    },
+    {
+        "key": "violations_notify_on_critical",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "Уведомлять о критических",
+        "description": "Отправлять уведомление при критическом нарушении (скор >= 80)",
+        "default_value": "true",
+        "sort_order": 8,
+    },
+    {
+        "key": "violations_notify_on_high",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "Уведомлять о высоких",
+        "description": "Отправлять уведомление при высоком нарушении (скор >= 60)",
+        "default_value": "true",
+        "sort_order": 9,
+    },
+    {
+        "key": "violations_weight_temporal",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "weights",
+        "display_name": "Вес: временной",
+        "description": "Множитель для временного скора (0.0 - 5.0)",
+        "default_value": "1.0",
+        "sort_order": 20,
+    },
+    {
+        "key": "violations_weight_geo",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "weights",
+        "display_name": "Вес: гео",
+        "description": "Множитель для гео скора (0.0 - 5.0)",
+        "default_value": "1.0",
+        "sort_order": 21,
+    },
+    {
+        "key": "violations_weight_asn",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "weights",
+        "display_name": "Вес: ASN/провайдер",
+        "description": "Множитель для ASN скора (0.0 - 5.0)",
+        "default_value": "1.0",
+        "sort_order": 22,
+    },
+    {
+        "key": "violations_weight_profile",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "weights",
+        "display_name": "Вес: профиль",
+        "description": "Множитель для профильного скора (0.0 - 5.0)",
+        "default_value": "1.0",
+        "sort_order": 23,
+    },
+    {
+        "key": "violations_weight_device",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "weights",
+        "display_name": "Вес: устройство",
+        "description": "Множитель для скора устройств (0.0 - 5.0)",
+        "default_value": "1.0",
+        "sort_order": 24,
+    },
+    {
+        "key": "violations_retention_days",
+        "value_type": "int",
+        "category": "violations",
+        "display_name": "Хранение (дни)",
+        "description": "Сколько дней хранить записи о нарушениях в БД",
+        "default_value": "90",
+        "sort_order": 30,
     },
 
     # === REPORTS ===
@@ -447,6 +596,33 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "default_value": "5",
         "sort_order": 3,
     },
+    {
+        "key": "collector_flush_interval_seconds",
+        "value_type": "int",
+        "category": "collector",
+        "display_name": "Интервал записи",
+        "description": "Интервал принудительной записи буфера в БД (секунды)",
+        "default_value": "60",
+        "sort_order": 4,
+    },
+    {
+        "key": "collector_geoip_enabled",
+        "value_type": "bool",
+        "category": "collector",
+        "display_name": "GeoIP обогащение",
+        "description": "Автоматически определять геолокацию IP при сборе данных",
+        "default_value": "true",
+        "sort_order": 5,
+    },
+    {
+        "key": "collector_geoip_cache_hours",
+        "value_type": "int",
+        "category": "collector",
+        "display_name": "GeoIP кэш (часы)",
+        "description": "Время жизни GeoIP кэша в памяти",
+        "default_value": "24",
+        "sort_order": 6,
+    },
 
     # === LIMITS ===
     {
@@ -506,13 +682,42 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "options": ["DD.MM.YYYY HH:mm", "YYYY-MM-DD HH:mm", "MM/DD/YYYY HH:mm"],
         "sort_order": 3,
     },
+    {
+        "key": "dashboard_refresh_seconds",
+        "value_type": "int",
+        "category": "appearance",
+        "display_name": "Обновление дашборда (сек)",
+        "description": "Интервал автообновления данных дашборда",
+        "default_value": "30",
+        "sort_order": 4,
+    },
+    {
+        "key": "timezone_display",
+        "value_type": "string",
+        "category": "appearance",
+        "display_name": "Часовой пояс",
+        "description": "Часовой пояс для отображения дат",
+        "default_value": "UTC",
+        "options": ["UTC", "Europe/Moscow", "Europe/Kiev", "Asia/Almaty", "Asia/Tashkent", "US/Eastern", "US/Pacific"],
+        "sort_order": 5,
+    },
+    {
+        "key": "table_rows_per_page",
+        "value_type": "int",
+        "category": "appearance",
+        "display_name": "Строк в таблице",
+        "description": "Количество строк на странице в таблицах",
+        "default_value": "20",
+        "options": ["10", "20", "50", "100"],
+        "sort_order": 6,
+    },
 ]
 
 
 class DynamicConfigService:
     """
     Сервис динамической конфигурации.
-    Приоритет: .env > БД > default_value
+    Приоритет: БД > .env > default_value
     """
 
     def __init__(self):
@@ -662,16 +867,19 @@ class DynamicConfigService:
     def get(self, key: str, default: Any = None) -> Any:
         """
         Получает значение настройки.
-        Приоритет: .env > БД > default_value > default параметр
+        Приоритет: БД > .env > default_value > default параметр
         """
         item = self._cache.get(key)
 
         if item:
-            # Проверяем .env сначала
+            # 1. Если в БД есть явно установленное значение — оно главнее всего
+            if item.value is not None:
+                return item.get_typed_value()
+
+            # 2. Проверяем .env как fallback
             if item.env_var_name:
                 env_value = os.getenv(item.env_var_name)
                 if env_value is not None and env_value != "":
-                    # Конвертируем в нужный тип
                     temp_item = ConfigItem(
                         key=key,
                         value=env_value,
@@ -680,10 +888,9 @@ class DynamicConfigService:
                     )
                     return temp_item.get_typed_value()
 
-            # Возвращаем значение из БД или default
-            typed_value = item.get_typed_value()
-            if typed_value is not None:
-                return typed_value
+            # 3. default_value из определения
+            if item.default_value is not None:
+                return item._convert_value(item.default_value)
 
         return default
 
@@ -694,20 +901,8 @@ class DynamicConfigService:
     async def set(self, key: str, value: Any) -> bool:
         """
         Устанавливает значение настройки в БД.
-        Не перезаписывает .env переменные.
+        БД значение имеет наивысший приоритет и перекрывает .env.
         """
-        item = self._cache.get(key)
-
-        if item:
-            # Проверяем, установлена ли .env переменная
-            if item.env_var_name:
-                env_value = os.getenv(item.env_var_name)
-                if env_value is not None and env_value != "":
-                    logger.warning(
-                        "Config %s is set via .env (%s), DB value will be ignored",
-                        key, item.env_var_name
-                    )
-
         # Конвертируем значение в строку для хранения
         str_value = self._value_to_string(value)
 
@@ -770,13 +965,18 @@ class DynamicConfigService:
     def get_effective_value(self, key: str) -> tuple[Any, str]:
         """
         Возвращает эффективное значение и его источник.
-        Returns: (value, source) где source: "env", "db", "default"
+        Приоритет: БД > .env > default
+        Returns: (value, source) где source: "db", "env", "default", "none"
         """
         item = self._cache.get(key)
         if not item:
             return (None, "unknown")
 
-        # Проверяем .env
+        # 1. БД значение — наивысший приоритет
+        if item.value is not None:
+            return (item.get_typed_value(), "db")
+
+        # 2. .env как fallback
         if item.env_var_name:
             env_value = os.getenv(item.env_var_name)
             if env_value is not None and env_value != "":
@@ -788,13 +988,9 @@ class DynamicConfigService:
                 )
                 return (temp_item.get_typed_value(), "env")
 
-        # Проверяем БД
-        if item.value is not None:
-            return (item.get_typed_value(), "db")
-
-        # Default
+        # 3. Default
         if item.default_value is not None:
-            return (item.get_typed_value(), "default")
+            return (item._convert_value(item.default_value), "default")
 
         return (None, "none")
 
