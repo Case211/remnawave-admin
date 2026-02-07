@@ -31,7 +31,13 @@ _CAMEL_TO_SNAKE = {
     "isDisabled": "is_disabled",
     "isConnected": "is_connected",
     "trafficUsedBytes": "traffic_used_bytes",
+    "trafficTotalBytes": "traffic_total_bytes",
+    "trafficTodayBytes": "traffic_today_bytes",
     "usersOnline": "users_online",
+    "isXrayRunning": "is_xray_running",
+    "xrayVersion": "xray_version",
+    "lastSeenAt": "last_seen_at",
+    "lifetimeUsedTrafficBytes": "lifetime_used_traffic_bytes",
 }
 
 
@@ -53,6 +59,9 @@ def _normalize(data: Dict[str, Any]) -> Dict[str, Any]:
     for camel, snake in _CAMEL_TO_SNAKE.items():
         if camel in result and snake not in result:
             result[snake] = result[camel]
+    # Ensure traffic_total_bytes exists for nodes
+    if 'traffic_total_bytes' not in result and 'traffic_used_bytes' in result:
+        result['traffic_total_bytes'] = result['traffic_used_bytes']
     return result
 
 

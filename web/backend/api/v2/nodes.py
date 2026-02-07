@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser
-from web.backend.core.api_helper import fetch_nodes_from_api
+from web.backend.core.api_helper import fetch_nodes_from_api, _normalize
 from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeUpdate
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 
@@ -49,13 +49,14 @@ def _ensure_node_snake_case(node: dict) -> dict:
 
 
 async def _get_nodes_list():
-    """Get nodes from DB, fall back to API."""
+    """Get nodes from DB (normalized), fall back to API."""
     try:
         from src.services.database import db_service
         if db_service.is_connected:
             nodes = await db_service.get_all_nodes()
             if nodes:
-                return nodes
+                # Normalize raw_data: flatten nested objects, add snake_case aliases
+                return [_normalize(n) for n in nodes]
     except Exception as e:
         logger.debug("DB nodes fetch failed: %s", e)
     return await fetch_nodes_from_api()
