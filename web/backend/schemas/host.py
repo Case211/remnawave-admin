@@ -1,7 +1,7 @@
 """Host schemas for web panel API."""
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class HostBase(BaseModel):
@@ -22,6 +22,13 @@ class HostListItem(HostBase):
     security: Optional[str] = None
     alpn: Optional[List[str]] = None
     fingerprint: Optional[str] = None
+
+    @field_validator('alpn', mode='before')
+    @classmethod
+    def parse_alpn(cls, v):
+        if isinstance(v, str):
+            return [v] if v else None
+        return v
 
     class Config:
         from_attributes = True

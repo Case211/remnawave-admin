@@ -504,7 +504,7 @@ function NodeCard({
 
   return (
     <div
-      className={`card relative ${node.is_disabled ? 'opacity-60' : ''}`}
+      className={`card relative ${node.is_disabled ? 'opacity-60' : ''} ${menuOpen ? 'z-30' : ''}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
@@ -550,7 +550,7 @@ function NodeCard({
             {menuOpen && (
               <>
                 <div
-                  className="fixed inset-0 z-10"
+                  className="fixed inset-0 z-40"
                   onClick={() => setMenuOpen(false)}
                 />
                 <div className="dropdown-menu">

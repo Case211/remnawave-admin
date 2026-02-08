@@ -481,7 +481,7 @@ function HostCard({
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <div className={`card relative ${host.is_disabled ? 'opacity-60' : ''}`}>
+    <div className={`card relative ${host.is_disabled ? 'opacity-60' : ''} ${menuOpen ? 'z-30' : ''}`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -517,7 +517,7 @@ function HostCard({
 
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
                 <div className="dropdown-menu">
                   <button
                     onClick={() => { onEdit(); setMenuOpen(false) }}

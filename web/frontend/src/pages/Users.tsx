@@ -225,7 +225,7 @@ function UserActions({
       {open && (
         <>
           <div
-            className="fixed inset-0 z-10"
+            className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
           <div className="dropdown-menu w-40">
