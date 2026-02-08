@@ -112,7 +112,9 @@ CREATE TABLE IF NOT EXISTS user_hwid_devices (
     hwid VARCHAR(255) NOT NULL,
     platform VARCHAR(50),
     os_version VARCHAR(100),
+    device_model VARCHAR(255),
     app_version VARCHAR(50),
+    user_agent TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -213,10 +215,25 @@ class DatabaseService:
         """Initialize database schema (create tables if not exist)."""
         if self._pool is None:
             return
-        
+
         async with self._pool.acquire() as conn:
             await conn.execute(SCHEMA_SQL)
+            # Migrations for existing tables
+            await self._run_migrations(conn)
             logger.debug("Database schema initialized")
+
+    async def _run_migrations(self, conn) -> None:
+        """Apply incremental migrations for existing tables."""
+        # Add device_model and user_agent columns to user_hwid_devices if missing
+        for col, col_type in [("device_model", "VARCHAR(255)"), ("user_agent", "TEXT")]:
+            exists = await conn.fetchval(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'user_hwid_devices' AND column_name = $1",
+                col,
+            )
+            if not exists:
+                await conn.execute(f"ALTER TABLE user_hwid_devices ADD COLUMN {col} {col_type}")
+                logger.info("Migration: added column %s to user_hwid_devices", col)
     
     @asynccontextmanager
     async def acquire(self):
@@ -2587,7 +2604,9 @@ class DatabaseService:
         hwid: str,
         platform: Optional[str] = None,
         os_version: Optional[str] = None,
+        device_model: Optional[str] = None,
         app_version: Optional[str] = None,
+        user_agent: Optional[str] = None,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None
     ) -> bool:
@@ -2605,18 +2624,21 @@ class DatabaseService:
                 await conn.execute(
                     """
                     INSERT INTO user_hwid_devices (
-                        user_uuid, hwid, platform, os_version, app_version,
-                        created_at, updated_at, synced_at
+                        user_uuid, hwid, platform, os_version, device_model, app_version,
+                        user_agent, created_at, updated_at, synced_at
                     )
-                    VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, NOW()), NOW())
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, NOW()), COALESCE($9, NOW()), NOW())
                     ON CONFLICT (user_uuid, hwid) DO UPDATE SET
                         platform = COALESCE(EXCLUDED.platform, user_hwid_devices.platform),
                         os_version = COALESCE(EXCLUDED.os_version, user_hwid_devices.os_version),
+                        device_model = COALESCE(EXCLUDED.device_model, user_hwid_devices.device_model),
                         app_version = COALESCE(EXCLUDED.app_version, user_hwid_devices.app_version),
+                        user_agent = COALESCE(EXCLUDED.user_agent, user_hwid_devices.user_agent),
                         updated_at = COALESCE(EXCLUDED.updated_at, NOW()),
                         synced_at = NOW()
                     """,
-                    user_uuid, hwid, platform, os_version, app_version, created_at, updated_at
+                    user_uuid, hwid, platform, os_version, device_model, app_version,
+                    user_agent, created_at, updated_at
                 )
                 return True
 
@@ -2688,7 +2710,8 @@ class DatabaseService:
             async with self.acquire() as conn:
                 rows = await conn.fetch(
                     """
-                    SELECT hwid, platform, os_version, app_version, created_at, updated_at
+                    SELECT hwid, platform, os_version, device_model, app_version,
+                           user_agent, created_at, updated_at
                     FROM user_hwid_devices
                     WHERE user_uuid = $1
                     ORDER BY created_at DESC
@@ -2778,25 +2801,30 @@ class DatabaseService:
 
                         platform = device.get('platform')
                         os_version = device.get('osVersion')
+                        device_model = device.get('deviceModel')
                         app_version = device.get('appVersion')
+                        user_agent = device.get('userAgent')
                         created_at = _parse_timestamp(device.get('createdAt'))
                         updated_at = _parse_timestamp(device.get('updatedAt'))
 
                         await conn.execute(
                             """
                             INSERT INTO user_hwid_devices (
-                                user_uuid, hwid, platform, os_version, app_version,
-                                created_at, updated_at, synced_at
+                                user_uuid, hwid, platform, os_version, device_model,
+                                app_version, user_agent, created_at, updated_at, synced_at
                             )
-                            VALUES ($1, $2, $3, $4, $5, COALESCE($6, NOW()), COALESCE($7, NOW()), NOW())
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, NOW()), COALESCE($9, NOW()), NOW())
                             ON CONFLICT (user_uuid, hwid) DO UPDATE SET
                                 platform = COALESCE(EXCLUDED.platform, user_hwid_devices.platform),
                                 os_version = COALESCE(EXCLUDED.os_version, user_hwid_devices.os_version),
+                                device_model = COALESCE(EXCLUDED.device_model, user_hwid_devices.device_model),
                                 app_version = COALESCE(EXCLUDED.app_version, user_hwid_devices.app_version),
+                                user_agent = COALESCE(EXCLUDED.user_agent, user_hwid_devices.user_agent),
                                 updated_at = COALESCE(EXCLUDED.updated_at, NOW()),
                                 synced_at = NOW()
                             """,
-                            user_uuid, hwid, platform, os_version, app_version, created_at, updated_at
+                            user_uuid, hwid, platform, os_version, device_model,
+                            app_version, user_agent, created_at, updated_at
                         )
                         synced += 1
 

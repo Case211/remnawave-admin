@@ -20,6 +20,7 @@ class UserListItem(UserBase):
 
     uuid: str
     short_uuid: Optional[str] = None
+    description: Optional[str] = None
     expire_at: Optional[datetime] = None
     traffic_limit_bytes: Optional[int] = None
     used_traffic_bytes: Optional[int] = 0

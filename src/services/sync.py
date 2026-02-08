@@ -739,7 +739,9 @@ class SyncService:
             # Добавляем устройство в БД
             platform = hwid_data.get("platform")
             os_version = hwid_data.get("osVersion")
+            device_model = hwid_data.get("deviceModel")
             app_version = hwid_data.get("appVersion")
+            user_agent = hwid_data.get("userAgent")
             created_at = hwid_data.get("createdAt")
             updated_at = hwid_data.get("updatedAt")
 
@@ -762,7 +764,9 @@ class SyncService:
                 hwid=hwid,
                 platform=platform,
                 os_version=os_version,
+                device_model=device_model,
                 app_version=app_version,
+                user_agent=user_agent,
                 created_at=created_dt,
                 updated_at=updated_dt
             )

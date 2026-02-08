@@ -134,6 +134,7 @@ async def list_users(
                 or search_lower in str(_get(u, 'uuid')).lower()
                 or search_lower in str(_get(u, 'short_uuid')).lower()
                 or search_lower in str(_get(u, 'telegram_id')).lower()
+                or search_lower in str(_get(u, 'description')).lower()
             ]
 
         # Filter: status
