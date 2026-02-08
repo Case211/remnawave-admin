@@ -3,7 +3,41 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import {
+  ArrowLeft,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Check,
+  Pencil,
+  Trash2,
+  X,
+  Save,
+  ShieldCheck,
+  Smartphone,
+  Monitor,
+  Laptop,
+  Server,
+  Globe,
+  Clock,
+  AlertTriangle,
+  Users,
+  Activity,
+  TrendingUp,
+  Eye,
+} from 'lucide-react'
 import client from '../api/client'
+
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 
 interface UserDetailData {
   uuid: string
@@ -65,83 +99,34 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
-function getStatusBadge(status: string): { label: string; color: string } {
+function getStatusBadge(status: string): { label: string; variant: 'default' | 'success' | 'warning' | 'destructive' | 'secondary'; dotColor: string } {
   const s = status.toLowerCase()
   switch (s) {
-    case 'active': return { label: 'Активен', color: 'bg-green-500' }
-    case 'disabled': return { label: 'Отключён', color: 'bg-red-500' }
-    case 'expired': return { label: 'Истёк', color: 'bg-yellow-500' }
-    case 'limited': return { label: 'Ограничен', color: 'bg-orange-500' }
-    default: return { label: status, color: 'bg-gray-500' }
+    case 'active': return { label: 'Активен', variant: 'success', dotColor: 'bg-green-400' }
+    case 'disabled': return { label: 'Отключён', variant: 'destructive', dotColor: 'bg-red-400' }
+    case 'expired': return { label: 'Истёк', variant: 'warning', dotColor: 'bg-yellow-400' }
+    case 'limited': return { label: 'Ограничен', variant: 'warning', dotColor: 'bg-orange-400' }
+    default: return { label: status, variant: 'secondary', dotColor: 'bg-gray-400' }
   }
 }
 
-function getSeverityColor(severity: string): string {
+function getSeverityBadge(severity: string): { variant: 'destructive' | 'warning' | 'secondary'; icon: typeof AlertTriangle } {
   switch (severity) {
-    case 'critical': return 'text-red-400 bg-red-500/10'
-    case 'high': return 'text-orange-400 bg-orange-500/10'
-    case 'medium': return 'text-yellow-400 bg-yellow-500/10'
-    default: return 'text-dark-200 bg-gray-500/10'
+    case 'critical': return { variant: 'destructive', icon: AlertTriangle }
+    case 'high': return { variant: 'destructive', icon: AlertTriangle }
+    case 'medium': return { variant: 'warning', icon: AlertTriangle }
+    default: return { variant: 'secondary', icon: AlertTriangle }
   }
 }
 
-/** Parse User-Agent string into human-readable OS + app name */
-function parseUserAgent(ua: string | null): { os: string; app: string; raw: string } {
-  if (!ua) return { os: '—', app: '—', raw: '—' }
-
-  let os = 'Неизвестно'
-  let app = 'Неизвестно'
-
-  // Detect OS
-  if (/windows/i.test(ua)) {
-    const ver = ua.match(/Windows NT (\d+\.\d+)/i)
-    const winVer: Record<string, string> = { '10.0': '10/11', '6.3': '8.1', '6.2': '8', '6.1': '7' }
-    os = ver ? `Windows ${winVer[ver[1]] || ver[1]}` : 'Windows'
-  } else if (/android/i.test(ua)) {
-    const ver = ua.match(/Android[\s/]?([\d.]+)/i)
-    os = ver ? `Android ${ver[1]}` : 'Android'
-  } else if (/iPhone|iPad|iOS/i.test(ua)) {
-    const ver = ua.match(/OS[\s_]([\d_]+)/i)
-    os = ver ? `iOS ${ver[1].replace(/_/g, '.')}` : 'iOS'
-  } else if (/Mac\s?OS/i.test(ua)) {
-    os = 'macOS'
-  } else if (/Linux/i.test(ua)) {
-    os = 'Linux'
-  }
-
-  // Detect app/client
-  if (/v2rayN/i.test(ua)) app = 'v2rayN'
-  else if (/v2rayNG/i.test(ua)) app = 'v2rayNG'
-  else if (/Hiddify/i.test(ua)) app = 'Hiddify'
-  else if (/Streisand/i.test(ua)) app = 'Streisand'
-  else if (/FoXray/i.test(ua)) app = 'FoXray'
-  else if (/ShadowRocket/i.test(ua)) app = 'Shadowrocket'
-  else if (/Shadowrocket/i.test(ua)) app = 'Shadowrocket'
-  else if (/Clash/i.test(ua)) app = ua.match(/Clash[\w.]*/i)?.[0] || 'Clash'
-  else if (/Sing-?Box/i.test(ua)) app = 'sing-box'
-  else if (/NekoBox/i.test(ua)) app = 'NekoBox'
-  else if (/NekoRay/i.test(ua)) app = 'NekoRay'
-  else if (/V2Box/i.test(ua)) app = 'V2Box'
-  else if (/Loon/i.test(ua)) app = 'Loon'
-  else if (/Surge/i.test(ua)) app = 'Surge'
-  else if (/Quantumult/i.test(ua)) app = 'Quantumult X'
-  else if (/stash/i.test(ua)) app = 'Stash'
-
-  // Try extracting version from app name
-  const verMatch = ua.match(new RegExp(`${app}[/\\s]?([\\d.]+)`, 'i'))
-  if (verMatch && verMatch[1]) app = `${app} ${verMatch[1]}`
-
-  return { os, app, raw: ua }
-}
-
-function getPlatformInfo(platform: string | null): { icon: string; label: string } {
+function getPlatformIcon(platform: string | null): { icon: typeof Smartphone; label: string } {
   const p = (platform || '').toLowerCase()
-  if (p.includes('windows') || p === 'win') return { icon: '🖥️', label: 'Windows' }
-  if (p.includes('android')) return { icon: '📱', label: 'Android' }
-  if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return { icon: '📱', label: 'iOS' }
-  if (p.includes('macos') || p.includes('mac') || p.includes('darwin')) return { icon: '💻', label: 'macOS' }
-  if (p.includes('linux')) return { icon: '🐧', label: 'Linux' }
-  return { icon: '📟', label: platform || 'Неизвестно' }
+  if (p.includes('windows') || p === 'win') return { icon: Monitor, label: 'Windows' }
+  if (p.includes('android')) return { icon: Smartphone, label: 'Android' }
+  if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return { icon: Smartphone, label: 'iOS' }
+  if (p.includes('macos') || p.includes('mac') || p.includes('darwin')) return { icon: Laptop, label: 'macOS' }
+  if (p.includes('linux')) return { icon: Monitor, label: 'Linux' }
+  return { icon: Smartphone, label: platform || 'Неизвестно' }
 }
 
 function bytesToGb(bytes: number | null): string {
@@ -245,177 +230,197 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
   ]
 
   return (
-    <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-      <h2 className="text-base md:text-lg font-semibold text-white mb-4">Трафик</h2>
-
-      {/* Period selector */}
-      <div className="flex flex-wrap gap-1 mb-4">
-        {TRAFFIC_PERIODS.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => setPeriod(p.key)}
-            className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
-              period === p.key
-                ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
-                : 'text-dark-200 hover:text-white hover:bg-dark-700/50 border border-transparent'
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
-      {period === 'nodes' ? (
-        /* Per-node breakdown */
-        <div className="space-y-3">
-          {/* Node period sub-filter */}
-          <div className="flex flex-wrap gap-1">
-            {NODE_PERIOD_OPTIONS.map((p) => (
-              <button
-                key={p.key}
-                onClick={() => setNodePeriod(p.key)}
-                className={`px-2 py-0.5 text-[11px] rounded font-medium transition-all ${
-                  nodePeriod === p.key
-                    ? 'bg-dark-600 text-white'
-                    : 'text-dark-300 hover:text-dark-100 hover:bg-dark-700/50'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Node list */}
-          <div className="space-y-2 relative">
-            {showLoadingOverlay && (
-              <div className="absolute inset-0 bg-dark-800/50 rounded-lg flex items-center justify-center z-10">
-                <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            )}
-            {trafficStats?.nodes_traffic && trafficStats.nodes_traffic.length > 0 ? (
-              <>
-                {trafficStats.nodes_traffic.map((node) => (
-                  <div
-                    key={node.node_uuid}
-                    className="flex items-center justify-between p-2.5 bg-dark-700/40 rounded-lg border border-dark-600/20"
-                  >
-                    <span className="text-sm text-dark-100 truncate flex-1 mr-3">{node.node_name}</span>
-                    <span className="text-white font-medium text-sm">{formatBytes(node.total_bytes)}</span>
-                  </div>
-                ))}
-                {/* Total */}
-                <div className="flex items-center justify-between p-2.5 bg-dark-600/30 rounded-lg border border-primary-500/20">
-                  <span className="text-sm text-primary-400 font-medium">Итого</span>
-                  <span className="text-sm text-white font-bold">
-                    {formatBytes(trafficStats.nodes_traffic.reduce((sum, n) => sum + n.total_bytes, 0))}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-6 text-dark-300 text-sm">
-                {isFetching ? 'Загрузка...' : 'Нет данных о трафике по нодам за этот период'}
-              </div>
-            )}
-          </div>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-primary-400" />
+          Трафик
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Period selector */}
+        <div className="flex flex-wrap gap-1">
+          {TRAFFIC_PERIODS.map((p) => (
+            <Button
+              key={p.key}
+              variant={period === p.key ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setPeriod(p.key)}
+              className={cn(
+                'h-7 px-2.5 text-xs',
+                period === p.key
+                  ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30 hover:bg-primary-600/30 shadow-none'
+                  : 'text-dark-200 hover:text-white'
+              )}
+            >
+              {p.label}
+            </Button>
+          ))}
         </div>
-      ) : (
-        /* Traffic bar and stats */
-        <div className="space-y-4 relative">
-          {showLoadingOverlay && (
-            <div className="absolute inset-0 bg-dark-800/50 rounded-lg flex items-center justify-center z-10">
-              <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+
+        {period === 'nodes' ? (
+          /* Per-node breakdown */
+          <div className="space-y-3">
+            {/* Node period sub-filter */}
+            <div className="flex flex-wrap gap-1">
+              {NODE_PERIOD_OPTIONS.map((p) => (
+                <Button
+                  key={p.key}
+                  variant={nodePeriod === p.key ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setNodePeriod(p.key)}
+                  className={cn(
+                    'h-6 px-2 text-[11px]',
+                    nodePeriod === p.key
+                      ? 'bg-dark-600 text-white'
+                      : 'text-dark-300 hover:text-dark-100'
+                  )}
+                >
+                  {p.label}
+                </Button>
+              ))}
             </div>
-          )}
-          <div>
-            {isUnlimited ? (
-              <>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-dark-200">{displayed.label}</span>
-                  <span className="text-primary-400 text-xs sm:text-sm font-medium">Безлимит</span>
+
+            {/* Node list */}
+            <div className="space-y-2 relative">
+              {showLoadingOverlay && (
+                <div className="absolute inset-0 bg-dark-800/50 rounded-lg flex items-center justify-center z-10">
+                  <RefreshCw className="h-5 w-5 text-primary-500 animate-spin" />
                 </div>
-                <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-sm font-medium text-primary-200">
-                      {formatBytes(displayed.value)}{period === 'current' ? ' / ∞' : ''}
+              )}
+              {trafficStats?.nodes_traffic && trafficStats.nodes_traffic.length > 0 ? (
+                <>
+                  {trafficStats.nodes_traffic.map((node) => (
+                    <div
+                      key={node.node_uuid}
+                      className="flex items-center justify-between p-2.5 bg-dark-700/40 rounded-lg border border-dark-600/20"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0 mr-3">
+                        <Server className="h-3.5 w-3.5 text-dark-300 flex-shrink-0" />
+                        <span className="text-sm text-dark-100 truncate">{node.node_name}</span>
+                      </div>
+                      <span className="text-white font-medium text-sm">{formatBytes(node.total_bytes)}</span>
+                    </div>
+                  ))}
+                  {/* Total */}
+                  <div className="flex items-center justify-between p-2.5 bg-dark-600/30 rounded-lg border border-primary-500/20">
+                    <span className="text-sm text-primary-400 font-medium">Итого</span>
+                    <span className="text-sm text-white font-bold">
+                      {formatBytes(trafficStats.nodes_traffic.reduce((sum, n) => sum + n.total_bytes, 0))}
                     </span>
                   </div>
+                </>
+              ) : (
+                <div className="text-center py-6 text-dark-300 text-sm">
+                  {isFetching ? 'Загрузка...' : 'Нет данных о трафике по нодам за этот период'}
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-dark-200">{displayed.label}</span>
-                  <span className="text-white text-xs sm:text-sm">
-                    {formatBytes(displayed.value)}{period === 'current' ? ` / ${formatBytes(user.traffic_limit_bytes!)}` : ''}
-                  </span>
-                </div>
-                {period === 'current' ? (
-                  <>
-                    <div className="w-full bg-dark-600 rounded-full h-2.5">
-                      <div
-                        className={`h-2.5 rounded-full transition-all ${
-                          trafficPercent > 90 ? 'bg-red-500' : trafficPercent > 70 ? 'bg-yellow-500' : 'bg-primary-500'
-                        }`}
-                        style={{ width: `${trafficPercent}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-dark-300 mt-1">
-                      {trafficPercent.toFixed(1)}% использовано
-                    </p>
-                  </>
-                ) : (
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Traffic bar and stats */
+          <div className="space-y-4 relative">
+            {showLoadingOverlay && (
+              <div className="absolute inset-0 bg-dark-800/50 rounded-lg flex items-center justify-center z-10">
+                <RefreshCw className="h-5 w-5 text-primary-500 animate-spin" />
+              </div>
+            )}
+            <div>
+              {isUnlimited ? (
+                <>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-dark-200">{displayed.label}</span>
+                    <Badge variant="default" className="text-xs">Безлимит</Badge>
+                  </div>
                   <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
                     <div className="absolute inset-0 flex items-center justify-center">
                       <span className="text-sm font-medium text-primary-200">
-                        {formatBytes(displayed.value)}
+                        {formatBytes(displayed.value)}{period === 'current' ? ' / \u221E' : ''}
                       </span>
                     </div>
                   </div>
-                )}
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-dark-200">{displayed.label}</span>
+                    <span className="text-white text-xs sm:text-sm">
+                      {formatBytes(displayed.value)}{period === 'current' ? ` / ${formatBytes(user.traffic_limit_bytes!)}` : ''}
+                    </span>
+                  </div>
+                  {period === 'current' ? (
+                    <>
+                      <div className="w-full bg-dark-600 rounded-full h-2.5">
+                        <div
+                          className={cn(
+                            'h-2.5 rounded-full transition-all',
+                            trafficPercent > 90 ? 'bg-red-500' : trafficPercent > 70 ? 'bg-yellow-500' : 'bg-primary-500'
+                          )}
+                          style={{ width: `${trafficPercent}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-dark-300 mt-1">
+                        {trafficPercent.toFixed(1)}% использовано
+                      </p>
+                    </>
+                  ) : (
+                    <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-sm font-medium text-primary-200">
+                          {formatBytes(displayed.value)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Summary cards */}
+            <Separator />
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-dark-700/50 rounded-lg p-3 text-center">
+                <p className="text-base font-bold text-white">{formatBytes(user.used_traffic_bytes)}</p>
+                <p className="text-[11px] text-dark-200">Текущий период</p>
+              </div>
+              <div className="bg-dark-700/50 rounded-lg p-3 text-center">
+                <p className="text-base font-bold text-white">
+                  {user.traffic_limit_bytes ? formatBytes(user.traffic_limit_bytes) : '\u221E'}
+                </p>
+                <p className="text-[11px] text-dark-200">Лимит</p>
+              </div>
+              <div className="bg-dark-700/50 rounded-lg p-3 text-center">
+                <p className="text-base font-bold text-white">
+                  {formatBytes(user.lifetime_used_traffic_bytes || user.used_traffic_bytes)}
+                </p>
+                <p className="text-[11px] text-dark-200">Всё время</p>
+              </div>
+            </div>
+
+            {/* Per-node breakdown for period views */}
+            {API_PERIODS.includes(period) && trafficStats?.nodes_traffic && trafficStats.nodes_traffic.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-xs text-dark-300 mb-2">Разбивка по нодам</p>
+                  <div className="space-y-1.5">
+                    {trafficStats.nodes_traffic.map((node) => (
+                      <div
+                        key={node.node_uuid}
+                        className="flex items-center justify-between px-2.5 py-1.5 bg-dark-700/30 rounded text-xs"
+                      >
+                        <span className="text-dark-100 truncate flex-1 mr-2">{node.node_name}</span>
+                        <span className="text-white font-medium">{formatBytes(node.total_bytes)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </>
             )}
           </div>
-
-          {/* Summary cards */}
-          <div className="grid grid-cols-3 gap-3 pt-3 border-t border-dark-400/10">
-            <div className="bg-dark-700/50 rounded-lg p-3 text-center">
-              <p className="text-base font-bold text-white">{formatBytes(user.used_traffic_bytes)}</p>
-              <p className="text-[11px] text-dark-200">Текущий период</p>
-            </div>
-            <div className="bg-dark-700/50 rounded-lg p-3 text-center">
-              <p className="text-base font-bold text-white">
-                {user.traffic_limit_bytes ? formatBytes(user.traffic_limit_bytes) : '∞'}
-              </p>
-              <p className="text-[11px] text-dark-200">Лимит</p>
-            </div>
-            <div className="bg-dark-700/50 rounded-lg p-3 text-center">
-              <p className="text-base font-bold text-white">
-                {formatBytes(user.lifetime_used_traffic_bytes || user.used_traffic_bytes)}
-              </p>
-              <p className="text-[11px] text-dark-200">Всё время</p>
-            </div>
-          </div>
-
-          {/* Per-node breakdown for period views */}
-          {API_PERIODS.includes(period) && trafficStats?.nodes_traffic && trafficStats.nodes_traffic.length > 0 && (
-            <div className="pt-3 border-t border-dark-400/10">
-              <p className="text-xs text-dark-300 mb-2">Разбивка по нодам</p>
-              <div className="space-y-1.5">
-                {trafficStats.nodes_traffic.map((node) => (
-                  <div
-                    key={node.node_uuid}
-                    className="flex items-center justify-between px-2.5 py-1.5 bg-dark-700/30 rounded text-xs"
-                  >
-                    <span className="text-dark-100 truncate flex-1 mr-2">{node.node_name}</span>
-                    <span className="text-white font-medium">{formatBytes(node.total_bytes)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -432,7 +437,8 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {visibleDevices.map((device, localIdx) => {
           const globalIdx = startIdx + localIdx
-          const pi = getPlatformInfo(device.platform)
+          const pi = getPlatformIcon(device.platform)
+          const PlatformIcon = pi.icon
           return (
             <div
               key={device.hwid || globalIdx}
@@ -440,12 +446,12 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
             >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">{pi.icon}</span>
+                  <PlatformIcon className="h-4 w-4 text-primary-400" />
                   <span className="text-sm font-medium text-white">{pi.label}</span>
                 </div>
-                <span className="text-[10px] text-dark-400 bg-dark-800/50 px-1.5 py-0.5 rounded font-mono">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-mono">
                   #{globalIdx + 1}
-                </span>
+                </Badge>
               </div>
               <div className="space-y-1.5 text-xs">
                 {device.os_version && (
@@ -494,23 +500,27 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
       {/* Pagination controls */}
       {totalDevicePages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-2">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setDevicePage(Math.max(1, devicePage - 1))}
             disabled={devicePage <= 1}
-            className="px-2 py-1 text-xs bg-dark-700 hover:bg-dark-600 disabled:opacity-40 disabled:cursor-not-allowed text-dark-100 rounded transition-colors"
+            className="h-7 w-7 p-0"
           >
-            ←
-          </button>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
           <span className="text-xs text-dark-200">
             {devicePage} / {totalDevicePages}
           </span>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setDevicePage(Math.min(totalDevicePages, devicePage + 1))}
             disabled={devicePage >= totalDevicePages}
-            className="px-2 py-1 text-xs bg-dark-700 hover:bg-dark-600 disabled:opacity-40 disabled:cursor-not-allowed text-dark-100 rounded transition-colors"
+            className="h-7 w-7 p-0"
           >
-            →
-          </button>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
     </div>
@@ -693,20 +703,42 @@ export default function UserDetail() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-4 md:space-y-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-10 w-10 rounded-lg" />
+          <div className="space-y-2 flex-1">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <Skeleton className="h-64 w-full rounded-xl" />
+            <Skeleton className="h-48 w-full rounded-xl" />
+          </div>
+          <div className="space-y-4">
+            <Skeleton className="h-40 w-full rounded-xl" />
+            <Skeleton className="h-56 w-full rounded-xl" />
+          </div>
+        </div>
       </div>
     )
   }
 
   if (error || !user) {
     return (
-      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-        <p className="text-red-400">Пользователь не найден</p>
-        <button onClick={() => navigate('/users')} className="mt-2 text-sm text-primary-400 hover:underline">
-          Вернуться к списку
-        </button>
-      </div>
+      <Card className="border-red-500/20 bg-red-500/10">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="h-5 w-5 text-red-400" />
+            <p className="text-red-400 font-medium">Пользователь не найден</p>
+          </div>
+          <Button variant="link" onClick={() => navigate('/users')} className="px-0">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Вернуться к списку
+          </Button>
+        </CardContent>
+      </Card>
     )
   }
 
@@ -715,80 +747,102 @@ export default function UserDetail() {
     : 0
 
   const statusBadge = getStatusBadge(user.status)
-  const uaInfo = parseUserAgent(user.sub_last_user_agent)
-
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between animate-fade-in-up">
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => navigate('/users')}
-            className="p-2 text-dark-200 hover:text-white rounded-lg hover:bg-dark-600 flex-shrink-0"
+            className="flex-shrink-0"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg md:text-2xl font-bold text-white truncate">
                 {user.username || user.email || user.short_uuid}
               </h1>
-              <span className={`px-2 py-1 rounded text-xs font-medium ${statusBadge.color} text-white flex-shrink-0`}>
+              <Badge variant={statusBadge.variant} className="flex-shrink-0">
+                <span className={cn('h-1.5 w-1.5 rounded-full mr-1.5', statusBadge.dotColor)} />
                 {statusBadge.label}
-              </span>
+              </Badge>
             </div>
-            <p className="text-xs md:text-sm text-dark-200 truncate">{user.uuid}</p>
+            <p className="text-xs md:text-sm text-dark-200 truncate font-mono">{user.uuid}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           {isEditing ? (
             <>
-              <button
+              <Button
                 onClick={handleSave}
                 disabled={updateUserMutation.isPending}
-                className="px-3 md:px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white rounded-lg text-sm"
+                size="sm"
+                className="bg-green-600 hover:bg-green-500 text-white"
               >
+                <Save className="h-4 w-4 mr-1.5" />
                 {updateUserMutation.isPending ? 'Сохранение...' : 'Сохранить'}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleCancelEdit}
                 disabled={updateUserMutation.isPending}
-                className="px-3 md:px-4 py-2 bg-dark-700 hover:bg-dark-600 text-dark-100 rounded-lg text-sm"
               >
+                <X className="h-4 w-4 mr-1.5" />
                 Отмена
-              </button>
+              </Button>
             </>
           ) : (
             <>
-              <button
-                onClick={handleStartEdit}
-                className="px-3 md:px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg text-sm"
-              >
+              <Button size="sm" onClick={handleStartEdit}>
+                <Pencil className="h-4 w-4 mr-1.5" />
                 Редактировать
-              </button>
+              </Button>
               {user.status === 'active' ? (
-                <button onClick={() => disableMutation.mutate()} disabled={disableMutation.isPending}
-                  className="px-3 md:px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-800 text-white rounded-lg text-sm">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => disableMutation.mutate()}
+                  disabled={disableMutation.isPending}
+                >
+                  <X className="h-4 w-4 mr-1.5" />
                   Отключить
-                </button>
+                </Button>
               ) : (
-                <button onClick={() => enableMutation.mutate()} disabled={enableMutation.isPending}
-                  className="px-3 md:px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white rounded-lg text-sm">
+                <Button
+                  size="sm"
+                  onClick={() => enableMutation.mutate()}
+                  disabled={enableMutation.isPending}
+                  className="bg-green-600 hover:bg-green-500 text-white"
+                >
+                  <Check className="h-4 w-4 mr-1.5" />
                   Включить
-                </button>
+                </Button>
               )}
-              <button onClick={() => resetTrafficMutation.mutate()} disabled={resetTrafficMutation.isPending}
-                className="px-3 md:px-4 py-2 bg-dark-700 hover:bg-dark-600 text-primary-400 rounded-lg text-sm">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => resetTrafficMutation.mutate()}
+                disabled={resetTrafficMutation.isPending}
+                className="text-primary-400"
+              >
+                <RefreshCw className={cn('h-4 w-4 mr-1.5', resetTrafficMutation.isPending && 'animate-spin')} />
                 Сбросить трафик
-              </button>
-              <button onClick={() => { if (confirm('Удалить пользователя?')) deleteMutation.mutate() }}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { if (confirm('Удалить пользователя?')) deleteMutation.mutate() }}
                 disabled={deleteMutation.isPending}
-                className="px-3 md:px-4 py-2 bg-dark-700 hover:bg-dark-600 text-red-400 rounded-lg text-sm">
+                className="text-red-400 hover:text-red-300"
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
                 Удалить
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -796,14 +850,20 @@ export default function UserDetail() {
 
       {/* Edit success/error messages */}
       {editSuccess && (
-        <div className="card border border-green-500/30 bg-green-500/10 py-3">
-          <p className="text-green-400 text-sm">Изменения сохранены</p>
-        </div>
+        <Card className="border-green-500/30 bg-green-500/10">
+          <CardContent className="py-3 px-4 flex items-center gap-2">
+            <Check className="h-4 w-4 text-green-400" />
+            <p className="text-green-400 text-sm">Изменения сохранены</p>
+          </CardContent>
+        </Card>
       )}
       {editError && (
-        <div className="card border border-red-500/30 bg-red-500/10 py-3">
-          <p className="text-red-400 text-sm">{editError}</p>
-        </div>
+        <Card className="border-red-500/30 bg-red-500/10">
+          <CardContent className="py-3 px-4 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-400" />
+            <p className="text-red-400 text-sm">{editError}</p>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
@@ -811,231 +871,271 @@ export default function UserDetail() {
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
 
           {/* Block: General info / Edit form */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-            <h2 className="text-base md:text-lg font-semibold text-white mb-4">
-              {isEditing ? 'Редактирование' : 'Общая информация'}
-            </h2>
-
-            {isEditing ? (
-              /* Edit form */
-              <div className="space-y-5">
-                {/* Status */}
-                <div>
-                  <label className="block text-sm text-dark-200 mb-1.5">Статус</label>
-                  <select
-                    value={editForm.status}
-                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                    className="input"
-                  >
-                    <option value="active">Активен</option>
-                    <option value="disabled">Отключён</option>
-                    <option value="limited">Ограничен</option>
-                    <option value="expired">Истёк</option>
-                  </select>
-                </div>
-
-                {/* Traffic limit */}
-                <div>
-                  <label className="block text-sm text-dark-200 mb-1.5">Лимит трафика</label>
-                  <div className="flex items-center gap-3 mb-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={editForm.is_unlimited}
-                        onChange={(e) => setEditForm({
-                          ...editForm,
-                          is_unlimited: e.target.checked,
-                          traffic_limit_gb: e.target.checked ? '' : editForm.traffic_limit_gb,
-                        })}
-                        className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
-                      />
-                      <span className="text-sm text-dark-100">Безлимитный</span>
-                    </label>
-                  </div>
-                  {!editForm.is_unlimited && (
-                    <div className="relative">
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value={editForm.traffic_limit_gb}
-                        onChange={(e) => setEditForm({ ...editForm, traffic_limit_gb: e.target.value })}
-                        placeholder="Введите лимит"
-                        className="input pr-12"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Expire date */}
-                <div>
-                  <label className="block text-sm text-dark-200 mb-1.5">Дата истечения</label>
-                  <input
-                    type="datetime-local"
-                    value={editForm.expire_at}
-                    onChange={(e) => setEditForm({ ...editForm, expire_at: e.target.value })}
-                    className="input"
-                  />
-                  {editForm.expire_at && (
-                    <button
-                      onClick={() => setEditForm({ ...editForm, expire_at: '' })}
-                      className="text-xs text-dark-200 hover:text-primary-400 mt-1"
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {isEditing ? (
+                  <>
+                    <Pencil className="h-5 w-5 text-primary-400" />
+                    Редактирование
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-5 w-5 text-primary-400" />
+                    Общая информация
+                  </>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isEditing ? (
+                /* Edit form */
+                <div className="space-y-5">
+                  {/* Status */}
+                  <div className="space-y-2">
+                    <Label>Статус</Label>
+                    <Select
+                      value={editForm.status}
+                      onValueChange={(value) => setEditForm({ ...editForm, status: value })}
                     >
-                      Убрать дату (бессрочно)
-                    </button>
-                  )}
-                </div>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Выберите статус" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Активен</SelectItem>
+                        <SelectItem value="disabled">Отключён</SelectItem>
+                        <SelectItem value="limited">Ограничен</SelectItem>
+                        <SelectItem value="expired">Истёк</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                {/* HWID limit */}
-                <div>
-                  <label className="block text-sm text-dark-200 mb-1.5">Лимит устройств (HWID)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={editForm.hwid_device_limit}
-                    onChange={(e) => setEditForm({ ...editForm, hwid_device_limit: e.target.value })}
-                    className="input"
-                  />
-                </div>
+                  {/* Traffic limit */}
+                  <div className="space-y-2">
+                    <Label>Лимит трафика</Label>
+                    <div className="flex items-center gap-3 mb-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editForm.is_unlimited}
+                          onChange={(e) => setEditForm({
+                            ...editForm,
+                            is_unlimited: e.target.checked,
+                            traffic_limit_gb: e.target.checked ? '' : editForm.traffic_limit_gb,
+                          })}
+                          className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                        />
+                        <span className="text-sm text-dark-100">Безлимитный</span>
+                      </label>
+                    </div>
+                    {!editForm.is_unlimited && (
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={editForm.traffic_limit_gb}
+                          onChange={(e) => setEditForm({ ...editForm, traffic_limit_gb: e.target.value })}
+                          placeholder="Введите лимит"
+                          className="pr-12"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
+                      </div>
+                    )}
+                  </div>
 
-                {/* Read-only fields */}
-                <div className="pt-3 border-t border-dark-400/10">
-                  <p className="text-xs text-dark-300 mb-3">Информация (только чтение)</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-dark-200">Username</p>
-                      <p className="text-white text-sm">{user.username || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-dark-200">Email</p>
-                      <p className="text-white text-sm truncate">{user.email || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-dark-200">Telegram ID</p>
-                      <p className="text-white text-sm">{user.telegram_id || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-dark-200">Short UUID</p>
-                      <p className="text-white text-sm font-mono">{user.short_uuid || '—'}</p>
+                  {/* Expire date */}
+                  <div className="space-y-2">
+                    <Label>Дата истечения</Label>
+                    <Input
+                      type="datetime-local"
+                      value={editForm.expire_at}
+                      onChange={(e) => setEditForm({ ...editForm, expire_at: e.target.value })}
+                    />
+                    {editForm.expire_at && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={() => setEditForm({ ...editForm, expire_at: '' })}
+                        className="px-0 h-auto text-xs text-dark-200 hover:text-primary-400"
+                      >
+                        Убрать дату (бессрочно)
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* HWID limit */}
+                  <div className="space-y-2">
+                    <Label>Лимит устройств (HWID)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={editForm.hwid_device_limit}
+                      onChange={(e) => setEditForm({ ...editForm, hwid_device_limit: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Read-only fields */}
+                  <Separator />
+                  <div>
+                    <p className="text-xs text-dark-300 mb-3">Информация (только чтение)</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-dark-200">Username</p>
+                        <p className="text-white text-sm">{user.username || '\u2014'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-dark-200">Email</p>
+                        <p className="text-white text-sm truncate">{user.email || '\u2014'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-dark-200">Telegram ID</p>
+                        <p className="text-white text-sm">{user.telegram_id || '\u2014'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-dark-200">Short UUID</p>
+                        <p className="text-white text-sm font-mono">{user.short_uuid || '\u2014'}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              /* View mode */
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-dark-200">Username</p>
-                  <p className="text-white">{user.username || '—'}</p>
+              ) : (
+                /* View mode */
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-dark-200">Username</p>
+                    <p className="text-white">{user.username || '\u2014'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-dark-200">Email</p>
+                    <p className="text-white truncate">{user.email || '\u2014'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-dark-200">Telegram ID</p>
+                    <p className="text-white">{user.telegram_id || '\u2014'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-dark-200">Short UUID</p>
+                    <p className="text-white font-mono">{user.short_uuid || '\u2014'}</p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Clock className="h-3.5 w-3.5 text-dark-300" />
+                      <p className="text-sm text-dark-200">Создан</p>
+                    </div>
+                    <p className="text-white">
+                      {user.created_at
+                        ? format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                        : '\u2014'}
+                    </p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Clock className="h-3.5 w-3.5 text-dark-300" />
+                      <p className="text-sm text-dark-200">Истекает</p>
+                    </div>
+                    <p className="text-white">
+                      {user.expire_at
+                        ? format(new Date(user.expire_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                        : 'Бессрочно'}
+                    </p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Activity className="h-3.5 w-3.5 text-dark-300" />
+                      <p className="text-sm text-dark-200">Последняя активность</p>
+                    </div>
+                    <p className="text-white">
+                      {user.online_at
+                        ? format(new Date(user.online_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                        : '\u2014'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-dark-200">Email</p>
-                  <p className="text-white truncate">{user.email || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-dark-200">Telegram ID</p>
-                  <p className="text-white">{user.telegram_id || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-dark-200">Short UUID</p>
-                  <p className="text-white font-mono">{user.short_uuid || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-dark-200">Создан</p>
-                  <p className="text-white">
-                    {user.created_at
-                      ? format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                      : '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-dark-200">Истекает</p>
-                  <p className="text-white">
-                    {user.expire_at
-                      ? format(new Date(user.expire_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                      : 'Бессрочно'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-dark-200">Последняя активность</p>
-                  <p className="text-white">
-                    {user.online_at
-                      ? format(new Date(user.online_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                      : '—'}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Block: Traffic */}
           <TrafficBlock user={user} trafficPercent={trafficPercent} />
 
           {/* Block: Devices (HWID) */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base md:text-lg font-semibold text-white">
-                Устройства
-                {hwidDevices && hwidDevices.length > 0 && (
-                  <span className="ml-2 text-sm font-normal text-dark-200">
-                    {hwidDevices.length} / {user.hwid_device_limit || '∞'}
-                  </span>
-                )}
-              </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => syncHwidMutation.mutate()}
-                  disabled={syncHwidMutation.isPending || hwidFetching}
-                  className="p-1.5 text-dark-300 hover:text-primary-400 hover:bg-dark-700/50 rounded-lg transition-colors disabled:opacity-40"
-                  title="Синхронизировать устройства"
-                >
-                  <svg className={`w-4 h-4 ${syncHwidMutation.isPending ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
-                <span className="text-xs text-dark-300 bg-dark-700/50 px-2 py-1 rounded">
-                  Лимит: {user.hwid_device_limit || '∞'}
-                </span>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Smartphone className="h-5 w-5 text-primary-400" />
+                  Устройства
+                  {hwidDevices && hwidDevices.length > 0 && (
+                    <span className="ml-1 text-sm font-normal text-dark-200">
+                      {hwidDevices.length} / {user.hwid_device_limit || '\u221E'}
+                    </span>
+                  )}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => syncHwidMutation.mutate()}
+                    disabled={syncHwidMutation.isPending || hwidFetching}
+                    className="h-8 w-8 p-0"
+                    title="Синхронизировать устройства"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', syncHwidMutation.isPending && 'animate-spin')} />
+                  </Button>
+                  <Badge variant="outline" className="text-xs">
+                    Лимит: {user.hwid_device_limit || '\u221E'}
+                  </Badge>
+                </div>
               </div>
-            </div>
-
-            {/* HWID device cards with pagination */}
-            {hwidDevices && hwidDevices.length > 0 ? (
-              <PaginatedDeviceList devices={hwidDevices} />
-            ) : (
-              <div className="text-center py-6 text-dark-300 text-sm">
-                Нет зарегистрированных устройств
-              </div>
-            )}
-          </div>
+            </CardHeader>
+            <CardContent>
+              {/* HWID device cards with pagination */}
+              {hwidDevices && hwidDevices.length > 0 ? (
+                <PaginatedDeviceList devices={hwidDevices} />
+              ) : (
+                <div className="text-center py-6 text-dark-300 text-sm">
+                  Нет зарегистрированных устройств
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Block: Violations */}
           {violations && violations.length > 0 && (
-            <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-              <h2 className="text-base md:text-lg font-semibold text-white mb-4">
-                Нарушения ({violations.length})
-              </h2>
-              <div className="space-y-3">
-                {violations.slice(0, 5).map((v) => (
-                  <div
-                    key={v.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-dark-700 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getSeverityColor(v.severity)}`}>
-                        {v.severity}
-                      </span>
-                      <span className="text-white text-sm">Score: {v.score.toFixed(1)}</span>
-                      <span className="text-dark-200 text-sm">{v.recommended_action}</span>
-                    </div>
-                    <span className="text-dark-200 text-xs sm:text-sm flex-shrink-0">
-                      {format(new Date(v.detected_at), 'dd.MM.yyyy HH:mm')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-yellow-400" />
+                  Нарушения
+                  <Badge variant="warning" className="ml-1">{violations.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {violations.slice(0, 5).map((v) => {
+                    const sevBadge = getSeverityBadge(v.severity)
+                    return (
+                      <div
+                        key={v.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-dark-700 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <Badge variant={sevBadge.variant}>
+                            {v.severity}
+                          </Badge>
+                          <span className="text-white text-sm">Score: {v.score.toFixed(1)}</span>
+                          <span className="text-dark-200 text-sm">{v.recommended_action}</span>
+                        </div>
+                        <span className="text-dark-200 text-xs sm:text-sm flex-shrink-0">
+                          {format(new Date(v.detected_at), 'dd.MM.yyyy HH:mm')}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
 
@@ -1043,84 +1143,126 @@ export default function UserDetail() {
         <div className="space-y-4 md:space-y-6">
 
           {/* Block: Subscription */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Подписка</h2>
-            <div className="space-y-3">
-              {user.subscription_url ? (
-                <div>
-                  <p className="text-xs text-dark-200 mb-1">Ссылка подписки</p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={user.subscription_url}
-                      className="input text-xs font-mono flex-1 truncate"
-                    />
-                    <button
-                      onClick={() => copyToClipboard(user.subscription_url!)}
-                      className={`px-3 py-2 rounded-lg text-xs font-medium flex-shrink-0 transition-colors ${
-                        copied
-                          ? 'bg-green-600 text-white'
-                          : 'bg-dark-600 hover:bg-dark-500 text-dark-100'
-                      }`}
-                    >
-                      {copied ? 'OK' : 'Копировать'}
-                    </button>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary-400" />
+                Подписка
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {user.subscription_url ? (
+                  <div>
+                    <p className="text-xs text-dark-200 mb-1">Ссылка подписки</p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        readOnly
+                        value={user.subscription_url}
+                        className="text-xs font-mono flex-1 truncate"
+                      />
+                      <Button
+                        variant={copied ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => copyToClipboard(user.subscription_url!)}
+                        className={cn(
+                          'flex-shrink-0',
+                          copied && 'bg-green-600 hover:bg-green-500 text-white'
+                        )}
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            OK
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5 mr-1" />
+                            Копировать
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ) : user.subscription_uuid ? (
-                <div>
-                  <p className="text-xs text-dark-200 mb-1">UUID подписки</p>
-                  <p className="text-white text-sm font-mono break-all">{user.subscription_uuid}</p>
-                </div>
-              ) : (
-                <p className="text-dark-200 text-sm">Нет активной подписки</p>
-              )}
-              {user.subscription_url && user.subscription_uuid && (
-                <div>
-                  <p className="text-xs text-dark-200 mb-1">UUID подписки</p>
-                  <p className="text-dark-100 text-xs font-mono break-all">{user.subscription_uuid}</p>
-                </div>
-              )}
-            </div>
-          </div>
+                ) : user.subscription_uuid ? (
+                  <div>
+                    <p className="text-xs text-dark-200 mb-1">UUID подписки</p>
+                    <p className="text-white text-sm font-mono break-all">{user.subscription_uuid}</p>
+                  </div>
+                ) : (
+                  <p className="text-dark-200 text-sm">Нет активной подписки</p>
+                )}
+                {user.subscription_url && user.subscription_uuid && (
+                  <div>
+                    <p className="text-xs text-dark-200 mb-1">UUID подписки</p>
+                    <p className="text-dark-100 text-xs font-mono break-all">{user.subscription_uuid}</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Block: Anti-Abuse */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Anti-Abuse</h2>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm text-dark-200">Trust Score</p>
-                  <span className="text-white font-medium">{user.trust_score ?? 100}</span>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-primary-400" />
+                Anti-Abuse
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm text-dark-200">Trust Score</p>
+                    <Badge
+                      variant={
+                        (user.trust_score ?? 100) >= 70 ? 'success'
+                          : (user.trust_score ?? 100) >= 40 ? 'warning'
+                          : 'destructive'
+                      }
+                    >
+                      {user.trust_score ?? 100}
+                    </Badge>
+                  </div>
+                  <div className="w-full bg-dark-600 rounded-full h-2">
+                    <div
+                      className={cn(
+                        'h-2 rounded-full transition-all',
+                        (user.trust_score ?? 100) >= 70 ? 'bg-green-500'
+                          : (user.trust_score ?? 100) >= 40 ? 'bg-yellow-500'
+                          : 'bg-red-500'
+                      )}
+                      style={{ width: `${user.trust_score ?? 100}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-dark-600 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full ${
-                      (user.trust_score ?? 100) >= 70 ? 'bg-green-500'
-                        : (user.trust_score ?? 100) >= 40 ? 'bg-yellow-500'
-                        : 'bg-red-500'
-                    }`}
-                    style={{ width: `${user.trust_score ?? 100}%` }}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-dark-600 rounded-lg p-3 text-center">
+                    <div className="flex justify-center mb-1">
+                      <AlertTriangle className="h-4 w-4 text-dark-300" />
+                    </div>
+                    <p className="text-xl md:text-2xl font-bold text-white">{user.violation_count_30d}</p>
+                    <p className="text-xs text-dark-200">Нарушений (30д)</p>
+                  </div>
+                  <div className="bg-dark-600 rounded-lg p-3 text-center">
+                    <div className="flex justify-center mb-1">
+                      <Users className="h-4 w-4 text-dark-300" />
+                    </div>
+                    <p className="text-xl md:text-2xl font-bold text-white">{user.active_connections}</p>
+                    <p className="text-xs text-dark-200">Подключений</p>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div className="bg-dark-600 rounded-lg p-3 text-center">
-                  <p className="text-xl md:text-2xl font-bold text-white">{user.violation_count_30d}</p>
-                  <p className="text-xs text-dark-200">Нарушений (30д)</p>
-                </div>
-                <div className="bg-dark-600 rounded-lg p-3 text-center">
-                  <p className="text-xl md:text-2xl font-bold text-white">{user.active_connections}</p>
-                  <p className="text-xs text-dark-200">Подключений</p>
+                  <div className="flex justify-center mb-1">
+                    <Globe className="h-4 w-4 text-dark-300" />
+                  </div>
+                  <p className="text-xl md:text-2xl font-bold text-white">{user.unique_ips_24h}</p>
+                  <p className="text-xs text-dark-200">Уникальных IP (24ч)</p>
                 </div>
               </div>
-              <div className="bg-dark-600 rounded-lg p-3 text-center">
-                <p className="text-xl md:text-2xl font-bold text-white">{user.unique_ips_24h}</p>
-                <p className="text-xs text-dark-200">Уникальных IP (24ч)</p>
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

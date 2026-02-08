@@ -2,25 +2,35 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  HiSearch,
-  HiRefresh,
-  HiChevronLeft,
-  HiChevronRight,
-  HiDotsVertical,
-  HiEye,
-  HiPencil,
-  HiTrash,
-  HiCheck,
-  HiBan,
-  HiSortAscending,
-  HiSortDescending,
-  HiFilter,
-  HiX,
-  HiChevronDown,
-  HiChevronUp,
-  HiPlus,
-} from 'react-icons/hi'
+  Search,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  MoreVertical,
+  Eye,
+  Pencil,
+  Trash2,
+  Check,
+  Ban,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+} from 'lucide-react'
 import client from '../api/client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 // Types
 interface UserListItem {
@@ -63,7 +73,6 @@ const fetchUsers = async (params: {
 }): Promise<PaginatedResponse> => {
   const { data } = await client.get('/users', { params })
 
-  // Fetch HWID device counts for users on this page
   if (data.items && data.items.length > 0) {
     try {
       const uuids = data.items.map((u: UserListItem) => u.uuid)
@@ -122,24 +131,23 @@ function getTrafficPercent(used: number, limit: number | null): number {
 // Status badge component
 function StatusBadge({ status }: { status: string }) {
   const normalizedStatus = status.toLowerCase()
-  const statusConfig: Record<string, { label: string; class: string }> = {
-    active: { label: 'Активен', class: 'badge-success' },
-    disabled: { label: 'Отключён', class: 'badge-danger' },
-    limited: { label: 'Ограничен', class: 'badge-warning' },
-    expired: { label: 'Истёк', class: 'badge-gray' },
+  const statusConfig: Record<string, { label: string; variant: 'success' | 'destructive' | 'warning' | 'secondary' }> = {
+    active: { label: 'Активен', variant: 'success' },
+    disabled: { label: 'Отключён', variant: 'destructive' },
+    limited: { label: 'Ограничен', variant: 'warning' },
+    expired: { label: 'Истёк', variant: 'secondary' },
   }
 
-  const config = statusConfig[normalizedStatus] || { label: status, class: 'badge-gray' }
+  const config = statusConfig[normalizedStatus] || { label: status, variant: 'secondary' as const }
 
-  return <span className={config.class}>{config.label}</span>
+  return <Badge variant={config.variant}>{config.label}</Badge>
 }
 
-// Traffic bar component - unified gradient style
+// Traffic bar component
 function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
   const percent = getTrafficPercent(used, limit)
   const isUnlimited = !limit
 
-  // Gradient colors based on usage percentage
   const gradientClass = isUnlimited
     ? 'from-primary-600/30 to-cyan-600/30 border-primary-500/20'
     : percent >= 90
@@ -158,12 +166,12 @@ function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
 
   return (
     <div className={`relative h-5 rounded-full overflow-hidden bg-gradient-to-r ${gradientClass} border`}>
-      {/* Fill bar for limited users */}
       {!isUnlimited && percent > 0 && (
         <div
-          className={`absolute inset-y-0 left-0 rounded-full transition-all ${
+          className={cn(
+            "absolute inset-y-0 left-0 rounded-full transition-all",
             percent >= 90 ? 'bg-red-500/20' : percent >= 70 ? 'bg-yellow-500/20' : 'bg-primary-500/20'
-          }`}
+          )}
           style={{ width: `${percent}%` }}
         />
       )}
@@ -210,80 +218,40 @@ function UserActions({
   onDisable: () => void
   onDelete: () => void
 }) {
-  const [open, setOpen] = useState(false)
   const navigate = useNavigate()
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="btn-ghost p-1.5 rounded"
-      >
-        <HiDotsVertical className="w-4 h-4" />
-      </button>
-
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-          />
-          <div className="dropdown-menu w-40">
-            <button
-              onClick={() => {
-                navigate(`/users/${user.uuid}`)
-                setOpen(false)
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
-            >
-              <HiEye className="w-4 h-4" /> Просмотр
-            </button>
-            <button
-              onClick={() => {
-                navigate(`/users/${user.uuid}?edit=1`)
-                setOpen(false)
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
-            >
-              <HiPencil className="w-4 h-4" /> Редактировать
-            </button>
-            <div className="border-t border-dark-400/20 my-1" />
-            {user.status === 'disabled' ? (
-              <button
-                onClick={() => {
-                  onEnable()
-                  setOpen(false)
-                }}
-                className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-600 flex items-center gap-2"
-              >
-                <HiCheck className="w-4 h-4" /> Включить
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  onDisable()
-                  setOpen(false)
-                }}
-                className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-600 flex items-center gap-2"
-              >
-                <HiBan className="w-4 h-4" /> Отключить
-              </button>
-            )}
-            <button
-              onClick={() => {
-                if (confirm('Удалить пользователя?')) {
-                  onDelete()
-                }
-                setOpen(false)
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-600 flex items-center gap-2"
-            >
-              <HiTrash className="w-4 h-4" /> Удалить
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <MoreVertical className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}`)}>
+          <Eye className="w-4 h-4 mr-2" /> Просмотр
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}?edit=1`)}>
+          <Pencil className="w-4 h-4 mr-2" /> Редактировать
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {user.status === 'disabled' ? (
+          <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
+            <Check className="w-4 h-4 mr-2" /> Включить
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
+            <Ban className="w-4 h-4 mr-2" /> Отключить
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          onClick={() => { if (confirm('Удалить пользователя?')) onDelete() }}
+          className="text-red-400 focus:text-red-400"
+        >
+          <Trash2 className="w-4 h-4 mr-2" /> Удалить
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -302,14 +270,15 @@ function SortHeader({
   onSort: (field: string) => void
 }) {
   const isActive = currentSort === field
-  const Icon = isActive && currentOrder === 'asc' ? HiSortAscending : HiSortDescending
+  const Icon = isActive && currentOrder === 'asc' ? ArrowUp : ArrowDown
 
   return (
     <button
       onClick={() => onSort(field)}
-      className={`flex items-center gap-1 hover:text-white transition-all duration-200 ${
-        isActive ? 'text-primary-400' : ''
-      }`}
+      className={cn(
+        "flex items-center gap-1 hover:text-white transition-all duration-200",
+        isActive && "text-primary-400"
+      )}
     >
       {label}
       {isActive && <Icon className="w-4 h-4" />}
@@ -317,7 +286,7 @@ function SortHeader({
   )
 }
 
-// Mobile user card component
+// Mobile user card
 function MobileUserCard({
   user,
   onNavigate,
@@ -332,48 +301,40 @@ function MobileUserCard({
   onDelete: () => void
 }) {
   return (
-    <div
-      className="card cursor-pointer active:bg-dark-700/50"
+    <Card
+      className="cursor-pointer active:bg-dark-700/50"
       onClick={onNavigate}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-white truncate">
-            {user.username || user.short_uuid}
-          </p>
-          {user.description && (
-            <p className="text-xs text-dark-300 truncate" title={user.description}>{user.description}</p>
-          )}
-          {user.email && (
-            <p className="text-xs text-dark-200 truncate">{user.email}</p>
-          )}
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-white truncate">
+              {user.username || user.short_uuid}
+            </p>
+            {user.description && (
+              <p className="text-xs text-dark-300 truncate" title={user.description}>{user.description}</p>
+            )}
+            {user.email && (
+              <p className="text-xs text-dark-200 truncate">{user.email}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 ml-2" onClick={(e) => e.stopPropagation()}>
+            <StatusBadge status={user.status} />
+            <UserActions user={user} onEnable={onEnable} onDisable={onDisable} onDelete={onDelete} />
+          </div>
         </div>
-        <div className="flex items-center gap-2 ml-2" onClick={(e) => e.stopPropagation()}>
-          <StatusBadge status={user.status} />
-          <UserActions
-            user={user}
-            onEnable={onEnable}
-            onDisable={onDisable}
-            onDelete={onDelete}
-          />
+        <div className="mb-3">
+          <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
         </div>
-      </div>
-      <div className="mb-3">
-        <TrafficBar
-          used={user.used_traffic_bytes}
-          limit={user.traffic_limit_bytes}
-        />
-      </div>
-      <div className="flex items-center justify-between text-xs text-dark-200">
-        <OnlineIndicator onlineAt={user.online_at} />
-        <div className="flex items-center gap-3">
-          <span title="HWID устройства">
-            {user.hwid_device_count} / {user.hwid_device_limit || '∞'}
-          </span>
-          <span>Истекает: {formatDate(user.expire_at)}</span>
+        <div className="flex items-center justify-between text-xs text-dark-200">
+          <OnlineIndicator onlineAt={user.online_at} />
+          <div className="flex items-center gap-3">
+            <span title="HWID устройства">{user.hwid_device_count} / {user.hwid_device_limit || '∞'}</span>
+            <span>Истекает: {formatDate(user.expire_at)}</span>
+          </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -387,11 +348,13 @@ interface CreateUserFormData {
 }
 
 function CreateUserModal({
+  open,
   onClose,
   onSave,
   isPending,
   error,
 }: {
+  open: boolean
   onClose: () => void
   onSave: (data: Record<string, unknown>) => void
   isPending: boolean
@@ -433,48 +396,44 @@ function CreateUserModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md card border border-dark-400/20 animate-scale-in max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Создание пользователя</h2>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
-            <HiX className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Создание пользователя</DialogTitle>
+          <DialogDescription>Заполните данные для нового пользователя</DialogDescription>
+        </DialogHeader>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Имя пользователя</label>
-            <input
-              type="text"
+            <Label>Имя пользователя</Label>
+            <Input
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
-              className="input"
               placeholder="username"
+              className="mt-1.5"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Email</label>
-            <input
+            <Label>Email</Label>
+            <Input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="input"
               placeholder="user@example.com"
+              className="mt-1.5"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Лимит трафика</label>
-            <div className="flex items-center gap-3 mb-2">
+            <Label>Лимит трафика</Label>
+            <div className="flex items-center gap-3 mt-1.5 mb-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -491,14 +450,14 @@ function CreateUserModal({
             </div>
             {!form.is_unlimited && (
               <div className="relative">
-                <input
+                <Input
                   type="number"
                   step="0.1"
                   min="0"
                   value={form.traffic_limit_gb}
                   onChange={(e) => setForm({ ...form, traffic_limit_gb: e.target.value })}
                   placeholder="Введите лимит"
-                  className="input pr-12"
+                  className="pr-12"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
               </div>
@@ -506,46 +465,38 @@ function CreateUserModal({
           </div>
 
           <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Дата истечения</label>
-            <input
+            <Label>Дата истечения</Label>
+            <Input
               type="datetime-local"
               value={form.expire_at}
               onChange={(e) => setForm({ ...form, expire_at: e.target.value })}
-              className="input"
+              className="mt-1.5"
             />
             <p className="text-xs text-dark-300 mt-1">Оставьте пустым для бессрочной подписки</p>
           </div>
 
           <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Лимит устройств (HWID)</label>
-            <input
+            <Label>Лимит устройств (HWID)</Label>
+            <Input
               type="number"
               min="0"
               value={form.hwid_device_limit}
               onChange={(e) => setForm({ ...form, hwid_device_limit: e.target.value })}
-              className="input"
+              className="mt-1.5"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 mt-6">
-          <button
-            onClick={onClose}
-            disabled={isPending}
-            className="btn-secondary px-4 py-2"
-          >
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose} disabled={isPending}>
             Отмена
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isPending}
-            className="btn-primary px-4 py-2"
-          >
+          </Button>
+          <Button onClick={handleSubmit} disabled={isPending}>
             {isPending ? 'Создание...' : 'Создать'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -570,7 +521,6 @@ export default function Users() {
   const [sortOrder, setSortOrder] = useState('desc')
   const [showFilters, setShowFilters] = useState(false)
 
-  // Count active filters (excluding search)
   const activeFilterCount = [status, trafficType, expireFilter, onlineFilter, trafficUsage].filter(Boolean).length
 
   // Debounced search
@@ -604,23 +554,17 @@ export default function Users() {
   // Mutations
   const enableUser = useMutation({
     mutationFn: (uuid: string) => client.post(`/users/${uuid}/enable`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
   })
 
   const disableUser = useMutation({
     mutationFn: (uuid: string) => client.post(`/users/${uuid}/disable`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
   })
 
   const deleteUser = useMutation({
     mutationFn: (uuid: string) => client.delete(`/users/${uuid}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
   })
 
   const createUser = useMutation({
@@ -635,7 +579,6 @@ export default function Users() {
     },
   })
 
-  // Handle sort
   const handleSort = (field: string) => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
@@ -646,7 +589,6 @@ export default function Users() {
     setPage(1)
   }
 
-  // Reset all filters
   const resetFilters = () => {
     setSearch('')
     setStatus('')
@@ -669,300 +611,293 @@ export default function Users() {
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Пользователи</h1>
-          <p className="text-dark-200 mt-1 text-sm md:text-base">
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">
             Управление пользователями и подписками
           </p>
         </div>
-        <button
+        <Button
           onClick={() => { setShowCreateModal(true); setCreateError('') }}
-          className="btn-primary flex items-center gap-2 self-start sm:self-auto"
+          className="self-start sm:self-auto"
         >
-          <HiPlus className="w-4 h-4" />
+          <Plus className="w-4 h-4 mr-2" />
           <span className="hidden sm:inline">Создать пользователя</span>
           <span className="sm:hidden">Создать</span>
-        </button>
+        </Button>
       </div>
 
       {/* Search + Filter/Sort controls */}
-      <div className="card">
-        <div className="flex flex-col gap-3">
-          {/* Row 1: Search */}
-          <div className="flex-1 relative">
-            <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по имени, email, UUID, Telegram ID..."
-              className="input pl-10"
-            />
-          </div>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-3">
+            {/* Row 1: Search */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-200" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по имени, email, UUID, Telegram ID..."
+                className="pl-10"
+              />
+            </div>
 
-          {/* Row 2: Filters | Sort | Refresh */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            {/* Filter toggle */}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`btn-secondary flex items-center gap-2 flex-1 sm:flex-none ${
-                activeFilterCount > 0 ? 'border-primary-500/50 text-primary-400' : ''
-              }`}
-            >
-              <HiFilter className="w-4 h-4" />
-              <span>Фильтры</span>
-              {activeFilterCount > 0 && (
-                <span className="bg-primary-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {activeFilterCount}
-                </span>
-              )}
-              {showFilters ? <HiChevronUp className="w-4 h-4" /> : <HiChevronDown className="w-4 h-4" />}
-            </button>
-
-            {/* Separator */}
-            <div className="hidden sm:block w-px h-6 bg-dark-400/20" />
-
-            {/* Sort controls */}
-            <div className="flex items-center gap-2 flex-1 sm:flex-none">
-              {/* Sort order toggle */}
-              <button
-                onClick={() => { setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); setPage(1) }}
-                className="btn-secondary p-2 flex-shrink-0"
-                title={sortOrder === 'desc' ? 'По убыванию' : 'По возрастанию'}
-              >
-                {sortOrder === 'desc' ? (
-                  <HiSortDescending className="w-5 h-5 text-primary-400" />
-                ) : (
-                  <HiSortAscending className="w-5 h-5 text-primary-400" />
+            {/* Row 2: Filters | Sort | Refresh */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setShowFilters(!showFilters)}
+                className={cn(
+                  "flex-1 sm:flex-none",
+                  activeFilterCount > 0 && "border-primary-500/50 text-primary-400"
                 )}
-              </button>
-
-              {/* Sort dropdown */}
-              <div className="relative flex-1 sm:flex-none sm:w-48">
-                <select
-                  value={sortBy}
-                  onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
-                  className="input text-sm w-full appearance-none pr-8"
-                >
-                  <option value="created_at">Дата создания</option>
-                  <option value="used_traffic_bytes">Трафик (текущий)</option>
-                  <option value="lifetime_used_traffic_bytes">Трафик (за всё время)</option>
-                  <option value="hwid_device_limit">Устройства (HWID)</option>
-                  <option value="online_at">Последняя активность</option>
-                  <option value="expire_at">Дата истечения</option>
-                  <option value="traffic_limit_bytes">Лимит трафика</option>
-                  <option value="username">Имя</option>
-                  <option value="status">Статус</option>
-                </select>
-                <HiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Refresh button */}
-            <button
-              onClick={() => refetch()}
-              className="btn-secondary flex-shrink-0 p-2"
-              disabled={isLoading}
-              title="Обновить"
-            >
-              <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
-          {/* Expandable filter panel */}
-          {showFilters && (
-            <div className="pt-3 border-t border-dark-400/20 space-y-3 animate-fade-in">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Status */}
-                <div>
-                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Статус</label>
-                  <select
-                    value={status}
-                    onChange={(e) => { setStatus(e.target.value); setPage(1) }}
-                    className="input text-sm"
-                  >
-                    <option value="">Все статусы</option>
-                    <option value="active">Активные</option>
-                    <option value="disabled">Отключённые</option>
-                    <option value="limited">Ограниченные</option>
-                    <option value="expired">Истёкшие</option>
-                  </select>
-                </div>
-
-                {/* Traffic type */}
-                <div>
-                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Тип трафика</label>
-                  <select
-                    value={trafficType}
-                    onChange={(e) => { setTrafficType(e.target.value); setPage(1) }}
-                    className="input text-sm"
-                  >
-                    <option value="">Любой</option>
-                    <option value="unlimited">Безлимитные</option>
-                    <option value="limited">С лимитом</option>
-                  </select>
-                </div>
-
-                {/* Traffic usage */}
-                <div>
-                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Расход трафика</label>
-                  <select
-                    value={trafficUsage}
-                    onChange={(e) => { setTrafficUsage(e.target.value); setPage(1) }}
-                    className="input text-sm"
-                  >
-                    <option value="">Любой расход</option>
-                    <option value="above_90">Более 90% лимита</option>
-                    <option value="above_70">Более 70% лимита</option>
-                    <option value="above_50">Более 50% лимита</option>
-                    <option value="zero">Без трафика (0)</option>
-                  </select>
-                </div>
-
-                {/* Expiration */}
-                <div>
-                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Срок действия</label>
-                  <select
-                    value={expireFilter}
-                    onChange={(e) => { setExpireFilter(e.target.value); setPage(1) }}
-                    className="input text-sm"
-                  >
-                    <option value="">Любой срок</option>
-                    <option value="expiring_7d">Истекает за 7 дней</option>
-                    <option value="expiring_30d">Истекает за 30 дней</option>
-                    <option value="expired">Уже истёк</option>
-                    <option value="no_expiry">Бессрочные</option>
-                  </select>
-                </div>
-
-                {/* Online status */}
-                <div>
-                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Активность</label>
-                  <select
-                    value={onlineFilter}
-                    onChange={(e) => { setOnlineFilter(e.target.value); setPage(1) }}
-                    className="input text-sm"
-                  >
-                    <option value="">Любая активность</option>
-                    <option value="online_24h">Были онлайн за 24ч</option>
-                    <option value="online_7d">Были онлайн за 7 дней</option>
-                    <option value="online_30d">Были онлайн за 30 дней</option>
-                    <option value="never">Никогда не подключались</option>
-                  </select>
-                </div>
-
-                {/* Per page */}
-                <div>
-                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">На странице</label>
-                  <select
-                    value={perPage}
-                    onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1) }}
-                    className="input text-sm"
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Reset button */}
-              {hasAnyFilter && (
-                <div className="flex items-center justify-between pt-2">
-                  <p className="text-xs text-dark-300">
-                    Найдено: <span className="text-white font-medium">{total.toLocaleString()}</span> пользователей
-                  </p>
-                  <button
-                    onClick={resetFilters}
-                    className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
-                  >
-                    <HiX className="w-3 h-3" />
-                    Сбросить все фильтры
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Active filters chips (when panel is collapsed) */}
-          {!showFilters && activeFilterCount > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {status && (
-                <FilterChip
-                  label={`Статус: ${({ active: 'Активные', disabled: 'Отключённые', limited: 'Ограниченные', expired: 'Истёкшие' } as Record<string, string>)[status] || status}`}
-                  onRemove={() => { setStatus(''); setPage(1) }}
-                />
-              )}
-              {trafficType && (
-                <FilterChip
-                  label={`Трафик: ${trafficType === 'unlimited' ? 'Безлимит' : 'С лимитом'}`}
-                  onRemove={() => { setTrafficType(''); setPage(1) }}
-                />
-              )}
-              {trafficUsage && (
-                <FilterChip
-                  label={`Расход: ${({ above_90: '>90%', above_70: '>70%', above_50: '>50%', zero: '0' } as Record<string, string>)[trafficUsage] || trafficUsage}`}
-                  onRemove={() => { setTrafficUsage(''); setPage(1) }}
-                />
-              )}
-              {expireFilter && (
-                <FilterChip
-                  label={`Срок: ${({ expiring_7d: '7 дней', expiring_30d: '30 дней', expired: 'Истёк', no_expiry: 'Бессрочные' } as Record<string, string>)[expireFilter] || expireFilter}`}
-                  onRemove={() => { setExpireFilter(''); setPage(1) }}
-                />
-              )}
-              {onlineFilter && (
-                <FilterChip
-                  label={`Онлайн: ${({ online_24h: '24ч', online_7d: '7д', online_30d: '30д', never: 'Никогда' } as Record<string, string>)[onlineFilter] || onlineFilter}`}
-                  onRemove={() => { setOnlineFilter(''); setPage(1) }}
-                />
-              )}
-              <button
-                onClick={resetFilters}
-                className="text-[11px] text-dark-300 hover:text-primary-400 ml-1"
               >
-                Сбросить все
-              </button>
+                <Filter className="w-4 h-4 mr-2" />
+                Фильтры
+                {activeFilterCount > 0 && (
+                  <span className="bg-primary-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center ml-2">
+                    {activeFilterCount}
+                  </span>
+                )}
+                {showFilters ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+              </Button>
+
+              <Separator orientation="vertical" className="hidden sm:block h-6" />
+
+              <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  onClick={() => { setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); setPage(1) }}
+                  title={sortOrder === 'desc' ? 'По убыванию' : 'По возрастанию'}
+                >
+                  {sortOrder === 'desc' ? (
+                    <ArrowDown className="w-5 h-5 text-primary-400" />
+                  ) : (
+                    <ArrowUp className="w-5 h-5 text-primary-400" />
+                  )}
+                </Button>
+
+                <div className="relative flex-1 sm:flex-none sm:w-48">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
+                    className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  >
+                    <option value="created_at">Дата создания</option>
+                    <option value="used_traffic_bytes">Трафик (текущий)</option>
+                    <option value="lifetime_used_traffic_bytes">Трафик (за всё время)</option>
+                    <option value="hwid_device_limit">Устройства (HWID)</option>
+                    <option value="online_at">Последняя активность</option>
+                    <option value="expire_at">Дата истечения</option>
+                    <option value="traffic_limit_bytes">Лимит трафика</option>
+                    <option value="username">Имя</option>
+                    <option value="status">Статус</option>
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
+                </div>
+              </div>
+
+              <Button
+                variant="secondary"
+                size="icon"
+                onClick={() => refetch()}
+                disabled={isLoading}
+                title="Обновить"
+              >
+                <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
+              </Button>
             </div>
-          )}
-        </div>
-      </div>
+
+            {/* Expandable filter panel */}
+            {showFilters && (
+              <div className="pt-3 border-t border-dark-400/20 space-y-3 animate-fade-in">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Статус</Label>
+                    <select
+                      value={status}
+                      onChange={(e) => { setStatus(e.target.value); setPage(1) }}
+                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
+                    >
+                      <option value="">Все статусы</option>
+                      <option value="active">Активные</option>
+                      <option value="disabled">Отключённые</option>
+                      <option value="limited">Ограниченные</option>
+                      <option value="expired">Истёкшие</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Тип трафика</Label>
+                    <select
+                      value={trafficType}
+                      onChange={(e) => { setTrafficType(e.target.value); setPage(1) }}
+                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
+                    >
+                      <option value="">Любой</option>
+                      <option value="unlimited">Безлимитные</option>
+                      <option value="limited">С лимитом</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Расход трафика</Label>
+                    <select
+                      value={trafficUsage}
+                      onChange={(e) => { setTrafficUsage(e.target.value); setPage(1) }}
+                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
+                    >
+                      <option value="">Любой расход</option>
+                      <option value="above_90">Более 90% лимита</option>
+                      <option value="above_70">Более 70% лимита</option>
+                      <option value="above_50">Более 50% лимита</option>
+                      <option value="zero">Без трафика (0)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Срок действия</Label>
+                    <select
+                      value={expireFilter}
+                      onChange={(e) => { setExpireFilter(e.target.value); setPage(1) }}
+                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
+                    >
+                      <option value="">Любой срок</option>
+                      <option value="expiring_7d">Истекает за 7 дней</option>
+                      <option value="expiring_30d">Истекает за 30 дней</option>
+                      <option value="expired">Уже истёк</option>
+                      <option value="no_expiry">Бессрочные</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Активность</Label>
+                    <select
+                      value={onlineFilter}
+                      onChange={(e) => { setOnlineFilter(e.target.value); setPage(1) }}
+                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
+                    >
+                      <option value="">Любая активность</option>
+                      <option value="online_24h">Были онлайн за 24ч</option>
+                      <option value="online_7d">Были онлайн за 7 дней</option>
+                      <option value="online_30d">Были онлайн за 30 дней</option>
+                      <option value="never">Никогда не подключались</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">На странице</Label>
+                    <select
+                      value={perPage}
+                      onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1) }}
+                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+
+                {hasAnyFilter && (
+                  <div className="flex items-center justify-between pt-2">
+                    <p className="text-xs text-dark-300">
+                      Найдено: <span className="text-white font-medium">{total.toLocaleString()}</span> пользователей
+                    </p>
+                    <button
+                      onClick={resetFilters}
+                      className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" />
+                      Сбросить все фильтры
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Active filters chips */}
+            {!showFilters && activeFilterCount > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {status && (
+                  <FilterChip
+                    label={`Статус: ${({ active: 'Активные', disabled: 'Отключённые', limited: 'Ограниченные', expired: 'Истёкшие' } as Record<string, string>)[status] || status}`}
+                    onRemove={() => { setStatus(''); setPage(1) }}
+                  />
+                )}
+                {trafficType && (
+                  <FilterChip
+                    label={`Трафик: ${trafficType === 'unlimited' ? 'Безлимит' : 'С лимитом'}`}
+                    onRemove={() => { setTrafficType(''); setPage(1) }}
+                  />
+                )}
+                {trafficUsage && (
+                  <FilterChip
+                    label={`Расход: ${({ above_90: '>90%', above_70: '>70%', above_50: '>50%', zero: '0' } as Record<string, string>)[trafficUsage] || trafficUsage}`}
+                    onRemove={() => { setTrafficUsage(''); setPage(1) }}
+                  />
+                )}
+                {expireFilter && (
+                  <FilterChip
+                    label={`Срок: ${({ expiring_7d: '7 дней', expiring_30d: '30 дней', expired: 'Истёк', no_expiry: 'Бессрочные' } as Record<string, string>)[expireFilter] || expireFilter}`}
+                    onRemove={() => { setExpireFilter(''); setPage(1) }}
+                  />
+                )}
+                {onlineFilter && (
+                  <FilterChip
+                    label={`Онлайн: ${({ online_24h: '24ч', online_7d: '7д', online_30d: '30д', never: 'Никогда' } as Record<string, string>)[onlineFilter] || onlineFilter}`}
+                    onRemove={() => { setOnlineFilter(''); setPage(1) }}
+                  />
+                )}
+                <button onClick={resetFilters} className="text-[11px] text-dark-300 hover:text-primary-400 ml-1">
+                  Сбросить все
+                </button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Error state */}
       {isError && (
-        <div className="card border border-red-500/30 bg-red-500/10">
-          <div className="flex items-center justify-between">
-            <p className="text-red-400 text-sm">
-              Ошибка загрузки пользователей: {(error as Error)?.message || 'Неизвестная ошибка'}
-            </p>
-            <button onClick={() => refetch()} className="btn-secondary text-sm">
-              Повторить
-            </button>
-          </div>
-        </div>
+        <Card className="border-red-500/30 bg-red-500/10">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-400 text-sm">
+                Ошибка загрузки пользователей: {(error as Error)?.message || 'Неизвестная ошибка'}
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => refetch()}>
+                Повторить
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Mobile: User cards */}
       <div className="md:hidden space-y-3">
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="card animate-fade-in">
-              <div className="flex items-center justify-between mb-3">
-                <div className="h-4 w-32 bg-dark-700 rounded" />
-                <div className="h-5 w-20 bg-dark-700 rounded" />
-              </div>
-              <div className="h-4 w-full bg-dark-700 rounded mb-3" />
-              <div className="flex justify-between">
-                <div className="h-3 w-24 bg-dark-700 rounded" />
-                <div className="h-3 w-24 bg-dark-700 rounded" />
-              </div>
-            </div>
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-5 w-20" />
+                </div>
+                <Skeleton className="h-4 w-full mb-3" />
+                <div className="flex justify-between">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </CardContent>
+            </Card>
           ))
         ) : users.length === 0 ? (
-          <div className="card text-center py-8 text-dark-200">
-            {hasAnyFilter
-              ? 'Пользователи не найдены'
-              : 'Нет пользователей'}
-          </div>
+          <Card>
+            <CardContent className="p-4 text-center py-8 text-muted-foreground">
+              {hasAnyFilter ? 'Пользователи не найдены' : 'Нет пользователей'}
+            </CardContent>
+          </Card>
         ) : (
           users.map((user, i) => (
             <div key={user.uuid} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.04}s` }}>
@@ -979,112 +914,39 @@ export default function Users() {
       </div>
 
       {/* Desktop: Users table */}
-      <div className="card p-0 overflow-hidden hidden md:block animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+      <Card className="p-0 overflow-hidden hidden md:block animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
               <tr>
-                <th>
-                  <SortHeader
-                    label="Пользователь"
-                    field="username"
-                    currentSort={sortBy}
-                    currentOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th>
-                  <SortHeader
-                    label="Статус"
-                    field="status"
-                    currentSort={sortBy}
-                    currentOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th>
-                  <SortHeader
-                    label="Трафик"
-                    field="used_traffic_bytes"
-                    currentSort={sortBy}
-                    currentOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th>
-                  <SortHeader
-                    label="HWID"
-                    field="hwid_device_limit"
-                    currentSort={sortBy}
-                    currentOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th>
-                  <SortHeader
-                    label="Активность"
-                    field="online_at"
-                    currentSort={sortBy}
-                    currentOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th>
-                  <SortHeader
-                    label="Истекает"
-                    field="expire_at"
-                    currentSort={sortBy}
-                    currentOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                </th>
-                <th>
-                  <SortHeader
-                    label="Создан"
-                    field="created_at"
-                    currentSort={sortBy}
-                    currentOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                </th>
+                <th><SortHeader label="Пользователь" field="username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label="Статус" field="status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label="Трафик" field="used_traffic_bytes" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label="HWID" field="hwid_device_limit" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label="Активность" field="online_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label="Истекает" field="expire_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label="Создан" field="created_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
                 <th className="w-10"></th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                // Loading skeleton
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td>
-                      <div className="h-4 w-32 skeleton rounded" />
-                    </td>
-                    <td>
-                      <div className="h-5 w-20 skeleton rounded" />
-                    </td>
-                    <td>
-                      <div className="h-4 w-24 skeleton rounded" />
-                    </td>
-                    <td>
-                      <div className="h-4 w-8 skeleton rounded mx-auto" />
-                    </td>
-                    <td>
-                      <div className="h-4 w-20 skeleton rounded" />
-                    </td>
-                    <td>
-                      <div className="h-4 w-20 skeleton rounded" />
-                    </td>
-                    <td>
-                      <div className="h-4 w-20 skeleton rounded" />
-                    </td>
+                    <td><Skeleton className="h-4 w-32" /></td>
+                    <td><Skeleton className="h-5 w-20" /></td>
+                    <td><Skeleton className="h-4 w-24" /></td>
+                    <td><Skeleton className="h-4 w-8 mx-auto" /></td>
+                    <td><Skeleton className="h-4 w-20" /></td>
+                    <td><Skeleton className="h-4 w-20" /></td>
+                    <td><Skeleton className="h-4 w-20" /></td>
                     <td></td>
                   </tr>
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-8 text-dark-200">
-                    {hasAnyFilter
-                      ? 'Пользователи не найдены'
-                      : 'Нет пользователей'}
+                  <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                    {hasAnyFilter ? 'Пользователи не найдены' : 'Нет пользователей'}
                   </td>
                 </tr>
               ) : (
@@ -1096,40 +958,23 @@ export default function Users() {
                   >
                     <td>
                       <div>
-                        <span className="font-medium text-white">
-                          {user.username || user.short_uuid}
-                        </span>
-                        {user.description && (
-                          <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>
-                        )}
-                        {user.email && (
-                          <p className="text-xs text-dark-200">{user.email}</p>
-                        )}
+                        <span className="font-medium text-white">{user.username || user.short_uuid}</span>
+                        {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
+                        {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
                       </div>
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <StatusBadge status={user.status} />
                     </td>
                     <td className="min-w-[140px]">
-                      <TrafficBar
-                        used={user.used_traffic_bytes}
-                        limit={user.traffic_limit_bytes}
-                      />
+                      <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
                     </td>
                     <td className="text-center">
-                      <span className="text-dark-100 text-sm">
-                        {user.hwid_device_count} / {user.hwid_device_limit || '∞'}
-                      </span>
+                      <span className="text-dark-100 text-sm">{user.hwid_device_count} / {user.hwid_device_limit || '∞'}</span>
                     </td>
-                    <td>
-                      <OnlineIndicator onlineAt={user.online_at} />
-                    </td>
-                    <td className="text-dark-200 text-sm">
-                      {formatDate(user.expire_at)}
-                    </td>
-                    <td className="text-dark-200 text-sm">
-                      {formatDate(user.created_at)}
-                    </td>
+                    <td><OnlineIndicator onlineAt={user.online_at} /></td>
+                    <td className="text-dark-200 text-sm">{formatDate(user.expire_at)}</td>
+                    <td className="text-dark-200 text-sm">{formatDate(user.created_at)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <UserActions
                         user={user}
@@ -1144,50 +989,36 @@ export default function Users() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* Pagination */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in" style={{ animationDelay: '0.15s' }}>
-        <p className="text-sm text-dark-200 order-2 sm:order-1">
+        <p className="text-sm text-muted-foreground order-2 sm:order-1">
           {total > 0 ? (
-            <>
-              Показано {(page - 1) * perPage + 1}-
-              {Math.min(page * perPage, total)} из {total.toLocaleString()}
-            </>
+            <>Показано {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} из {total.toLocaleString()}</>
           ) : (
             'Нет данных'
           )}
         </p>
         <div className="flex items-center gap-2 order-1 sm:order-2">
-          <button
-            onClick={() => setPage(page - 1)}
-            disabled={page <= 1}
-            className="btn-secondary p-2"
-          >
-            <HiChevronLeft className="w-5 h-5" />
-          </button>
-          <span className="text-sm text-dark-200 min-w-[80px] text-center">
-            {page} / {pages}
-          </span>
-          <button
-            onClick={() => setPage(page + 1)}
-            disabled={page >= pages}
-            className="btn-secondary p-2"
-          >
-            <HiChevronRight className="w-5 h-5" />
-          </button>
+          <Button variant="secondary" size="icon" onClick={() => setPage(page - 1)} disabled={page <= 1}>
+            <ChevronLeft className="w-5 h-5" />
+          </Button>
+          <span className="text-sm text-muted-foreground min-w-[80px] text-center">{page} / {pages}</span>
+          <Button variant="secondary" size="icon" onClick={() => setPage(page + 1)} disabled={page >= pages}>
+            <ChevronRight className="w-5 h-5" />
+          </Button>
         </div>
       </div>
 
       {/* Create user modal */}
-      {showCreateModal && (
-        <CreateUserModal
-          onClose={() => { setShowCreateModal(false); setCreateError('') }}
-          onSave={(data) => createUser.mutate(data)}
-          isPending={createUser.isPending}
-          error={createError}
-        />
-      )}
+      <CreateUserModal
+        open={showCreateModal}
+        onClose={() => { setShowCreateModal(false); setCreateError('') }}
+        onSave={(data) => createUser.mutate(data)}
+        isPending={createUser.isPending}
+        error={createError}
+      />
     </div>
   )
 }
@@ -1198,7 +1029,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary-500/10 border border-primary-500/20 text-[11px] text-primary-300">
       {label}
       <button onClick={onRemove} className="hover:text-white ml-0.5">
-        <HiX className="w-3 h-3" />
+        <X className="w-3 h-3" />
       </button>
     </span>
   )

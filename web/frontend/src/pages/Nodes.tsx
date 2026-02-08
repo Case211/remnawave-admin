@@ -1,26 +1,47 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  HiRefresh,
-  HiStatusOnline,
-  HiStatusOffline,
-  HiGlobe,
-  HiUsers,
-  HiChartBar,
-  HiClock,
-  HiDotsVertical,
-  HiPencil,
-  HiTrash,
-  HiPlay,
-  HiStop,
-  HiX,
-  HiPlus,
-  HiKey,
-  HiClipboardCopy,
-  HiShieldCheck,
-  HiExclamation,
-} from 'react-icons/hi'
+  RefreshCw,
+  Activity,
+  WifiOff,
+  Globe,
+  Users,
+  BarChart3,
+  Clock,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Play,
+  Square,
+  Plus,
+  Key,
+  Copy,
+  ShieldCheck,
+  AlertTriangle,
+} from 'lucide-react'
 import client from '../api/client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 
 // Types
 interface Node {
@@ -81,13 +102,15 @@ function formatTimeAgo(dateStr: string | null): string {
 // Node edit modal
 function NodeEditModal({
   node,
-  onClose,
+  open,
+  onOpenChange,
   onSave,
   isPending,
   error,
 }: {
   node: Node
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onSave: (data: Record<string, unknown>) => void
   isPending: boolean
   error: string
@@ -113,93 +136,90 @@ function NodeEditModal({
     const newPort = parseInt(form.port, 10)
     if (!isNaN(newPort) && newPort !== node.port) updateData.port = newPort
     if (Object.keys(updateData).length === 0) {
-      onClose()
+      onOpenChange(false)
       return
     }
     onSave(updateData)
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md card border border-dark-400/20 animate-scale-in">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Редактирование ноды</h2>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
-            <HiX className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Редактирование ноды</DialogTitle>
+          <DialogDescription className="sr-only">
+            Форма редактирования параметров ноды
+          </DialogDescription>
+        </DialogHeader>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Название</label>
-            <input
+          <div className="space-y-2">
+            <Label>Название</Label>
+            <Input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="input"
               placeholder="Название ноды"
             />
           </div>
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Адрес</label>
-            <input
+          <div className="space-y-2">
+            <Label>Адрес</Label>
+            <Input
               type="text"
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
-              className="input"
               placeholder="IP или домен"
             />
           </div>
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Порт</label>
-            <input
+          <div className="space-y-2">
+            <Label>Порт</Label>
+            <Input
               type="number"
-              min="1"
-              max="65535"
+              min={1}
+              max={65535}
               value={form.port}
               onChange={(e) => setForm({ ...form, port: e.target.value })}
-              className="input"
               placeholder="Порт"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 mt-6">
-          <button
-            onClick={onClose}
+        <DialogFooter>
+          <Button
+            variant="secondary"
+            onClick={() => onOpenChange(false)}
             disabled={isPending}
-            className="btn-secondary px-4 py-2"
           >
             Отмена
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSubmit}
             disabled={isPending || !form.name.trim() || !form.address.trim() || !form.port}
-            className="btn-primary px-4 py-2"
           >
             {isPending ? 'Сохранение...' : 'Сохранить'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 // Node create modal
 function NodeCreateModal({
-  onClose,
+  open,
+  onOpenChange,
   onSave,
   isPending,
   error,
 }: {
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onSave: (data: Record<string, unknown>) => void
   isPending: boolean
   error: string
@@ -221,85 +241,82 @@ function NodeCreateModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md card border border-dark-400/20 animate-scale-in">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Добавление ноды</h2>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
-            <HiX className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Добавление ноды</DialogTitle>
+          <DialogDescription className="sr-only">
+            Форма создания новой ноды
+          </DialogDescription>
+        </DialogHeader>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Название</label>
-            <input
+          <div className="space-y-2">
+            <Label>Название</Label>
+            <Input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="input"
               placeholder="Название ноды"
             />
           </div>
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Адрес</label>
-            <input
+          <div className="space-y-2">
+            <Label>Адрес</Label>
+            <Input
               type="text"
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
-              className="input"
               placeholder="IP или домен"
             />
           </div>
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Порт</label>
-            <input
+          <div className="space-y-2">
+            <Label>Порт</Label>
+            <Input
               type="number"
-              min="1"
-              max="65535"
+              min={1}
+              max={65535}
               value={form.port}
               onChange={(e) => setForm({ ...form, port: e.target.value })}
-              className="input"
               placeholder="Порт"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 mt-6">
-          <button
-            onClick={onClose}
+        <DialogFooter>
+          <Button
+            variant="secondary"
+            onClick={() => onOpenChange(false)}
             disabled={isPending}
-            className="btn-secondary px-4 py-2"
           >
             Отмена
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSubmit}
             disabled={isPending || !form.name.trim() || !form.address.trim() || !form.port}
-            className="btn-primary px-4 py-2"
           >
             {isPending ? 'Создание...' : 'Создать'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 // Agent token management modal
 function AgentTokenModal({
   node,
-  onClose,
+  open,
+  onOpenChange,
 }: {
   node: Node
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }) {
   const queryClient = useQueryClient()
   const [generatedToken, setGeneratedToken] = useState<string | null>(null)
@@ -345,22 +362,17 @@ function AgentTokenModal({
     : null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg card border border-dark-400/20 animate-scale-in">
-        <div className="flex items-center justify-between mb-4">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
           <div className="flex items-center gap-2">
-            <HiKey className="w-5 h-5 text-primary-400" />
-            <h2 className="text-lg font-semibold text-white">Токен Node Agent</h2>
+            <Key className="w-5 h-5 text-primary-400" />
+            <DialogTitle>Токен Node Agent</DialogTitle>
           </div>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
-            <HiX className="w-5 h-5" />
-          </button>
-        </div>
-
-        <p className="text-sm text-dark-200 mb-4">
-          Нода: <span className="text-white font-medium">{node.name}</span>
-        </p>
+          <DialogDescription>
+            Нода: <span className="text-white font-medium">{node.name}</span>
+          </DialogDescription>
+        </DialogHeader>
 
         {isLoading ? (
           <div className="py-8 text-center">
@@ -374,12 +386,12 @@ function AgentTokenModal({
                 <span className="text-sm text-dark-200">Статус</span>
                 {tokenStatus?.has_token ? (
                   <span className="flex items-center gap-1.5 text-sm text-green-400">
-                    <HiShieldCheck className="w-4 h-4" />
+                    <ShieldCheck className="w-4 h-4" />
                     Установлен
                   </span>
                 ) : (
                   <span className="flex items-center gap-1.5 text-sm text-yellow-400">
-                    <HiExclamation className="w-4 h-4" />
+                    <AlertTriangle className="w-4 h-4" />
                     Не установлен
                   </span>
                 )}
@@ -393,18 +405,20 @@ function AgentTokenModal({
             {generatedToken && (
               <div className="p-3 bg-primary-500/5 border border-primary-500/20 rounded-lg space-y-3">
                 <div className="flex items-center gap-1.5 text-xs text-yellow-400">
-                  <HiExclamation className="w-3.5 h-3.5" />
+                  <AlertTriangle className="w-3.5 h-3.5" />
                   Сохраните токен! Он больше не будет показан.
                 </div>
                 <div className="relative">
                   <pre className="text-xs text-primary-300 font-mono bg-dark-900/50 p-2.5 rounded overflow-x-auto whitespace-pre-wrap break-all">{generatedToken}</pre>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1.5 right-1.5 h-7 w-7 text-dark-300 hover:text-white"
                     onClick={() => copyToClipboard(generatedToken)}
-                    className="absolute top-1.5 right-1.5 p-1 text-dark-300 hover:text-white rounded transition-colors"
                     title="Копировать токен"
                   >
-                    <HiClipboardCopy className="w-4 h-4" />
-                  </button>
+                    <Copy className="w-4 h-4" />
+                  </Button>
                 </div>
 
                 {/* Env config hint */}
@@ -413,13 +427,15 @@ function AgentTokenModal({
                     <p className="text-xs text-dark-300 mb-1.5">Для .env файла агента:</p>
                     <div className="relative">
                       <pre className="text-[11px] text-dark-200 font-mono bg-dark-900/50 p-2.5 rounded overflow-x-auto whitespace-pre-wrap break-all">{envConfig}</pre>
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-1.5 right-1.5 h-7 w-7 text-dark-300 hover:text-white"
                         onClick={() => copyToClipboard(envConfig)}
-                        className="absolute top-1.5 right-1.5 p-1 text-dark-300 hover:text-white rounded transition-colors"
                         title="Копировать конфиг"
                       >
-                        <HiClipboardCopy className="w-4 h-4" />
-                      </button>
+                        <Copy className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -432,7 +448,7 @@ function AgentTokenModal({
 
             {/* Actions */}
             <div className="flex items-center gap-2 pt-2">
-              <button
+              <Button
                 onClick={() => {
                   if (tokenStatus?.has_token && !generatedToken) {
                     if (confirm('Сгенерировать новый токен? Старый перестанет работать.')) {
@@ -443,30 +459,30 @@ function AgentTokenModal({
                   }
                 }}
                 disabled={generateMutation.isPending}
-                className="btn-primary px-4 py-2 flex items-center gap-2 text-sm"
               >
-                <HiKey className="w-4 h-4" />
+                <Key className="w-4 h-4 mr-2" />
                 {generateMutation.isPending ? 'Генерация...' : tokenStatus?.has_token ? 'Перегенерировать' : 'Сгенерировать'}
-              </button>
+              </Button>
 
               {tokenStatus?.has_token && (
-                <button
+                <Button
+                  variant="secondary"
+                  className="text-red-400 hover:text-red-300"
                   onClick={() => {
                     if (confirm('Отозвать токен? Node Agent потеряет доступ.')) {
                       revokeMutation.mutate()
                     }
                   }}
                   disabled={revokeMutation.isPending}
-                  className="btn-secondary px-4 py-2 flex items-center gap-2 text-sm text-red-400 hover:text-red-300"
                 >
                   {revokeMutation.isPending ? 'Отзыв...' : 'Отозвать'}
-                </button>
+                </Button>
               )}
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -488,213 +504,187 @@ function NodeCard({
   onDelete: () => void
   onTokenManage: () => void
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-
   const isOnline = node.is_connected && !node.is_disabled
+
+  const statusVariant = node.is_disabled
+    ? 'secondary'
+    : node.is_connected
+      ? 'success'
+      : 'destructive'
   const statusText = node.is_disabled
     ? 'Отключён'
     : node.is_connected
       ? 'Онлайн'
       : 'Офлайн'
-  const statusClass = node.is_disabled
-    ? 'badge-gray'
-    : node.is_connected
-      ? 'badge-success'
-      : 'badge-danger'
 
   return (
-    <div
-      className={`card relative ${node.is_disabled ? 'opacity-60' : ''} ${menuOpen ? 'z-30' : ''}`}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={`p-2.5 rounded-lg ${
-              isOnline
-                ? 'bg-green-500/10'
-                : node.is_disabled
-                  ? 'bg-gray-500/10'
-                  : 'bg-red-500/10'
-            }`}
-          >
-            {isOnline ? (
-              <HiStatusOnline className="w-6 h-6 text-green-400" />
-            ) : (
-              <HiStatusOffline
-                className={`w-6 h-6 ${node.is_disabled ? 'text-dark-200' : 'text-red-400'}`}
-              />
-            )}
+    <Card className={cn('relative', node.is_disabled && 'opacity-60')}>
+      <CardHeader className="pb-0">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                'p-2.5 rounded-lg',
+                isOnline
+                  ? 'bg-green-500/10'
+                  : node.is_disabled
+                    ? 'bg-gray-500/10'
+                    : 'bg-red-500/10'
+              )}
+            >
+              {isOnline ? (
+                <Activity className="w-6 h-6 text-green-400" />
+              ) : (
+                <WifiOff
+                  className={cn('w-6 h-6', node.is_disabled ? 'text-dark-200' : 'text-red-400')}
+                />
+              )}
+            </div>
+            <div>
+              <h3 className="font-semibold text-white">{node.name}</h3>
+              <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
+                <Globe className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{node.address}:{node.port}</span>
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-white">{node.name}</h3>
-            <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
-              <HiGlobe className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="truncate">{node.address}:{node.port}</span>
+
+          <div className="flex items-center gap-2">
+            <Badge variant={statusVariant as 'success' | 'secondary' | 'destructive'}>
+              {statusText}
+            </Badge>
+
+            {/* Actions menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onRestart}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Перезапустить
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Редактировать
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onTokenManage}>
+                  <Key className="w-4 h-4 mr-2" />
+                  Токен агента
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {node.is_disabled ? (
+                  <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
+                    <Play className="w-4 h-4 mr-2" />
+                    Включить
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
+                    <Square className="w-4 h-4 mr-2" />
+                    Отключить
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (confirm('Удалить ноду?')) {
+                      onDelete()
+                    }
+                  }}
+                  className="text-red-400 focus:text-red-400"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Удалить
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="pt-4">
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4">
+          <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
+            <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
+              <Users className="w-3.5 h-3.5" />
+              <span className="text-[10px] md:text-xs">Онлайн</span>
+            </div>
+            <p className="text-base md:text-lg font-semibold text-white">{node.users_online}</p>
+          </div>
+          <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
+            <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span className="text-[10px] md:text-xs">Сегодня</span>
+            </div>
+            <p className="text-sm md:text-lg font-semibold text-white">
+              {formatBytes(node.traffic_today_bytes)}
+            </p>
+          </div>
+          <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
+            <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span className="text-[10px] md:text-xs">Всего</span>
+            </div>
+            <p className="text-sm md:text-lg font-semibold text-white">
+              {formatBytes(node.traffic_total_bytes)}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className={statusClass}>{statusText}</span>
-
-          {/* Actions menu */}
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="btn-ghost p-1.5 rounded"
-            >
-              <HiDotsVertical className="w-4 h-4" />
-            </button>
-
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setMenuOpen(false)}
-                />
-                <div className="dropdown-menu">
-                  <button
-                    onClick={() => {
-                      onRestart()
-                      setMenuOpen(false)
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
-                  >
-                    <HiRefresh className="w-4 h-4" /> Перезапустить
-                  </button>
-                  <button
-                    onClick={() => {
-                      onEdit()
-                      setMenuOpen(false)
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
-                  >
-                    <HiPencil className="w-4 h-4" /> Редактировать
-                  </button>
-                  <button
-                    onClick={() => {
-                      onTokenManage()
-                      setMenuOpen(false)
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
-                  >
-                    <HiKey className="w-4 h-4" /> Токен агента
-                  </button>
-                  <div className="border-t border-dark-400/20 my-1" />
-                  {node.is_disabled ? (
-                    <button
-                      onClick={() => {
-                        onEnable()
-                        setMenuOpen(false)
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-600 flex items-center gap-2"
-                    >
-                      <HiPlay className="w-4 h-4" /> Включить
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        onDisable()
-                        setMenuOpen(false)
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-600 flex items-center gap-2"
-                    >
-                      <HiStop className="w-4 h-4" /> Отключить
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      if (confirm('Удалить ноду?')) {
-                        onDelete()
-                      }
-                      setMenuOpen(false)
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-600 flex items-center gap-2"
-                  >
-                    <HiTrash className="w-4 h-4" /> Удалить
-                  </button>
-                </div>
-              </>
-            )}
+        {/* Footer info */}
+        <Separator className="mb-3" />
+        <div className="flex items-center justify-between text-xs text-dark-200">
+          <div className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5" />
+            {formatTimeAgo(node.last_seen_at)}
           </div>
+          {node.xray_version && (
+            <span className="text-dark-300">Xray {node.xray_version}</span>
+          )}
         </div>
-      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 md:gap-4 mb-4">
-        <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
-          <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
-            <HiUsers className="w-3.5 h-3.5" />
-            <span className="text-[10px] md:text-xs">Онлайн</span>
+        {/* Error message */}
+        {node.message && !node.is_connected && (
+          <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
+            {node.message}
           </div>
-          <p className="text-base md:text-lg font-semibold text-white">{node.users_online}</p>
-        </div>
-        <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
-          <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
-            <HiChartBar className="w-3.5 h-3.5" />
-            <span className="text-[10px] md:text-xs">Сегодня</span>
-          </div>
-          <p className="text-sm md:text-lg font-semibold text-white">
-            {formatBytes(node.traffic_today_bytes)}
-          </p>
-        </div>
-        <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
-          <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
-            <HiChartBar className="w-3.5 h-3.5" />
-            <span className="text-[10px] md:text-xs">Всего</span>
-          </div>
-          <p className="text-sm md:text-lg font-semibold text-white">
-            {formatBytes(node.traffic_total_bytes)}
-          </p>
-        </div>
-      </div>
-
-      {/* Footer info */}
-      <div className="flex items-center justify-between text-xs text-dark-200 pt-3 border-t border-dark-400/10">
-        <div className="flex items-center gap-1">
-          <HiClock className="w-3.5 h-3.5" />
-          {formatTimeAgo(node.last_seen_at)}
-        </div>
-        {node.xray_version && (
-          <span className="text-dark-300">Xray {node.xray_version}</span>
         )}
-      </div>
-
-      {/* Error message */}
-      {node.message && !node.is_connected && (
-        <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
-          {node.message}
-        </div>
-      )}
-    </div>
+      </CardContent>
+    </Card>
   )
 }
 
 // Loading skeleton
 function NodeSkeleton() {
   return (
-    <div className="card animate-fade-in">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-dark-700 rounded-lg" />
-          <div>
-            <div className="h-4 w-32 bg-dark-700 rounded mb-2" />
-            <div className="h-3 w-24 bg-dark-700 rounded" />
+    <Card className="animate-fade-in">
+      <CardHeader className="pb-0">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-dark-700 rounded-lg" />
+            <div>
+              <div className="h-4 w-32 bg-dark-700 rounded mb-2" />
+              <div className="h-3 w-24 bg-dark-700 rounded" />
+            </div>
           </div>
+          <div className="h-5 w-16 bg-dark-700 rounded" />
         </div>
-        <div className="h-5 w-16 bg-dark-700 rounded" />
-      </div>
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="p-3 bg-dark-800/50 rounded-lg">
-            <div className="h-3 w-12 bg-dark-700 rounded mx-auto mb-2" />
-            <div className="h-5 w-8 bg-dark-700 rounded mx-auto" />
-          </div>
-        ))}
-      </div>
-      <div className="h-3 w-20 bg-dark-700 rounded" />
-    </div>
+      </CardHeader>
+      <CardContent className="pt-4">
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="p-3 bg-dark-800/50 rounded-lg">
+              <div className="h-3 w-12 bg-dark-700 rounded mx-auto mb-2" />
+              <div className="h-5 w-8 bg-dark-700 rounded mx-auto" />
+            </div>
+          ))}
+        </div>
+        <div className="h-3 w-20 bg-dark-700 rounded" />
+      </CardContent>
+    </Card>
   )
 }
 
@@ -795,56 +785,65 @@ export default function Nodes() {
           <p className="text-dark-200 mt-1 text-sm md:text-base">Управление серверами</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
+          <Button
             onClick={() => { setShowCreateModal(true); setCreateError('') }}
-            className="btn-primary flex items-center gap-2"
           >
-            <HiPlus className="w-4 h-4" />
+            <Plus className="w-4 h-4 mr-2" />
             <span className="hidden sm:inline">Добавить</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => refetch()}
-            className="btn-secondary flex items-center gap-2"
             disabled={isLoading}
           >
-            <HiRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
             <span className="hidden sm:inline">Обновить</span>
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-          <p className="text-xs md:text-sm text-dark-200">Всего</p>
-          <p className="text-xl md:text-2xl font-bold text-white mt-1">
-            {isLoading ? '-' : totalNodes}
-          </p>
-        </div>
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <p className="text-xs md:text-sm text-dark-200">Онлайн</p>
-          <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
-            {isLoading ? '-' : onlineNodes}
-          </p>
-        </div>
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <p className="text-xs md:text-sm text-dark-200">Офлайн</p>
-          <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
-            {isLoading ? '-' : offlineNodes}
-          </p>
-        </div>
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <p className="text-xs md:text-sm text-dark-200">Отключены</p>
-          <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
-            {isLoading ? '-' : disabledNodes}
-          </p>
-        </div>
-        <div className="card text-center col-span-2 sm:col-span-1 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
-          <p className="text-xs md:text-sm text-dark-200">Пользователей</p>
-          <p className="text-xl md:text-2xl font-bold text-primary-400 mt-1">
-            {isLoading ? '-' : totalUsersOnline}
-          </p>
-        </div>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+          <CardContent className="p-4 md:p-6">
+            <p className="text-xs md:text-sm text-dark-200">Всего</p>
+            <p className="text-xl md:text-2xl font-bold text-white mt-1">
+              {isLoading ? '-' : totalNodes}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <CardContent className="p-4 md:p-6">
+            <p className="text-xs md:text-sm text-dark-200">Онлайн</p>
+            <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
+              {isLoading ? '-' : onlineNodes}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+          <CardContent className="p-4 md:p-6">
+            <p className="text-xs md:text-sm text-dark-200">Офлайн</p>
+            <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
+              {isLoading ? '-' : offlineNodes}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <CardContent className="p-4 md:p-6">
+            <p className="text-xs md:text-sm text-dark-200">Отключены</p>
+            <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
+              {isLoading ? '-' : disabledNodes}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="text-center col-span-2 sm:col-span-1 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
+          <CardContent className="p-4 md:p-6">
+            <p className="text-xs md:text-sm text-dark-200">Пользователей</p>
+            <p className="text-xl md:text-2xl font-bold text-primary-400 mt-1">
+              {isLoading ? '-' : totalUsersOnline}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Nodes grid */}
@@ -853,9 +852,13 @@ export default function Nodes() {
           // Loading skeletons
           Array.from({ length: 4 }).map((_, i) => <NodeSkeleton key={i} />)
         ) : sortedNodes.length === 0 ? (
-          <div className="col-span-full card text-center py-12">
-            <HiStatusOffline className="w-12 h-12 text-dark-300 mx-auto mb-3" />
-            <p className="text-dark-200">Нет добавленных нод</p>
+          <div className="col-span-full">
+            <Card className="text-center py-12">
+              <CardContent>
+                <WifiOff className="w-12 h-12 text-dark-300 mx-auto mb-3" />
+                <p className="text-dark-200">Нет добавленных нод</p>
+              </CardContent>
+            </Card>
           </div>
         ) : (
           sortedNodes.map((node, i) => (
@@ -878,7 +881,8 @@ export default function Nodes() {
       {editingNode && (
         <NodeEditModal
           node={editingNode}
-          onClose={() => { setEditingNode(null); setEditError('') }}
+          open={!!editingNode}
+          onOpenChange={(open) => { if (!open) { setEditingNode(null); setEditError('') } }}
           onSave={(data) => updateNode.mutate({ uuid: editingNode.uuid, data })}
           isPending={updateNode.isPending}
           error={editError}
@@ -886,20 +890,20 @@ export default function Nodes() {
       )}
 
       {/* Create modal */}
-      {showCreateModal && (
-        <NodeCreateModal
-          onClose={() => { setShowCreateModal(false); setCreateError('') }}
-          onSave={(data) => createNode.mutate(data)}
-          isPending={createNode.isPending}
-          error={createError}
-        />
-      )}
+      <NodeCreateModal
+        open={showCreateModal}
+        onOpenChange={(open) => { if (!open) { setShowCreateModal(false); setCreateError('') } else { setShowCreateModal(true) } }}
+        onSave={(data) => createNode.mutate(data)}
+        isPending={createNode.isPending}
+        error={createError}
+      />
 
       {/* Agent token modal */}
       {tokenNode && (
         <AgentTokenModal
           node={tokenNode}
-          onClose={() => setTokenNode(null)}
+          open={!!tokenNode}
+          onOpenChange={(open) => { if (!open) setTokenNode(null) }}
         />
       )}
     </div>
