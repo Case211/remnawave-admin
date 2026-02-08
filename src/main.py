@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import sys
 
 from aiogram import Bot, Dispatcher
@@ -247,34 +248,60 @@ async def main() -> None:
         report_scheduler = None
 
     logger.info("🤖 Bot started")
+
+    # Graceful shutdown: use an event so SIGTERM/SIGINT stop polling cleanly
+    shutdown_event = asyncio.Event()
+
+    def _signal_handler(sig: signal.Signals) -> None:
+        logger.info("Received %s, initiating graceful shutdown...", sig.name)
+        shutdown_event.set()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, _signal_handler, sig)
+
+    # Run polling in a task so we can cancel it on signal
+    polling_task = asyncio.create_task(
+        dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    )
+
+    # Wait for shutdown signal
+    await shutdown_event.wait()
+
+    # Stop polling gracefully
+    logger.info("Shutting down...")
+    await dp.stop_polling()
+    polling_task.cancel()
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-    finally:
-        logger.info("Shutting down...")
-        config_service.stop_auto_reload()
-        if report_scheduler and report_scheduler.is_running:
-            await report_scheduler.stop()
-        if sync_service.is_running:
-            await sync_service.stop()
-        health_checker.stop()
-        health_checker_task.cancel()
+        await polling_task
+    except asyncio.CancelledError:
+        pass
+
+    # Cleanup services
+    config_service.stop_auto_reload()
+    if report_scheduler and report_scheduler.is_running:
+        await report_scheduler.stop()
+    if sync_service.is_running:
+        await sync_service.stop()
+    health_checker.stop()
+    health_checker_task.cancel()
+    try:
+        await health_checker_task
+    except asyncio.CancelledError:
+        pass
+    if webhook_task:
+        webhook_task.cancel()
         try:
-            await health_checker_task
+            await webhook_task
         except asyncio.CancelledError:
             pass
-        if webhook_task:
-            webhook_task.cancel()
-            try:
-                await webhook_task
-            except asyncio.CancelledError:
-                pass
-        if db_service.is_connected:
-            await db_service.disconnect()
-        logger.info("👋 Bot stopped")
+    if db_service.is_connected:
+        await db_service.disconnect()
+    logger.info("👋 Bot stopped")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped")
+        pass

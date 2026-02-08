@@ -5,10 +5,12 @@
  *   node_status, user_update, violation, connection, activity
  *
  * Automatically invalidates React Query caches when relevant events arrive.
+ * Handles token expiry by refreshing before reconnect.
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from './authStore'
+import { authApi } from '../api/auth'
 
 interface WsMessage {
   type: string
@@ -41,15 +43,22 @@ function getWsUrl(token: string): string {
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000]
 const TOPICS = ['node_status', 'user_update', 'violation', 'connection', 'hwid_update']
 
+// Close code 4001 = auth failure from backend
+const AUTH_FAILURE_CODE = 4001
+
 export function useRealtimeUpdates() {
   const queryClient = useQueryClient()
   const accessToken = useAuthStore((s) => s.accessToken)
+  const refreshToken = useAuthStore((s) => s.refreshToken)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const setTokens = useAuthStore((s) => s.setTokens)
+  const logout = useAuthStore((s) => s.logout)
 
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectAttempt = useRef(0)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
   const isMounted = useRef(true)
+  const isRefreshing = useRef(false)
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
@@ -95,15 +104,41 @@ export function useRealtimeUpdates() {
     [queryClient],
   )
 
+  /**
+   * Try to refresh the access token using the refresh token.
+   * Returns the new access token or null if refresh failed.
+   */
+  const tryRefreshToken = useCallback(async (): Promise<string | null> => {
+    if (isRefreshing.current) return null
+    const currentRefreshToken = useAuthStore.getState().refreshToken
+    if (!currentRefreshToken) return null
+
+    isRefreshing.current = true
+    try {
+      const response = await authApi.refreshToken(currentRefreshToken)
+      setTokens(response.access_token, response.refresh_token)
+      return response.access_token
+    } catch {
+      // Refresh failed — session is dead
+      logout()
+      return null
+    } finally {
+      isRefreshing.current = false
+    }
+  }, [setTokens, logout])
+
   const connect = useCallback(() => {
-    if (!accessToken || !isAuthenticated || !isMounted.current) return
+    const currentToken = useAuthStore.getState().accessToken
+    const currentAuth = useAuthStore.getState().isAuthenticated
+    if (!currentToken || !currentAuth || !isMounted.current) return
+
     // Close existing connection
     if (wsRef.current) {
       wsRef.current.onclose = null
       wsRef.current.close()
     }
 
-    const url = getWsUrl(accessToken)
+    const url = getWsUrl(currentToken)
     const ws = new WebSocket(url)
     wsRef.current = ws
 
@@ -115,8 +150,25 @@ export function useRealtimeUpdates() {
 
     ws.onmessage = handleMessage
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (!isMounted.current) return
+
+      // Auth failure — try to refresh token before reconnecting
+      if (event.code === AUTH_FAILURE_CODE) {
+        tryRefreshToken().then((newToken) => {
+          if (newToken && isMounted.current) {
+            // Got a new token, reconnect immediately
+            reconnectAttempt.current = 0
+            reconnectTimer.current = setTimeout(() => {
+              if (isMounted.current) connect()
+            }, 500)
+          }
+          // If refresh failed, logout was already called — no reconnect
+        })
+        return
+      }
+
+      // Normal reconnect with exponential backoff
       const delay =
         RECONNECT_DELAYS[
           Math.min(reconnectAttempt.current, RECONNECT_DELAYS.length - 1)
@@ -130,7 +182,7 @@ export function useRealtimeUpdates() {
     ws.onerror = () => {
       // onclose will fire after this, handling reconnect
     }
-  }, [accessToken, isAuthenticated, handleMessage])
+  }, [handleMessage, tryRefreshToken])
 
   useEffect(() => {
     isMounted.current = true
