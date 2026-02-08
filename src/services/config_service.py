@@ -2,6 +2,7 @@
 Dynamic configuration service for bot settings.
 Allows managing configuration through database with .env fallback.
 """
+import asyncio
 import json
 import os
 from dataclasses import dataclass
@@ -723,6 +724,8 @@ class DynamicConfigService:
     def __init__(self):
         self._cache: Dict[str, ConfigItem] = {}
         self._initialized: bool = False
+        self._auto_reload_task: Optional[asyncio.Task] = None
+        self._auto_reload_interval: int = 30  # seconds
 
     async def initialize(self) -> bool:
         """
@@ -1001,6 +1004,32 @@ class DynamicConfigService:
             return False
 
         return await self.set(key, None)
+
+    def start_auto_reload(self, interval_seconds: int = 30) -> None:
+        """Запускает фоновую задачу периодической перезагрузки конфигурации из БД."""
+        self._auto_reload_interval = interval_seconds
+        if self._auto_reload_task is not None:
+            return
+        self._auto_reload_task = asyncio.create_task(self._auto_reload_loop())
+        logger.info("Config auto-reload started (every %ds)", interval_seconds)
+
+    def stop_auto_reload(self) -> None:
+        """Останавливает фоновую задачу перезагрузки конфигурации."""
+        if self._auto_reload_task is not None:
+            self._auto_reload_task.cancel()
+            self._auto_reload_task = None
+            logger.info("Config auto-reload stopped")
+
+    async def _auto_reload_loop(self) -> None:
+        """Периодически перезагружает настройки из БД."""
+        while True:
+            try:
+                await asyncio.sleep(self._auto_reload_interval)
+                await self._load_all_from_db()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("Config auto-reload error: %s", e)
 
     async def reload(self) -> None:
         """Перезагружает все настройки из БД."""
