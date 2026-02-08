@@ -466,6 +466,27 @@ function ActionBadge({ action }: { action: string | null }) {
 
 // ── Detail panel ─────────────────────────────────────────────────
 
+interface HwidDevice {
+  hwid: string
+  platform: string | null
+  os_version: string | null
+  device_model: string | null
+  app_version: string | null
+  user_agent: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+function getPlatformInfo(platform: string | null): { icon: string; label: string } {
+  const p = (platform || '').toLowerCase()
+  if (p.includes('windows') || p === 'win') return { icon: '🖥️', label: 'Windows' }
+  if (p.includes('android')) return { icon: '📱', label: 'Android' }
+  if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return { icon: '📱', label: 'iOS' }
+  if (p.includes('macos') || p.includes('mac') || p.includes('darwin')) return { icon: '💻', label: 'macOS' }
+  if (p.includes('linux')) return { icon: '🐧', label: 'Linux' }
+  return { icon: '📟', label: platform || 'Неизвестно' }
+}
+
 function ViolationDetailPanel({
   violationId,
   onClose,
@@ -490,6 +511,16 @@ function ViolationDetailPanel({
     queryKey: ['ipLookup', detail?.ips],
     queryFn: () => fetchIPLookup(detail!.ips),
     enabled: !!detail && detail.ips.length > 0,
+  })
+
+  // Fetch HWID devices for the violation's user
+  const { data: hwidDevices } = useQuery<HwidDevice[]>({
+    queryKey: ['violation-user-hwid-devices', detail?.user_uuid],
+    queryFn: async () => {
+      const response = await client.get(`/users/${detail!.user_uuid}/hwid-devices`)
+      return response.data
+    },
+    enabled: !!detail?.user_uuid,
   })
 
   if (isLoading) {
@@ -719,6 +750,66 @@ function ViolationDetailPanel({
                     <span className="text-xs text-dark-300">—</span>
                   ) : (
                     <span className="text-xs text-dark-300 animate-pulse">...</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* HWID Devices */}
+      {hwidDevices && hwidDevices.length > 0 && (
+        <div className="card animate-fade-in-up" style={{ animationDelay: '0.32s' }}>
+          <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+            <HiDeviceMobile className="w-4 h-4 inline mr-1" />
+            Устройства ({hwidDevices.length})
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {hwidDevices.map((device, idx) => {
+              const pi = getPlatformInfo(device.platform)
+              return (
+                <div
+                  key={device.hwid || idx}
+                  className="bg-dark-800/80 rounded-lg p-3 border border-dark-600/20"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base">{pi.icon}</span>
+                    <span className="text-sm font-medium text-white">{pi.label}</span>
+                    <span className="text-[10px] text-dark-400 bg-dark-700/50 px-1.5 py-0.5 rounded font-mono ml-auto">
+                      #{idx + 1}
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    {device.device_model && (
+                      <div className="flex justify-between">
+                        <span className="text-dark-300">Модель</span>
+                        <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right">{device.device_model}</span>
+                      </div>
+                    )}
+                    {device.os_version && (
+                      <div className="flex justify-between">
+                        <span className="text-dark-300">ОС</span>
+                        <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right">{device.os_version}</span>
+                      </div>
+                    )}
+                    {device.user_agent && (
+                      <div className="flex justify-between">
+                        <span className="text-dark-300">User-Agent</span>
+                        <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right" title={device.user_agent}>{device.user_agent}</span>
+                      </div>
+                    )}
+                    {device.created_at && (
+                      <div className="flex justify-between">
+                        <span className="text-dark-300">Добавлено</span>
+                        <span className="text-dark-100">{formatDate(device.created_at)}</span>
+                      </div>
+                    )}
+                  </div>
+                  {device.hwid && (
+                    <p className="text-[10px] text-dark-400 font-mono mt-1.5 truncate" title={device.hwid}>
+                      HWID: {device.hwid}
+                    </p>
                   )}
                 </div>
               )

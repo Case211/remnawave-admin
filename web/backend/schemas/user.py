@@ -25,6 +25,7 @@ class UserListItem(UserBase):
     used_traffic_bytes: Optional[int] = 0
     lifetime_used_traffic_bytes: Optional[int] = 0
     hwid_device_limit: Optional[int] = 0
+    hwid_device_count: Optional[int] = 0
     created_at: Optional[datetime] = None
     online_at: Optional[datetime] = None
 
@@ -39,6 +40,8 @@ class UserListItem(UserBase):
                 values['lifetime_used_traffic_bytes'] = 0
             if values.get('hwid_device_limit') is None:
                 values['hwid_device_limit'] = 0
+            if values.get('hwid_device_count') is None:
+                values['hwid_device_count'] = 0
             # Normalize status to lowercase (Remnawave API returns ACTIVE, DISABLED, etc.)
             status = values.get('status')
             if isinstance(status, str):

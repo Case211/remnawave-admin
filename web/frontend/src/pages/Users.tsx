@@ -34,6 +34,7 @@ interface UserListItem {
   used_traffic_bytes: number
   lifetime_used_traffic_bytes: number
   hwid_device_limit: number
+  hwid_device_count: number
   created_at: string | null
   online_at: string | null
 }
@@ -60,6 +61,20 @@ const fetchUsers = async (params: {
   sort_order: string
 }): Promise<PaginatedResponse> => {
   const { data } = await client.get('/users', { params })
+
+  // Fetch HWID device counts for users on this page
+  if (data.items && data.items.length > 0) {
+    try {
+      const uuids = data.items.map((u: UserListItem) => u.uuid)
+      const { data: counts } = await client.post('/users/hwid-device-counts', uuids)
+      for (const item of data.items) {
+        item.hwid_device_count = counts[item.uuid] ?? 0
+      }
+    } catch {
+      // Silently fail - counts will show as 0
+    }
+  }
+
   return data
 }
 
@@ -118,39 +133,44 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={config.class}>{config.label}</span>
 }
 
-// Traffic bar component
+// Traffic bar component - unified gradient style
 function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
   const percent = getTrafficPercent(used, limit)
-  const colorClass =
-    percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-yellow-500' : 'bg-green-500'
   const isUnlimited = !limit
 
+  // Gradient colors based on usage percentage
+  const gradientClass = isUnlimited
+    ? 'from-primary-600/30 to-cyan-600/30 border-primary-500/20'
+    : percent >= 90
+    ? 'from-red-600/30 to-red-500/20 border-red-500/20'
+    : percent >= 70
+    ? 'from-yellow-600/30 to-yellow-500/20 border-yellow-500/20'
+    : 'from-primary-600/30 to-cyan-600/30 border-primary-500/20'
+
+  const textClass = isUnlimited
+    ? 'text-primary-200'
+    : percent >= 90
+    ? 'text-red-200'
+    : percent >= 70
+    ? 'text-yellow-200'
+    : 'text-primary-200'
+
   return (
-    <div className="space-y-1">
-      {isUnlimited ? (
-        /* Unlimited: solid gradient bar with centered text */
-        <div className="relative h-5 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[11px] font-medium text-primary-200">
-              {formatBytes(used)} / ∞
-            </span>
-          </div>
-        </div>
-      ) : (
-        /* Limited: standard progress bar */
-        <>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-dark-100">{formatBytes(used)}</span>
-            <span className="text-dark-200">/ {formatBytes(limit)}</span>
-          </div>
-          <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
-            <div
-              className={`h-full ${colorClass} transition-all`}
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-        </>
+    <div className={`relative h-5 rounded-full overflow-hidden bg-gradient-to-r ${gradientClass} border`}>
+      {/* Fill bar for limited users */}
+      {!isUnlimited && percent > 0 && (
+        <div
+          className={`absolute inset-y-0 left-0 rounded-full transition-all ${
+            percent >= 90 ? 'bg-red-500/20' : percent >= 70 ? 'bg-yellow-500/20' : 'bg-primary-500/20'
+          }`}
+          style={{ width: `${percent}%` }}
+        />
       )}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className={`text-[11px] font-medium ${textClass}`}>
+          {formatBytes(used)} / {isUnlimited ? '∞' : formatBytes(limit)}
+        </span>
+      </div>
     </div>
   )
 }
@@ -342,7 +362,12 @@ function MobileUserCard({
       </div>
       <div className="flex items-center justify-between text-xs text-dark-200">
         <OnlineIndicator onlineAt={user.online_at} />
-        <span>Истекает: {formatDate(user.expire_at)}</span>
+        <div className="flex items-center gap-3">
+          <span title="HWID устройства">
+            {user.hwid_device_count} / {user.hwid_device_limit || '∞'}
+          </span>
+          <span>Истекает: {formatDate(user.expire_at)}</span>
+        </div>
       </div>
     </div>
   )
@@ -654,48 +679,91 @@ export default function Users() {
         </button>
       </div>
 
-      {/* Search + Filter toggle */}
+      {/* Search + Filter/Sort controls */}
       <div className="card">
         <div className="flex flex-col gap-3">
-          {/* Row 1: Search + filter toggle + refresh */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск по имени, email, UUID, Telegram ID..."
-                className="input pl-10"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`btn-secondary flex items-center gap-2 flex-1 sm:flex-none ${
-                  activeFilterCount > 0 ? 'border-primary-500/50 text-primary-400' : ''
-                }`}
-              >
-                <HiFilter className="w-4 h-4" />
-                <span className="sm:inline">Фильтры</span>
-                {activeFilterCount > 0 && (
-                  <span className="bg-primary-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                    {activeFilterCount}
-                  </span>
-                )}
-                {showFilters ? <HiChevronUp className="w-4 h-4" /> : <HiChevronDown className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => refetch()}
-                className="btn-secondary flex-shrink-0"
-                disabled={isLoading}
-              >
-                <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
+          {/* Row 1: Search */}
+          <div className="flex-1 relative">
+            <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск по имени, email, UUID, Telegram ID..."
+              className="input pl-10"
+            />
           </div>
 
-          {/* Row 2: Expandable filters */}
+          {/* Row 2: Filters | Sort | Refresh */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            {/* Filter toggle */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`btn-secondary flex items-center gap-2 flex-1 sm:flex-none ${
+                activeFilterCount > 0 ? 'border-primary-500/50 text-primary-400' : ''
+              }`}
+            >
+              <HiFilter className="w-4 h-4" />
+              <span>Фильтры</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-primary-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+              {showFilters ? <HiChevronUp className="w-4 h-4" /> : <HiChevronDown className="w-4 h-4" />}
+            </button>
+
+            {/* Separator */}
+            <div className="hidden sm:block w-px h-6 bg-dark-400/20" />
+
+            {/* Sort controls */}
+            <div className="flex items-center gap-2 flex-1 sm:flex-none">
+              {/* Sort order toggle */}
+              <button
+                onClick={() => { setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); setPage(1) }}
+                className="btn-secondary p-2 flex-shrink-0"
+                title={sortOrder === 'desc' ? 'По убыванию' : 'По возрастанию'}
+              >
+                {sortOrder === 'desc' ? (
+                  <HiSortDescending className="w-5 h-5 text-primary-400" />
+                ) : (
+                  <HiSortAscending className="w-5 h-5 text-primary-400" />
+                )}
+              </button>
+
+              {/* Sort dropdown */}
+              <div className="relative flex-1 sm:flex-none sm:w-48">
+                <select
+                  value={sortBy}
+                  onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
+                  className="input text-sm w-full appearance-none pr-8"
+                >
+                  <option value="created_at">Дата создания</option>
+                  <option value="used_traffic_bytes">Трафик (текущий)</option>
+                  <option value="lifetime_used_traffic_bytes">Трафик (за всё время)</option>
+                  <option value="hwid_device_limit">Устройства (HWID)</option>
+                  <option value="online_at">Последняя активность</option>
+                  <option value="expire_at">Дата истечения</option>
+                  <option value="traffic_limit_bytes">Лимит трафика</option>
+                  <option value="username">Имя</option>
+                  <option value="status">Статус</option>
+                </select>
+                <HiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Refresh button */}
+            <button
+              onClick={() => refetch()}
+              className="btn-secondary flex-shrink-0 p-2"
+              disabled={isLoading}
+              title="Обновить"
+            >
+              <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {/* Expandable filter panel */}
           {showFilters && (
             <div className="pt-3 border-t border-dark-400/20 space-y-3 animate-fade-in">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -775,38 +843,6 @@ export default function Users() {
                     <option value="online_30d">Были онлайн за 30 дней</option>
                     <option value="never">Никогда не подключались</option>
                   </select>
-                </div>
-
-                {/* Sort by */}
-                <div>
-                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Сортировка</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
-                    className="input text-sm"
-                  >
-                    <option value="created_at">Дата создания</option>
-                    <option value="used_traffic_bytes">Трафик (текущий)</option>
-                    <option value="lifetime_used_traffic_bytes">Трафик (за всё время)</option>
-                    <option value="hwid_device_limit">Устройства (HWID)</option>
-                    <option value="online_at">Последняя активность</option>
-                    <option value="expire_at">Дата истечения</option>
-                    <option value="traffic_limit_bytes">Лимит трафика</option>
-                    <option value="username">Имя</option>
-                    <option value="status">Статус</option>
-                  </select>
-                </div>
-
-                {/* Sort order */}
-                <div>
-                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Порядок</label>
-                  <button
-                    onClick={() => { setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); setPage(1) }}
-                    className="input text-sm w-full flex items-center justify-between gap-2"
-                  >
-                    <span>{sortOrder === 'desc' ? 'По убыванию' : 'По возрастанию'}</span>
-                    {sortOrder === 'desc' ? <HiSortDescending className="w-4 h-4 text-primary-400" /> : <HiSortAscending className="w-4 h-4 text-primary-400" />}
-                  </button>
                 </div>
 
                 {/* Per page */}
@@ -1074,7 +1110,9 @@ export default function Users() {
                       />
                     </td>
                     <td className="text-center">
-                      <span className="text-dark-100 text-sm">{user.hwid_device_limit}</span>
+                      <span className="text-dark-100 text-sm">
+                        {user.hwid_device_count} / {user.hwid_device_limit || '∞'}
+                      </span>
                     </td>
                     <td>
                       <OnlineIndicator onlineAt={user.online_at} />

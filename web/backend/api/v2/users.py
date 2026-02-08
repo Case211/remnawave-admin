@@ -41,6 +41,8 @@ def _ensure_snake_case(user: dict) -> dict:
         'usedTrafficBytes': 'used_traffic_bytes',
         'lifetimeUsedTrafficBytes': 'lifetime_used_traffic_bytes',
         'hwidDeviceLimit': 'hwid_device_limit',
+        'hwidDeviceCount': 'hwid_device_count',
+        'activeDeviceCount': 'hwid_device_count',
         'createdAt': 'created_at',
         'updatedAt': 'updated_at',
         'onlineAt': 'online_at',
@@ -480,19 +482,119 @@ async def revoke_user_subscription(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/hwid-device-counts")
+async def get_hwid_device_counts(
+    user_uuids: List[str],
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Get HWID device counts for multiple users in one call."""
+    import asyncio
+
+    async def _get_count(uuid: str) -> tuple:
+        try:
+            from src.services.api_client import api_client
+            result = await api_client.get_user_hwid_devices(uuid)
+            response = result.get("response", result) if isinstance(result, dict) else result
+            devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
+            return (uuid, len(devices))
+        except Exception:
+            return (uuid, 0)
+
+    # Limit concurrent requests
+    semaphore = asyncio.Semaphore(10)
+
+    async def _limited_get_count(uuid: str) -> tuple:
+        async with semaphore:
+            return await _get_count(uuid)
+
+    results = await asyncio.gather(*[_limited_get_count(uid) for uid in user_uuids[:100]])
+    return {uuid: count for uuid, count in results}
+
+
+@router.get("/{user_uuid}/traffic-stats")
+async def get_user_traffic_stats(
+    user_uuid: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Get traffic statistics for a user with global bandwidth context."""
+    try:
+        from web.backend.core.api_helper import fetch_bandwidth_stats, fetch_nodes_realtime_usage
+
+        # Get user data
+        user_data = None
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                user_data = await db_service.get_user_by_uuid(user_uuid)
+        except Exception:
+            pass
+
+        if not user_data:
+            try:
+                from src.services.api_client import api_client
+                user_data = await api_client.get_user(user_uuid)
+            except ImportError:
+                raise HTTPException(status_code=503, detail="API service not available")
+
+        if not user_data:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user_data = _ensure_snake_case(user_data)
+
+        used_bytes = user_data.get('used_traffic_bytes', 0) or 0
+        lifetime_bytes = user_data.get('lifetime_used_traffic_bytes', 0) or 0
+        traffic_limit = user_data.get('traffic_limit_bytes')
+
+        # Get global bandwidth stats for period context
+        bw_stats = await fetch_bandwidth_stats()
+        global_periods = {}
+        if bw_stats:
+            for key, label in [
+                ('bandwidthLastTwoDays', 'today'),
+                ('bandwidthLastSevenDays', 'week'),
+                ('bandwidthLast30Days', 'month'),
+                ('bandwidthCurrentYear', 'year'),
+            ]:
+                period_data = bw_stats.get(key, {})
+                try:
+                    global_periods[label] = int(period_data.get('current') or 0)
+                except (ValueError, TypeError):
+                    global_periods[label] = 0
+
+        # Get per-node realtime stats
+        realtime_nodes = await fetch_nodes_realtime_usage()
+        nodes_traffic = []
+        for node in realtime_nodes:
+            nodes_traffic.append({
+                'node_name': node.get('nodeName', 'Unknown'),
+                'node_uuid': node.get('nodeUuid', ''),
+                'total_bytes': int(node.get('totalBytes', 0) or 0),
+                'download_bytes': int(node.get('downloadBytes', 0) or 0),
+                'upload_bytes': int(node.get('uploadBytes', 0) or 0),
+            })
+
+        return {
+            'used_bytes': used_bytes,
+            'lifetime_bytes': lifetime_bytes,
+            'traffic_limit_bytes': traffic_limit,
+            'global_periods': global_periods,
+            'nodes_traffic': nodes_traffic,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting traffic stats for %s: %s", user_uuid, e)
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
 @router.get("/{user_uuid}/hwid-devices", response_model=List[HwidDevice])
 async def get_user_hwid_devices(
     user_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Get HWID devices for a user."""
-    try:
-        from src.services.api_client import api_client
-
-        result = await api_client.get_user_hwid_devices(user_uuid)
-        response = result.get("response", result) if isinstance(result, dict) else result
-        devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
-
+    """Get HWID devices for a user. Tries local DB first, then API."""
+    def _parse_devices(devices: list) -> List[HwidDevice]:
         items = []
         for d in devices:
             items.append(HwidDevice(
@@ -506,6 +608,26 @@ async def get_user_hwid_devices(
                 updated_at=d.get("updatedAt") or d.get("updated_at"),
             ))
         return items
+
+    # Try local DB first (reflects webhook deletions immediately)
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            db_devices = await db_service.get_user_hwid_devices(user_uuid)
+            if db_devices is not None:
+                return _parse_devices(db_devices)
+    except Exception as e:
+        logger.debug("DB HWID fetch failed for %s: %s", user_uuid, e)
+
+    # Fall back to API
+    try:
+        from src.services.api_client import api_client
+
+        result = await api_client.get_user_hwid_devices(user_uuid)
+        response = result.get("response", result) if isinstance(result, dict) else result
+        devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
+
+        return _parse_devices(devices)
 
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")

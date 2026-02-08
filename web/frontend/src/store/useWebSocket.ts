@@ -39,7 +39,7 @@ function getWsUrl(token: string): string {
 }
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000]
-const TOPICS = ['node_status', 'user_update', 'violation', 'connection']
+const TOPICS = ['node_status', 'user_update', 'violation', 'connection', 'hwid_update']
 
 export function useRealtimeUpdates() {
   const queryClient = useQueryClient()
@@ -65,6 +65,15 @@ export function useRealtimeUpdates() {
           case 'user_update':
             queryClient.invalidateQueries({ queryKey: ['users'] })
             if (msg.data?.uuid) {
+              queryClient.invalidateQueries({ queryKey: ['user', msg.data.uuid] })
+              queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', msg.data.uuid] })
+              queryClient.invalidateQueries({ queryKey: ['user-traffic-stats', msg.data.uuid] })
+            }
+            break
+          case 'hwid_update':
+            queryClient.invalidateQueries({ queryKey: ['users'] })
+            if (msg.data?.uuid) {
+              queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', msg.data.uuid] })
               queryClient.invalidateQueries({ queryKey: ['user', msg.data.uuid] })
             }
             break
