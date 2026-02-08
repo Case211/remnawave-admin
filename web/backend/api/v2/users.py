@@ -383,7 +383,7 @@ async def update_user(
     try:
         from src.services.api_client import api_client
 
-        update_data = data.model_dump(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True, mode='json')
         user = await api_client.update_user(user_uuid, **update_data)
 
         return UserDetail(**_ensure_snake_case(user))

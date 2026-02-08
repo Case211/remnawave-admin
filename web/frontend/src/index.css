@@ -179,7 +179,7 @@
 
   /* Dropdown menu */
   .dropdown-menu {
-    @apply absolute right-0 top-full mt-1 w-44 rounded-lg py-1 z-20 border border-dark-400/20 animate-scale-in;
+    @apply absolute right-0 top-full mt-1 w-44 rounded-lg py-1 z-50 border border-dark-400/20 animate-scale-in;
     background: rgba(22, 27, 34, 0.98);
     backdrop-filter: blur(12px);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
