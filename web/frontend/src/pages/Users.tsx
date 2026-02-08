@@ -72,19 +72,6 @@ const fetchUsers = async (params: {
   sort_order: string
 }): Promise<PaginatedResponse> => {
   const { data } = await client.get('/users', { params })
-
-  if (data.items && data.items.length > 0) {
-    try {
-      const uuids = data.items.map((u: UserListItem) => u.uuid)
-      const { data: counts } = await client.post('/users/hwid-device-counts', uuids)
-      for (const item of data.items) {
-        item.hwid_device_count = counts[item.uuid] ?? 0
-      }
-    } catch {
-      // Silently fail - counts will show as 0
-    }
-  }
-
   return data
 }
 
