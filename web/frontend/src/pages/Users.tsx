@@ -28,6 +28,7 @@ interface UserListItem {
   short_uuid: string
   username: string | null
   email: string | null
+  description: string | null
   status: string
   expire_at: string | null
   traffic_limit_bytes: number | null
@@ -340,6 +341,9 @@ function MobileUserCard({
           <p className="font-medium text-white truncate">
             {user.username || user.short_uuid}
           </p>
+          {user.description && (
+            <p className="text-xs text-dark-300 truncate" title={user.description}>{user.description}</p>
+          )}
           {user.email && (
             <p className="text-xs text-dark-200 truncate">{user.email}</p>
           )}
@@ -1095,6 +1099,9 @@ export default function Users() {
                         <span className="font-medium text-white">
                           {user.username || user.short_uuid}
                         </span>
+                        {user.description && (
+                          <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>
+                        )}
                         {user.email && (
                           <p className="text-xs text-dark-200">{user.email}</p>
                         )}

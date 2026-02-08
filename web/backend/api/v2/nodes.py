@@ -273,6 +273,71 @@ async def enable_node(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/{node_uuid}/agent-token")
+async def get_agent_token_status(
+    node_uuid: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Get agent token status for a node (masked)."""
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            token = await db_service.get_node_agent_token(node_uuid)
+            if token:
+                # Return masked token: first 8 + ... + last 4
+                masked = token[:8] + '...' + token[-4:] if len(token) > 12 else '***'
+                return {"has_token": True, "masked_token": masked}
+            return {"has_token": False, "masked_token": None}
+        raise HTTPException(status_code=503, detail="Database not available")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting agent token status for %s: %s", node_uuid, e)
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
+@router.post("/{node_uuid}/agent-token/generate")
+async def generate_agent_token(
+    node_uuid: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Generate a new agent token for a node."""
+    try:
+        from src.services.database import db_service
+        from src.utils.agent_tokens import set_node_agent_token
+
+        token = await set_node_agent_token(db_service, node_uuid)
+        if token:
+            return {"success": True, "token": token}
+        raise HTTPException(status_code=500, detail="Failed to generate token")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error generating agent token for %s: %s", node_uuid, e)
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
+@router.post("/{node_uuid}/agent-token/revoke")
+async def revoke_agent_token(
+    node_uuid: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Revoke agent token for a node."""
+    try:
+        from src.services.database import db_service
+        from src.utils.agent_tokens import revoke_node_agent_token
+
+        success = await revoke_node_agent_token(db_service, node_uuid)
+        if success:
+            return {"success": True}
+        raise HTTPException(status_code=500, detail="Failed to revoke token")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error revoking agent token for %s: %s", node_uuid, e)
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
 @router.post("/{node_uuid}/disable", response_model=SuccessResponse)
 async def disable_node(
     node_uuid: str,

@@ -165,13 +165,6 @@ class SyncService:
             results["config_profiles"] = -1
         
         try:
-            # Sync tokens
-            results["tokens"] = await self.sync_tokens()
-        except Exception as e:
-            logger.error("Failed to sync tokens: %s", e)
-            results["tokens"] = -1
-        
-        try:
             # Sync templates
             results["templates"] = await self.sync_templates()
         except Exception as e:
@@ -377,53 +370,6 @@ class SyncService:
         except Exception as e:
             await db_service.update_sync_metadata(
                 key="config_profiles",
-                status="error",
-                error_message=str(e)
-            )
-            raise
-    
-    async def sync_tokens(self) -> int:
-        """
-        Sync all API tokens from API to database.
-        Returns number of synced tokens.
-        """
-        if not db_service.is_connected:
-            return 0
-        
-        try:
-            response = await api_client.get_tokens()
-            payload = response.get("response", {})
-            
-            # Handle different response formats
-            tokens = []
-            if isinstance(payload, list):
-                tokens = payload
-            elif isinstance(payload, dict):
-                tokens = payload.get("apiKeys") or payload.get("tokens") or []
-            
-            # Clear old tokens and insert new
-            await db_service.delete_all_tokens()
-            
-            total_synced = 0
-            for token in tokens:
-                try:
-                    await db_service.upsert_token({"response": token})
-                    total_synced += 1
-                except Exception as e:
-                    logger.warning("Failed to sync token %s: %s", token.get("uuid"), e)
-            
-            await db_service.update_sync_metadata(
-                key="tokens",
-                status="success",
-                records_synced=total_synced
-            )
-            
-            logger.debug("Synced %d tokens", total_synced)
-            return total_synced
-            
-        except Exception as e:
-            await db_service.update_sync_metadata(
-                key="tokens",
                 status="error",
                 error_message=str(e)
             )
@@ -739,7 +685,9 @@ class SyncService:
             # Добавляем устройство в БД
             platform = hwid_data.get("platform")
             os_version = hwid_data.get("osVersion")
+            device_model = hwid_data.get("deviceModel")
             app_version = hwid_data.get("appVersion")
+            user_agent = hwid_data.get("userAgent")
             created_at = hwid_data.get("createdAt")
             updated_at = hwid_data.get("updatedAt")
 
@@ -762,7 +710,9 @@ class SyncService:
                 hwid=hwid,
                 platform=platform,
                 os_version=os_version,
+                device_model=device_model,
                 app_version=app_version,
+                user_agent=user_agent,
                 created_at=created_dt,
                 updated_at=updated_dt
             )

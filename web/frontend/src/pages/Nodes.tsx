@@ -15,6 +15,10 @@ import {
   HiStop,
   HiX,
   HiPlus,
+  HiKey,
+  HiClipboardCopy,
+  HiShieldCheck,
+  HiExclamation,
 } from 'react-icons/hi'
 import client from '../api/client'
 
@@ -289,6 +293,183 @@ function NodeCreateModal({
   )
 }
 
+// Agent token management modal
+function AgentTokenModal({
+  node,
+  onClose,
+}: {
+  node: Node
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [generatedToken, setGeneratedToken] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const { data: tokenStatus, isLoading } = useQuery<{ has_token: boolean; masked_token: string | null }>({
+    queryKey: ['node-agent-token', node.uuid],
+    queryFn: async () => {
+      const { data } = await client.get(`/nodes/${node.uuid}/agent-token`)
+      return data
+    },
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await client.post(`/nodes/${node.uuid}/agent-token/generate`)
+      return data
+    },
+    onSuccess: (data) => {
+      setGeneratedToken(data.token)
+      queryClient.invalidateQueries({ queryKey: ['node-agent-token', node.uuid] })
+    },
+  })
+
+  const revokeMutation = useMutation({
+    mutationFn: async () => {
+      await client.post(`/nodes/${node.uuid}/agent-token/revoke`)
+    },
+    onSuccess: () => {
+      setGeneratedToken(null)
+      queryClient.invalidateQueries({ queryKey: ['node-agent-token', node.uuid] })
+    },
+  })
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const envConfig = generatedToken
+    ? `AGENT_NODE_UUID=${node.uuid}\nAGENT_AUTH_TOKEN=${generatedToken}\nAGENT_COLLECTOR_URL=https://your-admin-bot.com`
+    : null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg card border border-dark-400/20 animate-scale-in">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <HiKey className="w-5 h-5 text-primary-400" />
+            <h2 className="text-lg font-semibold text-white">Токен Node Agent</h2>
+          </div>
+          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
+            <HiX className="w-5 h-5" />
+          </button>
+        </div>
+
+        <p className="text-sm text-dark-200 mb-4">
+          Нода: <span className="text-white font-medium">{node.name}</span>
+        </p>
+
+        {isLoading ? (
+          <div className="py-8 text-center">
+            <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Token status */}
+            <div className="p-3 bg-dark-800/50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-dark-200">Статус</span>
+                {tokenStatus?.has_token ? (
+                  <span className="flex items-center gap-1.5 text-sm text-green-400">
+                    <HiShieldCheck className="w-4 h-4" />
+                    Установлен
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-sm text-yellow-400">
+                    <HiExclamation className="w-4 h-4" />
+                    Не установлен
+                  </span>
+                )}
+              </div>
+              {tokenStatus?.masked_token && !generatedToken && (
+                <p className="text-xs text-dark-300 font-mono mt-2">{tokenStatus.masked_token}</p>
+              )}
+            </div>
+
+            {/* Generated token display */}
+            {generatedToken && (
+              <div className="p-3 bg-primary-500/5 border border-primary-500/20 rounded-lg space-y-3">
+                <div className="flex items-center gap-1.5 text-xs text-yellow-400">
+                  <HiExclamation className="w-3.5 h-3.5" />
+                  Сохраните токен! Он больше не будет показан.
+                </div>
+                <div className="relative">
+                  <pre className="text-xs text-primary-300 font-mono bg-dark-900/50 p-2.5 rounded overflow-x-auto whitespace-pre-wrap break-all">{generatedToken}</pre>
+                  <button
+                    onClick={() => copyToClipboard(generatedToken)}
+                    className="absolute top-1.5 right-1.5 p-1 text-dark-300 hover:text-white rounded transition-colors"
+                    title="Копировать токен"
+                  >
+                    <HiClipboardCopy className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Env config hint */}
+                {envConfig && (
+                  <div>
+                    <p className="text-xs text-dark-300 mb-1.5">Для .env файла агента:</p>
+                    <div className="relative">
+                      <pre className="text-[11px] text-dark-200 font-mono bg-dark-900/50 p-2.5 rounded overflow-x-auto whitespace-pre-wrap break-all">{envConfig}</pre>
+                      <button
+                        onClick={() => copyToClipboard(envConfig)}
+                        className="absolute top-1.5 right-1.5 p-1 text-dark-300 hover:text-white rounded transition-colors"
+                        title="Копировать конфиг"
+                      >
+                        <HiClipboardCopy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {copied && (
+                  <p className="text-xs text-green-400">Скопировано!</p>
+                )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                onClick={() => {
+                  if (tokenStatus?.has_token && !generatedToken) {
+                    if (confirm('Сгенерировать новый токен? Старый перестанет работать.')) {
+                      generateMutation.mutate()
+                    }
+                  } else {
+                    generateMutation.mutate()
+                  }
+                }}
+                disabled={generateMutation.isPending}
+                className="btn-primary px-4 py-2 flex items-center gap-2 text-sm"
+              >
+                <HiKey className="w-4 h-4" />
+                {generateMutation.isPending ? 'Генерация...' : tokenStatus?.has_token ? 'Перегенерировать' : 'Сгенерировать'}
+              </button>
+
+              {tokenStatus?.has_token && (
+                <button
+                  onClick={() => {
+                    if (confirm('Отозвать токен? Node Agent потеряет доступ.')) {
+                      revokeMutation.mutate()
+                    }
+                  }}
+                  disabled={revokeMutation.isPending}
+                  className="btn-secondary px-4 py-2 flex items-center gap-2 text-sm text-red-400 hover:text-red-300"
+                >
+                  {revokeMutation.isPending ? 'Отзыв...' : 'Отозвать'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Node card component
 function NodeCard({
   node,
@@ -297,6 +478,7 @@ function NodeCard({
   onEnable,
   onDisable,
   onDelete,
+  onTokenManage,
 }: {
   node: Node
   onRestart: () => void
@@ -304,6 +486,7 @@ function NodeCard({
   onEnable: () => void
   onDisable: () => void
   onDelete: () => void
+  onTokenManage: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -388,6 +571,15 @@ function NodeCard({
                     className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
                   >
                     <HiPencil className="w-4 h-4" /> Редактировать
+                  </button>
+                  <button
+                    onClick={() => {
+                      onTokenManage()
+                      setMenuOpen(false)
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
+                  >
+                    <HiKey className="w-4 h-4" /> Токен агента
                   </button>
                   <div className="border-t border-dark-400/20 my-1" />
                   {node.is_disabled ? (
@@ -512,6 +704,7 @@ export default function Nodes() {
   const [editError, setEditError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [tokenNode, setTokenNode] = useState<Node | null>(null)
 
   // Fetch nodes
   const { data: nodes = [], isLoading, refetch } = useQuery({
@@ -674,6 +867,7 @@ export default function Nodes() {
                 onEnable={() => enableNode.mutate(node.uuid)}
                 onDisable={() => disableNode.mutate(node.uuid)}
                 onDelete={() => deleteNode.mutate(node.uuid)}
+                onTokenManage={() => setTokenNode(node)}
               />
             </div>
           ))
@@ -698,6 +892,14 @@ export default function Nodes() {
           onSave={(data) => createNode.mutate(data)}
           isPending={createNode.isPending}
           error={createError}
+        />
+      )}
+
+      {/* Agent token modal */}
+      {tokenNode && (
+        <AgentTokenModal
+          node={tokenNode}
+          onClose={() => setTokenNode(null)}
         />
       )}
     </div>
