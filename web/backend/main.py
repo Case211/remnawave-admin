@@ -24,6 +24,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from web.backend.core.config import get_web_settings
+from web.backend.core.ip_whitelist import get_allowed_ips, is_ip_allowed
 from web.backend.core.rate_limit import limiter
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 from web.backend.api.v2 import settings as settings_api
@@ -226,6 +227,32 @@ def create_app() -> FastAPI:
             "frame-ancestors 'none'"
         )
         return response
+
+    # IP whitelist middleware (checked before routing)
+    @app.middleware("http")
+    async def ip_whitelist_middleware(request: Request, call_next):
+        # Skip health check so monitoring still works
+        if request.url.path in ("/", "/api/v2/health"):
+            return await call_next(request)
+
+        allowed = get_allowed_ips()
+        if allowed:
+            forwarded = request.headers.get("x-forwarded-for")
+            client_ip = forwarded.split(",")[0].strip() if forwarded else (
+                request.client.host if request.client else "unknown"
+            )
+            if not is_ip_allowed(client_ip, allowed):
+                logger.warning("IP %s rejected by whitelist (path: %s)", client_ip, request.url.path)
+                # Async notification (fire-and-forget)
+                from web.backend.core.notifier import notify_ip_rejected
+                import asyncio
+                asyncio.create_task(notify_ip_rejected(client_ip, str(request.url.path)))
+                return Response(
+                    content='{"detail":"Access denied"}',
+                    status_code=403,
+                    media_type="application/json",
+                )
+        return await call_next(request)
 
     # Include routers
     app.include_router(auth.router, prefix="/api/v2/auth", tags=["auth"])

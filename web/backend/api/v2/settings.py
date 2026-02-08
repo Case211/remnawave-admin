@@ -262,6 +262,62 @@ async def reset_setting(
         raise HTTPException(status_code=500, detail="Internal error")
 
 
+@router.get("/ip-whitelist")
+async def get_ip_whitelist(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Get current IP whitelist configuration."""
+    from web.backend.core.config import get_web_settings
+    from web.backend.core.ip_whitelist import parse_ip_list
+
+    settings = get_web_settings()
+    ips = parse_ip_list(settings.allowed_ips)
+    return {
+        "enabled": len(ips) > 0,
+        "ips": ips,
+        "env_var": "WEB_ALLOWED_IPS",
+    }
+
+
+@router.put("/ip-whitelist")
+async def update_ip_whitelist(
+    data: ConfigUpdateRequest,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Update IP whitelist. Value is a comma-separated list of IPs/CIDRs.
+
+    The setting is stored as WEB_ALLOWED_IPS environment variable override.
+    Changes take effect after restart (env vars are read at startup).
+    To apply immediately, the value is also hot-patched into the running config.
+    """
+    import ipaddress
+
+    # Validate all entries
+    entries = [ip.strip() for ip in data.value.split(",") if ip.strip()] if data.value.strip() else []
+    for entry in entries:
+        try:
+            if "/" in entry:
+                ipaddress.ip_network(entry, strict=False)
+            else:
+                ipaddress.ip_address(entry)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid IP/CIDR: {entry}")
+
+    # Hot-patch the running config
+    from web.backend.core.config import get_web_settings
+    settings = get_web_settings()
+    new_value = ",".join(entries)
+
+    # Update the env var so middleware picks it up
+    os.environ["WEB_ALLOWED_IPS"] = new_value
+    # Also patch the cached settings object
+    object.__setattr__(settings, "allowed_ips", new_value)
+
+    logger.info("IP whitelist updated by %s: %s", admin.username, new_value or "(disabled)")
+
+    return {"status": "ok", "ips": entries, "enabled": len(entries) > 0}
+
+
 @router.get("/sync-status")
 async def get_sync_status(
     admin: AdminUser = Depends(get_current_admin),

@@ -32,6 +32,9 @@ class WebSettings(BaseSettings):
     admin_login: Optional[str] = Field(default=None, alias="WEB_ADMIN_LOGIN")
     admin_password: Optional[str] = Field(default=None, alias="WEB_ADMIN_PASSWORD")
 
+    # IP whitelist (optional, comma-separated IPs/CIDRs — empty = allow all)
+    allowed_ips: str = Field(default="", alias="WEB_ALLOWED_IPS")
+
     # CORS
     cors_origins_raw: str = Field(
         default="http://localhost:3000,http://localhost:5173",

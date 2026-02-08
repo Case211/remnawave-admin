@@ -5,6 +5,11 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from web.backend.api.deps import get_current_admin, AdminUser
 from web.backend.core.config import get_web_settings
 from web.backend.core.login_guard import login_guard
+from web.backend.core.notifier import (
+    notify_login_failed,
+    notify_login_success,
+    notify_ip_blocked,
+)
 from web.backend.core.rate_limit import limiter
 from web.backend.core.security import (
     verify_telegram_auth,
@@ -27,6 +32,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP, respecting X-Forwarded-For behind a reverse proxy."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # First IP in the chain is the original client
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/telegram", response_model=TokenResponse)
 @limiter.limit("5/minute")
 async def telegram_login(request: Request, data: TelegramAuthData):
@@ -36,7 +50,7 @@ async def telegram_login(request: Request, data: TelegramAuthData):
     Verifies the data signature and creates JWT tokens.
     """
     settings = get_web_settings()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _get_client_ip(request)
 
     # Check brute-force lockout
     if login_guard.is_locked(client_ip):
@@ -49,13 +63,21 @@ async def telegram_login(request: Request, data: TelegramAuthData):
     # Convert to dict for verification
     auth_dict = data.model_dump()
 
-    logger.info("Login attempt from Telegram user (id=%d)", data.id)
+    logger.info("Login attempt from Telegram user (id=%d) from %s", data.id, client_ip)
 
     # Verify Telegram signature
     is_valid, error_message = verify_telegram_auth(auth_dict)
     if not is_valid:
         logger.warning("Auth verification failed for user id=%d: %s", data.id, error_message)
-        login_guard.record_failure(client_ip)
+        locked = login_guard.record_failure(client_ip)
+        await notify_login_failed(
+            ip=client_ip,
+            username=f"tg:{data.id}",
+            auth_method="telegram",
+            reason=error_message,
+        )
+        if locked:
+            await notify_ip_blocked(client_ip, 900, 5)
         raise HTTPException(
             status_code=401,
             detail=f"Invalid Telegram auth data: {error_message}"
@@ -64,7 +86,15 @@ async def telegram_login(request: Request, data: TelegramAuthData):
     # Check if user is in admins list
     if data.id not in settings.admins:
         logger.warning(f"User {data.id} is not in admins list: {settings.admins}")
-        login_guard.record_failure(client_ip)
+        locked = login_guard.record_failure(client_ip)
+        await notify_login_failed(
+            ip=client_ip,
+            username=f"tg:{data.id} ({data.username or data.first_name})",
+            auth_method="telegram",
+            reason="Not in admins list",
+        )
+        if locked:
+            await notify_ip_blocked(client_ip, 900, 5)
         raise HTTPException(
             status_code=403,
             detail="Access denied"
@@ -79,7 +109,8 @@ async def telegram_login(request: Request, data: TelegramAuthData):
     access_token = create_access_token(subject, username, auth_method="telegram")
     refresh_token = create_refresh_token(subject)
 
-    logger.info("Login successful for user id=%d", data.id)
+    logger.info("Login successful for user id=%d from %s", data.id, client_ip)
+    await notify_login_success(ip=client_ip, username=username, auth_method="telegram")
 
     return TokenResponse(
         access_token=access_token,
@@ -97,7 +128,7 @@ async def password_login(request: Request, data: LoginRequest):
     WEB_ADMIN_LOGIN / WEB_ADMIN_PASSWORD must be configured in .env.
     """
     settings = get_web_settings()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _get_client_ip(request)
 
     # Check brute-force lockout
     if login_guard.is_locked(client_ip):
@@ -118,8 +149,16 @@ async def password_login(request: Request, data: LoginRequest):
 
     # Verify credentials
     if not verify_admin_password(data.username, data.password):
-        login_guard.record_failure(client_ip)
+        locked = login_guard.record_failure(client_ip)
         logger.warning("Password login failed for user '%s' from %s", data.username, client_ip)
+        await notify_login_failed(
+            ip=client_ip,
+            username=data.username,
+            auth_method="password",
+            reason="Invalid credentials",
+        )
+        if locked:
+            await notify_ip_blocked(client_ip, 900, 5)
         raise HTTPException(
             status_code=401,
             detail="Invalid username or password",
@@ -132,7 +171,8 @@ async def password_login(request: Request, data: LoginRequest):
     access_token = create_access_token(subject, data.username, auth_method="password")
     refresh_token = create_refresh_token(subject)
 
-    logger.info("Password login successful for user '%s'", data.username)
+    logger.info("Password login successful for user '%s' from %s", data.username, client_ip)
+    await notify_login_success(ip=client_ip, username=data.username, auth_method="password")
 
     return TokenResponse(
         access_token=access_token,
