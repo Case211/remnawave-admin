@@ -5,6 +5,76 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-02-08
+
+### Added
+
+#### Web Admin Panel
+- **Full-featured web admin panel** built with React 18 + TypeScript + Tailwind CSS
+- **Telegram Login Widget authentication** with JWT (access + refresh tokens)
+- **Dark theme** with teal/cyan accent colors, fully responsive design
+- **Smooth animations** system: fade-in, fade-in-up, scale-in, slide, shimmer, glow-pulse
+- **Stagger animations** for dynamic lists (`.stagger-1` through `.stagger-8`)
+- Pages: Dashboard, Users, User Detail, Nodes, Hosts, Violations, Settings, Login
+
+#### Dashboard
+- Real-time system overview: users (active/expired/disabled), nodes (online/offline), hosts
+- **Bandwidth Stats API integration** — accurate traffic data (today, week, month, total) from `/api/system/stats/bandwidth`
+- Per-node realtime traffic from `/api/bandwidth-stats/nodes/realtime`
+- Violation statistics with severity bar charts (Recharts) and action breakdown
+- System health indicators (API, nodes, database) with live status dots
+- Quick action navigation cards
+
+#### Violations Page (Full Rewrite)
+- Detailed violation viewer with tabs: Overview, Devices, Geography
+- Advanced filtering: severity level, action, country, date range
+- Search by username and IP address
+- **IP Lookup feature** — resolve provider name, city, connection type (ISP/mobile/hosting/VPN) via GeoIP
+- Pagination, sorting, severity badges with color coding
+- UUID-to-string fix for violation list rendering
+
+#### Settings System v2
+- **Priority changed**: DB > .env > default values (was: .env > DB > default)
+- **Auto-save**: instant for boolean/select toggles, 800ms debounce for text/number inputs
+- **20+ new fine-tuning settings**:
+  - Violation weights (temporal, geo, ASN, profile, device)
+  - Cooldown between analyses, retention period, notification throttling
+  - Quiet hours for notifications
+  - Sync retry count, GeoIP cache TTL
+  - Dashboard refresh interval, timezone, table rows per page
+- Source badges (DB / env / Default) with visual indicators
+- Reset to fallback value (X button on hover)
+- Full-text search across all settings
+- Subcategory grouping within categories
+
+#### Dynamic Bot Language
+- Language changed via web panel now applies **instantly without restart**
+- i18n middleware reads language from `config_service` (DB) on every request
+- Removed `.env` locking in Telegram bot config handler
+
+#### Security
+- **Security audit** of web panel with P0–P2 fixes documented in `web/SECURITY_AUDIT.md`
+- JWT validation hardening, XSS protection, API access restrictions
+- Input sanitization for settings values
+
+### Changed
+- Config priority inverted: database values now take precedence over `.env` for runtime flexibility
+- Overview and traffic endpoints use Remnawave Bandwidth Stats API instead of broken DB fallback
+- Node list enriched with realtime bandwidth data for per-node today traffic
+- User status comparison made case-insensitive (handles `ACTIVE`, `Active`, `active`)
+- Traffic extraction handles nested `userTraffic.usedTrafficBytes` from raw API data
+- Project structure updated in README to reflect web panel directories
+
+### Fixed
+- Dashboard showing 0 for active/expired users (case-sensitive status comparison)
+- Dashboard showing 0 for all traffic stats (nested `userTraffic` object not extracted)
+- Week/month traffic showing same as total (broken fallback: `week = total, month = total`)
+- Node "today" traffic always 0 (`trafficTodayBytes` field doesn't exist in Remnawave API)
+- Violation list empty due to UUID-to-string conversion error
+- Bot language not changing after update via web panel (static `settings.default_locale`)
+
+---
+
 ## [1.6.0] - 2026-01-31
 
 ### Added

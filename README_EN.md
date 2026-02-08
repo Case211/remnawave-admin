@@ -63,11 +63,20 @@
 - ⚡ Automatic actions based on scoring thresholds
 - 📡 Integration with Node Agent for data collection
 
+### 🌐 Web Admin Panel
+- 📊 Dashboard with system overview and violation charts
+- 👥 User management (search, filters, editing, detailed view)
+- 🛰 Node management with real-time traffic data
+- 🛡 Violation viewer with IP Lookup (provider, city, connection type)
+- ⚙️ Settings with auto-save and DB > .env priority
+- 🔐 Telegram Login Widget + JWT authentication
+- 🎨 Dark theme, responsive design, smooth animations
+
 ### ⚙️ Dynamic Settings
 - 🔧 Change bot settings without restart
 - 📂 Categories: General, Notifications, Violations, Collector, Limits
-- 🔒 Protection of .env settings from overwrite
-- ✅ Type and value validation
+- 🔄 Priority: DB > .env > default values
+- ✅ Type and value validation, auto-save
 
 ### 🌐 Additional Features
 - 🌍 Russian and English language support
@@ -79,6 +88,44 @@
 ---
 
 ## 🆕 What's New
+
+### Version 1.7
+
+**🌐 Web Admin Panel**
+- Full-featured web admin panel built with React + TypeScript + Tailwind CSS
+- Authentication via Telegram Login Widget + JWT (access/refresh tokens)
+- Dark theme with teal/cyan accents, responsive design
+- Smooth animations: fade-in, scale-in, slide, stagger effects for lists
+- Pages: Dashboard, Users, User Details, Nodes, Hosts, Violations, Settings
+
+**📊 Dashboard**
+- System overview: users (active/expired/disabled), nodes (online/offline), hosts
+- Real-time traffic via Remnawave Bandwidth Stats API (today, week, month, total)
+- Violation statistics with severity and action charts
+- System health indicators (API, nodes, DB)
+- Quick action navigation
+
+**🛡 Violations Page**
+- Full rewrite: list with detailed view, tabs (overview, devices, geography)
+- Filtering by severity, action, country, date
+- Search by username and IP address
+- IP Lookup — provider, city, connection type (ISP/mobile/hosting/VPN)
+- Pagination, sorting, bulk export
+
+**⚙️ Settings System (v2)**
+- Value priority changed: DB > .env > default values
+- Auto-save: instant for toggles, 800ms debounce for text/number inputs
+- 20+ new fine-tuning settings (violation weights, cooldown, retention, quiet hours, GeoIP cache, dashboard refresh interval, timezone)
+- Source badges (DB / env / Default), reset to fallback value
+- Search across all settings, subcategory grouping
+
+**🌍 Dynamic Bot Language Switching**
+- Bot language changed via web panel applies instantly without restart
+- i18n middleware reads language from config_service (DB) on every request
+
+**🔒 Security Audit**
+- Web panel security audit performed (P0–P2 fixes)
+- JWT validation, XSS protection, API access restrictions
 
 ### Version 1.6
 
@@ -413,47 +460,38 @@ The bot uses inline keyboards for navigation. Main sections:
 
 ```
 remnawave-admin/
-├── src/
-│   ├── main.py                 # Application entry point
-│   ├── config.py               # Configuration management
-│   ├── handlers/               # Event handlers
-│   │   ├── basic.py            # Basic handlers
-│   │   ├── commands.py         # Command handlers
-│   │   ├── users.py            # User management
-│   │   ├── nodes.py            # Node management
-│   │   ├── hosts.py            # Host management
-│   │   ├── resources.py        # Resources (templates, snippets)
-│   │   ├── billing.py          # Billing
-│   │   ├── system.py           # System information
-│   │   ├── navigation.py       # Navigation
-│   │   ├── bulk.py             # Bulk operations
-│   │   ├── common.py           # Common utilities
-│   │   ├── errors.py           # Error handling
-│   │   └── state.py            # State management
-│   ├── keyboards/              # Inline keyboards
-│   │   ├── main_menu.py        # Main menu
-│   │   ├── user_actions.py    # User actions
-│   │   ├── nodes_menu.py       # Node menu
-│   │   └── ...                 # Other keyboards
-│   ├── services/               # Services
-│   │   ├── api_client.py       # Remnawave API client
-│   │   └── webhook.py          # Webhook server (FastAPI)
-│   └── utils/                   # Utilities
-│       ├── formatters.py       # Data formatting
-│       ├── notifications.py     # Notifications
-│       ├── auth.py              # Authentication
-│       ├── logger.py            # Logging
-│       └── i18n.py              # Internationalization
-├── locales/                     # Localization
-│   ├── ru/                      # Russian language
-│   │   └── messages.json
-│   └── en/                      # English language
-│       └── messages.json
-├── docker-compose.yml          # Docker Compose configuration
-├── Dockerfile                  # Docker image definition
-├── requirements.txt            # Python dependencies
-├── WEBHOOK_SETUP.md           # Webhook setup instructions
-└── README.md                   # This file
+├── src/                            # Telegram bot
+│   ├── main.py                     # Application entry point
+│   ├── config.py                   # Configuration management
+│   ├── handlers/                   # Event handlers
+│   │   ├── users.py                # User management
+│   │   ├── nodes.py                # Node management
+│   │   ├── hosts.py                # Host management
+│   │   ├── bot_config.py           # Dynamic settings
+│   │   └── ...                     # Other handlers
+│   ├── keyboards/                  # Inline keyboards
+│   ├── services/                   # Services
+│   │   ├── api_client.py           # Remnawave API client
+│   │   ├── database.py             # PostgreSQL service
+│   │   ├── config_service.py       # Configuration service (DB > .env)
+│   │   ├── violation_detector.py   # Anti-Abuse detector
+│   │   └── webhook.py              # Webhook server
+│   └── utils/                      # Utilities (i18n, logging, formatting)
+├── web/                            # Web admin panel
+│   ├── frontend/                   # React + TypeScript + Tailwind
+│   │   └── src/
+│   │       ├── pages/              # Dashboard, Users, Nodes, Violations, Settings...
+│   │       ├── components/layout/  # Layout, Header, Sidebar
+│   │       ├── store/              # Zustand (auth)
+│   │       └── api/                # Axios client
+│   └── backend/                    # FastAPI backend for web panel
+│       ├── api/v2/                 # REST API endpoints
+│       ├── core/                   # Config, security, API helper
+│       └── schemas/                # Pydantic models
+├── node-agent/                     # Node Agent for connection data collection
+├── locales/                        # Localization (ru, en)
+├── docker-compose.yml              # Docker Compose (profiles: bot, web)
+└── README.md                       # This file
 ```
 
 ---
