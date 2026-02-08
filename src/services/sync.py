@@ -199,15 +199,17 @@ class SyncService:
         """
         Sync all users from API to database.
         Uses pagination to handle large datasets.
+        Removes local users that no longer exist in API.
         Returns number of synced users.
         """
         if not db_service.is_connected:
             return 0
-        
+
         total_synced = 0
         start = 0
         page_size = 100
-        
+        api_user_uuids: set[str] = set()
+
         try:
             while True:
                 # Fetch users from API with pagination
@@ -216,38 +218,56 @@ class SyncService:
                     size=page_size,
                     skip_cache=True
                 )
-                
+
                 # API returns: {"response": {"users": [...], "total": N}}
                 payload = response.get("response", response)
                 users = payload.get("users") if isinstance(payload, dict) else []
                 total = payload.get("total", 0) if isinstance(payload, dict) else 0
-                
+
                 if not users:
                     break
-                
+
                 # Upsert users to database
                 for user in users:
+                    user_uuid = user.get("uuid")
+                    if user_uuid:
+                        api_user_uuids.add(user_uuid)
                     try:
                         await db_service.upsert_user({"response": user})
                         total_synced += 1
                     except Exception as e:
                         logger.warning("Failed to sync user %s: %s", user.get("uuid"), e)
-                
+
                 # Check if we've reached the end
                 start += page_size
                 if start >= total or len(users) < page_size:
                     break
-            
+
+            # Remove local users that no longer exist in API
+            if api_user_uuids:
+                try:
+                    local_users = await db_service.get_all_users(limit=50000)
+                    removed = 0
+                    for local_user in local_users:
+                        local_uuid = local_user.get("uuid")
+                        if local_uuid and local_uuid not in api_user_uuids:
+                            await db_service.delete_user(local_uuid)
+                            removed += 1
+                    if removed:
+                        logger.info("Removed %d stale users from local DB (not in API)", removed)
+                except Exception as e:
+                    logger.warning("Failed to reconcile stale users: %s", e)
+
             # Update sync metadata
             await db_service.update_sync_metadata(
                 key="users",
                 status="success",
                 records_synced=total_synced
             )
-            
+
             logger.debug("Synced %d users", total_synced)
             return total_synced
-            
+
         except Exception as e:
             await db_service.update_sync_metadata(
                 key="users",
@@ -259,34 +279,52 @@ class SyncService:
     async def sync_nodes(self) -> int:
         """
         Sync all nodes from API to database.
+        Removes local nodes that no longer exist in API.
         Returns number of synced nodes.
         """
         if not db_service.is_connected:
             return 0
-        
+
         try:
             # Fetch all nodes from API
             response = await api_client.get_nodes(skip_cache=True)
             nodes = response.get("response", [])
-            
+
+            # Collect API node UUIDs for reconciliation
+            api_node_uuids = set()
+
             total_synced = 0
             for node in nodes:
+                node_uuid = node.get("uuid")
+                if node_uuid:
+                    api_node_uuids.add(node_uuid)
                 try:
                     await db_service.upsert_node({"response": node})
                     total_synced += 1
                 except Exception as e:
                     logger.warning("Failed to sync node %s: %s", node.get("uuid"), e)
-            
+
+            # Remove local nodes that no longer exist in API
+            try:
+                local_nodes = await db_service.get_all_nodes()
+                for local_node in local_nodes:
+                    local_uuid = local_node.get("uuid")
+                    if local_uuid and local_uuid not in api_node_uuids:
+                        await db_service.delete_node(local_uuid)
+                        logger.info("Removed stale node %s from local DB (not in API)", local_uuid)
+            except Exception as e:
+                logger.warning("Failed to reconcile stale nodes: %s", e)
+
             # Update sync metadata
             await db_service.update_sync_metadata(
                 key="nodes",
                 status="success",
                 records_synced=total_synced
             )
-            
+
             logger.debug("Synced %d nodes", total_synced)
             return total_synced
-            
+
         except Exception as e:
             await db_service.update_sync_metadata(
                 key="nodes",

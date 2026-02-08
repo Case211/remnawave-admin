@@ -321,6 +321,27 @@ class RemnawaveApiClient:
     async def enable_user(self, user_uuid: str) -> dict:
         return await self._post(f"/api/users/{user_uuid}/actions/enable")
 
+    async def delete_user(self, user_uuid: str) -> dict:
+        """Delete a single user by UUID."""
+        try:
+            response = await self._client.delete(f"/api/users/{user_uuid}")
+            response.raise_for_status()
+            result = response.json()
+            await cache.invalidate(CacheKeys.STATS)
+            return result
+        except HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status in (401, 403):
+                raise UnauthorizedError from exc
+            if status == 404:
+                raise NotFoundError from exc
+            logger.warning("API error %s on DELETE /api/users/%s: %s", status, user_uuid, exc.response.text)
+            raise ApiClientError from exc
+        except httpx.HTTPError as exc:
+            error_type = type(exc).__name__
+            logger.warning("HTTP client error on DELETE /api/users/%s: %s (%s)", user_uuid, exc, error_type)
+            raise ApiClientError from exc
+
     async def reset_user_traffic(self, user_uuid: str) -> dict:
         return await self._post(f"/api/users/{user_uuid}/actions/reset-traffic")
 

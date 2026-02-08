@@ -54,6 +54,11 @@ class WebSettings(BaseSettings):
     # Admins list (shared with bot)
     admins_raw: str = Field(default="", alias="ADMINS")
 
+    # Notifications (shared with bot)
+    notifications_chat_id: Optional[str] = Field(default=None, alias="NOTIFICATIONS_CHAT_ID")
+    notifications_topic_service: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_SERVICE")
+    notifications_topic_id: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_ID")
+
     @field_validator("jwt_algorithm", mode="before")
     @classmethod
     def validate_jwt_algorithm(cls, v):

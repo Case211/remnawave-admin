@@ -22,16 +22,15 @@ async def _send_telegram_message(text: str, topic_id: Optional[int] = None) -> b
     settings = get_web_settings()
     bot_token = settings.telegram_bot_token
 
-    # Get chat_id from environment (shared with bot)
-    import os
-    chat_id = os.getenv("NOTIFICATIONS_CHAT_ID")
+    # Get chat_id from settings (reads .env via pydantic_settings)
+    chat_id = settings.notifications_chat_id
     if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return False
 
-    # Get service topic from environment
+    # Get service topic from settings
     if topic_id is None:
-        topic_id_str = os.getenv("NOTIFICATIONS_TOPIC_SERVICE") or os.getenv("NOTIFICATIONS_TOPIC_ID")
+        topic_id_str = settings.notifications_topic_service or settings.notifications_topic_id
         if topic_id_str:
             try:
                 topic_id = int(topic_id_str)

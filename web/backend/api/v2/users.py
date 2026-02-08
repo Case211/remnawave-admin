@@ -405,6 +405,15 @@ async def delete_user(
         from src.services.api_client import api_client
 
         await api_client.delete_user(user_uuid)
+
+        # Also remove from local DB so UI updates immediately
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                await db_service.delete_user(user_uuid)
+        except Exception:
+            pass  # non-critical, sync will reconcile
+
         return SuccessResponse(message="User deleted")
 
     except ImportError:
