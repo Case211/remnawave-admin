@@ -28,6 +28,17 @@ interface UserDetailData {
   unique_ips_24h: number
 }
 
+interface HwidDevice {
+  hwid: string
+  platform: string | null
+  os_version: string | null
+  device_model: string | null
+  app_version: string | null
+  user_agent: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 interface Violation {
   id: number
   score: number
@@ -122,6 +133,16 @@ function parseUserAgent(ua: string | null): { os: string; app: string; raw: stri
   return { os, app, raw: ua }
 }
 
+function getPlatformInfo(platform: string | null): { icon: string; label: string } {
+  const p = (platform || '').toLowerCase()
+  if (p.includes('windows') || p === 'win') return { icon: '🖥️', label: 'Windows' }
+  if (p.includes('android')) return { icon: '📱', label: 'Android' }
+  if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return { icon: '📱', label: 'iOS' }
+  if (p.includes('macos') || p.includes('mac') || p.includes('darwin')) return { icon: '💻', label: 'macOS' }
+  if (p.includes('linux')) return { icon: '🐧', label: 'Linux' }
+  return { icon: '📟', label: platform || 'Неизвестно' }
+}
+
 function bytesToGb(bytes: number | null): string {
   if (!bytes) return ''
   return (bytes / (1024 * 1024 * 1024)).toFixed(2)
@@ -174,6 +195,16 @@ export default function UserDetail() {
     queryKey: ['user-violations', uuid],
     queryFn: async () => {
       const response = await client.get(`/violations/user/${uuid}`)
+      return response.data
+    },
+    enabled: !!uuid,
+  })
+
+  // Fetch HWID devices
+  const { data: hwidDevices } = useQuery<HwidDevice[]>({
+    queryKey: ['user-hwid-devices', uuid],
+    queryFn: async () => {
+      const response = await client.get(`/users/${uuid}/hwid-devices`)
       return response.data
     },
     enabled: !!uuid,
@@ -633,27 +664,104 @@ export default function UserDetail() {
             </div>
           </div>
 
-          {/* Block: Device & Client */}
+          {/* Block: Devices (HWID) */}
           <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Устройство и клиент</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-dark-200">ОС</p>
-                <p className="text-white">{uaInfo.os}</p>
-              </div>
-              <div>
-                <p className="text-sm text-dark-200">Приложение</p>
-                <p className="text-white">{uaInfo.app}</p>
-              </div>
-              <div>
-                <p className="text-sm text-dark-200">Лимит устройств (HWID)</p>
-                <p className="text-white">{user.hwid_device_limit}</p>
-              </div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base md:text-lg font-semibold text-white">
+                Устройства
+                {hwidDevices && hwidDevices.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-dark-200">
+                    {hwidDevices.length} / {user.hwid_device_limit || '∞'}
+                  </span>
+                )}
+              </h2>
+              <span className="text-xs text-dark-300 bg-dark-700/50 px-2 py-1 rounded">
+                Лимит: {user.hwid_device_limit || '∞'}
+              </span>
             </div>
+
+            {/* Last subscription user-agent */}
             {user.sub_last_user_agent && (
-              <div className="mt-3 pt-3 border-t border-dark-400/10">
-                <p className="text-xs text-dark-300">User-Agent</p>
-                <p className="text-xs text-dark-200 font-mono break-all mt-1">{uaInfo.raw}</p>
+              <div className="mb-4 p-3 bg-dark-700/30 rounded-lg border border-dark-600/30">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-dark-300">ОС (подписка)</p>
+                    <p className="text-dark-100">{uaInfo.os}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-dark-300">Приложение</p>
+                    <p className="text-dark-100">{uaInfo.app}</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-dark-300 font-mono mt-2 break-all">{uaInfo.raw}</p>
+              </div>
+            )}
+
+            {/* HWID device cards */}
+            {hwidDevices && hwidDevices.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {hwidDevices.map((device, idx) => {
+                  const pi = getPlatformInfo(device.platform)
+                  return (
+                    <div
+                      key={device.hwid || idx}
+                      className="bg-dark-700/40 rounded-lg p-3 border border-dark-600/20 hover:border-dark-500/30 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{pi.icon}</span>
+                          <span className="text-sm font-medium text-white">{pi.label}</span>
+                        </div>
+                        <span className="text-[10px] text-dark-400 bg-dark-800/50 px-1.5 py-0.5 rounded font-mono">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 text-xs">
+                        {device.os_version && (
+                          <div className="flex justify-between">
+                            <span className="text-dark-300">Версия ОС</span>
+                            <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.os_version}</span>
+                          </div>
+                        )}
+                        {device.device_model && (
+                          <div className="flex justify-between">
+                            <span className="text-dark-300">Модель</span>
+                            <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.device_model}</span>
+                          </div>
+                        )}
+                        {device.app_version && (
+                          <div className="flex justify-between">
+                            <span className="text-dark-300">Приложение</span>
+                            <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.app_version}</span>
+                          </div>
+                        )}
+                        {device.user_agent && (
+                          <div className="flex justify-between">
+                            <span className="text-dark-300">User-Agent</span>
+                            <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]" title={device.user_agent}>{device.user_agent}</span>
+                          </div>
+                        )}
+                        {device.created_at && (
+                          <div className="flex justify-between">
+                            <span className="text-dark-300">Добавлено</span>
+                            <span className="text-dark-100">
+                              {format(new Date(device.created_at), 'dd.MM.yyyy HH:mm')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {device.hwid && (
+                        <p className="text-[10px] text-dark-400 font-mono mt-2 truncate" title={device.hwid}>
+                          HWID: {device.hwid}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-dark-300 text-sm">
+                Нет зарегистрированных устройств
               </div>
             )}
           </div>
