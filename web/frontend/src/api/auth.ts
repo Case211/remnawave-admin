@@ -11,6 +11,11 @@ export interface TelegramUser {
   hash: string
 }
 
+export interface LoginCredentials {
+  username: string
+  password: string
+}
+
 export interface TokenResponse {
   access_token: string
   refresh_token: string
@@ -19,9 +24,10 @@ export interface TokenResponse {
 }
 
 export interface AdminInfo {
-  telegram_id: number
+  telegram_id: number | null
   username: string
   role: string
+  auth_method: string
 }
 
 interface ApiError {
@@ -43,6 +49,9 @@ function getErrorMessage(error: unknown): string {
     if (axiosError.response?.status === 403) {
       return 'Access denied. You are not authorized to access this panel.'
     }
+    if (axiosError.response?.status === 429) {
+      return axiosError.response.data?.detail || 'Too many attempts. Please wait and try again.'
+    }
     if (axiosError.message) {
       return axiosError.message
     }
@@ -60,6 +69,18 @@ export const authApi = {
   telegramLogin: async (data: TelegramUser): Promise<TokenResponse> => {
     try {
       const response = await client.post<TokenResponse>('/auth/telegram', data)
+      return response.data
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    }
+  },
+
+  /**
+   * Login with username and password
+   */
+  passwordLogin: async (data: LoginCredentials): Promise<TokenResponse> => {
+    try {
+      const response = await client.post<TokenResponse>('/auth/login', data)
       return response.data
     } catch (error) {
       throw new Error(getErrorMessage(error))

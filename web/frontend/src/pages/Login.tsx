@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { TelegramUser } from '../api/auth'
@@ -14,7 +14,12 @@ declare global {
 export default function Login() {
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
-  const { login, isAuthenticated, isLoading, error, clearError } = useAuthStore()
+  const { login, loginWithPassword, isAuthenticated, isLoading, error, clearError } = useAuthStore()
+
+  // Password form state
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -36,6 +41,8 @@ export default function Login() {
     const botUsername = (window as any).__ENV?.TELEGRAM_BOT_USERNAME || import.meta.env.VITE_TELEGRAM_BOT_USERNAME
     if (!botUsername) {
       console.error('TELEGRAM_BOT_USERNAME is not set')
+      // If no bot username, show password form by default
+      setShowPasswordForm(true)
       return
     }
 
@@ -56,6 +63,18 @@ export default function Login() {
       }
     }
   }, [isAuthenticated, navigate, login])
+
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!username.trim() || !password.trim()) return
+
+    try {
+      await loginWithPassword({ username: username.trim(), password })
+      navigate('/')
+    } catch (err) {
+      console.error('Password login failed:', err)
+    }
+  }
 
   return (
     <div
@@ -94,7 +113,7 @@ export default function Login() {
 
           {/* Description */}
           <p className="text-center text-dark-200 mb-8">
-            Войдите через Telegram для доступа к панели управления
+            Войдите для доступа к панели управления
           </p>
 
           {/* Error */}
@@ -127,9 +146,73 @@ export default function Login() {
             </div>
           )}
 
-          {/* Telegram Login Widget */}
           {!isLoading && (
-            <div ref={containerRef} className="flex justify-center" />
+            <>
+              {/* Password login form */}
+              {showPasswordForm ? (
+                <form onSubmit={handlePasswordLogin} className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm text-dark-200 mb-1.5">Логин</label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg text-white text-sm placeholder-dark-300 outline-none transition-all duration-200"
+                      style={{
+                        background: 'rgba(22, 27, 34, 0.8)',
+                        border: '1px solid rgba(72, 79, 88, 0.3)',
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = 'rgba(13, 148, 136, 0.5)'}
+                      onBlur={(e) => e.target.style.borderColor = 'rgba(72, 79, 88, 0.3)'}
+                      placeholder="admin"
+                      autoComplete="username"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-dark-200 mb-1.5">Пароль</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg text-white text-sm placeholder-dark-300 outline-none transition-all duration-200"
+                      style={{
+                        background: 'rgba(22, 27, 34, 0.8)',
+                        border: '1px solid rgba(72, 79, 88, 0.3)',
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = 'rgba(13, 148, 136, 0.5)'}
+                      onBlur={(e) => e.target.style.borderColor = 'rgba(72, 79, 88, 0.3)'}
+                      placeholder="********"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!username.trim() || !password.trim()}
+                    className="w-full py-2.5 rounded-lg text-white font-medium text-sm transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{
+                      background: 'linear-gradient(135deg, #0d9488 0%, #06b6d4 100%)',
+                      boxShadow: '0 0 20px -5px rgba(13, 148, 136, 0.3)',
+                    }}
+                  >
+                    Войти
+                  </button>
+                </form>
+              ) : (
+                /* Telegram Login Widget */
+                <div ref={containerRef} className="flex justify-center mb-6" />
+              )}
+
+              {/* Toggle auth method */}
+              <div className="text-center">
+                <button
+                  onClick={() => { setShowPasswordForm(!showPasswordForm); clearError() }}
+                  className="text-xs text-dark-300 hover:text-primary-400 transition-colors duration-200"
+                >
+                  {showPasswordForm ? 'Войти через Telegram' : 'Войти по логину и паролю'}
+                </button>
+              </div>
+            </>
           )}
 
           {/* Footer */}

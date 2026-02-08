@@ -108,13 +108,52 @@ def verify_telegram_auth_simple(auth_data: Dict[str, Any]) -> bool:
     return is_valid
 
 
-def create_access_token(telegram_id: int, username: str) -> str:
+def verify_admin_password(username: str, password: str) -> bool:
+    """
+    Verify admin credentials against configured WEB_ADMIN_LOGIN / WEB_ADMIN_PASSWORD.
+
+    Supports both plain-text and bcrypt-hashed passwords in the env var.
+    Uses constant-time comparison for plain-text passwords.
+
+    Returns:
+        True if credentials match, False otherwise.
+    """
+    settings = get_web_settings()
+
+    if not settings.admin_login or not settings.admin_password:
+        return False
+
+    # Username comparison (case-insensitive)
+    if username.lower() != settings.admin_login.lower():
+        return False
+
+    stored = settings.admin_password
+
+    # If stored password is a bcrypt hash, use passlib for verification
+    if stored.startswith("$2b$") or stored.startswith("$2a$"):
+        try:
+            from passlib.hash import bcrypt
+            return bcrypt.verify(password, stored)
+        except Exception as e:
+            logger.error("bcrypt verification failed: %s", e)
+            return False
+
+    # Plain-text comparison using constant-time function
+    return hmac.compare_digest(password, stored)
+
+
+def create_access_token(
+    subject: str,
+    username: str,
+    auth_method: str = "telegram",
+) -> str:
     """
     Create JWT access token.
 
     Args:
-        telegram_id: User's Telegram ID
-        username: User's username
+        subject: Token subject (telegram_id as string, or "pwd:<username>")
+        username: Display username
+        auth_method: "telegram" or "password"
 
     Returns:
         Encoded JWT token
@@ -123,31 +162,32 @@ def create_access_token(telegram_id: int, username: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
 
     payload = {
-        "sub": str(telegram_id),
+        "sub": subject,
         "username": username,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
         "type": "access",
+        "auth_method": auth_method,
     }
 
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(telegram_id: int) -> str:
+def create_refresh_token(subject: str) -> str:
     """
     Create JWT refresh token.
 
     Args:
-        telegram_id: User's Telegram ID
+        subject: Token subject (telegram_id as string, or "pwd:<username>")
 
     Returns:
         Encoded JWT refresh token
     """
     settings = get_web_settings()
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_days)
+    expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_refresh_hours)
 
     payload = {
-        "sub": str(telegram_id),
+        "sub": subject,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
         "type": "refresh",

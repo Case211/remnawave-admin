@@ -25,7 +25,7 @@ class ConnectionManager:
         await websocket.accept()
         async with self._lock:
             self.active_connections.add(websocket)
-        logger.info(f"WebSocket connected: admin {admin.telegram_id} ({admin.username})")
+        logger.info(f"WebSocket connected: admin {admin.telegram_id or admin.username} ({admin.auth_method})")
         logger.info(f"Active connections: {len(self.active_connections)}")
 
     async def disconnect(self, websocket: WebSocket):

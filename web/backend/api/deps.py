@@ -18,9 +18,57 @@ security = HTTPBearer()
 class AdminUser:
     """Authenticated admin user."""
 
-    telegram_id: int
-    username: str
+    telegram_id: Optional[int] = None
+    username: str = "admin"
     role: str = "admin"
+    auth_method: str = "telegram"
+
+
+def _validate_token_payload(payload: dict) -> AdminUser:
+    """Validate token payload and return AdminUser.
+
+    Handles both Telegram-based (sub = telegram_id) and
+    password-based (sub = "pwd:<username>") authentication.
+    """
+    subject = payload.get("sub", "")
+    settings = get_web_settings()
+
+    if subject.startswith("pwd:"):
+        # Password-based auth
+        username = subject[4:]
+        if not settings.admin_login or username.lower() != settings.admin_login.lower():
+            logger.warning("Access denied for password user '%s': account not configured", username)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin account disabled",
+            )
+        return AdminUser(
+            telegram_id=None,
+            username=username,
+            auth_method="password",
+        )
+    else:
+        # Telegram-based auth
+        try:
+            telegram_id = int(subject)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token subject",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if telegram_id not in settings.admins:
+            logger.warning("Access denied: telegram_id=%d", telegram_id)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not an admin",
+            )
+        return AdminUser(
+            telegram_id=telegram_id,
+            username=payload.get("username", "admin"),
+            auth_method="telegram",
+        )
 
 
 async def get_current_admin(
@@ -57,22 +105,7 @@ async def get_current_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    telegram_id = int(payload["sub"])
-
-    # Verify admin is in admins list
-    settings = get_web_settings()
-    admins_list = settings.admins
-    if telegram_id not in admins_list:
-        logger.warning("🚫 Access denied: telegram_id=%d", telegram_id)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not an admin",
-        )
-
-    return AdminUser(
-        telegram_id=telegram_id,
-        username=payload.get("username", "admin"),
-    )
+    return _validate_token_payload(payload)
 
 
 async def get_current_admin_ws(
@@ -106,17 +139,13 @@ async def get_current_admin_ws(
         await websocket.close(code=4001, reason="Invalid token")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    telegram_id = int(payload["sub"])
+    try:
+        admin = _validate_token_payload(payload)
+    except HTTPException:
+        await websocket.close(code=4003, reason="Access denied")
+        raise
 
-    settings = get_web_settings()
-    if telegram_id not in settings.admins:
-        await websocket.close(code=4003, reason="Not an admin")
-        raise HTTPException(status_code=403, detail="Not an admin")
-
-    return AdminUser(
-        telegram_id=telegram_id,
-        username=payload.get("username", "admin"),
-    )
+    return admin
 
 
 async def get_optional_admin(

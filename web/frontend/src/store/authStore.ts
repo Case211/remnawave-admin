@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
-import { authApi, TelegramUser } from '../api/auth'
+import { authApi, TelegramUser, LoginCredentials } from '../api/auth'
 import { registerAuthGetter } from './authBridge'
 
 // Safe localStorage wrapper to prevent quota errors
@@ -34,11 +34,12 @@ const safeLocalStorage: StateStorage = {
 }
 
 interface User {
-  telegramId: number
+  telegramId?: number
   username: string
   firstName: string
   lastName?: string
   photoUrl?: string
+  authMethod: string
 }
 
 interface AuthState {
@@ -51,6 +52,7 @@ interface AuthState {
 
   // Actions
   login: (telegramUser: TelegramUser) => Promise<void>
+  loginWithPassword: (credentials: LoginCredentials) => Promise<void>
   logout: () => void
   setTokens: (accessToken: string, refreshToken: string) => void
   clearError: () => void
@@ -79,6 +81,33 @@ export const useAuthStore = create<AuthState>()(
               firstName: telegramUser.first_name,
               lastName: telegramUser.last_name,
               photoUrl: telegramUser.photo_url,
+              authMethod: 'telegram',
+            },
+            accessToken: response.access_token,
+            refreshToken: response.refresh_token,
+            isAuthenticated: true,
+            isLoading: false,
+          })
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Login failed',
+          })
+          throw error
+        }
+      },
+
+      loginWithPassword: async (credentials: LoginCredentials) => {
+        set({ isLoading: true, error: null })
+
+        try {
+          const response = await authApi.passwordLogin(credentials)
+
+          set({
+            user: {
+              username: credentials.username,
+              firstName: credentials.username,
+              authMethod: 'password',
             },
             accessToken: response.access_token,
             refreshToken: response.refresh_token,
