@@ -32,6 +32,7 @@ interface UserListItem {
   expire_at: string | null
   traffic_limit_bytes: number | null
   used_traffic_bytes: number
+  lifetime_used_traffic_bytes: number
   hwid_device_limit: number
   created_at: string | null
   online_at: string | null
@@ -776,6 +777,38 @@ export default function Users() {
                   </select>
                 </div>
 
+                {/* Sort by */}
+                <div>
+                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Сортировка</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
+                    className="input text-sm"
+                  >
+                    <option value="created_at">Дата создания</option>
+                    <option value="used_traffic_bytes">Трафик (текущий)</option>
+                    <option value="lifetime_used_traffic_bytes">Трафик (за всё время)</option>
+                    <option value="hwid_device_limit">Устройства (HWID)</option>
+                    <option value="online_at">Последняя активность</option>
+                    <option value="expire_at">Дата истечения</option>
+                    <option value="traffic_limit_bytes">Лимит трафика</option>
+                    <option value="username">Имя</option>
+                    <option value="status">Статус</option>
+                  </select>
+                </div>
+
+                {/* Sort order */}
+                <div>
+                  <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">Порядок</label>
+                  <button
+                    onClick={() => { setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); setPage(1) }}
+                    className="input text-sm w-full flex items-center justify-between gap-2"
+                  >
+                    <span>{sortOrder === 'desc' ? 'По убыванию' : 'По возрастанию'}</span>
+                    {sortOrder === 'desc' ? <HiSortDescending className="w-4 h-4 text-primary-400" /> : <HiSortAscending className="w-4 h-4 text-primary-400" />}
+                  </button>
+                </div>
+
                 {/* Per page */}
                 <div>
                   <label className="block text-[11px] text-dark-300 uppercase tracking-wider mb-1">На странице</label>
@@ -940,6 +973,15 @@ export default function Users() {
                 </th>
                 <th>
                   <SortHeader
+                    label="HWID"
+                    field="hwid_device_limit"
+                    currentSort={sortBy}
+                    currentOrder={sortOrder}
+                    onSort={handleSort}
+                  />
+                </th>
+                <th>
+                  <SortHeader
                     label="Активность"
                     field="online_at"
                     currentSort={sortBy}
@@ -983,6 +1025,9 @@ export default function Users() {
                       <div className="h-4 w-24 skeleton rounded" />
                     </td>
                     <td>
+                      <div className="h-4 w-8 skeleton rounded mx-auto" />
+                    </td>
+                    <td>
                       <div className="h-4 w-20 skeleton rounded" />
                     </td>
                     <td>
@@ -996,7 +1041,7 @@ export default function Users() {
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-dark-200">
+                  <td colSpan={8} className="text-center py-8 text-dark-200">
                     {hasAnyFilter
                       ? 'Пользователи не найдены'
                       : 'Нет пользователей'}
@@ -1027,6 +1072,9 @@ export default function Users() {
                         used={user.used_traffic_bytes}
                         limit={user.traffic_limit_bytes}
                       />
+                    </td>
+                    <td className="text-center">
+                      <span className="text-dark-100 text-sm">{user.hwid_device_limit}</span>
                     </td>
                     <td>
                       <OnlineIndicator onlineAt={user.online_at} />

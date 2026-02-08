@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser
 from web.backend.core.api_helper import fetch_users_from_api
-from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate
+from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate, HwidDevice
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ def _ensure_snake_case(user: dict) -> dict:
         'expireAt': 'expire_at',
         'trafficLimitBytes': 'traffic_limit_bytes',
         'usedTrafficBytes': 'used_traffic_bytes',
+        'lifetimeUsedTrafficBytes': 'lifetime_used_traffic_bytes',
         'hwidDeviceLimit': 'hwid_device_limit',
         'createdAt': 'created_at',
         'updatedAt': 'updated_at',
@@ -216,6 +217,8 @@ async def list_users(
 
         if sort_by == 'used_traffic_bytes':
             users.sort(key=lambda x: x.get('used_traffic_bytes', 0) or 0, reverse=reverse)
+        elif sort_by == 'lifetime_used_traffic_bytes':
+            users.sort(key=lambda x: x.get('lifetime_used_traffic_bytes', 0) or 0, reverse=reverse)
         elif sort_by == 'traffic_limit_bytes':
             def _traffic_limit_key(u):
                 val = u.get('traffic_limit_bytes')
@@ -475,3 +478,37 @@ async def revoke_user_subscription(
         raise HTTPException(status_code=503, detail="API service not available")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{user_uuid}/hwid-devices", response_model=List[HwidDevice])
+async def get_user_hwid_devices(
+    user_uuid: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Get HWID devices for a user."""
+    try:
+        from src.services.api_client import api_client
+
+        result = await api_client.get_user_hwid_devices(user_uuid)
+        response = result.get("response", result) if isinstance(result, dict) else result
+        devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
+
+        items = []
+        for d in devices:
+            items.append(HwidDevice(
+                hwid=d.get("hwid", ""),
+                platform=d.get("platform"),
+                os_version=d.get("osVersion") or d.get("os_version"),
+                device_model=d.get("deviceModel") or d.get("device_model"),
+                app_version=d.get("appVersion") or d.get("app_version"),
+                user_agent=d.get("userAgent") or d.get("user_agent"),
+                created_at=d.get("createdAt") or d.get("created_at"),
+                updated_at=d.get("updatedAt") or d.get("updated_at"),
+            ))
+        return items
+
+    except ImportError:
+        raise HTTPException(status_code=503, detail="API service not available")
+    except Exception as e:
+        logger.error("Error fetching HWID devices for %s: %s", user_uuid, e)
+        return []
