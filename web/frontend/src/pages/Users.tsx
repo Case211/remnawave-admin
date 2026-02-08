@@ -18,6 +18,7 @@ import {
   HiX,
   HiChevronDown,
   HiChevronUp,
+  HiPlus,
 } from 'react-icons/hi'
 import client from '../api/client'
 
@@ -346,9 +347,184 @@ function MobileUserCard({
   )
 }
 
+interface CreateUserFormData {
+  username: string
+  email: string
+  traffic_limit_gb: string
+  is_unlimited: boolean
+  expire_at: string
+  hwid_device_limit: string
+}
+
+function CreateUserModal({
+  onClose,
+  onSave,
+  isPending,
+  error,
+}: {
+  onClose: () => void
+  onSave: (data: Record<string, unknown>) => void
+  isPending: boolean
+  error: string
+}) {
+  const [form, setForm] = useState<CreateUserFormData>({
+    username: '',
+    email: '',
+    traffic_limit_gb: '',
+    is_unlimited: true,
+    expire_at: '',
+    hwid_device_limit: '0',
+  })
+
+  const handleSubmit = () => {
+    const createData: Record<string, unknown> = {}
+    if (form.username.trim()) createData.username = form.username.trim()
+    if (form.email.trim()) createData.email = form.email.trim()
+
+    if (!form.is_unlimited && form.traffic_limit_gb) {
+      const val = parseFloat(form.traffic_limit_gb)
+      if (!isNaN(val) && val > 0) {
+        createData.traffic_limit_bytes = Math.round(val * 1024 * 1024 * 1024)
+      }
+    } else {
+      createData.traffic_limit_bytes = null
+    }
+
+    if (form.expire_at) {
+      createData.expire_at = new Date(form.expire_at).toISOString()
+    }
+
+    const hwid = parseInt(form.hwid_device_limit, 10)
+    if (!isNaN(hwid)) {
+      createData.hwid_device_limit = hwid
+    }
+
+    onSave(createData)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md card border border-dark-400/20 animate-scale-in max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">Создание пользователя</h2>
+          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
+            <HiX className="w-5 h-5" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Имя пользователя</label>
+            <input
+              type="text"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              className="input"
+              placeholder="username"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Email</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className="input"
+              placeholder="user@example.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Лимит трафика</label>
+            <div className="flex items-center gap-3 mb-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.is_unlimited}
+                  onChange={(e) => setForm({
+                    ...form,
+                    is_unlimited: e.target.checked,
+                    traffic_limit_gb: e.target.checked ? '' : form.traffic_limit_gb,
+                  })}
+                  className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                />
+                <span className="text-sm text-dark-100">Безлимитный</span>
+              </label>
+            </div>
+            {!form.is_unlimited && (
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={form.traffic_limit_gb}
+                  onChange={(e) => setForm({ ...form, traffic_limit_gb: e.target.value })}
+                  placeholder="Введите лимит"
+                  className="input pr-12"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Дата истечения</label>
+            <input
+              type="datetime-local"
+              value={form.expire_at}
+              onChange={(e) => setForm({ ...form, expire_at: e.target.value })}
+              className="input"
+            />
+            <p className="text-xs text-dark-300 mt-1">Оставьте пустым для бессрочной подписки</p>
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Лимит устройств (HWID)</label>
+            <input
+              type="number"
+              min="0"
+              value={form.hwid_device_limit}
+              onChange={(e) => setForm({ ...form, hwid_device_limit: e.target.value })}
+              className="input"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isPending}
+            className="btn-secondary px-4 py-2"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isPending}
+            className="btn-primary px-4 py-2"
+          >
+            {isPending ? 'Создание...' : 'Создать'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Users() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   // State
   const [page, setPage] = useState(1)
@@ -417,6 +593,18 @@ export default function Users() {
     },
   })
 
+  const createUser = useMutation({
+    mutationFn: (data: Record<string, unknown>) => client.post('/users', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      setShowCreateModal(false)
+      setCreateError('')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
+    },
+  })
+
   // Handle sort
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -455,6 +643,14 @@ export default function Users() {
             Управление пользователями и подписками
           </p>
         </div>
+        <button
+          onClick={() => { setShowCreateModal(true); setCreateError('') }}
+          className="btn-primary flex items-center gap-2 self-start sm:self-auto"
+        >
+          <HiPlus className="w-4 h-4" />
+          <span className="hidden sm:inline">Создать пользователя</span>
+          <span className="sm:hidden">Создать</span>
+        </button>
       </div>
 
       {/* Search + Filter toggle */}
@@ -889,6 +1085,16 @@ export default function Users() {
           </button>
         </div>
       </div>
+
+      {/* Create user modal */}
+      {showCreateModal && (
+        <CreateUserModal
+          onClose={() => { setShowCreateModal(false); setCreateError('') }}
+          onSave={(data) => createUser.mutate(data)}
+          isPending={createUser.isPending}
+          error={createError}
+        />
+      )}
     </div>
   )
 }
