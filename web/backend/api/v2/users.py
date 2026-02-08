@@ -115,6 +115,19 @@ async def list_users(
         # Normalize all users to have snake_case keys
         users = [_ensure_snake_case(u) for u in users]
 
+        # Enrich with HWID device counts from local DB (single query, no API calls)
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                device_counts = await db_service.get_hwid_device_counts_bulk()
+                if device_counts:
+                    for u in users:
+                        uid = u.get('uuid')
+                        if uid and uid in device_counts:
+                            u['hwid_device_count'] = device_counts[uid]
+        except Exception as e:
+            logger.debug("Failed to enrich hwid device counts: %s", e)
+
         now = datetime.now(timezone.utc)
 
         def _get(u, *keys, default=''):
