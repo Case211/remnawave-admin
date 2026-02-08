@@ -384,7 +384,8 @@ async def update_user(
         from src.services.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True, mode='json')
-        user = await api_client.update_user(user_uuid, **update_data)
+        resp = await api_client.update_user(user_uuid, **update_data)
+        user = resp.get('response', resp) if isinstance(resp, dict) else resp
 
         return UserDetail(**_ensure_snake_case(user))
 
@@ -650,17 +651,7 @@ async def get_user_hwid_devices(
             ))
         return items
 
-    # Try local DB first (reflects webhook deletions immediately)
-    try:
-        from src.services.database import db_service
-        if db_service.is_connected:
-            db_devices = await db_service.get_user_hwid_devices(user_uuid)
-            if db_devices is not None:
-                return _parse_devices(db_devices)
-    except Exception as e:
-        logger.debug("DB HWID fetch failed for %s: %s", user_uuid, e)
-
-    # Fall back to API
+    # Fetch from API first for freshest data
     try:
         from src.services.api_client import api_client
 
@@ -673,5 +664,16 @@ async def get_user_hwid_devices(
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
     except Exception as e:
-        logger.error("Error fetching HWID devices for %s: %s", user_uuid, e)
-        return []
+        logger.debug("API HWID fetch failed for %s, trying DB: %s", user_uuid, e)
+
+    # Fall back to local DB if API is unavailable
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            db_devices = await db_service.get_user_hwid_devices(user_uuid)
+            if db_devices is not None:
+                return _parse_devices(db_devices)
+    except Exception as e:
+        logger.error("DB HWID fetch also failed for %s: %s", user_uuid, e)
+
+    return []

@@ -2779,10 +2779,10 @@ class DatabaseService:
                     )
                     current_hwids = {row['hwid'] for row in rows}
 
-                    # Собираем новые HWID
+                    # Собираем новые HWID (devices может быть списком строк или словарей)
                     new_hwids = set()
                     for device in devices:
-                        hwid = device.get('hwid')
+                        hwid = device.get('hwid') if isinstance(device, dict) else device
                         if hwid:
                             new_hwids.add(hwid)
 
@@ -2798,17 +2798,21 @@ class DatabaseService:
                     # Добавляем/обновляем устройства
                     synced = 0
                     for device in devices:
-                        hwid = device.get('hwid')
-                        if not hwid:
-                            continue
-
-                        platform = device.get('platform')
-                        os_version = device.get('osVersion')
-                        device_model = device.get('deviceModel')
-                        app_version = device.get('appVersion')
-                        user_agent = device.get('userAgent')
-                        created_at = _parse_timestamp(device.get('createdAt'))
-                        updated_at = _parse_timestamp(device.get('updatedAt'))
+                        if isinstance(device, str):
+                            hwid = device
+                            platform = os_version = device_model = app_version = user_agent = None
+                            created_at = updated_at = None
+                        else:
+                            hwid = device.get('hwid')
+                            if not hwid:
+                                continue
+                            platform = device.get('platform')
+                            os_version = device.get('osVersion')
+                            device_model = device.get('deviceModel')
+                            app_version = device.get('appVersion')
+                            user_agent = device.get('userAgent')
+                            created_at = _parse_timestamp(device.get('createdAt'))
+                            updated_at = _parse_timestamp(device.get('updatedAt'))
 
                         await conn.execute(
                             """

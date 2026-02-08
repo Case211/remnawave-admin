@@ -105,6 +105,7 @@ const SYNC_ENTITY_LABELS: Record<string, string> = {
   snippets: 'Сниппеты',
   squads: 'Сквады',
   hwid_devices: 'HWID устройства',
+  asn: 'ASN база',
 }
 
 // Entity keys that can be synced manually (maps display key -> API trigger key)
@@ -114,6 +115,7 @@ const SYNCABLE_ENTITIES: Record<string, string> = {
   hosts: 'hosts',
   config_profiles: 'config_profiles',
   hwid_devices: 'hwid_devices',
+  asn: 'asn',
 }
 
 function SyncStatusBlock({

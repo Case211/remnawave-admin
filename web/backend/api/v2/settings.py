@@ -369,11 +369,29 @@ async def trigger_sync(
             'all': sync_service.full_sync,
         }
 
-        method = sync_methods.get(entity)
-        if not method:
-            raise HTTPException(status_code=400, detail=f"Unknown entity: {entity}")
-
-        result = await method()
+        if entity == 'asn':
+            from src.services.asn_parser import ASNParser
+            from src.services.database import db_service
+            parser = ASNParser(db_service)
+            try:
+                stats = await parser.sync_russian_asn_database(limit=None)
+                records = stats.get('success', 0) if isinstance(stats, dict) else 0
+                await db_service.update_sync_metadata(
+                    key="asn", status="success", records_synced=records
+                )
+                result = stats
+            except Exception as asn_err:
+                await db_service.update_sync_metadata(
+                    key="asn", status="error", error_message=str(asn_err)
+                )
+                raise
+            finally:
+                await parser.close()
+        else:
+            method = sync_methods.get(entity)
+            if not method:
+                raise HTTPException(status_code=400, detail=f"Unknown entity: {entity}")
+            result = await method()
         return {"success": True, "entity": entity, "result": result}
 
     except HTTPException:
