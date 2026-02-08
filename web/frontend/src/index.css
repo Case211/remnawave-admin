@@ -116,12 +116,12 @@
 @layer components {
   /* Card - diagonal gradient background with fadeIn animation */
   .card {
-    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
-    @apply rounded-lg border border-dark-400/20 p-4 animate-fade-in;
+    background: linear-gradient(135deg, rgba(22, 27, 34, 0.8) 0%, #161b22 100%);
+    @apply rounded-lg border border-dark-300/25 p-4 animate-fade-in shadow-lg shadow-black/25;
   }
 
   .card:hover {
-    @apply border-dark-400/30;
+    @apply border-dark-300/40;
   }
 
   /* Glass card variant */
