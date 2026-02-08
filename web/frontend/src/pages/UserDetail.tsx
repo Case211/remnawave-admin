@@ -15,6 +15,7 @@ interface UserDetailData {
   expire_at: string | null
   traffic_limit_bytes: number | null
   used_traffic_bytes: number
+  lifetime_used_traffic_bytes: number
   hwid_device_limit: number
   created_at: string
   online_at: string | null
@@ -172,8 +173,6 @@ interface TrafficStats {
     node_name: string
     node_uuid: string
     total_bytes: number
-    download_bytes: number
-    upload_bytes: number
   }[]
 }
 
@@ -221,7 +220,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
       case 'current':
         return { value: user.used_traffic_bytes, label: 'Текущий период' }
       case 'lifetime':
-        return { value: trafficStats?.lifetime_bytes ?? user.used_traffic_bytes, label: 'За всё время' }
+        return { value: user.lifetime_used_traffic_bytes || user.used_traffic_bytes, label: 'За всё время' }
       default:
         if (trafficStats && API_PERIODS.includes(period)) {
           return {
@@ -301,11 +300,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
                     className="flex items-center justify-between p-2.5 bg-dark-700/40 rounded-lg border border-dark-600/20"
                   >
                     <span className="text-sm text-dark-100 truncate flex-1 mr-3">{node.node_name}</span>
-                    <div className="flex items-center gap-3 text-xs flex-shrink-0">
-                      <span className="text-green-400" title="Download">↓ {formatBytes(node.download_bytes)}</span>
-                      <span className="text-blue-400" title="Upload">↑ {formatBytes(node.upload_bytes)}</span>
-                      <span className="text-white font-medium min-w-[70px] text-right">{formatBytes(node.total_bytes)}</span>
-                    </div>
+                    <span className="text-white font-medium text-sm">{formatBytes(node.total_bytes)}</span>
                   </div>
                 ))}
                 {/* Total */}
@@ -395,7 +390,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
             </div>
             <div className="bg-dark-700/50 rounded-lg p-3 text-center">
               <p className="text-base font-bold text-white">
-                {trafficStats ? formatBytes(trafficStats.lifetime_bytes) : formatBytes(user.used_traffic_bytes)}
+                {formatBytes(user.lifetime_used_traffic_bytes || user.used_traffic_bytes)}
               </p>
               <p className="text-[11px] text-dark-200">Всё время</p>
             </div>
