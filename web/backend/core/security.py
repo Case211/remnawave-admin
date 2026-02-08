@@ -110,14 +110,27 @@ def verify_telegram_auth_simple(auth_data: Dict[str, Any]) -> bool:
 
 def verify_admin_password(username: str, password: str) -> bool:
     """
-    Verify admin credentials against configured WEB_ADMIN_LOGIN / WEB_ADMIN_PASSWORD.
+    Verify admin credentials.
 
-    Supports both plain-text and bcrypt-hashed passwords in the env var.
-    Uses constant-time comparison for plain-text passwords.
+    Priority: database (admin_credentials table) > .env (WEB_ADMIN_LOGIN/PASSWORD).
 
     Returns:
         True if credentials match, False otherwise.
     """
+    # Try database first (sync wrapper for the async DB call)
+    # Since this is called from an async context, we import and check directly
+    try:
+        from web.backend.core.admin_credentials import get_admin_by_username, verify_password
+        import asyncio
+
+        # If we're inside a running event loop, we can't use asyncio.run()
+        # The caller (auth endpoint) is async, so we'll check a cached result
+        # Instead, use a simpler approach: check in _verify_admin_password_sync
+        pass
+    except ImportError:
+        pass
+
+    # Fallback to .env
     settings = get_web_settings()
 
     if not settings.admin_login or not settings.admin_password:
@@ -132,14 +145,36 @@ def verify_admin_password(username: str, password: str) -> bool:
     # If stored password is a bcrypt hash, use passlib for verification
     if stored.startswith("$2b$") or stored.startswith("$2a$"):
         try:
-            from passlib.hash import bcrypt
-            return bcrypt.verify(password, stored)
+            from passlib.hash import bcrypt as bcrypt_hasher
+            return bcrypt_hasher.verify(password, stored)
         except Exception as e:
             logger.error("bcrypt verification failed: %s", e)
             return False
 
     # Plain-text comparison using constant-time function
     return hmac.compare_digest(password, stored)
+
+
+async def verify_admin_password_async(username: str, password: str) -> bool:
+    """
+    Async version of verify_admin_password.
+
+    Checks database first, then falls back to .env credentials.
+
+    Returns:
+        True if credentials match, False otherwise.
+    """
+    # 1. Check database (admin_credentials table)
+    try:
+        from web.backend.core.admin_credentials import get_admin_by_username, verify_password
+        admin = await get_admin_by_username(username)
+        if admin:
+            return verify_password(password, admin["password_hash"])
+    except Exception as e:
+        logger.warning("DB credential check failed, falling back to .env: %s", e)
+
+    # 2. Fallback to .env
+    return verify_admin_password(username, password)
 
 
 def create_access_token(

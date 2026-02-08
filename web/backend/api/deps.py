@@ -34,9 +34,26 @@ def _validate_token_payload(payload: dict) -> AdminUser:
     settings = get_web_settings()
 
     if subject.startswith("pwd:"):
-        # Password-based auth
+        # Password-based auth — check DB first, then .env
         username = subject[4:]
-        if not settings.admin_login or username.lower() != settings.admin_login.lower():
+        is_valid = False
+
+        # Check DB
+        try:
+            from web.backend.core.admin_credentials import get_admin_by_username
+            import asyncio
+            admin_row = await get_admin_by_username(username)
+            if admin_row:
+                is_valid = True
+        except Exception:
+            pass
+
+        # Fallback to .env
+        if not is_valid:
+            if settings.admin_login and username.lower() == settings.admin_login.lower():
+                is_valid = True
+
+        if not is_valid:
             logger.warning("Access denied for password user '%s': account not configured", username)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

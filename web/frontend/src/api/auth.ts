@@ -28,6 +28,12 @@ export interface AdminInfo {
   username: string
   role: string
   auth_method: string
+  password_is_generated: boolean
+}
+
+export interface ChangePasswordRequest {
+  current_password: string
+  new_password: string
 }
 
 interface ApiError {
@@ -103,6 +109,17 @@ export const authApi = {
   getMe: async (): Promise<AdminInfo> => {
     const response = await client.get<AdminInfo>('/auth/me')
     return response.data
+  },
+
+  /**
+   * Change admin password
+   */
+  changePassword: async (data: ChangePasswordRequest): Promise<void> => {
+    try {
+      await client.post('/auth/change-password', data)
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    }
   },
 
   /**

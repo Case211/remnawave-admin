@@ -37,6 +37,13 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class ChangePasswordRequest(BaseModel):
+    """Change admin password request."""
+
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=200)
+
+
 class AdminInfo(BaseModel):
     """Current admin info."""
 
@@ -44,3 +51,4 @@ class AdminInfo(BaseModel):
     username: str
     role: str
     auth_method: str = "telegram"
+    password_is_generated: bool = False

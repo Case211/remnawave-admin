@@ -13,7 +13,7 @@ from web.backend.core.notifier import (
 from web.backend.core.rate_limit import limiter
 from web.backend.core.security import (
     verify_telegram_auth,
-    verify_admin_password,
+    verify_admin_password_async,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -22,6 +22,7 @@ from web.backend.core.token_blacklist import token_blacklist
 from web.backend.schemas.auth import (
     TelegramAuthData,
     LoginRequest,
+    ChangePasswordRequest,
     TokenResponse,
     RefreshRequest,
     AdminInfo,
@@ -138,8 +139,16 @@ async def password_login(request: Request, data: LoginRequest):
             detail=f"Too many failed attempts. Try again in {remaining}s",
         )
 
-    # Check that password auth is configured
-    if not settings.admin_login or not settings.admin_password:
+    # Check that password auth is configured (DB or .env)
+    has_env_auth = settings.admin_login and settings.admin_password
+    has_db_auth = False
+    try:
+        from web.backend.core.admin_credentials import admin_exists
+        has_db_auth = await admin_exists()
+    except Exception:
+        pass
+
+    if not has_env_auth and not has_db_auth:
         raise HTTPException(
             status_code=403,
             detail="Password authentication is not configured",
@@ -147,8 +156,8 @@ async def password_login(request: Request, data: LoginRequest):
 
     logger.info("Password login attempt for user '%s' from %s", data.username, client_ip)
 
-    # Verify credentials
-    if not verify_admin_password(data.username, data.password):
+    # Verify credentials (DB first, then .env fallback)
+    if not await verify_admin_password_async(data.username, data.password):
         locked = login_guard.record_failure(client_ip)
         logger.warning("Password login failed for user '%s' from %s", data.username, client_ip)
         await notify_login_failed(
@@ -197,10 +206,19 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
 
     # Determine auth method from subject format
     if subject.startswith("pwd:"):
-        # Password-based auth — verify admin_login still configured
+        # Password-based auth — verify account still exists (DB or .env)
         username = subject[4:]
-        if not settings.admin_login or username.lower() != settings.admin_login.lower():
-            raise HTTPException(status_code=403, detail="Admin account disabled")
+        is_valid = False
+        try:
+            from web.backend.core.admin_credentials import get_admin_by_username
+            admin_row = await get_admin_by_username(username)
+            if admin_row:
+                is_valid = True
+        except Exception:
+            pass
+        if not is_valid:
+            if not settings.admin_login or username.lower() != settings.admin_login.lower():
+                raise HTTPException(status_code=403, detail="Admin account disabled")
         access_token = create_access_token(subject, username, auth_method="password")
     else:
         # Telegram-based auth — verify still in admins list
@@ -223,12 +241,67 @@ async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
     """
     Get current authenticated admin info.
     """
+    # Check if password is auto-generated (needs changing)
+    password_is_generated = False
+    if admin.auth_method == "password":
+        try:
+            from web.backend.core.admin_credentials import get_admin_by_username
+            db_admin = await get_admin_by_username(admin.username)
+            if db_admin and db_admin.get("is_generated"):
+                password_is_generated = True
+        except Exception:
+            pass
+
     return AdminInfo(
         telegram_id=admin.telegram_id,
         username=admin.username,
         role=admin.role,
         auth_method=admin.auth_method,
+        password_is_generated=password_is_generated,
     )
+
+
+@router.post("/change-password", response_model=SuccessResponse)
+async def change_password(
+    request: Request,
+    data: ChangePasswordRequest,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """
+    Change admin password. Requires current password for verification.
+    Only available for password-based accounts stored in DB.
+    """
+    from web.backend.core.admin_credentials import (
+        get_admin_by_username,
+        verify_password,
+        update_password,
+        validate_password_strength,
+    )
+
+    # Validate new password strength
+    is_strong, strength_error = validate_password_strength(data.new_password)
+    if not is_strong:
+        raise HTTPException(status_code=400, detail=strength_error)
+
+    # Find admin in DB
+    db_admin = await get_admin_by_username(admin.username)
+    if not db_admin:
+        raise HTTPException(
+            status_code=400,
+            detail="Password change is only available for DB-managed accounts",
+        )
+
+    # Verify current password
+    if not verify_password(data.current_password, db_admin["password_hash"]):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+    # Update password
+    success = await update_password(admin.username, data.new_password)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update password")
+
+    logger.info("Password changed for user '%s'", admin.username)
+    return SuccessResponse(message="Password changed successfully")
 
 
 @router.post("/logout", response_model=SuccessResponse)

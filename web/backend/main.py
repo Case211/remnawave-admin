@@ -157,13 +157,29 @@ async def lifespan(app: FastAPI):
             from src.services.database import db_service
             connected = await db_service.connect(database_url=database_url)
             if connected:
-                logger.info("✅ Database connected")
+                logger.info("Database connected")
+
+                # First-run admin setup
+                from web.backend.core.admin_credentials import first_run_setup
+                generated_password = await first_run_setup()
+                if generated_password:
+                    # Print prominently so admin sees it in docker logs
+                    print("\n" + "=" * 60, flush=True)
+                    print("  FIRST RUN - Admin credentials generated", flush=True)
+                    print("=" * 60, flush=True)
+                    print(f"  Login:    admin", flush=True)
+                    print(f"  Password: {generated_password}", flush=True)
+                    print("=" * 60, flush=True)
+                    print("  Change the password after first login!", flush=True)
+                    print("  Settings -> Change password", flush=True)
+                    print("=" * 60 + "\n", flush=True)
+                    logger.warning("First run: admin password generated (see console output)")
             else:
-                logger.warning("⚠️ Database connection failed")
+                logger.warning("Database connection failed")
         except Exception as e:
-            logger.error("⚠️ Database error: %s", e)
+            logger.error("Database error: %s", e)
     else:
-        logger.info("🗄️ No DATABASE_URL, running without database")
+        logger.info("No DATABASE_URL, running without database")
 
     yield
 
