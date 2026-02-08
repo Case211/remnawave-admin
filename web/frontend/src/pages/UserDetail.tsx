@@ -162,6 +162,300 @@ function formatDateForInput(dateStr: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+interface TrafficStats {
+  used_bytes: number
+  lifetime_bytes: number
+  traffic_limit_bytes: number | null
+  global_periods: {
+    today?: number
+    week?: number
+    month?: number
+    year?: number
+  }
+  nodes_traffic: {
+    node_name: string
+    node_uuid: string
+    total_bytes: number
+    download_bytes: number
+    upload_bytes: number
+  }[]
+}
+
+type TrafficPeriod = 'current' | 'lifetime' | 'today' | 'week' | 'month' | 'year' | 'nodes'
+
+const TRAFFIC_PERIOD_LABELS: Record<TrafficPeriod, string> = {
+  current: 'Текущий',
+  lifetime: 'Всё время',
+  today: 'Сегодня',
+  week: 'Неделя',
+  month: 'Месяц',
+  year: 'Год',
+  nodes: 'По нодам',
+}
+
+function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficPercent: number }) {
+  const [period, setPeriod] = useState<TrafficPeriod>('current')
+
+  const { data: trafficStats } = useQuery<TrafficStats>({
+    queryKey: ['user-traffic-stats', user.uuid],
+    queryFn: async () => {
+      const response = await client.get(`/users/${user.uuid}/traffic-stats`)
+      return response.data
+    },
+    enabled: !!user.uuid,
+  })
+
+  // Determine displayed traffic value based on period
+  const getDisplayedTraffic = (): { value: number; label: string } => {
+    if (!trafficStats) {
+      return { value: user.used_traffic_bytes, label: 'Использовано' }
+    }
+    switch (period) {
+      case 'current':
+        return { value: trafficStats.used_bytes, label: 'Текущий период' }
+      case 'lifetime':
+        return { value: trafficStats.lifetime_bytes, label: 'За всё время' }
+      case 'today':
+        return { value: trafficStats.global_periods.today || 0, label: 'Сегодня (глобально)' }
+      case 'week':
+        return { value: trafficStats.global_periods.week || 0, label: 'За неделю (глобально)' }
+      case 'month':
+        return { value: trafficStats.global_periods.month || 0, label: 'За месяц (глобально)' }
+      case 'year':
+        return { value: trafficStats.global_periods.year || 0, label: 'За год (глобально)' }
+      default:
+        return { value: user.used_traffic_bytes, label: 'Использовано' }
+    }
+  }
+
+  const displayed = getDisplayedTraffic()
+  const isUnlimited = !user.traffic_limit_bytes
+  const periods: TrafficPeriod[] = ['current', 'lifetime', 'today', 'week', 'month', 'year', 'nodes']
+
+  return (
+    <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base md:text-lg font-semibold text-white">Трафик</h2>
+      </div>
+
+      {/* Period selector */}
+      <div className="flex flex-wrap gap-1 mb-4">
+        {periods.map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
+              period === p
+                ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
+                : 'text-dark-200 hover:text-white hover:bg-dark-700/50 border border-transparent'
+            }`}
+          >
+            {TRAFFIC_PERIOD_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
+      {period === 'nodes' ? (
+        /* Per-node breakdown */
+        <div className="space-y-2">
+          {trafficStats?.nodes_traffic && trafficStats.nodes_traffic.length > 0 ? (
+            trafficStats.nodes_traffic.map((node) => (
+              <div
+                key={node.node_uuid}
+                className="flex items-center justify-between p-2.5 bg-dark-700/40 rounded-lg border border-dark-600/20"
+              >
+                <span className="text-sm text-dark-100 truncate flex-1 mr-3">{node.node_name}</span>
+                <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                  <span className="text-green-400" title="Download">↓ {formatBytes(node.download_bytes)}</span>
+                  <span className="text-blue-400" title="Upload">↑ {formatBytes(node.upload_bytes)}</span>
+                  <span className="text-white font-medium min-w-[70px] text-right">{formatBytes(node.total_bytes)}</span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-6 text-dark-300 text-sm">
+              Нет данных о трафике по нодам
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Traffic bar and stats */
+        <div className="space-y-4">
+          <div>
+            {isUnlimited ? (
+              <>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-dark-200">{displayed.label}</span>
+                  <span className="text-primary-400 text-xs sm:text-sm font-medium">Безлимит</span>
+                </div>
+                <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-sm font-medium text-primary-200">
+                      {formatBytes(displayed.value)} / ∞
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-dark-200">{displayed.label}</span>
+                  <span className="text-white text-xs sm:text-sm">
+                    {formatBytes(displayed.value)}{period === 'current' ? ` / ${formatBytes(user.traffic_limit_bytes!)}` : ''}
+                  </span>
+                </div>
+                {period === 'current' ? (
+                  <>
+                    <div className="w-full bg-dark-600 rounded-full h-2.5">
+                      <div
+                        className={`h-2.5 rounded-full transition-all ${
+                          trafficPercent > 90 ? 'bg-red-500' : trafficPercent > 70 ? 'bg-yellow-500' : 'bg-primary-500'
+                        }`}
+                        style={{ width: `${trafficPercent}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-dark-300 mt-1">
+                      {trafficPercent.toFixed(1)}% использовано
+                    </p>
+                  </>
+                ) : (
+                  <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-sm font-medium text-primary-200">
+                        {formatBytes(displayed.value)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 gap-4 pt-3 border-t border-dark-400/10">
+            <div className="bg-dark-700/50 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-white">{formatBytes(user.used_traffic_bytes)}</p>
+              <p className="text-xs text-dark-200">Текущий период</p>
+            </div>
+            <div className="bg-dark-700/50 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-white">
+                {user.traffic_limit_bytes ? formatBytes(user.traffic_limit_bytes) : '∞'}
+              </p>
+              <p className="text-xs text-dark-200">Лимит</p>
+            </div>
+          </div>
+
+          {/* Lifetime traffic */}
+          {trafficStats && trafficStats.lifetime_bytes > 0 && period === 'current' && (
+            <div className="bg-dark-700/50 rounded-lg p-3 text-center">
+              <p className="text-lg font-bold text-white">{formatBytes(trafficStats.lifetime_bytes)}</p>
+              <p className="text-xs text-dark-200">За всё время</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const DEVICES_PER_PAGE = 3
+
+function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
+  const [devicePage, setDevicePage] = useState(1)
+  const totalDevicePages = Math.ceil(devices.length / DEVICES_PER_PAGE)
+  const startIdx = (devicePage - 1) * DEVICES_PER_PAGE
+  const visibleDevices = devices.slice(startIdx, startIdx + DEVICES_PER_PAGE)
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {visibleDevices.map((device, localIdx) => {
+          const globalIdx = startIdx + localIdx
+          const pi = getPlatformInfo(device.platform)
+          return (
+            <div
+              key={device.hwid || globalIdx}
+              className="bg-dark-700/40 rounded-lg p-3 border border-dark-600/20 hover:border-dark-500/30 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{pi.icon}</span>
+                  <span className="text-sm font-medium text-white">{pi.label}</span>
+                </div>
+                <span className="text-[10px] text-dark-400 bg-dark-800/50 px-1.5 py-0.5 rounded font-mono">
+                  #{globalIdx + 1}
+                </span>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                {device.os_version && (
+                  <div className="flex justify-between">
+                    <span className="text-dark-300">Версия ОС</span>
+                    <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.os_version}</span>
+                  </div>
+                )}
+                {device.device_model && (
+                  <div className="flex justify-between">
+                    <span className="text-dark-300">Модель</span>
+                    <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.device_model}</span>
+                  </div>
+                )}
+                {device.app_version && (
+                  <div className="flex justify-between">
+                    <span className="text-dark-300">Приложение</span>
+                    <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.app_version}</span>
+                  </div>
+                )}
+                {device.user_agent && (
+                  <div className="flex justify-between">
+                    <span className="text-dark-300">User-Agent</span>
+                    <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]" title={device.user_agent}>{device.user_agent}</span>
+                  </div>
+                )}
+                {device.created_at && (
+                  <div className="flex justify-between">
+                    <span className="text-dark-300">Добавлено</span>
+                    <span className="text-dark-100">
+                      {format(new Date(device.created_at), 'dd.MM.yyyy HH:mm')}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {device.hwid && (
+                <p className="text-[10px] text-dark-400 font-mono mt-2 truncate" title={device.hwid}>
+                  HWID: {device.hwid}
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Pagination controls */}
+      {totalDevicePages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <button
+            onClick={() => setDevicePage(Math.max(1, devicePage - 1))}
+            disabled={devicePage <= 1}
+            className="px-2 py-1 text-xs bg-dark-700 hover:bg-dark-600 disabled:opacity-40 disabled:cursor-not-allowed text-dark-100 rounded transition-colors"
+          >
+            ←
+          </button>
+          <span className="text-xs text-dark-200">
+            {devicePage} / {totalDevicePages}
+          </span>
+          <button
+            onClick={() => setDevicePage(Math.min(totalDevicePages, devicePage + 1))}
+            disabled={devicePage >= totalDevicePages}
+            className="px-2 py-1 text-xs bg-dark-700 hover:bg-dark-600 disabled:opacity-40 disabled:cursor-not-allowed text-dark-100 rounded transition-colors"
+          >
+            →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function UserDetail() {
   const { uuid } = useParams<{ uuid: string }>()
   const navigate = useNavigate()
@@ -607,62 +901,7 @@ export default function UserDetail() {
           </div>
 
           {/* Block: Traffic */}
-          <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-            <h2 className="text-base md:text-lg font-semibold text-white mb-4">Трафик</h2>
-            <div className="space-y-4">
-              <div>
-                {user.traffic_limit_bytes ? (
-                  /* Limited user: standard progress bar */
-                  <>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-dark-200">Использовано</span>
-                      <span className="text-white text-xs sm:text-sm">
-                        {formatBytes(user.used_traffic_bytes)} / {formatBytes(user.traffic_limit_bytes)}
-                      </span>
-                    </div>
-                    <div className="w-full bg-dark-600 rounded-full h-2.5">
-                      <div
-                        className={`h-2.5 rounded-full transition-all ${
-                          trafficPercent > 90 ? 'bg-red-500' : trafficPercent > 70 ? 'bg-yellow-500' : 'bg-primary-500'
-                        }`}
-                        style={{ width: `${trafficPercent}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-dark-300 mt-1">
-                      {trafficPercent.toFixed(1)}% использовано
-                    </p>
-                  </>
-                ) : (
-                  /* Unlimited user: solid gradient bar with centered text */
-                  <>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-dark-200">Использовано</span>
-                      <span className="text-primary-400 text-xs sm:text-sm font-medium">Безлимит</span>
-                    </div>
-                    <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-sm font-medium text-primary-200">
-                          {formatBytes(user.used_traffic_bytes)} / ∞
-                        </span>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-4 pt-3 border-t border-dark-400/10">
-                <div className="bg-dark-700/50 rounded-lg p-3 text-center">
-                  <p className="text-lg font-bold text-white">{formatBytes(user.used_traffic_bytes)}</p>
-                  <p className="text-xs text-dark-200">Использовано</p>
-                </div>
-                <div className="bg-dark-700/50 rounded-lg p-3 text-center">
-                  <p className="text-lg font-bold text-white">
-                    {user.traffic_limit_bytes ? formatBytes(user.traffic_limit_bytes) : '∞'}
-                  </p>
-                  <p className="text-xs text-dark-200">Лимит</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <TrafficBlock user={user} trafficPercent={trafficPercent} />
 
           {/* Block: Devices (HWID) */}
           <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
@@ -680,85 +919,9 @@ export default function UserDetail() {
               </span>
             </div>
 
-            {/* Last subscription user-agent */}
-            {user.sub_last_user_agent && (
-              <div className="mb-4 p-3 bg-dark-700/30 rounded-lg border border-dark-600/30">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-dark-300">ОС (подписка)</p>
-                    <p className="text-dark-100">{uaInfo.os}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-dark-300">Приложение</p>
-                    <p className="text-dark-100">{uaInfo.app}</p>
-                  </div>
-                </div>
-                <p className="text-[10px] text-dark-300 font-mono mt-2 break-all">{uaInfo.raw}</p>
-              </div>
-            )}
-
-            {/* HWID device cards */}
+            {/* HWID device cards with pagination */}
             {hwidDevices && hwidDevices.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {hwidDevices.map((device, idx) => {
-                  const pi = getPlatformInfo(device.platform)
-                  return (
-                    <div
-                      key={device.hwid || idx}
-                      className="bg-dark-700/40 rounded-lg p-3 border border-dark-600/20 hover:border-dark-500/30 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{pi.icon}</span>
-                          <span className="text-sm font-medium text-white">{pi.label}</span>
-                        </div>
-                        <span className="text-[10px] text-dark-400 bg-dark-800/50 px-1.5 py-0.5 rounded font-mono">
-                          #{idx + 1}
-                        </span>
-                      </div>
-                      <div className="space-y-1.5 text-xs">
-                        {device.os_version && (
-                          <div className="flex justify-between">
-                            <span className="text-dark-300">Версия ОС</span>
-                            <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.os_version}</span>
-                          </div>
-                        )}
-                        {device.device_model && (
-                          <div className="flex justify-between">
-                            <span className="text-dark-300">Модель</span>
-                            <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.device_model}</span>
-                          </div>
-                        )}
-                        {device.app_version && (
-                          <div className="flex justify-between">
-                            <span className="text-dark-300">Приложение</span>
-                            <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.app_version}</span>
-                          </div>
-                        )}
-                        {device.user_agent && (
-                          <div className="flex justify-between">
-                            <span className="text-dark-300">User-Agent</span>
-                            <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]" title={device.user_agent}>{device.user_agent}</span>
-                          </div>
-                        )}
-                        {device.created_at && (
-                          <div className="flex justify-between">
-                            <span className="text-dark-300">Добавлено</span>
-                            <span className="text-dark-100">
-                              {format(new Date(device.created_at), 'dd.MM.yyyy HH:mm')}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      {device.hwid && (
-                        <p className="text-[10px] text-dark-400 font-mono mt-2 truncate" title={device.hwid}>
-                          HWID: {device.hwid}
-                        </p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+              <PaginatedDeviceList devices={hwidDevices} />
             ) : (
               <div className="text-center py-6 text-dark-300 text-sm">
                 Нет зарегистрированных устройств
