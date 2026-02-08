@@ -2350,6 +2350,43 @@ class DatabaseService:
             logger.error("Error getting violations by ASN type: %s", e, exc_info=True)
             return {}
 
+    async def get_recent_violations_count(
+        self,
+        user_uuid: str,
+        hours: int = 2
+    ) -> int:
+        """
+        Подсчитать количество нарушений пользователя за последние N часов.
+
+        Используется для проверки повторяемости нарушений:
+        одиночное срабатывание может быть ложным, а повторяющиеся — устойчивый паттерн.
+
+        Args:
+            user_uuid: UUID пользователя
+            hours: Временное окно в часах
+
+        Returns:
+            Количество нарушений за указанный период
+        """
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT COUNT(*) as cnt FROM violations
+                    WHERE user_uuid = $1
+                    AND detected_at > NOW() - INTERVAL '%s hours'
+                    """.replace('%s', str(hours)),
+                    user_uuid
+                )
+                return row['cnt'] if row else 0
+
+        except Exception as e:
+            logger.error("Error counting recent violations: %s", e, exc_info=True)
+            return 0
+
     async def get_user_violations(
         self,
         user_uuid: str,

@@ -36,6 +36,7 @@ class TemporalScore:
     reasons: List[str]
     simultaneous_connections_count: int = 0
     rapid_switches_count: int = 0
+    overlap_duration_minutes: float = 0.0  # Длительность перекрытия одновременных подключений
 
 
 @dataclass
@@ -120,7 +121,8 @@ class TemporalAnalyzer:
         score = 0.0
         reasons = []
         rapid_switches = 0
-        
+        overlap_minutes = 0.0
+
         # Проверка одновременных подключений
         # Считаем уникальные IP и проверяем, действительно ли подключения одновременные
         # Подключения считаются одновременными только если они созданы в пределах окна
@@ -272,6 +274,28 @@ class TemporalAnalyzer:
                         else:
                             score = 15.0
                             reasons.append(f"Возможное переключение сети: {simultaneous_count} IP при лимите {max_allowed_simultaneous} устройств")
+
+                    # Анализ длительности перекрытия сессий
+                    # Кратковременное перекрытие (< 3 мин) — почти наверняка переключение сети
+                    # Длительное перекрытие (> 15 мин) — подозрительно
+                    if simultaneous_groups and score > 0:
+                        best_group = max(simultaneous_groups, key=lambda g: len(set(ip for _, ip in g)))
+                        # Перекрытие начинается когда последнее подключение в группе появилось
+                        latest_start = max(t for t, _ in best_group)
+                        overlap_minutes = (now - latest_start).total_seconds() / 60
+
+                        if overlap_minutes < 2:
+                            # Очень короткое перекрытие — переключение сети, сильно снижаем
+                            score *= 0.15
+                            reasons.append(f"Кратковременное перекрытие ({overlap_minutes:.1f} мин) — вероятно переключение сети")
+                        elif overlap_duration_minutes < 5:
+                            # Короткое перекрытие — возможно переключение
+                            score *= 0.4
+                        elif overlap_duration_minutes < 15:
+                            # Среднее перекрытие — неоднозначно
+                            score *= 0.7
+                        # > 15 мин — длительное перекрытие, скор не снижаем
+
                 else:
                     # Если нет одновременных подключений, используем количество уникальных IP для статистики
                     simultaneous_count = len(set(ip for _, ip in valid_connections))
@@ -409,7 +433,8 @@ class TemporalAnalyzer:
             score=min(score, 100.0),  # Максимум 100
             reasons=reasons,
             simultaneous_connections_count=simultaneous_count,
-            rapid_switches_count=rapid_switches
+            rapid_switches_count=rapid_switches,
+            overlap_duration_minutes=overlap_minutes
         )
 
 
@@ -1694,6 +1719,43 @@ class IntelligentViolationDetector:
                     asn_ratio * 100, score_before_asn, raw_score
                 )
 
+            # --- Дополнительные проверки для снижения ложных срабатываний ---
+
+            # Проверка 1: Близость подсетей (CGNAT/NAT)
+            # IP в одной /24 подсети — почти наверняка один NAT, не шаринг
+            is_same_subnet, subnet_modifier = self._check_subnet_proximity(
+                active_connections, connection_history
+            )
+            if is_same_subnet:
+                score_before_subnet = raw_score
+                raw_score *= subnet_modifier
+                logger.debug(
+                    "Subnet proximity detected (modifier=%.2f), reducing score: %.2f -> %.2f",
+                    subnet_modifier, score_before_subnet, raw_score
+                )
+
+            # Проверка 2: Повторяемость нарушений
+            # Одиночное срабатывание может быть случайным, повторяющиеся — паттерн
+            consistency_modifier = await self._check_violation_consistency(user_uuid)
+            if consistency_modifier < 1.0:
+                score_before_consistency = raw_score
+                raw_score *= consistency_modifier
+                logger.debug(
+                    "Violation consistency modifier=%.2f, reducing score: %.2f -> %.2f",
+                    consistency_modifier, score_before_consistency, raw_score
+                )
+
+            # Проверка 3: Известные пары IP
+            # Пары IP, которые пользователь регулярно использует (дом+работа) — не шаринг
+            known_pairs_modifier = await self._check_known_ip_pairs(user_uuid, current_ips)
+            if known_pairs_modifier < 1.0:
+                score_before_pairs = raw_score
+                raw_score *= known_pairs_modifier
+                logger.debug(
+                    "Known IP pairs modifier=%.2f, reducing score: %.2f -> %.2f",
+                    known_pairs_modifier, score_before_pairs, raw_score
+                )
+
             # Если есть серьёзные одновременные подключения (высокий скор), устанавливаем минимум
             # Применяем только для очевидных нарушений (temporal >= 80), чтобы не создавать
             # ложных срабатываний при обычном переключении сетей
@@ -1812,6 +1874,182 @@ class IntelligentViolationDetector:
         is_same_asn = ratio >= 0.7
 
         return is_same_asn, ratio
+
+    def _check_subnet_proximity(
+        self,
+        connections: List[ActiveConnection],
+        connection_history: List[Dict[str, Any]]
+    ) -> tuple[bool, float]:
+        """
+        Проверить, находятся ли IP в одной подсети (/24 или /16).
+
+        IP в одной /24 подсети (напр. 185.26.120.X) почти наверняка принадлежат одному
+        NAT/CGNAT/корпоративной сети, а не разным пользователям.
+
+        Returns:
+            Tuple (is_same_subnet, modifier) где:
+            - is_same_subnet: True если большинство IP в одной подсети
+            - modifier: множитель для скора (0.2 = сильное снижение, 1.0 = без снижения)
+        """
+        all_ips = set()
+        for conn in connections:
+            ip_str = str(conn.ip_address)
+            if not ip_str.startswith(('127.', '192.168.', '10.', '172.16.')):
+                all_ips.add(ip_str)
+        for conn in connection_history[-10:]:
+            ip_str = str(conn.get("ip_address", ""))
+            if ip_str and not ip_str.startswith(('127.', '192.168.', '10.', '172.16.')):
+                all_ips.add(ip_str)
+
+        if len(all_ips) <= 1:
+            return False, 1.0
+
+        # Группируем по /24 и /16 подсетям
+        subnets_24: Dict[str, List[str]] = {}
+        subnets_16: Dict[str, List[str]] = {}
+        for ip in all_ips:
+            parts = ip.split('.')
+            if len(parts) == 4:
+                subnet_24 = '.'.join(parts[:3])
+                subnet_16 = '.'.join(parts[:2])
+                subnets_24.setdefault(subnet_24, []).append(ip)
+                subnets_16.setdefault(subnet_16, []).append(ip)
+
+        total = len(all_ips)
+        if total == 0:
+            return False, 1.0
+
+        # Находим самую большую группу в /24
+        max_same_24 = max((len(ips) for ips in subnets_24.values()), default=0)
+        max_same_16 = max((len(ips) for ips in subnets_16.values()), default=0)
+
+        ratio_24 = max_same_24 / total
+        ratio_16 = max_same_16 / total
+
+        # Если >= 70% IP в одной /24 подсети — очень вероятно один NAT
+        if ratio_24 >= 0.7:
+            logger.debug(
+                "Subnet proximity: %.0f%% IPs in same /24 subnet (%d/%d)",
+                ratio_24 * 100, max_same_24, total
+            )
+            return True, 0.2  # Сильное снижение — почти наверняка один NAT
+
+        # Если >= 70% IP в одной /16 подсети — вероятно один провайдер/регион
+        if ratio_16 >= 0.7:
+            logger.debug(
+                "Subnet proximity: %.0f%% IPs in same /16 subnet (%d/%d)",
+                ratio_16 * 100, max_same_16, total
+            )
+            return True, 0.5  # Умеренное снижение — один провайдер
+
+        return False, 1.0
+
+    async def _check_violation_consistency(self, user_uuid: str) -> float:
+        """
+        Проверить повторяемость нарушений для пользователя.
+
+        Одиночное срабатывание может быть случайным (переключение сети, глитч).
+        Повторяющиеся срабатывания — более надёжный сигнал.
+
+        Returns:
+            Множитель для скора:
+            - 0.3 — первое нарушение за 2 часа (вероятно ложное)
+            - 0.6 — второе нарушение (неоднозначно)
+            - 1.0 — 3+ нарушений (устойчивый паттерн)
+        """
+        try:
+            recent_count = await self.db.get_recent_violations_count(user_uuid, hours=2)
+            if recent_count == 0:
+                logger.debug("Violation consistency: first violation in 2h for %s — dampening", user_uuid)
+                return 0.3  # Первое срабатывание — сильный dampening
+            elif recent_count == 1:
+                logger.debug("Violation consistency: 2nd violation in 2h for %s — moderate dampening", user_uuid)
+                return 0.6  # Второе — умеренный dampening
+            else:
+                logger.debug("Violation consistency: %d violations in 2h for %s — consistent pattern", recent_count, user_uuid)
+                return 1.0  # 3+ — устойчивый паттерн, без снижения
+        except Exception as e:
+            logger.debug("Error checking violation consistency: %s", e)
+            return 1.0  # При ошибке не снижаем
+
+    async def _check_known_ip_pairs(self, user_uuid: str, current_ips: Set[str]) -> float:
+        """
+        Проверить, являются ли текущие пары IP «знакомыми» для пользователя.
+
+        Если пользователь регулярно использует одни и те же IP-адреса (дом + работа, WiFi + mobile),
+        это его нормальный паттерн, а не шаринг.
+
+        Args:
+            user_uuid: UUID пользователя
+            current_ips: Текущие IP адреса пользователя
+
+        Returns:
+            Множитель для скора:
+            - 0.3 — все пары IP знакомые (регулярный паттерн)
+            - 0.6 — большинство знакомые
+            - 1.0 — все пары новые (подозрительно)
+        """
+        if len(current_ips) <= 1:
+            return 1.0
+
+        try:
+            from itertools import combinations
+            from collections import Counter
+
+            # Получаем историю подключений за 30 дней
+            history = await self.db.get_connection_history(user_uuid, days=30)
+            if not history or len(history) < 5:
+                return 1.0  # Недостаточно данных для оценки
+
+            # Группируем IP по дням
+            daily_ips: Dict[str, Set[str]] = {}
+            for conn in history:
+                ip = str(conn.get("ip_address", ""))
+                connected_at = conn.get("connected_at")
+                if not ip or not connected_at:
+                    continue
+                if isinstance(connected_at, datetime):
+                    day = connected_at.strftime('%Y-%m-%d')
+                elif isinstance(connected_at, str):
+                    day = connected_at[:10]
+                else:
+                    continue
+                daily_ips.setdefault(day, set()).add(ip)
+
+            # Считаем как часто каждая пара IP встречается в один день
+            pair_counts: Counter = Counter()
+            for day, ips in daily_ips.items():
+                if len(ips) >= 2:
+                    for pair in combinations(sorted(ips), 2):
+                        pair_counts[pair] += 1
+
+            # Проверяем текущие пары IP
+            current_pairs = list(combinations(sorted(current_ips), 2))
+            if not current_pairs:
+                return 1.0
+
+            # Пара считается «знакомой» если встречалась 5+ раз за месяц
+            known_count = sum(1 for pair in current_pairs if pair_counts.get(pair, 0) >= 5)
+            known_ratio = known_count / len(current_pairs)
+
+            if known_ratio >= 0.8:
+                logger.debug(
+                    "Known IP pairs: %.0f%% pairs are familiar for %s",
+                    known_ratio * 100, user_uuid
+                )
+                return 0.3  # Почти все пары знакомые — нормальный паттерн
+            elif known_ratio >= 0.5:
+                logger.debug(
+                    "Known IP pairs: %.0f%% pairs are familiar for %s",
+                    known_ratio * 100, user_uuid
+                )
+                return 0.6  # Половина знакомые
+            else:
+                return 1.0  # Большинство новые
+
+        except Exception as e:
+            logger.debug("Error checking known IP pairs: %s", e)
+            return 1.0
 
     def _get_action(self, score: float) -> ViolationAction:
         """Определить рекомендуемое действие на основе скора."""
