@@ -166,12 +166,8 @@ interface TrafficStats {
   used_bytes: number
   lifetime_bytes: number
   traffic_limit_bytes: number | null
-  global_periods: {
-    today?: number
-    week?: number
-    month?: number
-    year?: number
-  }
+  period: string
+  period_bytes: number
   nodes_traffic: {
     node_name: string
     node_uuid: string
@@ -181,106 +177,160 @@ interface TrafficStats {
   }[]
 }
 
-type TrafficPeriod = 'current' | 'lifetime' | 'today' | 'week' | 'month' | 'year' | 'nodes'
+type TrafficPeriod = 'current' | 'lifetime' | 'today' | 'week' | 'month' | '3month' | '6month' | 'year' | 'nodes'
 
-const TRAFFIC_PERIOD_LABELS: Record<TrafficPeriod, string> = {
-  current: 'Текущий',
-  lifetime: 'Всё время',
-  today: 'Сегодня',
-  week: 'Неделя',
-  month: 'Месяц',
-  year: 'Год',
-  nodes: 'По нодам',
-}
+const TRAFFIC_PERIODS: { key: TrafficPeriod; label: string }[] = [
+  { key: 'current', label: 'Текущий' },
+  { key: 'lifetime', label: 'Всё время' },
+  { key: 'today', label: 'Сутки' },
+  { key: 'week', label: 'Неделя' },
+  { key: 'month', label: 'Месяц' },
+  { key: '3month', label: '3 месяца' },
+  { key: '6month', label: '6 месяцев' },
+  { key: 'year', label: 'Год' },
+  { key: 'nodes', label: 'По нодам' },
+]
+
+// API period keys (sent to backend)
+const API_PERIODS: TrafficPeriod[] = ['today', 'week', 'month', '3month', '6month', 'year']
 
 function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficPercent: number }) {
   const [period, setPeriod] = useState<TrafficPeriod>('current')
+  const [nodePeriod, setNodePeriod] = useState<string>('today')
 
-  const { data: trafficStats } = useQuery<TrafficStats>({
-    queryKey: ['user-traffic-stats', user.uuid],
+  // Fetch per-user traffic stats from Remnawave API for period-based views
+  const apiPeriod = period === 'nodes' ? nodePeriod : (API_PERIODS.includes(period) ? period : null)
+
+  const { data: trafficStats, isFetching } = useQuery<TrafficStats>({
+    queryKey: ['user-traffic-stats', user.uuid, apiPeriod],
     queryFn: async () => {
-      const response = await client.get(`/users/${user.uuid}/traffic-stats`)
+      const params: Record<string, string> = {}
+      if (apiPeriod) params.period = apiPeriod
+      const response = await client.get(`/users/${user.uuid}/traffic-stats`, { params })
       return response.data
     },
-    enabled: !!user.uuid,
+    enabled: !!user.uuid && (period !== 'current' && period !== 'lifetime'),
+    staleTime: 30_000,
   })
 
-  // Determine displayed traffic value based on period
-  const getDisplayedTraffic = (): { value: number; label: string } => {
-    if (!trafficStats) {
-      return { value: user.used_traffic_bytes, label: 'Использовано' }
-    }
+  const isUnlimited = !user.traffic_limit_bytes
+
+  // Get display value and label based on current period
+  const getDisplay = (): { value: number; label: string } => {
     switch (period) {
       case 'current':
-        return { value: trafficStats.used_bytes, label: 'Текущий период' }
+        return { value: user.used_traffic_bytes, label: 'Текущий период' }
       case 'lifetime':
-        return { value: trafficStats.lifetime_bytes, label: 'За всё время' }
-      case 'today':
-        return { value: trafficStats.global_periods.today || 0, label: 'Сегодня (глобально)' }
-      case 'week':
-        return { value: trafficStats.global_periods.week || 0, label: 'За неделю (глобально)' }
-      case 'month':
-        return { value: trafficStats.global_periods.month || 0, label: 'За месяц (глобально)' }
-      case 'year':
-        return { value: trafficStats.global_periods.year || 0, label: 'За год (глобально)' }
+        return { value: trafficStats?.lifetime_bytes ?? user.used_traffic_bytes, label: 'За всё время' }
       default:
+        if (trafficStats && API_PERIODS.includes(period)) {
+          return {
+            value: trafficStats.period_bytes,
+            label: TRAFFIC_PERIODS.find(p => p.key === period)?.label || '',
+          }
+        }
         return { value: user.used_traffic_bytes, label: 'Использовано' }
     }
   }
 
-  const displayed = getDisplayedTraffic()
-  const isUnlimited = !user.traffic_limit_bytes
-  const periods: TrafficPeriod[] = ['current', 'lifetime', 'today', 'week', 'month', 'year', 'nodes']
+  const displayed = getDisplay()
+  const showLoadingOverlay = isFetching && period !== 'current'
+
+  const NODE_PERIOD_OPTIONS = [
+    { key: 'today', label: 'Сутки' },
+    { key: 'week', label: 'Неделя' },
+    { key: 'month', label: 'Месяц' },
+    { key: '3month', label: '3 мес.' },
+    { key: '6month', label: '6 мес.' },
+    { key: 'year', label: 'Год' },
+  ]
 
   return (
     <div className="card rounded-xl border border-dark-400/10 p-4 md:p-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base md:text-lg font-semibold text-white">Трафик</h2>
-      </div>
+      <h2 className="text-base md:text-lg font-semibold text-white mb-4">Трафик</h2>
 
       {/* Period selector */}
       <div className="flex flex-wrap gap-1 mb-4">
-        {periods.map((p) => (
+        {TRAFFIC_PERIODS.map((p) => (
           <button
-            key={p}
-            onClick={() => setPeriod(p)}
+            key={p.key}
+            onClick={() => setPeriod(p.key)}
             className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
-              period === p
+              period === p.key
                 ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
                 : 'text-dark-200 hover:text-white hover:bg-dark-700/50 border border-transparent'
             }`}
           >
-            {TRAFFIC_PERIOD_LABELS[p]}
+            {p.label}
           </button>
         ))}
       </div>
 
       {period === 'nodes' ? (
         /* Per-node breakdown */
-        <div className="space-y-2">
-          {trafficStats?.nodes_traffic && trafficStats.nodes_traffic.length > 0 ? (
-            trafficStats.nodes_traffic.map((node) => (
-              <div
-                key={node.node_uuid}
-                className="flex items-center justify-between p-2.5 bg-dark-700/40 rounded-lg border border-dark-600/20"
+        <div className="space-y-3">
+          {/* Node period sub-filter */}
+          <div className="flex flex-wrap gap-1">
+            {NODE_PERIOD_OPTIONS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setNodePeriod(p.key)}
+                className={`px-2 py-0.5 text-[11px] rounded font-medium transition-all ${
+                  nodePeriod === p.key
+                    ? 'bg-dark-600 text-white'
+                    : 'text-dark-300 hover:text-dark-100 hover:bg-dark-700/50'
+                }`}
               >
-                <span className="text-sm text-dark-100 truncate flex-1 mr-3">{node.node_name}</span>
-                <div className="flex items-center gap-3 text-xs flex-shrink-0">
-                  <span className="text-green-400" title="Download">↓ {formatBytes(node.download_bytes)}</span>
-                  <span className="text-blue-400" title="Upload">↑ {formatBytes(node.upload_bytes)}</span>
-                  <span className="text-white font-medium min-w-[70px] text-right">{formatBytes(node.total_bytes)}</span>
-                </div>
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Node list */}
+          <div className="space-y-2 relative">
+            {showLoadingOverlay && (
+              <div className="absolute inset-0 bg-dark-800/50 rounded-lg flex items-center justify-center z-10">
+                <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
               </div>
-            ))
-          ) : (
-            <div className="text-center py-6 text-dark-300 text-sm">
-              Нет данных о трафике по нодам
-            </div>
-          )}
+            )}
+            {trafficStats?.nodes_traffic && trafficStats.nodes_traffic.length > 0 ? (
+              <>
+                {trafficStats.nodes_traffic.map((node) => (
+                  <div
+                    key={node.node_uuid}
+                    className="flex items-center justify-between p-2.5 bg-dark-700/40 rounded-lg border border-dark-600/20"
+                  >
+                    <span className="text-sm text-dark-100 truncate flex-1 mr-3">{node.node_name}</span>
+                    <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                      <span className="text-green-400" title="Download">↓ {formatBytes(node.download_bytes)}</span>
+                      <span className="text-blue-400" title="Upload">↑ {formatBytes(node.upload_bytes)}</span>
+                      <span className="text-white font-medium min-w-[70px] text-right">{formatBytes(node.total_bytes)}</span>
+                    </div>
+                  </div>
+                ))}
+                {/* Total */}
+                <div className="flex items-center justify-between p-2.5 bg-dark-600/30 rounded-lg border border-primary-500/20">
+                  <span className="text-sm text-primary-400 font-medium">Итого</span>
+                  <span className="text-sm text-white font-bold">
+                    {formatBytes(trafficStats.nodes_traffic.reduce((sum, n) => sum + n.total_bytes, 0))}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-6 text-dark-300 text-sm">
+                {isFetching ? 'Загрузка...' : 'Нет данных о трафике по нодам за этот период'}
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         /* Traffic bar and stats */
-        <div className="space-y-4">
+        <div className="space-y-4 relative">
+          {showLoadingOverlay && (
+            <div className="absolute inset-0 bg-dark-800/50 rounded-lg flex items-center justify-center z-10">
+              <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
           <div>
             {isUnlimited ? (
               <>
@@ -291,7 +341,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
                 <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-sm font-medium text-primary-200">
-                      {formatBytes(displayed.value)} / ∞
+                      {formatBytes(displayed.value)}{period === 'current' ? ' / ∞' : ''}
                     </span>
                   </div>
                 </div>
@@ -332,24 +382,40 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
           </div>
 
           {/* Summary cards */}
-          <div className="grid grid-cols-2 gap-4 pt-3 border-t border-dark-400/10">
+          <div className="grid grid-cols-3 gap-3 pt-3 border-t border-dark-400/10">
             <div className="bg-dark-700/50 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-white">{formatBytes(user.used_traffic_bytes)}</p>
-              <p className="text-xs text-dark-200">Текущий период</p>
+              <p className="text-base font-bold text-white">{formatBytes(user.used_traffic_bytes)}</p>
+              <p className="text-[11px] text-dark-200">Текущий период</p>
             </div>
             <div className="bg-dark-700/50 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-white">
+              <p className="text-base font-bold text-white">
                 {user.traffic_limit_bytes ? formatBytes(user.traffic_limit_bytes) : '∞'}
               </p>
-              <p className="text-xs text-dark-200">Лимит</p>
+              <p className="text-[11px] text-dark-200">Лимит</p>
+            </div>
+            <div className="bg-dark-700/50 rounded-lg p-3 text-center">
+              <p className="text-base font-bold text-white">
+                {trafficStats ? formatBytes(trafficStats.lifetime_bytes) : formatBytes(user.used_traffic_bytes)}
+              </p>
+              <p className="text-[11px] text-dark-200">Всё время</p>
             </div>
           </div>
 
-          {/* Lifetime traffic */}
-          {trafficStats && trafficStats.lifetime_bytes > 0 && period === 'current' && (
-            <div className="bg-dark-700/50 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-white">{formatBytes(trafficStats.lifetime_bytes)}</p>
-              <p className="text-xs text-dark-200">За всё время</p>
+          {/* Per-node breakdown for period views */}
+          {API_PERIODS.includes(period) && trafficStats?.nodes_traffic && trafficStats.nodes_traffic.length > 0 && (
+            <div className="pt-3 border-t border-dark-400/10">
+              <p className="text-xs text-dark-300 mb-2">Разбивка по нодам</p>
+              <div className="space-y-1.5">
+                {trafficStats.nodes_traffic.map((node) => (
+                  <div
+                    key={node.node_uuid}
+                    className="flex items-center justify-between px-2.5 py-1.5 bg-dark-700/30 rounded text-xs"
+                  >
+                    <span className="text-dark-100 truncate flex-1 mr-2">{node.node_name}</span>
+                    <span className="text-white font-medium">{formatBytes(node.total_bytes)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

@@ -514,13 +514,18 @@ async def get_hwid_device_counts(
 @router.get("/{user_uuid}/traffic-stats")
 async def get_user_traffic_stats(
     user_uuid: str,
+    period: str = Query("today", description="Period: today, week, month, 3month, 6month, year"),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Get traffic statistics for a user with global bandwidth context."""
-    try:
-        from web.backend.core.api_helper import fetch_bandwidth_stats, fetch_nodes_realtime_usage
+    """Get per-user traffic statistics with per-node breakdown from Remnawave API.
 
-        # Get user data
+    Uses /api/bandwidth-stats/users/{uuid} which returns actual per-user
+    traffic data broken down by node for any date range.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    try:
+        # Get user data for current/lifetime traffic
         user_data = None
         try:
             from src.services.database import db_service
@@ -531,8 +536,8 @@ async def get_user_traffic_stats(
 
         if not user_data:
             try:
-                from src.services.api_client import api_client
-                user_data = await api_client.get_user(user_uuid)
+                from src.services.api_client import api_client as _api
+                user_data = await _api.get_user(user_uuid)
             except ImportError:
                 raise HTTPException(status_code=503, detail="API service not available")
 
@@ -545,39 +550,68 @@ async def get_user_traffic_stats(
         lifetime_bytes = user_data.get('lifetime_used_traffic_bytes', 0) or 0
         traffic_limit = user_data.get('traffic_limit_bytes')
 
-        # Get global bandwidth stats for period context
-        bw_stats = await fetch_bandwidth_stats()
-        global_periods = {}
-        if bw_stats:
-            for key, label in [
-                ('bandwidthLastTwoDays', 'today'),
-                ('bandwidthLastSevenDays', 'week'),
-                ('bandwidthLast30Days', 'month'),
-                ('bandwidthCurrentYear', 'year'),
-            ]:
-                period_data = bw_stats.get(key, {})
-                try:
-                    global_periods[label] = int(period_data.get('current') or 0)
-                except (ValueError, TypeError):
-                    global_periods[label] = 0
+        # Calculate date range for the requested period
+        now = datetime.now(timezone.utc)
+        period_map = {
+            'today': timedelta(days=1),
+            'week': timedelta(days=7),
+            'month': timedelta(days=30),
+            '3month': timedelta(days=90),
+            '6month': timedelta(days=180),
+            'year': timedelta(days=365),
+        }
+        delta = period_map.get(period, timedelta(days=1))
+        start_dt = now - delta
+        start_str = start_dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        end_str = now.strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
-        # Get per-node realtime stats
-        realtime_nodes = await fetch_nodes_realtime_usage()
+        # Fetch per-user traffic from Remnawave bandwidth-stats API
+        period_bytes = 0
         nodes_traffic = []
-        for node in realtime_nodes:
-            nodes_traffic.append({
-                'node_name': node.get('nodeName', 'Unknown'),
-                'node_uuid': node.get('nodeUuid', ''),
-                'total_bytes': int(node.get('totalBytes', 0) or 0),
-                'download_bytes': int(node.get('downloadBytes', 0) or 0),
-                'upload_bytes': int(node.get('uploadBytes', 0) or 0),
-            })
+        try:
+            from src.services.api_client import api_client
+            result = await api_client.get_user_traffic_stats(
+                user_uuid, start=start_str, end=end_str, top_nodes_limit=50
+            )
+            # Parse response - handle nested "response" wrapper
+            response = result.get('response', result) if isinstance(result, dict) else result
+
+            if isinstance(response, dict):
+                # Total bytes for this user in the period
+                period_bytes = int(response.get('totalBytes', 0) or 0)
+
+                # Per-node breakdown
+                top_nodes = response.get('topNodes', [])
+                if isinstance(top_nodes, list):
+                    for node in top_nodes:
+                        nodes_traffic.append({
+                            'node_name': node.get('nodeName', 'Unknown'),
+                            'node_uuid': node.get('nodeUuid', ''),
+                            'total_bytes': int(node.get('totalBytes', 0) or 0),
+                            'download_bytes': int(node.get('downloadBytes', 0) or 0),
+                            'upload_bytes': int(node.get('uploadBytes', 0) or 0),
+                        })
+            elif isinstance(response, list):
+                # If it returns a list of node entries
+                for node in response:
+                    total = int(node.get('totalBytes', 0) or 0)
+                    period_bytes += total
+                    nodes_traffic.append({
+                        'node_name': node.get('nodeName', 'Unknown'),
+                        'node_uuid': node.get('nodeUuid', ''),
+                        'total_bytes': total,
+                        'download_bytes': int(node.get('downloadBytes', 0) or 0),
+                        'upload_bytes': int(node.get('uploadBytes', 0) or 0),
+                    })
+        except Exception as e:
+            logger.warning("Failed to fetch per-user bandwidth stats for %s: %s", user_uuid, e)
 
         return {
             'used_bytes': used_bytes,
             'lifetime_bytes': lifetime_bytes,
             'traffic_limit_bytes': traffic_limit,
-            'global_periods': global_periods,
+            'period': period,
+            'period_bytes': period_bytes,
             'nodes_traffic': nodes_traffic,
         }
 
