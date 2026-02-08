@@ -614,6 +614,21 @@ async def get_user_traffic_stats(
         raise HTTPException(status_code=500, detail="Internal error")
 
 
+@router.post("/{user_uuid}/sync-hwid-devices")
+async def sync_user_hwid_devices(
+    user_uuid: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Force re-sync HWID devices for a user from Remnawave API to local DB."""
+    try:
+        from src.services.sync import sync_service
+        synced = await sync_service.sync_user_hwid_devices(user_uuid)
+        return {"success": True, "synced": synced}
+    except Exception as e:
+        logger.error("Error syncing HWID devices for %s: %s", user_uuid, e)
+        raise HTTPException(status_code=500, detail="Sync failed")
+
+
 @router.get("/{user_uuid}/hwid-devices", response_model=List[HwidDevice])
 async def get_user_hwid_devices(
     user_uuid: str,

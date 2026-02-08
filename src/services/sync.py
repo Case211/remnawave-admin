@@ -165,13 +165,6 @@ class SyncService:
             results["config_profiles"] = -1
         
         try:
-            # Sync tokens
-            results["tokens"] = await self.sync_tokens()
-        except Exception as e:
-            logger.error("Failed to sync tokens: %s", e)
-            results["tokens"] = -1
-        
-        try:
             # Sync templates
             results["templates"] = await self.sync_templates()
         except Exception as e:

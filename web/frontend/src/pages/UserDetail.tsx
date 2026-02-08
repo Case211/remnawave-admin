@@ -556,13 +556,21 @@ export default function UserDetail() {
   })
 
   // Fetch HWID devices
-  const { data: hwidDevices } = useQuery<HwidDevice[]>({
+  const { data: hwidDevices, isFetching: hwidFetching } = useQuery<HwidDevice[]>({
     queryKey: ['user-hwid-devices', uuid],
     queryFn: async () => {
       const response = await client.get(`/users/${uuid}/hwid-devices`)
       return response.data
     },
     enabled: !!uuid,
+  })
+
+  // Sync HWID devices from API
+  const syncHwidMutation = useMutation({
+    mutationFn: async () => { await client.post(`/users/${uuid}/sync-hwid-devices`) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
+    },
   })
 
   // Initialize edit form when user data loads
@@ -975,9 +983,21 @@ export default function UserDetail() {
                   </span>
                 )}
               </h2>
-              <span className="text-xs text-dark-300 bg-dark-700/50 px-2 py-1 rounded">
-                Лимит: {user.hwid_device_limit || '∞'}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => syncHwidMutation.mutate()}
+                  disabled={syncHwidMutation.isPending || hwidFetching}
+                  className="p-1.5 text-dark-300 hover:text-primary-400 hover:bg-dark-700/50 rounded-lg transition-colors disabled:opacity-40"
+                  title="Синхронизировать устройства"
+                >
+                  <svg className={`w-4 h-4 ${syncHwidMutation.isPending ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+                <span className="text-xs text-dark-300 bg-dark-700/50 px-2 py-1 rounded">
+                  Лимит: {user.hwid_device_limit || '∞'}
+                </span>
+              </div>
             </div>
 
             {/* HWID device cards with pagination */}

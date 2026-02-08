@@ -94,6 +94,165 @@ const subcategoryLabels: Record<string, string> = {
   'weights': 'Веса компонентов скора',
 }
 
+const SYNC_ENTITY_LABELS: Record<string, string> = {
+  users: 'Пользователи',
+  nodes: 'Ноды',
+  hosts: 'Хосты',
+  config_profiles: 'Профили',
+  templates: 'Шаблоны',
+  snippets: 'Сниппеты',
+  squads: 'Сквады',
+  hwid_devices: 'HWID устройства',
+}
+
+// Entity keys that can be synced manually (maps display key -> API trigger key)
+const SYNCABLE_ENTITIES: Record<string, string> = {
+  users: 'users',
+  nodes: 'nodes',
+  hosts: 'hosts',
+  config_profiles: 'config_profiles',
+  hwid_devices: 'hwid_devices',
+}
+
+function SyncStatusBlock({
+  syncItems,
+  queryClient,
+}: {
+  syncItems: SyncStatusItem[]
+  queryClient: ReturnType<typeof useQueryClient>
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [syncingEntity, setSyncingEntity] = useState<string | null>(null)
+
+  const syncMutation = useMutation({
+    mutationFn: async (entity: string) => {
+      setSyncingEntity(entity)
+      await client.post(`/settings/sync/${entity}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['syncStatus'] })
+      setSyncingEntity(null)
+    },
+    onError: () => {
+      setSyncingEntity(null)
+    },
+  })
+
+  const syncAllMutation = useMutation({
+    mutationFn: async () => {
+      setSyncingEntity('all')
+      await client.post('/settings/sync/all')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['syncStatus'] })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      setSyncingEntity(null)
+    },
+    onError: () => {
+      setSyncingEntity(null)
+    },
+  })
+
+  // Filter out tokens from display
+  const visibleItems = syncItems.filter((item) => item.key !== 'tokens')
+
+  const successCount = visibleItems.filter((i) => i.sync_status === 'success').length
+  const errorCount = visibleItems.filter((i) => i.sync_status === 'error').length
+
+  return (
+    <div className="card p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-dark-700/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          {isOpen ? (
+            <HiChevronDown className="w-5 h-5 text-dark-200 transition-transform duration-200" />
+          ) : (
+            <HiChevronRight className="w-5 h-5 text-dark-200 transition-transform duration-200" />
+          )}
+          <h2 className="text-base font-semibold text-white">Синхронизация</h2>
+          <span className="text-xs text-dark-300">{visibleItems.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {errorCount > 0 && (
+            <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20">
+              {errorCount} ошибок
+            </span>
+          )}
+          {successCount > 0 && (
+            <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded border border-green-500/20">
+              {successCount} ОК
+            </span>
+          )}
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="px-4 pb-4 md:px-5 md:pb-5 space-y-3">
+          {/* Sync all button */}
+          <div className="flex justify-end">
+            <button
+              onClick={(e) => { e.stopPropagation(); syncAllMutation.mutate() }}
+              disabled={syncingEntity !== null}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 rounded-lg transition-colors disabled:opacity-40"
+            >
+              <HiRefresh className={`w-3.5 h-3.5 ${syncingEntity === 'all' ? 'animate-spin' : ''}`} />
+              Синхронизировать всё
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {visibleItems.map((item) => {
+              const entityKey = SYNCABLE_ENTITIES[item.key]
+              const isSyncing = syncingEntity === item.key || syncingEntity === 'all'
+              return (
+                <div key={item.key} className="bg-dark-800/50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-white">
+                      {SYNC_ENTITY_LABELS[item.key] || item.key}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {entityKey && (
+                        <button
+                          onClick={() => syncMutation.mutate(entityKey)}
+                          disabled={syncingEntity !== null}
+                          className="p-1 text-dark-400 hover:text-primary-400 rounded transition-colors disabled:opacity-40"
+                          title="Синхронизировать"
+                        >
+                          <HiRefresh className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                        </button>
+                      )}
+                      <span className={`w-2 h-2 rounded-full ${
+                        item.sync_status === 'success' ? 'bg-green-500' :
+                        item.sync_status === 'error' ? 'bg-red-500' : 'bg-yellow-500'
+                      }`}></span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-dark-200 flex items-center gap-1">
+                    <HiClock className="w-3 h-3" />
+                    {item.last_sync_at ? formatTimeAgo(item.last_sync_at) : 'Никогда'}
+                  </div>
+                  {item.records_synced > 0 && (
+                    <div className="text-xs text-dark-200 mt-0.5">
+                      {item.records_synced} записей
+                    </div>
+                  )}
+                  {item.error_message && (
+                    <div className="text-xs text-red-400 mt-1 truncate" title={item.error_message}>
+                      {item.error_message}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function formatTimeAgo(dateStr: string): string {
   const date = new Date(dateStr)
   const now = new Date()
@@ -550,38 +709,9 @@ export default function Settings() {
         )}
       </div>
 
-      {/* Sync status */}
+      {/* Sync status - collapsible */}
       {syncItems.length > 0 && !search && (
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <h2 className="text-base md:text-lg font-semibold text-white mb-3">Статус синхронизации</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {syncItems.map((item) => (
-              <div key={item.key} className="bg-dark-800/50 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-white capitalize">{item.key}</span>
-                  <span className={`w-2 h-2 rounded-full ${
-                    item.sync_status === 'success' ? 'bg-green-500' :
-                    item.sync_status === 'error' ? 'bg-red-500' : 'bg-yellow-500'
-                  }`}></span>
-                </div>
-                <div className="text-xs text-dark-200 flex items-center gap-1">
-                  <HiClock className="w-3 h-3" />
-                  {item.last_sync_at ? formatTimeAgo(item.last_sync_at) : 'Никогда'}
-                </div>
-                {item.records_synced > 0 && (
-                  <div className="text-xs text-dark-200 mt-0.5">
-                    {item.records_synced} записей
-                  </div>
-                )}
-                {item.error_message && (
-                  <div className="text-xs text-red-400 mt-1 truncate" title={item.error_message}>
-                    {item.error_message}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <SyncStatusBlock syncItems={syncItems} queryClient={queryClient} />
       )}
 
       {/* Settings as accordion */}

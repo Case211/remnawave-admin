@@ -293,3 +293,35 @@ async def get_sync_status(
     except Exception as e:
         logger.error("Error fetching sync status: %s", e)
         return {"items": []}
+
+
+@router.post("/sync/{entity}")
+async def trigger_sync(
+    entity: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Trigger manual sync for a specific entity type."""
+    try:
+        from src.services.sync import sync_service
+
+        sync_methods = {
+            'users': sync_service.sync_users,
+            'nodes': sync_service.sync_nodes,
+            'hosts': sync_service.sync_hosts,
+            'config_profiles': sync_service.sync_config_profiles,
+            'hwid_devices': sync_service.sync_all_hwid_devices,
+            'all': sync_service.full_sync,
+        }
+
+        method = sync_methods.get(entity)
+        if not method:
+            raise HTTPException(status_code=400, detail=f"Unknown entity: {entity}")
+
+        result = await method()
+        return {"success": True, "entity": entity, "result": result}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error triggering sync for %s: %s", entity, e)
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
