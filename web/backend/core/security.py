@@ -142,11 +142,11 @@ def verify_admin_password(username: str, password: str) -> bool:
 
     stored = settings.admin_password
 
-    # If stored password is a bcrypt hash, use passlib for verification
+    # If stored password is a bcrypt hash, verify with bcrypt
     if stored.startswith("$2b$") or stored.startswith("$2a$"):
         try:
-            from passlib.hash import bcrypt as bcrypt_hasher
-            return bcrypt_hasher.verify(password, stored)
+            import bcrypt as _bcrypt
+            return _bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
         except Exception as e:
             logger.error("bcrypt verification failed: %s", e)
             return False
