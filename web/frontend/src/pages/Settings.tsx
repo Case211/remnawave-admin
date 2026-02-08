@@ -158,8 +158,19 @@ function SyncStatusBlock({
     },
   })
 
-  // Filter out tokens from display
-  const visibleItems = syncItems.filter((item) => item.key !== 'tokens')
+  // Filter out tokens from display, and ensure all SYNCABLE_ENTITIES are visible
+  // even if they don't have a sync_metadata row yet (e.g. ASN before first sync)
+  const existingKeys = new Set(syncItems.map((item) => item.key))
+  const missingItems: SyncStatusItem[] = Object.keys(SYNCABLE_ENTITIES)
+    .filter((key) => !existingKeys.has(key))
+    .map((key) => ({
+      key,
+      last_sync_at: null,
+      sync_status: 'never',
+      error_message: null,
+      records_synced: 0,
+    }))
+  const visibleItems = [...syncItems, ...missingItems].filter((item) => item.key !== 'tokens')
 
   const successCount = visibleItems.filter((i) => i.sync_status === 'success').length
   const errorCount = visibleItems.filter((i) => i.sync_status === 'error').length
@@ -235,7 +246,8 @@ function SyncStatusBlock({
                       <span className={cn(
                         'w-2 h-2 rounded-full',
                         item.sync_status === 'success' ? 'bg-green-500' :
-                        item.sync_status === 'error' ? 'bg-red-500' : 'bg-yellow-500'
+                        item.sync_status === 'error' ? 'bg-red-500' :
+                        item.sync_status === 'never' ? 'bg-dark-400' : 'bg-yellow-500'
                       )} />
                     </div>
                   </div>
@@ -1054,7 +1066,7 @@ export default function Settings() {
       </div>
 
       {/* Sync status - collapsible */}
-      {syncItems.length > 0 && !search && (
+      {!search && (
         <SyncStatusBlock syncItems={syncItems} queryClient={queryClient} />
       )}
 

@@ -36,6 +36,7 @@ class TemporalScore:
     reasons: List[str]
     simultaneous_connections_count: int = 0
     rapid_switches_count: int = 0
+    overlap_duration_minutes: float = 0.0  # Длительность перекрытия одновременных подключений
 
 
 @dataclass
@@ -120,7 +121,8 @@ class TemporalAnalyzer:
         score = 0.0
         reasons = []
         rapid_switches = 0
-        
+        overlap_minutes = 0.0
+
         # Проверка одновременных подключений
         # Считаем уникальные IP и проверяем, действительно ли подключения одновременные
         # Подключения считаются одновременными только если они созданы в пределах окна
@@ -128,7 +130,7 @@ class TemporalAnalyzer:
         # Также учитываем роутинг в приложении - пользователь может периодически подключаться/отключаться
         if len(connections) > 1:
             simultaneous_window_seconds = 120  # Окно для определения одновременности (2 минуты)
-            reconnect_threshold_seconds = 300  # Порог для определения переподключения (5 минут)
+            reconnect_threshold_seconds = 600  # Порог для определения переподключения (10 минут)
             # Если между подключениями больше 5 минут, это переподключение через роутинг, а не одновременное подключение
             max_connection_age_hours = 24  # Максимальный возраст подключения для учёта
             # Учитываем количество устройств пользователя - если у пользователя несколько устройств,
@@ -146,28 +148,26 @@ class TemporalAnalyzer:
                         conn_time = datetime.fromisoformat(conn_time.replace('Z', '+00:00'))
                     except ValueError:
                         continue
-                
+
                 if not isinstance(conn_time, datetime):
                     continue
-                
+
                 # Убираем timezone для сравнения
                 if conn_time.tzinfo:
                     conn_time = conn_time.replace(tzinfo=None)
-                
+
                 # Пропускаем слишком старые подключения (старше 24 часов)
                 age_hours = (now - conn_time).total_seconds() / 3600
                 if age_hours > max_connection_age_hours:
                     continue
-                
-                # Пропускаем подключения, которые были неактивны слишком долго (более 5 минут)
-                # Это переподключения через роутинг, а не одновременные подключения
+
+                # Пропускаем подключения, которые были неактивны слишком долго
+                # Это устаревшие (зависшие) подключения или переподключения через роутинг
+                # Не считаем их одновременными
                 age_seconds = (now - conn_time).total_seconds()
                 if age_seconds > reconnect_threshold_seconds:
-                    # Если подключение старше 5 минут и нет других активных подключений,
-                    # это может быть переподключение, но мы всё равно учитываем его для анализа
-                    # (но не как одновременное подключение)
-                    pass
-                
+                    continue
+
                 valid_connections.append((conn_time, str(conn.ip_address)))
             
             # Если есть валидные подключения, проверяем одновременность
@@ -231,94 +231,71 @@ class TemporalAnalyzer:
 
                     # Логика определения нарушения:
                     # - Базовый лимит = количество устройств пользователя
-                    # - Буфер +1 на случай кратковременного overlap при переключении сети
-                    # - Если IP > лимит + буфер - это превышение
+                    # - Буфер для переключения сетей (WiFi <-> Mobile, роутинг, погрешности disconnect)
+                    # - Превышение буфера = нарушение
                     #
-                    # Примеры:
-                    # - 1 устройство: лимит=1, буфер=1, порог=2 → 3+ IP = нарушение, 2 IP = предупреждение
-                    # - 3 устройства: лимит=3, буфер=1, порог=4 → 5+ IP = нарушение, 4 IP = предупреждение
-                    network_switch_buffer = 1
-                    soft_threshold = max_allowed_simultaneous + network_switch_buffer  # Мягкий порог (предупреждение)
-                    hard_threshold = max_allowed_simultaneous + network_switch_buffer + 1  # Жёсткий порог (нарушение)
-
-                    # Сначала проверяем: IP > количества устройств?
-                    # Это уже подозрительно, даже если в пределах буфера
-                    if simultaneous_count > max_allowed_simultaneous:
-                        excess_over_devices = simultaneous_count - max_allowed_simultaneous
-
-                        if simultaneous_count > hard_threshold:
-                            # Значительное превышение - точно нарушение
-                            excess = simultaneous_count - hard_threshold
-                            if excess >= 2 or simultaneous_count > 5:
-                                # Сильное превышение
-                                score = 100.0
-                                reasons.append(f"Превышение лимита устройств: {simultaneous_count} IP при лимите {user_device_count} устройств (превышение на {excess_over_devices})")
-                            else:
-                                # Умеренное превышение
-                                score = 80.0
-                                reasons.append(f"Превышение лимита устройств: {simultaneous_count} IP при лимите {user_device_count} устройств")
-                        elif simultaneous_count > soft_threshold:
-                            # Небольшое превышение мягкого порога
-                            score = 60.0
-                            reasons.append(f"Возможное превышение лимита: {simultaneous_count} IP при лимите {user_device_count} устройств")
-                        else:
-                            # IP > устройств, но в пределах буфера - может быть переключение сети
-                            # Даём небольшой скор для мониторинга
-                            score = 40.0
-                            reasons.append(f"Подозрительная активность: {simultaneous_count} IP при лимите {user_device_count} устройств (возможно переключение сети)")
-                    # Если IP <= устройств - всё нормально, не добавляем скор
-                    # Учитываем количество устройств пользователя с буфером для переключения сетей
-                    # Буфер учитывает:
-                    # - Переключение WiFi <-> Mobile (кратковременно 2 IP от одного устройства)
-                    # - Роутинг с несколькими точками выхода
-                    # - Погрешности определения времени отключения
-                    #
-                    # ВАЖНО: Буфер должен быть меньше для маленьких лимитов,
-                    # иначе пользователь с лимитом 1 устройство может использовать 3 IP без детекции!
-                    if user_device_count <= 1:
-                        network_switch_buffer = 1  # Маленький буфер для лимита 1 устройство
-                    elif user_device_count == 2:
-                        network_switch_buffer = 1  # Маленький буфер для лимита 2 устройства
+                    # Буфер зависит от количества устройств:
+                    # - 1-2 устройства: буфер +1 (переключение WiFi <-> Mobile)
+                    # - 3+ устройств: буфер +2 (несколько устройств могут одновременно переключать сети)
+                    if user_device_count <= 2:
+                        network_switch_buffer = 1
                     else:
-                        network_switch_buffer = 2  # Стандартный буфер для 3+ устройств
+                        network_switch_buffer = 2
 
                     effective_threshold = max_allowed_simultaneous + network_switch_buffer
 
                     # Если пользователь имеет много устройств (3+), даём дополнительный буфер
-                    # т.к. несколько устройств могут одновременно переключать сети
                     if user_device_count >= 3:
                         effective_threshold += 1
 
-                    # ПЕРВАЯ ПРОВЕРКА: Базовое превышение лимита устройств
-                    # Если количество одновременных IP > лимита устройств, это уже подозрительно
-                    # (даже если с буфером всё ещё ок)
-                    if simultaneous_count > max_allowed_simultaneous:
-                        excess_over_limit = simultaneous_count - max_allowed_simultaneous
-                        if excess_over_limit >= 2:
-                            # Превышение лимита на 2+ - это почти наверняка шаринг
-                            score = max(score, 70.0)
-                            reasons.append(f"Превышение лимита устройств: {simultaneous_count} IP одновременно при лимите {max_allowed_simultaneous} устройств (превышение на {excess_over_limit})")
-                        else:
-                            # Превышение на 1 - может быть переключение сетей, но заслуживает мониторинга
-                            score = max(score, 55.0)
-                            reasons.append(f"Возможное превышение лимита: {simultaneous_count} IP при лимите {max_allowed_simultaneous} устройств")
-
-                    # ВТОРАЯ ПРОВЕРКА: Превышение с учётом буфера (более серьёзное нарушение)
+                    # Проверяем превышение с учётом буфера
                     if simultaneous_count > effective_threshold:
-                        # Значительное превышение - вероятно шаринг
+                        # Превышение буфера — вероятно шаринг
                         excess = simultaneous_count - effective_threshold
                         if excess >= 3 or simultaneous_count > 5:
-                            # Сильное превышение - высокий скор
+                            # Сильное превышение
                             score = 100.0
                             reasons.append(f"Множественные одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
                         elif excess >= 2:
                             # Умеренное превышение
-                            score = max(score, 85.0)
+                            score = 80.0
                             reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
                         else:
-                            # Минимальное превышение на 1 - добавляем к скору
-                            score = max(score, 65.0)
-                            reasons.append(f"Избыточные подключения: {simultaneous_count} IP (порог: {effective_threshold}, устройств: {user_device_count})")
+                            # Превышение на 1 сверх буфера
+                            score = 60.0
+                            reasons.append(f"Превышение лимита устройств: {simultaneous_count} IP (порог: {effective_threshold}, устройств: {user_device_count})")
+                    elif simultaneous_count > max_allowed_simultaneous:
+                        # IP > устройств, но в пределах буфера — скорее всего переключение сети
+                        # Минимальный скор для мониторинга, не классифицируем как нарушение
+                        excess_over_limit = simultaneous_count - max_allowed_simultaneous
+                        if excess_over_limit >= 2:
+                            score = 35.0
+                            reasons.append(f"Подозрительная активность: {simultaneous_count} IP при лимите {max_allowed_simultaneous} устройств")
+                        else:
+                            score = 15.0
+                            reasons.append(f"Возможное переключение сети: {simultaneous_count} IP при лимите {max_allowed_simultaneous} устройств")
+
+                    # Анализ длительности перекрытия сессий
+                    # Кратковременное перекрытие (< 3 мин) — почти наверняка переключение сети
+                    # Длительное перекрытие (> 15 мин) — подозрительно
+                    if simultaneous_groups and score > 0:
+                        best_group = max(simultaneous_groups, key=lambda g: len(set(ip for _, ip in g)))
+                        # Перекрытие начинается когда последнее подключение в группе появилось
+                        latest_start = max(t for t, _ in best_group)
+                        overlap_minutes = (now - latest_start).total_seconds() / 60
+
+                        if overlap_minutes < 2:
+                            # Очень короткое перекрытие — переключение сети, сильно снижаем
+                            score *= 0.15
+                            reasons.append(f"Кратковременное перекрытие ({overlap_minutes:.1f} мин) — вероятно переключение сети")
+                        elif overlap_duration_minutes < 5:
+                            # Короткое перекрытие — возможно переключение
+                            score *= 0.4
+                        elif overlap_duration_minutes < 15:
+                            # Среднее перекрытие — неоднозначно
+                            score *= 0.7
+                        # > 15 мин — длительное перекрытие, скор не снижаем
+
                 else:
                     # Если нет одновременных подключений, используем количество уникальных IP для статистики
                     simultaneous_count = len(set(ip for _, ip in valid_connections))
@@ -456,7 +433,8 @@ class TemporalAnalyzer:
             score=min(score, 100.0),  # Максимум 100
             reasons=reasons,
             simultaneous_connections_count=simultaneous_count,
-            rapid_switches_count=rapid_switches
+            rapid_switches_count=rapid_switches,
+            overlap_duration_minutes=overlap_minutes
         )
 
 
@@ -480,8 +458,85 @@ class GeoAnalyzer:
         'international': 800, # км/ч (самолёт)
     }
 
+    # Маппинг русских названий городов в английские (канонические)
+    # Используется для нормализации: GeoIP API возвращает английские названия,
+    # а локальная база ASN — русские. Без маппинга "Moscow" и "Москва" считаются разными городами.
+    CITY_NAME_ALIASES = {
+        'москва': 'moscow',
+        'санкт-петербург': 'saint petersburg',
+        'петербург': 'saint petersburg',
+        'спб': 'saint petersburg',
+        'новосибирск': 'novosibirsk',
+        'екатеринбург': 'yekaterinburg',
+        'казань': 'kazan',
+        'нижний новгород': 'nizhny novgorod',
+        'челябинск': 'chelyabinsk',
+        'самара': 'samara',
+        'омск': 'omsk',
+        'ростов-на-дону': 'rostov-on-don',
+        'уфа': 'ufa',
+        'красноярск': 'krasnoyarsk',
+        'воронеж': 'voronezh',
+        'пермь': 'perm',
+        'волгоград': 'volgograd',
+        'краснодар': 'krasnodar',
+        'саратов': 'saratov',
+        'тюмень': 'tyumen',
+        'тольятти': 'tolyatti',
+        'ижевск': 'izhevsk',
+        'барнаул': 'barnaul',
+        'ульяновск': 'ulyanovsk',
+        'иркутск': 'irkutsk',
+        'хабаровск': 'khabarovsk',
+        'ярославль': 'yaroslavl',
+        'владивосток': 'vladivostok',
+        'махачкала': 'makhachkala',
+        'томск': 'tomsk',
+        'оренбург': 'orenburg',
+        'кемерово': 'kemerovo',
+        'новокузнецк': 'novokuznetsk',
+        'рязань': 'ryazan',
+        'астрахань': 'astrakhan',
+        'набережные челны': 'naberezhnye chelny',
+        'пенза': 'penza',
+        'липецк': 'lipetsk',
+        'тула': 'tula',
+        'киров': 'kirov',
+        'чебоксары': 'cheboksary',
+        'калининград': 'kaliningrad',
+        'курск': 'kursk',
+        'ставрополь': 'stavropol',
+        'сочи': 'sochi',
+        'тверь': 'tver',
+        'брянск': 'bryansk',
+        'иваново': 'ivanovo',
+        'белгород': 'belgorod',
+        'сургут': 'surgut',
+        'владимир': 'vladimir',
+        'архангельск': 'arkhangelsk',
+        'чита': 'chita',
+        'калуга': 'kaluga',
+        'смоленск': 'smolensk',
+        'вологда': 'vologda',
+        'орёл': 'oryol',
+        'орел': 'oryol',
+        'мурманск': 'murmansk',
+        'химки': 'khimki',
+        'мытищи': 'mytishchi',
+        'балашиха': 'balashikha',
+        'подольск': 'podolsk',
+        'королёв': 'korolev',
+        'королев': 'korolev',
+        'люберцы': 'lyubertsy',
+        'красногорск': 'krasnogorsk',
+        'одинцово': 'odintsovo',
+        'домодедово': 'domodedovo',
+        'зеленоград': 'zelenograd',
+    }
+
     # Агломерации и пригороды - города, которые считаются одной локацией
     # Ключ - название агломерации, значение - список городов (включая центр)
+    # Содержит как английские, так и русские названия для корректного сравнения
     METROPOLITAN_AREAS = {
         # Свердловская область
         'yekaterinburg': [
@@ -579,7 +634,8 @@ class GeoAnalyzer:
         """
         Нормализует название города для сравнения.
 
-        Убирает диакритику, приводит к нижнему регистру, убирает лишние символы.
+        Приводит к нижнему регистру, убирает лишние символы,
+        переводит русские названия в английские через маппинг алиасов.
         """
         if not city:
             return ""
@@ -589,6 +645,9 @@ class GeoAnalyzer:
         for suffix in [' city', ' gorod', ' oblast', ' region']:
             if normalized.endswith(suffix):
                 normalized = normalized[:-len(suffix)].strip()
+        # Переводим русские названия в английские через маппинг алиасов
+        if normalized in self.CITY_NAME_ALIASES:
+            normalized = self.CITY_NAME_ALIASES[normalized]
         return normalized
 
     def _get_metro_area(self, city: str) -> Optional[str]:
@@ -712,7 +771,10 @@ class GeoAnalyzer:
             if metadata.country_code:
                 countries.add(metadata.country_code)
             if metadata.city:
-                cities.add(metadata.city)
+                # Нормализуем название города для корректного сравнения
+                # (избегаем дубликатов вроде "Moscow" и "Москва")
+                normalized_city = self._normalize_city_name(metadata.city)
+                cities.add(normalized_city or metadata.city)
         
         # Если нет данных о геолокации, возвращаем нулевой скор
         # Не добавляем это в причины, так как отсутствие данных не является нарушением
@@ -822,7 +884,9 @@ class GeoAnalyzer:
                                     reasons.append(f"Перемещение между странами: {prev_country} → {curr_country}")
                 
                 # Разные города одной страны
-                elif prev_country == curr_country and prev_city != curr_city and prev_city and curr_city:
+                # Нормализуем названия перед сравнением (Moscow == Москва и т.д.)
+                elif prev_country == curr_country and prev_city and curr_city and \
+                        self._normalize_city_name(prev_city) != self._normalize_city_name(curr_city):
                     # Проверяем, находятся ли города в одной агломерации (пригороды)
                     # Если да, это нормальное поведение - не добавляем скор
                     if self._are_cities_in_same_metro(prev_city, curr_city):
@@ -1655,16 +1719,50 @@ class IntelligentViolationDetector:
                     asn_ratio * 100, score_before_asn, raw_score
                 )
 
+            # --- Дополнительные проверки для снижения ложных срабатываний ---
+
+            # Проверка 1: Близость подсетей (CGNAT/NAT)
+            # IP в одной /24 подсети — почти наверняка один NAT, не шаринг
+            is_same_subnet, subnet_modifier = self._check_subnet_proximity(
+                active_connections, connection_history
+            )
+            if is_same_subnet:
+                score_before_subnet = raw_score
+                raw_score *= subnet_modifier
+                logger.debug(
+                    "Subnet proximity detected (modifier=%.2f), reducing score: %.2f -> %.2f",
+                    subnet_modifier, score_before_subnet, raw_score
+                )
+
+            # Проверка 2: Повторяемость нарушений
+            # Одиночное срабатывание может быть случайным, повторяющиеся — паттерн
+            consistency_modifier = await self._check_violation_consistency(user_uuid)
+            if consistency_modifier < 1.0:
+                score_before_consistency = raw_score
+                raw_score *= consistency_modifier
+                logger.debug(
+                    "Violation consistency modifier=%.2f, reducing score: %.2f -> %.2f",
+                    consistency_modifier, score_before_consistency, raw_score
+                )
+
+            # Проверка 3: Известные пары IP
+            # Пары IP, которые пользователь регулярно использует (дом+работа) — не шаринг
+            known_pairs_modifier = await self._check_known_ip_pairs(user_uuid, current_ips)
+            if known_pairs_modifier < 1.0:
+                score_before_pairs = raw_score
+                raw_score *= known_pairs_modifier
+                logger.debug(
+                    "Known IP pairs modifier=%.2f, reducing score: %.2f -> %.2f",
+                    known_pairs_modifier, score_before_pairs, raw_score
+                )
+
             # Если есть серьёзные одновременные подключения (высокий скор), устанавливаем минимум
-            # Но только если temporal_score достаточно высокий (80+), что указывает на реальное нарушение
-            # Не применяем минимум для пограничных случаев (переключение сетей, несколько устройств)
-            # И не применяем если обнаружен паттерн переключения сетей
+            # Применяем только для очевидных нарушений (temporal >= 80), чтобы не создавать
+            # ложных срабатываний при обычном переключении сетей
+            # Не применяем если обнаружен паттерн переключения сетей
             if not is_network_switch:
                 if temporal_score.score >= 80.0 and temporal_score.simultaneous_connections_count > 1:
-                    raw_score = max(raw_score, 85.0)
-                elif temporal_score.score >= 40.0 and temporal_score.simultaneous_connections_count > 1:
-                    # Пограничные случаи - устанавливаем минимум для мониторинга, но не блокировки
-                    raw_score = max(raw_score, 50.0)
+                    raw_score = max(raw_score, 70.0)
             
             # Определяем рекомендуемое действие
             recommended_action = self._get_action(raw_score)
@@ -1776,6 +1874,182 @@ class IntelligentViolationDetector:
         is_same_asn = ratio >= 0.7
 
         return is_same_asn, ratio
+
+    def _check_subnet_proximity(
+        self,
+        connections: List[ActiveConnection],
+        connection_history: List[Dict[str, Any]]
+    ) -> tuple[bool, float]:
+        """
+        Проверить, находятся ли IP в одной подсети (/24 или /16).
+
+        IP в одной /24 подсети (напр. 185.26.120.X) почти наверняка принадлежат одному
+        NAT/CGNAT/корпоративной сети, а не разным пользователям.
+
+        Returns:
+            Tuple (is_same_subnet, modifier) где:
+            - is_same_subnet: True если большинство IP в одной подсети
+            - modifier: множитель для скора (0.2 = сильное снижение, 1.0 = без снижения)
+        """
+        all_ips = set()
+        for conn in connections:
+            ip_str = str(conn.ip_address)
+            if not ip_str.startswith(('127.', '192.168.', '10.', '172.16.')):
+                all_ips.add(ip_str)
+        for conn in connection_history[-10:]:
+            ip_str = str(conn.get("ip_address", ""))
+            if ip_str and not ip_str.startswith(('127.', '192.168.', '10.', '172.16.')):
+                all_ips.add(ip_str)
+
+        if len(all_ips) <= 1:
+            return False, 1.0
+
+        # Группируем по /24 и /16 подсетям
+        subnets_24: Dict[str, List[str]] = {}
+        subnets_16: Dict[str, List[str]] = {}
+        for ip in all_ips:
+            parts = ip.split('.')
+            if len(parts) == 4:
+                subnet_24 = '.'.join(parts[:3])
+                subnet_16 = '.'.join(parts[:2])
+                subnets_24.setdefault(subnet_24, []).append(ip)
+                subnets_16.setdefault(subnet_16, []).append(ip)
+
+        total = len(all_ips)
+        if total == 0:
+            return False, 1.0
+
+        # Находим самую большую группу в /24
+        max_same_24 = max((len(ips) for ips in subnets_24.values()), default=0)
+        max_same_16 = max((len(ips) for ips in subnets_16.values()), default=0)
+
+        ratio_24 = max_same_24 / total
+        ratio_16 = max_same_16 / total
+
+        # Если >= 70% IP в одной /24 подсети — очень вероятно один NAT
+        if ratio_24 >= 0.7:
+            logger.debug(
+                "Subnet proximity: %.0f%% IPs in same /24 subnet (%d/%d)",
+                ratio_24 * 100, max_same_24, total
+            )
+            return True, 0.2  # Сильное снижение — почти наверняка один NAT
+
+        # Если >= 70% IP в одной /16 подсети — вероятно один провайдер/регион
+        if ratio_16 >= 0.7:
+            logger.debug(
+                "Subnet proximity: %.0f%% IPs in same /16 subnet (%d/%d)",
+                ratio_16 * 100, max_same_16, total
+            )
+            return True, 0.5  # Умеренное снижение — один провайдер
+
+        return False, 1.0
+
+    async def _check_violation_consistency(self, user_uuid: str) -> float:
+        """
+        Проверить повторяемость нарушений для пользователя.
+
+        Одиночное срабатывание может быть случайным (переключение сети, глитч).
+        Повторяющиеся срабатывания — более надёжный сигнал.
+
+        Returns:
+            Множитель для скора:
+            - 0.3 — первое нарушение за 2 часа (вероятно ложное)
+            - 0.6 — второе нарушение (неоднозначно)
+            - 1.0 — 3+ нарушений (устойчивый паттерн)
+        """
+        try:
+            recent_count = await self.db.get_recent_violations_count(user_uuid, hours=2)
+            if recent_count == 0:
+                logger.debug("Violation consistency: first violation in 2h for %s — dampening", user_uuid)
+                return 0.3  # Первое срабатывание — сильный dampening
+            elif recent_count == 1:
+                logger.debug("Violation consistency: 2nd violation in 2h for %s — moderate dampening", user_uuid)
+                return 0.6  # Второе — умеренный dampening
+            else:
+                logger.debug("Violation consistency: %d violations in 2h for %s — consistent pattern", recent_count, user_uuid)
+                return 1.0  # 3+ — устойчивый паттерн, без снижения
+        except Exception as e:
+            logger.debug("Error checking violation consistency: %s", e)
+            return 1.0  # При ошибке не снижаем
+
+    async def _check_known_ip_pairs(self, user_uuid: str, current_ips: Set[str]) -> float:
+        """
+        Проверить, являются ли текущие пары IP «знакомыми» для пользователя.
+
+        Если пользователь регулярно использует одни и те же IP-адреса (дом + работа, WiFi + mobile),
+        это его нормальный паттерн, а не шаринг.
+
+        Args:
+            user_uuid: UUID пользователя
+            current_ips: Текущие IP адреса пользователя
+
+        Returns:
+            Множитель для скора:
+            - 0.3 — все пары IP знакомые (регулярный паттерн)
+            - 0.6 — большинство знакомые
+            - 1.0 — все пары новые (подозрительно)
+        """
+        if len(current_ips) <= 1:
+            return 1.0
+
+        try:
+            from itertools import combinations
+            from collections import Counter
+
+            # Получаем историю подключений за 30 дней
+            history = await self.db.get_connection_history(user_uuid, days=30)
+            if not history or len(history) < 5:
+                return 1.0  # Недостаточно данных для оценки
+
+            # Группируем IP по дням
+            daily_ips: Dict[str, Set[str]] = {}
+            for conn in history:
+                ip = str(conn.get("ip_address", ""))
+                connected_at = conn.get("connected_at")
+                if not ip or not connected_at:
+                    continue
+                if isinstance(connected_at, datetime):
+                    day = connected_at.strftime('%Y-%m-%d')
+                elif isinstance(connected_at, str):
+                    day = connected_at[:10]
+                else:
+                    continue
+                daily_ips.setdefault(day, set()).add(ip)
+
+            # Считаем как часто каждая пара IP встречается в один день
+            pair_counts: Counter = Counter()
+            for day, ips in daily_ips.items():
+                if len(ips) >= 2:
+                    for pair in combinations(sorted(ips), 2):
+                        pair_counts[pair] += 1
+
+            # Проверяем текущие пары IP
+            current_pairs = list(combinations(sorted(current_ips), 2))
+            if not current_pairs:
+                return 1.0
+
+            # Пара считается «знакомой» если встречалась 5+ раз за месяц
+            known_count = sum(1 for pair in current_pairs if pair_counts.get(pair, 0) >= 5)
+            known_ratio = known_count / len(current_pairs)
+
+            if known_ratio >= 0.8:
+                logger.debug(
+                    "Known IP pairs: %.0f%% pairs are familiar for %s",
+                    known_ratio * 100, user_uuid
+                )
+                return 0.3  # Почти все пары знакомые — нормальный паттерн
+            elif known_ratio >= 0.5:
+                logger.debug(
+                    "Known IP pairs: %.0f%% pairs are familiar for %s",
+                    known_ratio * 100, user_uuid
+                )
+                return 0.6  # Половина знакомые
+            else:
+                return 1.0  # Большинство новые
+
+        except Exception as e:
+            logger.debug("Error checking known IP pairs: %s", e)
+            return 1.0
 
     def _get_action(self, score: float) -> ViolationAction:
         """Определить рекомендуемое действие на основе скора."""
