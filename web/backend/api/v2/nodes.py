@@ -229,6 +229,15 @@ async def delete_node(
         from src.services.api_client import api_client
 
         await api_client.delete_node(node_uuid)
+
+        # Also remove from local DB so UI updates immediately
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                await db_service.delete_node(node_uuid)
+        except Exception:
+            pass  # non-critical, sync will reconcile
+
         return SuccessResponse(message="Node deleted")
 
     except ImportError:

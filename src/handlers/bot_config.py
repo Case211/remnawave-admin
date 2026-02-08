@@ -31,11 +31,7 @@ CATEGORY_NAMES = {
     "general": "Общие настройки",
     "notifications": "Уведомления",
     "sync": "Синхронизация",
-    "violations": "Детектор нарушений",
     "reports": "Отчёты по нарушениям",
-    "collector": "Collector API",
-    "limits": "Лимиты",
-    "appearance": "Внешний вид",
 }
 
 
@@ -281,10 +277,7 @@ async def process_config_input(message: Message, state: FSMContext) -> None:
             parsed_int = int(value)
             # Проверка на отрицательные значения для некоторых настроек
             if parsed_int < 0 and item.key in (
-                "sync_interval_seconds", "violations_max_ips_per_hour",
-                "violations_max_simultaneous", "search_results_limit",
-                "pagination_page_size", "max_bulk_operations",
-                "collector_batch_size", "collector_connection_timeout_minutes"
+                "sync_interval_seconds",
             ):
                 raise ValueError(_("bot_config.validation_positive_required"))
         elif item.value_type.value == "float":
