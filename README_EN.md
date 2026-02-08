@@ -1,4 +1,4 @@
-# Remnawave Admin Bot
+# 🤖 Remnawave Admin Bot
 
 <div align="center">
 
@@ -14,95 +14,180 @@
 
 ---
 
-## Features
+## ✨ Features
 
-### Telegram Bot
-- **Users** — search, create, edit, HWID devices, statistics, bulk operations
-- **Nodes** — view, enable/disable, restart, traffic monitoring, statistics
-- **Hosts** — view, create, edit, bulk operations
-- **Resources** — subscription templates, snippets, API tokens, configs
-- **Billing** — payment history, providers, billing nodes
-- **System** — health checks, statistics, traffic
+### 🤖 Telegram Bot
+- **👥 Users** — search, create, edit, HWID devices, statistics, bulk operations
+- **🛰 Nodes** — view, enable/disable, restart, traffic monitoring, statistics
+- **🖥 Hosts** — view, create, edit, bulk operations
+- **🧰 Resources** — subscription templates, snippets, API tokens, configs
+- **💰 Billing** — payment history, providers, billing nodes
+- **📊 System** — health checks, statistics, traffic
 
-### Web Panel
-- Dashboard with system overview and violation charts
-- User, node, and host management
-- Violation viewer with IP Lookup (provider, city, connection type)
-- Settings with auto-save (priority: DB > .env > defaults)
-- Telegram Login Widget + JWT authentication
-- Dark theme, responsive design
+### 🌐 Web Panel
+- 📊 Dashboard with system overview and violation charts
+- 👥 User, node, and host management
+- 🛡 Violation viewer with IP Lookup (provider, city, connection type)
+- ⚙️ Settings with auto-save (priority: DB > .env > defaults)
+- 🔐 Telegram Login Widget + JWT authentication
+- 🎨 Dark theme, responsive design
 
-### Anti-Abuse System
-- Multi-factor connection analysis (temporal, geographic, ASN, profile, device)
-- "Impossible travel" detection, 60+ Russian metropolitan area recognition
-- Automatic actions based on scoring thresholds
-- Integration with [Node Agent](node-agent/README.md) for data collection
+### 🛡 Anti-Abuse System
+- 🔍 Multi-factor connection analysis (temporal, geographic, ASN, profile, device)
+- 🌍 "Impossible travel" detection, 60+ Russian metropolitan area recognition
+- ⚡ Automatic actions based on scoring thresholds
+- 📡 Integration with [Node Agent](node-agent/README.md) for data collection
 
-### Additional
-- Dynamic settings without restart (Telegram and web panel)
-- Webhook notifications with topic routing
-- Russian and English language support
-- PostgreSQL with graceful degradation (works without DB too)
+### 🔧 Additional
+- ⚙️ Dynamic settings without restart (Telegram and web panel)
+- 🔔 Webhook notifications with topic routing
+- 🌍 Russian and English language support
+- 🗄 PostgreSQL with graceful degradation (works without DB too)
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-### Prerequisites
+### 📋 What you'll need
 
-- **Docker** and **Docker Compose** (recommended) or **Python 3.12+**
-- Telegram bot token from [@BotFather](https://t.me/BotFather)
-- Remnawave API access token
+| What | Where to get |
+|------|-------------|
+| 🐳 **Docker** + **Docker Compose** | [docker.com](https://www.docker.com/) |
+| 🤖 **Telegram bot token** | Create a bot with [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token |
+| 🔑 **Remnawave API token** | Remnawave Panel → Settings → API → copy the token |
+| 🆔 **Your Telegram ID** | Message [@userinfobot](https://t.me/userinfobot) → it will reply with your numeric ID |
 
-### 1. Clone and configure
+---
+
+### Step 1️⃣ — Clone the repository
 
 ```bash
 git clone https://github.com/case211/remnawave-admin.git
 cd remnawave-admin
-cp .env.example .env
-nano .env
 ```
 
-**Required variables:**
-
-```env
-BOT_TOKEN=your_telegram_bot_token
-API_BASE_URL=http://remnawave:3000       # Docker network
-API_TOKEN=your_api_token
-ADMINS=123456789,987654321               # Administrator IDs
-```
-
-**Optional (notifications, webhook):**
-
-```env
-NOTIFICATIONS_CHAT_ID=-1001234567890
-WEBHOOK_SECRET=your_secret_key           # Must match WEBHOOK_SECRET_HEADER in panel
-WEBHOOK_PORT=8080
-```
-
-> Get your Telegram ID: [@userinfobot](https://t.me/userinfobot)
-
-### 2. Deploy
+### Step 2️⃣ — Create the `.env` file
 
 ```bash
-docker network create remnawave-network
-
-# Bot only
-docker compose up -d
-
-# Bot + web panel
-docker compose --profile web up -d
+cp .env.example .env
+nano .env          # or vim, or any editor
 ```
 
-### 3. Configure webhook (optional)
+Fill in the **required** fields (bot won't start without them):
 
-Detailed instructions: [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
+```env
+# 🤖 Bot token (from @BotFather)
+BOT_TOKEN=1234567890:ABCdefGHIjklmNOPqrstUVWxyz
 
-Quick setup: in Remnawave panel set webhook URL to `http://bot:8080/webhook` and set `WEBHOOK_SECRET_HEADER` equal to bot's `WEBHOOK_SECRET`.
+# 🌐 Remnawave API address
+# If bot and panel are on the same Docker network:
+API_BASE_URL=http://remnawave:3000
+# If the panel is on a different server:
+# API_BASE_URL=https://panel.yourdomain.com/api
+
+# 🔑 API token from Remnawave panel
+API_TOKEN=your_token_from_panel
+
+# 👤 Telegram IDs of administrators (comma-separated)
+ADMINS=123456789
+```
+
+Configure the **database** (PostgreSQL starts automatically in Docker):
+
+```env
+# 🗄 PostgreSQL — choose a password
+POSTGRES_USER=remnawave
+POSTGRES_PASSWORD=choose_a_secure_password
+POSTGRES_DB=remnawave_bot
+
+# ⚠️ Password here must match POSTGRES_PASSWORD above!
+DATABASE_URL=postgresql://remnawave:choose_a_secure_password@remnawave-admin-db:5432/remnawave_bot
+```
+
+### Step 3️⃣ — Start the bot
+
+```bash
+# Create Docker network (once)
+docker network create remnawave-network
+
+# Pull images and start
+docker compose up -d
+
+# Check that everything is working
+docker compose logs -f bot
+```
+
+✅ **Done!** Open the bot in Telegram and send `/start`.
 
 ---
 
-## Local Development
+### Step 4️⃣ — Web Panel (optional)
+
+If you want the web interface — add to `.env`:
+
+```env
+# 🌐 Web panel
+# JWT secret key (generate: openssl rand -hex 32)
+WEB_SECRET_KEY=generated_key_minimum_32_characters
+
+# Bot username (without @) — needed for Telegram Login Widget
+TELEGRAM_BOT_USERNAME=your_bot_username
+
+# Web panel domain (for CORS)
+WEB_CORS_ORIGINS=https://admin.yourdomain.com
+```
+
+Start with the `web` profile:
+
+```bash
+docker compose --profile web up -d
+```
+
+Web panel will be available on ports: **frontend :3000**, **backend :8081**.
+
+> 📖 More on domain setup and reverse proxy: [web/README.md](web/README.md)
+
+---
+
+### Step 5️⃣ — Webhook Notifications (optional)
+
+To get bot notifications when things change in the panel — add to `.env`:
+
+```env
+# 🔔 Notification chat
+NOTIFICATIONS_CHAT_ID=-1001234567890    # Your group/channel ID
+
+# 🔐 Webhook secret (generate: openssl rand -hex 64)
+WEBHOOK_SECRET=your_secret_key
+```
+
+Then in the **Remnawave panel** set:
+- **WEBHOOK_URL** = `http://bot:8080/webhook` (if on the same Docker network)
+- **WEBHOOK_SECRET_HEADER** = same key as `WEBHOOK_SECRET` in the bot's `.env`
+
+> 📖 Detailed guide with nginx/Caddy examples: [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
+
+---
+
+### Step 6️⃣ — Topic Notifications (optional)
+
+If you have a forum-group in Telegram, you can split notifications by topics:
+
+```env
+NOTIFICATIONS_TOPIC_USERS=456       # 👥 User events
+NOTIFICATIONS_TOPIC_NODES=789       # 🛰 Node events
+NOTIFICATIONS_TOPIC_SERVICE=101     # ⚙️ Service events
+NOTIFICATIONS_TOPIC_HWID=102        # 💻 HWID devices
+NOTIFICATIONS_TOPIC_CRM=103         # 💰 Billing
+NOTIFICATIONS_TOPIC_ERRORS=104      # ❌ Errors
+NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Violations
+```
+
+> 💡 If a topic is not set — the notification goes to `NOTIFICATIONS_TOPIC_ID` (general fallback).
+
+---
+
+## 💻 Local Development
 
 ```bash
 python -m venv .venv
@@ -115,22 +200,30 @@ python -m src.main
 
 ---
 
-## Configuration
+## ⚙️ Environment Variables Reference
 
-### Core Environment Variables
+### Core
 
 | Variable | Req. | Default | Description |
 |----------|------|---------|-------------|
-| `BOT_TOKEN` | Yes | — | Telegram bot token |
-| `API_BASE_URL` | Yes | — | Remnawave API URL |
-| `API_TOKEN` | Yes | — | API authentication token |
-| `ADMINS` | Yes | — | Comma-separated administrator IDs |
+| `BOT_TOKEN` | ✅ | — | Telegram bot token |
+| `API_BASE_URL` | ✅ | — | Remnawave API URL |
+| `API_TOKEN` | ✅ | — | API authentication token |
+| `ADMINS` | ✅ | — | Comma-separated administrator IDs |
 | `DEFAULT_LOCALE` | — | `ru` | Language (`ru` / `en`) |
 | `LOG_LEVEL` | — | `INFO` | Logging level |
-| `DATABASE_URL` | — | — | PostgreSQL connection URL |
+
+### 🗄 Database
+
+| Variable | Req. | Default | Description |
+|----------|------|---------|-------------|
+| `POSTGRES_USER` | ✅ | — | PostgreSQL user |
+| `POSTGRES_PASSWORD` | ✅ | — | PostgreSQL password |
+| `POSTGRES_DB` | ✅ | — | Database name |
+| `DATABASE_URL` | ✅ | — | PostgreSQL connection URL |
 | `SYNC_INTERVAL_SECONDS` | — | `300` | Data sync interval with API (sec) |
 
-### Notifications
+### 🔔 Notifications
 
 | Variable | Description |
 |----------|-------------|
@@ -144,16 +237,31 @@ python -m src.main
 | `NOTIFICATIONS_TOPIC_ERRORS` | Error notifications |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | Violation notifications |
 
-### Webhook
+### 🔗 Webhook
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WEBHOOK_SECRET` | — | Webhook verification key (HMAC-SHA256) |
 | `WEBHOOK_PORT` | `8080` | Webhook server port |
 
+### 🌐 Web Panel
+
+| Variable | Req.* | Default | Description |
+|----------|-------|---------|-------------|
+| `WEB_SECRET_KEY` | ✅ | — | JWT secret key |
+| `TELEGRAM_BOT_USERNAME` | ✅ | — | Bot username (without @) |
+| `WEB_CORS_ORIGINS` | — | — | Allowed domains (CORS) |
+| `WEB_JWT_EXPIRE_MINUTES` | — | `30` | Access token lifetime (min) |
+| `WEB_JWT_REFRESH_HOURS` | — | `6` | Refresh token lifetime (h) |
+| `WEB_BACKEND_PORT` | — | `8081` | Backend port |
+| `WEB_FRONTEND_PORT` | — | `3000` | Frontend port |
+| `WEB_ALLOWED_IPS` | — | — | IP whitelist (CIDR) |
+
+*\* Required only when running with `--profile web`*
+
 ---
 
-## Bot Commands
+## 🤖 Bot Commands
 
 | Command | Description |
 |---------|-------------|
@@ -169,7 +277,7 @@ python -m src.main
 
 ---
 
-## Logging
+## 📝 Logging
 
 Two-tier system: **files** (full history) and **console** (WARNING+ only).
 
@@ -189,7 +297,7 @@ tail -100 ./logs/adminbot_INFO.log            # Last 100 lines
 
 ---
 
-## Project Structure
+## 📂 Project Structure
 
 ```
 remnawave-admin/
@@ -209,7 +317,7 @@ remnawave-admin/
 
 ---
 
-## Documentation
+## 📚 Documentation
 
 | Document | Description |
 |----------|-------------|
@@ -222,13 +330,13 @@ remnawave-admin/
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Bot not responding
 
 ```bash
 docker compose ps                    # Container status
-docker compose logs -f bot           # Logs (WARNING+)
+docker compose logs -f bot           # Logs
 docker compose config                # Check configuration
 ```
 
@@ -249,7 +357,7 @@ docker compose config                # Check configuration
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a branch: `git checkout -b feature/amazing-feature`
@@ -258,11 +366,13 @@ docker compose config                # Check configuration
 
 ---
 
-## License
+## 📄 License
 
 MIT License — see [LICENSE](LICENSE).
 
-## Support
+---
+
+## 💖 Support
 
 - [GitHub Issues](https://github.com/case211/remnawave-admin/issues)
 - [Telegram chat](https://t.me/remnawave_admin)
@@ -271,3 +381,11 @@ Support the author:
 - TON: `UQDDe-jyFTbQsPHqyojdFeO1_m7uPF-q1w0g_MfbSOd3l1sC`
 - USDT TRC20: `TGyHJj2PsYSUwkBbWdc7BFfsAxsE6SGGJP`
 - BTC: `bc1qusrj5rxd3kv6eepzpdn0muy6zsl3c24xunz2xn`
+
+---
+
+<div align="center">
+
+Made with ❤️ for the Remnawave community
+
+</div>
