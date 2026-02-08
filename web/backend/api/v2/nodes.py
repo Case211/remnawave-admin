@@ -157,7 +157,8 @@ async def get_node(
 
         if not node_data:
             from src.services.api_client import api_client
-            node_data = await api_client.get_node(node_uuid)
+            raw = await api_client.get_node(node_uuid)
+            node_data = raw.get('response', raw) if isinstance(raw, dict) else raw
 
         if not node_data:
             raise HTTPException(status_code=404, detail="Node not found")
@@ -179,12 +180,14 @@ async def create_node(
     try:
         from src.services.api_client import api_client
 
-        node = await api_client.create_node(
+        result = await api_client.create_node(
             name=data.name,
             address=data.address,
             port=data.port,
         )
 
+        # Upstream API wraps data in 'response' key
+        node = result.get('response', result) if isinstance(result, dict) else result
         return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:
@@ -204,8 +207,10 @@ async def update_node(
         from src.services.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True)
-        node = await api_client.update_node(node_uuid, **update_data)
+        result = await api_client.update_node(node_uuid, **update_data)
 
+        # Upstream API wraps data in 'response' key
+        node = result.get('response', result) if isinstance(result, dict) else result
         return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:

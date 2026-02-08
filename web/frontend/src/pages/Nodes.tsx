@@ -517,7 +517,7 @@ export default function Nodes() {
   const { data: nodes = [], isLoading, refetch } = useQuery({
     queryKey: ['nodes'],
     queryFn: fetchNodes,
-    refetchInterval: 15000, // Refresh every 15 seconds
+    refetchInterval: 30000, // Fallback polling (WebSocket handles real-time)
   })
 
   // Mutations
@@ -572,6 +572,18 @@ export default function Nodes() {
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
     },
+  })
+
+  // Sort: offline (problems) first, then disabled, then online
+  const sortedNodes = [...nodes].sort((a, b) => {
+    const priority = (n: Node) => {
+      if (!n.is_connected && !n.is_disabled) return 0 // Offline — top priority
+      if (n.is_disabled) return 1
+      return 2 // Online — last
+    }
+    const diff = priority(a) - priority(b)
+    if (diff !== 0) return diff
+    return (a.name || '').localeCompare(b.name || '')
   })
 
   // Calculate stats
@@ -647,13 +659,13 @@ export default function Nodes() {
         {isLoading ? (
           // Loading skeletons
           Array.from({ length: 4 }).map((_, i) => <NodeSkeleton key={i} />)
-        ) : nodes.length === 0 ? (
+        ) : sortedNodes.length === 0 ? (
           <div className="col-span-full card text-center py-12">
             <HiStatusOffline className="w-12 h-12 text-dark-300 mx-auto mb-3" />
             <p className="text-dark-200">Нет добавленных нод</p>
           </div>
         ) : (
-          nodes.map((node, i) => (
+          sortedNodes.map((node, i) => (
             <div key={node.uuid} className="animate-fade-in-up" style={{ animationDelay: `${0.1 + i * 0.06}s` }}>
               <NodeCard
                 node={node}
