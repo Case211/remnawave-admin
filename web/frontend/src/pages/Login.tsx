@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { TelegramUser } from '../api/auth'
+import { User, Lock, AlertCircle, X, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 
 declare global {
   interface Window {
@@ -84,17 +90,17 @@ export default function Login() {
       }}
     >
       <div className="w-full max-w-md animate-fade-in">
-        <div
-          className="rounded-2xl p-8 border border-dark-400/20"
+        <Card
+          className="rounded-2xl border-dark-400/20"
           style={{
             background: 'linear-gradient(135deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 0.95) 100%)',
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px -10px rgba(13, 148, 136, 0.15)',
             backdropFilter: 'blur(12px)',
           }}
         >
-          {/* Logo */}
-          <div className="flex justify-center mb-8">
-            <div className="flex items-center gap-3">
+          <CardHeader className="items-center pb-2">
+            {/* Logo */}
+            <div className="flex items-center gap-3 mb-4">
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center"
                 style={{
@@ -105,121 +111,126 @@ export default function Login() {
                 <span className="text-white font-bold text-xl">R</span>
               </div>
               <div>
-                <h1 className="text-2xl font-display font-bold text-white">Remnawave</h1>
-                <p className="text-sm text-dark-200">Панель администратора</p>
+                <CardTitle className="text-2xl font-display font-bold">Remnawave</CardTitle>
+                <CardDescription className="text-dark-200">
+                  Панель администратора
+                </CardDescription>
               </div>
             </div>
-          </div>
 
-          {/* Description */}
-          <p className="text-center text-dark-200 mb-8">
-            Войдите для доступа к панели управления
-          </p>
+            {/* Description */}
+            <CardDescription className="text-center text-dark-200">
+              Войдите для доступа к панели управления
+            </CardDescription>
+          </CardHeader>
 
-          {/* Error */}
-          {error && (
-            <div
-              className="mb-6 p-4 rounded-lg border"
-              style={{
-                background: 'linear-gradient(135deg, rgba(250, 82, 82, 0.15) 0%, rgba(239, 68, 68, 0.1) 100%)',
-                borderColor: 'rgba(250, 82, 82, 0.3)',
-              }}
-            >
-              <p className="text-sm text-red-400 text-center whitespace-pre-wrap">{error}</p>
-              <button
-                onClick={clearError}
-                className="mt-2 text-xs text-red-400 hover:text-red-300 mx-auto block transition-all duration-200"
-              >
-                Закрыть
-              </button>
-            </div>
-          )}
-
-          {/* Loading */}
-          {isLoading && (
-            <div className="flex flex-col items-center mb-6">
+          <CardContent className="pt-4">
+            {/* Error */}
+            {error && (
               <div
-                className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-                style={{ borderColor: '#0d9488', borderTopColor: 'transparent' }}
-              ></div>
-              <p className="mt-2 text-sm text-dark-200">Авторизация...</p>
-            </div>
-          )}
-
-          {!isLoading && (
-            <>
-              {/* Password login form */}
-              {showPasswordForm ? (
-                <form onSubmit={handlePasswordLogin} className="space-y-4 mb-6">
-                  <div>
-                    <label className="block text-sm text-dark-200 mb-1.5">Логин</label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-lg text-white text-sm placeholder-dark-300 outline-none transition-all duration-200"
-                      style={{
-                        background: 'rgba(22, 27, 34, 0.8)',
-                        border: '1px solid rgba(72, 79, 88, 0.3)',
-                      }}
-                      onFocus={(e) => e.target.style.borderColor = 'rgba(13, 148, 136, 0.5)'}
-                      onBlur={(e) => e.target.style.borderColor = 'rgba(72, 79, 88, 0.3)'}
-                      placeholder="admin"
-                      autoComplete="username"
-                      autoFocus
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-dark-200 mb-1.5">Пароль</label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-lg text-white text-sm placeholder-dark-300 outline-none transition-all duration-200"
-                      style={{
-                        background: 'rgba(22, 27, 34, 0.8)',
-                        border: '1px solid rgba(72, 79, 88, 0.3)',
-                      }}
-                      onFocus={(e) => e.target.style.borderColor = 'rgba(13, 148, 136, 0.5)'}
-                      onBlur={(e) => e.target.style.borderColor = 'rgba(72, 79, 88, 0.3)'}
-                      placeholder="********"
-                      autoComplete="current-password"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={!username.trim() || !password.trim()}
-                    className="w-full py-2.5 rounded-lg text-white font-medium text-sm transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{
-                      background: 'linear-gradient(135deg, #0d9488 0%, #06b6d4 100%)',
-                      boxShadow: '0 0 20px -5px rgba(13, 148, 136, 0.3)',
-                    }}
-                  >
-                    Войти
-                  </button>
-                </form>
-              ) : (
-                /* Telegram Login Widget */
-                <div ref={containerRef} className="flex justify-center mb-6" />
-              )}
-
-              {/* Toggle auth method */}
-              <div className="text-center">
-                <button
-                  onClick={() => { setShowPasswordForm(!showPasswordForm); clearError() }}
-                  className="text-xs text-dark-300 hover:text-primary-400 transition-colors duration-200"
+                className="mb-6 p-4 rounded-lg border"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(250, 82, 82, 0.15) 0%, rgba(239, 68, 68, 0.1) 100%)',
+                  borderColor: 'rgba(250, 82, 82, 0.3)',
+                }}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+                  <p className="text-sm text-red-400 text-center whitespace-pre-wrap">{error}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearError}
+                  className={cn(
+                    "mt-2 mx-auto flex items-center gap-1 text-xs text-red-400",
+                    "hover:text-red-300 hover:bg-transparent h-auto py-1"
+                  )}
                 >
-                  {showPasswordForm ? 'Войти через Telegram' : 'Войти по логину и паролю'}
-                </button>
+                  <X className="h-3 w-3" />
+                  Закрыть
+                </Button>
               </div>
-            </>
-          )}
+            )}
 
-          {/* Footer */}
-          <p className="mt-8 text-center text-xs text-dark-300">
-            Доступ только для авторизованных администраторов
-          </p>
-        </div>
+            {/* Loading */}
+            {isLoading && (
+              <div className="flex flex-col items-center mb-6">
+                <Loader2
+                  className="h-8 w-8 animate-spin text-teal-500"
+                />
+                <p className="mt-2 text-sm text-dark-200">Авторизация...</p>
+              </div>
+            )}
+
+            {!isLoading && (
+              <>
+                {/* Password login form */}
+                {showPasswordForm ? (
+                  <form onSubmit={handlePasswordLogin} className="space-y-4 mb-6">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="username" className="text-dark-200">
+                        <User className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+                        Логин
+                      </Label>
+                      <Input
+                        id="username"
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="admin"
+                        autoComplete="username"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="password" className="text-dark-200">
+                        <Lock className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+                        Пароль
+                      </Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="********"
+                        autoComplete="current-password"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      variant="default"
+                      className="w-full"
+                      disabled={!username.trim() || !password.trim()}
+                    >
+                      Войти
+                    </Button>
+                  </form>
+                ) : (
+                  /* Telegram Login Widget */
+                  <div ref={containerRef} className="flex justify-center mb-6" />
+                )}
+
+                {/* Toggle auth method */}
+                <div className="text-center">
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={() => { setShowPasswordForm(!showPasswordForm); clearError() }}
+                    className="text-xs text-dark-300 hover:text-primary-400 h-auto p-0"
+                  >
+                    {showPasswordForm ? 'Войти через Telegram' : 'Войти по логину и паролю'}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* Footer */}
+            <p className="mt-8 text-center text-xs text-dark-300">
+              Доступ только для авторизованных администраторов
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

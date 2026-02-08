@@ -1,15 +1,25 @@
+import tailwindcssAnimate from "tailwindcss-animate"
+
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ["class"],
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Primary: Teal/Cyan (Remnawave brand)
+        // shadcn/ui CSS variable-based colors
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
         primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+          // Keep Remnawave brand teal/cyan scale
           50: '#ecfeff',
           100: '#cffafe',
           200: '#a5f3fc',
@@ -22,7 +32,34 @@ export default {
           900: '#164e63',
           950: '#083344',
         },
-        // Dark palette: GitHub-inspired
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+          // Keep Remnawave accent colors
+          teal: '#0d9488',
+          cyan: '#06b6d4',
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        // Keep existing dark palette
         dark: {
           50: '#c9d1d9',
           100: '#b1bac4',
@@ -36,11 +73,22 @@ export default {
           900: '#010409',
           950: '#000000',
         },
-        // Accent teal for glows and highlights
-        accent: {
-          teal: '#0d9488',
-          cyan: '#06b6d4',
+        // Sidebar colors
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar-background))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          primary: "hsl(var(--sidebar-primary))",
+          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+          accent: "hsl(var(--sidebar-accent))",
+          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          ring: "hsl(var(--sidebar-ring))",
         },
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
         sans: ['Montserrat', 'system-ui', 'sans-serif'],
@@ -80,6 +128,14 @@ export default {
           '0%, 100%': { boxShadow: '0 0 15px -3px rgba(20, 184, 166, 0.3)' },
           '50%': { boxShadow: '0 0 25px -3px rgba(20, 184, 166, 0.5)' },
         },
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-out',
@@ -90,6 +146,8 @@ export default {
         'shimmer': 'shimmer 1.5s infinite',
         'slide-in': 'slideInLeft 0.3s ease-out',
         'glow-pulse': 'glowPulse 2s ease-in-out infinite',
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
       },
       boxShadow: {
         'glow-teal': '0 0 30px -5px rgba(20, 184, 166, 0.3)',
@@ -99,5 +157,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [tailwindcssAnimate],
 }

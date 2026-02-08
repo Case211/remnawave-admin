@@ -2,8 +2,71 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base styles - Remnawave design language */
+/* shadcn/ui CSS variables — Remnawave dark theme */
 @layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 210 11% 85%;
+    --card: 215 19% 7%;
+    --card-foreground: 210 11% 85%;
+    --popover: 215 19% 7%;
+    --popover-foreground: 210 11% 85%;
+    --primary: 187 72% 41%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 14% 18%;
+    --secondary-foreground: 210 11% 85%;
+    --muted: 215 14% 18%;
+    --muted-foreground: 215 9% 64%;
+    --accent: 215 14% 18%;
+    --accent-foreground: 210 11% 85%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 14% 20%;
+    --input: 215 14% 20%;
+    --ring: 187 72% 41%;
+    --radius: 0.5rem;
+
+    --sidebar-background: 215 28% 7%;
+    --sidebar-foreground: 210 11% 85%;
+    --sidebar-primary: 187 72% 41%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 14% 14%;
+    --sidebar-accent-foreground: 210 11% 85%;
+    --sidebar-border: 215 14% 16%;
+    --sidebar-ring: 187 72% 41%;
+  }
+
+  .dark {
+    --background: 215 28% 4%;
+    --foreground: 210 11% 85%;
+    --card: 215 19% 7%;
+    --card-foreground: 210 11% 85%;
+    --popover: 215 19% 7%;
+    --popover-foreground: 210 11% 85%;
+    --primary: 187 72% 41%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 14% 18%;
+    --secondary-foreground: 210 11% 85%;
+    --muted: 215 14% 18%;
+    --muted-foreground: 215 9% 64%;
+    --accent: 215 14% 18%;
+    --accent-foreground: 210 11% 85%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 14% 20%;
+    --input: 215 14% 20%;
+    --ring: 187 72% 41%;
+
+    --sidebar-background: 215 28% 7%;
+    --sidebar-foreground: 210 11% 85%;
+    --sidebar-primary: 187 72% 41%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 14% 14%;
+    --sidebar-accent-foreground: 210 11% 85%;
+    --sidebar-border: 215 14% 16%;
+    --sidebar-ring: 187 72% 41%;
+  }
+
   html {
     @apply antialiased;
     -webkit-font-smoothing: antialiased;
@@ -12,6 +75,10 @@
 
   body {
     @apply bg-dark-800 text-dark-50 min-h-screen;
+  }
+
+  * {
+    @apply border-border;
   }
 
   /* Scrollbar styling - teal/cyan gradient like Remnawave */
@@ -45,7 +112,7 @@
   }
 }
 
-/* Component styles */
+/* Legacy component styles - kept for backward compatibility during migration */
 @layer components {
   /* Card - diagonal gradient background with fadeIn animation */
   .card {
