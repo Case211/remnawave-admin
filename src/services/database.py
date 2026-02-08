@@ -234,7 +234,10 @@ class DatabaseService:
             if not exists:
                 await conn.execute(f"ALTER TABLE user_hwid_devices ADD COLUMN {col} {col_type}")
                 logger.info("Migration: added column %s to user_hwid_devices", col)
-    
+
+        # Remove stale tokens sync metadata (tokens sync removed)
+        await conn.execute("DELETE FROM sync_metadata WHERE key = 'tokens'")
+
     @asynccontextmanager
     async def acquire(self):
         """Acquire a connection from the pool."""

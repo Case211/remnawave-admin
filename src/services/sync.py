@@ -375,53 +375,6 @@ class SyncService:
             )
             raise
     
-    async def sync_tokens(self) -> int:
-        """
-        Sync all API tokens from API to database.
-        Returns number of synced tokens.
-        """
-        if not db_service.is_connected:
-            return 0
-        
-        try:
-            response = await api_client.get_tokens()
-            payload = response.get("response", {})
-            
-            # Handle different response formats
-            tokens = []
-            if isinstance(payload, list):
-                tokens = payload
-            elif isinstance(payload, dict):
-                tokens = payload.get("apiKeys") or payload.get("tokens") or []
-            
-            # Clear old tokens and insert new
-            await db_service.delete_all_tokens()
-            
-            total_synced = 0
-            for token in tokens:
-                try:
-                    await db_service.upsert_token({"response": token})
-                    total_synced += 1
-                except Exception as e:
-                    logger.warning("Failed to sync token %s: %s", token.get("uuid"), e)
-            
-            await db_service.update_sync_metadata(
-                key="tokens",
-                status="success",
-                records_synced=total_synced
-            )
-            
-            logger.debug("Synced %d tokens", total_synced)
-            return total_synced
-            
-        except Exception as e:
-            await db_service.update_sync_metadata(
-                key="tokens",
-                status="error",
-                error_message=str(e)
-            )
-            raise
-    
     async def sync_templates(self) -> int:
         """
         Sync all subscription templates from API to database.
