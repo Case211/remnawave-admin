@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Telegram bot for managing Remnawave panel**
+**Telegram bot and web panel for managing Remnawave panel**
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.12+-green)](https://www.python.org/)
@@ -16,496 +16,317 @@
 
 ## ✨ Features
 
-### 👥 User Management
-- 🔍 Search users by username, email, Telegram ID, description
-- ➕ Create users with step-by-step input
-- ✏️ Edit profile (traffic, limits, contacts, squads)
-- 💻 Manage HWID devices (add, delete, limits)
-- 📊 User statistics (traffic, subscription history, node usage)
-- 🔄 Bulk operations with users
+### 🤖 Telegram Bot
+- **👥 Users** — search, create, edit, HWID devices, statistics, bulk operations
+- **🛰 Nodes** — view, enable/disable, restart, traffic monitoring, statistics
+- **🖥 Hosts** — view, create, edit, bulk operations
+- **🧰 Resources** — subscription templates, snippets, API tokens, configs
+- **💰 Billing** — payment history, providers, billing nodes
+- **📊 System** — health checks, statistics, traffic
 
-### 🛰 Node Management
-- 📋 View node list with real-time data
-- 🔄 Enable/disable nodes
-- 🔁 Restart nodes
-- 📊 Monitor traffic and usage
-- ⚙️ Assign configuration profiles
-- 📈 Node statistics
-
-### 🖥 Host Management
-- 📋 View host list
-- ➕ Create and edit hosts
-- 🔄 Bulk operations
-
-### 🧰 Resources
-- 📑 **Templates** - create and manage subscription templates
-- ✂️ **Snippets** - manage configuration snippets
-- 🔑 **API Tokens** - manage access tokens
-- 📄 **Configs** - view configurations
-
-### 💰 Billing
-- 📜 Payment history
-- 🏢 Provider management
-- 🖥 Billing node management
-- 📊 Billing statistics
-
-### 📊 Statistics and Monitoring
-- 📈 Panel statistics (users, nodes, hosts)
-- 🖥 Server statistics (CPU, memory, uptime)
-- 📶 Traffic statistics
-- 🔔 Event notifications via webhook
+### 🌐 Web Panel
+- 📊 Dashboard with system overview and violation charts
+- 👥 User, node, and host management
+- 🛡 Violation viewer with IP Lookup (provider, city, connection type)
+- ⚙️ Settings with auto-save (priority: DB > .env > defaults)
+- 🔐 Telegram Login Widget + JWT authentication
+- 🎨 Dark theme, responsive design
 
 ### 🛡 Anti-Abuse System
-- 🔍 Multi-factor connection analysis for detecting account abuse
-- 🌍 Geographic analysis with "impossible travel" detection
-- 📱 Device and VPN client analysis
-- 📊 User behavioral profiling
+- 🔍 Multi-factor connection analysis (temporal, geographic, ASN, profile, device)
+- 🌍 "Impossible travel" detection, 60+ Russian metropolitan area recognition
 - ⚡ Automatic actions based on scoring thresholds
-- 📡 Integration with Node Agent for data collection
+- 📡 Integration with [Node Agent](node-agent/README.md) for data collection
 
-### 🌐 Web Admin Panel
-- 📊 Dashboard with system overview and violation charts
-- 👥 User management (search, filters, editing, detailed view)
-- 🛰 Node management with real-time traffic data
-- 🛡 Violation viewer with IP Lookup (provider, city, connection type)
-- ⚙️ Settings with auto-save and DB > .env priority
-- 🔐 Telegram Login Widget + JWT authentication
-- 🎨 Dark theme, responsive design, smooth animations
-
-### ⚙️ Dynamic Settings
-- 🔧 Change bot settings without restart
-- 📂 Categories: General, Notifications, Violations, Collector, Limits
-- 🔄 Priority: DB > .env > default values
-- ✅ Type and value validation, auto-save
-
-### 🌐 Additional Features
+### 🔧 Additional
+- ⚙️ Dynamic settings without restart (Telegram and web panel)
+- 🔔 Webhook notifications with topic routing
 - 🌍 Russian and English language support
-- 🔔 Webhook notifications for events (user creation, modification, deletion)
-- 🔐 Secure webhook authentication via HMAC-SHA256
-- 🎨 Intuitive interface with inline buttons
-- 🐳 Ready for deployment via Docker Compose
-
----
-
-## 🆕 What's New
-
-### Version 1.7
-
-**🌐 Web Admin Panel**
-- Full-featured web admin panel built with React + TypeScript + Tailwind CSS
-- Authentication via Telegram Login Widget + JWT (access/refresh tokens)
-- Dark theme with teal/cyan accents, responsive design
-- Smooth animations: fade-in, scale-in, slide, stagger effects for lists
-- Pages: Dashboard, Users, User Details, Nodes, Hosts, Violations, Settings
-
-**📊 Dashboard**
-- System overview: users (active/expired/disabled), nodes (online/offline), hosts
-- Real-time traffic via Remnawave Bandwidth Stats API (today, week, month, total)
-- Violation statistics with severity and action charts
-- System health indicators (API, nodes, DB)
-- Quick action navigation
-
-**🛡 Violations Page**
-- Full rewrite: list with detailed view, tabs (overview, devices, geography)
-- Filtering by severity, action, country, date
-- Search by username and IP address
-- IP Lookup — provider, city, connection type (ISP/mobile/hosting/VPN)
-- Pagination, sorting, bulk export
-
-**⚙️ Settings System (v2)**
-- Value priority changed: DB > .env > default values
-- Auto-save: instant for toggles, 800ms debounce for text/number inputs
-- 20+ new fine-tuning settings (violation weights, cooldown, retention, quiet hours, GeoIP cache, dashboard refresh interval, timezone)
-- Source badges (DB / env / Default), reset to fallback value
-- Search across all settings, subcategory grouping
-
-**🌍 Dynamic Bot Language Switching**
-- Bot language changed via web panel applies instantly without restart
-- i18n middleware reads language from config_service (DB) on every request
-
-**🔒 Security Audit**
-- Web panel security audit performed (P0–P2 fixes)
-- JWT validation, XSS protection, API access restrictions
-
-### Version 1.6
-
-**⚙️ Dynamic Settings**
-- Change bot settings without restart via Telegram interface
-- Setting categories: General, Notifications, Sync, Violations, Collector API, Limits, Appearance
-- Value priority: environment variables > database > default values
-- Type validation (string, int, float, bool, JSON)
-- Secret value protection (masked in UI)
-- Protection of .env settings from overwrite (read-only)
-
-**🛡 Anti-Abuse System (Violation Detector)**
-- Multi-factor analysis for detecting account abuse
-- **Temporal analysis**: detection of simultaneous connections from different IPs
-- **Geographic analysis**:
-  - Recognition of 60+ Russian metropolitan areas
-  - "Impossible travel" detection (Haversine distance)
-  - Travel speed calculation (city: 50 km/h, country: 200 km/h, international: 800 km/h)
-- **ASN/Provider analysis**: provider type classification (mobile, ISP, hosting, VPN)
-- **User profile**: building 30-day behavioral profile
-- **Device analysis**: OS and VPN client detection from User-Agent
-- Scoring system with weights and thresholds for automatic actions
-- Detailed violation notifications
-
-**📡 Node Agent Integration**
-- Collector API for receiving connection data from Node Agent
-- Generation and management of authentication tokens for nodes
-- Batch processing of connection data
-- Automatic violation checking on data receipt
-
-**🔔 Violation Notifications**
-- Separate topic for violation notifications (`NOTIFICATIONS_TOPIC_VIOLATIONS`)
-- Detailed reports: devices, OS, countries, cities, action, confidence
-
-### Version 1.5
-
-**🗄 PostgreSQL Integration**
-- Local data caching to reduce API panel load
-- Automatic data synchronization with configurable interval (`SYNC_INTERVAL_SECONDS`)
-- Real-time updates through webhook events
-
-**📖 Data Reading Optimization**
-- Read operations now use local database: subscriptions, user searches, host lists, node information, panel statistics, configuration profiles
-- Node status continues pulling real-time data from the API
-
-**📋 Diff Notifications**
-- When data changes through the panel, the bot displays exactly what was modified
-- Shows before-and-after values for affected fields
-
-**🔀 Notification Topic Routing**
-- Ability to route different notification types to different Telegram topics
-- Separate topics for: users, nodes, service, HWID, billing, errors
-- Fallback to general topic if specific one is not set
-
-**🛡 Graceful Degradation**
-- System continues functioning through the API if database becomes unavailable
-- Full backward compatibility — PostgreSQL is optional
+- 🗄 PostgreSQL with graceful degradation (works without DB too)
 
 ---
 
 ## 🚀 Quick Start
 
-### 📋 Prerequisites
+### 📋 What you'll need
 
-- **Docker** and **Docker Compose** (recommended)
-- Or **Python 3.12+** (for local development)
-- Telegram Bot Token from [@BotFather](https://t.me/BotFather)
-- Remnawave API access token
+| What | Where to get |
+|------|-------------|
+| 🐳 **Docker** + **Docker Compose** | [docker.com](https://www.docker.com/) |
+| 🤖 **Telegram bot token** | Create a bot with [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token |
+| 🔑 **Remnawave API token** | Remnawave Panel → Settings → API → copy the token |
+| 🆔 **Your Telegram ID** | Message [@userinfobot](https://t.me/userinfobot) → it will reply with your numeric ID |
 
-### 🔧 Installation
+---
 
-#### 1. Clone the repository
+### Step 1️⃣ — Clone the repository
 
 ```bash
 git clone https://github.com/case211/remnawave-admin.git
 cd remnawave-admin
 ```
 
-#### 2. Configure environment variables
-
-Create `.env` file based on `.env.example`:
+### Step 2️⃣ — Create the `.env` file
 
 ```bash
 cp .env.example .env
-nano .env
+nano .env          # or vim, or any editor
 ```
 
-**Required variables:**
+Fill in the **required** fields (bot won't start without them):
 
 ```env
-# Telegram Bot
-BOT_TOKEN=your_telegram_bot_token
+# 🤖 Bot token (from @BotFather)
+BOT_TOKEN=1234567890:ABCdefGHIjklmNOPqrstUVWxyz
 
-# Remnawave API
-API_BASE_URL=http://remnawave:3000  # For Docker network
-# or
-API_BASE_URL=https://your-panel-domain.com/api  # For external API
-API_TOKEN=your_api_token
+# 🌐 Remnawave API address
+# If bot and panel are on the same Docker network:
+API_BASE_URL=http://remnawave:3000
+# If the panel is on a different server:
+# API_BASE_URL=https://panel.yourdomain.com/api
 
-# Administrators
-ADMINS=123456789,987654321  # Administrator IDs separated by commas
+# 🔑 API token from Remnawave panel
+API_TOKEN=your_token_from_panel
 
-# Localization
-DEFAULT_LOCALE=ru  # ru or en
-LOG_LEVEL=INFO
+# 👤 Telegram IDs of administrators (comma-separated)
+ADMINS=123456789
 ```
 
-**Optional variables:**
+Configure the **database** (PostgreSQL starts automatically in Docker):
 
 ```env
-# Telegram Notifications
-NOTIFICATIONS_CHAT_ID=-1001234567890  # Group/channel ID
-NOTIFICATIONS_TOPIC_ID=123  # Topic ID (optional)
+# 🗄 PostgreSQL — choose a password
+POSTGRES_USER=remnawave
+POSTGRES_PASSWORD=choose_a_secure_password
+POSTGRES_DB=remnawave_bot
 
-# Webhook (for receiving notifications from panel)
-WEBHOOK_SECRET=your_secret_key  # Must match WEBHOOK_SECRET_HEADER in panel
-WEBHOOK_PORT=8080  # Port for webhook server
+# ⚠️ Password here must match POSTGRES_PASSWORD above!
+DATABASE_URL=postgresql://remnawave:choose_a_secure_password@remnawave-admin-db:5432/remnawave_bot
 ```
 
-> 💡 **Tip:** Get your Telegram ID by messaging [@userinfobot](https://t.me/userinfobot)
-
-#### 3. Deploy with Docker Compose
+### Step 3️⃣ — Start the bot
 
 ```bash
-# Create Docker network (if not exists)
+# Create Docker network (once)
 docker network create remnawave-network
 
-# Start the bot
-docker compose pull
+# Pull images and start
 docker compose up -d
 
-# Check logs
+# Check that everything is working
 docker compose logs -f bot
 ```
 
-#### 4. Configure webhook in Remnawave panel
+✅ **Done!** Open the bot in Telegram and send `/start`.
 
-Detailed webhook setup instructions are available in [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
+---
 
-**Quick setup:**
-1. In Remnawave panel, set webhook URL: `http://bot:8080/webhook` (for Docker) or `https://your-bot-domain.com/webhook` (for external)
-2. Set `WEBHOOK_SECRET_HEADER` in panel equal to `WEBHOOK_SECRET` in bot
+### Step 4️⃣ — Web Panel (optional)
+
+If you want the web interface — add to `.env`:
+
+```env
+# 🌐 Web panel
+# JWT secret key (generate: openssl rand -hex 32)
+WEB_SECRET_KEY=generated_key_minimum_32_characters
+
+# Bot username (without @) — needed for Telegram Login Widget
+TELEGRAM_BOT_USERNAME=your_bot_username
+
+# Web panel domain (for CORS)
+WEB_CORS_ORIGINS=https://admin.yourdomain.com
+```
+
+Start with the `web` profile:
+
+```bash
+docker compose --profile web up -d
+```
+
+Web panel will be available on ports: **frontend :3000**, **backend :8081**.
+
+> 📖 More on domain setup and reverse proxy: [web/README.md](web/README.md)
+
+---
+
+### Step 5️⃣ — Webhook Notifications (optional)
+
+To get bot notifications when things change in the panel — add to `.env`:
+
+```env
+# 🔔 Notification chat
+NOTIFICATIONS_CHAT_ID=-1001234567890    # Your group/channel ID
+
+# 🔐 Webhook secret (generate: openssl rand -hex 64)
+WEBHOOK_SECRET=your_secret_key
+```
+
+Then in the **Remnawave panel** set:
+- **WEBHOOK_URL** = `http://bot:8080/webhook` (if on the same Docker network)
+- **WEBHOOK_SECRET_HEADER** = same key as `WEBHOOK_SECRET` in the bot's `.env`
+
+> 📖 Detailed guide with nginx/Caddy examples: [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
+
+---
+
+### Step 6️⃣ — Topic Notifications (optional)
+
+If you have a forum-group in Telegram, you can split notifications by topics:
+
+```env
+NOTIFICATIONS_TOPIC_USERS=456       # 👥 User events
+NOTIFICATIONS_TOPIC_NODES=789       # 🛰 Node events
+NOTIFICATIONS_TOPIC_SERVICE=101     # ⚙️ Service events
+NOTIFICATIONS_TOPIC_HWID=102        # 💻 HWID devices
+NOTIFICATIONS_TOPIC_CRM=103         # 💰 Billing
+NOTIFICATIONS_TOPIC_ERRORS=104      # ❌ Errors
+NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Violations
+```
+
+> 💡 If a topic is not set — the notification goes to `NOTIFICATIONS_TOPIC_ID` (general fallback).
 
 ---
 
 ## 💻 Local Development
 
-### 1. Create virtual environment
-
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# or
-.venv\Scripts\activate  # Windows
-```
-
-### 2. Install dependencies
-
-```bash
+source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 3. Configure environment
-
-```bash
 cp .env.example .env
-nano .env
-```
-
-For local development, use:
-```env
-API_BASE_URL=https://your-panel-domain.com/api
-```
-
-### 4. Run the bot
-
-```bash
+# Edit .env: API_BASE_URL=https://your-panel-domain.com/api
 python -m src.main
 ```
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ Environment Variables Reference
 
-### Environment Variables
+### Core
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `BOT_TOKEN` | ✅ Yes | - | Telegram bot token from @BotFather |
-| `API_BASE_URL` | ✅ Yes | - | Remnawave API base URL |
-| `API_TOKEN` | ✅ Yes | - | API authentication token |
-| `ADMINS` | ✅ Yes | - | Comma-separated list of administrator IDs |
-| `DEFAULT_LOCALE` | ❌ No | `ru` | Default language (`ru` or `en`) |
-| `LOG_LEVEL` | ❌ No | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-| `NOTIFICATIONS_CHAT_ID` | ❌ No | - | Group/channel ID for notifications |
-| `NOTIFICATIONS_TOPIC_ID` | ❌ No | - | Topic ID in group (for forums, fallback) |
-| `NOTIFICATIONS_TOPIC_USERS` | ❌ No | - | Topic for user notifications |
-| `NOTIFICATIONS_TOPIC_NODES` | ❌ No | - | Topic for node notifications |
-| `NOTIFICATIONS_TOPIC_SERVICE` | ❌ No | - | Topic for service notifications |
-| `NOTIFICATIONS_TOPIC_HWID` | ❌ No | - | Topic for HWID notifications |
-| `NOTIFICATIONS_TOPIC_CRM` | ❌ No | - | Topic for billing notifications |
-| `NOTIFICATIONS_TOPIC_ERRORS` | ❌ No | - | Topic for error notifications |
-| `NOTIFICATIONS_TOPIC_VIOLATIONS` | ❌ No | - | Topic for violation notifications |
-| `WEBHOOK_SECRET` | ❌ No | - | Secret key for webhook verification (HMAC-SHA256) |
-| `WEBHOOK_PORT` | ❌ No | `8080` | Port for webhook server |
-| `DATABASE_URL` | ❌ No | - | PostgreSQL connection URL |
-| `SYNC_INTERVAL_SECONDS` | ❌ No | `300` | Data sync interval with API (seconds) |
+| Variable | Req. | Default | Description |
+|----------|------|---------|-------------|
+| `BOT_TOKEN` | ✅ | — | Telegram bot token |
+| `API_BASE_URL` | ✅ | — | Remnawave API URL |
+| `API_TOKEN` | ✅ | — | API authentication token |
+| `ADMINS` | ✅ | — | Comma-separated administrator IDs |
+| `DEFAULT_LOCALE` | — | `ru` | Language (`ru` / `en`) |
+| `LOG_LEVEL` | — | `INFO` | Logging level |
 
-### Docker Network
+### 🗄 Database
 
-The bot requires access to the `remnawave-network` Docker network. If it doesn't exist, create it:
+| Variable | Req. | Default | Description |
+|----------|------|---------|-------------|
+| `POSTGRES_USER` | ✅ | — | PostgreSQL user |
+| `POSTGRES_PASSWORD` | ✅ | — | PostgreSQL password |
+| `POSTGRES_DB` | ✅ | — | Database name |
+| `DATABASE_URL` | ✅ | — | PostgreSQL connection URL |
+| `SYNC_INTERVAL_SECONDS` | — | `300` | Data sync interval with API (sec) |
 
-```bash
-docker network create remnawave-network
-```
+### 🔔 Notifications
+
+| Variable | Description |
+|----------|-------------|
+| `NOTIFICATIONS_CHAT_ID` | Group/channel ID |
+| `NOTIFICATIONS_TOPIC_ID` | General topic (fallback) |
+| `NOTIFICATIONS_TOPIC_USERS` | User notifications topic |
+| `NOTIFICATIONS_TOPIC_NODES` | Node notifications topic |
+| `NOTIFICATIONS_TOPIC_SERVICE` | Service notifications |
+| `NOTIFICATIONS_TOPIC_HWID` | HWID notifications |
+| `NOTIFICATIONS_TOPIC_CRM` | Billing notifications |
+| `NOTIFICATIONS_TOPIC_ERRORS` | Error notifications |
+| `NOTIFICATIONS_TOPIC_VIOLATIONS` | Violation notifications |
+
+### 🔗 Webhook
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WEBHOOK_SECRET` | — | Webhook verification key (HMAC-SHA256) |
+| `WEBHOOK_PORT` | `8080` | Webhook server port |
+
+### 🌐 Web Panel
+
+| Variable | Req.* | Default | Description |
+|----------|-------|---------|-------------|
+| `WEB_SECRET_KEY` | ✅ | — | JWT secret key |
+| `TELEGRAM_BOT_USERNAME` | ✅ | — | Bot username (without @) |
+| `WEB_CORS_ORIGINS` | — | — | Allowed domains (CORS) |
+| `WEB_JWT_EXPIRE_MINUTES` | — | `30` | Access token lifetime (min) |
+| `WEB_JWT_REFRESH_HOURS` | — | `6` | Refresh token lifetime (h) |
+| `WEB_BACKEND_PORT` | — | `8081` | Backend port |
+| `WEB_FRONTEND_PORT` | — | `3000` | Frontend port |
+| `WEB_ALLOWED_IPS` | — | — | IP whitelist (CIDR) |
+
+*\* Required only when running with `--profile web`*
 
 ---
 
-## 📋 Logging
+## 🤖 Bot Commands
 
-The bot uses a two-tier logging system: **files** for full history and **console** (docker logs) for critical events only.
+| Command | Description |
+|---------|-------------|
+| `/start` | Main menu |
+| `/help` | Help |
+| `/health` | System health status |
+| `/stats` | Panel statistics |
+| `/bandwidth` | Traffic statistics |
+| `/config` | Dynamic settings |
+| `/user <username\|id>` | User information |
+| `/node <uuid>` | Node information |
+| `/host <uuid>` | Host information |
 
-### What you see in `docker compose logs`
+---
 
-Live logs only show **WARNING** and **ERROR** — things that require attention:
+## 📝 Logging
 
-```
-14:27:02 | WARNING | bot        | ⏳ Timeout GET /api/users (1/3), retry in 0.5s
-14:27:05 | ERROR   | bot        | ❌ Network error GET /api/users after 3 attempts
-14:27:10 | WARNING | web        | ⚠️ Database connection failed
-```
-
-```bash
-# Watch live logs for all services
-docker compose --profile web logs -f
-
-# Bot only
-docker compose logs -f bot
-```
-
-### Log Files
-
-Detailed logs are saved in the `./logs/` directory next to `docker-compose.yml` (mounted at `/app/logs` inside containers):
+Two-tier system: **files** (full history) and **console** (WARNING+ only).
 
 | File | Level | Contents |
 |------|-------|----------|
-| `adminbot_INFO.log` | INFO+ | Everything: API calls, sync, webhooks, user actions, errors |
-| `adminbot_WARNING.log` | WARNING+ | Problems only: timeouts, connection errors, failures |
-| `web_INFO.log` | INFO+ | Detailed web backend logs |
+| `adminbot_INFO.log` | INFO+ | Everything: API calls, sync, actions |
+| `adminbot_WARNING.log` | WARNING+ | Problems: timeouts, errors |
+| `web_INFO.log` | INFO+ | Web backend logs |
 | `web_WARNING.log` | WARNING+ | Web backend problems |
 
-### Rotation
-
-- **File size**: up to 50 MB
-- **Backup count**: 5
-- **Compression**: gzip (`.1.gz`, `.2.gz`, ... `.5.gz`)
-- **Total per log type**: ~300 MB (50 MB current + 5 × ~50 MB compressed)
-
-### How to read log files
+Rotation: 50 MB per file, 5 backups (gzip). Files in `./logs/`.
 
 ```bash
-# Read logs directly from host
-cat ./logs/adminbot_INFO.log
-
-# Last 100 lines
-tail -100 ./logs/adminbot_INFO.log
-
-# Search for errors
-grep "ERROR" ./logs/adminbot_WARNING.log
-
-# Follow file in real time
-tail -f ./logs/adminbot_INFO.log
-
-# Check file sizes
-ls -lh ./logs/
+docker compose logs -f bot                    # Live logs
+tail -100 ./logs/adminbot_INFO.log            # Last 100 lines
 ```
-
-### Log Level Configuration
-
-The `LOG_LEVEL` variable controls the minimum level written to files:
-
-```env
-LOG_LEVEL=INFO      # Default — all INFO, WARNING, ERROR
-LOG_LEVEL=DEBUG     # Maximum detail (for debugging)
-LOG_LEVEL=WARNING   # Problems only
-```
-
-> **Note:** Console (`docker compose logs`) always shows WARNING+ only, regardless of `LOG_LEVEL`. For the full picture, check the log files.
 
 ---
 
-### Basic Commands
-
-| Command | Description |
-|---------|-------------|
-| `/start` | Start the bot and show main menu |
-| `/help` | Show command help |
-| `/health` | Show system health status |
-| `/stats` | Show panel and server statistics |
-| `/bandwidth` | Show traffic statistics |
-| `/config` | Manage bot settings (dynamic settings) |
-
-### User Management Commands
-
-| Command | Description |
-|---------|-------------|
-| `/user <username\|telegram_id>` | View user information |
-| `/user_create <username> <expire_iso> [telegram_id]` | Create new user |
-
-### Infrastructure Commands
-
-| Command | Description |
-|---------|-------------|
-| `/node <uuid>` | View node information |
-| `/host <uuid>` | View host information |
-| `/sub <short_uuid>` | Open subscription link |
-
-### Menu Navigation
-
-The bot uses inline keyboards for navigation. Main sections:
-
-- **👥 Users** - User management, search, creation, editing, statistics, HWID
-- **🛰 Nodes** - Node management and monitoring, traffic statistics
-- **🖥 Hosts** - Host management, bulk operations
-- **🧰 Resources** - Templates, snippets, API tokens, configs
-- **💰 Billing** - Payment history, providers, billing nodes
-- **📊 System** - System health, statistics, management
-
----
-
-## 📁 Project Structure
+## 📂 Project Structure
 
 ```
 remnawave-admin/
-├── src/                            # Telegram bot
-│   ├── main.py                     # Application entry point
-│   ├── config.py                   # Configuration management
-│   ├── handlers/                   # Event handlers
-│   │   ├── users.py                # User management
-│   │   ├── nodes.py                # Node management
-│   │   ├── hosts.py                # Host management
-│   │   ├── bot_config.py           # Dynamic settings
-│   │   └── ...                     # Other handlers
-│   ├── keyboards/                  # Inline keyboards
-│   ├── services/                   # Services
-│   │   ├── api_client.py           # Remnawave API client
-│   │   ├── database.py             # PostgreSQL service
-│   │   ├── config_service.py       # Configuration service (DB > .env)
-│   │   ├── violation_detector.py   # Anti-Abuse detector
-│   │   └── webhook.py              # Webhook server
-│   └── utils/                      # Utilities (i18n, logging, formatting)
-├── web/                            # Web admin panel
-│   ├── frontend/                   # React + TypeScript + Tailwind
-│   │   └── src/
-│   │       ├── pages/              # Dashboard, Users, Nodes, Violations, Settings...
-│   │       ├── components/layout/  # Layout, Header, Sidebar
-│   │       ├── store/              # Zustand (auth)
-│   │       └── api/                # Axios client
-│   └── backend/                    # FastAPI backend for web panel
-│       ├── api/v2/                 # REST API endpoints
-│       ├── core/                   # Config, security, API helper
-│       └── schemas/                # Pydantic models
-├── node-agent/                     # Node Agent for connection data collection
-├── locales/                        # Localization (ru, en)
-├── docker-compose.yml              # Docker Compose (profiles: bot, web)
-└── README.md                       # This file
+├── src/                        # Telegram bot
+│   ├── handlers/               # Handlers (users, nodes, hosts, billing, ...)
+│   ├── keyboards/              # Inline keyboards
+│   ├── services/               # API client, database, violation detector, webhook, ...
+│   └── utils/                  # i18n, logging, formatting
+├── web/                        # Web panel
+│   ├── frontend/               # React + TypeScript + Tailwind
+│   └── backend/                # FastAPI backend
+├── node-agent/                 # Node data collection agent
+├── alembic/                    # DB migrations
+├── locales/                    # Localization (ru, en)
+└── docker-compose.yml          # Docker Compose (profiles: bot, web)
 ```
 
 ---
 
-## 🔔 Webhook Notifications
+## 📚 Documentation
 
-The bot supports receiving webhook notifications from Remnawave panel about various events:
-
-- **Users**: creation, modification, deletion, disabling, subscription expiration
-- **Nodes**: creation, modification, deletion, connection loss/restoration
-- **HWID Devices**: addition, deletion
-- **Service**: panel events, login attempts
-
-Detailed setup instructions are available in [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
+| Document | Description |
+|----------|-------------|
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) | Webhook setup guide |
+| [docs/anti-abuse.md](docs/anti-abuse.md) | Anti-Abuse system, ASN database, provider classification |
+| [web/README.md](web/README.md) | Web panel: setup, reverse proxy, API |
+| [web/SECURITY_AUDIT.md](web/SECURITY_AUDIT.md) | Web panel security audit |
+| [node-agent/README.md](node-agent/README.md) | Node Agent: installation, configuration, troubleshooting |
 
 ---
 
@@ -513,81 +334,58 @@ Detailed setup instructions are available in [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md
 
 ### Bot not responding
 
-1. **Check bot status:**
-   ```bash
-   docker compose ps
-   ```
-
-2. **Check logs for errors:**
-   ```bash
-   # Live logs (WARNING and ERROR only)
-   docker compose logs -f bot
-
-   # Full logs from file (INFO+)
-   docker compose exec bot tail -100 /app/logs/adminbot_INFO.log
-   ```
-
-3. **Check environment variables:**
-   ```bash
-   docker compose config
-   ```
+```bash
+docker compose ps                    # Container status
+docker compose logs -f bot           # Logs
+docker compose config                # Check configuration
+```
 
 ### API connection issues
 
-1. Make sure `API_BASE_URL` is set correctly
-2. Check if Docker network exists:
-   ```bash
-   docker network ls | grep remnawave-network
-   ```
-3. For external API, ensure URL is accessible and token is valid
+- Check `API_BASE_URL` and `API_TOKEN`
+- Docker network exists: `docker network ls | grep remnawave-network`
 
 ### Access denied
 
-- Make sure your Telegram ID is listed in `ADMINS` environment variable
-- Get your ID by messaging [@userinfobot](https://t.me/userinfobot)
+- Telegram ID in `ADMINS`? Check via [@userinfobot](https://t.me/userinfobot)
 
-### Webhook issues
+### Webhook not working
 
-- Check that `WEBHOOK_SECRET` in bot matches `WEBHOOK_SECRET_HEADER` in panel
-- Ensure webhook URL is accessible from panel
-- Check logs for authentication errors
-- See [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) for more details
+- `WEBHOOK_SECRET` matches `WEBHOOK_SECRET_HEADER` in panel?
+- Webhook URL accessible from panel?
+- Details: [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions to the project!
-
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make changes and commit (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a branch: `git checkout -b feature/amazing-feature`
+3. Commit and push
+4. Open a Pull Request
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE).
 
 ---
 
-## 💬 Support
+## 💖 Support
 
-For questions and issues, create an [issue](https://github.com/case211/remnawave-admin/issues) on GitHub.
+- [GitHub Issues](https://github.com/case211/remnawave-admin/issues)
+- [Telegram chat](https://t.me/remnawave_admin)
 
-Join our Telegram chat - https://t.me/remnawave_admin
+Support the author:
+- TON: `UQDDe-jyFTbQsPHqyojdFeO1_m7uPF-q1w0g_MfbSOd3l1sC`
+- USDT TRC20: `TGyHJj2PsYSUwkBbWdc7BFfsAxsE6SGGJP`
+- BTC: `bc1qusrj5rxd3kv6eepzpdn0muy6zsl3c24xunz2xn`
 
-Support author donation:
-
-TON: UQDDe-jyFTbQsPHqyojdFeO1_m7uPF-q1w0g_MfbSOd3l1sC
-USDT TRC20: TGyHJj2PsYSUwkBbWdc7BFfsAxsE6SGGJP
-BTC: bc1qusrj5rxd3kv6eepzpdn0muy6zsl3c24xunz2xn
 ---
 
 <div align="center">
 
-**Made with ❤️ for Remnawave management**
+Made with ❤️ for the Remnawave community
 
 </div>
