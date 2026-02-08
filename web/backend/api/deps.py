@@ -24,7 +24,7 @@ class AdminUser:
     auth_method: str = "telegram"
 
 
-def _validate_token_payload(payload: dict) -> AdminUser:
+async def _validate_token_payload(payload: dict) -> AdminUser:
     """Validate token payload and return AdminUser.
 
     Handles both Telegram-based (sub = telegram_id) and
@@ -41,7 +41,6 @@ def _validate_token_payload(payload: dict) -> AdminUser:
         # Check DB
         try:
             from web.backend.core.admin_credentials import get_admin_by_username
-            import asyncio
             admin_row = await get_admin_by_username(username)
             if admin_row:
                 is_valid = True
@@ -122,7 +121,7 @@ async def get_current_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return _validate_token_payload(payload)
+    return await _validate_token_payload(payload)
 
 
 async def get_current_admin_ws(
@@ -157,7 +156,7 @@ async def get_current_admin_ws(
         raise HTTPException(status_code=401, detail="Invalid token")
 
     try:
-        admin = _validate_token_payload(payload)
+        admin = await _validate_token_payload(payload)
     except HTTPException:
         await websocket.close(code=4003, reason="Access denied")
         raise
