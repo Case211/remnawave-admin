@@ -13,6 +13,7 @@ import {
   HiLockClosed,
   HiShieldCheck,
   HiX,
+  HiPlus,
 } from 'react-icons/hi'
 import client from '../api/client'
 
@@ -278,6 +279,191 @@ function HostEditModal({
   )
 }
 
+// Host create modal
+function HostCreateModal({
+  onClose,
+  onSave,
+  isPending,
+  error,
+}: {
+  onClose: () => void
+  onSave: (data: Record<string, unknown>) => void
+  isPending: boolean
+  error: string
+}) {
+  const [form, setForm] = useState<HostEditFormData>({
+    remark: '',
+    address: '',
+    port: '443',
+    sni: '',
+    host: '',
+    path: '',
+    security: 'tls',
+    alpn: '',
+    fingerprint: '',
+  })
+
+  const handleSubmit = () => {
+    const createData: Record<string, unknown> = {
+      remark: form.remark.trim(),
+      address: form.address.trim(),
+    }
+    const port = parseInt(form.port, 10)
+    if (!isNaN(port)) createData.port = port
+    createData.security = form.security
+    if (form.sni.trim()) createData.sni = form.sni.trim()
+    if (form.host.trim()) createData.host = form.host.trim()
+    if (form.path.trim()) createData.path = form.path.trim()
+    if (form.alpn.trim()) createData.alpn = form.alpn.trim()
+    if (form.fingerprint.trim()) createData.fingerprint = form.fingerprint.trim()
+    onSave(createData)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg card border border-dark-400/20 animate-scale-in max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">Добавление хоста</h2>
+          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
+            <HiX className="w-5 h-5" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Название</label>
+            <input
+              type="text"
+              value={form.remark}
+              onChange={(e) => setForm({ ...form, remark: e.target.value })}
+              className="input"
+              placeholder="Название хоста"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm text-dark-200 mb-1.5">Адрес</label>
+              <input
+                type="text"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                className="input"
+                placeholder="IP или домен"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-dark-200 mb-1.5">Порт</label>
+              <input
+                type="number"
+                min="1"
+                max="65535"
+                value={form.port}
+                onChange={(e) => setForm({ ...form, port: e.target.value })}
+                className="input"
+                placeholder="Порт"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Безопасность</label>
+            <select
+              value={form.security}
+              onChange={(e) => setForm({ ...form, security: e.target.value })}
+              className="input"
+            >
+              <option value="none">Без шифрования</option>
+              <option value="tls">TLS</option>
+              <option value="reality">Reality</option>
+              <option value="xtls">XTLS</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">SNI</label>
+            <input
+              type="text"
+              value={form.sni}
+              onChange={(e) => setForm({ ...form, sni: e.target.value })}
+              className="input"
+              placeholder="Server Name Indication"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Host</label>
+            <input
+              type="text"
+              value={form.host}
+              onChange={(e) => setForm({ ...form, host: e.target.value })}
+              className="input"
+              placeholder="Host header"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Path</label>
+            <input
+              type="text"
+              value={form.path}
+              onChange={(e) => setForm({ ...form, path: e.target.value })}
+              className="input font-mono text-sm"
+              placeholder="/path"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">ALPN</label>
+            <input
+              type="text"
+              value={form.alpn}
+              onChange={(e) => setForm({ ...form, alpn: e.target.value })}
+              className="input"
+              placeholder="h2,http/1.1"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Fingerprint</label>
+            <input
+              type="text"
+              value={form.fingerprint}
+              onChange={(e) => setForm({ ...form, fingerprint: e.target.value })}
+              className="input"
+              placeholder="chrome, firefox, safari..."
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isPending}
+            className="btn-secondary px-4 py-2"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isPending || !form.address.trim() || !form.port}
+            className="btn-primary px-4 py-2"
+          >
+            {isPending ? 'Создание...' : 'Создать'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Host card component
 function HostCard({
   host,
@@ -440,6 +626,8 @@ export default function Hosts() {
   const queryClient = useQueryClient()
   const [editingHost, setEditingHost] = useState<Host | null>(null)
   const [editError, setEditError] = useState('')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   // Fetch hosts
   const { data: hosts = [], isLoading, refetch } = useQuery({
@@ -477,6 +665,18 @@ export default function Hosts() {
     },
   })
 
+  const createHost = useMutation({
+    mutationFn: (data: Record<string, unknown>) => client.post('/hosts', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hosts'] })
+      setShowCreateModal(false)
+      setCreateError('')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
+    },
+  })
+
   // Stats
   const totalHosts = hosts.length
   const activeHosts = hosts.filter((h) => !h.is_disabled).length
@@ -490,14 +690,23 @@ export default function Hosts() {
           <h1 className="page-header-title">Хосты</h1>
           <p className="text-dark-200 mt-1 text-sm md:text-base">Управление хостами подключений</p>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="btn-secondary flex items-center gap-2 self-start sm:self-auto"
-          disabled={isLoading}
-        >
-          <HiRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">Обновить</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => { setShowCreateModal(true); setCreateError('') }}
+            className="btn-primary flex items-center gap-2"
+          >
+            <HiPlus className="w-4 h-4" />
+            <span className="hidden sm:inline">Добавить</span>
+          </button>
+          <button
+            onClick={() => refetch()}
+            className="btn-secondary flex items-center gap-2"
+            disabled={isLoading}
+          >
+            <HiRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Обновить</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -554,6 +763,16 @@ export default function Hosts() {
           onSave={(data) => updateHost.mutate({ uuid: editingHost.uuid, data })}
           isPending={updateHost.isPending}
           error={editError}
+        />
+      )}
+
+      {/* Create modal */}
+      {showCreateModal && (
+        <HostCreateModal
+          onClose={() => { setShowCreateModal(false); setCreateError('') }}
+          onSave={(data) => createHost.mutate(data)}
+          isPending={createHost.isPending}
+          error={createError}
         />
       )}
     </div>

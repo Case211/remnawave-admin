@@ -14,6 +14,7 @@ import {
   HiPlay,
   HiStop,
   HiX,
+  HiPlus,
 } from 'react-icons/hi'
 import client from '../api/client'
 
@@ -180,6 +181,107 @@ function NodeEditModal({
             className="btn-primary px-4 py-2"
           >
             {isPending ? 'Сохранение...' : 'Сохранить'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Node create modal
+function NodeCreateModal({
+  onClose,
+  onSave,
+  isPending,
+  error,
+}: {
+  onClose: () => void
+  onSave: (data: Record<string, unknown>) => void
+  isPending: boolean
+  error: string
+}) {
+  const [form, setForm] = useState<NodeEditFormData>({
+    name: '',
+    address: '',
+    port: '62050',
+  })
+
+  const handleSubmit = () => {
+    const createData: Record<string, unknown> = {
+      name: form.name.trim(),
+      address: form.address.trim(),
+    }
+    const port = parseInt(form.port, 10)
+    if (!isNaN(port)) createData.port = port
+    onSave(createData)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md card border border-dark-400/20 animate-scale-in">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">Добавление ноды</h2>
+          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
+            <HiX className="w-5 h-5" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Название</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="input"
+              placeholder="Название ноды"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Адрес</label>
+            <input
+              type="text"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              className="input"
+              placeholder="IP или домен"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-dark-200 mb-1.5">Порт</label>
+            <input
+              type="number"
+              min="1"
+              max="65535"
+              value={form.port}
+              onChange={(e) => setForm({ ...form, port: e.target.value })}
+              className="input"
+              placeholder="Порт"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isPending}
+            className="btn-secondary px-4 py-2"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isPending || !form.name.trim() || !form.address.trim() || !form.port}
+            className="btn-primary px-4 py-2"
+          >
+            {isPending ? 'Создание...' : 'Создать'}
           </button>
         </div>
       </div>
@@ -408,6 +510,8 @@ export default function Nodes() {
   const queryClient = useQueryClient()
   const [editingNode, setEditingNode] = useState<Node | null>(null)
   const [editError, setEditError] = useState('')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   // Fetch nodes
   const { data: nodes = [], isLoading, refetch } = useQuery({
@@ -458,6 +562,18 @@ export default function Nodes() {
     },
   })
 
+  const createNode = useMutation({
+    mutationFn: (data: Record<string, unknown>) => client.post('/nodes', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      setShowCreateModal(false)
+      setCreateError('')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
+    },
+  })
+
   // Calculate stats
   const totalNodes = nodes.length
   const onlineNodes = nodes.filter((n) => n.is_connected && !n.is_disabled).length
@@ -473,14 +589,23 @@ export default function Nodes() {
           <h1 className="page-header-title">Ноды</h1>
           <p className="text-dark-200 mt-1 text-sm md:text-base">Управление серверами</p>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="btn-secondary flex items-center gap-2 self-start sm:self-auto"
-          disabled={isLoading}
-        >
-          <HiRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">Обновить</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => { setShowCreateModal(true); setCreateError('') }}
+            className="btn-primary flex items-center gap-2"
+          >
+            <HiPlus className="w-4 h-4" />
+            <span className="hidden sm:inline">Добавить</span>
+          </button>
+          <button
+            onClick={() => refetch()}
+            className="btn-secondary flex items-center gap-2"
+            disabled={isLoading}
+          >
+            <HiRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Обновить</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -551,6 +676,16 @@ export default function Nodes() {
           onSave={(data) => updateNode.mutate({ uuid: editingNode.uuid, data })}
           isPending={updateNode.isPending}
           error={editError}
+        />
+      )}
+
+      {/* Create modal */}
+      {showCreateModal && (
+        <NodeCreateModal
+          onClose={() => { setShowCreateModal(false); setCreateError('') }}
+          onSave={(data) => createNode.mutate(data)}
+          isPending={createNode.isPending}
+          error={createError}
         />
       )}
     </div>
