@@ -2786,6 +2786,27 @@ class DatabaseService:
             logger.error("Error getting HWID devices count for user %s: %s", user_uuid, e, exc_info=True)
             return 0
 
+    async def get_hwid_device_counts_bulk(self) -> Dict[str, int]:
+        """
+        Получить количество HWID устройств для всех пользователей одним запросом.
+
+        Returns:
+            Словарь {user_uuid: count}
+        """
+        if not self.is_connected:
+            return {}
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT user_uuid, COUNT(*) as cnt FROM user_hwid_devices GROUP BY user_uuid"
+                )
+                return {row["user_uuid"]: row["cnt"] for row in rows}
+
+        except Exception as e:
+            logger.error("Error getting bulk HWID device counts: %s", e, exc_info=True)
+            return {}
+
     async def sync_user_hwid_devices(
         self,
         user_uuid: str,
