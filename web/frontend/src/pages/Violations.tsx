@@ -2,31 +2,36 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  HiShieldExclamation,
-  HiRefresh,
-  HiChevronLeft,
-  HiChevronRight,
-  HiCheck,
-  HiBan,
-  HiX,
-  HiEye,
-  HiExclamation,
-  HiFilter,
-  HiGlobe,
-  HiClock,
-  HiUser,
-  HiTrendingUp,
-  HiChevronDown,
-  HiChevronUp,
-  HiLocationMarker,
-  HiServer,
-  HiDeviceMobile,
-  HiIdentification,
-  HiArrowLeft,
-  HiExternalLink,
-  HiChat,
-} from 'react-icons/hi'
+  ShieldAlert,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  Ban,
+  X,
+  Eye,
+  AlertTriangle,
+  Filter,
+  Globe,
+  Clock,
+  User,
+  TrendingUp,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  Server,
+  Smartphone,
+  Fingerprint,
+  ArrowLeft,
+  ExternalLink,
+  MessageCircle,
+} from 'lucide-react'
 import client from '../api/client'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -186,28 +191,28 @@ function formatDate(dateStr: string): string {
 }
 
 function getSeverityConfig(severity: string) {
-  const config: Record<string, { label: string; class: string; iconClass: string; bg: string }> = {
+  const config: Record<string, { label: string; variant: 'destructive' | 'warning' | 'default' | 'secondary'; iconClass: string; bg: string }> = {
     critical: {
       label: 'Критический',
-      class: 'badge-danger',
+      variant: 'destructive',
       iconClass: 'text-red-400',
       bg: 'bg-red-500/10',
     },
     high: {
       label: 'Высокий',
-      class: 'badge-warning',
+      variant: 'warning',
       iconClass: 'text-yellow-400',
       bg: 'bg-yellow-500/10',
     },
     medium: {
       label: 'Средний',
-      class: 'badge-info',
+      variant: 'default',
       iconClass: 'text-blue-400',
       bg: 'bg-blue-500/10',
     },
     low: {
       label: 'Низкий',
-      class: 'badge-gray',
+      variant: 'secondary',
       iconClass: 'text-dark-200',
       bg: 'bg-dark-600/50',
     },
@@ -223,17 +228,17 @@ function getSeverityFromScore(score: number): string {
 }
 
 function getActionConfig(action: string | null) {
-  if (!action) return { label: 'Ожидает', class: 'badge-warning' }
-  const config: Record<string, { label: string; class: string }> = {
-    block: { label: 'Заблокирован', class: 'badge-danger' },
-    blocked: { label: 'Заблокирован', class: 'badge-danger' },
-    warn: { label: 'Предупреждён', class: 'badge-info' },
-    warned: { label: 'Предупреждён', class: 'badge-info' },
-    ignore: { label: 'Отклонено', class: 'badge-gray' },
-    dismissed: { label: 'Отклонено', class: 'badge-gray' },
-    resolved: { label: 'Разрешено', class: 'badge-success' },
+  if (!action) return { label: 'Ожидает', variant: 'warning' as const }
+  const config: Record<string, { label: string; variant: 'destructive' | 'default' | 'secondary' | 'success' | 'warning' }> = {
+    block: { label: 'Заблокирован', variant: 'destructive' },
+    blocked: { label: 'Заблокирован', variant: 'destructive' },
+    warn: { label: 'Предупреждён', variant: 'default' },
+    warned: { label: 'Предупреждён', variant: 'default' },
+    ignore: { label: 'Отклонено', variant: 'secondary' },
+    dismissed: { label: 'Отклонено', variant: 'secondary' },
+    resolved: { label: 'Разрешено', variant: 'success' },
   }
-  return config[action] || { label: action, class: 'badge-gray' }
+  return config[action] || { label: action, variant: 'secondary' as const }
 }
 
 function getRecommendedActionLabel(action: string): string {
@@ -359,109 +364,109 @@ function ViolationCard({
   const isPending = !violation.action_taken
 
   return (
-    <div className="card hover:border-dark-400/40 transition-colors">
-      <div className="flex items-start gap-3 md:gap-4">
-        {/* Severity icon */}
-        <div className={`hidden sm:flex p-2.5 rounded-lg flex-shrink-0 ${severityConfig.bg}`}>
-          {violation.severity === 'critical' ? (
-            <HiExclamation className={`w-6 h-6 ${severityConfig.iconClass}`} />
-          ) : (
-            <HiShieldExclamation className={`w-6 h-6 ${severityConfig.iconClass}`} />
-          )}
-        </div>
+    <Card className="hover:border-dark-400/40 transition-colors">
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3 md:gap-4">
+          {/* Severity icon */}
+          <div className={`hidden sm:flex p-2.5 rounded-lg flex-shrink-0 ${severityConfig.bg}`}>
+            {violation.severity === 'critical' ? (
+              <AlertTriangle className={`w-6 h-6 ${severityConfig.iconClass}`} />
+            ) : (
+              <ShieldAlert className={`w-6 h-6 ${severityConfig.iconClass}`} />
+            )}
+          </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <button
-              onClick={onViewUser}
-              className="font-semibold text-white hover:text-primary-400 transition-colors"
-            >
-              {violation.username || violation.email || 'Неизвестный'}
-            </button>
-            <SeverityBadge severity={violation.severity} />
-            <ActionBadge action={violation.action_taken} />
-            {violation.notified && (
-              <span className="text-xs text-dark-200" title="Уведомлён">
-                <HiChat className="w-3.5 h-3.5 inline" />
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <button
+                onClick={onViewUser}
+                className="font-semibold text-white hover:text-primary-400 transition-colors"
+              >
+                {violation.username || violation.email || 'Неизвестный'}
+              </button>
+              <SeverityBadge severity={violation.severity} />
+              <ActionBadge action={violation.action_taken} />
+              {violation.notified && (
+                <span className="text-xs text-dark-200" title="Уведомлён">
+                  <MessageCircle className="w-3.5 h-3.5 inline" />
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-dark-200 mb-1">
+              <span className={getRecommendedActionClass(violation.recommended_action)}>
+                {getRecommendedActionLabel(violation.recommended_action)}
               </span>
+              {violation.confidence > 0 && (
+                <span>Уверенность: {Math.round(violation.confidence * 100)}%</span>
+              )}
+            </div>
+
+            {violation.email && (
+              <p className="text-xs text-dark-200 mb-0.5 truncate">{violation.email}</p>
             )}
+
+            <p className="text-xs text-dark-200 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {formatTimeAgo(violation.detected_at)}
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-dark-200 mb-1">
-            <span className={getRecommendedActionClass(violation.recommended_action)}>
-              {getRecommendedActionLabel(violation.recommended_action)}
-            </span>
-            {violation.confidence > 0 && (
-              <span>Уверенность: {Math.round(violation.confidence * 100)}%</span>
-            )}
+          {/* Score */}
+          <ScoreCircle score={violation.score} />
+        </div>
+
+        {/* Actions for pending violations */}
+        {isPending && (
+          <div className="mt-4 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
+            <Button variant="destructive" size="sm" onClick={onBlock} className="gap-1">
+              <Ban className="w-4 h-4" />
+              <span className="hidden sm:inline">Заблокировать</span>
+              <span className="sm:hidden">Блок</span>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onWarn} className="gap-1">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="hidden sm:inline">Предупредить</span>
+              <span className="sm:hidden">Пред.</span>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onDismiss} className="gap-1">
+              <X className="w-4 h-4" /> Отклонить
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onViewDetail} className="gap-1 ml-auto">
+              <Eye className="w-4 h-4" />
+              <span className="hidden sm:inline">Подробнее</span>
+            </Button>
           </div>
+        )}
 
-          {violation.email && (
-            <p className="text-xs text-dark-200 mb-0.5 truncate">{violation.email}</p>
-          )}
-
-          <p className="text-xs text-dark-200 flex items-center gap-1">
-            <HiClock className="w-3.5 h-3.5" />
-            {formatTimeAgo(violation.detected_at)}
-          </p>
-        </div>
-
-        {/* Score */}
-        <ScoreCircle score={violation.score} />
-      </div>
-
-      {/* Actions for pending violations */}
-      {isPending && (
-        <div className="mt-4 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
-          <button onClick={onBlock} className="btn-danger text-xs sm:text-sm flex items-center gap-1">
-            <HiBan className="w-4 h-4" />
-            <span className="hidden sm:inline">Заблокировать</span>
-            <span className="sm:hidden">Блок</span>
-          </button>
-          <button onClick={onWarn} className="btn-secondary text-xs sm:text-sm flex items-center gap-1">
-            <HiExclamation className="w-4 h-4" />
-            <span className="hidden sm:inline">Предупредить</span>
-            <span className="sm:hidden">Пред.</span>
-          </button>
-          <button onClick={onDismiss} className="btn-ghost text-xs sm:text-sm flex items-center gap-1">
-            <HiX className="w-4 h-4" /> Отклонить
-          </button>
-          <button
-            onClick={onViewDetail}
-            className="btn-ghost text-xs sm:text-sm flex items-center gap-1 ml-auto"
-          >
-            <HiEye className="w-4 h-4" />
-            <span className="hidden sm:inline">Подробнее</span>
-          </button>
-        </div>
-      )}
-
-      {/* Resolved footer */}
-      {!isPending && (
-        <div className="mt-4 pt-3 border-t border-dark-400/10 flex items-center justify-between text-xs text-dark-200">
-          <span>Действие: {getActionConfig(violation.action_taken).label}</span>
-          <button
-            onClick={onViewDetail}
-            className="text-primary-400 hover:text-primary-300 flex items-center gap-1 transition-colors"
-          >
-            <HiEye className="w-4 h-4" /> Подробнее
-          </button>
-        </div>
-      )}
-    </div>
+        {/* Resolved footer */}
+        {!isPending && (
+          <div className="mt-4 pt-3 border-t border-dark-400/10 flex items-center justify-between text-xs text-dark-200">
+            <span>Действие: {getActionConfig(violation.action_taken).label}</span>
+            <button
+              onClick={onViewDetail}
+              className="text-primary-400 hover:text-primary-300 flex items-center gap-1 transition-colors"
+            >
+              <Eye className="w-4 h-4" /> Подробнее
+            </button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
 // ── Badges ───────────────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: string }) {
-  return <span className={getSeverityConfig(severity).class}>{getSeverityConfig(severity).label}</span>
+  const config = getSeverityConfig(severity)
+  return <Badge variant={config.variant}>{config.label}</Badge>
 }
 
 function ActionBadge({ action }: { action: string | null }) {
   const config = getActionConfig(action)
-  return <span className={config.class}>{config.label}</span>
+  return <Badge variant={config.variant}>{config.label}</Badge>
 }
 
 // ── Detail panel ─────────────────────────────────────────────────
@@ -527,16 +532,18 @@ function ViolationDetailPanel({
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="btn-ghost p-2">
-            <HiArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="h-6 w-48 bg-dark-700 rounded skeleton" />
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <Skeleton className="h-6 w-48" />
         </div>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="card">
-            <div className="h-4 w-32 bg-dark-700 rounded skeleton mb-3" />
-            <div className="h-20 bg-dark-700 rounded skeleton" />
-          </div>
+          <Card key={i}>
+            <CardContent className="p-4">
+              <Skeleton className="h-4 w-32 mb-3" />
+              <Skeleton className="h-20 w-full" />
+            </CardContent>
+          </Card>
         ))}
       </div>
     )
@@ -545,10 +552,12 @@ function ViolationDetailPanel({
   if (!detail) {
     return (
       <div className="space-y-4">
-        <button onClick={onClose} className="btn-ghost flex items-center gap-2">
-          <HiArrowLeft className="w-5 h-5" /> Назад
-        </button>
-        <div className="card text-center py-8 text-dark-200">Нарушение не найдено</div>
+        <Button variant="ghost" onClick={onClose} className="gap-2">
+          <ArrowLeft className="w-5 h-5" /> Назад
+        </Button>
+        <Card>
+          <CardContent className="text-center py-8 text-dark-200">Нарушение не найдено</CardContent>
+        </Card>
       </div>
     )
   }
@@ -561,9 +570,9 @@ function ViolationDetailPanel({
     <div className="space-y-4 animate-fade-in-up">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={onClose} className="btn-ghost p-2">
-          <HiArrowLeft className="w-5 h-5" />
-        </button>
+        <Button variant="ghost" size="icon" onClick={onClose}>
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-bold text-white truncate">
             Нарушение #{detail.id}
@@ -574,292 +583,298 @@ function ViolationDetailPanel({
       </div>
 
       {/* User info card */}
-      <div className="card animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-        <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-          Пользователь
-        </h3>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className={`p-2 rounded-lg ${severityConfig.bg}`}>
-            <HiUser className={`w-5 h-5 ${severityConfig.iconClass}`} />
+      <Card className="animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+        <CardContent className="p-4">
+          <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+            Пользователь
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className={`p-2 rounded-lg ${severityConfig.bg}`}>
+              <User className={`w-5 h-5 ${severityConfig.iconClass}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-white">{detail.username || 'Неизвестный'}</p>
+              {detail.email && <p className="text-sm text-dark-200 truncate">{detail.email}</p>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SeverityBadge severity={severity} />
+              <ActionBadge action={detail.action_taken} />
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => onViewUser(detail.user_uuid)} className="gap-1">
+              <ExternalLink className="w-4 h-4" /> Профиль
+            </Button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-white">{detail.username || 'Неизвестный'}</p>
-            {detail.email && <p className="text-sm text-dark-200 truncate">{detail.email}</p>}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <SeverityBadge severity={severity} />
-            <ActionBadge action={detail.action_taken} />
-          </div>
-          <button
-            onClick={() => onViewUser(detail.user_uuid)}
-            className="btn-secondary text-sm flex items-center gap-1"
-          >
-            <HiExternalLink className="w-4 h-4" /> Профиль
-          </button>
-        </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-          <div className="text-center p-2 rounded-lg bg-dark-800/50">
-            <p className="text-xs text-dark-200">Рекомендация</p>
-            <p className={`text-sm font-medium ${getRecommendedActionClass(detail.recommended_action)}`}>
-              {getRecommendedActionLabel(detail.recommended_action)}
-            </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+            <div className="text-center p-2 rounded-lg bg-dark-800/50">
+              <p className="text-xs text-dark-200">Рекомендация</p>
+              <p className={`text-sm font-medium ${getRecommendedActionClass(detail.recommended_action)}`}>
+                {getRecommendedActionLabel(detail.recommended_action)}
+              </p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-dark-800/50">
+              <p className="text-xs text-dark-200">Уверенность</p>
+              <p className="text-sm font-medium text-white">
+                {Math.round(detail.confidence * 100)}%
+              </p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-dark-800/50">
+              <p className="text-xs text-dark-200">Стран</p>
+              <p className="text-sm font-medium text-white">{detail.countries.length}</p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-dark-800/50">
+              <p className="text-xs text-dark-200">IP-адресов</p>
+              <p className="text-sm font-medium text-white">{detail.ips.length}</p>
+            </div>
           </div>
-          <div className="text-center p-2 rounded-lg bg-dark-800/50">
-            <p className="text-xs text-dark-200">Уверенность</p>
-            <p className="text-sm font-medium text-white">
-              {Math.round(detail.confidence * 100)}%
-            </p>
-          </div>
-          <div className="text-center p-2 rounded-lg bg-dark-800/50">
-            <p className="text-xs text-dark-200">Стран</p>
-            <p className="text-sm font-medium text-white">{detail.countries.length}</p>
-          </div>
-          <div className="text-center p-2 rounded-lg bg-dark-800/50">
-            <p className="text-xs text-dark-200">IP-адресов</p>
-            <p className="text-sm font-medium text-white">{detail.ips.length}</p>
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Score breakdown */}
-      <div className="card animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-        <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-4">
-          Разбор скоринга
-        </h3>
-        <div className="space-y-3">
-          <ScoreBar
-            label="Временной"
-            score={detail.temporal_score}
-            icon={<HiClock className="w-4 h-4" />}
-          />
-          <ScoreBar
-            label="Гео"
-            score={detail.geo_score}
-            icon={<HiGlobe className="w-4 h-4" />}
-          />
-          <ScoreBar
-            label="Провайдер"
-            score={detail.asn_score}
-            icon={<HiServer className="w-4 h-4" />}
-          />
-          <ScoreBar
-            label="Профиль"
-            score={detail.profile_score}
-            icon={<HiIdentification className="w-4 h-4" />}
-          />
-          <ScoreBar
-            label="Устройство"
-            score={detail.device_score}
-            icon={<HiDeviceMobile className="w-4 h-4" />}
-          />
-        </div>
-        <div className="mt-4 pt-3 border-t border-dark-400/10 flex items-center justify-between">
-          <span className="text-sm text-dark-200">Итоговый скор</span>
-          <span className={`text-lg font-bold ${getScoreColor(detail.score)}`}>
-            {Math.round(detail.score)} / 100
-          </span>
-        </div>
-      </div>
+      <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+        <CardContent className="p-4">
+          <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-4">
+            Разбор скоринга
+          </h3>
+          <div className="space-y-3">
+            <ScoreBar
+              label="Временной"
+              score={detail.temporal_score}
+              icon={<Clock className="w-4 h-4" />}
+            />
+            <ScoreBar
+              label="Гео"
+              score={detail.geo_score}
+              icon={<Globe className="w-4 h-4" />}
+            />
+            <ScoreBar
+              label="Провайдер"
+              score={detail.asn_score}
+              icon={<Server className="w-4 h-4" />}
+            />
+            <ScoreBar
+              label="Профиль"
+              score={detail.profile_score}
+              icon={<Fingerprint className="w-4 h-4" />}
+            />
+            <ScoreBar
+              label="Устройство"
+              score={detail.device_score}
+              icon={<Smartphone className="w-4 h-4" />}
+            />
+          </div>
+          <div className="mt-4 pt-3 border-t border-dark-400/10 flex items-center justify-between">
+            <span className="text-sm text-dark-200">Итоговый скор</span>
+            <span className={`text-lg font-bold ${getScoreColor(detail.score)}`}>
+              {Math.round(detail.score)} / 100
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Reasons */}
       {detail.reasons.length > 0 && (
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-            Причины ({detail.reasons.length})
-          </h3>
-          <ul className="space-y-2">
-            {detail.reasons.map((reason, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <HiExclamation className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-                <span className="text-dark-100">{reason}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+              Причины ({detail.reasons.length})
+            </h3>
+            <ul className="space-y-2">
+              {detail.reasons.map((reason, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+                  <span className="text-dark-100">{reason}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
 
       {/* Geo & Network info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Countries */}
         {detail.countries.length > 0 && (
-          <div className="card animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-              <HiLocationMarker className="w-4 h-4 inline mr-1" />
-              Страны
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {detail.countries.map((country, i) => (
-                <span key={i} className="badge-info">{country}</span>
-              ))}
-            </div>
-          </div>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+            <CardContent className="p-4">
+              <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+                <MapPin className="w-4 h-4 inline mr-1" />
+                Страны
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {detail.countries.map((country, i) => (
+                  <Badge key={i} variant="default">{country}</Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* ASN types */}
         {detail.asn_types.length > 0 && (
-          <div className="card animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
-            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-              <HiServer className="w-4 h-4 inline mr-1" />
-              Типы провайдеров
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {detail.asn_types.map((asn, i) => (
-                <span key={i} className="badge-gray">{asn}</span>
-              ))}
-            </div>
-          </div>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
+            <CardContent className="p-4">
+              <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+                <Server className="w-4 h-4 inline mr-1" />
+                Типы провайдеров
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {detail.asn_types.map((asn, i) => (
+                  <Badge key={i} variant="secondary">{asn}</Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 
       {/* IPs */}
       {detail.ips.length > 0 && (
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-            IP-адреса ({detail.ips.length})
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {detail.ips.map((ip, i) => {
-              const info = ipInfo?.[ip]
-              const badge = info ? getConnectionTypeBadge(info) : null
-              return (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 bg-dark-800/80 rounded px-3 py-2"
-                >
-                  <code className="text-xs text-dark-100 font-mono flex-shrink-0">{ip}</code>
-                  {info ? (
-                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                      {info.asn_org && (
-                        <span className="text-xs text-primary-400 truncate max-w-[160px]" title={info.asn_org}>
-                          {info.asn_org}
-                        </span>
-                      )}
-                      {info.city && info.country && (
-                        <span className="text-xs text-dark-200 truncate max-w-[120px]" title={`${info.city}, ${info.country}`}>
-                          {info.city}
-                        </span>
-                      )}
-                      {badge && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badge.cls}`}>
-                          {badge.label}
-                        </span>
-                      )}
-                    </div>
-                  ) : ipInfo ? (
-                    <span className="text-xs text-dark-300">—</span>
-                  ) : (
-                    <span className="text-xs text-dark-300 animate-pulse">...</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+              IP-адреса ({detail.ips.length})
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {detail.ips.map((ip, i) => {
+                const info = ipInfo?.[ip]
+                const badge = info ? getConnectionTypeBadge(info) : null
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 bg-dark-800/80 rounded px-3 py-2"
+                  >
+                    <code className="text-xs text-dark-100 font-mono flex-shrink-0">{ip}</code>
+                    {info ? (
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        {info.asn_org && (
+                          <span className="text-xs text-primary-400 truncate max-w-[160px]" title={info.asn_org}>
+                            {info.asn_org}
+                          </span>
+                        )}
+                        {info.city && info.country && (
+                          <span className="text-xs text-dark-200 truncate max-w-[120px]" title={`${info.city}, ${info.country}`}>
+                            {info.city}
+                          </span>
+                        )}
+                        {badge && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                        )}
+                      </div>
+                    ) : ipInfo ? (
+                      <span className="text-xs text-dark-300">—</span>
+                    ) : (
+                      <span className="text-xs text-dark-300 animate-pulse">...</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* HWID Devices */}
       {hwidDevices && hwidDevices.length > 0 && (
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.32s' }}>
-          <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-            <HiDeviceMobile className="w-4 h-4 inline mr-1" />
-            Устройства ({hwidDevices.length})
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {hwidDevices.map((device, idx) => {
-              const pi = getPlatformInfo(device.platform)
-              return (
-                <div
-                  key={device.hwid || idx}
-                  className="bg-dark-800/80 rounded-lg p-3 border border-dark-600/20"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-base">{pi.icon}</span>
-                    <span className="text-sm font-medium text-white">{pi.label}</span>
-                    <span className="text-[10px] text-dark-400 bg-dark-700/50 px-1.5 py-0.5 rounded font-mono ml-auto">
-                      #{idx + 1}
-                    </span>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.32s' }}>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+              <Smartphone className="w-4 h-4 inline mr-1" />
+              Устройства ({hwidDevices.length})
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {hwidDevices.map((device, idx) => {
+                const pi = getPlatformInfo(device.platform)
+                return (
+                  <div
+                    key={device.hwid || idx}
+                    className="bg-dark-800/80 rounded-lg p-3 border border-dark-600/20"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-base">{pi.icon}</span>
+                      <span className="text-sm font-medium text-white">{pi.label}</span>
+                      <span className="text-[10px] text-dark-400 bg-dark-700/50 px-1.5 py-0.5 rounded font-mono ml-auto">
+                        #{idx + 1}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      {device.device_model && (
+                        <div className="flex justify-between">
+                          <span className="text-dark-300">Модель</span>
+                          <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right">{device.device_model}</span>
+                        </div>
+                      )}
+                      {device.os_version && (
+                        <div className="flex justify-between">
+                          <span className="text-dark-300">ОС</span>
+                          <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right">{device.os_version}</span>
+                        </div>
+                      )}
+                      {device.user_agent && (
+                        <div className="flex justify-between">
+                          <span className="text-dark-300">User-Agent</span>
+                          <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right" title={device.user_agent}>{device.user_agent}</span>
+                        </div>
+                      )}
+                      {device.created_at && (
+                        <div className="flex justify-between">
+                          <span className="text-dark-300">Добавлено</span>
+                          <span className="text-dark-100">{formatDate(device.created_at)}</span>
+                        </div>
+                      )}
+                    </div>
+                    {device.hwid && (
+                      <p className="text-[10px] text-dark-400 font-mono mt-1.5 truncate" title={device.hwid}>
+                        HWID: {device.hwid}
+                      </p>
+                    )}
                   </div>
-                  <div className="space-y-1 text-xs">
-                    {device.device_model && (
-                      <div className="flex justify-between">
-                        <span className="text-dark-300">Модель</span>
-                        <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right">{device.device_model}</span>
-                      </div>
-                    )}
-                    {device.os_version && (
-                      <div className="flex justify-between">
-                        <span className="text-dark-300">ОС</span>
-                        <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right">{device.os_version}</span>
-                      </div>
-                    )}
-                    {device.user_agent && (
-                      <div className="flex justify-between">
-                        <span className="text-dark-300">User-Agent</span>
-                        <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right" title={device.user_agent}>{device.user_agent}</span>
-                      </div>
-                    )}
-                    {device.created_at && (
-                      <div className="flex justify-between">
-                        <span className="text-dark-300">Добавлено</span>
-                        <span className="text-dark-100">{formatDate(device.created_at)}</span>
-                      </div>
-                    )}
-                  </div>
-                  {device.hwid && (
-                    <p className="text-[10px] text-dark-400 font-mono mt-1.5 truncate" title={device.hwid}>
-                      HWID: {device.hwid}
-                    </p>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Admin action resolution info */}
       {detail.action_taken && detail.action_taken_at && (
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
-          <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-            Решение администратора
-          </h3>
-          <div className="flex items-center gap-3">
-            <ActionBadge action={detail.action_taken} />
-            <span className="text-sm text-dark-200">
-              {formatDate(detail.action_taken_at)}
-            </span>
-          </div>
-        </div>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+              Решение администратора
+            </h3>
+            <div className="flex items-center gap-3">
+              <ActionBadge action={detail.action_taken} />
+              <span className="text-sm text-dark-200">
+                {formatDate(detail.action_taken_at)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Action buttons for pending */}
       {isPending && (
-        <div className="card animate-fade-in-up border-primary-500/20" style={{ animationDelay: '0.35s' }}>
-          <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-            Принять решение
-          </h3>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => onBlock(detail.id)}
-              className="btn-danger flex items-center gap-2"
-            >
-              <HiBan className="w-4 h-4" /> Заблокировать
-            </button>
-            <button
-              onClick={() => onWarn(detail.id)}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <HiExclamation className="w-4 h-4" /> Предупредить
-            </button>
-            <button
-              onClick={() => onDismiss(detail.id)}
-              className="btn-ghost flex items-center gap-2"
-            >
-              <HiX className="w-4 h-4" /> Отклонить
-            </button>
-          </div>
-        </div>
+        <Card className="animate-fade-in-up border-primary-500/20" style={{ animationDelay: '0.35s' }}>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+              Принять решение
+            </h3>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="destructive" onClick={() => onBlock(detail.id)} className="gap-2">
+                <Ban className="w-4 h-4" /> Заблокировать
+              </Button>
+              <Button variant="secondary" onClick={() => onWarn(detail.id)} className="gap-2">
+                <AlertTriangle className="w-4 h-4" /> Предупредить
+              </Button>
+              <Button variant="ghost" onClick={() => onDismiss(detail.id)} className="gap-2">
+                <X className="w-4 h-4" /> Отклонить
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
@@ -877,15 +892,17 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
     return (
       <div className="space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="card">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-dark-700 rounded-full skeleton" />
-              <div className="flex-1">
-                <div className="h-4 w-32 bg-dark-700 rounded skeleton mb-2" />
-                <div className="h-3 w-48 bg-dark-700 rounded skeleton" />
+          <Card key={i}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <Skeleton className="w-10 h-10 rounded-full" />
+                <div className="flex-1">
+                  <Skeleton className="h-4 w-32 mb-2" />
+                  <Skeleton className="h-3 w-48" />
+                </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
     )
@@ -893,10 +910,12 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
 
   if (!violators?.length) {
     return (
-      <div className="card text-center py-12">
-        <HiCheck className="w-12 h-12 text-green-500 mx-auto mb-3" />
-        <p className="text-dark-200">Нет нарушителей за период</p>
-      </div>
+      <Card className="text-center py-12">
+        <CardContent>
+          <Check className="w-12 h-12 text-green-500 mx-auto mb-3" />
+          <p className="text-dark-200">Нет нарушителей за период</p>
+        </CardContent>
+      </Card>
     )
   }
 
@@ -905,60 +924,63 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
       {violators.map((v, i) => {
         const severity = getSeverityFromScore(v.max_score)
         return (
-          <div
+          <Card
             key={v.user_uuid}
-            className="card animate-fade-in-up hover:border-dark-400/40 transition-colors"
+            className="animate-fade-in-up hover:border-dark-400/40 transition-colors"
             style={{ animationDelay: `${i * 0.05}s` }}
           >
-            <div className="flex items-center gap-3 md:gap-4">
-              {/* Rank */}
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                i === 0 ? 'bg-red-500/20 text-red-400' :
-                i === 1 ? 'bg-yellow-500/20 text-yellow-400' :
-                i === 2 ? 'bg-orange-500/20 text-orange-400' :
-                'bg-dark-600/50 text-dark-200'
-              }`}>
-                <span className="font-bold text-sm">#{i + 1}</span>
-              </div>
-
-              {/* User info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <button
-                    onClick={() => onViewUser(v.user_uuid)}
-                    className="font-semibold text-white hover:text-primary-400 transition-colors"
-                  >
-                    {v.username || 'Неизвестный'}
-                  </button>
-                  <SeverityBadge severity={severity} />
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3 md:gap-4">
+                {/* Rank */}
+                <div className={cn(
+                  'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0',
+                  i === 0 ? 'bg-red-500/20 text-red-400' :
+                  i === 1 ? 'bg-yellow-500/20 text-yellow-400' :
+                  i === 2 ? 'bg-orange-500/20 text-orange-400' :
+                  'bg-dark-600/50 text-dark-200'
+                )}>
+                  <span className="font-bold text-sm">#{i + 1}</span>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dark-200">
-                  <span>
-                    <HiShieldExclamation className="w-3.5 h-3.5 inline mr-0.5" />
-                    {v.violations_count} нарушени{v.violations_count === 1 ? 'е' : v.violations_count < 5 ? 'я' : 'й'}
-                  </span>
-                  <span>Макс: {Math.round(v.max_score)}</span>
-                  <span>Средн: {Math.round(v.avg_score)}</span>
-                  <span>
-                    <HiClock className="w-3.5 h-3.5 inline mr-0.5" />
-                    {formatTimeAgo(v.last_violation_at)}
-                  </span>
+
+                {/* User info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <button
+                      onClick={() => onViewUser(v.user_uuid)}
+                      className="font-semibold text-white hover:text-primary-400 transition-colors"
+                    >
+                      {v.username || 'Неизвестный'}
+                    </button>
+                    <SeverityBadge severity={severity} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dark-200">
+                    <span>
+                      <ShieldAlert className="w-3.5 h-3.5 inline mr-0.5" />
+                      {v.violations_count} нарушени{v.violations_count === 1 ? 'е' : v.violations_count < 5 ? 'я' : 'й'}
+                    </span>
+                    <span>Макс: {Math.round(v.max_score)}</span>
+                    <span>Средн: {Math.round(v.avg_score)}</span>
+                    <span>
+                      <Clock className="w-3.5 h-3.5 inline mr-0.5" />
+                      {formatTimeAgo(v.last_violation_at)}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Max score */}
+                <ScoreCircle score={v.max_score} size="sm" />
               </div>
 
-              {/* Max score */}
-              <ScoreCircle score={v.max_score} size="sm" />
-            </div>
-
-            {/* Actions taken */}
-            {v.actions.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
-                {v.actions.map((action, j) => (
-                  <ActionBadge key={j} action={action} />
-                ))}
-              </div>
-            )}
-          </div>
+              {/* Actions taken */}
+              {v.actions.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
+                  {v.actions.map((action, j) => (
+                    <ActionBadge key={j} action={action} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )
       })}
     </div>
@@ -979,95 +1001,113 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
     <>
       {/* Main stats grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-          <p className="text-xs sm:text-sm text-dark-200">Критические</p>
-          <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">{stats.critical}</p>
-        </div>
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <p className="text-xs sm:text-sm text-dark-200">Высокие</p>
-          <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">{stats.high}</p>
-        </div>
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <p className="text-xs sm:text-sm text-dark-200">Средние</p>
-          <p className="text-xl md:text-2xl font-bold text-blue-400 mt-1">{stats.medium}</p>
-        </div>
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <p className="text-xs sm:text-sm text-dark-200">Низкие</p>
-          <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">{stats.low}</p>
-        </div>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+          <CardContent className="p-4">
+            <p className="text-xs sm:text-sm text-dark-200">Критические</p>
+            <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">{stats.critical}</p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <CardContent className="p-4">
+            <p className="text-xs sm:text-sm text-dark-200">Высокие</p>
+            <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">{stats.high}</p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+          <CardContent className="p-4">
+            <p className="text-xs sm:text-sm text-dark-200">Средние</p>
+            <p className="text-xl md:text-2xl font-bold text-blue-400 mt-1">{stats.medium}</p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <CardContent className="p-4">
+            <p className="text-xs sm:text-sm text-dark-200">Низкие</p>
+            <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">{stats.low}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Summary row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
-          <div className="flex items-center gap-2">
-            <HiShieldExclamation className="w-5 h-5 text-primary-400" />
-            <div>
-              <p className="text-xs text-dark-200">Всего</p>
-              <p className="text-lg font-bold text-white">{stats.total}</p>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-primary-400" />
+              <div>
+                <p className="text-xs text-dark-200">Всего</p>
+                <p className="text-lg font-bold text-white">{stats.total}</p>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <div className="flex items-center gap-2">
-            <HiUser className="w-5 h-5 text-primary-400" />
-            <div>
-              <p className="text-xs text-dark-200">Уник. юзеров</p>
-              <p className="text-lg font-bold text-white">{stats.unique_users}</p>
+          </CardContent>
+        </Card>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <User className="w-5 h-5 text-primary-400" />
+              <div>
+                <p className="text-xs text-dark-200">Уник. юзеров</p>
+                <p className="text-lg font-bold text-white">{stats.unique_users}</p>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
-          <div className="flex items-center gap-2">
-            <HiTrendingUp className="w-5 h-5 text-primary-400" />
-            <div>
-              <p className="text-xs text-dark-200">Средн. скор</p>
-              <p className="text-lg font-bold text-white">{Math.round(stats.avg_score)}</p>
+          </CardContent>
+        </Card>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary-400" />
+              <div>
+                <p className="text-xs text-dark-200">Средн. скор</p>
+                <p className="text-lg font-bold text-white">{Math.round(stats.avg_score)}</p>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-          <div className="flex items-center gap-2">
-            <HiExclamation className="w-5 h-5 text-red-400" />
-            <div>
-              <p className="text-xs text-dark-200">Макс. скор</p>
-              <p className="text-lg font-bold text-white">{Math.round(stats.max_score)}</p>
+          </CardContent>
+        </Card>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-400" />
+              <div>
+                <p className="text-xs text-dark-200">Макс. скор</p>
+                <p className="text-lg font-bold text-white">{Math.round(stats.max_score)}</p>
+              </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Countries (collapsible) */}
       {countryEntries.length > 0 && (
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.45s' }}>
-          <button
-            onClick={() => setShowCountries(!showCountries)}
-            className="flex items-center justify-between w-full text-left"
-          >
-            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider flex items-center gap-2">
-              <HiGlobe className="w-4 h-4" />
-              По странам ({countryEntries.length})
-            </h3>
-            {showCountries ? (
-              <HiChevronUp className="w-5 h-5 text-dark-200" />
-            ) : (
-              <HiChevronDown className="w-5 h-5 text-dark-200" />
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.45s' }}>
+          <CardContent className="p-0">
+            <button
+              onClick={() => setShowCountries(!showCountries)}
+              className="flex items-center justify-between w-full text-left p-4"
+            >
+              <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                По странам ({countryEntries.length})
+              </h3>
+              {showCountries ? (
+                <ChevronUp className="w-5 h-5 text-dark-200" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-dark-200" />
+              )}
+            </button>
+            {showCountries && (
+              <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 animate-fade-in-down">
+                {countryEntries.map(([country, count]) => (
+                  <div
+                    key={country}
+                    className="flex items-center justify-between bg-dark-800/50 rounded-lg px-3 py-2"
+                  >
+                    <span className="text-sm text-dark-100">{country || 'Неизвестно'}</span>
+                    <span className="text-sm font-medium text-primary-400">{count}</span>
+                  </div>
+                ))}
+              </div>
             )}
-          </button>
-          {showCountries && (
-            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 animate-fade-in-down">
-              {countryEntries.map(([country, count]) => (
-                <div
-                  key={country}
-                  className="flex items-center justify-between bg-dark-800/50 rounded-lg px-3 py-2"
-                >
-                  <span className="text-sm text-dark-100">{country || 'Неизвестно'}</span>
-                  <span className="text-sm font-medium text-primary-400">{count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       )}
     </>
   )
@@ -1077,20 +1117,22 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
 
 function ViolationSkeleton() {
   return (
-    <div className="card">
-      <div className="flex items-start gap-4">
-        <div className="w-11 h-11 bg-dark-700 rounded-lg skeleton hidden sm:block" />
-        <div className="flex-1">
-          <div className="flex gap-2 mb-2">
-            <div className="h-4 w-24 bg-dark-700 rounded skeleton" />
-            <div className="h-4 w-16 bg-dark-700 rounded skeleton" />
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-4">
+          <Skeleton className="w-11 h-11 rounded-lg hidden sm:block" />
+          <div className="flex-1">
+            <div className="flex gap-2 mb-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <Skeleton className="h-3 w-48 mb-2" />
+            <Skeleton className="h-3 w-20" />
           </div>
-          <div className="h-3 w-48 bg-dark-700 rounded skeleton mb-2" />
-          <div className="h-3 w-20 bg-dark-700 rounded skeleton" />
+          <Skeleton className="w-14 h-14 rounded-full" />
         </div>
-        <div className="w-14 h-14 bg-dark-700 rounded-full skeleton" />
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1205,96 +1247,102 @@ export default function Violations() {
           </p>
         </div>
         <div className="page-header-actions">
-          <button
+          <Button
+            variant="secondary"
             onClick={() => setShowFilters(!showFilters)}
-            className={`btn-secondary flex items-center gap-2 ${showFilters ? 'ring-2 ring-primary-500' : ''}`}
+            className={cn('gap-2', showFilters && 'ring-2 ring-primary-500')}
           >
-            <HiFilter className="w-4 h-4" />
+            <Filter className="w-4 h-4" />
             <span className="hidden sm:inline">Фильтры</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
+            size="icon"
             onClick={() => {
               refetch()
               queryClient.invalidateQueries({ queryKey: ['violationStats'] })
               queryClient.invalidateQueries({ queryKey: ['topViolators'] })
             }}
-            className="btn-secondary"
             disabled={isLoading}
           >
-            <HiRefresh className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
+            <RefreshCw className={cn('w-5 h-5', isLoading && 'animate-spin')} />
+          </Button>
         </div>
       </div>
 
       {/* Filters panel */}
       {showFilters && (
-        <div className="card animate-fade-in-down">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-            <div>
-              <label className="block text-xs text-dark-200 mb-1">Уровень</label>
-              <select
-                value={severity}
-                onChange={(e) => {
-                  setSeverity(e.target.value)
-                  setPage(1)
-                }}
-                className="input"
-              >
-                <option value="">Все</option>
-                <option value="critical">Критический</option>
-                <option value="high">Высокий</option>
-                <option value="medium">Средний</option>
-                <option value="low">Низкий</option>
-              </select>
+        <Card className="animate-fade-in-down">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">Уровень</label>
+                <select
+                  value={severity}
+                  onChange={(e) => {
+                    setSeverity(e.target.value)
+                    setPage(1)
+                  }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                >
+                  <option value="">Все</option>
+                  <option value="critical">Критический</option>
+                  <option value="high">Высокий</option>
+                  <option value="medium">Средний</option>
+                  <option value="low">Низкий</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">Период</label>
+                <select
+                  value={days}
+                  onChange={(e) => {
+                    setDays(Number(e.target.value))
+                    setPage(1)
+                  }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                >
+                  <option value={1}>Сегодня</option>
+                  <option value={7}>Неделя</option>
+                  <option value={30}>Месяц</option>
+                  <option value={90}>3 месяца</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">
+                  Мин. скор: {minScore}
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={90}
+                  step={10}
+                  value={minScore}
+                  onChange={(e) => {
+                    setMinScore(Number(e.target.value))
+                    setPage(1)
+                  }}
+                  className="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSeverity('')
+                    setDays(7)
+                    setMinScore(0)
+                    setPage(1)
+                  }}
+                  className="w-full"
+                >
+                  Сбросить
+                </Button>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-dark-200 mb-1">Период</label>
-              <select
-                value={days}
-                onChange={(e) => {
-                  setDays(Number(e.target.value))
-                  setPage(1)
-                }}
-                className="input"
-              >
-                <option value={1}>Сегодня</option>
-                <option value={7}>Неделя</option>
-                <option value={30}>Месяц</option>
-                <option value={90}>3 месяца</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-dark-200 mb-1">
-                Мин. скор: {minScore}
-              </label>
-              <input
-                type="range"
-                min={0}
-                max={90}
-                step={10}
-                value={minScore}
-                onChange={(e) => {
-                  setMinScore(Number(e.target.value))
-                  setPage(1)
-                }}
-                className="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
-              />
-            </div>
-            <div className="flex items-end">
-              <button
-                onClick={() => {
-                  setSeverity('')
-                  setDays(7)
-                  setMinScore(0)
-                  setPage(1)
-                }}
-                className="btn-ghost text-sm w-full"
-              >
-                Сбросить
-              </button>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabs */}
@@ -1307,11 +1355,12 @@ export default function Violations() {
           <button
             key={t.key}
             onClick={() => handleTabChange(t.key)}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-md font-medium transition-all ${
+            className={cn(
+              'flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-md font-medium transition-all',
               tab === t.key
                 ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
                 : 'text-dark-200 hover:text-white hover:bg-dark-700/50'
-            }`}
+            )}
           >
             {t.label}
             {t.count !== undefined && t.count > 0 && (
@@ -1334,17 +1383,19 @@ export default function Violations() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => <ViolationSkeleton key={i} />)
             ) : violations.length === 0 ? (
-              <div className="card text-center py-12">
-                <HiCheck className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                <p className="text-dark-200 text-lg">
-                  {tab === 'pending' ? 'Нет ожидающих нарушений' : 'Нарушений не обнаружено'}
-                </p>
-                <p className="text-sm text-dark-200 mt-1">
-                  {tab === 'pending'
-                    ? 'Все нарушения обработаны'
-                    : 'За выбранный период нет записей о нарушениях'}
-                </p>
-              </div>
+              <Card className="text-center py-12">
+                <CardContent>
+                  <Check className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                  <p className="text-dark-200 text-lg">
+                    {tab === 'pending' ? 'Нет ожидающих нарушений' : 'Нарушений не обнаружено'}
+                  </p>
+                  <p className="text-sm text-dark-200 mt-1">
+                    {tab === 'pending'
+                      ? 'Все нарушения обработаны'
+                      : 'За выбранный период нет записей о нарушениях'}
+                  </p>
+                </CardContent>
+              </Card>
             ) : (
               violations.map((violation, i) => (
                 <div
@@ -1373,23 +1424,25 @@ export default function Violations() {
                 {Math.min(page * perPage, total)} из {total}
               </p>
               <div className="flex items-center gap-2 order-1 sm:order-2">
-                <button
+                <Button
+                  variant="secondary"
+                  size="icon"
                   onClick={() => setPage(page - 1)}
                   disabled={page <= 1}
-                  className="btn-secondary p-2"
                 >
-                  <HiChevronLeft className="w-5 h-5" />
-                </button>
+                  <ChevronLeft className="w-5 h-5" />
+                </Button>
                 <span className="text-sm text-dark-200 min-w-[80px] text-center">
                   {page} / {pages}
                 </span>
-                <button
+                <Button
+                  variant="secondary"
+                  size="icon"
                   onClick={() => setPage(page + 1)}
                   disabled={page >= pages}
-                  className="btn-secondary p-2"
                 >
-                  <HiChevronRight className="w-5 h-5" />
-                </button>
+                  <ChevronRight className="w-5 h-5" />
+                </Button>
               </div>
             </div>
           )}

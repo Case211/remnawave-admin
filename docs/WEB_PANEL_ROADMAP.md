@@ -22,7 +22,7 @@
 
 ---
 
-## Фаза 1 — Миграция на shadcn/ui
+## Фаза 1 — Миграция на shadcn/ui ✅ ВЫПОЛНЕНО
 
 **Зачем:** Сейчас весь UI написан на голом Tailwind (inline классы в страницах). shadcn/ui даёт готовую библиотеку компонентов на базе Radix UI + Tailwind с единым дизайном, доступностью (a11y) и полной кастомизацией (код копируется в проект).
 
@@ -34,19 +34,19 @@
 
 ### Задачи
 
-| # | Задача | Описание |
-|---|--------|----------|
-| 1.1 | Инициализация shadcn/ui | `npx shadcn-ui@latest init` в web/frontend, настройка `components.json`, алиасы путей |
-| 1.2 | Базовые компоненты | Установить: Button, Card, Badge, Input, Select, Dialog, Table, Tabs, Tooltip, Dropdown Menu, Sheet (мобильное меню), Separator, Skeleton |
-| 1.3 | Рефакторинг Layout | Sidebar, Header → на shadcn Sheet/NavigationMenu, единый Layout |
-| 1.4 | Рефакторинг Dashboard | Карточки статистики → Card, бейджи → Badge, кнопки → Button |
-| 1.5 | Рефакторинг Users | Таблица → Table (shadcn DataTable с сортировкой), модалки → Dialog, фильтры → Select/Popover |
-| 1.6 | Рефакторинг остальных страниц | Nodes, Hosts, Violations, Settings, Login — аналогичный рефакторинг |
-| 1.7 | Удаление старых inline-стилей | Почистить дублирующийся Tailwind, вынести общие паттерны в компоненты |
+| # | Задача | Описание | Статус |
+|---|--------|----------|--------|
+| 1.1 | Инициализация shadcn/ui | `components.json`, алиасы путей, `cn()` утилита, CSS-переменные для темы | ✅ |
+| 1.2 | Базовые компоненты | Button, Card, Badge, Input, Label, Select, Dialog, Table, Tabs, Tooltip, DropdownMenu, Sheet, Separator, Skeleton, ScrollArea, Switch, Popover (17 компонентов) | ✅ |
+| 1.3 | Рефакторинг Layout | Sidebar → lucide-react + Button/ScrollArea/Tooltip/Separator, Header → Button/Input/Badge | ✅ |
+| 1.4 | Рефакторинг Dashboard | Card, Badge, Button, Skeleton, Separator + lucide-react иконки | ✅ |
+| 1.5 | Рефакторинг Users + UserDetail | Table, Dialog, DropdownMenu, Badge, Button, Input, Select, Skeleton, Tabs | ✅ |
+| 1.6 | Рефакторинг остальных страниц | Nodes, Hosts, Violations, Settings, Login — полный рефакторинг на shadcn/ui + lucide-react | ✅ |
+| 1.7 | Удаление react-icons/hi | Полная замена react-icons/hi на lucide-react, исправление TS-ошибок | ✅ |
 
-**Зависимости:** `@radix-ui/*`, `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react` (иконки)
+**Зависимости (установлены):** `@radix-ui/*` (dialog, dropdown-menu, select, tabs, tooltip, separator, label, popover, scroll-area, switch, slot), `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react`, `tailwindcss-animate`
 
-**Оценка объёма:** Средний — затрагивает все 8 страниц, но каждая мигрируется независимо.
+**Результат:** Все 8 страниц + Layout мигрированы на shadcn/ui. Единая дизайн-система с CSS-переменными (Remnawave тёмная тема с teal/cyan акцентами). Иконки: lucide-react вместо react-icons.
 
 ---
 

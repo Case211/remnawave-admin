@@ -1,21 +1,32 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  HiCheck,
-  HiExclamation,
-  HiClock,
-  HiLockClosed,
-  HiLightningBolt,
-  HiChevronDown,
-  HiChevronRight,
-  HiSearch,
-  HiRefresh,
-  HiDatabase,
-  HiX,
-} from 'react-icons/hi'
+  Check,
+  AlertTriangle,
+  Clock,
+  Lock,
+  Zap,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  RefreshCw,
+  Database,
+  X,
+} from 'lucide-react'
 import client from '../api/client'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
+
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 // Types matching backend ConfigItemResponse
 interface ConfigItem {
@@ -80,16 +91,6 @@ const categoryLabels: Record<string, string> = {
   'appearance': 'Внешний вид',
 }
 
-const categoryIcons: Record<string, string> = {
-  'general': 'cog',
-  'notifications': 'bell',
-  'sync': 'refresh',
-  'violations': 'shield',
-  'reports': 'document',
-  'collector': 'server',
-  'limits': 'adjustments',
-  'appearance': 'color-swatch',
-}
 
 const subcategoryLabels: Record<string, string> = {
   'topics': 'Топики уведомлений',
@@ -164,30 +165,30 @@ function SyncStatusBlock({
   const errorCount = visibleItems.filter((i) => i.sync_status === 'error').length
 
   return (
-    <div className="card p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+    <Card className="p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-dark-700/30 transition-colors"
       >
         <div className="flex items-center gap-3">
           {isOpen ? (
-            <HiChevronDown className="w-5 h-5 text-dark-200 transition-transform duration-200" />
+            <ChevronDown className="w-5 h-5 text-dark-200 transition-transform duration-200" />
           ) : (
-            <HiChevronRight className="w-5 h-5 text-dark-200 transition-transform duration-200" />
+            <ChevronRight className="w-5 h-5 text-dark-200 transition-transform duration-200" />
           )}
           <h2 className="text-base font-semibold text-white">Синхронизация</h2>
           <span className="text-xs text-dark-300">{visibleItems.length}</span>
         </div>
         <div className="flex items-center gap-2">
           {errorCount > 0 && (
-            <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20">
+            <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5">
               {errorCount} ошибок
-            </span>
+            </Badge>
           )}
           {successCount > 0 && (
-            <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded border border-green-500/20">
+            <Badge variant="success" className="text-[10px] px-1.5 py-0.5">
               {successCount} ОК
-            </span>
+            </Badge>
           )}
         </div>
       </button>
@@ -196,14 +197,16 @@ function SyncStatusBlock({
         <div className="px-4 pb-4 md:px-5 md:pb-5 space-y-3">
           {/* Sync all button */}
           <div className="flex justify-end">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={(e) => { e.stopPropagation(); syncAllMutation.mutate() }}
               disabled={syncingEntity !== null}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/20 rounded-lg transition-colors disabled:opacity-40"
+              className="flex items-center gap-1.5 text-xs font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border-primary-500/20"
             >
-              <HiRefresh className={`w-3.5 h-3.5 ${syncingEntity === 'all' ? 'animate-spin' : ''}`} />
+              <RefreshCw className={cn('w-3.5 h-3.5', syncingEntity === 'all' && 'animate-spin')} />
               Синхронизировать всё
-            </button>
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -218,23 +221,26 @@ function SyncStatusBlock({
                     </span>
                     <div className="flex items-center gap-1.5">
                       {entityKey && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => syncMutation.mutate(entityKey)}
                           disabled={syncingEntity !== null}
-                          className="p-1 text-dark-400 hover:text-primary-400 rounded transition-colors disabled:opacity-40"
+                          className="h-6 w-6 text-dark-400 hover:text-primary-400"
                           title="Синхронизировать"
                         >
-                          <HiRefresh className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                        </button>
+                          <RefreshCw className={cn('w-3.5 h-3.5', isSyncing && 'animate-spin')} />
+                        </Button>
                       )}
-                      <span className={`w-2 h-2 rounded-full ${
+                      <span className={cn(
+                        'w-2 h-2 rounded-full',
                         item.sync_status === 'success' ? 'bg-green-500' :
                         item.sync_status === 'error' ? 'bg-red-500' : 'bg-yellow-500'
-                      }`}></span>
+                      )} />
                     </div>
                   </div>
                   <div className="text-xs text-dark-200 flex items-center gap-1">
-                    <HiClock className="w-3 h-3" />
+                    <Clock className="w-3 h-3" />
                     {item.last_sync_at ? formatTimeAgo(item.last_sync_at) : 'Никогда'}
                   </div>
                   {item.records_synced > 0 && (
@@ -253,7 +259,7 @@ function SyncStatusBlock({
           </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -277,25 +283,25 @@ function formatTimeAgo(dateStr: string): string {
 function SourceBadge({ source }: { source: string }) {
   if (source === 'db') {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-400 border border-primary-500/20" title="Значение из БД (наивысший приоритет)">
-        <HiDatabase className="w-2.5 h-2.5" />
+      <Badge className="gap-1 text-[10px] px-1.5 py-0.5" title="Значение из БД (наивысший приоритет)">
+        <Database className="w-2.5 h-2.5" />
         БД
-      </span>
+      </Badge>
     )
   }
   if (source === 'env') {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" title="Значение из .env файла (fallback)">
-        <HiLightningBolt className="w-2.5 h-2.5" />
+      <Badge variant="warning" className="gap-1 text-[10px] px-1.5 py-0.5" title="Значение из .env файла (fallback)">
+        <Zap className="w-2.5 h-2.5" />
         .env
-      </span>
+      </Badge>
     )
   }
   if (source === 'default') {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-dark-600/50 text-dark-200 border border-dark-500/20" title="Значение по умолчанию">
+      <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0.5" title="Значение по умолчанию">
         По умолч.
-      </span>
+      </Badge>
     )
   }
   return null
@@ -383,25 +389,25 @@ function ChangePasswordBlock() {
   if (!isPasswordAuth) return null
 
   return (
-    <div className="card p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
+    <Card className="p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-dark-700/30 transition-colors"
       >
         <div className="flex items-center gap-3">
           {isOpen ? (
-            <HiChevronDown className="w-5 h-5 text-dark-200" />
+            <ChevronDown className="w-5 h-5 text-dark-200" />
           ) : (
-            <HiChevronRight className="w-5 h-5 text-dark-200" />
+            <ChevronRight className="w-5 h-5 text-dark-200" />
           )}
           <h2 className="text-base font-semibold text-white">Смена пароля</h2>
           {isGenerated && (
-            <span className="text-[10px] bg-yellow-500/10 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/20">
+            <Badge variant="warning" className="text-[10px] px-1.5 py-0.5">
               Требуется смена
-            </span>
+            </Badge>
           )}
         </div>
-        <HiLockClosed className="w-4 h-4 text-dark-300" />
+        <Lock className="w-4 h-4 text-dark-300" />
       </button>
 
       {isOpen && (
@@ -413,11 +419,16 @@ function ChangePasswordBlock() {
           )}
 
           {error && (
-            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
-              {error}
-              <button onClick={() => setError('')} className="ml-2 text-red-300 hover:text-red-200">
-                <HiX className="w-3 h-3 inline" />
-              </button>
+            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2 flex items-center">
+              <span className="flex-1">{error}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setError('')}
+                className="h-5 w-5 ml-2 text-red-300 hover:text-red-200"
+              >
+                <X className="w-3 h-3" />
+              </Button>
             </div>
           )}
 
@@ -428,10 +439,10 @@ function ChangePasswordBlock() {
           )}
 
           <div>
-            <label className="block text-xs text-dark-200 mb-1">Текущий пароль</label>
-            <input
+            <Label className="block text-xs text-dark-200 mb-1">Текущий пароль</Label>
+            <Input
               type="password"
-              className="input w-full text-sm"
+              className="w-full text-sm"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               disabled={saving}
@@ -440,10 +451,10 @@ function ChangePasswordBlock() {
           </div>
 
           <div>
-            <label className="block text-xs text-dark-200 mb-1">Новый пароль</label>
-            <input
+            <Label className="block text-xs text-dark-200 mb-1">Новый пароль</Label>
+            <Input
               type="password"
-              className="input w-full text-sm"
+              className="w-full text-sm"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               disabled={saving}
@@ -458,8 +469,8 @@ function ChangePasswordBlock() {
                   { ok: checks.digit, text: 'Цифра (0-9)' },
                   { ok: checks.special, text: 'Спецсимвол (!@#$%...)' },
                 ].map((c) => (
-                  <div key={c.text} className={`text-[11px] flex items-center gap-1 ${c.ok ? 'text-green-400' : 'text-dark-300'}`}>
-                    {c.ok ? <HiCheck className="w-3 h-3" /> : <HiX className="w-3 h-3" />}
+                  <div key={c.text} className={cn('text-[11px] flex items-center gap-1', c.ok ? 'text-green-400' : 'text-dark-300')}>
+                    {c.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
                     {c.text}
                   </div>
                 ))}
@@ -468,10 +479,10 @@ function ChangePasswordBlock() {
           </div>
 
           <div>
-            <label className="block text-xs text-dark-200 mb-1">Подтвердите новый пароль</label>
-            <input
+            <Label className="block text-xs text-dark-200 mb-1">Подтвердите новый пароль</Label>
+            <Input
               type="password"
-              className="input w-full text-sm"
+              className="w-full text-sm"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={saving}
@@ -482,16 +493,16 @@ function ChangePasswordBlock() {
             )}
           </div>
 
-          <button
+          <Button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="btn-primary w-full text-sm disabled:opacity-40"
+            className="w-full text-sm"
           >
             {saving ? 'Сохранение...' : 'Сменить пароль'}
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -545,29 +556,29 @@ function IpWhitelistBlock() {
   }
 
   return (
-    <div className="card p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
+    <Card className="p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-dark-700/30 transition-colors"
       >
         <div className="flex items-center gap-3">
           {isOpen ? (
-            <HiChevronDown className="w-5 h-5 text-dark-200" />
+            <ChevronDown className="w-5 h-5 text-dark-200" />
           ) : (
-            <HiChevronRight className="w-5 h-5 text-dark-200" />
+            <ChevronRight className="w-5 h-5 text-dark-200" />
           )}
           <h2 className="text-base font-semibold text-white">IP Whitelist</h2>
           {enabled ? (
-            <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded border border-green-500/20">
+            <Badge variant="success" className="text-[10px] px-1.5 py-0.5">
               {ips.length} IP
-            </span>
+            </Badge>
           ) : (
-            <span className="text-[10px] bg-dark-700 text-dark-300 px-1.5 py-0.5 rounded">
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
               off
-            </span>
+            </Badge>
           )}
         </div>
-        <HiLockClosed className="w-4 h-4 text-dark-300" />
+        <Lock className="w-4 h-4 text-dark-300" />
       </button>
       {isOpen && (
         <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50 animate-fade-in-down space-y-3">
@@ -577,11 +588,16 @@ function IpWhitelistBlock() {
           </p>
 
           {error && (
-            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
-              {error}
-              <button onClick={() => setError('')} className="ml-2 text-red-300 hover:text-red-200">
-                <HiX className="w-3 h-3 inline" />
-              </button>
+            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2 flex items-center">
+              <span className="flex-1">{error}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setError('')}
+                className="h-5 w-5 ml-2 text-red-300 hover:text-red-200"
+              >
+                <X className="w-3 h-3" />
+              </Button>
             </div>
           )}
 
@@ -594,13 +610,15 @@ function IpWhitelistBlock() {
                   className="flex items-center justify-between bg-dark-800/50 rounded px-3 py-1.5 group"
                 >
                   <code className="text-sm text-white font-mono">{ip}</code>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => removeIp(ip)}
-                    className="text-dark-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                    className="h-6 w-6 text-dark-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                     title="Remove"
                   >
-                    <HiX className="w-4 h-4" />
-                  </button>
+                    <X className="w-4 h-4" />
+                  </Button>
                 </div>
               ))}
             </div>
@@ -608,36 +626,38 @@ function IpWhitelistBlock() {
 
           {/* Add new IP */}
           <div className="flex gap-2">
-            <input
+            <Input
               type="text"
               value={newIp}
               onChange={(e) => setNewIp(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addIp()}
               placeholder="1.2.3.4 or 10.0.0.0/24"
-              className="input flex-1 font-mono text-sm"
+              className="flex-1 font-mono text-sm"
               disabled={saving}
             />
-            <button
+            <Button
               onClick={addIp}
               disabled={!newIp.trim() || saving}
-              className="btn-primary px-4 text-sm disabled:opacity-40"
+              size="sm"
+              className="px-4 text-sm"
             >
               {saving ? '...' : 'Add'}
-            </button>
+            </Button>
           </div>
 
           {/* Disable button */}
           {enabled && (
-            <button
+            <Button
+              variant="link"
               onClick={disableWhitelist}
-              className="text-xs text-dark-300 hover:text-red-400 transition-colors"
+              className="text-xs text-dark-300 hover:text-red-400 p-0 h-auto"
             >
               Disable whitelist (allow all IPs)
-            </button>
+            </Button>
           )}
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -768,11 +788,11 @@ export default function Settings() {
     const canReset = item.source === 'db' && !item.is_readonly
 
     const statusIcon = isSaving ? (
-      <HiRefresh className="w-3.5 h-3.5 text-primary-400 animate-spin" />
+      <RefreshCw className="w-3.5 h-3.5 text-primary-400 animate-spin" />
     ) : wasSaved ? (
-      <HiCheck className="w-3.5 h-3.5 text-green-400" />
+      <Check className="w-3.5 h-3.5 text-green-400" />
     ) : hasError ? (
-      <HiExclamation className="w-3.5 h-3.5 text-red-400" title={errorKeys[item.key]} />
+      <span title={errorKeys[item.key]}><AlertTriangle className="w-3.5 h-3.5 text-red-400" /></span>
     ) : null
 
     if (item.value_type === 'bool') {
@@ -782,7 +802,7 @@ export default function Settings() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm text-white">{label}</p>
-              {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" title="Только для чтения" />}
+              {item.is_readonly && <span title="Только для чтения"><Lock className="w-3 h-3 text-dark-300" /></span>}
               <SourceBadge source={item.source} />
               {statusIcon}
             </div>
@@ -795,27 +815,21 @@ export default function Settings() {
           </div>
           <div className="flex items-center gap-2">
             {canReset && (
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => handleReset(item.key)}
-                className="text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Сбросить (использовать .env или значение по умолчанию)"
               >
-                <HiX className="w-3.5 h-3.5" />
-              </button>
+                <X className="w-3.5 h-3.5" />
+              </Button>
             )}
-            <button
-              onClick={() => isEditable && handleBoolToggle(item.key, boolValue)}
+            <Switch
+              checked={boolValue}
+              onCheckedChange={() => isEditable && handleBoolToggle(item.key, boolValue)}
               disabled={!isEditable || isSaving}
-              className={`w-12 h-6 rounded-full relative transition-all duration-200 ${
-                boolValue ? 'bg-primary-600' : 'bg-dark-600'
-              } ${!isEditable ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-            >
-              <span
-                className={`absolute top-1 w-4 h-4 rounded-full transition-all ${
-                  boolValue ? 'right-1 bg-white' : 'left-1 bg-gray-400'
-                }`}
-              ></span>
-            </button>
+            />
           </div>
         </div>
       )
@@ -825,23 +839,25 @@ export default function Settings() {
       return (
         <div key={item.key} className="py-3 group">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <label className="block text-sm text-dark-200">{label}</label>
-            {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
+            <Label className="block text-sm text-dark-200">{label}</Label>
+            {item.is_readonly && <Lock className="w-3 h-3 text-dark-300" />}
             <SourceBadge source={item.source} />
             {statusIcon}
             {canReset && (
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => handleReset(item.key)}
-                className="text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Сбросить"
               >
-                <HiX className="w-3.5 h-3.5" />
-              </button>
+                <X className="w-3.5 h-3.5" />
+              </Button>
             )}
           </div>
-          <input
+          <Input
             type="number"
-            className="input w-full"
+            className="w-full"
             value={displayValue}
             onChange={(e) => handleTextChange(item.key, e.target.value)}
             disabled={!isEditable || isSaving}
@@ -863,30 +879,36 @@ export default function Settings() {
       return (
         <div key={item.key} className="py-3 group">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <label className="block text-sm text-dark-200">{label}</label>
-            {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
+            <Label className="block text-sm text-dark-200">{label}</Label>
+            {item.is_readonly && <Lock className="w-3 h-3 text-dark-300" />}
             <SourceBadge source={item.source} />
             {statusIcon}
             {canReset && (
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => handleReset(item.key)}
-                className="text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Сбросить"
               >
-                <HiX className="w-3.5 h-3.5" />
-              </button>
+                <X className="w-3.5 h-3.5" />
+              </Button>
             )}
           </div>
-          <select
-            className="input w-full"
+          <Select
             value={displayValue}
-            onChange={(e) => handleSelectChange(item.key, e.target.value)}
+            onValueChange={(value) => handleSelectChange(item.key, value)}
             disabled={!isEditable || isSaving}
           >
-            {item.options.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {item.options.map((opt) => (
+                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {item.description && <p className="text-xs text-dark-200 mt-1">{item.description}</p>}
         </div>
       )
@@ -896,23 +918,25 @@ export default function Settings() {
     return (
       <div key={item.key} className="py-3 group">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <label className="block text-sm text-dark-200">{label}</label>
-          {item.is_readonly && <HiLockClosed className="w-3 h-3 text-dark-300" />}
+          <Label className="block text-sm text-dark-200">{label}</Label>
+          {item.is_readonly && <Lock className="w-3 h-3 text-dark-300" />}
           <SourceBadge source={item.source} />
           {statusIcon}
           {canReset && (
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => handleReset(item.key)}
-              className="text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
               title="Сбросить"
             >
-              <HiX className="w-3.5 h-3.5" />
-            </button>
+              <X className="w-3.5 h-3.5" />
+            </Button>
           )}
         </div>
-        <input
+        <Input
           type={item.is_secret ? 'password' : 'text'}
-          className="input w-full"
+          className="w-full"
           value={displayValue}
           onChange={(e) => handleTextChange(item.key, e.target.value)}
           disabled={!isEditable || isSaving}
@@ -992,32 +1016,35 @@ export default function Settings() {
             Конфигурация бота и панели. Приоритет: БД {'>'} .env {'>'} по умолчанию
           </p>
         </div>
-        <button
+        <Button
+          variant="secondary"
           onClick={() => refetchSettings()}
-          className="btn-secondary flex items-center gap-1"
+          className="flex items-center gap-1"
         >
-          <HiRefresh className="w-4 h-4" />
+          <RefreshCw className="w-4 h-4" />
           <span className="hidden sm:inline">Обновить</span>
-        </button>
+        </Button>
       </div>
 
       {/* Search */}
       <div className="relative animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-        <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300" />
-        <input
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
+        <Input
           type="text"
           placeholder="Поиск настроек..."
-          className="input w-full pl-10 pr-10"
+          className="w-full pl-10 pr-10"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         {search && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setSearch('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-300 hover:text-dark-100"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-dark-300 hover:text-dark-100"
           >
-            <HiX className="w-4 h-4" />
-          </button>
+            <X className="w-4 h-4" />
+          </Button>
         )}
         {search && (
           <p className="text-xs text-dark-200 mt-1 ml-1">
@@ -1039,9 +1066,11 @@ export default function Settings() {
       {settingsLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card animate-fade-in">
-              <div className="h-6 w-40 bg-dark-700 rounded animate-pulse"></div>
-            </div>
+            <Card key={i}>
+              <CardContent className="p-4 md:p-5">
+                <Skeleton className="h-6 w-40" />
+              </CardContent>
+            </Card>
           ))}
         </div>
       ) : Object.keys(categories).length > 0 ? (
@@ -1055,16 +1084,16 @@ export default function Settings() {
             if (search && filteredCount === 0) return null
 
             return (
-              <div key={category} className="card p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: `${0.05 * catIdx}s` }}>
+              <Card key={category} className="p-0 overflow-hidden animate-fade-in-up" style={{ animationDelay: `${0.05 * catIdx}s` }}>
                 <button
                   onClick={() => toggleCategory(category)}
                   className="w-full flex items-center justify-between p-4 md:p-5 hover:bg-dark-700/30 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     {isOpen ? (
-                      <HiChevronDown className="w-5 h-5 text-dark-200 transition-transform duration-200" />
+                      <ChevronDown className="w-5 h-5 text-dark-200 transition-transform duration-200" />
                     ) : (
-                      <HiChevronRight className="w-5 h-5 text-dark-200 transition-transform duration-200" />
+                      <ChevronRight className="w-5 h-5 text-dark-200 transition-transform duration-200" />
                     )}
                     <h2 className="text-base font-semibold text-white">
                       {categoryLabels[category] || category}
@@ -1075,9 +1104,9 @@ export default function Settings() {
                   </div>
                   <div className="flex items-center gap-2">
                     {dbCount > 0 && (
-                      <span className="text-[10px] bg-primary-500/10 text-primary-400 px-1.5 py-0.5 rounded border border-primary-500/20">
+                      <Badge className="text-[10px] px-1.5 py-0.5">
                         {dbCount} в БД
-                      </span>
+                      </Badge>
                     )}
                   </div>
                 </button>
@@ -1086,57 +1115,63 @@ export default function Settings() {
                     {renderCategoryItems(items)}
                   </div>
                 )}
-              </div>
+              </Card>
             )
           })}
         </div>
       ) : (
-        <div className="card text-center py-12">
-          <HiExclamation className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-          <p className="text-dark-200">Настройки не найдены</p>
-          <p className="text-sm text-dark-200 mt-1">
-            Убедитесь, что база данных подключена и бот хотя бы раз запускался
-          </p>
-          <button
-            onClick={() => refetchSettings()}
-            className="btn-secondary mt-4 inline-flex items-center gap-2"
-          >
-            <HiRefresh className="w-4 h-4" />
-            Повторить
-          </button>
-        </div>
+        <Card className="text-center py-12">
+          <CardContent className="pt-6">
+            <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
+            <p className="text-dark-200">Настройки не найдены</p>
+            <p className="text-sm text-dark-200 mt-1">
+              Убедитесь, что база данных подключена и бот хотя бы раз запускался
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() => refetchSettings()}
+              className="mt-4 inline-flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Повторить
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* Legend */}
       {!settingsLoading && Object.keys(categories).length > 0 && !search && (
-        <div className="card animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-          <h3 className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-2">Приоритет значений</h3>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-dark-200">
-            <div className="flex items-center gap-1.5">
-              <SourceBadge source="db" />
-              <span>— установлено в БД (главный)</span>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+          <CardContent className="pt-4 md:pt-6">
+            <h3 className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-2">Приоритет значений</h3>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-dark-200">
+              <div className="flex items-center gap-1.5">
+                <SourceBadge source="db" />
+                <span>-- установлено в БД (главный)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <SourceBadge source="env" />
+                <span>-- из .env файла (fallback)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <SourceBadge source="default" />
+                <span>-- значение по умолчанию</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Lock className="w-3 h-3 text-dark-400" />
+                <span>-- только чтение</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <X className="w-3 h-3 text-dark-400" />
+                <span>-- сбросить к fallback</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <SourceBadge source="env" />
-              <span>— из .env файла (fallback)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <SourceBadge source="default" />
-              <span>— значение по умолчанию</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <HiLockClosed className="w-3 h-3 text-dark-400" />
-              <span>— только чтение</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <HiX className="w-3 h-3 text-dark-400" />
-              <span>— сбросить к fallback</span>
-            </div>
-          </div>
-          <p className="text-[11px] text-dark-300 mt-2">
-            Настройки применяются мгновенно после изменения. Для сброса наведите на настройку и нажмите X.
-          </p>
-        </div>
+            <Separator className="my-2" />
+            <p className="text-[11px] text-dark-300">
+              Настройки применяются мгновенно после изменения. Для сброса наведите на настройку и нажмите X.
+            </p>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

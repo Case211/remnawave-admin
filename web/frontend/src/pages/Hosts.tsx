@@ -1,20 +1,48 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  HiRefresh,
-  HiGlobe,
-  HiDotsVertical,
-  HiPencil,
-  HiTrash,
-  HiPlay,
-  HiStop,
-  HiStatusOnline,
-  HiStatusOffline,
-  HiLockClosed,
-  HiShieldCheck,
-  HiX,
-  HiPlus,
-} from 'react-icons/hi'
+  RefreshCw,
+  Globe,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Play,
+  Square,
+  Wifi,
+  WifiOff,
+  Lock,
+  ShieldCheck,
+  Plus,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import client from '../api/client'
 
 // Types matching backend HostListItem
@@ -73,6 +101,9 @@ interface HostEditFormData {
   alpn: string
   fingerprint: string
 }
+
+// Suppress unused interface warning — kept for API contract reference
+void (undefined as unknown as HostListResponse)
 
 // Host edit modal
 function HostEditModal({
@@ -135,147 +166,137 @@ function HostEditModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg card border border-dark-400/20 animate-scale-in max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Редактирование хоста</h2>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
-            <HiX className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Редактирование хоста</DialogTitle>
+          <DialogDescription>Измените параметры хоста и нажмите сохранить</DialogDescription>
+        </DialogHeader>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Название</label>
-            <input
+          <div className="space-y-2">
+            <Label>Название</Label>
+            <Input
               type="text"
               value={form.remark}
               onChange={(e) => setForm({ ...form, remark: e.target.value })}
-              className="input"
               placeholder="Название хоста"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-dark-200 mb-1.5">Адрес</label>
-              <input
+            <div className="space-y-2">
+              <Label>Адрес</Label>
+              <Input
                 type="text"
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
-                className="input"
                 placeholder="IP или домен"
               />
             </div>
-            <div>
-              <label className="block text-sm text-dark-200 mb-1.5">Порт</label>
-              <input
+            <div className="space-y-2">
+              <Label>Порт</Label>
+              <Input
                 type="number"
-                min="1"
-                max="65535"
+                min={1}
+                max={65535}
                 value={form.port}
                 onChange={(e) => setForm({ ...form, port: e.target.value })}
-                className="input"
                 placeholder="Порт"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Безопасность</label>
-            <select
-              value={form.security}
-              onChange={(e) => setForm({ ...form, security: e.target.value })}
-              className="input"
-            >
-              <option value="none">Без шифрования</option>
-              <option value="tls">TLS</option>
-              <option value="reality">Reality</option>
-              <option value="xtls">XTLS</option>
-            </select>
+          <div className="space-y-2">
+            <Label>Безопасность</Label>
+            <Select value={form.security} onValueChange={(value) => setForm({ ...form, security: value })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Без шифрования</SelectItem>
+                <SelectItem value="tls">TLS</SelectItem>
+                <SelectItem value="reality">Reality</SelectItem>
+                <SelectItem value="xtls">XTLS</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">SNI</label>
-            <input
+          <div className="space-y-2">
+            <Label>SNI</Label>
+            <Input
               type="text"
               value={form.sni}
               onChange={(e) => setForm({ ...form, sni: e.target.value })}
-              className="input"
               placeholder="Server Name Indication"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Host</label>
-            <input
+          <div className="space-y-2">
+            <Label>Host</Label>
+            <Input
               type="text"
               value={form.host}
               onChange={(e) => setForm({ ...form, host: e.target.value })}
-              className="input"
               placeholder="Host header"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Path</label>
-            <input
+          <div className="space-y-2">
+            <Label>Path</Label>
+            <Input
               type="text"
               value={form.path}
               onChange={(e) => setForm({ ...form, path: e.target.value })}
-              className="input font-mono text-sm"
+              className="font-mono text-sm"
               placeholder="/path"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">ALPN</label>
-            <input
+          <div className="space-y-2">
+            <Label>ALPN</Label>
+            <Input
               type="text"
               value={form.alpn}
               onChange={(e) => setForm({ ...form, alpn: e.target.value })}
-              className="input"
               placeholder="h2,http/1.1"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Fingerprint</label>
-            <input
+          <div className="space-y-2">
+            <Label>Fingerprint</Label>
+            <Input
               type="text"
               value={form.fingerprint}
               onChange={(e) => setForm({ ...form, fingerprint: e.target.value })}
-              className="input"
               placeholder="chrome, firefox, safari..."
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 mt-6">
-          <button
+        <DialogFooter>
+          <Button
+            variant="secondary"
             onClick={onClose}
             disabled={isPending}
-            className="btn-secondary px-4 py-2"
           >
             Отмена
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSubmit}
             disabled={isPending || !form.address.trim() || !form.port}
-            className="btn-primary px-4 py-2"
           >
             {isPending ? 'Сохранение...' : 'Сохранить'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -320,147 +341,137 @@ function HostCreateModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg card border border-dark-400/20 animate-scale-in max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Добавление хоста</h2>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded">
-            <HiX className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Добавление хоста</DialogTitle>
+          <DialogDescription>Заполните параметры нового хоста</DialogDescription>
+        </DialogHeader>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Название</label>
-            <input
+          <div className="space-y-2">
+            <Label>Название</Label>
+            <Input
               type="text"
               value={form.remark}
               onChange={(e) => setForm({ ...form, remark: e.target.value })}
-              className="input"
               placeholder="Название хоста"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-dark-200 mb-1.5">Адрес</label>
-              <input
+            <div className="space-y-2">
+              <Label>Адрес</Label>
+              <Input
                 type="text"
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
-                className="input"
                 placeholder="IP или домен"
               />
             </div>
-            <div>
-              <label className="block text-sm text-dark-200 mb-1.5">Порт</label>
-              <input
+            <div className="space-y-2">
+              <Label>Порт</Label>
+              <Input
                 type="number"
-                min="1"
-                max="65535"
+                min={1}
+                max={65535}
                 value={form.port}
                 onChange={(e) => setForm({ ...form, port: e.target.value })}
-                className="input"
                 placeholder="Порт"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Безопасность</label>
-            <select
-              value={form.security}
-              onChange={(e) => setForm({ ...form, security: e.target.value })}
-              className="input"
-            >
-              <option value="none">Без шифрования</option>
-              <option value="tls">TLS</option>
-              <option value="reality">Reality</option>
-              <option value="xtls">XTLS</option>
-            </select>
+          <div className="space-y-2">
+            <Label>Безопасность</Label>
+            <Select value={form.security} onValueChange={(value) => setForm({ ...form, security: value })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Без шифрования</SelectItem>
+                <SelectItem value="tls">TLS</SelectItem>
+                <SelectItem value="reality">Reality</SelectItem>
+                <SelectItem value="xtls">XTLS</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">SNI</label>
-            <input
+          <div className="space-y-2">
+            <Label>SNI</Label>
+            <Input
               type="text"
               value={form.sni}
               onChange={(e) => setForm({ ...form, sni: e.target.value })}
-              className="input"
               placeholder="Server Name Indication"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Host</label>
-            <input
+          <div className="space-y-2">
+            <Label>Host</Label>
+            <Input
               type="text"
               value={form.host}
               onChange={(e) => setForm({ ...form, host: e.target.value })}
-              className="input"
               placeholder="Host header"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Path</label>
-            <input
+          <div className="space-y-2">
+            <Label>Path</Label>
+            <Input
               type="text"
               value={form.path}
               onChange={(e) => setForm({ ...form, path: e.target.value })}
-              className="input font-mono text-sm"
+              className="font-mono text-sm"
               placeholder="/path"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">ALPN</label>
-            <input
+          <div className="space-y-2">
+            <Label>ALPN</Label>
+            <Input
               type="text"
               value={form.alpn}
               onChange={(e) => setForm({ ...form, alpn: e.target.value })}
-              className="input"
               placeholder="h2,http/1.1"
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-dark-200 mb-1.5">Fingerprint</label>
-            <input
+          <div className="space-y-2">
+            <Label>Fingerprint</Label>
+            <Input
               type="text"
               value={form.fingerprint}
               onChange={(e) => setForm({ ...form, fingerprint: e.target.value })}
-              className="input"
               placeholder="chrome, firefox, safari..."
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 mt-6">
-          <button
+        <DialogFooter>
+          <Button
+            variant="secondary"
             onClick={onClose}
             disabled={isPending}
-            className="btn-secondary px-4 py-2"
           >
             Отмена
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSubmit}
             disabled={isPending || !form.address.trim() || !form.port}
-            className="btn-primary px-4 py-2"
           >
             {isPending ? 'Создание...' : 'Создать'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -478,147 +489,143 @@ function HostCard({
   onDisable: () => void
   onDelete: () => void
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-
   return (
-    <div className={`card relative ${host.is_disabled ? 'opacity-60' : ''} ${menuOpen ? 'z-30' : ''}`}>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={`p-2.5 rounded-lg ${host.is_disabled ? 'bg-gray-500/10' : 'bg-green-500/10'}`}>
-            {host.is_disabled ? (
-              <HiStatusOffline className="w-5 h-5 text-dark-200" />
-            ) : (
-              <HiStatusOnline className="w-5 h-5 text-green-400" />
-            )}
+    <Card className={cn('relative', host.is_disabled && 'opacity-60')}>
+      <CardContent className="p-4">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={cn(
+              'p-2.5 rounded-lg',
+              host.is_disabled ? 'bg-gray-500/10' : 'bg-green-500/10'
+            )}>
+              {host.is_disabled ? (
+                <WifiOff className="w-5 h-5 text-dark-200" />
+              ) : (
+                <Wifi className="w-5 h-5 text-green-400" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-white truncate">{host.remark || 'Без имени'}</h3>
+              <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
+                <Globe className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{host.address}:{host.port}</span>
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h3 className="font-semibold text-white truncate">{host.remark || 'Без имени'}</h3>
-            <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
-              <HiGlobe className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="truncate">{host.address}:{host.port}</span>
+
+          <div className="flex items-center gap-2">
+            <Badge variant={host.is_disabled ? 'secondary' : 'success'}>
+              {host.is_disabled ? 'Откл.' : 'Активен'}
+            </Badge>
+
+            {/* Actions menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={onEdit}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Редактировать
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {host.is_disabled ? (
+                  <DropdownMenuItem
+                    onSelect={onEnable}
+                    className="text-green-400 focus:text-green-400"
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Включить
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onSelect={onDisable}
+                    className="text-yellow-400 focus:text-yellow-400"
+                  >
+                    <Square className="w-4 h-4 mr-2" />
+                    Отключить
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onSelect={() => { if (confirm('Удалить хост?')) onDelete() }}
+                  className="text-red-400 focus:text-red-400"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Удалить
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Details */}
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="bg-dark-800/50 rounded-lg p-2">
+            <span className="text-dark-200 text-xs">Безопасность</span>
+            <p className={cn('font-medium', getSecurityColor(host.security))}>
+              {host.security === 'reality' && <ShieldCheck className="w-3.5 h-3.5 inline mr-1" />}
+              {host.security === 'tls' && <Lock className="w-3.5 h-3.5 inline mr-1" />}
+              {getSecurityLabel(host.security)}
             </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className={host.is_disabled ? 'badge-gray' : 'badge-success'}>
-            {host.is_disabled ? 'Откл.' : 'Активен'}
-          </span>
-
-          {/* Actions menu */}
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="btn-ghost p-1.5 rounded"
-            >
-              <HiDotsVertical className="w-4 h-4" />
-            </button>
-
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                <div className="dropdown-menu">
-                  <button
-                    onClick={() => { onEdit(); setMenuOpen(false) }}
-                    className="w-full px-3 py-2 text-left text-sm text-dark-100 hover:bg-dark-600 flex items-center gap-2"
-                  >
-                    <HiPencil className="w-4 h-4" /> Редактировать
-                  </button>
-                  <div className="border-t border-dark-400/20 my-1" />
-                  {host.is_disabled ? (
-                    <button
-                      onClick={() => { onEnable(); setMenuOpen(false) }}
-                      className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-dark-600 flex items-center gap-2"
-                    >
-                      <HiPlay className="w-4 h-4" /> Включить
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => { onDisable(); setMenuOpen(false) }}
-                      className="w-full px-3 py-2 text-left text-sm text-yellow-400 hover:bg-dark-600 flex items-center gap-2"
-                    >
-                      <HiStop className="w-4 h-4" /> Отключить
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      if (confirm('Удалить хост?')) onDelete()
-                      setMenuOpen(false)
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-dark-600 flex items-center gap-2"
-                  >
-                    <HiTrash className="w-4 h-4" /> Удалить
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Details */}
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="bg-dark-800/50 rounded-lg p-2">
-          <span className="text-dark-200 text-xs">Безопасность</span>
-          <p className={`font-medium ${getSecurityColor(host.security)}`}>
-            {host.security === 'reality' && <HiShieldCheck className="w-3.5 h-3.5 inline mr-1" />}
-            {host.security === 'tls' && <HiLockClosed className="w-3.5 h-3.5 inline mr-1" />}
-            {getSecurityLabel(host.security)}
-          </p>
-        </div>
-        <div className="bg-dark-800/50 rounded-lg p-2">
-          <span className="text-dark-200 text-xs">SNI</span>
-          <p className="font-medium text-white truncate">{host.sni || '-'}</p>
-        </div>
-        {host.host && (
           <div className="bg-dark-800/50 rounded-lg p-2">
-            <span className="text-dark-200 text-xs">Host</span>
-            <p className="font-medium text-white truncate">{host.host}</p>
+            <span className="text-dark-200 text-xs">SNI</span>
+            <p className="font-medium text-white truncate">{host.sni || '-'}</p>
           </div>
-        )}
-        {host.path && (
-          <div className="bg-dark-800/50 rounded-lg p-2">
-            <span className="text-dark-200 text-xs">Path</span>
-            <p className="font-medium text-white truncate font-mono text-xs">{host.path}</p>
-          </div>
-        )}
-        {host.alpn && (
-          <div className="bg-dark-800/50 rounded-lg p-2">
-            <span className="text-dark-200 text-xs">ALPN</span>
-            <p className="font-medium text-white truncate">{host.alpn}</p>
-          </div>
-        )}
-        {host.fingerprint && (
-          <div className="bg-dark-800/50 rounded-lg p-2">
-            <span className="text-dark-200 text-xs">Fingerprint</span>
-            <p className="font-medium text-white truncate">{host.fingerprint}</p>
-          </div>
-        )}
-      </div>
-    </div>
+          {host.host && (
+            <div className="bg-dark-800/50 rounded-lg p-2">
+              <span className="text-dark-200 text-xs">Host</span>
+              <p className="font-medium text-white truncate">{host.host}</p>
+            </div>
+          )}
+          {host.path && (
+            <div className="bg-dark-800/50 rounded-lg p-2">
+              <span className="text-dark-200 text-xs">Path</span>
+              <p className="font-medium text-white truncate font-mono text-xs">{host.path}</p>
+            </div>
+          )}
+          {host.alpn && (
+            <div className="bg-dark-800/50 rounded-lg p-2">
+              <span className="text-dark-200 text-xs">ALPN</span>
+              <p className="font-medium text-white truncate">{host.alpn}</p>
+            </div>
+          )}
+          {host.fingerprint && (
+            <div className="bg-dark-800/50 rounded-lg p-2">
+              <span className="text-dark-200 text-xs">Fingerprint</span>
+              <p className="font-medium text-white truncate">{host.fingerprint}</p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
 // Loading skeleton
 function HostSkeleton() {
   return (
-    <div className="card animate-fade-in">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-dark-700 rounded-lg" />
-          <div>
-            <div className="h-4 w-32 bg-dark-700 rounded mb-2" />
-            <div className="h-3 w-24 bg-dark-700 rounded" />
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <Skeleton className="w-10 h-10 rounded-lg" />
+            <div>
+              <Skeleton className="h-4 w-32 rounded mb-2" />
+              <Skeleton className="h-3 w-24 rounded" />
+            </div>
           </div>
+          <Skeleton className="h-5 w-16 rounded" />
         </div>
-        <div className="h-5 w-16 bg-dark-700 rounded" />
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="h-12 bg-dark-700 rounded-lg" />
-        <div className="h-12 bg-dark-700 rounded-lg" />
-      </div>
-    </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Skeleton className="h-12 rounded-lg" />
+          <Skeleton className="h-12 rounded-lg" />
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -691,44 +698,51 @@ export default function Hosts() {
           <p className="text-dark-200 mt-1 text-sm md:text-base">Управление хостами подключений</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
+          <Button
             onClick={() => { setShowCreateModal(true); setCreateError('') }}
-            className="btn-primary flex items-center gap-2"
+            className="gap-2"
           >
-            <HiPlus className="w-4 h-4" />
+            <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Добавить</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => refetch()}
-            className="btn-secondary flex items-center gap-2"
             disabled={isLoading}
+            className="gap-2"
           >
-            <HiRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
             <span className="hidden sm:inline">Обновить</span>
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-          <p className="text-xs md:text-sm text-dark-200">Всего</p>
-          <p className="text-xl md:text-2xl font-bold text-white mt-1">
-            {isLoading ? '-' : totalHosts}
-          </p>
-        </div>
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <p className="text-xs md:text-sm text-dark-200">Активные</p>
-          <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
-            {isLoading ? '-' : activeHosts}
-          </p>
-        </div>
-        <div className="card text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <p className="text-xs md:text-sm text-dark-200">Отключены</p>
-          <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
-            {isLoading ? '-' : disabledHosts}
-          </p>
-        </div>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+          <CardContent className="p-4">
+            <p className="text-xs md:text-sm text-dark-200">Всего</p>
+            <p className="text-xl md:text-2xl font-bold text-white mt-1">
+              {isLoading ? '-' : totalHosts}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <CardContent className="p-4">
+            <p className="text-xs md:text-sm text-dark-200">Активные</p>
+            <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
+              {isLoading ? '-' : activeHosts}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+          <CardContent className="p-4">
+            <p className="text-xs md:text-sm text-dark-200">Отключены</p>
+            <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
+              {isLoading ? '-' : disabledHosts}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Hosts grid */}
@@ -736,10 +750,12 @@ export default function Hosts() {
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => <HostSkeleton key={i} />)
         ) : hosts.length === 0 ? (
-          <div className="col-span-full card text-center py-12">
-            <HiGlobe className="w-12 h-12 text-dark-300 mx-auto mb-3" />
-            <p className="text-dark-200">Нет хостов</p>
-          </div>
+          <Card className="col-span-full">
+            <CardContent className="py-12 text-center">
+              <Globe className="w-12 h-12 text-dark-300 mx-auto mb-3" />
+              <p className="text-dark-200">Нет хостов</p>
+            </CardContent>
+          </Card>
         ) : (
           hosts.map((host, i) => (
             <div key={host.uuid} className="animate-fade-in-up" style={{ animationDelay: `${0.1 + i * 0.06}s` }}>
