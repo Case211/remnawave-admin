@@ -10,7 +10,7 @@ import string
 import re
 from typing import Optional, Tuple
 
-from passlib.hash import bcrypt
+import bcrypt as _bcrypt
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +84,17 @@ def generate_password(length: int = GENERATED_PASSWORD_LENGTH) -> str:
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt (12 rounds)."""
-    return bcrypt.hash(password, rounds=12)
+    return _bcrypt.hashpw(
+        password.encode("utf-8"), _bcrypt.gensalt(rounds=12)
+    ).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """Verify a password against a bcrypt hash."""
     try:
-        return bcrypt.verify(password, password_hash)
+        return _bcrypt.checkpw(
+            password.encode("utf-8"), password_hash.encode("utf-8")
+        )
     except Exception as e:
         logger.error("Password verification error: %s", e)
         return False
