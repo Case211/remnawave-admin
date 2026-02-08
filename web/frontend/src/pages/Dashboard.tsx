@@ -252,11 +252,6 @@ export default function Dashboard() {
 
   const isLoading = overviewLoading || violationsLoading || trafficLoading
 
-  // Build traffic subtitle from trafficStats
-  const trafficSubtitle = trafficStats
-    ? `Сегодня: ${formatBytes(trafficStats.today_bytes)}, за неделю: ${formatBytes(trafficStats.week_bytes)}`
-    : undefined
-
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -321,15 +316,48 @@ export default function Dashboard() {
           loading={overviewLoading}
           index={2}
         />
-        <StatCard
-          title="Общий трафик"
-          value={overview ? formatBytes(overview.total_traffic_bytes) : trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
-          icon={HiTrendingUp}
-          color="violet"
-          subtitle={trafficSubtitle}
-          loading={overviewLoading && trafficLoading}
-          index={3}
-        />
+        <div
+          className="card group animate-fade-in-up"
+          style={{ transition: 'all 0.2s ease', animationDelay: '0.21s' }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-dark-200">Трафик</p>
+              {(overviewLoading && trafficLoading) ? (
+                <div className="h-8 w-20 skeleton rounded mt-1"></div>
+              ) : (
+                <p className="text-xl md:text-2xl font-bold text-white mt-1">
+                  {overview ? formatBytes(overview.total_traffic_bytes) : trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
+                </p>
+              )}
+            </div>
+            <div
+              className="p-3 rounded-lg"
+              style={{
+                background: 'rgba(151, 117, 250, 0.15)',
+                border: '1px solid rgba(151, 117, 250, 0.3)',
+              }}
+            >
+              <HiTrendingUp className="w-6 h-6 text-violet-400" />
+            </div>
+          </div>
+          {trafficStats && (
+            <div className="mt-3 pt-3 border-t border-dark-400/10 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-dark-200">Сегодня</span>
+                <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.today_bytes)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-dark-200">За неделю</span>
+                <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.week_bytes)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-dark-200">За месяц</span>
+                <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.month_bytes)}</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Charts row */}

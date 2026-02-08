@@ -1,6 +1,6 @@
 """Auth schemas for web panel API."""
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TelegramAuthData(BaseModel):
@@ -13,6 +13,13 @@ class TelegramAuthData(BaseModel):
     photo_url: Optional[str] = None
     auth_date: int
     hash: str
+
+
+class LoginRequest(BaseModel):
+    """Username/password login request."""
+
+    username: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=1, max_length=200)
 
 
 class TokenResponse(BaseModel):
@@ -30,9 +37,18 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class ChangePasswordRequest(BaseModel):
+    """Change admin password request."""
+
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=200)
+
+
 class AdminInfo(BaseModel):
     """Current admin info."""
 
-    telegram_id: int
+    telegram_id: Optional[int] = None
     username: str
     role: str
+    auth_method: str = "telegram"
+    password_is_generated: bool = False

@@ -25,8 +25,15 @@ class WebSettings(BaseSettings):
 
     # JWT
     jwt_algorithm: str = Field(default="HS256", alias="WEB_JWT_ALGORITHM")
-    jwt_expire_minutes: int = Field(default=1440, alias="WEB_JWT_EXPIRE_MINUTES")  # 24 hours
-    jwt_refresh_days: int = Field(default=7, alias="WEB_JWT_REFRESH_DAYS")
+    jwt_expire_minutes: int = Field(default=30, alias="WEB_JWT_EXPIRE_MINUTES")  # 30 min access token
+    jwt_refresh_hours: int = Field(default=6, alias="WEB_JWT_REFRESH_HOURS")  # 6 hour session
+
+    # Password auth (optional, alongside Telegram)
+    admin_login: Optional[str] = Field(default=None, alias="WEB_ADMIN_LOGIN")
+    admin_password: Optional[str] = Field(default=None, alias="WEB_ADMIN_PASSWORD")
+
+    # IP whitelist (optional, comma-separated IPs/CIDRs — empty = allow all)
+    allowed_ips: str = Field(default="", alias="WEB_ALLOWED_IPS")
 
     # CORS
     cors_origins_raw: str = Field(

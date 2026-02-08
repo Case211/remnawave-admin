@@ -108,13 +108,87 @@ def verify_telegram_auth_simple(auth_data: Dict[str, Any]) -> bool:
     return is_valid
 
 
-def create_access_token(telegram_id: int, username: str) -> str:
+def verify_admin_password(username: str, password: str) -> bool:
+    """
+    Verify admin credentials.
+
+    Priority: database (admin_credentials table) > .env (WEB_ADMIN_LOGIN/PASSWORD).
+
+    Returns:
+        True if credentials match, False otherwise.
+    """
+    # Try database first (sync wrapper for the async DB call)
+    # Since this is called from an async context, we import and check directly
+    try:
+        from web.backend.core.admin_credentials import get_admin_by_username, verify_password
+        import asyncio
+
+        # If we're inside a running event loop, we can't use asyncio.run()
+        # The caller (auth endpoint) is async, so we'll check a cached result
+        # Instead, use a simpler approach: check in _verify_admin_password_sync
+        pass
+    except ImportError:
+        pass
+
+    # Fallback to .env
+    settings = get_web_settings()
+
+    if not settings.admin_login or not settings.admin_password:
+        return False
+
+    # Username comparison (case-insensitive)
+    if username.lower() != settings.admin_login.lower():
+        return False
+
+    stored = settings.admin_password
+
+    # If stored password is a bcrypt hash, use passlib for verification
+    if stored.startswith("$2b$") or stored.startswith("$2a$"):
+        try:
+            from passlib.hash import bcrypt as bcrypt_hasher
+            return bcrypt_hasher.verify(password, stored)
+        except Exception as e:
+            logger.error("bcrypt verification failed: %s", e)
+            return False
+
+    # Plain-text comparison using constant-time function
+    return hmac.compare_digest(password, stored)
+
+
+async def verify_admin_password_async(username: str, password: str) -> bool:
+    """
+    Async version of verify_admin_password.
+
+    Checks database first, then falls back to .env credentials.
+
+    Returns:
+        True if credentials match, False otherwise.
+    """
+    # 1. Check database (admin_credentials table)
+    try:
+        from web.backend.core.admin_credentials import get_admin_by_username, verify_password
+        admin = await get_admin_by_username(username)
+        if admin:
+            return verify_password(password, admin["password_hash"])
+    except Exception as e:
+        logger.warning("DB credential check failed, falling back to .env: %s", e)
+
+    # 2. Fallback to .env
+    return verify_admin_password(username, password)
+
+
+def create_access_token(
+    subject: str,
+    username: str,
+    auth_method: str = "telegram",
+) -> str:
     """
     Create JWT access token.
 
     Args:
-        telegram_id: User's Telegram ID
-        username: User's username
+        subject: Token subject (telegram_id as string, or "pwd:<username>")
+        username: Display username
+        auth_method: "telegram" or "password"
 
     Returns:
         Encoded JWT token
@@ -123,31 +197,32 @@ def create_access_token(telegram_id: int, username: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
 
     payload = {
-        "sub": str(telegram_id),
+        "sub": subject,
         "username": username,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
         "type": "access",
+        "auth_method": auth_method,
     }
 
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(telegram_id: int) -> str:
+def create_refresh_token(subject: str) -> str:
     """
     Create JWT refresh token.
 
     Args:
-        telegram_id: User's Telegram ID
+        subject: Token subject (telegram_id as string, or "pwd:<username>")
 
     Returns:
         Encoded JWT refresh token
     """
     settings = get_web_settings()
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_days)
+    expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_refresh_hours)
 
     payload = {
-        "sub": str(telegram_id),
+        "sub": subject,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
         "type": "refresh",

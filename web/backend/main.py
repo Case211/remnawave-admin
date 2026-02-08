@@ -24,6 +24,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from web.backend.core.config import get_web_settings
+from web.backend.core.ip_whitelist import get_allowed_ips, is_ip_allowed
 from web.backend.core.rate_limit import limiter
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 from web.backend.api.v2 import settings as settings_api
@@ -156,13 +157,29 @@ async def lifespan(app: FastAPI):
             from src.services.database import db_service
             connected = await db_service.connect(database_url=database_url)
             if connected:
-                logger.info("✅ Database connected")
+                logger.info("Database connected")
+
+                # First-run admin setup
+                from web.backend.core.admin_credentials import first_run_setup
+                generated_password = await first_run_setup()
+                if generated_password:
+                    # Print prominently so admin sees it in docker logs
+                    print("\n" + "=" * 60, flush=True)
+                    print("  FIRST RUN - Admin credentials generated", flush=True)
+                    print("=" * 60, flush=True)
+                    print(f"  Login:    admin", flush=True)
+                    print(f"  Password: {generated_password}", flush=True)
+                    print("=" * 60, flush=True)
+                    print("  Change the password after first login!", flush=True)
+                    print("  Settings -> Change password", flush=True)
+                    print("=" * 60 + "\n", flush=True)
+                    logger.warning("First run: admin password generated (see console output)")
             else:
-                logger.warning("⚠️ Database connection failed")
+                logger.warning("Database connection failed")
         except Exception as e:
-            logger.error("⚠️ Database error: %s", e)
+            logger.error("Database error: %s", e)
     else:
-        logger.info("🗄️ No DATABASE_URL, running without database")
+        logger.info("No DATABASE_URL, running without database")
 
     yield
 
@@ -226,6 +243,32 @@ def create_app() -> FastAPI:
             "frame-ancestors 'none'"
         )
         return response
+
+    # IP whitelist middleware (checked before routing)
+    @app.middleware("http")
+    async def ip_whitelist_middleware(request: Request, call_next):
+        # Skip health check so monitoring still works
+        if request.url.path in ("/", "/api/v2/health"):
+            return await call_next(request)
+
+        allowed = get_allowed_ips()
+        if allowed:
+            forwarded = request.headers.get("x-forwarded-for")
+            client_ip = forwarded.split(",")[0].strip() if forwarded else (
+                request.client.host if request.client else "unknown"
+            )
+            if not is_ip_allowed(client_ip, allowed):
+                logger.warning("IP %s rejected by whitelist (path: %s)", client_ip, request.url.path)
+                # Async notification (fire-and-forget)
+                from web.backend.core.notifier import notify_ip_rejected
+                import asyncio
+                asyncio.create_task(notify_ip_rejected(client_ip, str(request.url.path)))
+                return Response(
+                    content='{"detail":"Access denied"}',
+                    status_code=403,
+                    media_type="application/json",
+                )
+        return await call_next(request)
 
     # Include routers
     app.include_router(auth.router, prefix="/api/v2/auth", tags=["auth"])
