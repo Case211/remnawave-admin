@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import { useRealtimeUpdates } from '../../store/useWebSocket'
 
 interface LayoutProps {
   children: ReactNode
@@ -8,6 +9,9 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Connect WebSocket for real-time updates (nodes, users, violations)
+  useRealtimeUpdates()
 
   return (
     <div className="flex h-screen overflow-hidden bg-dark-800">
