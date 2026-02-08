@@ -235,6 +235,7 @@ async def main() -> None:
         config_initialized = await config_service.initialize()
         if config_initialized:
             logger.info("✅ Dynamic config initialized")
+            config_service.start_auto_reload(interval_seconds=30)
 
         logger.info("🔄 Starting sync service...")
         await sync_service.start()
@@ -250,6 +251,7 @@ async def main() -> None:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         logger.info("Shutting down...")
+        config_service.stop_auto_reload()
         if report_scheduler and report_scheduler.is_running:
             await report_scheduler.stop()
         if sync_service.is_running:
