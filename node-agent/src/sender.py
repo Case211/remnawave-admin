@@ -8,7 +8,7 @@ from datetime import datetime
 import httpx
 
 from .config import Settings
-from .models import BatchReport, ConnectionReport
+from .models import BatchReport, ConnectionReport, SystemMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -21,15 +21,20 @@ class CollectorSender:
         self._url = f"{settings.collector_url.rstrip('/')}/api/v1/connections/batch"
         self._headers = {"Authorization": f"Bearer {settings.auth_token}"}
 
-    async def send_batch(self, connections: list[ConnectionReport]) -> bool:
-        """Отправить батч подключений. Возвращает True при успехе."""
-        if not connections:
+    async def send_batch(
+        self,
+        connections: list[ConnectionReport],
+        system_metrics: SystemMetrics | None = None,
+    ) -> bool:
+        """Отправить батч подключений и метрик. Возвращает True при успехе."""
+        if not connections and not system_metrics:
             return True
 
         report = BatchReport(
             node_uuid=self.settings.node_uuid,
             timestamp=datetime.utcnow(),
             connections=connections,
+            system_metrics=system_metrics,
         )
         payload = report.model_dump(mode="json")
 

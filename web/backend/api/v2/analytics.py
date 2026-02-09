@@ -92,9 +92,15 @@ class NodeFleetItem(BaseModel):
     uptime_seconds: Optional[int] = None
     cpu_usage: Optional[float] = None
     memory_usage: Optional[float] = None
+    memory_total_bytes: Optional[int] = None
+    memory_used_bytes: Optional[int] = None
+    disk_usage: Optional[float] = None
+    disk_total_bytes: Optional[int] = None
+    disk_used_bytes: Optional[int] = None
     last_seen_at: Optional[str] = None
     download_speed_bps: int = 0
     upload_speed_bps: int = 0
+    metrics_updated_at: Optional[str] = None
 
 
 class NodeFleetResponse(BaseModel):
@@ -788,6 +794,42 @@ async def get_node_fleet(
         except Exception as e:
             logger.debug("Fleet: realtime fetch failed: %s", e)
 
+        # Enrich with system metrics from DB (collected by Node Agent)
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                db_nodes = await db_service.get_all_nodes()
+                metrics_map = {}
+                for dn in db_nodes:
+                    raw = dn.get('raw_data') or dn
+                    uid = dn.get('uuid') or (raw.get('uuid') if isinstance(raw, dict) else None)
+                    if uid:
+                        metrics_map[str(uid)] = dn
+                for n in nodes:
+                    db_node = metrics_map.get(n.get('uuid'))
+                    if db_node:
+                        if db_node.get('cpu_usage') is not None:
+                            n['cpu_usage'] = db_node['cpu_usage']
+                        if db_node.get('memory_usage') is not None:
+                            n['memory_usage'] = db_node['memory_usage']
+                        if db_node.get('memory_total_bytes') is not None:
+                            n['memory_total_bytes'] = db_node['memory_total_bytes']
+                        if db_node.get('memory_used_bytes') is not None:
+                            n['memory_used_bytes'] = db_node['memory_used_bytes']
+                        if db_node.get('disk_usage') is not None:
+                            n['disk_usage'] = db_node['disk_usage']
+                        if db_node.get('disk_total_bytes') is not None:
+                            n['disk_total_bytes'] = db_node['disk_total_bytes']
+                        if db_node.get('disk_used_bytes') is not None:
+                            n['disk_used_bytes'] = db_node['disk_used_bytes']
+                        if db_node.get('uptime_seconds') is not None:
+                            n['uptime_seconds'] = db_node['uptime_seconds']
+                        if db_node.get('metrics_updated_at') is not None:
+                            mua = db_node['metrics_updated_at']
+                            n['metrics_updated_at'] = mua.isoformat() if hasattr(mua, 'isoformat') else str(mua)
+        except Exception as e:
+            logger.debug("Fleet: DB metrics enrichment failed: %s", e)
+
         # Build response items
         fleet_items = []
         online = 0
@@ -812,6 +854,13 @@ async def get_node_fleet(
                 except Exception:
                     last_seen = str(last_seen)
 
+            metrics_updated = n.get('metrics_updated_at')
+            if metrics_updated and not isinstance(metrics_updated, str):
+                try:
+                    metrics_updated = metrics_updated.isoformat()
+                except Exception:
+                    metrics_updated = str(metrics_updated)
+
             fleet_items.append(NodeFleetItem(
                 uuid=n.get('uuid', ''),
                 name=n.get('name', ''),
@@ -827,9 +876,15 @@ async def get_node_fleet(
                 uptime_seconds=n.get('uptime_seconds'),
                 cpu_usage=n.get('cpu_usage'),
                 memory_usage=n.get('memory_usage'),
+                memory_total_bytes=n.get('memory_total_bytes'),
+                memory_used_bytes=n.get('memory_used_bytes'),
+                disk_usage=n.get('disk_usage'),
+                disk_total_bytes=n.get('disk_total_bytes'),
+                disk_used_bytes=n.get('disk_used_bytes'),
                 last_seen_at=last_seen,
                 download_speed_bps=int(n.get('download_speed_bps') or 0),
                 upload_speed_bps=int(n.get('upload_speed_bps') or 0),
+                metrics_updated_at=metrics_updated,
             ))
 
         # Sort: offline first (problematic), then online, then disabled

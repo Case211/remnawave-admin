@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from .config import Settings
-from .collectors import XrayLogCollector, XrayLogRealtimeCollector
+from .collectors import XrayLogCollector, XrayLogRealtimeCollector, SystemMetricsCollector
 from .models import ConnectionReport
 from .sender import CollectorSender
 
@@ -42,6 +42,11 @@ async def run_agent() -> None:
         logger.info("Using polling log collector (reads tail every interval)")
     
     sender = CollectorSender(settings)
+    system_metrics_collector = SystemMetricsCollector()
+
+    # Первый вызов CPU — инициализация baseline (первое значение всегда 0)
+    await system_metrics_collector.collect()
+    logger.info("System metrics collector initialized")
 
     # Проверяем доступность файла логов при старте
     log_path = Path(settings.xray_log_path)
@@ -85,15 +90,17 @@ async def run_agent() -> None:
                 # В real-time режиме накапливаем подключения для батч-отправки
                 if settings.log_parsing_mode.lower() == "realtime":
                     accumulated_connections.extend(connections)
-                    logger.debug("Cycle #%d: collected %d connections (accumulated: %d)", 
+                    logger.debug("Cycle #%d: collected %d connections (accumulated: %d)",
                                cycle_count, len(connections), len(accumulated_connections))
-                    
+
                     # Проверяем, пора ли отправлять батч
                     current_time = asyncio.get_event_loop().time()
                     if accumulated_connections and (current_time - last_send_time >= send_interval):
-                        logger.info("Cycle #%d: sending accumulated batch (%d connections)...", 
+                        # Собираем метрики перед отправкой
+                        metrics = await system_metrics_collector.collect()
+                        logger.info("Cycle #%d: sending accumulated batch (%d connections)...",
                                   cycle_count, len(accumulated_connections))
-                        ok = await sender.send_batch(accumulated_connections)
+                        ok = await sender.send_batch(accumulated_connections, system_metrics=metrics)
                         if ok:
                             logger.info("Cycle #%d: batch sent successfully", cycle_count)
                             accumulated_connections.clear()
@@ -102,13 +109,23 @@ async def run_agent() -> None:
                             logger.warning("Cycle #%d: send failed, will retry next cycle", cycle_count)
                 else:
                     # В polling режиме отправляем сразу
+                    metrics = await system_metrics_collector.collect()
                     logger.info("Cycle #%d: collected %d connections, sending batch...", cycle_count, len(connections))
-                    ok = await sender.send_batch(connections)
+                    ok = await sender.send_batch(connections, system_metrics=metrics)
                     if ok:
                         logger.info("Cycle #%d: batch sent successfully", cycle_count)
                     else:
                         logger.warning("Cycle #%d: send failed, will retry next cycle", cycle_count)
             else:
+                # Даже без подключений отправляем метрики периодически
+                current_time = asyncio.get_event_loop().time()
+                if current_time - last_send_time >= send_interval:
+                    metrics = await system_metrics_collector.collect()
+                    logger.debug("Cycle #%d: no connections, sending metrics only...", cycle_count)
+                    ok = await sender.send_batch([], system_metrics=metrics)
+                    if ok:
+                        last_send_time = current_time
+
                 # Показываем INFO каждые 10 циклов, чтобы видеть что агент работает
                 if cycle_count % 10 == 0:
                     logger.info("Cycle #%d: no connections found in log (agent is running)", cycle_count)
