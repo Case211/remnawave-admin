@@ -495,6 +495,11 @@ async def get_timeseries(
             node_points: List[NodeTimeseriesPoint] = []
 
             if resp:
+                logger.debug(
+                    "Timeseries raw response keys: %s",
+                    list(resp.keys()) if isinstance(resp, dict) else type(resp),
+                )
+
                 # Extract node names from topNodes
                 top_nodes = resp.get('topNodes', [])
                 for tn in top_nodes:
@@ -503,10 +508,16 @@ async def get_timeseries(
                     if uid:
                         node_names[uid] = name
 
-                # Extract series data: the upstream API returns series as list of
-                # {date: "YYYY-MM-DD", <node_uuid>: bytes, ...}
+                # Extract series data
                 series = resp.get('series', [])
-                if isinstance(series, list):
+                logger.debug(
+                    "Timeseries series: type=%s, len=%s, sample=%s",
+                    type(series).__name__,
+                    len(series) if isinstance(series, list) else 'N/A',
+                    series[:2] if isinstance(series, list) and series else 'empty',
+                )
+
+                if isinstance(series, list) and series:
                     for entry in series:
                         if not isinstance(entry, dict):
                             continue
@@ -517,19 +528,23 @@ async def get_timeseries(
                             if key in ('date', 'timestamp'):
                                 continue
                             try:
-                                v = int(val)
+                                v = int(float(val))
                             except (ValueError, TypeError):
                                 continue
                             per_node[key] = v
                             total += v
-                        points.append(TimeseriesPoint(timestamp=ts, value=total))
-                        node_points.append(NodeTimeseriesPoint(
-                            timestamp=ts, total=total, nodes=per_node,
-                        ))
+                        if ts:
+                            points.append(TimeseriesPoint(timestamp=ts, value=total))
+                            node_points.append(NodeTimeseriesPoint(
+                                timestamp=ts, total=total, nodes=per_node,
+                            ))
 
-            # If no series data, generate synthetic points from period totals
-            if not points:
-                points = _generate_synthetic_traffic_points(period, now)
+                # Fallback: if series is empty but topNodes has data,
+                # build daily points by querying each day individually
+                if not points and top_nodes:
+                    points, node_points = await _build_daily_points(
+                        start_dt, now, node_names, period,
+                    )
 
             return TimeseriesResponse(
                 period=period,
@@ -576,6 +591,71 @@ async def get_timeseries(
     except Exception as e:
         logger.error("Error getting timeseries: %s", e)
         return TimeseriesResponse(period=period, metric=metric)
+
+
+async def _build_daily_points(
+    start_dt: datetime,
+    end_dt: datetime,
+    node_names: Dict[str, str],
+    period: str,
+) -> tuple:
+    """Build per-day timeseries by querying each day individually.
+
+    Used as fallback when the upstream API's series field is empty
+    but topNodes data is available.
+    """
+    from datetime import timedelta
+
+    points: List[TimeseriesPoint] = []
+    node_points: List[NodeTimeseriesPoint] = []
+
+    # Determine days to query
+    if period == "24h":
+        # For 24h, just show today and yesterday
+        days = [end_dt.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1),
+                end_dt.replace(hour=0, minute=0, second=0, microsecond=0)]
+    else:
+        num_days = 7 if period == "7d" else 30
+        days = []
+        for i in range(num_days):
+            d = end_dt.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=num_days - 1 - i)
+            days.append(d)
+
+    for day in days:
+        day_str = day.strftime('%Y-%m-%d')
+        next_day_str = (day + timedelta(days=1)).strftime('%Y-%m-%d')
+        try:
+            resp = await fetch_nodes_usage_by_range(
+                start=day_str, end=next_day_str, top_nodes_limit=50,
+            )
+            if resp:
+                total = 0
+                per_node: Dict[str, int] = {}
+                for tn in resp.get('topNodes', []):
+                    uid = tn.get('uuid', '')
+                    try:
+                        val = int(tn.get('total', 0) or 0)
+                    except (ValueError, TypeError):
+                        val = 0
+                    if uid:
+                        per_node[uid] = val
+                        total += val
+                        # Ensure node name is captured
+                        if uid not in node_names:
+                            node_names[uid] = tn.get('nodeName') or tn.get('name') or uid[:8]
+                points.append(TimeseriesPoint(timestamp=day_str, value=total))
+                node_points.append(NodeTimeseriesPoint(
+                    timestamp=day_str, total=total, nodes=per_node,
+                ))
+            else:
+                points.append(TimeseriesPoint(timestamp=day_str, value=0))
+                node_points.append(NodeTimeseriesPoint(timestamp=day_str, total=0, nodes={}))
+        except Exception as e:
+            logger.debug("Failed to fetch day %s traffic: %s", day_str, e)
+            points.append(TimeseriesPoint(timestamp=day_str, value=0))
+            node_points.append(NodeTimeseriesPoint(timestamp=day_str, total=0, nodes={}))
+
+    return points, node_points
 
 
 def _generate_synthetic_traffic_points(period: str, now: datetime) -> List[TimeseriesPoint]:
@@ -789,7 +869,7 @@ async def get_system_components(
     try:
         from web.backend.core.api_helper import api_get
         start_time = time.monotonic()
-        health = await api_get("/api/healthcheck")
+        health = await api_get("/api/system/health")
         elapsed_ms = round((time.monotonic() - start_time) * 1000)
         if health is not None:
             components.append(SystemComponentStatus(

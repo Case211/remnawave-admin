@@ -458,20 +458,6 @@ function TrafficChartTooltip({ active, payload, label }: any) {
   )
 }
 
-function ConnectionsChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div style={tooltipStyle} className="px-3 py-2">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      {payload.map((entry: any, i: number) => (
-        <p key={i} className="text-xs" style={{ color: entry.color }}>
-          {entry.name}: {entry.value}
-        </p>
-      ))}
-    </div>
-  )
-}
-
 // ── NodeFleetCard ────────────────────────────────────────────────
 
 function NodeFleetCard({
@@ -894,13 +880,17 @@ export default function Dashboard() {
   const nodeNames = timeseries?.node_names || {}
   const nodeUuids = Object.keys(nodeNames)
 
-  // Connections data (per-node stacked)
-  const connectionsChartData = connectionsSeries?.node_points?.map((p) => ({
-    name: formatTimestamp(p.timestamp),
-    ...p.nodes,
-  })) || []
+  // Connections data — per-node bar chart from current snapshot
   const connectionNodeNames = connectionsSeries?.node_names || {}
-  const connectionNodeUuids = Object.keys(connectionNodeNames)
+  const connectionsBarData = connectionsSeries?.node_points?.[0]
+    ? Object.entries(connectionsSeries.node_points[0].nodes)
+        .map(([uid, value]) => ({
+          name: connectionNodeNames[uid] || uid.substring(0, 8),
+          value,
+        }))
+        .filter((d) => d.value > 0)
+        .sort((a, b) => b.value - a.value)
+    : []
 
   // Violations chart
   const violationsChartData = violationStats
@@ -1157,51 +1147,41 @@ export default function Dashboard() {
 
       {/* ── Connections Chart + Violations ───────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Connections area chart */}
+        {/* Connections by node — horizontal bar chart */}
         {canViewAnalytics && (
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base md:text-lg">Подключения по нодам</CardTitle>
-                {connectionsSeries && (
-                  <span className="text-xs text-muted-foreground">
-                    Всего: {connectionsSeries.points?.reduce((s, p) => s + p.value, 0) || 0}
-                  </span>
-                )}
+                <span className="text-xs text-muted-foreground">
+                  Всего: {overview?.users_online || 0}
+                </span>
               </div>
             </CardHeader>
             <CardContent>
-              {connectionsChartData.length > 0 && connectionNodeUuids.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={connectionsChartData}>
-                    <defs>
-                      {connectionNodeUuids.map((uid, i) => (
-                        <linearGradient key={uid} id={`conn-${i}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.4} />
-                          <stop offset="95%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.05} />
-                        </linearGradient>
-                      ))}
-                    </defs>
+              {connectionsBarData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={Math.max(connectionsBarData.length * 40 + 20, 120)}>
+                  <BarChart data={connectionsBarData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
-                    <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
-                    <YAxis stroke="#8b949e" fontSize={11} />
-                    <RechartsTooltip content={<ConnectionsChartTooltip />} />
-                    {connectionNodeUuids.map((uid, i) => (
-                      <Area
-                        key={uid}
-                        type="monotone"
-                        dataKey={uid}
-                        name={connectionNodeNames[uid] || uid.substring(0, 8)}
-                        stackId="connections"
-                        stroke={NODE_COLORS[i % NODE_COLORS.length]}
-                        fill={`url(#conn-${i})`}
-                        strokeWidth={2}
-                      />
-                    ))}
-                  </AreaChart>
+                    <XAxis type="number" stroke="#8b949e" fontSize={11} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      stroke="#8b949e"
+                      fontSize={11}
+                      width={120}
+                      tick={{ fill: '#c9d1d9' }}
+                    />
+                    <RechartsTooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={24}>
+                      {connectionsBarData.map((_entry, i) => (
+                        <Cell key={i} fill={NODE_COLORS[i % NODE_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[220px] flex items-center justify-center">
+                <div className="h-[120px] flex items-center justify-center">
                   <div className="text-center">
                     <Wifi className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
                     <span className="text-muted-foreground text-sm">
