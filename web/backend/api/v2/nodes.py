@@ -42,6 +42,8 @@ def _ensure_node_snake_case(node: dict) -> dict:
         'cpuUsage': 'cpu_usage',
         'memoryUsage': 'memory_usage',
         'uptimeSeconds': 'uptime_seconds',
+        'downloadSpeedBps': 'download_speed_bps',
+        'uploadSpeedBps': 'upload_speed_bps',
     }
     for camel, snake in mappings.items():
         if camel in result and snake not in result:
@@ -105,21 +107,22 @@ async def list_nodes(
         except Exception as e:
             logger.debug("Date-range today traffic fetch failed: %s", e)
 
-        # Fallback: realtime endpoint (resets on service restart)
-        nodes_without_today = [n for n in nodes if not n.get('traffic_today_bytes')]
-        if nodes_without_today:
-            try:
-                realtime = await fetch_nodes_realtime_usage()
-                rt_map = {r.get('nodeUuid'): r for r in realtime}
-                for n in nodes_without_today:
-                    rt = rt_map.get(n.get('uuid'))
-                    if rt:
+        # Enrich with realtime data (speed + fallback today traffic)
+        try:
+            realtime = await fetch_nodes_realtime_usage()
+            rt_map = {r.get('nodeUuid'): r for r in realtime}
+            for n in nodes:
+                rt = rt_map.get(n.get('uuid'))
+                if rt:
+                    n['download_speed_bps'] = int(rt.get('downloadSpeedBps') or 0)
+                    n['upload_speed_bps'] = int(rt.get('uploadSpeedBps') or 0)
+                    if not n.get('traffic_today_bytes'):
                         try:
                             n['traffic_today_bytes'] = int(rt.get('totalBytes') or 0)
                         except (ValueError, TypeError):
                             pass
-            except Exception as e:
-                logger.debug("Realtime bandwidth fetch failed: %s", e)
+        except Exception as e:
+            logger.debug("Realtime bandwidth fetch failed: %s", e)
 
         # Filter
         if search:
