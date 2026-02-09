@@ -70,9 +70,12 @@ export function useRealtimeUpdates() {
         switch (msg.type) {
           case 'node_status':
             queryClient.invalidateQueries({ queryKey: ['nodes'] })
+            queryClient.invalidateQueries({ queryKey: ['nodeFleet'] })
+            queryClient.invalidateQueries({ queryKey: ['systemComponents'] })
             break
           case 'user_update':
             queryClient.invalidateQueries({ queryKey: ['users'] })
+            queryClient.invalidateQueries({ queryKey: ['overview'] })
             if (msg.data?.uuid) {
               queryClient.invalidateQueries({ queryKey: ['user', msg.data.uuid] })
               queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', msg.data.uuid] })
@@ -88,13 +91,19 @@ export function useRealtimeUpdates() {
             break
           case 'violation':
             queryClient.invalidateQueries({ queryKey: ['violations'] })
+            queryClient.invalidateQueries({ queryKey: ['violationStats'] })
+            queryClient.invalidateQueries({ queryKey: ['deltas'] })
             break
           case 'connection':
             queryClient.invalidateQueries({ queryKey: ['nodes'] })
+            queryClient.invalidateQueries({ queryKey: ['nodeFleet'] })
             break
           case 'activity':
             // Refresh dashboard-related queries
             queryClient.invalidateQueries({ queryKey: ['analytics'] })
+            queryClient.invalidateQueries({ queryKey: ['overview'] })
+            queryClient.invalidateQueries({ queryKey: ['timeseries'] })
+            queryClient.invalidateQueries({ queryKey: ['deltas'] })
             break
         }
       } catch {

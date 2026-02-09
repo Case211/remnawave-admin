@@ -1,7 +1,7 @@
 """Analytics API endpoints."""
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 
@@ -43,6 +43,81 @@ class TrafficStats(BaseModel):
     today_bytes: int = 0
     week_bytes: int = 0
     month_bytes: int = 0
+
+
+class TimeseriesPoint(BaseModel):
+    """Single point in a timeseries."""
+    timestamp: str
+    value: int = 0
+
+
+class NodeTimeseriesPoint(BaseModel):
+    """Single point in per-node timeseries."""
+    timestamp: str
+    total: int = 0
+    nodes: Dict[str, int] = {}
+
+
+class TimeseriesResponse(BaseModel):
+    """Response for timeseries endpoint."""
+    period: str
+    metric: str
+    points: List[TimeseriesPoint] = []
+    node_points: List[NodeTimeseriesPoint] = []
+    node_names: Dict[str, str] = {}
+
+
+class DeltaStats(BaseModel):
+    """Delta indicators for stat cards."""
+    users_delta: Optional[float] = None         # % change in total users (24h)
+    users_online_delta: Optional[int] = None    # change in online users
+    traffic_delta: Optional[float] = None       # % change in traffic (vs yesterday)
+    violations_delta: Optional[int] = None      # change in violations (today vs yesterday)
+    nodes_delta: Optional[int] = None           # change in online nodes
+
+
+class NodeFleetItem(BaseModel):
+    """Compact node info for dashboard fleet view."""
+    uuid: str
+    name: str = ''
+    address: str = ''
+    port: int = 443
+    is_connected: bool = False
+    is_disabled: bool = False
+    is_xray_running: bool = False
+    xray_version: Optional[str] = None
+    users_online: int = 0
+    traffic_today_bytes: int = 0
+    traffic_total_bytes: int = 0
+    uptime_seconds: Optional[int] = None
+    cpu_usage: Optional[float] = None
+    memory_usage: Optional[float] = None
+    last_seen_at: Optional[str] = None
+    download_speed_bps: int = 0
+    upload_speed_bps: int = 0
+
+
+class NodeFleetResponse(BaseModel):
+    """Response for node fleet endpoint."""
+    nodes: List[NodeFleetItem] = []
+    total: int = 0
+    online: int = 0
+    offline: int = 0
+    disabled: int = 0
+
+
+class SystemComponentStatus(BaseModel):
+    """Status of a system component."""
+    name: str
+    status: str  # "online", "offline", "degraded", "unknown"
+    details: Dict[str, Any] = {}
+
+
+class SystemComponentsResponse(BaseModel):
+    """Response for system components endpoint."""
+    components: List[SystemComponentStatus] = []
+    uptime_seconds: Optional[int] = None
+    version: str = "2.0.0"
 
 
 async def _get_users_data() -> List[Dict[str, Any]]:
@@ -385,25 +460,441 @@ async def get_traffic_stats(
         return TrafficStats()
 
 
-@router.get("/users")
-async def get_user_stats(
-    period: str = Query("week", regex="^(day|week|month)$"),
+@router.get("/timeseries", response_model=TimeseriesResponse)
+async def get_timeseries(
+    period: str = Query("24h", regex="^(24h|7d|30d)$"),
+    metric: str = Query("traffic", regex="^(traffic|connections)$"),
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
-    """Get user statistics for charts."""
-    return {
-        "period": period,
-        "data": [],
-    }
+    """Get timeseries data for traffic or connections charts.
+
+    For traffic: returns bytes per time bucket from the upstream bandwidth-stats API.
+    For connections: returns users_online snapshots per node.
+    """
+    try:
+        now = datetime.utcnow()
+        node_names: Dict[str, str] = {}
+
+        if metric == "traffic":
+            # Determine date range based on period
+            if period == "24h":
+                start_dt = now - timedelta(hours=24)
+            elif period == "7d":
+                start_dt = now - timedelta(days=7)
+            else:  # 30d
+                start_dt = now - timedelta(days=30)
+
+            start_str = start_dt.strftime('%Y-%m-%d')
+            end_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+
+            resp = await fetch_nodes_usage_by_range(
+                start=start_str, end=end_str, top_nodes_limit=50,
+            )
+
+            points: List[TimeseriesPoint] = []
+            node_points: List[NodeTimeseriesPoint] = []
+
+            if resp:
+                # Extract node names from topNodes
+                top_nodes = resp.get('topNodes', [])
+                for tn in top_nodes:
+                    uid = tn.get('uuid', '')
+                    name = tn.get('nodeName') or tn.get('name') or uid[:8]
+                    if uid:
+                        node_names[uid] = name
+
+                # Extract series data: the upstream API returns series as list of
+                # {date: "YYYY-MM-DD", <node_uuid>: bytes, ...}
+                series = resp.get('series', [])
+                if isinstance(series, list):
+                    for entry in series:
+                        if not isinstance(entry, dict):
+                            continue
+                        ts = entry.get('date') or entry.get('timestamp') or ''
+                        total = 0
+                        per_node: Dict[str, int] = {}
+                        for key, val in entry.items():
+                            if key in ('date', 'timestamp'):
+                                continue
+                            try:
+                                v = int(val)
+                            except (ValueError, TypeError):
+                                continue
+                            per_node[key] = v
+                            total += v
+                        points.append(TimeseriesPoint(timestamp=ts, value=total))
+                        node_points.append(NodeTimeseriesPoint(
+                            timestamp=ts, total=total, nodes=per_node,
+                        ))
+
+            # If no series data, generate synthetic points from period totals
+            if not points:
+                points = _generate_synthetic_traffic_points(period, now)
+
+            return TimeseriesResponse(
+                period=period,
+                metric=metric,
+                points=points,
+                node_points=node_points,
+                node_names=node_names,
+            )
+
+        else:  # connections
+            # Get current node data with users_online
+            nodes = await _get_nodes_data()
+            node_points_list: List[NodeTimeseriesPoint] = []
+            total_online = 0
+            per_node: Dict[str, int] = {}
+
+            for n in nodes:
+                uid = n.get('uuid', '')
+                name = n.get('name') or uid[:8]
+                online = 0
+                try:
+                    online = int(n.get('users_online') or n.get('usersOnline') or 0)
+                except (ValueError, TypeError):
+                    pass
+                if uid:
+                    node_names[uid] = name
+                    per_node[uid] = online
+                    total_online += online
+
+            # Current snapshot as a single point
+            ts = now.strftime('%Y-%m-%dT%H:%M')
+            node_points_list.append(NodeTimeseriesPoint(
+                timestamp=ts, total=total_online, nodes=per_node,
+            ))
+
+            return TimeseriesResponse(
+                period=period,
+                metric=metric,
+                points=[TimeseriesPoint(timestamp=ts, value=total_online)],
+                node_points=node_points_list,
+                node_names=node_names,
+            )
+
+    except Exception as e:
+        logger.error("Error getting timeseries: %s", e)
+        return TimeseriesResponse(period=period, metric=metric)
 
 
-@router.get("/connections")
-async def get_connection_stats(
-    period: str = Query("day", regex="^(hour|day|week)$"),
+def _generate_synthetic_traffic_points(period: str, now: datetime) -> List[TimeseriesPoint]:
+    """Generate empty timeseries points as placeholders when no upstream data is available."""
+    points = []
+    if period == "24h":
+        for i in range(24):
+            ts = (now - timedelta(hours=23 - i)).strftime('%Y-%m-%dT%H:00')
+            points.append(TimeseriesPoint(timestamp=ts, value=0))
+    elif period == "7d":
+        for i in range(7):
+            ts = (now - timedelta(days=6 - i)).strftime('%Y-%m-%d')
+            points.append(TimeseriesPoint(timestamp=ts, value=0))
+    else:  # 30d
+        for i in range(30):
+            ts = (now - timedelta(days=29 - i)).strftime('%Y-%m-%d')
+            points.append(TimeseriesPoint(timestamp=ts, value=0))
+    return points
+
+
+@router.get("/deltas", response_model=DeltaStats)
+async def get_delta_stats(
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
-    """Get connection statistics for charts."""
-    return {
-        "period": period,
-        "data": [],
-    }
+    """Get delta indicators for dashboard stat cards.
+
+    Compares today vs yesterday for traffic and violations.
+    """
+    try:
+        now = datetime.utcnow()
+        result = DeltaStats()
+
+        # Traffic delta: today vs yesterday
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday_start = today_start - timedelta(days=1)
+        end_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+
+        try:
+            today_resp = await fetch_nodes_usage_by_range(
+                start=today_start.strftime('%Y-%m-%d'), end=end_str,
+            )
+            yesterday_resp = await fetch_nodes_usage_by_range(
+                start=yesterday_start.strftime('%Y-%m-%d'),
+                end=today_start.strftime('%Y-%m-%d'),
+            )
+            today_traffic = _sum_top_nodes_total(today_resp) if today_resp else 0
+            yesterday_traffic = _sum_top_nodes_total(yesterday_resp) if yesterday_resp else 0
+            if yesterday_traffic > 0:
+                result.traffic_delta = round(
+                    ((today_traffic - yesterday_traffic) / yesterday_traffic) * 100, 1
+                )
+            elif today_traffic > 0:
+                result.traffic_delta = 100.0
+        except Exception as e:
+            logger.debug("Failed to compute traffic delta: %s", e)
+
+        # Violations delta: today vs yesterday
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected:
+                today_stats = await db_service.get_violations_stats_for_period(
+                    start_date=today_start, end_date=now,
+                )
+                yesterday_stats = await db_service.get_violations_stats_for_period(
+                    start_date=yesterday_start, end_date=today_start,
+                )
+                today_v = today_stats.get('total', 0)
+                yesterday_v = yesterday_stats.get('total', 0)
+                result.violations_delta = today_v - yesterday_v
+        except Exception as e:
+            logger.debug("Failed to compute violations delta: %s", e)
+
+        return result
+
+    except Exception as e:
+        logger.error("Error getting delta stats: %s", e)
+        return DeltaStats()
+
+
+@router.get("/node-fleet", response_model=NodeFleetResponse)
+async def get_node_fleet(
+    admin: AdminUser = Depends(require_permission("nodes", "view")),
+):
+    """Get compact node fleet data for dashboard cards.
+
+    Returns all nodes with enriched metrics (traffic today, speed, uptime).
+    """
+    try:
+        from web.backend.api.v2.nodes import _get_nodes_list, _ensure_node_snake_case
+
+        nodes = await _get_nodes_list()
+        nodes = [_ensure_node_snake_case(n) for n in nodes]
+
+        # Enrich with today's traffic
+        now = datetime.utcnow()
+        today_str = now.strftime('%Y-%m-%d')
+        tomorrow_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+
+        try:
+            resp = await fetch_nodes_usage_by_range(start=today_str, end=tomorrow_str)
+            if resp:
+                for tn in resp.get('topNodes', []):
+                    uid = tn.get('uuid')
+                    if uid:
+                        try:
+                            today_val = int(tn.get('total', 0) or 0)
+                        except (ValueError, TypeError):
+                            today_val = 0
+                        for n in nodes:
+                            if n.get('uuid') == uid:
+                                n['traffic_today_bytes'] = today_val
+                                break
+        except Exception as e:
+            logger.debug("Fleet: date-range traffic failed: %s", e)
+
+        # Enrich with realtime speed data
+        try:
+            realtime = await fetch_nodes_realtime_usage()
+            rt_map = {r.get('nodeUuid'): r for r in realtime}
+            for n in nodes:
+                rt = rt_map.get(n.get('uuid'))
+                if rt:
+                    n['download_speed_bps'] = int(rt.get('downloadSpeedBps') or 0)
+                    n['upload_speed_bps'] = int(rt.get('uploadSpeedBps') or 0)
+                    if not n.get('traffic_today_bytes'):
+                        try:
+                            n['traffic_today_bytes'] = int(rt.get('totalBytes') or 0)
+                        except (ValueError, TypeError):
+                            pass
+        except Exception as e:
+            logger.debug("Fleet: realtime fetch failed: %s", e)
+
+        # Build response items
+        fleet_items = []
+        online = 0
+        offline = 0
+        disabled = 0
+
+        for n in nodes:
+            is_disabled = bool(n.get('is_disabled'))
+            is_connected = bool(n.get('is_connected'))
+
+            if is_disabled:
+                disabled += 1
+            elif is_connected:
+                online += 1
+            else:
+                offline += 1
+
+            last_seen = n.get('last_seen_at')
+            if last_seen and not isinstance(last_seen, str):
+                try:
+                    last_seen = last_seen.isoformat()
+                except Exception:
+                    last_seen = str(last_seen)
+
+            fleet_items.append(NodeFleetItem(
+                uuid=n.get('uuid', ''),
+                name=n.get('name', ''),
+                address=n.get('address', ''),
+                port=int(n.get('port') or 443),
+                is_connected=is_connected,
+                is_disabled=is_disabled,
+                is_xray_running=bool(n.get('is_xray_running')),
+                xray_version=n.get('xray_version'),
+                users_online=int(n.get('users_online') or 0),
+                traffic_today_bytes=int(n.get('traffic_today_bytes') or 0),
+                traffic_total_bytes=int(n.get('traffic_total_bytes') or 0),
+                uptime_seconds=n.get('uptime_seconds'),
+                cpu_usage=n.get('cpu_usage'),
+                memory_usage=n.get('memory_usage'),
+                last_seen_at=last_seen,
+                download_speed_bps=int(n.get('download_speed_bps') or 0),
+                upload_speed_bps=int(n.get('upload_speed_bps') or 0),
+            ))
+
+        # Sort: offline first (problematic), then online, then disabled
+        def sort_key(item: NodeFleetItem):
+            if not item.is_disabled and not item.is_connected:
+                return (0, item.name)  # offline first
+            elif item.is_connected and not item.is_disabled:
+                return (1, item.name)  # online second
+            else:
+                return (2, item.name)  # disabled last
+
+        fleet_items.sort(key=sort_key)
+
+        return NodeFleetResponse(
+            nodes=fleet_items,
+            total=len(fleet_items),
+            online=online,
+            offline=offline,
+            disabled=disabled,
+        )
+
+    except Exception as e:
+        logger.error("Error getting node fleet: %s", e)
+        return NodeFleetResponse()
+
+
+@router.get("/system/components", response_model=SystemComponentsResponse)
+async def get_system_components(
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get status of all system components for dashboard."""
+    import time
+
+    components: List[SystemComponentStatus] = []
+
+    # 1. Check Remnawave API
+    try:
+        from web.backend.core.api_helper import api_get
+        start_time = time.monotonic()
+        health = await api_get("/api/healthcheck")
+        elapsed_ms = round((time.monotonic() - start_time) * 1000)
+        if health is not None:
+            components.append(SystemComponentStatus(
+                name="Remnawave API",
+                status="online",
+                details={"response_time_ms": elapsed_ms},
+            ))
+        else:
+            components.append(SystemComponentStatus(
+                name="Remnawave API",
+                status="offline",
+                details={"error": "No response"},
+            ))
+    except Exception as e:
+        components.append(SystemComponentStatus(
+            name="Remnawave API",
+            status="offline",
+            details={"error": str(e)},
+        ))
+
+    # 2. Check Database
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            # Quick query to verify
+            users_count = 0
+            try:
+                users = await db_service.get_all_users(limit=1)
+                users_count = len(users) if users else 0
+            except Exception:
+                pass
+            pool_info = {}
+            try:
+                pool = db_service._pool
+                if pool:
+                    pool_info = {
+                        "size": pool.get_size(),
+                        "free_size": pool.get_idle_size(),
+                        "min_size": pool.get_min_size(),
+                        "max_size": pool.get_max_size(),
+                    }
+            except Exception:
+                pass
+            components.append(SystemComponentStatus(
+                name="PostgreSQL",
+                status="online",
+                details={**pool_info, "has_data": users_count > 0},
+            ))
+        else:
+            components.append(SystemComponentStatus(
+                name="PostgreSQL",
+                status="offline",
+                details={"error": "Not connected"},
+            ))
+    except Exception as e:
+        components.append(SystemComponentStatus(
+            name="PostgreSQL",
+            status="offline",
+            details={"error": str(e)},
+        ))
+
+    # 3. Check Nodes
+    try:
+        nodes = await _get_nodes_data()
+        total = len(nodes)
+        connected = sum(1 for n in nodes if _is_node_connected(n) and not _is_node_disabled(n))
+        components.append(SystemComponentStatus(
+            name="Nodes",
+            status="online" if connected > 0 else ("degraded" if total > 0 else "offline"),
+            details={"total": total, "online": connected},
+        ))
+    except Exception as e:
+        components.append(SystemComponentStatus(
+            name="Nodes",
+            status="unknown",
+            details={"error": str(e)},
+        ))
+
+    # 4. Check WebSocket
+    try:
+        from web.backend.api.v2.websocket import manager
+        ws_count = len(manager.active_connections) if manager else 0
+        components.append(SystemComponentStatus(
+            name="WebSocket",
+            status="online",
+            details={"active_connections": ws_count},
+        ))
+    except Exception:
+        components.append(SystemComponentStatus(
+            name="WebSocket",
+            status="unknown",
+            details={},
+        ))
+
+    # Calculate uptime (approximate via process start time)
+    uptime = None
+    try:
+        import psutil
+        p = psutil.Process()
+        uptime = int(time.time() - p.create_time())
+    except Exception:
+        pass
+
+    return SystemComponentsResponse(
+        components=components,
+        uptime_seconds=uptime,
+        version="2.0.0",
+    )
