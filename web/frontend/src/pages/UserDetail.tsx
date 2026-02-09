@@ -28,6 +28,7 @@ import {
   Eye,
 } from 'lucide-react'
 import client from '../api/client'
+import { useHasPermission } from '../components/PermissionGate'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -533,7 +534,9 @@ export default function UserDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
-  const [isEditing, setIsEditing] = useState(searchParams.get('edit') === '1')
+  const canEdit = useHasPermission('users', 'edit')
+  const canDelete = useHasPermission('users', 'delete')
+  const [isEditing, setIsEditing] = useState(searchParams.get('edit') === '1' && canEdit)
   const [editForm, setEditForm] = useState<EditFormData>({
     status: '',
     traffic_limit_bytes: null,
@@ -775,7 +778,7 @@ export default function UserDetail() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {isEditing ? (
+          {isEditing && canEdit ? (
             <>
               <Button
                 onClick={handleSave}
@@ -798,51 +801,59 @@ export default function UserDetail() {
             </>
           ) : (
             <>
-              <Button size="sm" onClick={handleStartEdit}>
-                <Pencil className="h-4 w-4 mr-1.5" />
-                Редактировать
-              </Button>
-              {user.status === 'active' ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => disableMutation.mutate()}
-                  disabled={disableMutation.isPending}
-                >
-                  <X className="h-4 w-4 mr-1.5" />
-                  Отключить
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={() => enableMutation.mutate()}
-                  disabled={enableMutation.isPending}
-                  className="bg-green-600 hover:bg-green-500 text-white"
-                >
-                  <Check className="h-4 w-4 mr-1.5" />
-                  Включить
+              {canEdit && (
+                <Button size="sm" onClick={handleStartEdit}>
+                  <Pencil className="h-4 w-4 mr-1.5" />
+                  Редактировать
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => resetTrafficMutation.mutate()}
-                disabled={resetTrafficMutation.isPending}
-                className="text-primary-400"
-              >
-                <RefreshCw className={cn('h-4 w-4 mr-1.5', resetTrafficMutation.isPending && 'animate-spin')} />
-                Сбросить трафик
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { if (confirm('Удалить пользователя?')) deleteMutation.mutate() }}
-                disabled={deleteMutation.isPending}
-                className="text-red-400 hover:text-red-300"
-              >
-                <Trash2 className="h-4 w-4 mr-1.5" />
-                Удалить
-              </Button>
+              {canEdit && (
+                user.status === 'active' ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => disableMutation.mutate()}
+                    disabled={disableMutation.isPending}
+                  >
+                    <X className="h-4 w-4 mr-1.5" />
+                    Отключить
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => enableMutation.mutate()}
+                    disabled={enableMutation.isPending}
+                    className="bg-green-600 hover:bg-green-500 text-white"
+                  >
+                    <Check className="h-4 w-4 mr-1.5" />
+                    Включить
+                  </Button>
+                )
+              )}
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => resetTrafficMutation.mutate()}
+                  disabled={resetTrafficMutation.isPending}
+                  className="text-primary-400"
+                >
+                  <RefreshCw className={cn('h-4 w-4 mr-1.5', resetTrafficMutation.isPending && 'animate-spin')} />
+                  Сбросить трафик
+                </Button>
+              )}
+              {canDelete && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { if (confirm('Удалить пользователя?')) deleteMutation.mutate() }}
+                  disabled={deleteMutation.isPending}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                  Удалить
+                </Button>
+              )}
             </>
           )}
         </div>
