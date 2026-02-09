@@ -3,7 +3,7 @@
 """
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 
@@ -19,7 +19,40 @@ class CollectorSender:
     def __init__(self, settings: Settings):
         self.settings = settings
         self._url = f"{settings.collector_url.rstrip('/')}/api/v1/connections/batch"
+        self._health_url = f"{settings.collector_url.rstrip('/')}/api/v1/connections/health"
         self._headers = {"Authorization": f"Bearer {settings.auth_token}"}
+        self._client: httpx.AsyncClient | None = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Возвращает переиспользуемый httpx клиент."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=30.0,
+                headers=self._headers,
+                limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
+            )
+        return self._client
+
+    async def close(self) -> None:
+        """Закрывает HTTP клиент. Вызывать при завершении работы."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
+
+    async def check_connectivity(self) -> bool:
+        """
+        Проверяет связь с Collector API при старте.
+        Возвращает True если API доступен.
+        """
+        try:
+            client = await self._get_client()
+            resp = await client.get(self._health_url)
+            resp.raise_for_status()
+            logger.info("Collector API connectivity check passed: %s", self._health_url)
+            return True
+        except Exception as e:
+            logger.warning("Collector API connectivity check failed (%s): %s", self._health_url, e)
+            return False
 
     async def send_batch(
         self,
@@ -32,7 +65,7 @@ class CollectorSender:
 
         report = BatchReport(
             node_uuid=self.settings.node_uuid,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
             connections=connections,
             system_metrics=system_metrics,
         )
@@ -40,54 +73,50 @@ class CollectorSender:
 
         for attempt in range(1, self.settings.send_max_retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(
-                        self._url,
-                        json=payload,
-                        headers=self._headers,
+                client = await self._get_client()
+                resp = await client.post(self._url, json=payload)
+                resp.raise_for_status()
+
+                # Проверяем, что ответ не пустой и содержит JSON
+                response_text = resp.text
+                if not response_text or not response_text.strip():
+                    logger.warning(
+                        "Collector returned empty response on attempt %s (status %s)",
+                        attempt,
+                        resp.status_code
                     )
-                    resp.raise_for_status()
-                    
-                    # Проверяем, что ответ не пустой и содержит JSON
-                    response_text = resp.text
-                    if not response_text or not response_text.strip():
-                        logger.warning(
-                            "Collector returned empty response on attempt %s (status %s)",
-                            attempt,
-                            resp.status_code
-                        )
-                        # Если статус 200 и ответ пустой, считаем успехом (может быть особенность API)
-                        if resp.status_code == 200:
-                            logger.info(
-                                "Batch sent successfully: %s connections (empty response accepted)",
-                                len(connections)
-                            )
-                            return True
-                        continue
-                    
-                    try:
-                        response_data = resp.json()
+                    # Если статус 200 и ответ пустой, считаем успехом (может быть особенность API)
+                    if resp.status_code == 200:
                         logger.info(
-                            "Batch sent successfully: %s connections, response: %s",
-                            len(connections),
-                            response_data,
+                            "Batch sent successfully: %s connections (empty response accepted)",
+                            len(connections)
                         )
                         return True
-                    except ValueError as json_error:
-                        logger.warning(
-                            "Collector returned non-JSON response on attempt %s: %s (status %s)",
-                            attempt,
-                            response_text[:200],
-                            resp.status_code
+                    continue
+
+                try:
+                    response_data = resp.json()
+                    logger.info(
+                        "Batch sent successfully: %s connections, response: %s",
+                        len(connections),
+                        response_data,
+                    )
+                    return True
+                except ValueError:
+                    logger.warning(
+                        "Collector returned non-JSON response on attempt %s: %s (status %s)",
+                        attempt,
+                        response_text[:200],
+                        resp.status_code
+                    )
+                    # Если статус 200, но не JSON - всё равно считаем успехом
+                    if resp.status_code == 200:
+                        logger.info(
+                            "Batch sent successfully: %s connections (non-JSON response accepted)",
+                            len(connections)
                         )
-                        # Если статус 200, но не JSON - всё равно считаем успехом
-                        if resp.status_code == 200:
-                            logger.info(
-                                "Batch sent successfully: %s connections (non-JSON response accepted)",
-                                len(connections)
-                            )
-                            return True
-                        continue
+                        return True
+                    continue
             except httpx.HTTPStatusError as e:
                 logger.warning(
                     "Collector returned %s on attempt %s: %s",

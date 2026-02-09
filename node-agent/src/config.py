@@ -48,8 +48,9 @@ class Settings(BaseSettings):
     send_max_retries: int = 3
     send_retry_delay_seconds: float = 5.0
 
+    # Максимальный размер буфера накопленных подключений (защита от утечки памяти)
+    # Если Collector API недоступен, буфер не будет расти бесконечно
+    max_buffer_size: int = 50_000
+
     # Логирование
     log_level: str = "INFO"
-    
-    # Опционально: путь к логам для отладки (если отличается от xray_log_path)
-    # debug_log_path: Optional[str] = None

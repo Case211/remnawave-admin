@@ -10,7 +10,7 @@
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -22,8 +22,11 @@ logger = logging.getLogger(__name__)
 
 # Формат: 2026/01/28 11:23:18.306521 from 188.170.87.33:20129 accepted tcp:... email: 154
 # Парсим: timestamp, client_ip, client_port, user_id
+# Поддержка IPv4 и IPv6 (в квадратных скобках или без)
 LOG_PATTERN = re.compile(
-    r"(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+(\d+\.\d+\.\d+\.\d+):(\d+)\s+accepted.*?email:\s*(\d+)",
+    r"(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+"
+    r"(?:\[?([0-9a-fA-F:\.]+)\]?)"  # IPv4 или IPv6
+    r":(\d+)\s+accepted.*?email:\s*(\d+)",
     re.IGNORECASE,
 )
 
@@ -44,11 +47,74 @@ def _parse_timestamp(s: str) -> datetime:
                 return dt
             except ValueError:
                 pass
-        
+
         # Если не получилось с микросекундами, парсим без них
         return datetime.strptime(s.split('.')[0], "%Y/%m/%d %H:%M:%S")
     except ValueError:
-        return datetime.utcnow()
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _parse_lines(lines: list[str], node_uuid: str) -> tuple[list[ConnectionReport], int, int, int]:
+    """
+    Парсит строки лога Xray и возвращает список подключений.
+
+    Общая логика парсинга для polling и realtime режимов.
+    Группирует по (user_email, ip) и использует самое позднее время подключения.
+
+    Returns:
+        (connections, lines_count, accepted_lines, matched_lines)
+    """
+    connections_map: dict[tuple[str, str], tuple[datetime, str]] = {}
+
+    lines_count = 0
+    accepted_lines = 0
+    matched_lines = 0
+
+    for line in lines:
+        lines_count += 1
+        line = line.strip()
+        if not line:
+            continue
+        if "accepted" not in line.lower():
+            continue
+        accepted_lines += 1
+        match = LOG_PATTERN.search(line)
+        if not match:
+            logger.debug("Line matched 'accepted' but regex failed: %s", line[:100] if len(line) > 100 else line)
+            continue
+        matched_lines += 1
+        ts_str, client_ip, client_port, user_id = match.groups()
+        user_identifier = f"user_{user_id}"
+        key = (user_identifier, client_ip)
+
+        try:
+            connected_at = _parse_timestamp(ts_str)
+        except Exception:
+            connected_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        # Сохраняем самое позднее время подключения для каждой пары (user, ip)
+        if key not in connections_map:
+            connections_map[key] = (connected_at, user_identifier)
+        else:
+            existing_time, _ = connections_map[key]
+            if connected_at > existing_time:
+                connections_map[key] = (connected_at, user_identifier)
+
+    # Преобразуем в список ConnectionReport
+    connections = [
+        ConnectionReport(
+            user_email=user_identifier,
+            ip_address=client_ip,
+            node_uuid=node_uuid,
+            connected_at=connected_at,
+            disconnected_at=None,
+            bytes_sent=0,
+            bytes_received=0,
+        )
+        for (user_identifier, client_ip), (connected_at, _) in connections_map.items()
+    ]
+
+    return connections, lines_count, accepted_lines, matched_lines
 
 
 class XrayLogCollector(BaseCollector):
@@ -71,11 +137,11 @@ class XrayLogCollector(BaseCollector):
             stat = await asyncio.to_thread(self._log_path.stat)
             file_size = stat.st_size
             logger.debug("Log file exists, size: %d bytes", file_size)
-            
+
             if file_size == 0:
                 logger.debug("Log file is empty")
                 return []
-            
+
             content = await asyncio.to_thread(
                 _read_tail,
                 self._log_path,
@@ -86,60 +152,9 @@ class XrayLogCollector(BaseCollector):
             logger.warning("Cannot read log file %s: %s", self._log_path, e)
             return []
 
-        connections: list[ConnectionReport] = []
-        # Группируем по (user_email, ip) и используем самое позднее время подключения
-        connections_map: dict[tuple[str, str], tuple[datetime, str]] = {}
-        
-        lines_count = 0
-        accepted_lines = 0
-        matched_lines = 0
-
-        for line in content.splitlines():
-            lines_count += 1
-            line = line.strip()
-            if not line:
-                continue
-            if "accepted" not in line.lower():
-                continue
-            accepted_lines += 1
-            match = LOG_PATTERN.search(line)
-            if not match:
-                logger.debug("Line matched 'accepted' but regex failed: %s", line[:100] if len(line) > 100 else line)
-                continue
-            matched_lines += 1
-            ts_str, client_ip, client_port, user_id = match.groups()
-            # Используем user_id как идентификатор (будет обработан в Collector API)
-            # Временно используем формат "user_{id}" для совместимости с текущей моделью
-            # Collector API будет искать пользователя по разным идентификаторам
-            user_identifier = f"user_{user_id}"
-            key = (user_identifier, client_ip)
-            
-            try:
-                connected_at = _parse_timestamp(ts_str)
-            except Exception:
-                connected_at = datetime.utcnow()
-            
-            # Сохраняем самое позднее время подключения для каждой пары (user, ip)
-            if key not in connections_map:
-                connections_map[key] = (connected_at, user_identifier)
-            else:
-                existing_time, _ = connections_map[key]
-                if connected_at > existing_time:
-                    connections_map[key] = (connected_at, user_identifier)
-        
-        # Преобразуем в список ConnectionReport
-        for (user_identifier, client_ip), (connected_at, _) in connections_map.items():
-            connections.append(
-                ConnectionReport(
-                    user_email=user_identifier,
-                    ip_address=client_ip,
-                    node_uuid=self._node_uuid,
-                    connected_at=connected_at,
-                    disconnected_at=None,
-                    bytes_sent=0,
-                    bytes_received=0,
-                )
-            )
+        connections, lines_count, accepted_lines, matched_lines = _parse_lines(
+            content.splitlines(), self._node_uuid
+        )
 
         logger.info(
             "Log parsing: total_lines=%d accepted_lines=%d matched_lines=%d connections=%d",
@@ -307,7 +322,7 @@ class XrayLogRealtimeCollector(BaseCollector):
     async def collect(self) -> list[ConnectionReport]:
         """
         Читает новые строки из лог-файла и парсит подключения.
-        
+
         При первом вызове инициализирует позицию (читает последние N байт).
         При последующих вызовах читает только новые данные.
         """
@@ -315,65 +330,17 @@ class XrayLogRealtimeCollector(BaseCollector):
         if not self._initialized:
             await self._initialize_position()
             self._initialized = True
-        
+
         # Читаем новые строки
         new_lines = await self._read_new_lines()
-        
+
         if not new_lines:
             return []
-        
-        connections: list[ConnectionReport] = []
-        # Группируем по (user_email, ip) и используем самое позднее время подключения
-        connections_map: dict[tuple[str, str], tuple[datetime, str]] = {}
-        
-        lines_count = 0
-        accepted_lines = 0
-        matched_lines = 0
-        
-        for line in new_lines:
-            lines_count += 1
-            line = line.strip()
-            if not line:
-                continue
-            if "accepted" not in line.lower():
-                continue
-            accepted_lines += 1
-            match = LOG_PATTERN.search(line)
-            if not match:
-                logger.debug("Line matched 'accepted' but regex failed: %s", line[:100] if len(line) > 100 else line)
-                continue
-            matched_lines += 1
-            ts_str, client_ip, client_port, user_id = match.groups()
-            user_identifier = f"user_{user_id}"
-            key = (user_identifier, client_ip)
-            
-            try:
-                connected_at = _parse_timestamp(ts_str)
-            except Exception:
-                connected_at = datetime.utcnow()
-            
-            # Сохраняем самое позднее время подключения для каждой пары (user, ip)
-            if key not in connections_map:
-                connections_map[key] = (connected_at, user_identifier)
-            else:
-                existing_time, _ = connections_map[key]
-                if connected_at > existing_time:
-                    connections_map[key] = (connected_at, user_identifier)
-        
-        # Преобразуем в список ConnectionReport
-        for (user_identifier, client_ip), (connected_at, _) in connections_map.items():
-            connections.append(
-                ConnectionReport(
-                    user_email=user_identifier,
-                    ip_address=client_ip,
-                    node_uuid=self._node_uuid,
-                    connected_at=connected_at,
-                    disconnected_at=None,
-                    bytes_sent=0,
-                    bytes_received=0,
-                )
-            )
-        
+
+        connections, lines_count, accepted_lines, matched_lines = _parse_lines(
+            new_lines, self._node_uuid
+        )
+
         if connections:
             logger.info(
                 "Real-time parsing: new_lines=%d accepted_lines=%d matched_lines=%d connections=%d",
@@ -382,5 +349,5 @@ class XrayLogRealtimeCollector(BaseCollector):
                 matched_lines,
                 len(connections)
             )
-        
+
         return connections

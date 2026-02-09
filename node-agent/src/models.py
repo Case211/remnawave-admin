@@ -2,10 +2,15 @@
 Pydantic-модели для контракта с Collector API.
 Формат должен совпадать с Admin Bot: POST /api/v1/connections/batch
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+
+def _utcnow() -> datetime:
+    """Возвращает текущее UTC время без timezone info (для совместимости с API)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class ConnectionReport(BaseModel):
@@ -37,6 +42,6 @@ class BatchReport(BaseModel):
     """Батч от одной ноды — тело POST /api/v1/connections/batch."""
 
     node_uuid: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utcnow)
     connections: list[ConnectionReport] = Field(default_factory=list)
     system_metrics: Optional[SystemMetrics] = None

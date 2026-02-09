@@ -172,16 +172,24 @@ async def receive_connections(
             status_code=200,
             content={"status": "ok", "processed": 0, "message": "No connections to process", "metrics_updated": report.system_metrics is not None}
         )
-    
+
+    # Кэш identifier -> user_uuid для текущего батча (избегаем повторных запросов в БД)
+    user_uuid_cache: dict[str, Optional[str]] = {}
+
+    async def _cached_find_user(identifier: str) -> Optional[str]:
+        if identifier not in user_uuid_cache:
+            user_uuid_cache[identifier] = await _find_user_uuid_by_identifier(identifier)
+        return user_uuid_cache[identifier]
+
     # Записываем подключения в БД
     processed = 0
     errors = 0
-    
+
     for conn in report.connections:
         try:
-            # Пытаемся найти пользователя по разным идентификаторам
-            user_uuid = await _find_user_uuid_by_identifier(conn.user_email)
-            
+            # Пытаемся найти пользователя по разным идентификаторам (с кэшем)
+            user_uuid = await _cached_find_user(conn.user_email)
+
             if not user_uuid:
                 logger.warning(
                     "User not found for identifier=%s, skipping connection",
@@ -189,7 +197,7 @@ async def receive_connections(
                 )
                 errors += 1
                 continue
-            
+
             # Записываем подключение
             # Используем время из логов агента, чтобы сохранить микросекунды
             connection_id = await db_service.add_user_connection(
@@ -205,7 +213,7 @@ async def receive_connections(
                 },
                 connected_at=conn.connected_at  # Передаём время из логов агента
             )
-            
+
             if connection_id:
                 logger.debug(
                     "Connection recorded: id=%d user=%s ip=%s node=%s",
@@ -217,7 +225,7 @@ async def receive_connections(
                 processed += 1
             else:
                 errors += 1
-                
+
         except Exception as e:
             logger.error("Error processing connection for %s: %s", conn.user_email, e, exc_info=True)
             errors += 1
@@ -250,7 +258,7 @@ async def receive_connections(
             new_connections_by_user = {}  # {user_uuid: set(ip_addresses)}
             
             for conn in report.connections:
-                user_uuid = await _find_user_uuid_by_identifier(conn.user_email)
+                user_uuid = await _cached_find_user(conn.user_email)
                 if user_uuid:
                     affected_user_uuids.add(user_uuid)
                     if user_uuid not in new_connections_by_user:

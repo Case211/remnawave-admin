@@ -46,13 +46,18 @@ AGENT_XRAY_LOG_PATH=/var/log/remnanode/access.log
 # AGENT_LOG_LEVEL=INFO
 ```
 
-| Переменная | Описание |
-|------------|----------|
-| `AGENT_NODE_UUID` | UUID ноды (из Remnawave/Admin Bot) |
-| `AGENT_COLLECTOR_URL` | URL Admin Bot |
-| `AGENT_AUTH_TOKEN` | Токен агента для этой ноды |
-| `AGENT_INTERVAL_SECONDS` | Интервал отправки (по умолчанию 30) |
-| `AGENT_XRAY_LOG_PATH` | Путь к `access.log` (по умолчанию `/var/log/remnanode/access.log`) |
+| Переменная | Описание | По умолчанию |
+|------------|----------|-------------|
+| `AGENT_NODE_UUID` | UUID ноды (из Remnawave/Admin Bot) | **обязательно** |
+| `AGENT_COLLECTOR_URL` | URL Admin Bot | **обязательно** |
+| `AGENT_AUTH_TOKEN` | Токен агента для этой ноды | **обязательно** |
+| `AGENT_INTERVAL_SECONDS` | Интервал отправки батчей (секунды) | `30` |
+| `AGENT_LOG_PARSING_MODE` | Режим парсинга: `realtime` или `polling` | `realtime` |
+| `AGENT_XRAY_LOG_PATH` | Путь к `access.log` | `/var/log/remnanode/access.log` |
+| `AGENT_MAX_BUFFER_SIZE` | Макс. размер буфера подключений (защита от утечки памяти) | `50000` |
+| `AGENT_SEND_MAX_RETRIES` | Количество попыток отправки батча | `3` |
+| `AGENT_SEND_RETRY_DELAY_SECONDS` | Задержка между попытками (секунды) | `5.0` |
+| `AGENT_LOG_LEVEL` | Уровень логов: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
 
 ### Шаг 3: Запуск
 
@@ -60,22 +65,24 @@ AGENT_XRAY_LOG_PATH=/var/log/remnanode/access.log
 
 ```bash
 cd node-agent
-docker-compose up -d
-docker-compose logs -f
+docker compose up -d
+docker compose logs -f
 ```
+
+Агент автоматически скачает готовый образ из GHCR (`ghcr.io/case211/remnawave-admin-node-agent:latest`).
 
 #### Docker напрямую
 
 ```bash
-docker build -f node-agent/Dockerfile -t remnawave-node-agent ./node-agent
-
 docker run -d \
   --name remnawave-node-agent \
   --restart unless-stopped \
   --env-file node-agent/.env \
   -v /var/log/remnanode:/var/log/remnanode:ro \
   --network remnawave-network \
-  remnawave-node-agent
+  --memory 128m \
+  --stop-timeout 15 \
+  ghcr.io/case211/remnawave-admin-node-agent:latest
 ```
 
 #### Локально (без Docker)
@@ -118,10 +125,19 @@ sudo systemctl status remnawave-node-agent
 
 Ожидаемые логи при работе:
 ```
-INFO: Node Agent started: node_uuid=..., collector=..., interval=30s
+INFO: Collector API connectivity check passed: https://admin.yourdomain.com/api/v1/connections/health
 INFO: Log file found: /var/log/remnanode/access.log (size: X bytes)
-INFO: Log parsing: total_lines=X accepted_lines=X connections=X
-INFO: Batch sent successfully: X connections
+INFO: Node Agent started: node_uuid=..., collector=..., mode=realtime, interval=30s
+INFO: Real-time parsing: new_lines=X accepted_lines=X matched_lines=X connections=X
+INFO: Batch sent successfully: X connections, response: {...}
+```
+
+При корректной остановке (`docker compose stop`) агент отправит оставшиеся данные:
+```
+INFO: Received shutdown signal, finishing current cycle...
+INFO: Shutdown: sending remaining X accumulated connections...
+INFO: Shutdown: remaining batch sent successfully
+INFO: Node Agent stopped
 ```
 
 ---
@@ -178,14 +194,169 @@ admin.yourdomain.com {
 2026/01/28 11:23:18.306521 from 188.170.87.33:20129 accepted tcp:accounts.google.com:443 [Sweden1 >> DIRECT] email: 154
 ```
 
-Регулярное выражение:
+Регулярное выражение (поддерживает IPv4 и IPv6):
 ```regex
-(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+(\d+\.\d+\.\d+\.\d+):(\d+)\s+accepted.*?email:\s*(\d+)
+(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+(?:\[?([0-9a-fA-F:\.]+)\]?):(\d+)\s+accepted.*?email:\s*(\d+)
 ```
 
 В логах Remnawave `email: 154` — это ID пользователя, не email. Collector API автоматически ищет пользователя по `short_uuid`, email или ID.
 
 Если формат логов другой — обновите регулярное выражение в `src/collectors/xray_log.py`.
+
+---
+
+## Обновление со старой версии (миграция на GHCR-образ)
+
+Если агент был установлен через `docker-compose build` (локальная сборка из исходников), выполните следующие шаги для перехода на готовый GHCR-образ.
+
+### Что изменилось
+
+| Было (старая версия) | Стало (новая версия) |
+|---------------------|---------------------|
+| Локальная сборка `build: .` | Готовый образ `ghcr.io/case211/remnawave-admin-node-agent:latest` |
+| `version: '3.8'` в docker-compose | Убран (deprecated) |
+| Нет healthcheck | Healthcheck встроен |
+| Нет лимитов ресурсов | Memory: 128M, CPU: 0.5 |
+| Нет graceful shutdown | Агент корректно завершается и отправляет оставшиеся данные |
+| Нет проверки связи при старте | Connectivity check при запуске |
+| Только IPv4 в логах | IPv4 + IPv6 |
+
+### Пошаговый план миграции
+
+**1. Остановить старый агент**
+
+```bash
+cd /path/to/node-agent
+docker-compose down
+```
+
+> Старая версия не поддерживала graceful shutdown, поэтому просто останавливаем.
+
+**2. Сделать бэкап .env (на всякий случай)**
+
+```bash
+cp .env .env.backup
+```
+
+**3. Обновить файлы**
+
+Вариант А — если клонирован весь репозиторий:
+
+```bash
+cd /path/to/remnawave-admin
+git pull origin main
+```
+
+Вариант Б — если скопирована только папка `node-agent`:
+
+Скачайте обновлённые файлы и замените:
+- `docker-compose.yml`
+- `docker-compose.local.yml` (если используется)
+- `.env.example` (для справки по новым параметрам)
+
+Dockerfile и `src/` больше **не нужны** на сервере — образ скачивается из GHCR.
+
+**4. Проверить .env — добавить новые переменные (опционально)**
+
+Новые переменные необязательны (есть разумные значения по умолчанию), но можно добавить:
+
+```bash
+# Сравнить с актуальным примером
+diff .env .env.example
+```
+
+Новые доступные настройки:
+```env
+# Максимальный размер буфера (защита от утечки памяти при недоступном API)
+# AGENT_MAX_BUFFER_SIZE=50000
+
+# Retry настройки
+# AGENT_SEND_MAX_RETRIES=3
+# AGENT_SEND_RETRY_DELAY_SECONDS=5.0
+```
+
+**5. Удалить старый локально собранный образ**
+
+```bash
+# Посмотреть старый образ
+docker images | grep node-agent
+
+# Удалить старый образ (имя может отличаться)
+docker rmi node-agent-node-agent:latest 2>/dev/null
+docker rmi remnawave-node-agent:latest 2>/dev/null
+```
+
+**6. Запустить новую версию**
+
+```bash
+cd /path/to/node-agent
+docker compose up -d
+```
+
+Docker автоматически скачает образ из GHCR.
+
+**7. Проверить работу**
+
+```bash
+# Логи — должно быть "Collector API connectivity check passed"
+docker compose logs -f
+
+# Healthcheck — должен быть "healthy"
+docker inspect remnawave-node-agent | grep -A3 Health
+```
+
+Ожидаемый вывод при успешном старте:
+```
+INFO: Collector API connectivity check passed: https://admin.yourdomain.com/api/v1/connections/health
+INFO: Log file found: /var/log/remnanode/access.log (size: X bytes)
+INFO: Node Agent started: node_uuid=..., collector=..., mode=realtime, interval=30s
+```
+
+### Миграция Systemd → Docker Compose
+
+Если агент работал через systemd:
+
+```bash
+# 1. Остановить и отключить systemd сервис
+sudo systemctl stop remnawave-node-agent
+sudo systemctl disable remnawave-node-agent
+sudo rm /etc/systemd/system/remnawave-node-agent.service
+sudo systemctl daemon-reload
+
+# 2. Создать папку и .env
+mkdir -p /opt/remnawave-node-agent
+cd /opt/remnawave-node-agent
+
+# Скопировать docker-compose.yml и .env из репозитория
+# или скачать напрямую
+
+# 3. Запустить через Docker Compose
+docker compose up -d
+docker compose logs -f
+```
+
+### Откат на старую версию
+
+Если что-то пошло не так:
+
+```bash
+# Остановить новую версию
+docker compose down
+
+# Восстановить .env
+cp .env.backup .env
+
+# Если есть старый docker-compose.yml с build:
+# docker-compose -f docker-compose.old.yml up -d --build
+```
+
+### Обновление в будущем
+
+После миграции обновление до новых версий — одна команда:
+
+```bash
+docker compose pull && docker compose up -d
+```
 
 ---
 
@@ -231,9 +402,11 @@ docker inspect remnawave-node-agent | grep -A5 Mounts
 ## Полезные команды
 
 ```bash
-docker-compose logs -f          # Логи
-docker-compose restart          # Перезапуск
-docker-compose down             # Остановка
-docker-compose build --no-cache # Пересборка
-docker-compose config           # Проверка конфигурации
+docker compose logs -f                    # Логи
+docker compose restart                    # Перезапуск
+docker compose stop                       # Остановка (graceful, отправит оставшиеся данные)
+docker compose down                       # Удаление контейнера
+docker compose pull && docker compose up -d  # Обновление до последней версии
+docker compose config                     # Проверка конфигурации
+docker inspect remnawave-node-agent | grep -A3 Health  # Проверка healthcheck
 ```
