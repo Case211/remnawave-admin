@@ -30,6 +30,12 @@ class NodeListItem(NodeBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
+    # Extended metrics
+    cpu_usage: Optional[float] = None
+    memory_usage: Optional[float] = None
+    uptime_seconds: Optional[int] = None
+    download_speed_bps: int = 0
+    upload_speed_bps: int = 0
 
     class Config:
         from_attributes = True
@@ -37,11 +43,6 @@ class NodeListItem(NodeBase):
 
 class NodeDetail(NodeListItem):
     """Detailed node information."""
-
-    # Extended stats
-    cpu_usage: Optional[float] = None
-    memory_usage: Optional[float] = None
-    uptime_seconds: Optional[int] = None
 
 
 class NodeCreate(BaseModel):
