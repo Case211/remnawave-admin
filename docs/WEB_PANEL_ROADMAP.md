@@ -122,7 +122,7 @@ CREATE TABLE admin_accounts (
 |---|--------|----------|--------|
 | 2.3.1 | Миграция БД | Alembic: создать таблицы admin_roles, admin_permissions, admin_accounts | ✅ |
 | 2.3.2 | Middleware прав | Декоратор `@require_permission("users", "create")` для эндпоинтов | ✅ |
-| 2.3.3 | Проверка лимитов | Middleware: при создании пользователя проверять `users_created < max_users` | ⚠️ частично |
+| 2.3.3 | Проверка лимитов | Middleware: при создании пользователя проверять `users_created < max_users` | ✅ |
 | 2.3.4 | API: Админы | CRUD `/api/v2/admins` — список, создание, редактирование, удаление | ✅ |
 | 2.3.5 | API: Роли | CRUD `/api/v2/roles` — управление ролями и правами | ✅ |
 | 2.3.6 | Аудит действий | Логирование: кто, когда, что сделал (таблица `admin_audit_log`) | ✅ |
@@ -135,7 +135,7 @@ CREATE TABLE admin_accounts (
 - `roles.py` (224 строки): 6 эндпоинтов (CRUD + resources), защита системных ролей, инвалидация кеша
 - Права применены на **всех** API v2 эндпоинтах: users, nodes, hosts, violations, settings, analytics, admins, roles
 
-**⚠️ 2.3.3:** Функции `check_quota()` и `increment_usage_counter()` написаны в `rbac.py`, но не подключены как middleware к API-эндпоинтам создания ресурсов.
+**2.3.3:** Dependency `require_quota()` в `deps.py` проверяет лимиты перед созданием. Подключён к POST-эндпоинтам users, nodes, hosts. После успешного создания вызывается `increment_usage_counter()`. Superadmin и legacy-админы обходят проверку.
 
 ### 2.4 Frontend — Страница «Администраторы»
 

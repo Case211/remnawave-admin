@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 
-from web.backend.api.deps import get_current_admin, get_api_client, AdminUser, require_permission
+from web.backend.api.deps import get_current_admin, get_api_client, AdminUser, require_permission, require_quota
 from web.backend.schemas.host import (
     HostListItem,
     HostListResponse,
@@ -85,6 +85,7 @@ async def get_host(
 async def create_host(
     data: HostCreate,
     admin: AdminUser = Depends(require_permission("hosts", "create")),
+    _quota: None = Depends(require_quota("hosts")),
     api_client=Depends(get_api_client),
 ):
     """Создать новый хост."""
@@ -115,6 +116,11 @@ async def create_host(
         raise HTTPException(status_code=400, detail="Failed to create host")
 
     h = result.get('response', result) if isinstance(result, dict) else result
+
+    # Increment quota usage counter
+    if admin.account_id is not None:
+        from web.backend.core.rbac import increment_usage_counter
+        await increment_usage_counter(admin.account_id, "hosts_created")
 
     return HostDetail(
         uuid=h.get('uuid'),

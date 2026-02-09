@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, require_permission, AdminUser
+from web.backend.api.deps import get_current_admin, require_permission, require_quota, AdminUser
 from web.backend.core.api_helper import fetch_users_from_api
 from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate, HwidDevice
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
@@ -400,6 +400,7 @@ async def get_user(
 async def create_user(
     data: UserCreate,
     admin: AdminUser = Depends(require_permission("users", "create")),
+    _quota: None = Depends(require_quota("users")),
 ):
     """Create a new user."""
     try:
@@ -425,6 +426,12 @@ async def create_user(
         )
 
         user = result.get('response', result) if isinstance(result, dict) else result
+
+        # Increment quota usage counter
+        if admin.account_id is not None:
+            from web.backend.core.rbac import increment_usage_counter
+            await increment_usage_counter(admin.account_id, "users_created")
+
         return UserDetail(**_ensure_snake_case(user))
 
     except ImportError:
