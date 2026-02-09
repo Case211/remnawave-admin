@@ -292,15 +292,16 @@ async def get_traffic_stats(
         total_bytes = 0
 
         # --- Period traffic from date-range queries (primary, persistent) ---
+        # API expects date format YYYY-MM-DD (not full ISO datetime)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = now - timedelta(days=7)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        now_iso = now.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        end_date = (now + timedelta(days=1)).strftime('%Y-%m-%d')
 
         try:
             resp = await fetch_nodes_usage_by_range(
-                start=today_start.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                end=now_iso,
+                start=today_start.strftime('%Y-%m-%d'),
+                end=end_date,
             )
             if resp:
                 today_bytes = _sum_top_nodes_total(resp)
@@ -309,8 +310,8 @@ async def get_traffic_stats(
 
         try:
             resp = await fetch_nodes_usage_by_range(
-                start=week_start.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                end=now_iso,
+                start=week_start.strftime('%Y-%m-%d'),
+                end=end_date,
             )
             if resp:
                 week_bytes = _sum_top_nodes_total(resp)
@@ -319,8 +320,8 @@ async def get_traffic_stats(
 
         try:
             resp = await fetch_nodes_usage_by_range(
-                start=month_start.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
-                end=now_iso,
+                start=month_start.strftime('%Y-%m-%d'),
+                end=end_date,
             )
             if resp:
                 month_bytes = _sum_top_nodes_total(resp)
