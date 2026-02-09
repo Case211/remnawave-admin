@@ -69,7 +69,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-Агент автоматически скачает готовый образ из GHCR (`ghcr.io/case211/remnawave-node-agent:latest`).
+Агент автоматически скачает готовый образ из GHCR (`ghcr.io/case211/remnawave-admin-node-agent:latest`).
 
 #### Docker напрямую
 
@@ -82,7 +82,7 @@ docker run -d \
   --network remnawave-network \
   --memory 128m \
   --stop-timeout 15 \
-  ghcr.io/case211/remnawave-node-agent:latest
+  ghcr.io/case211/remnawave-admin-node-agent:latest
 ```
 
 #### Локально (без Docker)
@@ -213,7 +213,7 @@ admin.yourdomain.com {
 
 | Было (старая версия) | Стало (новая версия) |
 |---------------------|---------------------|
-| Локальная сборка `build: .` | Готовый образ `ghcr.io/case211/remnawave-node-agent:latest` |
+| Локальная сборка `build: .` | Готовый образ `ghcr.io/case211/remnawave-admin-node-agent:latest` |
 | `version: '3.8'` в docker-compose | Убран (deprecated) |
 | Нет healthcheck | Healthcheck встроен |
 | Нет лимитов ресурсов | Memory: 128M, CPU: 0.5 |
