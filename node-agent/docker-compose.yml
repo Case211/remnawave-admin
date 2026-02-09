@@ -3,21 +3,12 @@ services:
     image: ghcr.io/case211/remnawave-admin-node-agent:latest
     container_name: remnawave-node-agent
     restart: unless-stopped
-
-    # Переменные окружения из .env файла
     env_file:
       - .env
-
-    # Монтируем логи Xray/Remnawave (read-only)
     volumes:
       - /var/log/remnanode:/var/log/remnanode:ro
-
-    # Сеть для подключения к Admin Bot
-    # Если Admin Bot на удалённом сервере — закомментируй networks и используй публичный URL
     networks:
       - remnawave-network
-
-    # Ограничение ресурсов — агент лёгкий, много не нужно
     deploy:
       resources:
         limits:
@@ -25,19 +16,16 @@ services:
           cpus: "0.5"
         reservations:
           memory: 32M
-
-    # Healthcheck: проверяем что процесс жив
+          
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'python -m src.main' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-
-    # Docker будет ждать 15 секунд для graceful shutdown (отправка оставшихся данных)
+      
     stop_grace_period: 15s
-
-    # Логирование
+    
     logging:
       driver: "json-file"
       options:
@@ -46,7 +34,4 @@ services:
 
 networks:
   remnawave-network:
-    # Используем внешнюю сеть (если Admin Bot уже запущен)
     external: true
-    # ИЛИ создаём новую сеть (раскомментируй если сети нет):
-    # external: false
