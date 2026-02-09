@@ -18,10 +18,6 @@ import {
   Copy,
   ShieldCheck,
   AlertTriangle,
-  Cpu,
-  MemoryStick,
-  ArrowDownRight,
-  ArrowUpRight,
   Zap,
 } from 'lucide-react'
 import client from '../api/client'
@@ -64,11 +60,6 @@ interface Node {
   traffic_today_bytes: number
   created_at: string
   last_seen_at: string | null
-  uptime_seconds: number | null
-  cpu_usage: number | null
-  memory_usage: number | null
-  download_speed_bps: number
-  upload_speed_bps: number
 }
 
 interface NodeEditFormData {
@@ -107,25 +98,6 @@ function formatTimeAgo(dateStr: string | null): string {
   if (diffMin < 60) return `${diffMin} мин назад`
   if (diffHour < 24) return `${diffHour} ч назад`
   return `${diffDay} дн назад`
-}
-
-function formatSpeed(bps: number): string {
-  if (!bps || bps <= 0) return '0 б/с'
-  const k = 1024
-  const sizes = ['б/с', 'Кб/с', 'Мб/с', 'Гб/с']
-  const i = Math.floor(Math.log(bps) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 б/с'
-  return parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-function formatUptime(seconds: number | null | undefined): string {
-  if (!seconds || seconds <= 0) return '-'
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (d > 0) return `${d}д ${h}ч`
-  if (h > 0) return `${h}ч ${m}м`
-  return `${m}м`
 }
 
 // Node edit modal
@@ -663,47 +635,6 @@ function NodeCard({
           </div>
         </div>
 
-        {/* Extended metrics */}
-        {isOnline && (node.uptime_seconds != null || node.cpu_usage != null || node.download_speed_bps > 0) && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-xs mb-4 px-1">
-            {node.uptime_seconds != null && (
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-3 h-3 text-green-400 shrink-0" />
-                <span className="text-dark-300">Uptime</span>
-                <span className="text-white font-mono ml-auto">{formatUptime(node.uptime_seconds)}</span>
-              </div>
-            )}
-            {node.cpu_usage != null && (
-              <div className="flex items-center gap-1.5">
-                <Cpu className="w-3 h-3 text-orange-400 shrink-0" />
-                <span className="text-dark-300">CPU</span>
-                <span className="text-white font-mono ml-auto">{node.cpu_usage.toFixed(0)}%</span>
-              </div>
-            )}
-            {node.memory_usage != null && (
-              <div className="flex items-center gap-1.5">
-                <MemoryStick className="w-3 h-3 text-pink-400 shrink-0" />
-                <span className="text-dark-300">RAM</span>
-                <span className="text-white font-mono ml-auto">{node.memory_usage.toFixed(0)}%</span>
-              </div>
-            )}
-            {node.download_speed_bps > 0 && (
-              <div className="flex items-center gap-1.5">
-                <ArrowDownRight className="w-3 h-3 text-blue-400 shrink-0" />
-                <span className="text-dark-300">DL</span>
-                <span className="text-white font-mono ml-auto text-[11px]">{formatSpeed(node.download_speed_bps)}</span>
-              </div>
-            )}
-            {node.upload_speed_bps > 0 && (
-              <div className="flex items-center gap-1.5">
-                <ArrowUpRight className="w-3 h-3 text-emerald-400 shrink-0" />
-                <span className="text-dark-300">UL</span>
-                <span className="text-white font-mono ml-auto text-[11px]">{formatSpeed(node.upload_speed_bps)}</span>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Footer info */}
         <Separator className="mb-3" />
         <div className="flex items-center justify-between text-xs text-dark-200">
@@ -711,14 +642,12 @@ function NodeCard({
             <Clock className="w-3.5 h-3.5" />
             {formatTimeAgo(node.last_seen_at)}
           </div>
-          <div className="flex items-center gap-2">
-            {node.xray_version && (
-              <span className="flex items-center gap-1 text-dark-300">
-                <Zap className="w-3 h-3 text-yellow-400" />
-                {node.xray_version}
-              </span>
-            )}
-          </div>
+          {node.xray_version && (
+            <span className="flex items-center gap-1 text-dark-300">
+              <Zap className="w-3 h-3 text-yellow-400" />
+              {node.xray_version}
+            </span>
+          )}
         </div>
 
         {/* Error message */}
