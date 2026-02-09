@@ -588,14 +588,36 @@ class DatabaseService:
         """Insert or update a node."""
         if not self.is_connected:
             return
-        
+
         response = node_data.get("response", node_data)
-        
+
         uuid = response.get("uuid")
         if not uuid:
             logger.warning("Cannot upsert node without UUID")
             return
-        
+
+        # Safely convert values that may come as strings from webhook payloads
+        port = response.get("port")
+        if port is not None:
+            try:
+                port = int(port)
+            except (ValueError, TypeError):
+                port = None
+
+        traffic_limit = response.get("trafficLimitBytes")
+        if traffic_limit is not None:
+            try:
+                traffic_limit = int(traffic_limit)
+            except (ValueError, TypeError):
+                traffic_limit = None
+
+        traffic_used = response.get("trafficUsedBytes")
+        if traffic_used is not None:
+            try:
+                traffic_used = int(traffic_used)
+            except (ValueError, TypeError):
+                traffic_used = None
+
         async with self.acquire() as conn:
             await conn.execute(
                 """
@@ -618,11 +640,11 @@ class DatabaseService:
                 uuid,
                 response.get("name"),
                 response.get("address"),
-                response.get("port"),
-                response.get("isDisabled", False),
-                response.get("isConnected", False),
-                response.get("trafficLimitBytes"),
-                response.get("trafficUsedBytes"),
+                port,
+                bool(response.get("isDisabled", False)),
+                bool(response.get("isConnected", False)),
+                traffic_limit,
+                traffic_used,
                 json.dumps(response),
             )
     
