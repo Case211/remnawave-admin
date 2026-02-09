@@ -26,6 +26,9 @@ jobs:
           - image_suffix: "-web-frontend"
             context: ./web/frontend
             dockerfile: ./web/frontend/Dockerfile
+          - image_suffix: "-node-agent"
+            context: ./node-agent
+            dockerfile: ./node-agent/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
