@@ -25,12 +25,14 @@ import {
   Globe,
   ShieldCheck,
   ShieldAlert,
+  Search,
 } from 'lucide-react'
 import client from '../api/client'
 import { usePermissionStore } from '../store/permissionStore'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableHeader,
@@ -79,6 +81,7 @@ interface FleetResponse {
 
 type SortField = 'name' | 'status' | 'cpu' | 'ram' | 'speed' | 'users' | 'traffic' | 'uptime'
 type SortDir = 'asc' | 'desc'
+type StatusFilter = 'all' | 'online' | 'offline' | 'disabled'
 
 // ── API ──────────────────────────────────────────────────────────
 
@@ -405,6 +408,8 @@ export default function Fleet() {
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [expandedUuid, setExpandedUuid] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
   // ── Data ──────────────────────────────────────────────────────
 
@@ -446,7 +451,20 @@ export default function Fleet() {
 
   const sortedNodes = useMemo(() => {
     if (!fleet?.nodes) return []
-    const nodes = [...fleet.nodes]
+    let nodes = [...fleet.nodes]
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      nodes = nodes.filter(
+        (n) => n.name.toLowerCase().includes(q) || n.address.toLowerCase().includes(q),
+      )
+    }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      nodes = nodes.filter((n) => getNodeStatus(n) === statusFilter)
+    }
 
     const statusPriority = (n: FleetNode) => {
       if (!n.is_disabled && !n.is_connected) return 0 // offline first
@@ -487,7 +505,7 @@ export default function Fleet() {
     })
 
     return nodes
-  }, [fleet?.nodes, sortField, sortDir])
+  }, [fleet?.nodes, sortField, sortDir, searchQuery, statusFilter])
 
   // ── Aggregates ────────────────────────────────────────────────
 
@@ -604,8 +622,47 @@ export default function Fleet() {
         </Card>
       </div>
 
-      {/* Node table */}
-      <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+      {/* Search + filter toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300" />
+          <Input
+            placeholder="Поиск по имени или адресу..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          {([
+            { value: 'all', label: 'Все', count: fleet?.total },
+            { value: 'online', label: 'Онлайн', count: fleet?.online },
+            { value: 'offline', label: 'Офлайн', count: fleet?.offline },
+            { value: 'disabled', label: 'Откл.', count: fleet?.disabled },
+          ] as const).map(({ value, label, count }) => (
+            <Button
+              key={value}
+              variant={statusFilter === value ? 'default' : 'secondary'}
+              size="sm"
+              className="h-8 text-xs gap-1"
+              onClick={() => setStatusFilter(value)}
+            >
+              {label}
+              {count != null && count > 0 && (
+                <span className={cn(
+                  'text-[10px] font-mono',
+                  statusFilter === value ? 'text-white/80' : 'text-dark-300',
+                )}>
+                  {count}
+                </span>
+              )}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Desktop: Node table */}
+      <Card className="hidden md:block animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -634,21 +691,23 @@ export default function Fleet() {
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-12">
                     <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
-                    <p className="text-dark-200">Нет нод</p>
+                    <p className="text-dark-200">
+                      {searchQuery || statusFilter !== 'all' ? 'Ничего не найдено' : 'Нет нод'}
+                    </p>
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedNodes.map((node) => {
+                sortedNodes.flatMap((node) => {
                   const status = getNodeStatus(node)
                   const isExpanded = expandedUuid === node.uuid
                   const totalSpeed = node.download_speed_bps + node.upload_speed_bps
 
-                  return (
+                  const rows = [
                     <TableRow
                       key={node.uuid}
                       className={cn(
                         'cursor-pointer',
-                        isExpanded && 'bg-dark-600/30',
+                        isExpanded && 'bg-dark-600/30 border-b-0',
                         status === 'offline' && 'bg-red-500/5',
                         node.is_disabled && 'opacity-50',
                       )}
@@ -729,30 +788,130 @@ export default function Fleet() {
                       <TableCell>
                         <span className="text-white font-mono text-xs">{formatUptime(node.uptime_seconds)}</span>
                       </TableCell>
-                    </TableRow>
-                  )
+                    </TableRow>,
+                  ]
+
+                  // Inline detail panel right after the row
+                  if (isExpanded) {
+                    rows.push(
+                      <tr key={`${node.uuid}-detail`} className="bg-dark-600/20">
+                        <td colSpan={9} className="p-0">
+                          <NodeDetailPanel
+                            node={node}
+                            canEdit={canEditNodes}
+                            onRestart={() => restartNode.mutate(node.uuid)}
+                            onEnable={() => enableNode.mutate(node.uuid)}
+                            onDisable={() => disableNode.mutate(node.uuid)}
+                            isPending={mutationPending}
+                          />
+                        </td>
+                      </tr>,
+                    )
+                  }
+
+                  return rows
                 })
               )}
             </TableBody>
           </Table>
         </div>
-
-        {/* Expanded detail panels rendered below the table */}
-        {expandedUuid && fleet?.nodes && (() => {
-          const node = fleet.nodes.find((n) => n.uuid === expandedUuid)
-          if (!node) return null
-          return (
-            <NodeDetailPanel
-              node={node}
-              canEdit={canEditNodes}
-              onRestart={() => restartNode.mutate(node.uuid)}
-              onEnable={() => enableNode.mutate(node.uuid)}
-              onDisable={() => disableNode.mutate(node.uuid)}
-              isPending={mutationPending}
-            />
-          )
-        })()}
       </Card>
+
+      {/* Mobile: Node cards */}
+      <div className="md:hidden space-y-3 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="h-16 bg-dark-700/30 rounded animate-pulse" />
+              </CardContent>
+            </Card>
+          ))
+        ) : sortedNodes.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
+              <p className="text-dark-200">
+                {searchQuery || statusFilter !== 'all' ? 'Ничего не найдено' : 'Нет нод'}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          sortedNodes.map((node) => {
+            const status = getNodeStatus(node)
+            const isExpanded = expandedUuid === node.uuid
+            const totalSpeed = node.download_speed_bps + node.upload_speed_bps
+
+            return (
+              <Card
+                key={node.uuid}
+                className={cn(
+                  'cursor-pointer transition-colors',
+                  status === 'offline' && 'border-red-500/30',
+                  node.is_disabled && 'opacity-50',
+                )}
+                onClick={() => setExpandedUuid(isExpanded ? null : node.uuid)}
+              >
+                <CardContent className="p-4">
+                  {/* Card header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-dark-200 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-dark-300 shrink-0" />
+                      )}
+                      <span className="text-white font-medium truncate">{node.name}</span>
+                    </div>
+                    {getStatusBadge(status)}
+                  </div>
+
+                  {/* Card metrics grid */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2 bg-dark-800/50 rounded-lg">
+                      <p className="text-[10px] text-dark-300 mb-0.5">CPU</p>
+                      <p className={cn('text-sm font-mono font-semibold', getCpuColor(node.cpu_usage))}>
+                        {node.cpu_usage != null ? `${node.cpu_usage.toFixed(0)}%` : '-'}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-dark-800/50 rounded-lg">
+                      <p className="text-[10px] text-dark-300 mb-0.5">RAM</p>
+                      <p className={cn('text-sm font-mono font-semibold', getRamColor(node.memory_usage))}>
+                        {node.memory_usage != null ? `${node.memory_usage.toFixed(0)}%` : '-'}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-dark-800/50 rounded-lg">
+                      <p className="text-[10px] text-dark-300 mb-0.5">Юзеры</p>
+                      <p className="text-sm font-mono font-semibold text-white">{node.users_online}</p>
+                    </div>
+                  </div>
+
+                  {/* Speed + traffic row */}
+                  <div className="flex items-center justify-between mt-2 text-xs text-dark-200">
+                    <span>{totalSpeed > 0 ? `DL ${formatSpeed(node.download_speed_bps)} / UL ${formatSpeed(node.upload_speed_bps)}` : '-'}</span>
+                    <span>{formatBytes(node.traffic_today_bytes)}</span>
+                  </div>
+
+                  {/* Expanded detail */}
+                  {isExpanded && (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Separator className="my-3" />
+                      <NodeDetailPanel
+                        node={node}
+                        canEdit={canEditNodes}
+                        onRestart={() => restartNode.mutate(node.uuid)}
+                        onEnable={() => enableNode.mutate(node.uuid)}
+                        onDisable={() => disableNode.mutate(node.uuid)}
+                        isPending={mutationPending}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })
+        )}
+      </div>
     </div>
   )
 }
