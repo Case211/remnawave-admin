@@ -159,12 +159,25 @@ async def verify_admin_password_async(username: str, password: str) -> bool:
     """
     Async version of verify_admin_password.
 
-    Checks database first, then falls back to .env credentials.
+    Checks RBAC admin_accounts first, then legacy admin_credentials, then .env.
 
     Returns:
         True if credentials match, False otherwise.
     """
-    # 1. Check database (admin_credentials table)
+    # 1. Check RBAC admin_accounts table (new)
+    try:
+        from web.backend.core.rbac import get_admin_account_by_username
+        from web.backend.core.admin_credentials import verify_password
+        account = await get_admin_account_by_username(username)
+        if account and account.get("password_hash"):
+            if not account.get("is_active", True):
+                logger.warning("Login denied for disabled admin account: %s", username)
+                return False
+            return verify_password(password, account["password_hash"])
+    except Exception as e:
+        logger.warning("RBAC admin_accounts check failed: %s", e)
+
+    # 2. Fallback: legacy admin_credentials table
     try:
         from web.backend.core.admin_credentials import get_admin_by_username, verify_password
         admin = await get_admin_by_username(username)
@@ -173,7 +186,7 @@ async def verify_admin_password_async(username: str, password: str) -> bool:
     except Exception as e:
         logger.warning("DB credential check failed, falling back to .env: %s", e)
 
-    # 2. Fallback to .env
+    # 3. Fallback to .env
     return verify_admin_password(username, password)
 
 

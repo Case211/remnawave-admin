@@ -9,7 +9,6 @@ import {
   LogOut,
   X,
   UserCog,
-  Shield,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -62,7 +61,6 @@ const navigation = [
   { name: 'Hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'Violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
   { name: 'Admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
-  { name: 'Roles', href: '/roles', icon: Shield, permission: { resource: 'roles', action: 'view' } },
   { name: 'Settings', href: '/settings', icon: Settings, permission: { resource: 'settings', action: 'view' } },
 ]
 

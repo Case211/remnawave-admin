@@ -16,7 +16,6 @@ import Hosts from './pages/Hosts'
 import Violations from './pages/Violations'
 import Settings from './pages/Settings'
 import Admins from './pages/Admins'
-import Roles from './pages/Roles'
 
 /**
  * Protected route wrapper - redirects to login if not authenticated.
@@ -73,7 +72,6 @@ export default function App() {
                   <Route path="/hosts" element={<Hosts />} />
                   <Route path="/violations" element={<Violations />} />
                   <Route path="/admins" element={<Admins />} />
-                  <Route path="/roles" element={<Roles />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
