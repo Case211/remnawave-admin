@@ -334,13 +334,23 @@ function MobileUserCard({
   )
 }
 
+interface Squad {
+  uuid: string
+  squadTag: string
+  squadName?: string
+}
+
 interface CreateUserFormData {
   username: string
-  email: string
+  telegram_id: string
+  description: string
   traffic_limit_gb: string
   is_unlimited: boolean
+  traffic_limit_strategy: string
   expire_at: string
   hwid_device_limit: string
+  external_squad_uuid: string
+  active_internal_squads: string[]
 }
 
 function CreateUserModal({
@@ -358,17 +368,45 @@ function CreateUserModal({
 }) {
   const [form, setForm] = useState<CreateUserFormData>({
     username: '',
-    email: '',
+    telegram_id: '',
+    description: '',
     traffic_limit_gb: '',
     is_unlimited: true,
+    traffic_limit_strategy: 'MONTH',
     expire_at: '',
     hwid_device_limit: '0',
+    external_squad_uuid: '',
+    active_internal_squads: [],
+  })
+
+  const { data: internalSquads = [] } = useQuery<Squad[]>({
+    queryKey: ['internal-squads'],
+    queryFn: async () => {
+      const { data } = await client.get('/users/meta/internal-squads')
+      return Array.isArray(data) ? data : []
+    },
+    enabled: open,
+  })
+
+  const { data: externalSquads = [] } = useQuery<Squad[]>({
+    queryKey: ['external-squads'],
+    queryFn: async () => {
+      const { data } = await client.get('/users/meta/external-squads')
+      return Array.isArray(data) ? data : []
+    },
+    enabled: open,
   })
 
   const handleSubmit = () => {
     const createData: Record<string, unknown> = {}
     if (form.username.trim()) createData.username = form.username.trim()
-    if (form.email.trim()) createData.email = form.email.trim()
+
+    if (form.telegram_id.trim()) {
+      const tgId = parseInt(form.telegram_id.trim(), 10)
+      if (!isNaN(tgId)) createData.telegram_id = tgId
+    }
+
+    if (form.description.trim()) createData.description = form.description.trim()
 
     if (!form.is_unlimited && form.traffic_limit_gb) {
       const val = parseFloat(form.traffic_limit_gb)
@@ -379,6 +417,8 @@ function CreateUserModal({
       createData.traffic_limit_bytes = null
     }
 
+    createData.traffic_limit_strategy = form.traffic_limit_strategy
+
     if (form.expire_at) {
       createData.expire_at = new Date(form.expire_at).toISOString()
     }
@@ -388,7 +428,24 @@ function CreateUserModal({
       createData.hwid_device_limit = hwid
     }
 
+    if (form.external_squad_uuid) {
+      createData.external_squad_uuid = form.external_squad_uuid
+    }
+
+    if (form.active_internal_squads.length > 0) {
+      createData.active_internal_squads = form.active_internal_squads
+    }
+
     onSave(createData)
+  }
+
+  const toggleInternalSquad = (uuid: string) => {
+    setForm(prev => ({
+      ...prev,
+      active_internal_squads: prev.active_internal_squads.includes(uuid)
+        ? prev.active_internal_squads.filter(u => u !== uuid)
+        : [...prev.active_internal_squads, uuid],
+    }))
   }
 
   return (
@@ -417,12 +474,22 @@ function CreateUserModal({
           </div>
 
           <div>
-            <Label>Email</Label>
+            <Label>Telegram ID</Label>
             <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="user@example.com"
+              type="number"
+              value={form.telegram_id}
+              onChange={(e) => setForm({ ...form, telegram_id: e.target.value })}
+              placeholder="123456789"
+              className="mt-1.5"
+            />
+          </div>
+
+          <div>
+            <Label>Описание</Label>
+            <Input
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Имя, email, заметки..."
               className="mt-1.5"
             />
           </div>
@@ -445,18 +512,33 @@ function CreateUserModal({
               </label>
             </div>
             {!form.is_unlimited && (
-              <div className="relative">
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={form.traffic_limit_gb}
-                  onChange={(e) => setForm({ ...form, traffic_limit_gb: e.target.value })}
-                  placeholder="Введите лимит"
-                  className="pr-12"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
-              </div>
+              <>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={form.traffic_limit_gb}
+                    onChange={(e) => setForm({ ...form, traffic_limit_gb: e.target.value })}
+                    placeholder="Введите лимит"
+                    className="pr-12"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
+                </div>
+                <div className="mt-2">
+                  <Label className="text-xs text-dark-300">Стратегия сброса</Label>
+                  <select
+                    value={form.traffic_limit_strategy}
+                    onChange={(e) => setForm({ ...form, traffic_limit_strategy: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-dark-400/30 bg-dark-800 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                  >
+                    <option value="MONTH">Ежемесячный</option>
+                    <option value="WEEK">Еженедельный</option>
+                    <option value="DAY">Ежедневный</option>
+                    <option value="NO_RESET">Без сброса</option>
+                  </select>
+                </div>
+              </>
             )}
           </div>
 
@@ -481,6 +563,47 @@ function CreateUserModal({
               className="mt-1.5"
             />
           </div>
+
+          {/* External squad */}
+          {externalSquads.length > 0 && (
+            <div>
+              <Label>Внешний сквад</Label>
+              <select
+                value={form.external_squad_uuid}
+                onChange={(e) => setForm({ ...form, external_squad_uuid: e.target.value })}
+                className="mt-1.5 w-full rounded-md border border-dark-400/30 bg-dark-800 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+              >
+                <option value="">Не выбран</option>
+                {externalSquads.map((sq: Squad) => (
+                  <option key={sq.uuid} value={sq.uuid}>
+                    {sq.squadName || sq.squadTag || sq.uuid}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Internal squads */}
+          {internalSquads.length > 0 && (
+            <div>
+              <Label>Внутренние сквады</Label>
+              <div className="mt-1.5 space-y-1.5 max-h-32 overflow-y-auto">
+                {internalSquads.map((sq: Squad) => (
+                  <label key={sq.uuid} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.active_internal_squads.includes(sq.uuid)}
+                      onChange={() => toggleInternalSquad(sq.uuid)}
+                      className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+                    />
+                    <span className="text-sm text-dark-100">
+                      {sq.squadName || sq.squadTag || sq.uuid}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

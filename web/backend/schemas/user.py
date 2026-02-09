@@ -70,11 +70,17 @@ class UserDetail(UserListItem):
 
 class UserCreate(BaseModel):
     """Create user request."""
+    model_config = ConfigDict(extra='ignore')
 
     username: str
     traffic_limit_bytes: Optional[int] = None
     expire_at: Optional[datetime] = None
     hwid_device_limit: int = 3
+    telegram_id: Optional[int] = None
+    description: Optional[str] = None
+    traffic_limit_strategy: str = "MONTH"
+    external_squad_uuid: Optional[str] = None
+    active_internal_squads: Optional[List[str]] = None
 
 
 class UserUpdate(BaseModel):

@@ -383,6 +383,11 @@ async def create_user(
             expire_at=expire_at_str,
             traffic_limit_bytes=data.traffic_limit_bytes,
             hwid_device_limit=data.hwid_device_limit,
+            telegram_id=data.telegram_id,
+            description=data.description,
+            traffic_limit_strategy=data.traffic_limit_strategy,
+            external_squad_uuid=data.external_squad_uuid,
+            active_internal_squads=data.active_internal_squads,
         )
 
         return UserDetail(**_ensure_snake_case(user))
@@ -706,3 +711,37 @@ async def get_user_hwid_devices(
         logger.error("API HWID fetch also failed for %s: %s", user_uuid, e)
 
     return []
+
+
+# ── Squad endpoints ────────────────────────────────────────────
+
+@router.get("/meta/internal-squads")
+async def get_internal_squads(
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Get available internal squads from Remnawave API."""
+    try:
+        from src.services.api_client import api_client
+        result = await api_client.get_internal_squads()
+        return result.get("response", result) if isinstance(result, dict) else result
+    except ImportError:
+        raise HTTPException(status_code=503, detail="API service not available")
+    except Exception as e:
+        logger.error("Error fetching internal squads: %s", e)
+        return []
+
+
+@router.get("/meta/external-squads")
+async def get_external_squads(
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Get available external squads from Remnawave API."""
+    try:
+        from src.services.api_client import api_client
+        result = await api_client.get_external_squads()
+        return result.get("response", result) if isinstance(result, dict) else result
+    except ImportError:
+        raise HTTPException(status_code=503, detail="API service not available")
+    except Exception as e:
+        logger.error("Error fetching external squads: %s", e)
+        return []
