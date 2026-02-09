@@ -23,12 +23,19 @@ export interface TokenResponse {
   expires_in: number
 }
 
+export interface PermissionEntry {
+  resource: string
+  action: string
+}
+
 export interface AdminInfo {
   telegram_id: number | null
   username: string
   role: string
+  role_id: number | null
   auth_method: string
   password_is_generated: boolean
+  permissions: PermissionEntry[]
 }
 
 export interface ChangePasswordRequest {

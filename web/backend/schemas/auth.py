@@ -1,5 +1,5 @@
 """Auth schemas for web panel API."""
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -44,11 +44,20 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=200)
 
 
+class PermissionEntry(BaseModel):
+    """Single permission entry."""
+
+    resource: str
+    action: str
+
+
 class AdminInfo(BaseModel):
-    """Current admin info."""
+    """Current admin info with RBAC data."""
 
     telegram_id: Optional[int] = None
     username: str
     role: str
+    role_id: Optional[int] = None
     auth_method: str = "telegram"
     password_is_generated: bool = False
+    permissions: List[PermissionEntry] = []
