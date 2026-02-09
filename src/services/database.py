@@ -52,6 +52,15 @@ CREATE TABLE IF NOT EXISTS nodes (
     traffic_limit_bytes BIGINT,
     traffic_used_bytes BIGINT,
     agent_token VARCHAR(255),  -- Токен для аутентификации Node Agent
+    cpu_usage FLOAT,
+    memory_usage FLOAT,
+    memory_total_bytes BIGINT,
+    memory_used_bytes BIGINT,
+    disk_usage FLOAT,
+    disk_total_bytes BIGINT,
+    disk_used_bytes BIGINT,
+    uptime_seconds INTEGER,
+    metrics_updated_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     raw_data JSONB
 );
@@ -677,6 +686,49 @@ class DatabaseService:
             )
             return result == "DELETE 1"
     
+    async def update_node_metrics(
+        self,
+        node_uuid: str,
+        cpu_usage: float | None = None,
+        memory_usage: float | None = None,
+        memory_total_bytes: int | None = None,
+        memory_used_bytes: int | None = None,
+        disk_usage: float | None = None,
+        disk_total_bytes: int | None = None,
+        disk_used_bytes: int | None = None,
+        uptime_seconds: int | None = None,
+    ) -> bool:
+        """Update system metrics for a node (from Node Agent)."""
+        if not self.is_connected:
+            return False
+
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE nodes SET
+                    cpu_usage = $2,
+                    memory_usage = $3,
+                    memory_total_bytes = $4,
+                    memory_used_bytes = $5,
+                    disk_usage = $6,
+                    disk_total_bytes = $7,
+                    disk_used_bytes = $8,
+                    uptime_seconds = $9,
+                    metrics_updated_at = NOW()
+                WHERE uuid = $1
+                """,
+                node_uuid,
+                cpu_usage,
+                memory_usage,
+                memory_total_bytes,
+                memory_used_bytes,
+                disk_usage,
+                disk_total_bytes,
+                disk_used_bytes,
+                uptime_seconds,
+            )
+            return result == "UPDATE 1"
+
     # ==================== Hosts ====================
     
     async def get_all_hosts(self) -> List[Dict[str, Any]]:

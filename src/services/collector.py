@@ -38,11 +38,24 @@ class ConnectionReport(BaseModel):
     bytes_received: int = 0
 
 
+class SystemMetricsReport(BaseModel):
+    """Системные метрики ноды."""
+    cpu_percent: float = 0.0
+    memory_percent: float = 0.0
+    memory_total_bytes: int = 0
+    memory_used_bytes: int = 0
+    disk_percent: float = 0.0
+    disk_total_bytes: int = 0
+    disk_used_bytes: int = 0
+    uptime_seconds: int = 0
+
+
 class BatchReport(BaseModel):
     """Батч подключений от одной ноды."""
     node_uuid: str
     timestamp: datetime
     connections: list[ConnectionReport] = []
+    system_metrics: Optional[SystemMetricsReport] = None
 
 
 async def _find_user_uuid_by_identifier(identifier: str) -> Optional[str]:
@@ -136,10 +149,28 @@ async def receive_connections(
             detail=f"Token does not match node UUID. Expected: {node_uuid}"
         )
     
+    # Обрабатываем системные метрики, если они есть
+    if report.system_metrics:
+        try:
+            await db_service.update_node_metrics(
+                node_uuid=node_uuid,
+                cpu_usage=report.system_metrics.cpu_percent,
+                memory_usage=report.system_metrics.memory_percent,
+                memory_total_bytes=report.system_metrics.memory_total_bytes,
+                memory_used_bytes=report.system_metrics.memory_used_bytes,
+                disk_usage=report.system_metrics.disk_percent,
+                disk_total_bytes=report.system_metrics.disk_total_bytes,
+                disk_used_bytes=report.system_metrics.disk_used_bytes,
+                uptime_seconds=report.system_metrics.uptime_seconds,
+            )
+            logger.debug("System metrics updated for node %s", node_uuid)
+        except Exception as e:
+            logger.warning("Failed to update system metrics for node %s: %s", node_uuid, e)
+
     if not report.connections:
         return JSONResponse(
             status_code=200,
-            content={"status": "ok", "processed": 0, "message": "No connections to process"}
+            content={"status": "ok", "processed": 0, "message": "No connections to process", "metrics_updated": report.system_metrics is not None}
         )
 
     # Кэш identifier -> user_uuid для текущего батча (избегаем повторных запросов в БД)

@@ -25,9 +25,23 @@ class ConnectionReport(BaseModel):
     bytes_received: int = 0
 
 
+class SystemMetrics(BaseModel):
+    """Системные метрики ноды (CPU, RAM, диск, uptime)."""
+
+    cpu_percent: float = 0.0
+    memory_percent: float = 0.0
+    memory_total_bytes: int = 0
+    memory_used_bytes: int = 0
+    disk_percent: float = 0.0
+    disk_total_bytes: int = 0
+    disk_used_bytes: int = 0
+    uptime_seconds: int = 0
+
+
 class BatchReport(BaseModel):
     """Батч от одной ноды — тело POST /api/v1/connections/batch."""
 
     node_uuid: str
     timestamp: datetime = Field(default_factory=_utcnow)
     connections: list[ConnectionReport] = Field(default_factory=list)
+    system_metrics: Optional[SystemMetrics] = None

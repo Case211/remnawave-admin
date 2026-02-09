@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Search,
+  HardDrive,
 } from 'lucide-react'
 import client from '../api/client'
 import { usePermissionStore } from '../store/permissionStore'
@@ -66,9 +67,15 @@ interface FleetNode {
   uptime_seconds: number | null
   cpu_usage: number | null
   memory_usage: number | null
+  memory_total_bytes: number | null
+  memory_used_bytes: number | null
+  disk_usage: number | null
+  disk_total_bytes: number | null
+  disk_used_bytes: number | null
   last_seen_at: string | null
   download_speed_bps: number
   upload_speed_bps: number
+  metrics_updated_at: string | null
 }
 
 interface FleetResponse {
@@ -79,7 +86,7 @@ interface FleetResponse {
   disabled: number
 }
 
-type SortField = 'name' | 'status' | 'cpu' | 'ram' | 'speed' | 'users' | 'traffic' | 'uptime'
+type SortField = 'name' | 'status' | 'cpu' | 'ram' | 'disk' | 'speed' | 'users' | 'traffic' | 'uptime'
 type SortDir = 'asc' | 'desc'
 type StatusFilter = 'all' | 'online' | 'offline' | 'disabled'
 
@@ -295,6 +302,33 @@ function NodeDetailPanel({
                 </div>
               )}
               <div className="flex items-center gap-2">
+                <HardDrive className="w-3.5 h-3.5 text-violet-400" />
+                <span className="text-dark-200">Диск</span>
+                <span className={cn('ml-auto font-mono', node.disk_usage != null && node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage != null && node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
+                  {node.disk_usage != null ? `${node.disk_usage.toFixed(1)}%` : '-'}
+                  {node.disk_total_bytes != null && <span className="text-dark-400 text-[10px] ml-1">({formatBytes(node.disk_used_bytes ?? 0)} / {formatBytes(node.disk_total_bytes)})</span>}
+                </span>
+              </div>
+              {node.disk_usage != null && (
+                <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-500',
+                      node.disk_usage >= 95 ? 'bg-red-500' : node.disk_usage >= 80 ? 'bg-yellow-500' : 'bg-violet-500',
+                    )}
+                    style={{ width: `${Math.min(node.disk_usage, 100)}%` }}
+                  />
+                </div>
+              )}
+              {node.memory_total_bytes != null && (
+                <div className="flex items-center gap-2">
+                  <MemoryStick className="w-3.5 h-3.5 text-dark-400" />
+                  <span className="text-dark-300 text-[10px]">
+                    {formatBytes(node.memory_used_bytes ?? 0)} / {formatBytes(node.memory_total_bytes)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
                 <ArrowDownRight className="w-3.5 h-3.5 text-blue-400" />
                 <span className="text-dark-200">Download</span>
                 <span className="text-white ml-auto font-mono text-xs">{formatSpeed(node.download_speed_bps)}</span>
@@ -487,6 +521,9 @@ export default function Fleet() {
         case 'ram':
           cmp = (a.memory_usage ?? -1) - (b.memory_usage ?? -1)
           break
+        case 'disk':
+          cmp = (a.disk_usage ?? -1) - (b.disk_usage ?? -1)
+          break
         case 'speed':
           cmp = (a.download_speed_bps + a.upload_speed_bps) - (b.download_speed_bps + b.upload_speed_bps)
           break
@@ -672,6 +709,7 @@ export default function Fleet() {
                 <SortableHead label="Нода" field="name" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
                 <SortableHead label="CPU" field="cpu" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
                 <SortableHead label="RAM" field="ram" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
+                <SortableHead label="Диск" field="disk" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
                 <SortableHead label="Скорость" field="speed" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-44" />
                 <SortableHead label="Юзеры" field="users" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-20" />
                 <SortableHead label="Трафик" field="traffic" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-28" />
@@ -682,14 +720,14 @@ export default function Fleet() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={9}>
+                    <TableCell colSpan={10}>
                       <div className="h-10 bg-dark-700/30 rounded animate-pulse" />
                     </TableCell>
                   </TableRow>
                 ))
               ) : sortedNodes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12">
+                  <TableCell colSpan={10} className="text-center py-12">
                     <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
                     <p className="text-dark-200">
                       {searchQuery || statusFilter !== 'all' ? 'Ничего не найдено' : 'Нет нод'}
@@ -768,6 +806,26 @@ export default function Fleet() {
                         )}
                       </TableCell>
                       <TableCell>
+                        {node.disk_usage != null ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-12 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                              <div
+                                className={cn(
+                                  'h-full rounded-full',
+                                  node.disk_usage >= 95 ? 'bg-red-500' : node.disk_usage >= 80 ? 'bg-yellow-500' : 'bg-violet-500',
+                                )}
+                                style={{ width: `${Math.min(node.disk_usage, 100)}%` }}
+                              />
+                            </div>
+                            <span className={cn('text-xs font-mono', node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
+                              {node.disk_usage.toFixed(0)}%
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-dark-400 text-xs">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {totalSpeed > 0 ? (
                           <div className="flex items-center gap-2 text-xs font-mono">
                             <ArrowDownRight className="w-3 h-3 text-blue-400 shrink-0" />
@@ -795,7 +853,7 @@ export default function Fleet() {
                   if (isExpanded) {
                     rows.push(
                       <tr key={`${node.uuid}-detail`} className="bg-dark-600/20">
-                        <td colSpan={9} className="p-0">
+                        <td colSpan={10} className="p-0">
                           <NodeDetailPanel
                             node={node}
                             canEdit={canEditNodes}
@@ -867,7 +925,7 @@ export default function Fleet() {
                   </div>
 
                   {/* Card metrics grid */}
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="grid grid-cols-4 gap-2 text-center">
                     <div className="p-2 bg-dark-800/50 rounded-lg">
                       <p className="text-[10px] text-dark-300 mb-0.5">CPU</p>
                       <p className={cn('text-sm font-mono font-semibold', getCpuColor(node.cpu_usage))}>
@@ -878,6 +936,12 @@ export default function Fleet() {
                       <p className="text-[10px] text-dark-300 mb-0.5">RAM</p>
                       <p className={cn('text-sm font-mono font-semibold', getRamColor(node.memory_usage))}>
                         {node.memory_usage != null ? `${node.memory_usage.toFixed(0)}%` : '-'}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-dark-800/50 rounded-lg">
+                      <p className="text-[10px] text-dark-300 mb-0.5">Диск</p>
+                      <p className={cn('text-sm font-mono font-semibold', node.disk_usage != null && node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage != null && node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
+                        {node.disk_usage != null ? `${node.disk_usage.toFixed(0)}%` : '-'}
                       </p>
                     </div>
                     <div className="p-2 bg-dark-800/50 rounded-lg">
