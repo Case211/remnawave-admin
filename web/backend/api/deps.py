@@ -281,6 +281,38 @@ def require_superadmin():
     return _check
 
 
+# ── Quota-checking dependency factory ───────────────────────
+
+def require_quota(resource: str):
+    """Create a dependency that checks admin quota before resource creation.
+
+    Usage in endpoint:
+        @router.post("/users")
+        async def create_user(
+            admin: AdminUser = Depends(require_permission("users", "create")),
+            _: None = Depends(require_quota("users")),
+        ):
+            ...
+
+    Admins without account_id (legacy) or with superadmin role bypass quota.
+    Null limits mean unlimited — no check needed.
+    """
+    async def _check(admin: AdminUser = Depends(get_current_admin)) -> None:
+        # Legacy admins and superadmins bypass quota
+        if admin.account_id is None or admin.role == "superadmin":
+            return
+
+        from web.backend.core.rbac import check_quota
+        allowed, error_msg = await check_quota(admin.account_id, resource)
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=error_msg,
+            )
+
+    return _check
+
+
 # ── Utility helpers ─────────────────────────────────────────────
 
 def get_client_ip(request: Request) -> str:

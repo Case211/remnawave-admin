@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, AdminUser, require_permission
+from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota
 from web.backend.core.api_helper import fetch_nodes_from_api, fetch_nodes_realtime_usage, _normalize
 from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeUpdate
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
@@ -175,6 +175,7 @@ async def get_node(
 async def create_node(
     data: NodeCreate,
     admin: AdminUser = Depends(require_permission("nodes", "create")),
+    _quota: None = Depends(require_quota("nodes")),
 ):
     """Create a new node."""
     try:
@@ -188,6 +189,12 @@ async def create_node(
 
         # Upstream API wraps data in 'response' key
         node = result.get('response', result) if isinstance(result, dict) else result
+
+        # Increment quota usage counter
+        if admin.account_id is not None:
+            from web.backend.core.rbac import increment_usage_counter
+            await increment_usage_counter(admin.account_id, "nodes_created")
+
         return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:
