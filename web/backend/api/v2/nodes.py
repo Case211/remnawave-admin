@@ -1,6 +1,7 @@
 """Nodes API endpoints."""
 import logging
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List
 
@@ -10,7 +11,10 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota
-from web.backend.core.api_helper import fetch_nodes_from_api, fetch_nodes_realtime_usage, _normalize
+from web.backend.core.api_helper import (
+    fetch_nodes_from_api, fetch_nodes_realtime_usage,
+    fetch_nodes_usage_by_range, _normalize,
+)
 from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeUpdate
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 
@@ -75,19 +79,47 @@ async def list_nodes(
         nodes = await _get_nodes_list()
         nodes = [_ensure_node_snake_case(n) for n in nodes]
 
-        # Enrich with realtime bandwidth data for per-node today traffic
+        # Enrich with per-node today traffic from date-range endpoint (persistent)
         try:
-            realtime = await fetch_nodes_realtime_usage()
-            rt_map = {r.get('nodeUuid'): r for r in realtime}
-            for n in nodes:
-                rt = rt_map.get(n.get('uuid'))
-                if rt:
-                    try:
-                        n['traffic_today_bytes'] = int(rt.get('totalBytes') or 0)
-                    except (ValueError, TypeError):
-                        pass
+            now = datetime.utcnow()
+            today_str = now.strftime('%Y-%m-%d')
+            tomorrow_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+            resp = await fetch_nodes_usage_by_range(
+                start=today_str, end=tomorrow_str,
+            )
+            if resp:
+                top_nodes = resp.get('topNodes', [])
+                if isinstance(top_nodes, list):
+                    today_map = {}
+                    for tn in top_nodes:
+                        uid = tn.get('uuid')
+                        if uid:
+                            try:
+                                today_map[uid] = int(tn.get('total', 0) or 0)
+                            except (ValueError, TypeError):
+                                pass
+                    for n in nodes:
+                        val = today_map.get(n.get('uuid'))
+                        if val is not None:
+                            n['traffic_today_bytes'] = val
         except Exception as e:
-            logger.debug("Realtime bandwidth fetch failed: %s", e)
+            logger.debug("Date-range today traffic fetch failed: %s", e)
+
+        # Fallback: realtime endpoint (resets on service restart)
+        nodes_without_today = [n for n in nodes if not n.get('traffic_today_bytes')]
+        if nodes_without_today:
+            try:
+                realtime = await fetch_nodes_realtime_usage()
+                rt_map = {r.get('nodeUuid'): r for r in realtime}
+                for n in nodes_without_today:
+                    rt = rt_map.get(n.get('uuid'))
+                    if rt:
+                        try:
+                            n['traffic_today_bytes'] = int(rt.get('totalBytes') or 0)
+                        except (ValueError, TypeError):
+                            pass
+            except Exception as e:
+                logger.debug("Realtime bandwidth fetch failed: %s", e)
 
         # Filter
         if search:
