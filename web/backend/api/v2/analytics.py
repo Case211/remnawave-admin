@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, Query
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission
 from web.backend.core.api_helper import (
     fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api,
-    fetch_bandwidth_stats, fetch_nodes_realtime_usage, _normalize,
+    fetch_bandwidth_stats, fetch_nodes_realtime_usage,
+    fetch_nodes_usage_by_range, _normalize,
 )
 from pydantic import BaseModel
 
@@ -255,58 +256,115 @@ def _parse_bandwidth_bytes(val: Any) -> int:
         return 0
 
 
+def _sum_top_nodes_total(response: Dict[str, Any]) -> int:
+    """Sum the 'total' field across all topNodes in a nodes-usage response."""
+    top_nodes = response.get('topNodes', [])
+    if not isinstance(top_nodes, list):
+        return 0
+    total = 0
+    for node in top_nodes:
+        try:
+            total += int(node.get('total', 0) or 0)
+        except (ValueError, TypeError):
+            pass
+    return total
+
+
 @router.get("/traffic", response_model=TrafficStats)
 async def get_traffic_stats(
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get traffic statistics with time breakdowns.
 
-    Uses the Remnawave /api/system/stats/bandwidth endpoint for accurate
-    per-period traffic data, and /api/bandwidth-stats/nodes/realtime for today.
+    Primary source for period traffic (today/week/month):
+        /api/bandwidth-stats/nodes with date ranges — queries persistent DB data,
+        survives service restarts.
+    Fallback for period traffic:
+        /api/system/stats/bandwidth — in-memory counters that reset on restart.
+    Total traffic:
+        /api/system/stats/bandwidth → bandwidthCurrentYear (persistent).
     """
     try:
-        # Fetch bandwidth stats and realtime data in parallel-like fashion
-        bw_stats = await fetch_bandwidth_stats()
-
+        now = datetime.utcnow()
         today_bytes = 0
         week_bytes = 0
         month_bytes = 0
         total_bytes = 0
 
+        # --- Period traffic from date-range queries (primary, persistent) ---
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = now - timedelta(days=7)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        now_iso = now.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
+        try:
+            resp = await fetch_nodes_usage_by_range(
+                start=today_start.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                end=now_iso,
+            )
+            if resp:
+                today_bytes = _sum_top_nodes_total(resp)
+        except Exception as e:
+            logger.debug("Failed to fetch today's traffic by range: %s", e)
+
+        try:
+            resp = await fetch_nodes_usage_by_range(
+                start=week_start.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                end=now_iso,
+            )
+            if resp:
+                week_bytes = _sum_top_nodes_total(resp)
+        except Exception as e:
+            logger.debug("Failed to fetch weekly traffic by range: %s", e)
+
+        try:
+            resp = await fetch_nodes_usage_by_range(
+                start=month_start.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                end=now_iso,
+            )
+            if resp:
+                month_bytes = _sum_top_nodes_total(resp)
+        except Exception as e:
+            logger.debug("Failed to fetch monthly traffic by range: %s", e)
+
+        # --- Total traffic + fallback for periods from bandwidth stats ---
+        bw_stats = await fetch_bandwidth_stats()
         if bw_stats:
-            logger.debug("Bandwidth stats response keys: %s", list(bw_stats.keys()) if isinstance(bw_stats, dict) else type(bw_stats))
+            logger.debug(
+                "Bandwidth stats response keys: %s",
+                list(bw_stats.keys()) if isinstance(bw_stats, dict) else type(bw_stats),
+            )
 
-            # bandwidthLastSevenDays.current = traffic over last 7 days
-            last_seven = bw_stats.get('bandwidthLastSevenDays', {})
-            week_bytes = _parse_bandwidth_bytes(last_seven.get('current'))
-
-            # Use bandwidthCalendarMonth if available (more intuitive "this month"),
-            # otherwise fall back to bandwidthLast30Days (rolling 30 days)
-            calendar_month = bw_stats.get('bandwidthCalendarMonth', {})
-            month_bytes = _parse_bandwidth_bytes(calendar_month.get('current'))
-            if not month_bytes:
-                last_30 = bw_stats.get('bandwidthLast30Days', {})
-                month_bytes = _parse_bandwidth_bytes(last_30.get('current'))
-
-            # bandwidthCurrentYear.current = traffic for current year
             current_year = bw_stats.get('bandwidthCurrentYear', {})
             total_bytes = _parse_bandwidth_bytes(current_year.get('current'))
 
-            # For "today": use bandwidthLastTwoDays as initial estimate
-            last_two_days = bw_stats.get('bandwidthLastTwoDays', {})
-            today_bytes = _parse_bandwidth_bytes(last_two_days.get('current'))
+            # Use bandwidth stats as fallback if date-range queries returned 0
+            if not week_bytes:
+                last_seven = bw_stats.get('bandwidthLastSevenDays', {})
+                week_bytes = _parse_bandwidth_bytes(last_seven.get('current'))
 
-        # Try to get more accurate "today" from realtime node stats
-        realtime = await fetch_nodes_realtime_usage()
-        if realtime:
-            realtime_total = 0
-            for node_rt in realtime:
-                realtime_total += _parse_bandwidth_bytes(node_rt.get('totalBytes'))
-            # Use realtime if it has data (it's more accurate for "today")
-            if realtime_total > 0:
-                today_bytes = realtime_total
+            if not month_bytes:
+                calendar_month = bw_stats.get('bandwidthCalendarMonth', {})
+                month_bytes = _parse_bandwidth_bytes(calendar_month.get('current'))
+                if not month_bytes:
+                    last_30 = bw_stats.get('bandwidthLast30Days', {})
+                    month_bytes = _parse_bandwidth_bytes(last_30.get('current'))
 
-        # If bandwidth stats API failed, fall back to node/user traffic totals
+            if not today_bytes:
+                last_two_days = bw_stats.get('bandwidthLastTwoDays', {})
+                today_bytes = _parse_bandwidth_bytes(last_two_days.get('current'))
+
+        # Fallback for today: realtime node stats (only if still 0)
+        if not today_bytes:
+            realtime = await fetch_nodes_realtime_usage()
+            if realtime:
+                realtime_total = 0
+                for node_rt in realtime:
+                    realtime_total += _parse_bandwidth_bytes(node_rt.get('totalBytes'))
+                if realtime_total > 0:
+                    today_bytes = realtime_total
+
+        # Fallback for total: sum user/node traffic
         if not total_bytes:
             users = await _get_users_data()
             nodes = await _get_nodes_data()
