@@ -70,6 +70,7 @@ export function useRealtimeUpdates() {
         switch (msg.type) {
           case 'node_status':
             queryClient.invalidateQueries({ queryKey: ['nodes'] })
+            queryClient.invalidateQueries({ queryKey: ['fleet'] })
             queryClient.invalidateQueries({ queryKey: ['systemComponents'] })
             break
           case 'user_update':
@@ -95,6 +96,7 @@ export function useRealtimeUpdates() {
             break
           case 'connection':
             queryClient.invalidateQueries({ queryKey: ['nodes'] })
+            queryClient.invalidateQueries({ queryKey: ['fleet'] })
             break
           case 'activity':
             // Refresh dashboard-related queries
