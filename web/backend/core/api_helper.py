@@ -175,6 +175,31 @@ async def fetch_bandwidth_stats() -> Optional[Dict[str, Any]]:
     return data.get("response", data)
 
 
+async def fetch_nodes_usage_by_range(
+    start: str, end: str, top_nodes_limit: int = 100
+) -> Optional[Dict[str, Any]]:
+    """Fetch per-node bandwidth usage for a date range from the Remnawave API.
+
+    Parameters:
+        start: ISO-8601 datetime string (e.g. '2025-01-01T00:00:00.000Z')
+        end: ISO-8601 datetime string
+        top_nodes_limit: max nodes to return (default 100)
+
+    Returns response with topNodes (each with 'total' bytes), series, etc.
+    """
+    data = await api_get(
+        "/api/bandwidth-stats/nodes",
+        params={
+            "start": start,
+            "end": end,
+            "topNodesLimit": top_nodes_limit,
+        },
+    )
+    if not data:
+        return None
+    return data.get("response", data)
+
+
 async def fetch_nodes_realtime_usage() -> List[Dict[str, Any]]:
     """Fetch real-time per-node bandwidth usage from the Remnawave API.
 
