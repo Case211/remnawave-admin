@@ -3031,16 +3031,35 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
     row_dict = dict(row)
     raw_data = row_dict.get("raw_data")
     
+    # Metric columns stored separately by node-agent (not in raw_data)
+    _METRIC_FIELDS = (
+        'cpu_usage', 'memory_usage', 'memory_total_bytes', 'memory_used_bytes',
+        'disk_usage', 'disk_total_bytes', 'disk_used_bytes',
+        'uptime_seconds', 'metrics_updated_at',
+    )
+
     if raw_data:
         # Use raw_data if available (contains full API response)
+        result = None
         if isinstance(raw_data, str):
             try:
-                return json.loads(raw_data)
+                result = json.loads(raw_data)
             except json.JSONDecodeError:
                 pass
         elif isinstance(raw_data, dict):
-            return raw_data
-    
+            result = dict(raw_data)
+
+        if result is not None:
+            # Overlay metric columns from DB row onto raw_data
+            for field in _METRIC_FIELDS:
+                val = row_dict.get(field)
+                if val is not None:
+                    if isinstance(val, datetime):
+                        result[field] = val.isoformat()
+                    else:
+                        result[field] = val
+            return result
+
     # Fallback: build from row fields (convert snake_case to camelCase)
     result = {}
     field_mapping = {
@@ -3064,7 +3083,7 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
         "is_connected": "isConnected",
         "remark": "remark",
     }
-    
+
     for db_field, api_field in field_mapping.items():
         if db_field in row_dict and row_dict[db_field] is not None:
             value = row_dict[db_field]
@@ -3075,7 +3094,16 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
             elif hasattr(value, 'hex'):
                 value = str(value)
             result[api_field] = value
-    
+
+    # Also include metric columns in fallback path
+    for field in _METRIC_FIELDS:
+        val = row_dict.get(field)
+        if val is not None:
+            if isinstance(val, datetime):
+                result[field] = val.isoformat()
+            else:
+                result[field] = val
+
     return result
 
 
