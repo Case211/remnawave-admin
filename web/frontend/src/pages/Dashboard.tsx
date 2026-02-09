@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Users,
   Server,
@@ -8,6 +9,21 @@ import {
   ExternalLink,
   Settings,
   TrendingUp,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  Activity,
+  Cpu,
+  MemoryStick,
+  Clock,
+  Power,
+  PowerOff,
+  RotateCcw,
+  Wifi,
+  WifiOff,
+  Database,
+  Globe,
+  Zap,
 } from 'lucide-react'
 import {
   BarChart,
@@ -18,6 +34,10 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   Cell,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
 } from 'recharts'
 import client from '../api/client'
 import { usePermissionStore } from '../store/permissionStore'
@@ -26,9 +46,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-// Types matching backend responses
+// ── Types ────────────────────────────────────────────────────────
+
 interface OverviewStats {
   total_users: number
   active_users: number
@@ -65,7 +91,75 @@ interface TrafficStats {
   month_bytes: number
 }
 
-// API functions
+interface TimeseriesPoint {
+  timestamp: string
+  value: number
+}
+
+interface NodeTimeseriesPoint {
+  timestamp: string
+  total: number
+  nodes: Record<string, number>
+}
+
+interface TimeseriesResponse {
+  period: string
+  metric: string
+  points: TimeseriesPoint[]
+  node_points: NodeTimeseriesPoint[]
+  node_names: Record<string, string>
+}
+
+interface DeltaStats {
+  users_delta: number | null
+  users_online_delta: number | null
+  traffic_delta: number | null
+  violations_delta: number | null
+  nodes_delta: number | null
+}
+
+interface NodeFleetItem {
+  uuid: string
+  name: string
+  address: string
+  port: number
+  is_connected: boolean
+  is_disabled: boolean
+  is_xray_running: boolean
+  xray_version: string | null
+  users_online: number
+  traffic_today_bytes: number
+  traffic_total_bytes: number
+  uptime_seconds: number | null
+  cpu_usage: number | null
+  memory_usage: number | null
+  last_seen_at: string | null
+  download_speed_bps: number
+  upload_speed_bps: number
+}
+
+interface NodeFleetResponse {
+  nodes: NodeFleetItem[]
+  total: number
+  online: number
+  offline: number
+  disabled: number
+}
+
+interface SystemComponent {
+  name: string
+  status: string
+  details: Record<string, any>
+}
+
+interface SystemComponentsResponse {
+  components: SystemComponent[]
+  uptime_seconds: number | null
+  version: string
+}
+
+// ── API functions ────────────────────────────────────────────────
+
 const fetchOverview = async (): Promise<OverviewStats> => {
   const { data } = await client.get('/analytics/overview')
   return data
@@ -81,7 +175,30 @@ const fetchTrafficStats = async (): Promise<TrafficStats> => {
   return data
 }
 
-// Utility functions
+const fetchTimeseries = async (period: string, metric: string): Promise<TimeseriesResponse> => {
+  const { data } = await client.get('/analytics/timeseries', {
+    params: { period, metric },
+  })
+  return data
+}
+
+const fetchDeltas = async (): Promise<DeltaStats> => {
+  const { data } = await client.get('/analytics/deltas')
+  return data
+}
+
+const fetchNodeFleet = async (): Promise<NodeFleetResponse> => {
+  const { data } = await client.get('/analytics/node-fleet')
+  return data
+}
+
+const fetchSystemComponents = async (): Promise<SystemComponentsResponse> => {
+  const { data } = await client.get('/analytics/system/components')
+  return data
+}
+
+// ── Utilities ────────────────────────────────────────────────────
+
 function formatBytes(bytes: number | null | undefined): string {
   if (!bytes || bytes <= 0) return '0 Б'
   const k = 1024
@@ -91,7 +208,59 @@ function formatBytes(bytes: number | null | undefined): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-// Stat card component
+function formatBytesShort(bytes: number): string {
+  if (bytes <= 0) return '0'
+  const k = 1024
+  const sizes = ['Б', 'К', 'М', 'Г', 'Т']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  if (i < 0 || i >= sizes.length) return '0'
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i]
+}
+
+function formatSpeed(bps: number): string {
+  if (bps <= 0) return '0 б/с'
+  const k = 1024
+  const sizes = ['б/с', 'Кб/с', 'Мб/с', 'Гб/с']
+  const i = Math.floor(Math.log(bps) / Math.log(k))
+  if (i < 0 || i >= sizes.length) return '0 б/с'
+  return parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+function formatUptime(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return '-'
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (d > 0) return `${d}д ${h}ч`
+  if (h > 0) return `${h}ч ${m}м`
+  return `${m}м`
+}
+
+function formatTimestamp(ts: string): string {
+  if (!ts) return ''
+  // For dates like "2026-02-09", show "09.02"
+  // For datetime like "2026-02-09T14:00", show "14:00"
+  if (ts.includes('T')) {
+    const parts = ts.split('T')
+    const time = parts[1]?.substring(0, 5)
+    if (time) return time
+  }
+  // Date format
+  const parts = ts.split('-')
+  if (parts.length === 3) {
+    return `${parts[2]}.${parts[1]}`
+  }
+  return ts
+}
+
+// Node chart colors
+const NODE_COLORS = [
+  '#06b6d4', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444',
+  '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316',
+]
+
+// ── StatCard ─────────────────────────────────────────────────────
+
 interface StatCardProps {
   title: string
   value: string | number
@@ -101,9 +270,14 @@ interface StatCardProps {
   onClick?: () => void
   loading?: boolean
   index?: number
+  delta?: number | null
+  deltaType?: 'percent' | 'absolute'
 }
 
-function StatCard({ title, value, icon: Icon, color, subtitle, onClick, loading, index = 0 }: StatCardProps) {
+function StatCard({
+  title, value, icon: Icon, color, subtitle, onClick, loading, index = 0,
+  delta, deltaType = 'percent',
+}: StatCardProps) {
   const colorConfig = {
     cyan: {
       bg: 'rgba(34, 211, 238, 0.15)',
@@ -145,19 +319,24 @@ function StatCard({ title, value, icon: Icon, color, subtitle, onClick, loading,
     >
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-sm text-muted-foreground">{title}</p>
             {loading ? (
               <Skeleton className="h-8 w-20 mt-1" />
             ) : (
-              <p className="text-xl md:text-2xl font-bold text-white mt-1">{value}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xl md:text-2xl font-bold text-white">{value}</p>
+                {delta != null && delta !== 0 && (
+                  <DeltaIndicator value={delta} type={deltaType} />
+                )}
+              </div>
             )}
             {subtitle && (
               <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
             )}
           </div>
           <div
-            className="p-3 rounded-lg transition-all duration-200"
+            className="p-3 rounded-lg transition-all duration-200 shrink-0"
             style={{
               background: cfg.bg,
               border: `1px solid ${cfg.border}`,
@@ -179,7 +358,38 @@ function StatCard({ title, value, icon: Icon, color, subtitle, onClick, loading,
   )
 }
 
-// Loading skeleton
+// ── DeltaIndicator ───────────────────────────────────────────────
+
+function DeltaIndicator({ value, type = 'percent' }: { value: number; type?: 'percent' | 'absolute' }) {
+  const isPositive = value > 0
+  const isNeutral = value === 0
+
+  const text = type === 'percent'
+    ? `${isPositive ? '+' : ''}${value}%`
+    : `${isPositive ? '+' : ''}${value}`
+
+  if (isNeutral) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+        <Minus className="w-3 h-3" />
+        {text}
+      </span>
+    )
+  }
+
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-0.5 text-xs font-medium",
+      isPositive ? "text-green-400" : "text-red-400",
+    )}>
+      {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+      {text}
+    </span>
+  )
+}
+
+// ── ChartSkeleton ────────────────────────────────────────────────
+
 function ChartSkeleton() {
   return (
     <div className="h-64 flex items-center justify-center">
@@ -194,12 +404,376 @@ function ChartSkeleton() {
   )
 }
 
+// ── PeriodSwitcher ───────────────────────────────────────────────
+
+function PeriodSwitcher({
+  value,
+  onChange,
+  options,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <div className="flex items-center gap-1 bg-dark-600/50 rounded-lg p-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={cn(
+            "px-2.5 py-1 text-xs rounded-md transition-all duration-200",
+            value === opt.value
+              ? "bg-primary/20 text-primary-400 font-medium"
+              : "text-muted-foreground hover:text-white"
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Custom Chart Tooltip ─────────────────────────────────────────
+
+const tooltipStyle = {
+  backgroundColor: 'rgba(22, 27, 34, 0.95)',
+  border: '1px solid rgba(72, 79, 88, 0.3)',
+  borderRadius: '8px',
+  backdropFilter: 'blur(12px)',
+}
+
+function TrafficChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={tooltipStyle} className="px-3 py-2">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-xs" style={{ color: entry.color }}>
+          {entry.name}: {formatBytes(entry.value)}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+function ConnectionsChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={tooltipStyle} className="px-3 py-2">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-xs" style={{ color: entry.color }}>
+          {entry.name}: {entry.value}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+// ── NodeFleetCard ────────────────────────────────────────────────
+
+function NodeFleetCard({
+  node,
+  onRestart,
+  onEnable,
+  onDisable,
+  canEdit,
+  isPending,
+}: {
+  node: NodeFleetItem
+  onRestart: () => void
+  onEnable: () => void
+  onDisable: () => void
+  canEdit: boolean
+  isPending: boolean
+}) {
+  const isOnline = node.is_connected && !node.is_disabled
+  const isOffline = !node.is_connected && !node.is_disabled
+  const isDisabled = node.is_disabled
+
+  const statusColor = isOnline ? '#10b981' : isOffline ? '#ef4444' : '#6b7280'
+  const statusText = isOnline ? 'Онлайн' : isOffline ? 'Офлайн' : 'Отключена'
+
+  return (
+    <Card className={cn(
+      "animate-fade-in-up transition-all duration-200",
+      isOffline && "border-red-500/30",
+      isDisabled && "opacity-60",
+    )}>
+      <CardContent className="p-4">
+        {/* Header: name + status */}
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{
+                  background: statusColor,
+                  boxShadow: isOnline ? `0 0 8px ${statusColor}` : undefined,
+                }}
+              />
+              <h3 className="text-sm font-semibold text-white truncate">{node.name}</h3>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+              {node.address}:{node.port}
+            </p>
+          </div>
+          <Badge
+            variant={isOnline ? 'success' : isOffline ? 'destructive' : 'secondary'}
+            className="shrink-0 text-[10px]"
+          >
+            {statusText}
+          </Badge>
+        </div>
+
+        {/* Metrics grid */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+          <div className="flex items-center gap-1.5">
+            <Users className="w-3 h-3 text-cyan-400" />
+            <span className="text-muted-foreground">Онлайн</span>
+            <span className="text-white font-mono ml-auto">{node.users_online}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="w-3 h-3 text-violet-400" />
+            <span className="text-muted-foreground">Сегодня</span>
+            <span className="text-white font-mono ml-auto">{formatBytesShort(node.traffic_today_bytes)}</span>
+          </div>
+          {node.uptime_seconds != null && (
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-green-400" />
+              <span className="text-muted-foreground">Uptime</span>
+              <span className="text-white font-mono ml-auto">{formatUptime(node.uptime_seconds)}</span>
+            </div>
+          )}
+          {node.xray_version && (
+            <div className="flex items-center gap-1.5">
+              <Zap className="w-3 h-3 text-yellow-400" />
+              <span className="text-muted-foreground">Xray</span>
+              <span className="text-white font-mono ml-auto text-[10px]">{node.xray_version}</span>
+            </div>
+          )}
+          {(node.download_speed_bps > 0 || node.upload_speed_bps > 0) && (
+            <>
+              <div className="flex items-center gap-1.5">
+                <ArrowDownRight className="w-3 h-3 text-blue-400" />
+                <span className="text-muted-foreground">DL</span>
+                <span className="text-white font-mono ml-auto text-[10px]">{formatSpeed(node.download_speed_bps)}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <ArrowUpRight className="w-3 h-3 text-emerald-400" />
+                <span className="text-muted-foreground">UL</span>
+                <span className="text-white font-mono ml-auto text-[10px]">{formatSpeed(node.upload_speed_bps)}</span>
+              </div>
+            </>
+          )}
+          {node.cpu_usage != null && (
+            <div className="flex items-center gap-1.5">
+              <Cpu className="w-3 h-3 text-orange-400" />
+              <span className="text-muted-foreground">CPU</span>
+              <span className="text-white font-mono ml-auto">{node.cpu_usage.toFixed(0)}%</span>
+            </div>
+          )}
+          {node.memory_usage != null && (
+            <div className="flex items-center gap-1.5">
+              <MemoryStick className="w-3 h-3 text-pink-400" />
+              <span className="text-muted-foreground">RAM</span>
+              <span className="text-white font-mono ml-auto">{node.memory_usage.toFixed(0)}%</span>
+            </div>
+          )}
+        </div>
+
+        {/* Quick actions */}
+        {canEdit && (
+          <>
+            <Separator className="mt-3" />
+            <div className="flex items-center gap-1.5 mt-3">
+              {isOnline && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={isPending}
+                      onClick={(e) => { e.stopPropagation(); onRestart() }}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Перезапустить</TooltipContent>
+                </Tooltip>
+              )}
+              {node.is_disabled ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-green-400 hover:text-green-300"
+                      disabled={isPending}
+                      onClick={(e) => { e.stopPropagation(); onEnable() }}
+                    >
+                      <Power className="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Включить</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-red-400 hover:text-red-300"
+                      disabled={isPending}
+                      onClick={(e) => { e.stopPropagation(); onDisable() }}
+                    >
+                      <PowerOff className="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Отключить</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── SystemStatusCard ─────────────────────────────────────────────
+
+function SystemStatusCard({
+  components,
+  uptime,
+  version,
+  loading,
+}: {
+  components: SystemComponent[]
+  uptime: number | null
+  version: string
+  loading: boolean
+}) {
+  const iconMap: Record<string, React.ElementType> = {
+    'Remnawave API': Globe,
+    'PostgreSQL': Database,
+    'Nodes': Server,
+    'WebSocket': Activity,
+  }
+
+  const statusColorMap: Record<string, string> = {
+    online: '#10b981',
+    offline: '#ef4444',
+    degraded: '#f59e0b',
+    unknown: '#6b7280',
+  }
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base md:text-lg">Состояние системы</CardTitle>
+          {version && (
+            <Badge variant="secondary" className="text-[10px] font-mono">
+              v{version}
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {components.map((comp) => {
+              const IconComp = iconMap[comp.name] || Activity
+              const statusColor = statusColorMap[comp.status] || '#6b7280'
+              const statusLabel = {
+                online: 'Работает',
+                offline: 'Недоступен',
+                degraded: 'Проблемы',
+                unknown: 'Неизвестно',
+              }[comp.status] || comp.status
+
+              // Build detail string
+              let detail = ''
+              if (comp.name === 'Remnawave API' && comp.details.response_time_ms) {
+                detail = `${comp.details.response_time_ms}мс`
+              } else if (comp.name === 'Nodes') {
+                detail = `${comp.details.online || 0}/${comp.details.total || 0}`
+              } else if (comp.name === 'WebSocket') {
+                detail = `${comp.details.active_connections || 0} сессий`
+              } else if (comp.name === 'PostgreSQL' && comp.details.size != null) {
+                detail = `pool: ${comp.details.free_size || 0}/${comp.details.size || 0}`
+              }
+
+              return (
+                <div key={comp.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <IconComp className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-white">{comp.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {detail && (
+                      <span className="text-[10px] text-muted-foreground font-mono">{detail}</span>
+                    )}
+                    <Badge
+                      variant={comp.status === 'online' ? 'success' : comp.status === 'degraded' ? 'warning' : 'destructive'}
+                      className="gap-1.5 px-2 text-[10px]"
+                    >
+                      <span
+                        className={cn("w-1.5 h-1.5 rounded-full", comp.status === 'online' && "animate-pulse")}
+                        style={{
+                          background: statusColor,
+                          boxShadow: `0 0 6px ${statusColor}80`,
+                        }}
+                      />
+                      {statusLabel}
+                    </Badge>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {uptime != null && (
+          <>
+            <Separator className="mt-3" />
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-xs text-muted-foreground">Время работы</span>
+              <span className="text-xs text-white font-mono">{formatUptime(uptime)}</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Constants ────────────────────────────────────────────────────
+
 const SEVERITY_COLORS: Record<string, string> = {
   low: '#40c057',
   medium: '#fab005',
   high: '#ff922b',
   critical: '#fa5252',
 }
+
+const TRAFFIC_PERIOD_OPTIONS = [
+  { value: '24h', label: '24ч' },
+  { value: '7d', label: '7д' },
+  { value: '30d', label: '30д' },
+]
+
+// ── Main Dashboard Component ─────────────────────────────────────
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -208,11 +782,14 @@ export default function Dashboard() {
 
   const canViewUsers = hasPermission('users', 'view')
   const canViewNodes = hasPermission('nodes', 'view')
+  const canEditNodes = hasPermission('nodes', 'edit')
   const canViewViolations = hasPermission('violations', 'view')
   const canViewAnalytics = hasPermission('analytics', 'view')
-  const canViewSettings = hasPermission('settings', 'view')
+  // Chart state
+  const [trafficPeriod, setTrafficPeriod] = useState('7d')
 
-  // Fetch data (only if permitted)
+  // ── Queries ──────────────────────────────────────────────────
+
   const { data: overview, isLoading: overviewLoading, isError: overviewError } = useQuery({
     queryKey: ['overview'],
     queryFn: fetchOverview,
@@ -234,14 +811,98 @@ export default function Dashboard() {
     enabled: canViewAnalytics,
   })
 
-  // Refresh ALL dashboard queries
+  const { data: timeseries, isLoading: timeseriesLoading } = useQuery({
+    queryKey: ['timeseries', trafficPeriod, 'traffic'],
+    queryFn: () => fetchTimeseries(trafficPeriod, 'traffic'),
+    refetchInterval: 60000,
+    enabled: canViewAnalytics,
+  })
+
+  const { data: connectionsSeries } = useQuery({
+    queryKey: ['timeseries', '24h', 'connections'],
+    queryFn: () => fetchTimeseries('24h', 'connections'),
+    refetchInterval: 30000,
+    enabled: canViewAnalytics,
+  })
+
+  const { data: deltas } = useQuery({
+    queryKey: ['deltas'],
+    queryFn: fetchDeltas,
+    refetchInterval: 120000,
+    enabled: canViewAnalytics,
+  })
+
+  const { data: nodeFleet, isLoading: fleetLoading } = useQuery({
+    queryKey: ['nodeFleet'],
+    queryFn: fetchNodeFleet,
+    refetchInterval: 30000,
+    enabled: canViewNodes,
+  })
+
+  const { data: systemComponents, isLoading: componentsLoading } = useQuery({
+    queryKey: ['systemComponents'],
+    queryFn: fetchSystemComponents,
+    refetchInterval: 60000,
+    enabled: canViewAnalytics,
+  })
+
+  // ── Mutations for node quick actions ──────────────────────────
+
+  const restartNode = useMutation({
+    mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/restart`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['nodeFleet'] }),
+  })
+
+  const enableNode = useMutation({
+    mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/enable`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['nodeFleet'] }),
+  })
+
+  const disableNode = useMutation({
+    mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/disable`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['nodeFleet'] }),
+  })
+
+  const nodeMutationPending = restartNode.isPending || enableNode.isPending || disableNode.isPending
+
+  // ── Refresh ──────────────────────────────────────────────────
+
   const handleRefreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ['overview'] })
     queryClient.invalidateQueries({ queryKey: ['violationStats'] })
     queryClient.invalidateQueries({ queryKey: ['trafficStats'] })
+    queryClient.invalidateQueries({ queryKey: ['timeseries'] })
+    queryClient.invalidateQueries({ queryKey: ['deltas'] })
+    queryClient.invalidateQueries({ queryKey: ['nodeFleet'] })
+    queryClient.invalidateQueries({ queryKey: ['systemComponents'] })
   }
 
-  // Build violations chart from real stats
+  // ── Chart data ───────────────────────────────────────────────
+
+  // Traffic chart data
+  const trafficChartData = timeseries?.points?.map((p) => ({
+    name: formatTimestamp(p.timestamp),
+    value: p.value,
+  })) || []
+
+  // Per-node traffic chart data (for stacked area)
+  const nodeTrafficChartData = timeseries?.node_points?.map((p) => ({
+    name: formatTimestamp(p.timestamp),
+    ...p.nodes,
+  })) || []
+
+  const nodeNames = timeseries?.node_names || {}
+  const nodeUuids = Object.keys(nodeNames)
+
+  // Connections data (per-node stacked)
+  const connectionsChartData = connectionsSeries?.node_points?.map((p) => ({
+    name: formatTimestamp(p.timestamp),
+    ...p.nodes,
+  })) || []
+  const connectionNodeNames = connectionsSeries?.node_names || {}
+  const connectionNodeUuids = Object.keys(connectionNodeNames)
+
+  // Violations chart
   const violationsChartData = violationStats
     ? [
         { name: 'Низкий', value: violationStats.low, key: 'low' },
@@ -256,7 +917,6 @@ export default function Dashboard() {
         { name: 'Критический', value: 0, key: 'critical' },
       ]
 
-  // Build violations by action list
   const actionLabels: Record<string, string> = {
     'no_action': 'Нет действий',
     'monitor': 'Мониторинг',
@@ -276,7 +936,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
+      {/* ── Page header ─────────────────────────────────────────── */}
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Панель управления</h1>
@@ -293,7 +953,7 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Error banner */}
+      {/* ── Error banner ────────────────────────────────────────── */}
       {(overviewError || violationsError) && (
         <Card className="border-red-500/30 bg-red-500/10 animate-fade-in-down">
           <CardContent className="p-4">
@@ -309,7 +969,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Stats grid */}
+      {/* ── Stats grid with deltas ──────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {canViewUsers && (
           <StatCard
@@ -321,6 +981,8 @@ export default function Dashboard() {
             onClick={() => navigate('/users')}
             loading={overviewLoading && canViewAnalytics}
             index={0}
+            delta={deltas?.users_delta}
+            deltaType="percent"
           />
         )}
         {canViewNodes && (
@@ -333,6 +995,8 @@ export default function Dashboard() {
             onClick={() => navigate('/nodes')}
             loading={overviewLoading && canViewAnalytics}
             index={1}
+            delta={deltas?.nodes_delta}
+            deltaType="absolute"
           />
         )}
         {canViewViolations && (
@@ -345,6 +1009,8 @@ export default function Dashboard() {
             onClick={() => navigate('/violations')}
             loading={overviewLoading && canViewAnalytics}
             index={2}
+            delta={deltas?.violations_delta}
+            deltaType="absolute"
           />
         )}
         {canViewAnalytics && (
@@ -359,9 +1025,14 @@ export default function Dashboard() {
                   {(overviewLoading && trafficLoading) ? (
                     <Skeleton className="h-8 w-20 mt-1" />
                   ) : (
-                    <p className="text-xl md:text-2xl font-bold text-white mt-1">
-                      {overview ? formatBytes(overview.total_traffic_bytes) : trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xl md:text-2xl font-bold text-white">
+                        {overview ? formatBytes(overview.total_traffic_bytes) : trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
+                      </p>
+                      {deltas?.traffic_delta != null && deltas.traffic_delta !== 0 && (
+                        <DeltaIndicator value={deltas.traffic_delta} type="percent" />
+                      )}
+                    </div>
                   )}
                 </div>
                 <div
@@ -398,11 +1069,156 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Charts row — only if violations visible */}
-      {canViewViolations && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Violations by severity */}
-          <Card className="lg:col-span-2 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+      {/* ── Traffic Chart ───────────────────────────────────────── */}
+      {canViewAnalytics && (
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <CardTitle className="text-base md:text-lg">Трафик</CardTitle>
+              <PeriodSwitcher
+                value={trafficPeriod}
+                onChange={setTrafficPeriod}
+                options={TRAFFIC_PERIOD_OPTIONS}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {timeseriesLoading ? (
+              <ChartSkeleton />
+            ) : trafficChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                {nodeUuids.length > 0 && nodeTrafficChartData.length > 0 ? (
+                  <AreaChart data={nodeTrafficChartData}>
+                    <defs>
+                      {nodeUuids.map((uid, i) => (
+                        <linearGradient key={uid} id={`grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.05} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
+                    <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
+                    <YAxis
+                      stroke="#8b949e"
+                      fontSize={11}
+                      tickFormatter={(v) => formatBytesShort(v)}
+                    />
+                    <RechartsTooltip content={<TrafficChartTooltip />} />
+                    {nodeUuids.map((uid, i) => (
+                      <Area
+                        key={uid}
+                        type="monotone"
+                        dataKey={uid}
+                        name={nodeNames[uid] || uid.substring(0, 8)}
+                        stackId="traffic"
+                        stroke={NODE_COLORS[i % NODE_COLORS.length]}
+                        fill={`url(#grad-${i})`}
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </AreaChart>
+                ) : (
+                  <LineChart data={trafficChartData}>
+                    <defs>
+                      <linearGradient id="trafficGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
+                    <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
+                    <YAxis
+                      stroke="#8b949e"
+                      fontSize={11}
+                      tickFormatter={(v) => formatBytesShort(v)}
+                    />
+                    <RechartsTooltip content={<TrafficChartTooltip />} />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      name="Трафик"
+                      stroke="#06b6d4"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, fill: '#06b6d4' }}
+                    />
+                  </LineChart>
+                )}
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-64 flex items-center justify-center">
+                <span className="text-muted-foreground text-sm">Нет данных за выбранный период</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Connections Chart + Violations ───────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Connections area chart */}
+        {canViewAnalytics && (
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base md:text-lg">Подключения по нодам</CardTitle>
+                {connectionsSeries && (
+                  <span className="text-xs text-muted-foreground">
+                    Всего: {connectionsSeries.points?.reduce((s, p) => s + p.value, 0) || 0}
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {connectionsChartData.length > 0 && connectionNodeUuids.length > 0 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={connectionsChartData}>
+                    <defs>
+                      {connectionNodeUuids.map((uid, i) => (
+                        <linearGradient key={uid} id={`conn-${i}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.4} />
+                          <stop offset="95%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.05} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
+                    <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
+                    <YAxis stroke="#8b949e" fontSize={11} />
+                    <RechartsTooltip content={<ConnectionsChartTooltip />} />
+                    {connectionNodeUuids.map((uid, i) => (
+                      <Area
+                        key={uid}
+                        type="monotone"
+                        dataKey={uid}
+                        name={connectionNodeNames[uid] || uid.substring(0, 8)}
+                        stackId="connections"
+                        stroke={NODE_COLORS[i % NODE_COLORS.length]}
+                        fill={`url(#conn-${i})`}
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[220px] flex items-center justify-center">
+                  <div className="text-center">
+                    <Wifi className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+                    <span className="text-muted-foreground text-sm">
+                      {overview?.users_online
+                        ? `${overview.users_online} пользователей онлайн`
+                        : 'Нет данных о подключениях'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Violations by severity */}
+        {canViewViolations && (
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
             <CardHeader className="pb-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <CardTitle className="text-base md:text-lg">Нарушения по уровню (за 7 дней)</CardTitle>
@@ -422,14 +1238,7 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
                     <XAxis type="number" stroke="#8b949e" fontSize={12} />
                     <YAxis dataKey="name" type="category" stroke="#8b949e" fontSize={12} width={100} />
-                    <RechartsTooltip
-                      contentStyle={{
-                        backgroundColor: 'rgba(22, 27, 34, 0.95)',
-                        border: '1px solid rgba(72, 79, 88, 0.3)',
-                        borderRadius: '8px',
-                        backdropFilter: 'blur(12px)',
-                      }}
-                    />
+                    <RechartsTooltip contentStyle={tooltipStyle} />
                     <Bar dataKey="value" radius={[0, 8, 8, 0]}>
                       {violationsChartData.map((entry) => (
                         <Cell key={entry.key} fill={SEVERITY_COLORS[entry.key] || '#fab005'} />
@@ -440,9 +1249,87 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+        )}
+      </div>
 
-          {/* Violations by action */}
-          <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+      {/* ── Node Fleet ──────────────────────────────────────────── */}
+      {canViewNodes && (
+        <div className="animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-base md:text-lg font-semibold text-white">Парк серверов</h2>
+              {nodeFleet && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="success" className="text-[10px] gap-1">
+                    <Wifi className="w-3 h-3" />
+                    {nodeFleet.online}
+                  </Badge>
+                  {nodeFleet.offline > 0 && (
+                    <Badge variant="destructive" className="text-[10px] gap-1">
+                      <WifiOff className="w-3 h-3" />
+                      {nodeFleet.offline}
+                    </Badge>
+                  )}
+                  {nodeFleet.disabled > 0 && (
+                    <Badge variant="secondary" className="text-[10px] gap-1">
+                      <PowerOff className="w-3 h-3" />
+                      {nodeFleet.disabled}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/nodes')}>
+              Все ноды <ExternalLink className="w-3 h-3 ml-1" />
+            </Button>
+          </div>
+
+          {fleetLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i}>
+                  <CardContent className="p-4">
+                    <Skeleton className="h-4 w-24 mb-3" />
+                    <Skeleton className="h-3 w-32 mb-4" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-3/4" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : nodeFleet && nodeFleet.nodes.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {nodeFleet.nodes.map((node, i) => (
+                <NodeFleetCard
+                  key={node.uuid}
+                  node={node}
+                  onRestart={() => restartNode.mutate(node.uuid)}
+                  onEnable={() => enableNode.mutate(node.uuid)}
+                  onDisable={() => disableNode.mutate(node.uuid)}
+                  canEdit={canEditNodes}
+                  isPending={nodeMutationPending}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Server className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-40" />
+                <p className="text-muted-foreground text-sm">Нет нод</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── Bottom row: Violations by action + System status ──── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Violations by action */}
+        {canViewViolations && (
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
             <CardHeader className="pb-2">
               <CardTitle className="text-base md:text-lg">По рекомендации</CardTitle>
             </CardHeader>
@@ -491,144 +1378,45 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
-        </div>
-      )}
+        )}
 
-      {/* Main content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Statistics summary */}
-        {canViewAnalytics && (
-          <Card className="animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
+        {/* System status */}
+        {canViewAnalytics ? (
+          <SystemStatusCard
+            components={systemComponents?.components || []}
+            uptime={systemComponents?.uptime_seconds ?? null}
+            version={systemComponents?.version || '2.0.0'}
+            loading={componentsLoading}
+          />
+        ) : (
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base md:text-lg">Сводка</CardTitle>
+              <CardTitle className="text-base md:text-lg">Быстрые действия</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Активные пользователи', value: overview?.active_users ?? '-' },
-                  { label: 'Отключённые пользователи', value: overview?.disabled_users ?? '-' },
-                  { label: 'Истёкшие подписки', value: overview?.expired_users ?? '-' },
-                  { label: 'Пользователи онлайн', value: overview?.users_online ?? '-', color: 'text-green-400' },
-                  { label: 'Хосты', value: overview?.total_hosts ?? '-' },
-                  { label: 'Общий трафик', value: overview ? formatBytes(overview.total_traffic_bytes) : '-', color: 'text-violet-400' },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b border-dark-400/10">
-                    <span className="text-sm text-muted-foreground">{item.label}</span>
-                    <span className={cn("text-sm font-semibold", item.color || "text-white")}>{item.value}</span>
-                  </div>
-                ))}
-                {trafficStats && (
-                  <>
-                    <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
-                      <span className="text-sm text-muted-foreground">Трафик сегодня</span>
-                      <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.today_bytes)}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
-                      <span className="text-sm text-muted-foreground">Трафик за неделю</span>
-                      <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.week_bytes)}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2">
-                      <span className="text-sm text-muted-foreground">Трафик за месяц</span>
-                      <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.month_bytes)}</span>
-                    </div>
-                  </>
-                )}
+                  { icon: Users, label: 'Пользователи', href: '/users', perm: 'users' },
+                  { icon: Server, label: 'Ноды', href: '/nodes', perm: 'nodes' },
+                  { icon: ShieldAlert, label: 'Нарушения', href: '/violations', perm: 'violations' },
+                  { icon: Settings, label: 'Настройки', href: '/settings', perm: 'settings' },
+                ]
+                  .filter((item) => hasPermission(item.perm, 'view'))
+                  .map((item) => (
+                    <Button
+                      key={item.href}
+                      variant="secondary"
+                      onClick={() => navigate(item.href)}
+                      className="py-8 flex flex-col items-center gap-2 hover:shadow-glow-teal h-auto"
+                    >
+                      <item.icon className="w-6 h-6" />
+                      <span>{item.label}</span>
+                    </Button>
+                  ))}
               </div>
-              {violationStats && violationStats.by_country && Object.keys(violationStats.by_country).length > 0 && (
-                <>
-                  <Separator className="mt-4" />
-                  <div className="mt-4">
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Нарушения по странам</h3>
-                    <div className="space-y-1">
-                      {Object.entries(violationStats.by_country).slice(0, 5).map(([country, count]) => (
-                        <div key={country} className="flex items-center justify-between">
-                          <span className="text-xs text-dark-100">{country}</span>
-                          <span className="text-xs text-white font-mono">{count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
             </CardContent>
           </Card>
         )}
-
-        {/* Quick actions + System status */}
-        <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base md:text-lg">Быстрые действия</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { icon: Users, label: 'Пользователи', href: '/users', delay: '0.32s', perm: 'users' },
-                { icon: Server, label: 'Ноды', href: '/nodes', delay: '0.36s', perm: 'nodes' },
-                { icon: ShieldAlert, label: 'Нарушения', href: '/violations', delay: '0.4s', perm: 'violations' },
-                { icon: Settings, label: 'Настройки', href: '/settings', delay: '0.44s', perm: 'settings' },
-              ]
-                .filter((item) => hasPermission(item.perm, 'view'))
-                .map((item) => (
-                  <Button
-                    key={item.href}
-                    variant="secondary"
-                    onClick={() => navigate(item.href)}
-                    className="py-8 flex flex-col items-center gap-2 hover:shadow-glow-teal animate-fade-in-up h-auto"
-                    style={{ animationDelay: item.delay }}
-                  >
-                    <item.icon className="w-6 h-6" />
-                    <span>{item.label}</span>
-                  </Button>
-                ))}
-            </div>
-
-            {/* System status */}
-            <Separator className="mt-6" />
-            <div className="mt-4">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Состояние системы</h3>
-              <div className="space-y-2">
-                {[
-                  {
-                    label: 'API',
-                    ok: !!(overview && !overviewError),
-                    loading: overviewLoading && canViewAnalytics,
-                    text: !canViewAnalytics ? 'N/A' : overviewLoading ? 'Проверка...' : overview && !overviewError ? 'Работает' : 'Недоступен',
-                  },
-                  {
-                    label: 'Ноды',
-                    ok: !!(overview && overview.online_nodes > 0),
-                    loading: false,
-                    text: overview ? `${overview.online_nodes} онлайн` : '-',
-                    warn: true,
-                  },
-                  {
-                    label: 'База данных',
-                    ok: violationStats !== undefined && !violationsError,
-                    loading: violationsLoading && canViewViolations,
-                    text: !canViewViolations ? 'N/A' : violationsLoading ? 'Проверка...' : violationStats !== undefined && !violationsError ? 'Доступна' : 'Недоступна',
-                    warn: true,
-                  },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">{item.label}</span>
-                    <span className="flex items-center gap-2 text-sm">
-                      <Badge variant={item.ok ? "success" : item.warn ? "warning" : "destructive"} className="gap-1.5 px-2">
-                        <span
-                          className={cn("w-2 h-2 rounded-full", item.ok && "animate-pulse")}
-                          style={{
-                            background: item.ok ? '#0d9488' : item.warn ? '#fab005' : '#fa5252',
-                            boxShadow: item.ok ? '0 0 6px rgba(13, 148, 136, 0.5)' : item.warn ? '0 0 6px rgba(250, 176, 5, 0.5)' : '0 0 6px rgba(250, 82, 82, 0.5)',
-                          }}
-                        />
-                        {item.text}
-                      </Badge>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )
