@@ -8,8 +8,11 @@ import {
   Settings,
   LogOut,
   X,
+  UserCog,
+  Shield,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import { usePermissionStore } from '../../store/permissionStore'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -53,12 +56,14 @@ function RemnawaveLogo({ className }: { className?: string }) {
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Users', href: '/users', icon: Users },
-  { name: 'Nodes', href: '/nodes', icon: Server },
-  { name: 'Hosts', href: '/hosts', icon: Globe },
-  { name: 'Violations', href: '/violations', icon: ShieldAlert },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, permission: null },
+  { name: 'Users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
+  { name: 'Nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
+  { name: 'Hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
+  { name: 'Violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
+  { name: 'Admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
+  { name: 'Roles', href: '/roles', icon: Shield, permission: { resource: 'roles', action: 'view' } },
+  { name: 'Settings', href: '/settings', icon: Settings, permission: { resource: 'settings', action: 'view' } },
 ]
 
 interface SidebarProps {
@@ -69,10 +74,18 @@ interface SidebarProps {
 export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const location = useLocation()
   const { logout, user } = useAuthStore()
+  const hasPermission = usePermissionStore((s) => s.hasPermission)
+  const role = usePermissionStore((s) => s.role)
 
   const handleNavClick = () => {
     if (onClose) onClose()
   }
+
+  // Filter nav items based on permissions
+  const visibleNavigation = navigation.filter((item) => {
+    if (!item.permission) return true
+    return hasPermission(item.permission.resource, item.permission.action)
+  })
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
@@ -96,7 +109,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
         <nav className="px-3 space-y-1">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const isActive = location.pathname === item.href
             return (
               <Tooltip key={item.name}>
@@ -144,7 +157,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             <p className="text-sm font-medium text-white truncate">
               {user?.username || 'Admin'}
             </p>
-            <p className="text-xs text-muted-foreground">Administrator</p>
+            <p className="text-xs text-muted-foreground capitalize">{role || 'Administrator'}</p>
           </div>
           <Tooltip>
             <TooltipTrigger asChild>

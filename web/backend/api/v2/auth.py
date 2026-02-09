@@ -26,6 +26,7 @@ from web.backend.schemas.auth import (
     TokenResponse,
     RefreshRequest,
     AdminInfo,
+    PermissionEntry,
 )
 from web.backend.schemas.common import SuccessResponse
 
@@ -239,25 +240,44 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
 @router.get("/me", response_model=AdminInfo)
 async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
     """
-    Get current authenticated admin info.
+    Get current authenticated admin info with RBAC permissions.
     """
     # Check if password is auto-generated (needs changing)
     password_is_generated = False
     if admin.auth_method == "password":
-        try:
-            from web.backend.core.admin_credentials import get_admin_by_username
-            db_admin = await get_admin_by_username(admin.username)
-            if db_admin and db_admin.get("is_generated"):
-                password_is_generated = True
-        except Exception:
-            pass
+        # Check new admin_accounts table first
+        if admin.account_id:
+            try:
+                from web.backend.core.rbac import get_admin_account_by_id
+                account = await get_admin_account_by_id(admin.account_id)
+                if account and account.get("is_generated_password"):
+                    password_is_generated = True
+            except Exception:
+                pass
+        else:
+            # Fallback to legacy admin_credentials
+            try:
+                from web.backend.core.admin_credentials import get_admin_by_username
+                db_admin = await get_admin_by_username(admin.username)
+                if db_admin and db_admin.get("is_generated"):
+                    password_is_generated = True
+            except Exception:
+                pass
+
+    # Build permissions list
+    permissions = [
+        PermissionEntry(resource=r, action=a)
+        for r, a in sorted(admin.permissions)
+    ]
 
     return AdminInfo(
         telegram_id=admin.telegram_id,
         username=admin.username,
         role=admin.role,
+        role_id=admin.role_id,
         auth_method=admin.auth_method,
         password_is_generated=password_is_generated,
+        permissions=permissions,
     )
 
 

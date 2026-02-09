@@ -28,6 +28,7 @@ from web.backend.core.ip_whitelist import get_allowed_ips, is_ip_allowed
 from web.backend.core.rate_limit import limiter
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 from web.backend.api.v2 import settings as settings_api
+from web.backend.api.v2 import admins as admins_api, roles as roles_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -160,6 +161,10 @@ async def lifespan(app: FastAPI):
                 logger.info("Database connected")
 
                 # First-run admin setup
+                # Verify RBAC tables exist
+                from web.backend.core.rbac import ensure_rbac_tables
+                await ensure_rbac_tables()
+
                 from web.backend.core.admin_credentials import first_run_setup
                 generated_password = await first_run_setup()
                 if generated_password:
@@ -278,6 +283,8 @@ def create_app() -> FastAPI:
     app.include_router(violations.router, prefix="/api/v2/violations", tags=["violations"])
     app.include_router(hosts.router, prefix="/api/v2/hosts", tags=["hosts"])
     app.include_router(settings_api.router, prefix="/api/v2/settings", tags=["settings"])
+    app.include_router(admins_api.router, prefix="/api/v2/admins", tags=["admins"])
+    app.include_router(roles_api.router, prefix="/api/v2/roles", tags=["roles"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
 
     # Health check endpoint
