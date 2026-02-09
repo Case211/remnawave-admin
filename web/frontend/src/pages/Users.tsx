@@ -31,6 +31,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { useHasPermission } from '../components/PermissionGate'
 
 // Types
 interface UserListItem {
@@ -206,6 +207,8 @@ function UserActions({
   onDelete: () => void
 }) {
   const navigate = useNavigate()
+  const canEdit = useHasPermission('users', 'edit')
+  const canDelete = useHasPermission('users', 'delete')
 
   return (
     <DropdownMenu>
@@ -218,25 +221,31 @@ function UserActions({
         <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}`)}>
           <Eye className="w-4 h-4 mr-2" /> Просмотр
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}?edit=1`)}>
-          <Pencil className="w-4 h-4 mr-2" /> Редактировать
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {user.status === 'disabled' ? (
-          <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
-            <Check className="w-4 h-4 mr-2" /> Включить
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
-            <Ban className="w-4 h-4 mr-2" /> Отключить
+        {canEdit && (
+          <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}?edit=1`)}>
+            <Pencil className="w-4 h-4 mr-2" /> Редактировать
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem
-          onClick={() => { if (confirm('Удалить пользователя?')) onDelete() }}
-          className="text-red-400 focus:text-red-400"
-        >
-          <Trash2 className="w-4 h-4 mr-2" /> Удалить
-        </DropdownMenuItem>
+        {(canEdit || canDelete) && <DropdownMenuSeparator />}
+        {canEdit && (
+          user.status === 'disabled' ? (
+            <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
+              <Check className="w-4 h-4 mr-2" /> Включить
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
+              <Ban className="w-4 h-4 mr-2" /> Отключить
+            </DropdownMenuItem>
+          )
+        )}
+        {canDelete && (
+          <DropdownMenuItem
+            onClick={() => { if (confirm('Удалить пользователя?')) onDelete() }}
+            className="text-red-400 focus:text-red-400"
+          >
+            <Trash2 className="w-4 h-4 mr-2" /> Удалить
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -490,6 +499,7 @@ function CreateUserModal({
 export default function Users() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const canCreate = useHasPermission('users', 'create')
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
@@ -602,14 +612,16 @@ export default function Users() {
             Управление пользователями и подписками
           </p>
         </div>
-        <Button
-          onClick={() => { setShowCreateModal(true); setCreateError('') }}
-          className="self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          <span className="hidden sm:inline">Создать пользователя</span>
-          <span className="sm:hidden">Создать</span>
-        </Button>
+        {canCreate && (
+          <Button
+            onClick={() => { setShowCreateModal(true); setCreateError('') }}
+            className="self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Создать пользователя</span>
+            <span className="sm:hidden">Создать</span>
+          </Button>
+        )}
       </div>
 
       {/* Search + Filter/Sort controls */}

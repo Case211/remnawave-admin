@@ -20,6 +20,7 @@ import {
   Cell,
 } from 'recharts'
 import client from '../api/client'
+import { usePermissionStore } from '../store/permissionStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -203,24 +204,34 @@ const SEVERITY_COLORS: Record<string, string> = {
 export default function Dashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const hasPermission = usePermissionStore((s) => s.hasPermission)
 
-  // Fetch data
+  const canViewUsers = hasPermission('users', 'view')
+  const canViewNodes = hasPermission('nodes', 'view')
+  const canViewViolations = hasPermission('violations', 'view')
+  const canViewAnalytics = hasPermission('analytics', 'view')
+  const canViewSettings = hasPermission('settings', 'view')
+
+  // Fetch data (only if permitted)
   const { data: overview, isLoading: overviewLoading, isError: overviewError } = useQuery({
     queryKey: ['overview'],
     queryFn: fetchOverview,
     refetchInterval: 30000,
+    enabled: canViewAnalytics,
   })
 
   const { data: violationStats, isLoading: violationsLoading, isError: violationsError } = useQuery({
     queryKey: ['violationStats'],
     queryFn: fetchViolationStats,
     refetchInterval: 30000,
+    enabled: canViewViolations,
   })
 
   const { data: trafficStats, isLoading: trafficLoading } = useQuery({
     queryKey: ['trafficStats'],
     queryFn: fetchTrafficStats,
     refetchInterval: 60000,
+    enabled: canViewAnalytics,
   })
 
   // Refresh ALL dashboard queries
@@ -300,238 +311,250 @@ export default function Dashboard() {
 
       {/* Stats grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Всего пользователей"
-          value={overview?.total_users != null ? overview.total_users.toLocaleString() : '-'}
-          icon={Users}
-          color="cyan"
-          subtitle={overview ? `${overview.active_users} активных, ${overview.expired_users} истекших` : undefined}
-          onClick={() => navigate('/users')}
-          loading={overviewLoading}
-          index={0}
-        />
-        <StatCard
-          title="Активные ноды"
-          value={overview ? `${overview.online_nodes}/${overview.total_nodes}` : '-'}
-          icon={Server}
-          color="green"
-          subtitle={overview ? `${overview.offline_nodes} офлайн, ${overview.disabled_nodes} отключ.${overview.users_online ? `, ${overview.users_online} онлайн` : ''}` : undefined}
-          onClick={() => navigate('/nodes')}
-          loading={overviewLoading}
-          index={1}
-        />
-        <StatCard
-          title="Нарушения"
-          value={overview ? `${overview.violations_today}` : '-'}
-          icon={ShieldAlert}
-          color={overview && overview.violations_today > 0 ? 'red' : 'yellow'}
-          subtitle={overview ? `Сегодня: ${overview.violations_today}, за неделю: ${overview.violations_week}` : undefined}
-          onClick={() => navigate('/violations')}
-          loading={overviewLoading}
-          index={2}
-        />
-        <Card
-          className="animate-fade-in-up"
-          style={{ animationDelay: '0.21s' }}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Трафик</p>
-                {(overviewLoading && trafficLoading) ? (
-                  <Skeleton className="h-8 w-20 mt-1" />
-                ) : (
-                  <p className="text-xl md:text-2xl font-bold text-white mt-1">
-                    {overview ? formatBytes(overview.total_traffic_bytes) : trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
-                  </p>
-                )}
-              </div>
-              <div
-                className="p-3 rounded-lg"
-                style={{
-                  background: 'rgba(151, 117, 250, 0.15)',
-                  border: '1px solid rgba(151, 117, 250, 0.3)',
-                }}
-              >
-                <TrendingUp className="w-6 h-6 text-violet-400" />
-              </div>
-            </div>
-            {trafficStats && (
-              <>
-                <Separator className="mt-3" />
-                <div className="space-y-1.5 mt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Сегодня</span>
-                    <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.today_bytes)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">За неделю</span>
-                    <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.week_bytes)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">За месяц</span>
-                    <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.month_bytes)}</span>
-                  </div>
+        {canViewUsers && (
+          <StatCard
+            title="Всего пользователей"
+            value={overview?.total_users != null ? overview.total_users.toLocaleString() : '-'}
+            icon={Users}
+            color="cyan"
+            subtitle={overview ? `${overview.active_users} активных, ${overview.expired_users} истекших` : undefined}
+            onClick={() => navigate('/users')}
+            loading={overviewLoading && canViewAnalytics}
+            index={0}
+          />
+        )}
+        {canViewNodes && (
+          <StatCard
+            title="Активные ноды"
+            value={overview ? `${overview.online_nodes}/${overview.total_nodes}` : '-'}
+            icon={Server}
+            color="green"
+            subtitle={overview ? `${overview.offline_nodes} офлайн, ${overview.disabled_nodes} отключ.${overview.users_online ? `, ${overview.users_online} онлайн` : ''}` : undefined}
+            onClick={() => navigate('/nodes')}
+            loading={overviewLoading && canViewAnalytics}
+            index={1}
+          />
+        )}
+        {canViewViolations && (
+          <StatCard
+            title="Нарушения"
+            value={overview ? `${overview.violations_today}` : '-'}
+            icon={ShieldAlert}
+            color={overview && overview.violations_today > 0 ? 'red' : 'yellow'}
+            subtitle={overview ? `Сегодня: ${overview.violations_today}, за неделю: ${overview.violations_week}` : undefined}
+            onClick={() => navigate('/violations')}
+            loading={overviewLoading && canViewAnalytics}
+            index={2}
+          />
+        )}
+        {canViewAnalytics && (
+          <Card
+            className="animate-fade-in-up"
+            style={{ animationDelay: '0.21s' }}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Трафик</p>
+                  {(overviewLoading && trafficLoading) ? (
+                    <Skeleton className="h-8 w-20 mt-1" />
+                  ) : (
+                    <p className="text-xl md:text-2xl font-bold text-white mt-1">
+                      {overview ? formatBytes(overview.total_traffic_bytes) : trafficStats ? formatBytes(trafficStats.total_bytes) : '-'}
+                    </p>
+                  )}
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Violations by severity */}
-        <Card className="lg:col-span-2 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <CardHeader className="pb-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <CardTitle className="text-base md:text-lg">Нарушения по уровню (за 7 дней)</CardTitle>
-              {violationStats && (
-                <span className="text-xs text-muted-foreground">
-                  Всего: {violationStats.total} | Уникальных: {violationStats.unique_users}
-                </span>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {violationsLoading ? (
-              <ChartSkeleton />
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={violationsChartData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
-                  <XAxis type="number" stroke="#8b949e" fontSize={12} />
-                  <YAxis dataKey="name" type="category" stroke="#8b949e" fontSize={12} width={100} />
-                  <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: 'rgba(22, 27, 34, 0.95)',
-                      border: '1px solid rgba(72, 79, 88, 0.3)',
-                      borderRadius: '8px',
-                      backdropFilter: 'blur(12px)',
-                    }}
-                  />
-                  <Bar dataKey="value" radius={[0, 8, 8, 0]}>
-                    {violationsChartData.map((entry) => (
-                      <Cell key={entry.key} fill={SEVERITY_COLORS[entry.key] || '#fab005'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Violations by action */}
-        <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base md:text-lg">По рекомендации</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {violationsLoading ? (
-              <ChartSkeleton />
-            ) : actionChartData.length > 0 ? (
-              <div className="space-y-3">
-                {actionChartData.map((item, i) => (
-                  <div key={item.name} className="flex items-center justify-between animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-                    <span className="text-sm text-dark-100">{item.name}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-2 bg-dark-600 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${violationStats && violationStats.total > 0 ? (item.value / violationStats.total) * 100 : 0}%`,
-                            background: 'linear-gradient(90deg, #0d9488, #06b6d4)',
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm text-white font-mono w-8 text-right">{item.value}</span>
+                <div
+                  className="p-3 rounded-lg"
+                  style={{
+                    background: 'rgba(151, 117, 250, 0.15)',
+                    border: '1px solid rgba(151, 117, 250, 0.3)',
+                  }}
+                >
+                  <TrendingUp className="w-6 h-6 text-violet-400" />
+                </div>
+              </div>
+              {trafficStats && (
+                <>
+                  <Separator className="mt-3" />
+                  <div className="space-y-1.5 mt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Сегодня</span>
+                      <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.today_bytes)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">За неделю</span>
+                      <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.week_bytes)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">За месяц</span>
+                      <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.month_bytes)}</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="h-48 flex items-center justify-center">
-                <span className="text-muted-foreground text-sm">Нет данных</span>
-              </div>
-            )}
-            {violationStats && violationStats.max_score > 0 && (
-              <>
-                <Separator className="mt-4" />
-                <div className="space-y-1 mt-4">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Средний скор</span>
-                    <span className="text-white">{violationStats.avg_score.toFixed(1)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Максимальный скор</span>
-                    <span className="text-white">{violationStats.max_score.toFixed(1)}</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {/* Charts row — only if violations visible */}
+      {canViewViolations && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Violations by severity */}
+          <Card className="lg:col-span-2 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+            <CardHeader className="pb-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <CardTitle className="text-base md:text-lg">Нарушения по уровню (за 7 дней)</CardTitle>
+                {violationStats && (
+                  <span className="text-xs text-muted-foreground">
+                    Всего: {violationStats.total} | Уникальных: {violationStats.unique_users}
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {violationsLoading ? (
+                <ChartSkeleton />
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={violationsChartData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
+                    <XAxis type="number" stroke="#8b949e" fontSize={12} />
+                    <YAxis dataKey="name" type="category" stroke="#8b949e" fontSize={12} width={100} />
+                    <RechartsTooltip
+                      contentStyle={{
+                        backgroundColor: 'rgba(22, 27, 34, 0.95)',
+                        border: '1px solid rgba(72, 79, 88, 0.3)',
+                        borderRadius: '8px',
+                        backdropFilter: 'blur(12px)',
+                      }}
+                    />
+                    <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                      {violationsChartData.map((entry) => (
+                        <Cell key={entry.key} fill={SEVERITY_COLORS[entry.key] || '#fab005'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Violations by action */}
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base md:text-lg">По рекомендации</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {violationsLoading ? (
+                <ChartSkeleton />
+              ) : actionChartData.length > 0 ? (
+                <div className="space-y-3">
+                  {actionChartData.map((item, i) => (
+                    <div key={item.name} className="flex items-center justify-between animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
+                      <span className="text-sm text-dark-100">{item.name}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-2 bg-dark-600 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${violationStats && violationStats.total > 0 ? (item.value / violationStats.total) * 100 : 0}%`,
+                              background: 'linear-gradient(90deg, #0d9488, #06b6d4)',
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm text-white font-mono w-8 text-right">{item.value}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-48 flex items-center justify-center">
+                  <span className="text-muted-foreground text-sm">Нет данных</span>
+                </div>
+              )}
+              {violationStats && violationStats.max_score > 0 && (
+                <>
+                  <Separator className="mt-4" />
+                  <div className="space-y-1 mt-4">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Средний скор</span>
+                      <span className="text-white">{violationStats.avg_score.toFixed(1)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Максимальный скор</span>
+                      <span className="text-white">{violationStats.max_score.toFixed(1)}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Main content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Statistics summary */}
-        <Card className="animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base md:text-lg">Сводка</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {[
-                { label: 'Активные пользователи', value: overview?.active_users ?? '-' },
-                { label: 'Отключённые пользователи', value: overview?.disabled_users ?? '-' },
-                { label: 'Истёкшие подписки', value: overview?.expired_users ?? '-' },
-                { label: 'Пользователи онлайн', value: overview?.users_online ?? '-', color: 'text-green-400' },
-                { label: 'Хосты', value: overview?.total_hosts ?? '-' },
-                { label: 'Общий трафик', value: overview ? formatBytes(overview.total_traffic_bytes) : '-', color: 'text-violet-400' },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-dark-400/10">
-                  <span className="text-sm text-muted-foreground">{item.label}</span>
-                  <span className={cn("text-sm font-semibold", item.color || "text-white")}>{item.value}</span>
-                </div>
-              ))}
-              {trafficStats && (
+        {canViewAnalytics && (
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base md:text-lg">Сводка</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[
+                  { label: 'Активные пользователи', value: overview?.active_users ?? '-' },
+                  { label: 'Отключённые пользователи', value: overview?.disabled_users ?? '-' },
+                  { label: 'Истёкшие подписки', value: overview?.expired_users ?? '-' },
+                  { label: 'Пользователи онлайн', value: overview?.users_online ?? '-', color: 'text-green-400' },
+                  { label: 'Хосты', value: overview?.total_hosts ?? '-' },
+                  { label: 'Общий трафик', value: overview ? formatBytes(overview.total_traffic_bytes) : '-', color: 'text-violet-400' },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-dark-400/10">
+                    <span className="text-sm text-muted-foreground">{item.label}</span>
+                    <span className={cn("text-sm font-semibold", item.color || "text-white")}>{item.value}</span>
+                  </div>
+                ))}
+                {trafficStats && (
+                  <>
+                    <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
+                      <span className="text-sm text-muted-foreground">Трафик сегодня</span>
+                      <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.today_bytes)}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
+                      <span className="text-sm text-muted-foreground">Трафик за неделю</span>
+                      <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.week_bytes)}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-sm text-muted-foreground">Трафик за месяц</span>
+                      <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.month_bytes)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+              {violationStats && violationStats.by_country && Object.keys(violationStats.by_country).length > 0 && (
                 <>
-                  <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
-                    <span className="text-sm text-muted-foreground">Трафик сегодня</span>
-                    <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.today_bytes)}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-dark-400/10">
-                    <span className="text-sm text-muted-foreground">Трафик за неделю</span>
-                    <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.week_bytes)}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-sm text-muted-foreground">Трафик за месяц</span>
-                    <span className="text-sm text-cyan-400 font-semibold">{formatBytes(trafficStats.month_bytes)}</span>
+                  <Separator className="mt-4" />
+                  <div className="mt-4">
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Нарушения по странам</h3>
+                    <div className="space-y-1">
+                      {Object.entries(violationStats.by_country).slice(0, 5).map(([country, count]) => (
+                        <div key={country} className="flex items-center justify-between">
+                          <span className="text-xs text-dark-100">{country}</span>
+                          <span className="text-xs text-white font-mono">{count}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </>
               )}
-            </div>
-            {violationStats && violationStats.by_country && Object.keys(violationStats.by_country).length > 0 && (
-              <>
-                <Separator className="mt-4" />
-                <div className="mt-4">
-                  <h3 className="text-sm font-medium text-muted-foreground mb-2">Нарушения по странам</h3>
-                  <div className="space-y-1">
-                    {Object.entries(violationStats.by_country).slice(0, 5).map(([country, count]) => (
-                      <div key={country} className="flex items-center justify-between">
-                        <span className="text-xs text-dark-100">{country}</span>
-                        <span className="text-xs text-white font-mono">{count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Quick actions */}
+        {/* Quick actions + System status */}
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
           <CardHeader className="pb-2">
             <CardTitle className="text-base md:text-lg">Быстрые действия</CardTitle>
@@ -539,22 +562,24 @@ export default function Dashboard() {
           <CardContent>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { icon: Users, label: 'Пользователи', href: '/users', delay: '0.32s' },
-                { icon: Server, label: 'Ноды', href: '/nodes', delay: '0.36s' },
-                { icon: ShieldAlert, label: 'Нарушения', href: '/violations', delay: '0.4s' },
-                { icon: Settings, label: 'Настройки', href: '/settings', delay: '0.44s' },
-              ].map((item) => (
-                <Button
-                  key={item.href}
-                  variant="secondary"
-                  onClick={() => navigate(item.href)}
-                  className="py-8 flex flex-col items-center gap-2 hover:shadow-glow-teal animate-fade-in-up h-auto"
-                  style={{ animationDelay: item.delay }}
-                >
-                  <item.icon className="w-6 h-6" />
-                  <span>{item.label}</span>
-                </Button>
-              ))}
+                { icon: Users, label: 'Пользователи', href: '/users', delay: '0.32s', perm: 'users' },
+                { icon: Server, label: 'Ноды', href: '/nodes', delay: '0.36s', perm: 'nodes' },
+                { icon: ShieldAlert, label: 'Нарушения', href: '/violations', delay: '0.4s', perm: 'violations' },
+                { icon: Settings, label: 'Настройки', href: '/settings', delay: '0.44s', perm: 'settings' },
+              ]
+                .filter((item) => hasPermission(item.perm, 'view'))
+                .map((item) => (
+                  <Button
+                    key={item.href}
+                    variant="secondary"
+                    onClick={() => navigate(item.href)}
+                    className="py-8 flex flex-col items-center gap-2 hover:shadow-glow-teal animate-fade-in-up h-auto"
+                    style={{ animationDelay: item.delay }}
+                  >
+                    <item.icon className="w-6 h-6" />
+                    <span>{item.label}</span>
+                  </Button>
+                ))}
             </div>
 
             {/* System status */}
@@ -566,8 +591,8 @@ export default function Dashboard() {
                   {
                     label: 'API',
                     ok: !!(overview && !overviewError),
-                    loading: overviewLoading,
-                    text: overviewLoading ? 'Проверка...' : overview && !overviewError ? 'Работает' : 'Недоступен',
+                    loading: overviewLoading && canViewAnalytics,
+                    text: !canViewAnalytics ? 'N/A' : overviewLoading ? 'Проверка...' : overview && !overviewError ? 'Работает' : 'Недоступен',
                   },
                   {
                     label: 'Ноды',
@@ -579,8 +604,8 @@ export default function Dashboard() {
                   {
                     label: 'База данных',
                     ok: violationStats !== undefined && !violationsError,
-                    loading: violationsLoading,
-                    text: violationsLoading ? 'Проверка...' : violationStats !== undefined && !violationsError ? 'Доступна' : 'Недоступна',
+                    loading: violationsLoading && canViewViolations,
+                    text: !canViewViolations ? 'N/A' : violationsLoading ? 'Проверка...' : violationStats !== undefined && !violationsError ? 'Доступна' : 'Недоступна',
                     warn: true,
                   },
                 ].map((item) => (
