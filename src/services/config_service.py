@@ -324,6 +324,7 @@ class DynamicConfigService:
         """
         Инициализация сервиса конфигурации.
         Создаёт предустановленные настройки в БД если их нет.
+        Удаляет настройки, которых больше нет в DEFAULT_CONFIG_DEFINITIONS.
         """
         if not db_service.is_connected:
             logger.warning("Database not connected, config service running in .env-only mode")
@@ -335,6 +336,9 @@ class DynamicConfigService:
 
             # Добавляем предустановленные настройки если их нет
             await self._ensure_default_configs()
+
+            # Удаляем настройки, которых больше нет в определениях
+            await self._cleanup_stale_configs()
 
             self._initialized = True
             logger.info("✅ Dynamic config: %d settings loaded", len(self._cache))
@@ -459,6 +463,29 @@ class DynamicConfigService:
 
         except Exception as e:
             logger.error("Failed to create config %s: %s", config_def['key'], e, exc_info=True)
+
+    async def _cleanup_stale_configs(self) -> None:
+        """Удаляет из БД настройки, которых больше нет в DEFAULT_CONFIG_DEFINITIONS."""
+        if not db_service.is_connected:
+            return
+
+        valid_keys = {d['key'] for d in DEFAULT_CONFIG_DEFINITIONS}
+        stale_keys = [k for k in self._cache if k not in valid_keys]
+
+        if not stale_keys:
+            return
+
+        try:
+            async with db_service.acquire() as conn:
+                await conn.execute(
+                    "DELETE FROM bot_config WHERE key = ANY($1)",
+                    stale_keys
+                )
+            for k in stale_keys:
+                del self._cache[k]
+            logger.info("Cleaned up %d stale config entries: %s", len(stale_keys), ", ".join(stale_keys))
+        except Exception as e:
+            logger.error("Failed to cleanup stale configs: %s", e, exc_info=True)
 
     def get(self, key: str, default: Any = None) -> Any:
         """

@@ -81,8 +81,12 @@ async def get_all_settings(
     """Get all settings grouped by category. Priority: DB > .env > default."""
     try:
         from src.services.database import db_service
+        from src.services.config_service import DEFAULT_CONFIG_DEFINITIONS
         if not db_service.is_connected:
             return ConfigByCategoryResponse(categories={})
+
+        # Only show keys that exist in current definitions
+        valid_keys = {d['key'] for d in DEFAULT_CONFIG_DEFINITIONS}
 
         async with db_service.acquire() as conn:
             rows = await conn.fetch(
@@ -98,6 +102,8 @@ async def get_all_settings(
 
         categories: Dict[str, List[ConfigItemResponse]] = {}
         for row in rows:
+            if row['key'] not in valid_keys:
+                continue
             row_dict = dict(row)
             category = row_dict.get('category', 'general')
 

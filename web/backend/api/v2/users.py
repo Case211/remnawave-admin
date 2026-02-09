@@ -657,7 +657,7 @@ async def get_user_hwid_devices(
     user_uuid: str,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Get HWID devices for a user. Tries local DB first, then API."""
+    """Get HWID devices for a user. Reads from local DB (synced via webhooks), API as fallback."""
     def _parse_devices(devices: list) -> List[HwidDevice]:
         items = []
         for d in devices:
@@ -673,7 +673,17 @@ async def get_user_hwid_devices(
             ))
         return items
 
-    # Fetch from API first for freshest data
+    # Read from local DB first (kept up-to-date via sync + webhooks)
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            db_devices = await db_service.get_user_hwid_devices(user_uuid)
+            if db_devices:
+                return _parse_devices(db_devices)
+    except Exception as e:
+        logger.debug("DB HWID fetch failed for %s, trying API: %s", user_uuid, e)
+
+    # Fall back to API if local DB has no data
     try:
         from src.services.api_client import api_client
 
@@ -686,16 +696,6 @@ async def get_user_hwid_devices(
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
     except Exception as e:
-        logger.debug("API HWID fetch failed for %s, trying DB: %s", user_uuid, e)
-
-    # Fall back to local DB if API is unavailable
-    try:
-        from src.services.database import db_service
-        if db_service.is_connected:
-            db_devices = await db_service.get_user_hwid_devices(user_uuid)
-            if db_devices is not None:
-                return _parse_devices(db_devices)
-    except Exception as e:
-        logger.error("DB HWID fetch also failed for %s: %s", user_uuid, e)
+        logger.error("API HWID fetch also failed for %s: %s", user_uuid, e)
 
     return []

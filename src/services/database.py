@@ -2801,7 +2801,7 @@ class DatabaseService:
                 rows = await conn.fetch(
                     "SELECT user_uuid, COUNT(*) as cnt FROM user_hwid_devices GROUP BY user_uuid"
                 )
-                return {row["user_uuid"]: row["cnt"] for row in rows}
+                return {str(row["user_uuid"]): row["cnt"] for row in rows}
 
         except Exception as e:
             logger.error("Error getting bulk HWID device counts: %s", e, exc_info=True)
