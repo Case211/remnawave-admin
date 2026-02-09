@@ -75,6 +75,18 @@ export interface RoleUpdate {
   permissions?: Permission[]
 }
 
+export interface AuditLogEntry {
+  id: number
+  admin_id: number | null
+  admin_username: string
+  action: string
+  resource: string | null
+  resource_id: string | null
+  details: string | null
+  ip_address: string | null
+  created_at: string | null
+}
+
 export type AvailableResources = Record<string, string[]>
 
 export const adminsApi = {
@@ -100,6 +112,17 @@ export const adminsApi = {
 
   delete: async (id: number): Promise<void> => {
     await client.delete(`/admins/${id}`)
+  },
+
+  auditLog: async (params?: {
+    limit?: number
+    offset?: number
+    admin_id?: number
+    action?: string
+    resource?: string
+  }): Promise<{ items: AuditLogEntry[]; total: number }> => {
+    const { data } = await client.get('/admins/audit-log', { params })
+    return data
   },
 }
 

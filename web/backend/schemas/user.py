@@ -73,7 +73,7 @@ class UserCreate(BaseModel):
 
     username: str
     traffic_limit_bytes: Optional[int] = None
-    expire_days: Optional[int] = None
+    expire_at: Optional[datetime] = None
     hwid_device_limit: int = 3
 
 

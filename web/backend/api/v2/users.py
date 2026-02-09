@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, AdminUser
+from web.backend.api.deps import get_current_admin, require_permission, AdminUser
 from web.backend.core.api_helper import fetch_users_from_api
 from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate, HwidDevice
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
@@ -107,7 +107,7 @@ async def list_users(
     traffic_usage: Optional[str] = Query(None, description="Filter by traffic usage: above_90, above_70, above_50, zero"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", regex="^(asc|desc)$"),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """List users with pagination and filtering."""
     try:
@@ -299,7 +299,7 @@ async def list_users(
 @router.get("/{user_uuid}", response_model=UserDetail)
 async def get_user(
     user_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """Get detailed user information with anti-abuse data from DB."""
     try:
@@ -365,16 +365,23 @@ async def get_user(
 @router.post("", response_model=UserDetail)
 async def create_user(
     data: UserCreate,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "create")),
 ):
     """Create a new user."""
     try:
         from src.services.api_client import api_client
 
+        # Compute expire_at ISO string
+        if data.expire_at:
+            expire_at_str = data.expire_at.isoformat()
+        else:
+            # Default: 30 days from now
+            expire_at_str = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+
         user = await api_client.create_user(
             username=data.username,
-            traffic_limit=data.traffic_limit_bytes,
-            expire_days=data.expire_days,
+            expire_at=expire_at_str,
+            traffic_limit_bytes=data.traffic_limit_bytes,
             hwid_device_limit=data.hwid_device_limit,
         )
 
@@ -390,7 +397,7 @@ async def create_user(
 async def update_user(
     user_uuid: str,
     data: UserUpdate,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Update user fields."""
     try:
@@ -411,7 +418,7 @@ async def update_user(
 @router.delete("/{user_uuid}", response_model=SuccessResponse)
 async def delete_user(
     user_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "delete")),
 ):
     """Delete a user."""
     try:
@@ -438,7 +445,7 @@ async def delete_user(
 @router.post("/{user_uuid}/enable", response_model=SuccessResponse)
 async def enable_user(
     user_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Enable a disabled user."""
     try:
@@ -456,7 +463,7 @@ async def enable_user(
 @router.post("/{user_uuid}/disable", response_model=SuccessResponse)
 async def disable_user(
     user_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Disable a user."""
     try:
@@ -474,7 +481,7 @@ async def disable_user(
 @router.post("/{user_uuid}/reset-traffic", response_model=SuccessResponse)
 async def reset_user_traffic(
     user_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Reset user's traffic usage."""
     try:
@@ -492,7 +499,7 @@ async def reset_user_traffic(
 @router.post("/{user_uuid}/revoke", response_model=SuccessResponse)
 async def revoke_user_subscription(
     user_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Revoke user's subscription (regenerate subscription UUID)."""
     try:
@@ -510,7 +517,7 @@ async def revoke_user_subscription(
 @router.post("/hwid-device-counts")
 async def get_hwid_device_counts(
     user_uuids: List[str],
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """Get HWID device counts for multiple users in one call."""
     import asyncio
@@ -540,7 +547,7 @@ async def get_hwid_device_counts(
 async def get_user_traffic_stats(
     user_uuid: str,
     period: str = Query("today", description="Period: today, week, month, 3month, 6month, year"),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """Get per-user traffic statistics with per-node breakdown from Remnawave API.
 
@@ -640,7 +647,7 @@ async def get_user_traffic_stats(
 @router.post("/{user_uuid}/sync-hwid-devices")
 async def sync_user_hwid_devices(
     user_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Force re-sync HWID devices for a user from Remnawave API to local DB."""
     try:
@@ -655,7 +662,7 @@ async def sync_user_hwid_devices(
 @router.get("/{user_uuid}/hwid-devices", response_model=List[HwidDevice])
 async def get_user_hwid_devices(
     user_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """Get HWID devices for a user. Reads from local DB (synced via webhooks), API as fallback."""
     def _parse_devices(devices: list) -> List[HwidDevice]:

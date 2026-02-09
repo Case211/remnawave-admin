@@ -13,7 +13,7 @@ from pydantic import BaseModel
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, AdminUser
+from web.backend.api.deps import get_current_admin, AdminUser, require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ def _effective_value(db_value: Optional[str], env_var_name: Optional[str], defau
 
 @router.get("", response_model=ConfigByCategoryResponse)
 async def get_all_settings(
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("settings", "view")),
 ):
     """Get all settings grouped by category. Priority: DB > .env > default."""
     try:
@@ -174,7 +174,7 @@ async def get_all_settings(
 async def update_setting(
     key: str,
     data: ConfigUpdateRequest,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Update a single setting value. DB takes priority over .env."""
     try:
@@ -223,7 +223,7 @@ async def update_setting(
 @router.delete("/{key}")
 async def reset_setting(
     key: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Reset a setting to default (remove DB value, fallback to .env or default)."""
     try:
@@ -270,7 +270,7 @@ async def reset_setting(
 
 @router.get("/ip-whitelist")
 async def get_ip_whitelist(
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("settings", "view")),
 ):
     """Get current IP whitelist configuration."""
     from web.backend.core.config import get_web_settings
@@ -288,7 +288,7 @@ async def get_ip_whitelist(
 @router.put("/ip-whitelist")
 async def update_ip_whitelist(
     data: ConfigUpdateRequest,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Update IP whitelist. Value is a comma-separated list of IPs/CIDRs.
 
@@ -326,7 +326,7 @@ async def update_ip_whitelist(
 
 @router.get("/sync-status")
 async def get_sync_status(
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("settings", "view")),
 ):
     """Get sync status for all entity types."""
     try:
@@ -360,7 +360,7 @@ async def get_sync_status(
 @router.post("/sync/{entity}")
 async def trigger_sync(
     entity: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Trigger manual sync for a specific entity type."""
     try:

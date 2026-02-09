@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 from fastapi import APIRouter, Depends, Query
 
-from web.backend.api.deps import get_current_admin, AdminUser
+from web.backend.api.deps import get_current_admin, AdminUser, require_permission
 from web.backend.core.api_helper import (
     fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api,
     fetch_bandwidth_stats, fetch_nodes_realtime_usage, _normalize,
@@ -184,7 +184,7 @@ def _get_users_online(node: Dict[str, Any]) -> int:
 
 @router.get("/overview", response_model=OverviewStats)
 async def get_overview(
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get overview statistics for dashboard."""
     try:
@@ -257,7 +257,7 @@ def _parse_bandwidth_bytes(val: Any) -> int:
 
 @router.get("/traffic", response_model=TrafficStats)
 async def get_traffic_stats(
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get traffic statistics with time breakdowns.
 
@@ -329,7 +329,7 @@ async def get_traffic_stats(
 @router.get("/users")
 async def get_user_stats(
     period: str = Query("week", regex="^(day|week|month)$"),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get user statistics for charts."""
     return {
@@ -341,7 +341,7 @@ async def get_user_stats(
 @router.get("/connections")
 async def get_connection_stats(
     period: str = Query("day", regex="^(hour|day|week)$"),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get connection statistics for charts."""
     return {

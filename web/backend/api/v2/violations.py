@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional
 from datetime import datetime, timedelta
 
-from web.backend.api.deps import get_current_admin, get_db, AdminUser
+from web.backend.api.deps import get_current_admin, get_db, AdminUser, require_permission
 from web.backend.schemas.violation import (
     ViolationListItem,
     ViolationListResponse,
@@ -63,7 +63,7 @@ async def list_violations(
     severity: Optional[str] = None,
     user_uuid: Optional[str] = None,
     resolved: Optional[bool] = None,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
     """
@@ -143,7 +143,7 @@ async def list_violations(
 async def get_violation_stats(
     days: int = Query(7, ge=1, le=90),
     min_score: float = Query(0.0, ge=0.0, le=100.0),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
     """Статистика нарушений за период."""
@@ -210,7 +210,7 @@ async def get_pending_violations(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     min_score: float = Query(40.0, ge=0.0, le=100.0),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
     """Нерассмотренные нарушения (требующие действий)."""
@@ -230,7 +230,7 @@ async def get_top_violators(
     days: int = Query(7, ge=1, le=90),
     limit: int = Query(10, ge=1, le=50),
     min_score: float = Query(40.0, ge=0.0, le=100.0),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
     """Топ нарушителей за период."""
@@ -264,7 +264,7 @@ async def get_top_violators(
 @router.post("/ip-lookup", response_model=IPLookupResponse)
 async def lookup_ips(
     data: IPLookupRequest,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
 ):
     """Получить информацию о провайдерах по списку IP адресов."""
     if not data.ips:
@@ -300,7 +300,7 @@ async def lookup_ips(
 @router.get("/{violation_id}", response_model=ViolationDetail)
 async def get_violation(
     violation_id: int,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
     """Детальная информация о нарушении."""
@@ -354,7 +354,7 @@ async def get_violation(
 async def resolve_violation(
     violation_id: int,
     data: ResolveViolationRequest,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
     db: DatabaseService = Depends(get_db),
 ):
     """
@@ -381,7 +381,7 @@ async def resolve_violation(
 async def get_user_violations(
     user_uuid: str,
     days: int = Query(30, ge=1, le=365),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
     """Нарушения конкретного пользователя."""

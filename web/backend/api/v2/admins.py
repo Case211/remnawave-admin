@@ -1,7 +1,8 @@
 """Admin account management API endpoints."""
 import json
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, Request, Query
 
 from web.backend.api.deps import (
     AdminUser,
@@ -19,6 +20,7 @@ from web.backend.core.rbac import (
     get_admin_account_by_username,
     get_role_by_id,
     write_audit_log,
+    get_audit_logs,
 )
 from web.backend.core.admin_credentials import hash_password, validate_password_strength
 from web.backend.schemas.admin import (
@@ -26,6 +28,8 @@ from web.backend.schemas.admin import (
     AdminAccountUpdate,
     AdminAccountResponse,
     AdminAccountListResponse,
+    AuditLogEntry,
+    AuditLogResponse,
 )
 from web.backend.schemas.common import SuccessResponse
 
@@ -236,3 +240,26 @@ async def delete_admin_endpoint(
     )
 
     return SuccessResponse(message="Admin account deleted")
+
+
+@router.get("/audit-log", response_model=AuditLogResponse)
+async def get_audit_log(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    admin_id: Optional[int] = Query(None),
+    action: Optional[str] = Query(None),
+    resource: Optional[str] = Query(None),
+    admin: AdminUser = Depends(require_permission("audit", "view")),
+):
+    """Get audit log entries with optional filters."""
+    logs, total = await get_audit_logs(
+        limit=limit,
+        offset=offset,
+        admin_id=admin_id,
+        action=action,
+        resource=resource,
+    )
+    return AuditLogResponse(
+        items=[AuditLogEntry(**log) for log in logs],
+        total=total,
+    )

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 
-from web.backend.api.deps import get_current_admin, get_api_client, AdminUser
+from web.backend.api.deps import get_current_admin, get_api_client, AdminUser, require_permission
 from web.backend.schemas.host import (
     HostListItem,
     HostListResponse,
@@ -16,7 +16,7 @@ router = APIRouter()
 
 @router.get("", response_model=HostListResponse)
 async def list_hosts(
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("hosts", "view")),
     api_client=Depends(get_api_client),
 ):
     """Список всех хостов."""
@@ -49,7 +49,7 @@ async def list_hosts(
 @router.get("/{host_uuid}", response_model=HostDetail)
 async def get_host(
     host_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("hosts", "view")),
     api_client=Depends(get_api_client),
 ):
     """Получить информацию о хосте."""
@@ -84,7 +84,7 @@ async def get_host(
 @router.post("", response_model=HostDetail)
 async def create_host(
     data: HostCreate,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("hosts", "create")),
     api_client=Depends(get_api_client),
 ):
     """Создать новый хост."""
@@ -136,7 +136,7 @@ async def create_host(
 async def update_host(
     host_uuid: str,
     data: HostUpdate,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("hosts", "edit")),
     api_client=Depends(get_api_client),
 ):
     """Обновить хост."""
@@ -189,7 +189,7 @@ async def update_host(
 @router.delete("/{host_uuid}")
 async def delete_host(
     host_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("hosts", "delete")),
     api_client=Depends(get_api_client),
 ):
     """Удалить хост."""
@@ -204,7 +204,7 @@ async def delete_host(
 @router.post("/{host_uuid}/enable")
 async def enable_host(
     host_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("hosts", "edit")),
     api_client=Depends(get_api_client),
 ):
     """Включить хост."""
@@ -219,7 +219,7 @@ async def enable_host(
 @router.post("/{host_uuid}/disable")
 async def disable_host(
     host_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("hosts", "edit")),
     api_client=Depends(get_api_client),
 ):
     """Отключить хост."""

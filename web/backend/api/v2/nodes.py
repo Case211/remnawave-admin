@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, AdminUser
+from web.backend.api.deps import get_current_admin, AdminUser, require_permission
 from web.backend.core.api_helper import fetch_nodes_from_api, fetch_nodes_realtime_usage, _normalize
 from web.backend.schemas.node import NodeListItem, NodeDetail, NodeCreate, NodeUpdate
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
@@ -68,7 +68,7 @@ async def list_nodes(
     per_page: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None, description="Search by name"),
     is_connected: Optional[bool] = Query(None, description="Filter by connection status"),
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "view")),
 ):
     """List nodes with pagination and filtering."""
     try:
@@ -143,7 +143,7 @@ async def list_nodes(
 @router.get("/{node_uuid}", response_model=NodeDetail)
 async def get_node(
     node_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "view")),
 ):
     """Get detailed node information."""
     try:
@@ -174,7 +174,7 @@ async def get_node(
 @router.post("", response_model=NodeDetail)
 async def create_node(
     data: NodeCreate,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "create")),
 ):
     """Create a new node."""
     try:
@@ -200,7 +200,7 @@ async def create_node(
 async def update_node(
     node_uuid: str,
     data: NodeUpdate,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Update node fields."""
     try:
@@ -222,7 +222,7 @@ async def update_node(
 @router.delete("/{node_uuid}", response_model=SuccessResponse)
 async def delete_node(
     node_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "delete")),
 ):
     """Delete a node."""
     try:
@@ -249,7 +249,7 @@ async def delete_node(
 @router.post("/{node_uuid}/restart", response_model=SuccessResponse)
 async def restart_node(
     node_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Restart a node."""
     try:
@@ -267,7 +267,7 @@ async def restart_node(
 @router.post("/{node_uuid}/enable", response_model=SuccessResponse)
 async def enable_node(
     node_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Enable a disabled node."""
     try:
@@ -285,7 +285,7 @@ async def enable_node(
 @router.get("/{node_uuid}/agent-token")
 async def get_agent_token_status(
     node_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Get agent token status for a node (masked)."""
     try:
@@ -308,7 +308,7 @@ async def get_agent_token_status(
 @router.post("/{node_uuid}/agent-token/generate")
 async def generate_agent_token(
     node_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Generate a new agent token for a node."""
     try:
@@ -329,7 +329,7 @@ async def generate_agent_token(
 @router.post("/{node_uuid}/agent-token/revoke")
 async def revoke_agent_token(
     node_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Revoke agent token for a node."""
     try:
@@ -350,7 +350,7 @@ async def revoke_agent_token(
 @router.post("/{node_uuid}/disable", response_model=SuccessResponse)
 async def disable_node(
     node_uuid: str,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Disable a node."""
     try:

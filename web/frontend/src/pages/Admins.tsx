@@ -13,11 +13,15 @@ import {
   Check,
   Lock,
   Users as UsersIcon,
+  History,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import {
   adminsApi, rolesApi,
   AdminAccount, AdminAccountCreate, AdminAccountUpdate,
   Role, RoleCreate, RoleUpdate, Permission, AvailableResources,
+  AuditLogEntry,
 } from '../api/admins'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,7 +32,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { PermissionGate } from '@/components/PermissionGate'
+import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -842,11 +846,154 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
   )
 }
 
+// ── Audit Log Tab ──────────────────────────────────────────────
+
+const ACTION_DISPLAY: Record<string, string> = {
+  'admin.create': 'Создание админа',
+  'admin.update': 'Обновление админа',
+  'admin.delete': 'Удаление админа',
+  'role.create': 'Создание роли',
+  'role.update': 'Обновление роли',
+  'role.delete': 'Удаление роли',
+  'login': 'Вход в систему',
+  'logout': 'Выход из системы',
+}
+
+function AuditTab() {
+  const [page, setPage] = useState(1)
+  const perPage = 30
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['audit-log', page],
+    queryFn: () => adminsApi.auditLog({ limit: perPage, offset: (page - 1) * perPage }),
+    refetchInterval: 30000,
+  })
+
+  const logs = data?.items ?? []
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / perPage))
+
+  function formatDateTime(dateStr: string | null): string {
+    if (!dateStr) return '\u2014'
+    return new Date(dateStr).toLocaleString('ru-RU', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    })
+  }
+
+  function parseDetails(details: string | null): Record<string, string> | null {
+    if (!details) return null
+    try { return JSON.parse(details) } catch { return null }
+  }
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {'Всего записей: '}{total}
+        </p>
+        <Button variant="secondary" size="sm" onClick={() => refetch()}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          {'Обновить'}
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              <History className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>{'Записи отсутствуют'}</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-dark-400/20">
+                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-medium">{'Дата'}</th>
+                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-medium">{'Администратор'}</th>
+                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-medium">{'Действие'}</th>
+                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-medium hidden md:table-cell">{'Ресурс'}</th>
+                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-medium hidden lg:table-cell">{'Детали'}</th>
+                    <th className="text-left py-3 px-4 text-xs text-muted-foreground font-medium hidden lg:table-cell">{'IP'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((log: AuditLogEntry) => {
+                    const details = parseDetails(log.details)
+                    return (
+                      <tr key={log.id} className="border-b border-dark-400/10 hover:bg-dark-700/30 transition-colors">
+                        <td className="py-2.5 px-4 text-xs text-dark-100 whitespace-nowrap">
+                          {formatDateTime(log.created_at)}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <span className="text-white font-medium">{log.admin_username}</span>
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <Badge variant={
+                            log.action.includes('delete') ? 'destructive' :
+                            log.action.includes('create') ? 'success' :
+                            'secondary'
+                          } className="text-xs">
+                            {ACTION_DISPLAY[log.action] || log.action}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-4 hidden md:table-cell">
+                          {log.resource && (
+                            <span className="text-dark-100 text-xs">
+                              {RESOURCE_LABELS[log.resource] || log.resource}
+                              {log.resource_id && <span className="text-dark-300 ml-1">#{log.resource_id}</span>}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 hidden lg:table-cell max-w-[200px]">
+                          {details && (
+                            <span className="text-dark-200 text-xs truncate block" title={log.details || ''}>
+                              {Object.entries(details).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-4 hidden lg:table-cell">
+                          <span className="text-dark-300 text-xs font-mono">{log.ip_address || '\u2014'}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button variant="secondary" size="icon" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {page} / {totalPages}
+          </span>
+          <Button variant="secondary" size="icon" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ──────────────────────────────────────────────────
 
 export default function Admins() {
   const { data: roles = [] } = useQuery({ queryKey: ['roles'], queryFn: rolesApi.list })
   const { data: resources = {} } = useQuery({ queryKey: ['roles-resources'], queryFn: rolesApi.getResources })
+  const canViewAudit = useHasPermission('audit', 'view')
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -863,6 +1010,12 @@ export default function Admins() {
         <TabsList>
           <TabsTrigger value="admins">{'Администраторы'}</TabsTrigger>
           <TabsTrigger value="roles">{'Роли'}</TabsTrigger>
+          {canViewAudit && (
+            <TabsTrigger value="audit">
+              <History className="w-4 h-4 mr-1.5" />
+              {'Журнал'}
+            </TabsTrigger>
+          )}
         </TabsList>
         <TabsContent value="admins">
           <AdminsTab roles={roles} />
@@ -870,6 +1023,11 @@ export default function Admins() {
         <TabsContent value="roles">
           <RolesTab resources={resources} />
         </TabsContent>
+        {canViewAudit && (
+          <TabsContent value="audit">
+            <AuditTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )
