@@ -9,6 +9,11 @@ import {
   Check,
   Zap,
   ArrowRight,
+  Clock,
+  AlertTriangle,
+  Activity,
+  Shield,
+  Info,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -33,13 +38,17 @@ import {
   EVENT_TYPES,
   THRESHOLD_METRICS,
   CONDITION_OPERATORS,
+  CONDITION_FIELDS,
   ACTION_TYPES,
   CATEGORIES,
   describeTrigger,
   describeAction,
   categoryLabel,
+  categoryColor,
   triggerTypeLabel,
 } from './helpers'
+import { CronBuilder } from './CronBuilder'
+import { IntervalPicker } from './IntervalPicker'
 
 interface Condition {
   field: string
@@ -53,9 +62,20 @@ interface RuleConstructorProps {
   editRule: AutomationRule | null
 }
 
+const STEP_LABELS = ['Триггер', 'Условия', 'Действие', 'Обзор']
+
+const TRIGGER_ICONS: Record<string, React.ElementType> = {
+  event: Zap,
+  schedule: Clock,
+  threshold: Activity,
+}
+
 export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructorProps) {
   const queryClient = useQueryClient()
   const [step, setStep] = useState(1)
+
+  // Schedule sub-mode: 'cron' or 'interval'
+  const [scheduleMode, setScheduleMode] = useState<'cron' | 'interval'>('cron')
 
   // Form state
   const [name, setName] = useState('')
@@ -106,6 +126,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         } else if (editRule.trigger_type === 'schedule') {
           setCronExpr(tc.cron || '')
           setIntervalMinutes(tc.interval_minutes?.toString() || '')
+          setScheduleMode(tc.cron ? 'cron' : 'interval')
         } else if (editRule.trigger_type === 'threshold') {
           setThresholdMetric(tc.metric || 'users_online')
           setThresholdOperator(tc.operator || '>=')
@@ -146,6 +167,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setOfflineMinutes('')
         setCronExpr('')
         setIntervalMinutes('')
+        setScheduleMode('cron')
         setThresholdMetric('users_online')
         setThresholdOperator('>=')
         setThresholdValue('')
@@ -169,8 +191,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       return cfg
     }
     if (triggerType === 'schedule') {
-      if (cronExpr) return { cron: cronExpr }
-      if (intervalMinutes) return { interval_minutes: parseInt(intervalMinutes) }
+      if (scheduleMode === 'cron' && cronExpr) return { cron: cronExpr }
+      if (scheduleMode === 'interval' && intervalMinutes) return { interval_minutes: parseInt(intervalMinutes) }
       return {}
     }
     if (triggerType === 'threshold') {
@@ -264,7 +286,10 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const canProceed = (): boolean => {
     if (step === 1) {
       if (triggerType === 'event') return !!eventType
-      if (triggerType === 'schedule') return !!(cronExpr || intervalMinutes)
+      if (triggerType === 'schedule') {
+        if (scheduleMode === 'cron') return !!cronExpr
+        return !!intervalMinutes
+      }
       if (triggerType === 'threshold') return !!(thresholdMetric && thresholdValue)
     }
     if (step === 3) return !!actionType
@@ -272,12 +297,15 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
     return true
   }
 
+  // Get the currently selected descriptions
+  const selectedMetric = THRESHOLD_METRICS.find((m) => m.value === thresholdMetric)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {editRule ? 'Редактирование правила' : 'Новое правило'}
+            {editRule ? 'Редактирование правила' : 'Новое правило автоматизации'}
           </DialogTitle>
         </DialogHeader>
 
@@ -306,10 +334,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             </div>
           ))}
           <span className="ml-3 text-xs text-dark-400">
-            {step === 1 && 'Триггер'}
-            {step === 2 && 'Условия'}
-            {step === 3 && 'Действие'}
-            {step === 4 && 'Обзор'}
+            {STEP_LABELS[step - 1]}
           </span>
         </div>
 
@@ -317,22 +342,27 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         {step === 1 && (
           <div className="space-y-4">
             <div>
-              <Label className="text-sm">Тип триггера</Label>
+              <Label className="text-sm">Когда запускать правило?</Label>
+              <p className="text-[11px] text-dark-500 mt-0.5">Выберите тип события, которое будет активировать автоматизацию</p>
               <div className="grid grid-cols-3 gap-2 mt-2">
-                {TRIGGER_TYPES.map((t) => (
-                  <button
-                    key={t.value}
-                    onClick={() => setTriggerType(t.value)}
-                    className={`p-3 rounded-lg border text-left transition-colors ${
-                      triggerType === t.value
-                        ? 'border-accent-teal bg-accent-teal/10'
-                        : 'border-dark-700 bg-dark-800/50 hover:border-dark-600'
-                    }`}
-                  >
-                    <p className="text-sm font-medium text-white">{t.label}</p>
-                    <p className="text-[10px] text-dark-400 mt-1">{t.description}</p>
-                  </button>
-                ))}
+                {TRIGGER_TYPES.map((t) => {
+                  const Icon = TRIGGER_ICONS[t.value] || Zap
+                  return (
+                    <button
+                      key={t.value}
+                      onClick={() => setTriggerType(t.value)}
+                      className={`p-3 rounded-lg border text-left transition-colors ${
+                        triggerType === t.value
+                          ? 'border-accent-teal bg-accent-teal/10'
+                          : 'border-dark-700 bg-dark-800/50 hover:border-dark-600'
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 mb-1.5 ${triggerType === t.value ? 'text-accent-teal' : 'text-dark-400'}`} />
+                      <p className="text-sm font-medium text-white">{t.label}</p>
+                      <p className="text-[10px] text-dark-400 mt-1">{t.description}</p>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
@@ -340,40 +370,58 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {triggerType === 'event' && (
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs">Событие</Label>
-                  <Select value={eventType} onValueChange={setEventType}>
-                    <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EVENT_TYPES.map((e) => (
-                        <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs text-dark-400">Какое событие отслеживать?</Label>
+                  <div className="grid gap-1.5 mt-1.5">
+                    {EVENT_TYPES.map((e) => (
+                      <button
+                        key={e.value}
+                        onClick={() => setEventType(e.value)}
+                        className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                          eventType === e.value
+                            ? 'border-accent-teal bg-accent-teal/10'
+                            : 'border-dark-700/50 bg-dark-800/30 hover:border-dark-600'
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-white">{e.label}</p>
+                          <p className="text-[10px] text-dark-500 mt-0.5">{e.description}</p>
+                        </div>
+                        {eventType === e.value && (
+                          <Check className="w-4 h-4 text-accent-teal flex-shrink-0 mt-0.5" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 {eventType === 'violation.detected' && (
-                  <div>
-                    <Label className="text-xs">Мин. score (опц.)</Label>
+                  <div className="p-3 rounded-lg bg-dark-900/50 border border-dark-700/50 space-y-2">
+                    <Label className="text-xs text-dark-400">Минимальная оценка нарушения (необязательно)</Label>
+                    <p className="text-[10px] text-dark-500">Правило сработает только если score нарушения не ниже указанного значения</p>
                     <Input
                       type="number"
                       value={minScore}
                       onChange={(e) => setMinScore(e.target.value)}
-                      className="mt-1 bg-dark-800 border-dark-700"
-                      placeholder="80"
+                      className="bg-dark-800 border-dark-700 w-32"
+                      placeholder="например 80"
                     />
                   </div>
                 )}
                 {eventType === 'node.went_offline' && (
-                  <div>
-                    <Label className="text-xs">Мин. минут офлайн (опц.)</Label>
+                  <div className="p-3 rounded-lg bg-dark-900/50 border border-dark-700/50 space-y-2">
+                    <Label className="text-xs text-dark-400">Минимальное время офлайн (необязательно)</Label>
+                    <p className="text-[10px] text-dark-500">Сработает только если нода недоступна дольше указанного количества минут</p>
                     <Input
                       type="number"
                       value={offlineMinutes}
                       onChange={(e) => setOfflineMinutes(e.target.value)}
-                      className="mt-1 bg-dark-800 border-dark-700"
-                      placeholder="5"
+                      className="bg-dark-800 border-dark-700 w-32"
+                      placeholder="например 5"
                     />
+                    {offlineMinutes && (
+                      <p className="text-[10px] text-accent-teal">
+                        Сработает после {offlineMinutes} мин. офлайн
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -382,26 +430,39 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {/* Schedule config */}
             {triggerType === 'schedule' && (
               <div className="space-y-3">
-                <div>
-                  <Label className="text-xs">CRON-выражение</Label>
-                  <Input
-                    value={cronExpr}
-                    onChange={(e) => { setCronExpr(e.target.value); setIntervalMinutes('') }}
-                    className="mt-1 bg-dark-800 border-dark-700 font-mono"
-                    placeholder="0 3 * * *  (мин час день мес день_нед)"
-                  />
+                {/* Sub-mode toggle */}
+                <div className="flex gap-1 p-0.5 rounded-lg bg-dark-900/50 border border-dark-700/50">
+                  <button
+                    onClick={() => setScheduleMode('cron')}
+                    className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+                      scheduleMode === 'cron'
+                        ? 'bg-accent-teal/20 text-accent-teal border border-accent-teal/30'
+                        : 'text-dark-400 hover:text-dark-200 border border-transparent'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5 inline mr-1.5" />
+                    По расписанию
+                  </button>
+                  <button
+                    onClick={() => setScheduleMode('interval')}
+                    className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+                      scheduleMode === 'interval'
+                        ? 'bg-accent-teal/20 text-accent-teal border border-accent-teal/30'
+                        : 'text-dark-400 hover:text-dark-200 border border-transparent'
+                    }`}
+                  >
+                    <Activity className="w-3.5 h-3.5 inline mr-1.5" />
+                    Через интервал
+                  </button>
                 </div>
-                <div className="text-center text-xs text-dark-500">или</div>
-                <div>
-                  <Label className="text-xs">Интервал (минуты)</Label>
-                  <Input
-                    type="number"
-                    value={intervalMinutes}
-                    onChange={(e) => { setIntervalMinutes(e.target.value); setCronExpr('') }}
-                    className="mt-1 bg-dark-800 border-dark-700"
-                    placeholder="60"
-                  />
-                </div>
+
+                {scheduleMode === 'cron' && (
+                  <CronBuilder value={cronExpr} onChange={(v) => { setCronExpr(v); setIntervalMinutes('') }} />
+                )}
+
+                {scheduleMode === 'interval' && (
+                  <IntervalPicker value={intervalMinutes} onChange={(v) => { setIntervalMinutes(v); setCronExpr('') }} />
+                )}
               </div>
             )}
 
@@ -409,49 +470,77 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {triggerType === 'threshold' && (
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs">Метрика</Label>
-                  <Select value={thresholdMetric} onValueChange={setThresholdMetric}>
-                    <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {THRESHOLD_METRICS.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs text-dark-400">Какую метрику отслеживать?</Label>
+                  <div className="grid gap-1.5 mt-1.5">
+                    {THRESHOLD_METRICS.map((m) => (
+                      <button
+                        key={m.value}
+                        onClick={() => setThresholdMetric(m.value)}
+                        className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                          thresholdMetric === m.value
+                            ? 'border-accent-teal bg-accent-teal/10'
+                            : 'border-dark-700/50 bg-dark-800/30 hover:border-dark-600'
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-white">{m.label}</p>
+                          <p className="text-[10px] text-dark-500 mt-0.5">{m.description}</p>
+                        </div>
+                        {thresholdMetric === m.value && (
+                          <Check className="w-4 h-4 text-accent-teal flex-shrink-0 mt-0.5" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Оператор</Label>
-                    <Select value={thresholdOperator} onValueChange={setThresholdOperator}>
-                      <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONDITION_OPERATORS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                <div className="p-3 rounded-lg bg-dark-900/50 border border-dark-700/50 space-y-3">
+                  <Label className="text-xs text-dark-400">Условие срабатывания</Label>
+                  <p className="text-[10px] text-dark-500">
+                    Правило сработает когда «{selectedMetric?.label || thresholdMetric}» будет соответствовать условию
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-[10px] text-dark-500">Сравнение</Label>
+                      <Select value={thresholdOperator} onValueChange={setThresholdOperator}>
+                        <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_OPERATORS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-dark-500">Пороговое значение</Label>
+                      <Input
+                        type="number"
+                        value={thresholdValue}
+                        onChange={(e) => setThresholdValue(e.target.value)}
+                        className="mt-1 bg-dark-800 border-dark-700"
+                        placeholder="90"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-xs">Значение</Label>
-                    <Input
-                      type="number"
-                      value={thresholdValue}
-                      onChange={(e) => setThresholdValue(e.target.value)}
-                      className="mt-1 bg-dark-800 border-dark-700"
-                      placeholder="90"
-                    />
-                  </div>
+                  {thresholdValue && (
+                    <div className="flex items-center gap-2 p-2 rounded-md bg-dark-800/50 border border-dark-700/30">
+                      <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                      <span className="text-[11px] text-dark-300">
+                        Сработает когда {selectedMetric?.label || thresholdMetric}{' '}
+                        {CONDITION_OPERATORS.find((o) => o.value === thresholdOperator)?.label || thresholdOperator}{' '}
+                        {thresholdValue}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {/* Category */}
             <div>
-              <Label className="text-xs">Категория</Label>
+              <Label className="text-xs text-dark-400">Категория правила</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
                   <SelectValue />
@@ -469,53 +558,86 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         {/* Step 2: Conditions */}
         {step === 2 && (
           <div className="space-y-4">
-            <p className="text-sm text-dark-300">
-              Дополнительные условия (необязательно). Все условия должны быть выполнены.
-            </p>
+            <div className="p-3 rounded-lg bg-dark-900/50 border border-dark-700/50">
+              <div className="flex items-start gap-2">
+                <Info className="w-4 h-4 text-dark-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-dark-300">Дополнительные условия</p>
+                  <p className="text-[10px] text-dark-500 mt-0.5">
+                    Необязательный шаг. Добавьте условия, если хотите, чтобы правило
+                    срабатывало только при выполнении всех указанных критериев.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {conditions.map((cond, idx) => (
-              <div key={idx} className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Label className="text-xs">Поле</Label>
-                  <Input
-                    value={cond.field}
-                    onChange={(e) => updateCondition(idx, 'field', e.target.value)}
-                    className="mt-1 bg-dark-800 border-dark-700"
-                    placeholder="score, percent..."
-                  />
-                </div>
-                <div className="w-24">
-                  <Label className="text-xs">Оператор</Label>
-                  <Select
-                    value={cond.operator}
-                    onValueChange={(v) => updateCondition(idx, 'operator', v)}
+              <div key={idx} className="p-3 rounded-lg bg-dark-800/30 border border-dark-700/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-dark-500 font-medium">Условие {idx + 1}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-red-400 hover:text-red-300"
+                    onClick={() => removeCondition(idx)}
                   >
-                    <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CONDITION_OPERATORS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
-                <div className="w-28">
-                  <Label className="text-xs">Значение</Label>
-                  <Input
-                    value={cond.value}
-                    onChange={(e) => updateCondition(idx, 'value', e.target.value)}
-                    className="mt-1 bg-dark-800 border-dark-700"
-                    placeholder="80"
-                  />
+                <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+                  <div>
+                    <Label className="text-[10px] text-dark-500">Поле</Label>
+                    <Select
+                      value={cond.field || '_custom'}
+                      onValueChange={(v) => updateCondition(idx, 'field', v === '_custom' ? '' : v)}
+                    >
+                      <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                        <SelectValue placeholder="Выберите поле" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONDITION_FIELDS.map((f) => (
+                          <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                        ))}
+                        <SelectItem value="_custom">Другое...</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {(cond.field === '' || !CONDITION_FIELDS.some((f) => f.value === cond.field)) && cond.field !== '' && null}
+                    {/* Show custom input if field is not from preset */}
+                    {!CONDITION_FIELDS.some((f) => f.value === cond.field) && (
+                      <Input
+                        value={cond.field}
+                        onChange={(e) => updateCondition(idx, 'field', e.target.value)}
+                        className="mt-1.5 bg-dark-800 border-dark-700"
+                        placeholder="Название поля"
+                      />
+                    )}
+                  </div>
+                  <div className="w-36">
+                    <Label className="text-[10px] text-dark-500">Сравнение</Label>
+                    <Select
+                      value={cond.operator}
+                      onValueChange={(v) => updateCondition(idx, 'operator', v)}
+                    >
+                      <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONDITION_OPERATORS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-24">
+                    <Label className="text-[10px] text-dark-500">Значение</Label>
+                    <Input
+                      value={cond.value}
+                      onChange={(e) => updateCondition(idx, 'value', e.target.value)}
+                      className="mt-1 bg-dark-800 border-dark-700"
+                      placeholder="80"
+                    />
+                  </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 text-red-400 hover:text-red-300 flex-shrink-0"
-                  onClick={() => removeCondition(idx)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
               </div>
             ))}
 
@@ -527,6 +649,12 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             >
               <Plus className="w-3.5 h-3.5 mr-1" /> Добавить условие
             </Button>
+
+            {conditions.length === 0 && (
+              <p className="text-xs text-dark-500 text-center py-4">
+                Нет дополнительных условий. Нажмите «Далее» чтобы продолжить без условий.
+              </p>
+            )}
           </div>
         )}
 
@@ -534,51 +662,78 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         {step === 3 && (
           <div className="space-y-4">
             <div>
-              <Label className="text-sm">Действие</Label>
-              <Select value={actionType} onValueChange={setActionType}>
-                <SelectTrigger className="mt-2 bg-dark-800 border-dark-700">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTION_TYPES.map((a) => (
-                    <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm">Что сделать при срабатывании?</Label>
+              <p className="text-[11px] text-dark-500 mt-0.5">Выберите действие, которое будет выполнено автоматически</p>
+              <div className="grid gap-1.5 mt-2">
+                {ACTION_TYPES.map((a) => (
+                  <button
+                    key={a.value}
+                    onClick={() => setActionType(a.value)}
+                    className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                      actionType === a.value
+                        ? 'border-accent-teal bg-accent-teal/10'
+                        : 'border-dark-700/50 bg-dark-800/30 hover:border-dark-600'
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">{a.label}</p>
+                      <p className="text-[10px] text-dark-500 mt-0.5">{a.description}</p>
+                    </div>
+                    {actionType === a.value && (
+                      <Check className="w-4 h-4 text-accent-teal flex-shrink-0 mt-0.5" />
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Notify config */}
             {actionType === 'notify' && (
-              <div className="space-y-3">
+              <div className="p-3 rounded-lg bg-dark-900/50 border border-dark-700/50 space-y-3">
+                <Label className="text-xs text-dark-400">Настройка уведомления</Label>
                 <div>
-                  <Label className="text-xs">Канал</Label>
-                  <Select value={notifyChannel} onValueChange={setNotifyChannel}>
-                    <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="telegram">Telegram</SelectItem>
-                      <SelectItem value="webhook">Webhook</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-[10px] text-dark-500">Куда отправить?</Label>
+                  <div className="flex gap-1.5 mt-1.5">
+                    <button
+                      onClick={() => setNotifyChannel('telegram')}
+                      className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
+                        notifyChannel === 'telegram'
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600'
+                      }`}
+                    >
+                      Telegram
+                    </button>
+                    <button
+                      onClick={() => setNotifyChannel('webhook')}
+                      className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-colors ${
+                        notifyChannel === 'webhook'
+                          ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                          : 'bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600'
+                      }`}
+                    >
+                      Webhook
+                    </button>
+                  </div>
                 </div>
                 <div>
-                  <Label className="text-xs">Сообщение</Label>
+                  <Label className="text-[10px] text-dark-500">Текст сообщения</Label>
                   <Input
                     value={notifyMessage}
                     onChange={(e) => setNotifyMessage(e.target.value)}
                     className="mt-1 bg-dark-800 border-dark-700"
-                    placeholder="Используйте {переменные} из контекста"
+                    placeholder="Например: Сработала автоматизация для {user}"
                   />
+                  <p className="text-[10px] text-dark-500 mt-1">Используйте {'{переменные}'} для подстановки данных из контекста</p>
                 </div>
                 {notifyChannel === 'webhook' && (
                   <div>
-                    <Label className="text-xs">Webhook URL</Label>
+                    <Label className="text-[10px] text-dark-500">URL для Webhook</Label>
                     <Input
                       value={webhookUrl}
                       onChange={(e) => setWebhookUrl(e.target.value)}
                       className="mt-1 bg-dark-800 border-dark-700"
-                      placeholder="https://..."
+                      placeholder="https://example.com/webhook"
                     />
                   </div>
                 )}
@@ -587,28 +742,34 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
 
             {/* Block user config */}
             {actionType === 'block_user' && (
-              <div>
-                <Label className="text-xs">Причина блокировки</Label>
+              <div className="p-3 rounded-lg bg-dark-900/50 border border-dark-700/50 space-y-2">
+                <Label className="text-xs text-dark-400">Причина блокировки</Label>
+                <p className="text-[10px] text-dark-500">Эта причина будет отображаться в карточке пользователя</p>
                 <Input
                   value={blockReason}
                   onChange={(e) => setBlockReason(e.target.value)}
-                  className="mt-1 bg-dark-800 border-dark-700"
-                  placeholder="Sharing detected (auto)"
+                  className="bg-dark-800 border-dark-700"
+                  placeholder="Например: Обнаружен шеринг аккаунта"
                 />
               </div>
             )}
 
             {/* Cleanup config */}
             {actionType === 'cleanup_expired' && (
-              <div>
-                <Label className="text-xs">Истекших более N дней</Label>
-                <Input
-                  type="number"
-                  value={cleanupDays}
-                  onChange={(e) => setCleanupDays(e.target.value)}
-                  className="mt-1 bg-dark-800 border-dark-700"
-                  placeholder="30"
-                />
+              <div className="p-3 rounded-lg bg-dark-900/50 border border-dark-700/50 space-y-2">
+                <Label className="text-xs text-dark-400">Порог для очистки</Label>
+                <p className="text-[10px] text-dark-500">Отключить пользователей, у которых подписка истекла более N дней назад</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-dark-400">Истекших более</span>
+                  <Input
+                    type="number"
+                    value={cleanupDays}
+                    onChange={(e) => setCleanupDays(e.target.value)}
+                    className="bg-dark-800 border-dark-700 w-20"
+                    placeholder="30"
+                  />
+                  <span className="text-xs text-dark-400">дней</span>
+                </div>
               </div>
             )}
           </div>
@@ -618,56 +779,84 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         {step === 4 && (
           <div className="space-y-4">
             <div>
-              <Label className="text-sm">Название</Label>
+              <Label className="text-sm">Название правила</Label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="mt-2 bg-dark-800 border-dark-700"
-                placeholder="Мое правило автоматизации"
+                placeholder="Например: Блокировка при шеринге"
               />
             </div>
             <div>
-              <Label className="text-xs">Описание (опц.)</Label>
+              <Label className="text-xs text-dark-400">Описание (необязательно)</Label>
               <Input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="mt-1 bg-dark-800 border-dark-700"
-                placeholder="Что делает это правило..."
+                placeholder="Кратко опишите назначение этого правила"
               />
             </div>
 
             {/* Summary */}
-            <div className="rounded-lg border border-dark-700 bg-dark-800/50 p-4 space-y-3">
-              <p className="text-xs font-medium text-dark-400 uppercase">Сводка</p>
-              <div className="flex items-center gap-2 text-sm">
-                <Badge variant="outline" className="text-[10px]">
+            <div className="rounded-lg border border-dark-700 bg-dark-800/50 p-4 space-y-4">
+              <p className="text-xs font-medium text-dark-400 uppercase tracking-wider">Сводка правила</p>
+
+              {/* Category & type badges */}
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className={`text-[10px] ${categoryColor(category)}`}>
                   {categoryLabel(category)}
                 </Badge>
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-[10px] bg-dark-700/50 text-dark-300 border-dark-600">
                   {triggerTypeLabel(triggerType)}
                 </Badge>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                <span className="text-dark-200">
-                  {describeTrigger({
-                    trigger_type: triggerType,
-                    trigger_config: buildTriggerConfig(),
-                  } as any)}
-                </span>
-                <ArrowRight className="w-3 h-3 text-dark-500" />
-                <span className="text-primary-400">
-                  {describeAction({
-                    action_type: actionType,
-                    action_config: buildActionConfig(),
-                  } as any)}
-                </span>
+
+              {/* Trigger description */}
+              <div className="p-3 rounded-md bg-dark-900/50 border border-dark-700/50 space-y-1.5">
+                <p className="text-[10px] text-dark-500 font-medium uppercase tracking-wider">Когда</p>
+                <div className="flex items-center gap-2">
+                  <Zap className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                  <span className="text-sm text-dark-200">
+                    {describeTrigger({
+                      trigger_type: triggerType,
+                      trigger_config: buildTriggerConfig(),
+                    } as any)}
+                  </span>
+                </div>
               </div>
-              {conditions.length > 0 && (
-                <p className="text-xs text-dark-400">
-                  + {conditions.length} условий
-                </p>
+
+              {/* Conditions */}
+              {conditions.filter((c) => c.field && c.value).length > 0 && (
+                <div className="p-3 rounded-md bg-dark-900/50 border border-dark-700/50 space-y-1.5">
+                  <p className="text-[10px] text-dark-500 font-medium uppercase tracking-wider">При условиях</p>
+                  {conditions.filter((c) => c.field && c.value).map((c, i) => {
+                    const fieldLabel = CONDITION_FIELDS.find((f) => f.value === c.field)?.label || c.field
+                    const opLabel = CONDITION_OPERATORS.find((o) => o.value === c.operator)?.label || c.operator
+                    return (
+                      <div key={i} className="flex items-center gap-2">
+                        <Shield className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                        <span className="text-xs text-dark-300">
+                          {fieldLabel} {opLabel} {c.value}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
+
+              {/* Action description */}
+              <div className="p-3 rounded-md bg-dark-900/50 border border-dark-700/50 space-y-1.5">
+                <p className="text-[10px] text-dark-500 font-medium uppercase tracking-wider">Тогда</p>
+                <div className="flex items-center gap-2">
+                  <ArrowRight className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
+                  <span className="text-sm text-primary-400">
+                    {describeAction({
+                      action_type: actionType,
+                      action_config: buildActionConfig(),
+                    } as any)}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -705,7 +894,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   ? 'Сохранение...'
                   : editRule
                     ? 'Сохранить'
-                    : 'Создать'}
+                    : 'Создать правило'}
               </Button>
             )}
           </div>
