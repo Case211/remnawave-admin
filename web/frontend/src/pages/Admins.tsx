@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   Plus,
   Pencil,
@@ -33,6 +34,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -572,26 +574,29 @@ function AdminsTab({ roles }: { roles: Role[] }) {
   const [showDialog, setShowDialog] = useState(false)
   const [editingAdmin, setEditingAdmin] = useState<AdminAccount | null>(null)
   const [formError, setFormError] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
 
   const { data: adminsData, isLoading, refetch } = useQuery({ queryKey: ['admins'], queryFn: adminsApi.list })
 
   const createMutation = useMutation({
     mutationFn: (data: AdminAccountCreate) => adminsApi.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setFormError('') },
-    onError: (err: any) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setFormError(''); toast.success('Администратор создан') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: AdminAccountUpdate }) => adminsApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setEditingAdmin(null); setFormError('') },
-    onError: (err: any) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setEditingAdmin(null); setFormError(''); toast.success('Администратор обновлён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => adminsApi.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); toast.success('Администратор удалён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const toggleMutation = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) => adminsApi.update(id, { is_active }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); toast.success('Статус администратора обновлён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
 
   const admins = adminsData?.items ?? []
@@ -641,7 +646,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
                     <AdminActions admin={admin}
                       onEdit={() => { setEditingAdmin(admin); setFormError(''); setShowDialog(true) }}
                       onToggle={() => toggleMutation.mutate({ id: admin.id, is_active: !admin.is_active })}
-                      onDelete={() => { if (confirm('Удалить администратора?')) deleteMutation.mutate(admin.id) }} />
+                      onDelete={() => setDeleteConfirm(admin.id)} />
                   </div>
                 </div>
                 <div className="mb-3"><RoleBadge name={admin.role_name} displayName={admin.role_display_name} /></div>
@@ -699,7 +704,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
                       <AdminActions admin={admin}
                         onEdit={() => { setEditingAdmin(admin); setFormError(''); setShowDialog(true) }}
                         onToggle={() => toggleMutation.mutate({ id: admin.id, is_active: !admin.is_active })}
-                        onDelete={() => { if (confirm('Удалить администратора?')) deleteMutation.mutate(admin.id) }} />
+                        onDelete={() => setDeleteConfirm(admin.id)} />
                     </td>
                   </tr>
                 ))
@@ -716,6 +721,21 @@ function AdminsTab({ roles }: { roles: Role[] }) {
           isPending={createMutation.isPending || updateMutation.isPending}
           error={formError} roles={roles} editingAdmin={editingAdmin} />
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirm(null) }}
+        title="Удалить администратора?"
+        description="Администратор потеряет доступ к панели."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirm !== null) {
+            deleteMutation.mutate(deleteConfirm)
+            setDeleteConfirm(null)
+          }
+        }}
+      />
     </>
   )
 }
@@ -727,22 +747,24 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
   const [showDialog, setShowDialog] = useState(false)
   const [editingRole, setEditingRole] = useState<Role | null>(null)
   const [formError, setFormError] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
 
   const { data: roles = [], isLoading, refetch } = useQuery({ queryKey: ['roles'], queryFn: rolesApi.list })
 
   const createMutation = useMutation({
     mutationFn: (data: RoleCreate) => rolesApi.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setFormError('') },
-    onError: (err: any) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setFormError(''); toast.success('Роль создана') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: RoleUpdate }) => rolesApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setEditingRole(null); setFormError('') },
-    onError: (err: any) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setEditingRole(null); setFormError(''); toast.success('Роль обновлена') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => rolesApi.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); toast.success('Роль удалена') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
 
   const handleSave = (data: RoleCreate | RoleUpdate) => {
@@ -823,7 +845,7 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
                   </PermissionGate>
                   {!role.is_system && (
                     <PermissionGate resource="roles" action="delete">
-                      <Button variant="secondary" size="sm" onClick={() => { if (confirm('Удалить роль?')) deleteMutation.mutate(role.id) }} className="text-red-400 hover:text-red-300">
+                      <Button variant="secondary" size="sm" onClick={() => setDeleteConfirm(role.id)} className="text-red-400 hover:text-red-300">
                         <Trash2 className="w-3.5 h-3.5 mr-1.5" /> {'Удалить'}
                       </Button>
                     </PermissionGate>
@@ -842,6 +864,21 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
           isPending={createMutation.isPending || updateMutation.isPending}
           error={formError} resources={resources} editingRole={editingRole} />
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirm(null) }}
+        title="Удалить роль?"
+        description="Роль будет удалена. Администраторы с этой ролью потеряют права."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirm !== null) {
+            deleteMutation.mutate(deleteConfirm)
+            setDeleteConfirm(null)
+          }
+        }}
+      />
     </>
   )
 }

@@ -13,9 +13,11 @@ import {
   Database,
   X,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import client from '../api/client'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
+import { useHasPermission } from '@/components/PermissionGate'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -122,9 +124,11 @@ const SYNCABLE_ENTITIES: Record<string, string> = {
 function SyncStatusBlock({
   syncItems,
   queryClient,
+  canEdit,
 }: {
   syncItems: SyncStatusItem[]
   queryClient: ReturnType<typeof useQueryClient>
+  canEdit: boolean
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [syncingEntity, setSyncingEntity] = useState<string | null>(null)
@@ -137,9 +141,11 @@ function SyncStatusBlock({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['syncStatus'] })
       setSyncingEntity(null)
+      toast.success('Синхронизация завершена')
     },
-    onError: () => {
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setSyncingEntity(null)
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка синхронизации')
     },
   })
 
@@ -152,9 +158,11 @@ function SyncStatusBlock({
       queryClient.invalidateQueries({ queryKey: ['syncStatus'] })
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       setSyncingEntity(null)
+      toast.success('Полная синхронизация завершена')
     },
-    onError: () => {
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setSyncingEntity(null)
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка синхронизации')
     },
   })
 
@@ -212,7 +220,7 @@ function SyncStatusBlock({
               variant="outline"
               size="sm"
               onClick={(e) => { e.stopPropagation(); syncAllMutation.mutate() }}
-              disabled={syncingEntity !== null}
+              disabled={syncingEntity !== null || !canEdit}
               className="flex items-center gap-1.5 text-xs font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border-primary-500/20"
             >
               <RefreshCw className={cn('w-3.5 h-3.5', syncingEntity === 'all' && 'animate-spin')} />
@@ -236,7 +244,7 @@ function SyncStatusBlock({
                           variant="ghost"
                           size="icon"
                           onClick={() => syncMutation.mutate(entityKey)}
-                          disabled={syncingEntity !== null}
+                          disabled={syncingEntity !== null || !canEdit}
                           className="h-6 w-6 text-dark-400 hover:text-primary-400"
                           title="Синхронизировать"
                         >
@@ -676,6 +684,7 @@ function IpWhitelistBlock() {
 
 export default function Settings() {
   const queryClient = useQueryClient()
+  const canEdit = useHasPermission('settings', 'edit')
   const [search, setSearch] = useState('')
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({})
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set())
@@ -793,11 +802,11 @@ export default function Settings() {
   const renderConfigItem = (item: ConfigItem) => {
     const displayValue = getDisplayValue(item)
     const label = item.display_name || item.key
-    const isEditable = !item.is_readonly
+    const isEditable = !item.is_readonly && canEdit
     const isSaving = savingKeys.has(item.key)
     const wasSaved = savedKeys.has(item.key)
     const hasError = item.key in errorKeys
-    const canReset = item.source === 'db' && !item.is_readonly
+    const canReset = item.source === 'db' && !item.is_readonly && canEdit
 
     const statusIcon = isSaving ? (
       <RefreshCw className="w-3.5 h-3.5 text-primary-400 animate-spin" />
@@ -1067,7 +1076,7 @@ export default function Settings() {
 
       {/* Sync status - collapsible */}
       {!search && (
-        <SyncStatusBlock syncItems={syncItems} queryClient={queryClient} />
+        <SyncStatusBlock syncItems={syncItems} queryClient={queryClient} canEdit={canEdit} />
       )}
 
       {/* Security blocks */}

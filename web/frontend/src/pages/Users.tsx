@@ -30,8 +30,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { useHasPermission } from '../components/PermissionGate'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ExportDropdown } from '@/components/ExportDropdown'
+import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
+import { exportCSV, exportJSON, formatBytesForExport } from '@/lib/export'
 
 // Types
 interface UserListItem {
@@ -240,7 +246,7 @@ function UserActions({
         )}
         {canDelete && (
           <DropdownMenuItem
-            onClick={() => { if (confirm('Удалить пользователя?')) onDelete() }}
+            onClick={onDelete}
             className="text-red-400 focus:text-red-400"
           >
             <Trash2 className="w-4 h-4 mr-2" /> Удалить
@@ -623,9 +629,12 @@ export default function Users() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('users', 'create')
+  const canBulk = useHasPermission('users', 'bulk_operations')
 
+  const [selectedUuids, setSelectedUuids] = useState<Set<string>>(new Set())
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [deleteConfirmUuid, setDeleteConfirmUuid] = useState<string | null>(null)
 
   // State
   const [page, setPage] = useState(1)
@@ -642,6 +651,52 @@ export default function Users() {
   const [showFilters, setShowFilters] = useState(false)
 
   const activeFilterCount = [status, trafficType, expireFilter, onlineFilter, trafficUsage].filter(Boolean).length
+
+  // Export handlers
+  const handleExportCSV = () => {
+    const items = data?.items
+    if (!items?.length) return
+    const exportData = items.map((u: any) => ({
+      username: u.username || '',
+      status: u.status,
+      email: u.email || '',
+      telegram_id: u.telegram_id || '',
+      traffic_used: formatBytesForExport(u.used_traffic_bytes),
+      traffic_limit: u.traffic_limit_bytes ? formatBytesForExport(u.traffic_limit_bytes) : 'Безлимит',
+      hwid_count: u.hwid_device_count ?? 0,
+      hwid_limit: u.hwid_device_limit ?? 0,
+      online_at: u.online_at || '',
+      expire_at: u.expire_at || '',
+      created_at: u.created_at || '',
+    }))
+    exportCSV(exportData, `users-${new Date().toISOString().slice(0, 10)}`)
+    toast.success('Экспорт CSV завершён')
+  }
+  const handleExportJSON = () => {
+    const items = data?.items
+    if (!items?.length) return
+    exportJSON(items, `users-${new Date().toISOString().slice(0, 10)}`)
+    toast.success('Экспорт JSON завершён')
+  }
+
+  // Saved filters
+  const currentFilters: Record<string, unknown> = {
+    ...(status && { status }),
+    ...(trafficType && { trafficType }),
+    ...(expireFilter && { expireFilter }),
+    ...(onlineFilter && { onlineFilter }),
+    ...(trafficUsage && { trafficUsage }),
+  }
+  const hasActiveFilters = activeFilterCount > 0
+  const handleLoadFilter = (filters: Record<string, unknown>) => {
+    setStatus((filters.status as string) || '')
+    setTrafficType((filters.trafficType as string) || '')
+    setExpireFilter((filters.expireFilter as string) || '')
+    setOnlineFilter((filters.onlineFilter as string) || '')
+    setTrafficUsage((filters.trafficUsage as string) || '')
+    setShowFilters(true)
+    setPage(1)
+  }
 
   // Debounced search
   useEffect(() => {
@@ -674,17 +729,35 @@ export default function Users() {
   // Mutations
   const enableUser = useMutation({
     mutationFn: (uuid: string) => client.post(`/users/${uuid}/enable`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('Пользователь включён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка включения')
+    },
   })
 
   const disableUser = useMutation({
     mutationFn: (uuid: string) => client.post(`/users/${uuid}/disable`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('Пользователь отключён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка отключения')
+    },
   })
 
   const deleteUser = useMutation({
     mutationFn: (uuid: string) => client.delete(`/users/${uuid}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('Пользователь удалён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка удаления')
+    },
   })
 
   const createUser = useMutation({
@@ -693,9 +766,11 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setShowCreateModal(false)
       setCreateError('')
+      toast.success('Пользователь создан')
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка создания')
     },
   })
 
@@ -718,6 +793,70 @@ export default function Users() {
     setTrafficUsage('')
     setPage(1)
   }
+
+  // Selection helpers
+  const toggleSelect = (uuid: string) => {
+    setSelectedUuids(prev => {
+      const next = new Set(prev)
+      if (next.has(uuid)) next.delete(uuid)
+      else next.add(uuid)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (!users) return
+    const pageUuids = users.map((u: any) => u.uuid)
+    const allSelected = pageUuids.every((id: string) => selectedUuids.has(id))
+    if (allSelected) {
+      setSelectedUuids(prev => {
+        const next = new Set(prev)
+        pageUuids.forEach((id: string) => next.delete(id))
+        return next
+      })
+    } else {
+      setSelectedUuids(prev => {
+        const next = new Set(prev)
+        pageUuids.forEach((id: string) => next.add(id))
+        return next
+      })
+    }
+  }
+  const clearSelection = () => setSelectedUuids(new Set())
+
+  // Bulk mutations
+  const bulkEnable = useMutation({
+    mutationFn: (uuids: string[]) => client.post('/users/bulk/enable', { uuids }),
+    onSuccess: (res) => {
+      const d = res.data
+      toast.success(`Включено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      clearSelection()
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+  })
+  const bulkDisable = useMutation({
+    mutationFn: (uuids: string[]) => client.post('/users/bulk/disable', { uuids }),
+    onSuccess: (res) => {
+      const d = res.data
+      toast.success(`Отключено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      clearSelection()
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+  })
+  const bulkDelete = useMutation({
+    mutationFn: (uuids: string[]) => client.post('/users/bulk/delete', { uuids }),
+    onSuccess: (res) => {
+      const d = res.data
+      toast.success(`Удалено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      clearSelection()
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+  })
+
+  // Clear selection on page/filter change
+  useEffect(() => { clearSelection() }, [page, perPage, debouncedSearch, status, trafficType, expireFilter, onlineFilter, trafficUsage])
 
   const hasAnyFilter = activeFilterCount > 0 || debouncedSearch
 
@@ -827,6 +966,18 @@ export default function Users() {
               >
                 <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
               </Button>
+
+              <ExportDropdown
+                onExportCSV={handleExportCSV}
+                onExportJSON={handleExportJSON}
+                disabled={!data?.items?.length}
+              />
+              <SavedFiltersDropdown
+                page="users"
+                currentFilters={currentFilters}
+                onLoadFilter={handleLoadFilter}
+                hasActiveFilters={hasActiveFilters}
+              />
             </div>
 
             {/* Expandable filter panel */}
@@ -1028,12 +1179,59 @@ export default function Users() {
                 onNavigate={() => navigate(`/users/${user.uuid}`)}
                 onEnable={() => enableUser.mutate(user.uuid)}
                 onDisable={() => disableUser.mutate(user.uuid)}
-                onDelete={() => deleteUser.mutate(user.uuid)}
+                onDelete={() => setDeleteConfirmUuid(user.uuid)}
               />
             </div>
           ))
         )}
       </div>
+
+      {/* Bulk action toolbar */}
+      {selectedUuids.size > 0 && canBulk && (
+        <div className="sticky bottom-4 z-30 mx-auto max-w-3xl animate-fade-in-up">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-dark-400/20 bg-dark-700/95 backdrop-blur-xl shadow-deep">
+            <span className="text-sm text-white font-medium">
+              Выбрано: {selectedUuids.size}
+            </span>
+            <div className="flex-1" />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => bulkEnable.mutate([...selectedUuids])}
+              disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
+              className="text-green-400 border-green-500/30 hover:bg-green-500/10"
+            >
+              Включить
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => bulkDisable.mutate([...selectedUuids])}
+              disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
+              className="text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10"
+            >
+              Отключить
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => bulkDelete.mutate([...selectedUuids])}
+              disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
+              className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+            >
+              Удалить
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              className="text-dark-300"
+            >
+              Отмена
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Desktop: Users table */}
       <Card className="p-0 overflow-hidden hidden md:block animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
@@ -1041,6 +1239,14 @@ export default function Users() {
           <table className="table">
             <thead>
               <tr>
+                {canBulk && (
+                  <th className="w-10 px-3">
+                    <Checkbox
+                      checked={users?.length > 0 && users.every((u: any) => selectedUuids.has(u.uuid))}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 <th><SortHeader label="Пользователь" field="username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
                 <th><SortHeader label="Статус" field="status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
                 <th><SortHeader label="Трафик" field="used_traffic_bytes" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
@@ -1078,6 +1284,14 @@ export default function Users() {
                     className="cursor-pointer hover:bg-dark-600/50"
                     onClick={() => navigate(`/users/${user.uuid}`)}
                   >
+                    {canBulk && (
+                      <td className="px-3" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedUuids.has(user.uuid)}
+                          onCheckedChange={() => toggleSelect(user.uuid)}
+                        />
+                      </td>
+                    )}
                     <td>
                       <div>
                         <span className="font-medium text-white">{user.username || user.short_uuid}</span>
@@ -1102,7 +1316,7 @@ export default function Users() {
                         user={user}
                         onEnable={() => enableUser.mutate(user.uuid)}
                         onDisable={() => disableUser.mutate(user.uuid)}
-                        onDelete={() => deleteUser.mutate(user.uuid)}
+                        onDelete={() => setDeleteConfirmUuid(user.uuid)}
                       />
                     </td>
                   </tr>
@@ -1140,6 +1354,21 @@ export default function Users() {
         onSave={(data) => createUser.mutate(data)}
         isPending={createUser.isPending}
         error={createError}
+      />
+
+      <ConfirmDialog
+        open={deleteConfirmUuid !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirmUuid(null) }}
+        title="Удалить пользователя?"
+        description="Это действие нельзя отменить. Пользователь и все его данные будут удалены."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirmUuid) {
+            deleteUser.mutate(deleteConfirmUuid)
+            setDeleteConfirmUuid(null)
+          }
+        }}
       />
     </div>
   )

@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { useHasPermission } from '@/components/PermissionGate'
 import {
   ShieldAlert,
   RefreshCw,
@@ -30,8 +32,13 @@ import client from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { ExportDropdown } from '@/components/ExportDropdown'
+import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
+import { exportCSV, exportJSON } from '@/lib/export'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -128,6 +135,10 @@ const fetchViolations = async (params: {
   days: number
   resolved?: boolean
   min_score?: number
+  ip?: string
+  country?: string
+  date_from?: string
+  date_to?: string
 }): Promise<PaginatedResponse> => {
   const p: Record<string, unknown> = {
     page: params.page,
@@ -137,6 +148,10 @@ const fetchViolations = async (params: {
   if (params.severity) p.severity = params.severity
   if (params.resolved !== undefined) p.resolved = params.resolved
   if (params.min_score !== undefined && params.min_score > 0) p.min_score = params.min_score
+  if (params.ip) p.ip = params.ip
+  if (params.country) p.country = params.country
+  if (params.date_from) p.date_from = params.date_from
+  if (params.date_to) p.date_to = params.date_to
   const { data } = await client.get('/violations', { params: p })
   return data
 }
@@ -347,6 +362,7 @@ function ScoreCircle({ score, size = 'md' }: { score: number; size?: 'sm' | 'md'
 
 function ViolationCard({
   violation,
+  canResolve,
   onBlock,
   onWarn,
   onDismiss,
@@ -354,6 +370,7 @@ function ViolationCard({
   onViewUser,
 }: {
   violation: Violation
+  canResolve: boolean
   onBlock: () => void
   onWarn: () => void
   onDismiss: () => void
@@ -418,7 +435,7 @@ function ViolationCard({
         </div>
 
         {/* Actions for pending violations */}
-        {isPending && (
+        {canResolve && isPending && (
           <div className="mt-4 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
             <Button variant="destructive" size="sm" onClick={onBlock} className="gap-1">
               <Ban className="w-4 h-4" />
@@ -494,6 +511,7 @@ function getPlatformInfo(platform: string | null): { icon: string; label: string
 
 function ViolationDetailPanel({
   violationId,
+  canResolve,
   onClose,
   onBlock,
   onWarn,
@@ -501,6 +519,7 @@ function ViolationDetailPanel({
   onViewUser,
 }: {
   violationId: number
+  canResolve: boolean
   onClose: () => void
   onBlock: (id: number) => void
   onWarn: (id: number) => void
@@ -856,7 +875,7 @@ function ViolationDetailPanel({
       )}
 
       {/* Action buttons for pending */}
-      {isPending && (
+      {canResolve && isPending && (
         <Card className="animate-fade-in-up border-primary-500/20" style={{ animationDelay: '0.35s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
@@ -1152,14 +1171,67 @@ export default function Violations() {
   const [days, setDays] = useState(7)
   const [showFilters, setShowFilters] = useState(false)
   const [minScore, setMinScore] = useState(0)
+  const [ipFilter, setIpFilter] = useState('')
+  const [countryFilter, setCountryFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [selectedViolationId, setSelectedViolationId] = useState<number | null>(null)
+
+  const canResolve = useHasPermission('violations', 'resolve')
+
+  // Export handlers
+  const handleExportCSV = () => {
+    const items = data?.items
+    if (!items?.length) return
+    const exportData = items.map((v: Violation) => ({
+      date: v.detected_at || '',
+      username: v.username || '',
+      score: v.score,
+      severity: v.severity,
+      reasons: v.reasons?.join('; ') || '',
+      countries: v.countries?.join(', ') || '',
+      recommendation: v.recommended_action || '',
+      status: v.status || '',
+    }))
+    exportCSV(exportData, `violations-${new Date().toISOString().slice(0, 10)}`)
+    toast.success('Экспорт CSV завершён')
+  }
+  const handleExportJSON = () => {
+    const items = data?.items
+    if (!items?.length) return
+    exportJSON(items, `violations-${new Date().toISOString().slice(0, 10)}`)
+    toast.success('Экспорт JSON завершён')
+  }
+
+  // Saved filters
+  const currentViolationFilters: Record<string, unknown> = {
+    ...(severity && { severity }),
+    ...(days !== 7 && { days }),
+    ...(minScore > 0 && { minScore }),
+    ...(ipFilter && { ipFilter }),
+    ...(countryFilter && { countryFilter }),
+    ...(dateFrom && { dateFrom }),
+    ...(dateTo && { dateTo }),
+  }
+  const hasActiveViolationFilters = Object.keys(currentViolationFilters).length > 0
+  const handleLoadViolationFilter = (filters: Record<string, unknown>) => {
+    setSeverity((filters.severity as string) || '')
+    setDays((filters.days as number) || 7)
+    setMinScore((filters.minScore as number) || 0)
+    setIpFilter((filters.ipFilter as string) || '')
+    setCountryFilter((filters.countryFilter as string) || '')
+    setDateFrom((filters.dateFrom as string) || '')
+    setDateTo((filters.dateTo as string) || '')
+    setShowFilters(true)
+    setPage(1)
+  }
 
   // Derived filter for resolved status
   const resolved = tab === 'pending' ? false : undefined
 
   // Fetch violations list
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['violations', page, perPage, severity, days, resolved, minScore],
+    queryKey: ['violations', page, perPage, severity, days, resolved, minScore, ipFilter, countryFilter, dateFrom, dateTo],
     queryFn: () =>
       fetchViolations({
         page,
@@ -1168,6 +1240,10 @@ export default function Violations() {
         days,
         resolved,
         min_score: minScore,
+        ...(ipFilter && { ip: ipFilter }),
+        ...(countryFilter && { country: countryFilter }),
+        ...(dateFrom && { date_from: dateFrom }),
+        ...(dateTo && { date_to: dateTo }),
       }),
     enabled: tab !== 'top',
   })
@@ -1188,6 +1264,10 @@ export default function Violations() {
       queryClient.invalidateQueries({ queryKey: ['topViolators'] })
       queryClient.invalidateQueries({ queryKey: ['violationDetail'] })
       setSelectedViolationId(null)
+      toast.success('Нарушение обработано')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
     },
   })
 
@@ -1220,6 +1300,7 @@ export default function Violations() {
       <div className="space-y-6">
         <ViolationDetailPanel
           violationId={selectedViolationId}
+          canResolve={canResolve}
           onClose={() => setSelectedViolationId(null)}
           onBlock={handleBlock}
           onWarn={handleWarn}
@@ -1267,6 +1348,17 @@ export default function Violations() {
           >
             <RefreshCw className={cn('w-5 h-5', isLoading && 'animate-spin')} />
           </Button>
+          <ExportDropdown
+            onExportCSV={handleExportCSV}
+            onExportJSON={handleExportJSON}
+            disabled={!data?.items?.length}
+          />
+          <SavedFiltersDropdown
+            page="violations"
+            currentFilters={currentViolationFilters}
+            onLoadFilter={handleLoadViolationFilter}
+            hasActiveFilters={hasActiveViolationFilters}
+          />
         </div>
       </div>
 
@@ -1405,6 +1497,7 @@ export default function Violations() {
                 >
                   <ViolationCard
                     violation={violation}
+                    canResolve={canResolve}
                     onBlock={() => handleBlock(violation.id)}
                     onWarn={() => handleWarn(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}

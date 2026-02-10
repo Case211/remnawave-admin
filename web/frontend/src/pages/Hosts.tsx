@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { useHasPermission } from '@/components/PermissionGate'
 import {
   RefreshCw,
   Globe,
@@ -43,6 +45,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import client from '../api/client'
 
 // Types matching backend HostListItem
@@ -482,12 +485,16 @@ function HostCard({
   onEnable,
   onDisable,
   onDelete,
+  canEdit,
+  canDelete,
 }: {
   host: Host
   onEdit: () => void
   onEnable: () => void
   onDisable: () => void
   onDelete: () => void
+  canEdit: boolean
+  canDelete: boolean
 }) {
   return (
     <Card className={cn('relative', host.is_disabled && 'opacity-60')}>
@@ -520,44 +527,52 @@ function HostCard({
             </Badge>
 
             {/* Actions menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={onEdit}>
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Редактировать
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {host.is_disabled ? (
-                  <DropdownMenuItem
-                    onSelect={onEnable}
-                    className="text-green-400 focus:text-green-400"
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    Включить
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    onSelect={onDisable}
-                    className="text-yellow-400 focus:text-yellow-400"
-                  >
-                    <Square className="w-4 h-4 mr-2" />
-                    Отключить
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem
-                  onSelect={() => { if (confirm('Удалить хост?')) onDelete() }}
-                  className="text-red-400 focus:text-red-400"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Удалить
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {(canEdit || canDelete) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canEdit && (
+                    <DropdownMenuItem onSelect={onEdit}>
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Редактировать
+                    </DropdownMenuItem>
+                  )}
+                  {canEdit && <DropdownMenuSeparator />}
+                  {canEdit && (
+                    host.is_disabled ? (
+                      <DropdownMenuItem
+                        onSelect={onEnable}
+                        className="text-green-400 focus:text-green-400"
+                      >
+                        <Play className="w-4 h-4 mr-2" />
+                        Включить
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        onSelect={onDisable}
+                        className="text-yellow-400 focus:text-yellow-400"
+                      >
+                        <Square className="w-4 h-4 mr-2" />
+                        Отключить
+                      </DropdownMenuItem>
+                    )
+                  )}
+                  {canDelete && (
+                    <DropdownMenuItem
+                      onSelect={onDelete}
+                      className="text-red-400 focus:text-red-400"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Удалить
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -631,10 +646,14 @@ function HostSkeleton() {
 
 export default function Hosts() {
   const queryClient = useQueryClient()
+  const canCreate = useHasPermission('hosts', 'create')
+  const canEdit = useHasPermission('hosts', 'edit')
+  const canDelete = useHasPermission('hosts', 'delete')
   const [editingHost, setEditingHost] = useState<Host | null>(null)
   const [editError, setEditError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [deleteConfirmUuid, setDeleteConfirmUuid] = useState<string | null>(null)
 
   // Fetch hosts
   const { data: hosts = [], isLoading, refetch } = useQuery({
@@ -646,17 +665,35 @@ export default function Hosts() {
   // Mutations
   const enableHost = useMutation({
     mutationFn: (uuid: string) => client.post(`/hosts/${uuid}/enable`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hosts'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hosts'] })
+      toast.success('Хост включён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
+    },
   })
 
   const disableHost = useMutation({
     mutationFn: (uuid: string) => client.post(`/hosts/${uuid}/disable`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hosts'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hosts'] })
+      toast.success('Хост отключён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
+    },
   })
 
   const deleteHost = useMutation({
     mutationFn: (uuid: string) => client.delete(`/hosts/${uuid}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hosts'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hosts'] })
+      toast.success('Хост удалён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
+    },
   })
 
   const updateHost = useMutation({
@@ -666,9 +703,11 @@ export default function Hosts() {
       queryClient.invalidateQueries({ queryKey: ['hosts'] })
       setEditingHost(null)
       setEditError('')
+      toast.success('Хост обновлён')
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setEditError(err.response?.data?.detail || err.message || 'Ошибка сохранения')
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка сохранения')
     },
   })
 
@@ -678,9 +717,11 @@ export default function Hosts() {
       queryClient.invalidateQueries({ queryKey: ['hosts'] })
       setShowCreateModal(false)
       setCreateError('')
+      toast.success('Хост создан')
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка создания')
     },
   })
 
@@ -698,13 +739,15 @@ export default function Hosts() {
           <p className="text-dark-200 mt-1 text-sm md:text-base">Управление хостами подключений</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Button
-            onClick={() => { setShowCreateModal(true); setCreateError('') }}
-            className="gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Добавить</span>
-          </Button>
+          {canCreate && (
+            <Button
+              onClick={() => { setShowCreateModal(true); setCreateError('') }}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Добавить</span>
+            </Button>
+          )}
           <Button
             variant="secondary"
             onClick={() => refetch()}
@@ -764,7 +807,9 @@ export default function Hosts() {
                 onEdit={() => { setEditingHost(host); setEditError('') }}
                 onEnable={() => enableHost.mutate(host.uuid)}
                 onDisable={() => disableHost.mutate(host.uuid)}
-                onDelete={() => deleteHost.mutate(host.uuid)}
+                onDelete={() => setDeleteConfirmUuid(host.uuid)}
+                canEdit={canEdit}
+                canDelete={canDelete}
               />
             </div>
           ))
@@ -791,6 +836,22 @@ export default function Hosts() {
           error={createError}
         />
       )}
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={deleteConfirmUuid !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirmUuid(null) }}
+        title="Удалить хост?"
+        description="Хост будет удалён. Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirmUuid) {
+            deleteHost.mutate(deleteConfirmUuid)
+            setDeleteConfirmUuid(null)
+          }
+        }}
+      />
     </div>
   )
 }

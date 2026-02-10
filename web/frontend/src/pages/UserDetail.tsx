@@ -27,6 +27,7 @@ import {
   TrendingUp,
   Eye,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import client from '../api/client'
 import { useHasPermission } from '../components/PermissionGate'
 
@@ -38,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
 
 interface UserDetailData {
@@ -547,6 +549,7 @@ export default function UserDetail() {
   })
   const [editError, setEditError] = useState('')
   const [editSuccess, setEditSuccess] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Fetch user data
   const { data: user, isLoading, error } = useQuery<UserDetailData>({
@@ -583,6 +586,10 @@ export default function UserDetail() {
     mutationFn: async () => { await client.post(`/users/${uuid}/sync-hwid-devices`) },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
+      toast.success('HWID устройства синхронизированы')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка синхронизации')
     },
   })
 
@@ -603,19 +610,23 @@ export default function UserDetail() {
   // Mutations
   const enableMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/enable`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Пользователь включён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const disableMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/disable`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Пользователь отключён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const resetTrafficMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/reset-traffic`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Трафик сброшен') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const deleteMutation = useMutation({
     mutationFn: async () => { await client.delete(`/users/${uuid}`) },
-    onSuccess: () => { navigate('/users') },
+    onSuccess: () => { toast.success('Пользователь удалён'); navigate('/users') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка удаления') },
   })
 
   const updateUserMutation = useMutation({
@@ -626,6 +637,7 @@ export default function UserDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user', uuid] })
       queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('Пользователь обновлён')
       setEditSuccess(true)
       setEditError('')
       setTimeout(() => setEditSuccess(false), 3000)
@@ -846,7 +858,7 @@ export default function UserDetail() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { if (confirm('Удалить пользователя?')) deleteMutation.mutate() }}
+                  onClick={() => setShowDeleteConfirm(true)}
                   disabled={deleteMutation.isPending}
                   className="text-red-400 hover:text-red-300"
                 >
@@ -1276,6 +1288,16 @@ export default function UserDetail() {
           </Card>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Удалить пользователя?"
+        description="Пользователь и все его данные будут удалены. Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => { deleteMutation.mutate(); setShowDeleteConfirm(false) }}
+      />
     </div>
   )
 }
