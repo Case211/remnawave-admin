@@ -12,6 +12,9 @@ import {
   Ship,
   UserPlus,
   Search,
+  ClipboardList,
+  Terminal,
+  BarChart3,
 } from 'lucide-react'
 import {
   CommandDialog,
@@ -136,6 +139,27 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           >
             <UserCog className="mr-2 h-4 w-4" />
             Администраторы
+          </CommandItem>
+          <CommandItem
+            value="analytics аналитика гео карта тренды"
+            onSelect={() => runCommand(() => navigate('/analytics'))}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" />
+            Аналитика
+          </CommandItem>
+          <CommandItem
+            value="audit аудит журнал лог"
+            onSelect={() => runCommand(() => navigate('/audit'))}
+          >
+            <ClipboardList className="mr-2 h-4 w-4" />
+            Журнал аудита
+          </CommandItem>
+          <CommandItem
+            value="logs логи системные"
+            onSelect={() => runCommand(() => navigate('/logs'))}
+          >
+            <Terminal className="mr-2 h-4 w-4" />
+            Системные логи
           </CommandItem>
           <CommandItem
             value="settings настройки"

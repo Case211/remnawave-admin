@@ -18,6 +18,9 @@ const ROUTE_LABELS: Record<string, string> = {
   hosts: 'Хосты',
   violations: 'Нарушения',
   admins: 'Администраторы',
+  analytics: 'Аналитика',
+  audit: 'Журнал аудита',
+  logs: 'Системные логи',
   settings: 'Настройки',
 }
 

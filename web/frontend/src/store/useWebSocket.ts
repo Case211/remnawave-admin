@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { useAuthStore } from './authStore'
 import { authApi } from '../api/auth'
 
@@ -38,6 +39,47 @@ function getWsUrl(token: string): string {
   }
 
   return `${base}/ws?token=${encodeURIComponent(token)}`
+}
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  create_user: 'создал пользователя',
+  update_user: 'обновил пользователя',
+  delete_user: 'удалил пользователя',
+  enable_user: 'включил пользователя',
+  disable_user: 'отключил пользователя',
+  revoke_sub: 'отозвал подписку',
+  create_host: 'создал хост',
+  update_host: 'обновил хост',
+  delete_host: 'удалил хост',
+  update_settings: 'изменил настройки',
+  create_admin: 'создал администратора',
+  update_admin: 'обновил администратора',
+  delete_admin: 'удалил администратора',
+  create_role: 'создал роль',
+  update_role: 'обновил роль',
+  delete_role: 'удалил роль',
+  login: 'вошёл в систему',
+  resolve_violation: 'обработал нарушение',
+}
+
+const AUDIT_RESOURCE_LABELS: Record<string, string> = {
+  users: 'пользователя',
+  hosts: 'хост',
+  nodes: 'ноду',
+  settings: 'настройки',
+  admins: 'администратора',
+  roles: 'роль',
+  violations: 'нарушение',
+}
+
+function formatAuditAction(action: string, resource: string): string {
+  const label = AUDIT_ACTION_LABELS[action]
+  if (label) return label
+
+  // Fallback: try to build from action + resource
+  const resLabel = AUDIT_RESOURCE_LABELS[resource]
+  if (resLabel) return `${action} ${resLabel}`
+  return `${action} ${resource || ''}`
 }
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000]
@@ -105,6 +147,24 @@ export function useRealtimeUpdates() {
             queryClient.invalidateQueries({ queryKey: ['timeseries'] })
             queryClient.invalidateQueries({ queryKey: ['deltas'] })
             break
+          case 'audit': {
+            // Refresh audit log queries
+            queryClient.invalidateQueries({ queryKey: ['audit-logs'] })
+            queryClient.invalidateQueries({ queryKey: ['audit-stats'] })
+
+            // Show toast for actions by OTHER admins
+            const currentUser = useAuthStore.getState().user
+            const auditAdmin = msg.data?.admin_username as string | undefined
+            if (auditAdmin && currentUser?.username && auditAdmin !== currentUser.username) {
+              const action = (msg.data?.action as string) || ''
+              const resource = (msg.data?.resource as string) || ''
+              toast.info(
+                `${auditAdmin}: ${formatAuditAction(action, resource)}`,
+                { duration: 4000 },
+              )
+            }
+            break
+          }
         }
       } catch {
         // Non-JSON message, ignore
