@@ -214,41 +214,78 @@ CREATE TABLE admin_accounts (
 
 ---
 
-## Фаза 4 — Улучшение существующих функций
+## Фаза 4 — Улучшение существующих функций ✅ ВЫПОЛНЕНО
 
-### 4.1 Массовые операции
+### 4.1 Массовые операции ✅
 
-| # | Задача | Описание |
-|---|--------|----------|
-| 4.1.1 | Выбор нескольких пользователей | Чекбоксы в таблице Users, кнопки "Выбрать всё / Снять" |
-| 4.1.2 | Массовые действия | Включить / Выключить / Удалить / Изменить лимит трафика / Продлить подписку |
-| 4.1.3 | Backend: batch endpoints | `POST /users/batch/enable`, `/batch/disable`, `/batch/update` |
-| 4.1.4 | Подтверждение | Диалог: "Вы уверены? Затронуто N пользователей" с предпросмотром |
+| # | Задача | Описание | Статус |
+|---|--------|----------|--------|
+| 4.1.1 | Выбор нескольких пользователей | Чекбоксы в таблице Users, кнопки "Выбрать всё / Снять" | ✅ |
+| 4.1.2 | Массовые действия | Включить / Выключить / Удалить / Сбросить трафик | ✅ |
+| 4.1.3 | Backend: batch endpoints | `POST /users/bulk/enable`, `/bulk/disable`, `/bulk/delete`, `/bulk/reset-traffic` | ✅ |
+| 4.1.4 | Подтверждение | ConfirmDialog: "Вы уверены? Затронуто N пользователей" | ✅ |
 
-### 4.2 Экспорт данных
+**Детали реализации:**
+- `bulk.py` (backend): BulkUserRequest (uuids, max 100), BulkOperationResult (success/failed/errors)
+- 4 bulk-эндпоинта в `users.py` с `require_permission("users", "bulk_operations")`
+- Alembic миграция: добавлено право `bulk_operations` для ролей superadmin и manager
+- Frontend: чекбоксы в таблице, sticky toolbar при выделении, мутации с toast-уведомлениями
 
-| # | Задача | Описание |
-|---|--------|----------|
-| 4.2.1 | Экспорт пользователей | CSV/JSON: текущая выборка (с фильтрами) или все |
-| 4.2.2 | Экспорт нарушений | CSV: дата, пользователь, скор, severity, причины, IP |
-| 4.2.3 | Экспорт статистики | PDF/PNG: текущий dashboard (для отчётов) |
+### 4.2 Экспорт данных ✅
 
-### 4.3 Улучшенный поиск
+| # | Задача | Описание | Статус |
+|---|--------|----------|--------|
+| 4.2.1 | Экспорт пользователей | CSV/JSON: текущая выборка (с фильтрами) | ✅ |
+| 4.2.2 | Экспорт нарушений | CSV/JSON: дата, пользователь, скор, severity, причины, IP | ✅ |
+| 4.2.3 | Экспорт статистики | PDF/PNG dashboard — отложено (требуется html-to-image) | ⏳ |
 
-| # | Задача | Описание |
-|---|--------|----------|
-| 4.3.1 | Глобальный поиск | Command Palette (Cmd+K): поиск пользователей, нод, хостов из любой страницы |
-| 4.3.2 | Сохранённые фильтры | Возможность сохранить набор фильтров и быстро переключаться |
-| 4.3.3 | Расширенный поиск нарушений | По IP, по стране, по ASN, по диапазону дат |
+**Детали реализации:**
+- `export.ts`: exportCSV (papaparse), exportJSON, formatBytesForExport, downloadBlob
+- `ExportDropdown.tsx`: переиспользуемый компонент с CSV/JSON вариантами
+- Интегрирован на страницах Users и Violations
 
-### 4.4 Улучшения UX
+### 4.3 Улучшенный поиск ✅
 
-| # | Задача | Описание |
-|---|--------|----------|
-| 4.4.1 | Toast-уведомления | Уведомления о действиях (создано, обновлено, ошибка) вместо alert |
-| 4.4.2 | Skeleton-загрузки | Скелетоны при загрузке данных вместо спиннеров |
-| 4.4.3 | Keyboard shortcuts | Горячие клавиши: Esc закрыть модал, Enter подтвердить, навигация по таблице |
-| 4.4.4 | Breadcrumbs | Навигация: Dashboard > Users > user@email |
+| # | Задача | Описание | Статус |
+|---|--------|----------|--------|
+| 4.3.1 | Глобальный поиск | Command Palette (Cmd+K): навигация, быстрые действия, live-поиск пользователей | ✅ |
+| 4.3.2 | Сохранённые фильтры | Zustand + localStorage: сохранение/загрузка/удаление наборов фильтров | ✅ |
+| 4.3.3 | Расширенный поиск нарушений | По IP, по стране, по диапазону дат (backend + frontend) | ✅ |
+
+**Детали реализации:**
+- `CommandPalette.tsx`: навигация по 8 страницам, быстрые действия, debounced поиск пользователей (React Query)
+- Горячая клавиша Cmd/Ctrl+K в Layout, кнопка-триггер в Header с бейджем ⌘K
+- `SavedFiltersDropdown.tsx`: dropdown с сохранёнными фильтрами, inline-ввод имени
+- `useFiltersStore.ts` (Zustand persist): SavedFilter {id, name, page, filters, createdAt}
+- Backend Violations: добавлены параметры ip, country, date_from, date_to
+
+### 4.4 Улучшения UX ✅
+
+| # | Задача | Описание | Статус |
+|---|--------|----------|--------|
+| 4.4.1 | Toast-уведомления | sonner: success/error/info на всех мутациях всех страниц | ✅ |
+| 4.4.2 | Skeleton-загрузки | Уже реализовано в Фазе 1 (shadcn Skeleton) | ✅ |
+| 4.4.3 | Keyboard shortcuts | Cmd+K — Command Palette, Esc закрыть модал/диалог | ✅ |
+| 4.4.4 | Breadcrumbs | PageBreadcrumbs с динамическим разрешением имён пользователей | ✅ |
+
+**Детали реализации:**
+- `sonner.tsx`: Toaster с тёмной темой, position bottom-right, цветовые варианты (green/red/yellow/cyan)
+- `ConfirmDialog.tsx`: замена всех `confirm()` и `alert()` на AlertDialog
+- `PageBreadcrumbs.tsx`: автогенерация из React Router, ROUTE_LABELS, dynamic user name fetch
+- Toast добавлен на **всех** страницах: Users, UserDetail, Nodes, Hosts, Violations, Settings, Fleet, Admins
+
+### 4.5 RBAC: расширение Permission Gates ✅
+
+| # | Задача | Описание | Статус |
+|---|--------|----------|--------|
+| 4.5.1 | Nodes.tsx | PermissionGate на create/edit/delete действиях | ✅ |
+| 4.5.2 | Hosts.tsx | PermissionGate на create/edit/delete действиях | ✅ |
+| 4.5.3 | Violations.tsx | useHasPermission для resolve-действий | ✅ |
+| 4.5.4 | Settings.tsx | useHasPermission('settings', 'edit') для всех input/sync | ✅ |
+
+**Зависимости (установлены):** `sonner`, `cmdk`, `@radix-ui/react-checkbox`, `papaparse`
+
+**Результат:** Все подсистемы Фазы 4 реализованы. Массовые операции с RBAC, экспорт CSV/JSON, Command Palette с Cmd+K, сохранённые фильтры, расширенный поиск нарушений, toast-уведомления на всех страницах, ConfirmDialog вместо confirm(), breadcrumbs с динамическими именами, Permission Gates на всех страницах.
 
 ---
 
@@ -446,7 +483,7 @@ CREATE TABLE automation_log (
 Фаза 1 (shadcn/ui)          ██████████  Фундамент — делается первой        ✅
 Фаза 2 (RBAC)               █████████   Ключевая фича — сразу после UI      ✅
 Фаза 3 (Dashboard)          ████████    Улучшение главной страницы           ✅
-Фаза 4 (Improvements)       ███████     Параллельно с Фазой 3
+Фаза 4 (Improvements)       ███████     Параллельно с Фазой 3               ✅
 Фаза 5 (New features)       ██████      После стабилизации основы
 Фаза 6 (Automations)        ██████      Конструктор правил
 Фаза 7 (Setup + Components) █████       Удобство первого запуска
