@@ -36,9 +36,6 @@ LOG_FILES = {
     "nginx_error": ("nginx_error.log", "nginx_error"),
     # PostgreSQL
     "postgres": ("postgres.log", "postgres"),
-    # Node Agent
-    "nodeagent_info": ("nodeagent_INFO.log", "admin"),
-    "nodeagent_warning": ("nodeagent_WARNING.log", "admin"),
 }
 
 # ── Log line parsers ─────────────────────────────────────────────

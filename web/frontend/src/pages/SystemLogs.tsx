@@ -10,7 +10,6 @@ import {
   Terminal,
   Globe,
   Database,
-  Server,
   Bot,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -35,27 +34,14 @@ import { useAuthStore } from '@/store/authStore'
 
 // ── Constants ───────────────────────────────────────────────────
 
-interface LogFileConfig {
-  label: string
-  group: string
-  icon: typeof Terminal
-}
-
-const LOG_FILE_CONFIG: Record<string, LogFileConfig> = {
-  // Web Backend
-  web_info: { label: 'Web Backend (INFO)', group: 'Web Backend', icon: Terminal },
-  web_warning: { label: 'Web Backend (WARNING+)', group: 'Web Backend', icon: Terminal },
-  // Telegram Bot
-  bot_info: { label: 'Telegram Bot (INFO)', group: 'Telegram Bot', icon: Bot },
-  bot_warning: { label: 'Telegram Bot (WARNING+)', group: 'Telegram Bot', icon: Bot },
-  // Nginx
-  nginx_access: { label: 'Nginx (Access)', group: 'Nginx', icon: Globe },
-  nginx_error: { label: 'Nginx (Error)', group: 'Nginx', icon: Globe },
-  // PostgreSQL
-  postgres: { label: 'PostgreSQL', group: 'PostgreSQL', icon: Database },
-  // Node Agent
-  nodeagent_info: { label: 'Node Agent (INFO)', group: 'Node Agent', icon: Server },
-  nodeagent_warning: { label: 'Node Agent (WARNING+)', group: 'Node Agent', icon: Server },
+const LOG_FILE_LABELS: Record<string, { label: string; icon: typeof Terminal }> = {
+  web_info: { label: 'Web Backend (INFO)', icon: Terminal },
+  web_warning: { label: 'Web Backend (WARNING+)', icon: Terminal },
+  bot_info: { label: 'Telegram Bot (INFO)', icon: Bot },
+  bot_warning: { label: 'Telegram Bot (WARNING+)', icon: Bot },
+  nginx_access: { label: 'Nginx (Access)', icon: Globe },
+  nginx_error: { label: 'Nginx (Error)', icon: Globe },
+  postgres: { label: 'PostgreSQL', icon: Database },
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -64,14 +50,6 @@ const LEVEL_COLORS: Record<string, string> = {
   WARNING: 'text-yellow-400',
   ERROR: 'text-red-400',
   CRITICAL: 'text-red-500 font-bold',
-}
-
-const GROUP_COLORS: Record<string, string> = {
-  'Web Backend': 'border-blue-500/30',
-  'Telegram Bot': 'border-violet-500/30',
-  'Nginx': 'border-emerald-500/30',
-  'PostgreSQL': 'border-orange-500/30',
-  'Node Agent': 'border-cyan-500/30',
 }
 
 function formatFileSize(bytes: number): string {
@@ -219,20 +197,7 @@ export default function SystemLogs() {
     ? [...(initialData?.items ?? []), ...streamLines]
     : (initialData?.items ?? [])
 
-  // Group log files by service for display
-  const groupedFiles = logFiles
-    ? Object.entries(
-        logFiles.reduce<Record<string, LogFile[]>>((acc, f) => {
-          const config = LOG_FILE_CONFIG[f.key]
-          const group = config?.group || 'Other'
-          if (!acc[group]) acc[group] = []
-          acc[group].push(f)
-          return acc
-        }, {}),
-      )
-    : []
-
-  const selectedConfig = LOG_FILE_CONFIG[selectedFile]
+  const selectedLabel = LOG_FILE_LABELS[selectedFile]
 
   return (
     <div className="p-4 md:p-6 space-y-4 animate-fade-in">
@@ -303,55 +268,44 @@ export default function SystemLogs() {
         </div>
       </div>
 
-      {/* File cards grouped by service */}
-      {groupedFiles.length > 0 && (
-        <div className="space-y-3">
-          {groupedFiles.map(([group, files]) => (
-            <div key={group}>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2 px-1">
-                {group}
-              </p>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-                {files.map((f: LogFile) => {
-                  const config = LOG_FILE_CONFIG[f.key]
-                  const Icon = config?.icon || FileText
-                  const groupColor = GROUP_COLORS[config?.group || ''] || 'border-dark-700'
+      {/* File cards */}
+      {logFiles && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {logFiles.map((f: LogFile) => {
+            const cfg = LOG_FILE_LABELS[f.key]
+            if (!cfg) return null
+            const Icon = cfg.icon
 
-                  return (
-                    <Card
-                      key={f.key}
-                      className={cn(
-                        'bg-dark-800 border cursor-pointer transition-all hover:border-primary-400/50',
-                        selectedFile === f.key
-                          ? 'border-primary-400'
-                          : groupColor,
-                      )}
-                      onClick={() => handleFileSwitch(f.key)}
-                    >
-                      <CardContent className="p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-xs font-medium text-white truncate">
-                            {config?.label || f.filename}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">
-                            {f.exists ? formatFileSize(f.size_bytes) : 'Не найден'}
-                          </span>
-                          {selectedFile === f.key && (
-                            <Badge className="bg-primary-400/20 text-primary-400 text-[10px] px-1.5 py-0">
-                              Active
-                            </Badge>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+            return (
+              <Card
+                key={f.key}
+                className={cn(
+                  'bg-dark-800 border cursor-pointer transition-all hover:border-primary-400/50',
+                  selectedFile === f.key ? 'border-primary-400' : 'border-dark-700',
+                )}
+                onClick={() => handleFileSwitch(f.key)}
+              >
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium text-white truncate">
+                      {cfg.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {f.exists ? formatFileSize(f.size_bytes) : 'Не найден'}
+                    </span>
+                    {selectedFile === f.key && (
+                      <Badge className="bg-primary-400/20 text-primary-400 text-xs">
+                        Active
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
 
@@ -397,7 +351,7 @@ export default function SystemLogs() {
         <CardContent className="p-0">
           <div className="flex items-center justify-between px-4 py-2 border-b border-dark-700 bg-dark-800">
             <span className="text-xs text-muted-foreground font-mono">
-              {selectedConfig?.label || selectedFile}
+              {selectedLabel?.label || selectedFile}
             </span>
             <span className="text-xs text-muted-foreground">
               {allLines.length} строк
@@ -411,7 +365,7 @@ export default function SystemLogs() {
           </div>
           <div
             ref={logContainerRef}
-            className="h-[calc(100vh-480px)] min-h-[400px] overflow-auto font-mono text-xs leading-5 p-2"
+            className="h-[calc(100vh-420px)] min-h-[400px] overflow-auto font-mono text-xs leading-5 p-2"
           >
             {allLines.length === 0 ? (
               <div className="flex items-center justify-center h-full text-muted-foreground">
