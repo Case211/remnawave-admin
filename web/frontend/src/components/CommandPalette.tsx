@@ -134,18 +134,31 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             Нарушения
           </CommandItem>
           <CommandItem
-            value="admins администраторы"
-            onSelect={() => runCommand(() => navigate('/admins'))}
-          >
-            <UserCog className="mr-2 h-4 w-4" />
-            Администраторы
-          </CommandItem>
-          <CommandItem
             value="analytics аналитика гео карта тренды"
             onSelect={() => runCommand(() => navigate('/analytics'))}
           >
             <BarChart3 className="mr-2 h-4 w-4" />
             Аналитика
+          </CommandItem>
+          <CommandItem
+            value="settings настройки"
+            onSelect={() => runCommand(() => navigate('/settings'))}
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            Настройки
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        {/* Administration */}
+        <CommandGroup heading="Администрирование">
+          <CommandItem
+            value="admins администраторы роли"
+            onSelect={() => runCommand(() => navigate('/admins'))}
+          >
+            <UserCog className="mr-2 h-4 w-4" />
+            Администраторы и роли
           </CommandItem>
           <CommandItem
             value="audit аудит журнал лог"
@@ -160,13 +173,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           >
             <Terminal className="mr-2 h-4 w-4" />
             Системные логи
-          </CommandItem>
-          <CommandItem
-            value="settings настройки"
-            onSelect={() => runCommand(() => navigate('/settings'))}
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            Настройки
           </CommandItem>
         </CommandGroup>
 
