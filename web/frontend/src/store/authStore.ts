@@ -56,6 +56,24 @@ interface AuthState {
   logout: () => void
   setTokens: (accessToken: string, refreshToken: string) => void
   clearError: () => void
+  validateSession: () => Promise<void>
+}
+
+/**
+ * Check if a JWT token is expired by decoding its payload.
+ * Returns true if the token is expired or cannot be decoded.
+ */
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return true
+    const payload = JSON.parse(atob(parts[1]))
+    if (!payload.exp) return true
+    // Add 30s buffer to avoid edge cases where token expires mid-request
+    return Date.now() >= (payload.exp - 30) * 1000
+  } catch {
+    return true
+  }
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -124,6 +142,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        const { accessToken } = get()
+
+        // Clear state immediately for responsive UX
         set({
           user: null,
           accessToken: null,
@@ -131,6 +152,13 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           error: null,
         })
+
+        // Notify backend to blacklist the token (fire-and-forget)
+        if (accessToken) {
+          authApi.logout().catch(() => {
+            // Ignore errors — token will expire naturally
+          })
+        }
       },
 
       setTokens: (accessToken: string, refreshToken: string) => {
@@ -139,6 +167,53 @@ export const useAuthStore = create<AuthState>()(
 
       clearError: () => {
         set({ error: null })
+      },
+
+      validateSession: async () => {
+        const { accessToken, refreshToken, isAuthenticated } = get()
+
+        // Not authenticated — nothing to validate
+        if (!isAuthenticated) return
+
+        // No tokens at all — invalid session
+        if (!accessToken && !refreshToken) {
+          set({
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            isAuthenticated: false,
+            error: null,
+          })
+          return
+        }
+
+        // Access token still valid — session OK
+        if (accessToken && !isTokenExpired(accessToken)) {
+          return
+        }
+
+        // Access token expired but refresh token available — try to refresh
+        if (refreshToken && !isTokenExpired(refreshToken)) {
+          try {
+            const response = await authApi.refreshToken(refreshToken)
+            set({
+              accessToken: response.access_token,
+              refreshToken: response.refresh_token,
+            })
+            return
+          } catch {
+            // Refresh failed — session is dead
+          }
+        }
+
+        // Both tokens expired or refresh failed — clear session
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          error: null,
+        })
       },
     }),
     {

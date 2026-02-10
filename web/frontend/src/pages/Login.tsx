@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { TelegramUser } from '../api/auth'
-import { User, Lock, AlertCircle, X, Loader2 } from 'lucide-react'
+import { User, Lock, AlertCircle, X, Loader2, Shield, KeyRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 declare global {
@@ -83,83 +83,135 @@ export default function Login() {
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{
-        background: 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%)',
-      }}
-    >
-      <div className="w-full max-w-md animate-fade-in">
+    <div className="login-bg min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Decorative background orbs */}
+      <div
+        className="login-orb"
+        style={{
+          width: 400,
+          height: 400,
+          background: 'radial-gradient(circle, #0d9488 0%, transparent 70%)',
+          top: '-10%',
+          right: '-5%',
+          animationDelay: '0s',
+        }}
+      />
+      <div
+        className="login-orb"
+        style={{
+          width: 350,
+          height: 350,
+          background: 'radial-gradient(circle, #06b6d4 0%, transparent 70%)',
+          bottom: '-8%',
+          left: '-5%',
+          animationDelay: '-3s',
+          animationDuration: '10s',
+        }}
+      />
+      <div
+        className="login-orb"
+        style={{
+          width: 200,
+          height: 200,
+          background: 'radial-gradient(circle, #0891b2 0%, transparent 70%)',
+          top: '40%',
+          left: '15%',
+          animationDelay: '-5s',
+          animationDuration: '12s',
+          opacity: 0.08,
+        }}
+      />
+
+      {/* Login card */}
+      <div className="w-full max-w-[420px] login-card-enter relative z-10">
         <Card
-          className="rounded-2xl border-dark-400/20"
+          className="rounded-2xl border-dark-400/15 overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, rgba(22, 27, 34, 0.95) 0%, rgba(13, 17, 23, 0.95) 100%)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px -10px rgba(13, 148, 136, 0.15)',
-            backdropFilter: 'blur(12px)',
+            background: 'linear-gradient(160deg, rgba(22, 27, 34, 0.92) 0%, rgba(13, 17, 23, 0.96) 100%)',
+            boxShadow:
+              '0 0 0 1px rgba(255, 255, 255, 0.04), ' +
+              '0 20px 60px -10px rgba(0, 0, 0, 0.5), ' +
+              '0 0 80px -20px rgba(13, 148, 136, 0.12)',
+            backdropFilter: 'blur(20px)',
           }}
         >
-          <CardHeader className="items-center pb-2">
+          {/* Top accent line */}
+          <div
+            className="h-[2px] w-full"
+            style={{
+              background: 'linear-gradient(90deg, transparent 0%, #0d9488 30%, #06b6d4 70%, transparent 100%)',
+            }}
+          />
+
+          <CardHeader className="items-center pt-8 pb-2 px-8">
             {/* Logo */}
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex flex-col items-center gap-4 mb-2">
               <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                className="w-16 h-16 rounded-2xl flex items-center justify-center relative"
                 style={{
                   background: 'linear-gradient(135deg, #0d9488 0%, #06b6d4 100%)',
-                  boxShadow: '0 0 30px -5px rgba(13, 148, 136, 0.4)',
+                  boxShadow: '0 0 40px -5px rgba(13, 148, 136, 0.35)',
                 }}
               >
-                <span className="text-white font-bold text-xl">R</span>
+                <Shield className="w-8 h-8 text-white" strokeWidth={1.8} />
               </div>
-              <div>
-                <CardTitle className="text-2xl font-display font-bold">Remnawave</CardTitle>
-                <CardDescription className="text-dark-200">
+              <div className="text-center">
+                <h1 className="text-2xl font-display font-bold text-white tracking-tight">
+                  Remnawave
+                </h1>
+                <p className="text-sm text-dark-200 mt-1">
                   Панель администратора
-                </CardDescription>
+                </p>
               </div>
             </div>
-
-            {/* Description */}
-            <CardDescription className="text-center text-dark-200">
-              Войдите для доступа к панели управления
-            </CardDescription>
           </CardHeader>
 
-          <CardContent className="pt-4">
+          <CardContent className="px-8 pb-8 pt-4">
+            {/* Separator */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex-1 h-px bg-dark-400/20" />
+              <span className="text-xs text-dark-300 font-medium uppercase tracking-wider">
+                {showPasswordForm ? 'Вход по паролю' : 'Авторизация'}
+              </span>
+              <div className="flex-1 h-px bg-dark-400/20" />
+            </div>
+
             {/* Error */}
             {error && (
               <div
-                className="mb-6 p-4 rounded-lg border"
+                className="mb-5 p-3.5 rounded-xl border animate-fade-in"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(250, 82, 82, 0.15) 0%, rgba(239, 68, 68, 0.1) 100%)',
-                  borderColor: 'rgba(250, 82, 82, 0.3)',
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.04) 100%)',
+                  borderColor: 'rgba(239, 68, 68, 0.2)',
                 }}
               >
-                <div className="flex items-center justify-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
-                  <p className="text-sm text-red-400 text-center whitespace-pre-wrap">{error}</p>
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-400 leading-relaxed flex-1">{error}</p>
+                  <button
+                    onClick={clearError}
+                    className="text-red-400/60 hover:text-red-400 transition-colors shrink-0"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearError}
-                  className={cn(
-                    "mt-2 mx-auto flex items-center gap-1 text-xs text-red-400",
-                    "hover:text-red-300 hover:bg-transparent h-auto py-1"
-                  )}
-                >
-                  <X className="h-3 w-3" />
-                  Закрыть
-                </Button>
               </div>
             )}
 
             {/* Loading */}
             {isLoading && (
-              <div className="flex flex-col items-center mb-6">
-                <Loader2
-                  className="h-8 w-8 animate-spin text-teal-500"
-                />
-                <p className="mt-2 text-sm text-dark-200">Авторизация...</p>
+              <div className="flex flex-col items-center py-6 animate-fade-in">
+                <div className="relative">
+                  <div
+                    className="absolute inset-0 rounded-full"
+                    style={{
+                      background: 'radial-gradient(circle, rgba(13, 148, 136, 0.2) 0%, transparent 70%)',
+                      transform: 'scale(2)',
+                    }}
+                  />
+                  <Loader2 className="h-8 w-8 animate-spin text-teal-500 relative" />
+                </div>
+                <p className="mt-3 text-sm text-dark-200">Авторизация...</p>
               </div>
             )}
 
@@ -167,68 +219,91 @@ export default function Login() {
               <>
                 {/* Password login form */}
                 {showPasswordForm ? (
-                  <form onSubmit={handlePasswordLogin} className="space-y-4 mb-6">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="username" className="text-dark-200">
-                        <User className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+                  <form onSubmit={handlePasswordLogin} className="space-y-4 mb-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="username" className="text-dark-100 text-sm font-medium">
                         Логин
                       </Label>
-                      <Input
-                        id="username"
-                        type="text"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        placeholder="admin"
-                        autoComplete="username"
-                        autoFocus
-                      />
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
+                        <Input
+                          id="username"
+                          type="text"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="admin"
+                          autoComplete="username"
+                          autoFocus
+                          className="pl-10"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="password" className="text-dark-200">
-                        <Lock className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+                    <div className="space-y-2">
+                      <Label htmlFor="password" className="text-dark-100 text-sm font-medium">
                         Пароль
                       </Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="********"
-                        autoComplete="current-password"
-                      />
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
+                        <Input
+                          id="password"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          autoComplete="current-password"
+                          className="pl-10"
+                        />
+                      </div>
                     </div>
                     <Button
                       type="submit"
-                      variant="default"
-                      className="w-full"
+                      className={cn(
+                        "w-full h-11 font-medium text-sm",
+                        "bg-gradient-to-r from-teal-600 to-cyan-600",
+                        "hover:from-teal-500 hover:to-cyan-500",
+                        "shadow-lg shadow-teal-900/20",
+                        "transition-all duration-200",
+                      )}
                       disabled={!username.trim() || !password.trim()}
                     >
+                      <KeyRound className="w-4 h-4 mr-2" />
                       Войти
                     </Button>
                   </form>
                 ) : (
                   /* Telegram Login Widget */
-                  <div ref={containerRef} className="flex justify-center mb-6" />
+                  <div ref={containerRef} className="flex justify-center mb-5 min-h-[40px]" />
                 )}
 
                 {/* Toggle auth method */}
                 <div className="text-center">
-                  <Button
-                    variant="link"
-                    size="sm"
+                  <button
                     onClick={() => { setShowPasswordForm(!showPasswordForm); clearError() }}
-                    className="text-xs text-dark-300 hover:text-primary-400 h-auto p-0"
+                    className={cn(
+                      "text-xs text-dark-300 hover:text-teal-400",
+                      "transition-colors duration-200",
+                      "inline-flex items-center gap-1.5",
+                    )}
                   >
-                    {showPasswordForm ? 'Войти через Telegram' : 'Войти по логину и паролю'}
-                  </Button>
+                    {showPasswordForm ? (
+                      <>Войти через Telegram</>
+                    ) : (
+                      <>
+                        <Lock className="h-3 w-3" />
+                        Войти по логину и паролю
+                      </>
+                    )}
+                  </button>
                 </div>
               </>
             )}
 
             {/* Footer */}
-            <p className="mt-8 text-center text-xs text-dark-300">
-              Доступ только для авторизованных администраторов
-            </p>
+            <div className="mt-8 pt-5 border-t border-dark-400/10">
+              <p className="text-center text-[11px] text-dark-300/80 leading-relaxed">
+                Доступ только для авторизованных администраторов
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>

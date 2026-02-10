@@ -54,6 +54,46 @@ client.interceptors.request.use(
 )
 
 /**
+ * Refresh token mutex — prevents multiple concurrent 401 responses
+ * from each triggering independent refresh requests.
+ * Only the first 401 performs the refresh; others wait for the result.
+ */
+let isRefreshing = false
+let refreshPromise: Promise<{ access_token: string; refresh_token: string }> | null = null
+
+function doRefresh(refreshToken: string): Promise<{ access_token: string; refresh_token: string }> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise
+  }
+
+  isRefreshing = true
+  const promise = axios
+    .post(`${getApiBaseUrl()}/auth/refresh`, { refresh_token: refreshToken })
+    .then((response) => response.data as { access_token: string; refresh_token: string })
+    .finally(() => {
+      isRefreshing = false
+      refreshPromise = null
+    })
+
+  refreshPromise = promise
+  return promise
+}
+
+/**
+ * Force logout — clear auth state and redirect to login page.
+ */
+function forceLogout() {
+  const auth = getAuthState()
+  if (auth) {
+    auth.logout()
+  }
+  // Only redirect if not already on the login page
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login'
+  }
+}
+
+/**
  * Response interceptor - handle errors and token refresh
  */
 client.interceptors.response.use(
@@ -66,27 +106,32 @@ client.interceptors.response.use(
       originalRequest._retry = true
 
       const auth = getAuthState()
-      if (auth?.refreshToken) {
-        try {
-          const response = await axios.post(`${getApiBaseUrl()}/auth/refresh`, {
-            refresh_token: auth.refreshToken,
-          })
 
-          const { access_token, refresh_token } = response.data
-
-          // Update tokens in Zustand store (will also persist to localStorage)
-          auth.setTokens(access_token, refresh_token)
-
-          // Retry original request
-          originalRequest.headers.Authorization = `Bearer ${access_token}`
-          return client(originalRequest)
-        } catch {
-          // Refresh failed - clear auth and redirect to login
-          const currentAuth = getAuthState()
-          currentAuth?.logout()
-          window.location.href = '/login'
-        }
+      // No refresh token available — force logout immediately
+      if (!auth?.refreshToken) {
+        forceLogout()
+        return Promise.reject(error)
       }
+
+      try {
+        const { access_token, refresh_token } = await doRefresh(auth.refreshToken)
+
+        // Update tokens in Zustand store (will also persist to localStorage)
+        auth.setTokens(access_token, refresh_token)
+
+        // Retry original request
+        originalRequest.headers.Authorization = `Bearer ${access_token}`
+        return client(originalRequest)
+      } catch {
+        // Refresh failed - force logout
+        forceLogout()
+        return Promise.reject(error)
+      }
+    }
+
+    // If already retried and still 401, force logout
+    if (error.response?.status === 401 && originalRequest._retry) {
+      forceLogout()
     }
 
     return Promise.reject(error)
