@@ -40,6 +40,7 @@ AVAILABLE_RESOURCES = {
     "admins": ["view", "create", "edit", "delete"],
     "roles": ["view", "create", "edit", "delete"],
     "audit": ["view"],
+    "logs": ["view"],
     "automation": ["view", "create", "edit", "delete", "run"],
 }
 

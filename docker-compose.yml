@@ -53,6 +53,27 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-remnawave_bot}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./logs:/app/logs
+    command:
+      - "postgres"
+      - "-c"
+      - "logging_collector=on"
+      - "-c"
+      - "log_directory=/app/logs"
+      - "-c"
+      - "log_filename=postgres.log"
+      - "-c"
+      - "log_file_mode=0644"
+      - "-c"
+      - "log_truncate_on_rotation=off"
+      - "-c"
+      - "log_rotation_size=10240"
+      - "-c"
+      - "log_min_messages=warning"
+      - "-c"
+      - "log_min_duration_statement=1000"
+      - "-c"
+      - "log_line_prefix=%t [%p] "
     networks:
       - remnawave-network
     healthcheck:
@@ -107,6 +128,8 @@ services:
     restart: unless-stopped
     environment:
       - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
+    volumes:
+      - ./logs:/app/logs
     ports:
       - "${WEB_FRONTEND_PORT:-3000}:80"
     networks:

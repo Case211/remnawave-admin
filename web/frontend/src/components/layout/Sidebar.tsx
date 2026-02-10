@@ -70,7 +70,7 @@ const navigation = [
   { name: 'Admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   { name: 'Audit Log', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
-  { name: 'Logs', href: '/logs', icon: Terminal, permission: { resource: 'settings', action: 'view' } },
+  { name: 'Logs', href: '/logs', icon: Terminal, permission: { resource: 'logs', action: 'view' } },
   { name: 'Settings', href: '/settings', icon: Settings, permission: { resource: 'settings', action: 'view' } },
 ]
 

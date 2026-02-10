@@ -7,6 +7,7 @@ services:
       - .env
     volumes:
       - /var/log/remnanode:/var/log/remnanode:ro
+      - ./logs:/app/logs
     networks:
       - remnawave-network
     deploy:

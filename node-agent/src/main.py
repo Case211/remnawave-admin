@@ -4,10 +4,14 @@ Remnawave Node Agent — entry point.
 Цикл: собрать подключения из Xray (access.log) → отправить в Collector API → sleep(interval).
 """
 import asyncio
+import gzip
 import logging
+import os
+import shutil
 import signal
 import sys
 import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from .config import Settings
@@ -15,13 +19,99 @@ from .collectors import XrayLogCollector, XrayLogRealtimeCollector, SystemMetric
 from .models import ConnectionReport
 from .sender import CollectorSender
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout,
-)
-logger = logging.getLogger(__name__)
+# ── Logging setup ─────────────────────────────────────────────────
+
+_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_CONSOLE_DATEFMT = "%H:%M:%S"
+_FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
+_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+_BACKUP_COUNT = 5
+_LOG_DIR = Path("/app/logs")
+
+
+class _CompressedRotatingFileHandler(RotatingFileHandler):
+    """RotatingFileHandler с gzip-сжатием ротированных файлов."""
+
+    def doRollover(self):
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+
+        for i in range(self.backupCount - 1, 0, -1):
+            sfn = self.rotation_filename(f"{self.baseFilename}.{i}.gz")
+            dfn = self.rotation_filename(f"{self.baseFilename}.{i + 1}.gz")
+            if os.path.exists(sfn):
+                if os.path.exists(dfn):
+                    os.remove(dfn)
+                os.rename(sfn, dfn)
+
+        dfn = self.rotation_filename(f"{self.baseFilename}.1.gz")
+        if os.path.exists(dfn):
+            os.remove(dfn)
+        if os.path.exists(self.baseFilename):
+            with open(self.baseFilename, "rb") as f_in:
+                with gzip.open(dfn, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            with open(self.baseFilename, "w"):
+                pass
+
+        if not self.delay:
+            self.stream = self._open()
+
+
+def _setup_logging() -> logging.Logger:
+    """Configure logging with console + optional file handlers."""
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(logging.DEBUG)
+
+    # Console handler
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT))
+    root.addHandler(console)
+
+    # File handlers (optional, shared volume may not be mounted)
+    try:
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        file_fmt = logging.Formatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT)
+
+        info_path = _LOG_DIR / "nodeagent_INFO.log"
+        warn_path = _LOG_DIR / "nodeagent_WARNING.log"
+
+        info_h = _CompressedRotatingFileHandler(
+            str(info_path),
+            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
+        )
+        info_h.setLevel(logging.INFO)
+        info_h.setFormatter(file_fmt)
+        root.addHandler(info_h)
+
+        warn_h = _CompressedRotatingFileHandler(
+            str(warn_path),
+            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
+        )
+        warn_h.setLevel(logging.WARNING)
+        warn_h.setFormatter(file_fmt)
+        root.addHandler(warn_h)
+
+        print(
+            f"[LOGGING] File logging active: {_LOG_DIR}",
+            file=sys.stderr, flush=True,
+        )
+    except OSError as exc:
+        console.setLevel(logging.INFO)
+        print(
+            f"[LOGGING] File logging DISABLED: {exc}. "
+            f"Mount ./logs:/app/logs volume to enable file logging.",
+            file=sys.stderr, flush=True,
+        )
+
+    return logging.getLogger(__name__)
+
+
+logger = _setup_logging()
 
 
 async def run_agent() -> None:
