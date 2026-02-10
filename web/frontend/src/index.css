@@ -60,6 +60,14 @@
 
     /* Text color overrides for body */
     --text-body: #c9d1d9;
+
+    /* Chart colors (axes, grids, ticks, tooltip) */
+    --chart-axis: #8b949e;
+    --chart-tick: #c9d1d9;
+    --chart-grid: rgba(72, 79, 88, 0.3);
+    --chart-tooltip-bg: rgba(22, 27, 34, 0.95);
+    --chart-tooltip-border: rgba(72, 79, 88, 0.3);
+    --chart-tooltip-text: #c9d1d9;
   }
 
   /* ====== DARK THEMES ====== */
@@ -201,6 +209,14 @@
     --surface-skeleton-shimmer: rgba(6, 182, 212, 0.06);
 
     --text-body: #1e293b;
+
+    /* Chart colors for light theme - high contrast on white */
+    --chart-axis: #475569;
+    --chart-tick: #334155;
+    --chart-grid: rgba(148, 163, 184, 0.3);
+    --chart-tooltip-bg: rgba(255, 255, 255, 0.95);
+    --chart-tooltip-border: rgba(203, 213, 225, 0.6);
+    --chart-tooltip-text: #1e293b;
   }
 
   html {
@@ -836,6 +852,49 @@
 }
 [data-theme="light"] .shadow-black\/25 {
   --tw-shadow-color: rgb(0 0 0 / 0.06) !important;
+}
+
+/* Light theme: bright text-*-400 colors → darker shades for contrast on white */
+[data-theme="light"] .text-cyan-400 {
+  color: #0891b2 !important;
+}
+[data-theme="light"] .text-blue-400 {
+  color: #2563eb !important;
+}
+[data-theme="light"] .text-green-400 {
+  color: #16a34a !important;
+}
+[data-theme="light"] .text-emerald-400 {
+  color: #059669 !important;
+}
+[data-theme="light"] .text-yellow-400 {
+  color: #a16207 !important;
+}
+[data-theme="light"] .text-amber-400 {
+  color: #b45309 !important;
+}
+[data-theme="light"] .text-orange-400 {
+  color: #ea580c !important;
+}
+[data-theme="light"] .text-red-400 {
+  color: #dc2626 !important;
+}
+[data-theme="light"] .text-purple-400 {
+  color: #9333ea !important;
+}
+[data-theme="light"] .text-violet-400 {
+  color: #7c3aed !important;
+}
+[data-theme="light"] .text-indigo-400 {
+  color: #4f46e5 !important;
+}
+[data-theme="light"] .text-gray-400 {
+  color: #4b5563 !important;
+}
+
+/* Light theme: text-*-400 with opacity variants */
+[data-theme="light"] .text-cyan-400\/70 {
+  color: rgba(8, 145, 178, 0.85) !important;
 }
 
 /* Light theme: scrollbar track */

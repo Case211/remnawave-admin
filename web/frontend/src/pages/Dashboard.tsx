@@ -40,6 +40,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
+import { useChartTheme } from '@/lib/useChartTheme'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -387,18 +388,12 @@ function PeriodSwitcher({
 
 // ── Custom Chart Tooltip ─────────────────────────────────────────
 
-const tooltipStyle = {
-  backgroundColor: 'rgba(22, 27, 34, 0.95)',
-  border: '1px solid rgba(72, 79, 88, 0.3)',
-  borderRadius: '8px',
-  backdropFilter: 'blur(12px)',
-}
-
 function TrafficChartTooltip({ active, payload, label }: any) {
+  const chart = useChartTheme()
   if (!active || !payload?.length) return null
   return (
-    <div style={tooltipStyle} className="px-3 py-2">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+    <div style={chart.tooltipStyle} className="px-3 py-2">
+      <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{label}</p>
       {payload.map((entry: any, i: number) => (
         <p key={i} className="text-xs" style={{ color: entry.color }}>
           {entry.name}: {formatBytes(entry.value)}
@@ -697,6 +692,7 @@ export default function Dashboard() {
   const canViewAnalytics = hasPermission('analytics', 'view')
   // Chart state
   const [trafficPeriod, setTrafficPeriod] = useState('7d')
+  const chart = useChartTheme()
 
   // ── Queries ──────────────────────────────────────────────────
 
@@ -1003,10 +999,10 @@ export default function Dashboard() {
                         </linearGradient>
                       ))}
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
-                    <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                    <XAxis dataKey="name" stroke={chart.axis} fontSize={11} />
                     <YAxis
-                      stroke="#8b949e"
+                      stroke={chart.axis}
                       fontSize={11}
                       tickFormatter={(v) => formatBytesShort(v)}
                     />
@@ -1032,10 +1028,10 @@ export default function Dashboard() {
                         <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
-                    <XAxis dataKey="name" stroke="#8b949e" fontSize={11} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                    <XAxis dataKey="name" stroke={chart.axis} fontSize={11} />
                     <YAxis
-                      stroke="#8b949e"
+                      stroke={chart.axis}
                       fontSize={11}
                       tickFormatter={(v) => formatBytesShort(v)}
                     />
@@ -1084,17 +1080,17 @@ export default function Dashboard() {
               {connectionsBarData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={Math.max(connectionsBarData.length * 40 + 20, 120)}>
                   <BarChart data={connectionsBarData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
-                    <XAxis type="number" stroke="#8b949e" fontSize={11} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                    <XAxis type="number" stroke={chart.axis} fontSize={11} />
                     <YAxis
                       dataKey="name"
                       type="category"
-                      stroke="#8b949e"
+                      stroke={chart.axis}
                       fontSize={11}
                       width={120}
-                      tick={{ fill: '#c9d1d9' }}
+                      tick={{ fill: chart.tick }}
                     />
-                    <RechartsTooltip contentStyle={tooltipStyle} />
+                    <RechartsTooltip contentStyle={chart.tooltipStyle} />
                     <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={24}>
                       {connectionsBarData.map((_entry, i) => (
                         <Cell key={i} fill={NODE_COLORS[i % NODE_COLORS.length]} />
@@ -1147,10 +1143,10 @@ export default function Dashboard() {
               ) : (
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={violationsChartData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(72, 79, 88, 0.3)" />
-                    <XAxis type="number" stroke="#8b949e" fontSize={12} />
-                    <YAxis dataKey="name" type="category" stroke="#8b949e" fontSize={12} width={100} />
-                    <RechartsTooltip contentStyle={tooltipStyle} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                    <XAxis type="number" stroke={chart.axis} fontSize={12} />
+                    <YAxis dataKey="name" type="category" stroke={chart.axis} fontSize={12} width={100} />
+                    <RechartsTooltip contentStyle={chart.tooltipStyle} />
                     <Bar dataKey="value" radius={[0, 8, 8, 0]}>
                       {violationsChartData.map((entry) => (
                         <Cell key={entry.key} fill={SEVERITY_COLORS[entry.key] || '#fab005'} />
