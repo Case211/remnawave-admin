@@ -136,6 +136,25 @@ async def list_automation_rules(
         return [], 0
 
 
+async def get_automation_rules_stats() -> dict:
+    """Get global aggregate stats for automation rules."""
+    try:
+        from src.services.database import db_service
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT
+                    COALESCE(SUM(CASE WHEN is_enabled THEN 1 ELSE 0 END), 0) AS total_active,
+                    COALESCE(SUM(trigger_count), 0) AS total_triggers
+                FROM automation_rules
+                """
+            )
+            return dict(row) if row else {"total_active": 0, "total_triggers": 0}
+    except Exception as e:
+        logger.error("Failed to get automation stats: %s", e)
+        return {"total_active": 0, "total_triggers": 0}
+
+
 async def get_automation_rule_by_id(rule_id: int) -> Optional[dict]:
     """Get a single automation rule by ID."""
     try:

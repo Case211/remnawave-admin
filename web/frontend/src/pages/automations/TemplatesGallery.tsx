@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -30,22 +31,30 @@ interface TemplatesGalleryProps {
 
 export function TemplatesGallery({ canCreate }: TemplatesGalleryProps) {
   const queryClient = useQueryClient()
-
-  const { data: templates, isLoading } = useQuery({
-    queryKey: ['automation-templates'],
-    queryFn: automationsApi.templates,
-  })
+  const [activatingId, setActivatingId] = useState<string | null>(null)
 
   const activateMutation = useMutation({
     mutationFn: automationsApi.activateTemplate,
     onSuccess: (rule) => {
       toast.success(`Шаблон "${rule.name}" активирован`)
       queryClient.invalidateQueries({ queryKey: ['automations'] })
+      setActivatingId(null)
     },
     onError: () => {
       toast.error('Не удалось активировать шаблон')
+      setActivatingId(null)
     },
   })
+
+  const { data: templates, isLoading } = useQuery({
+    queryKey: ['automation-templates'],
+    queryFn: automationsApi.templates,
+  })
+
+  const handleActivate = (templateId: string) => {
+    setActivatingId(templateId)
+    activateMutation.mutate(templateId)
+  }
 
   if (isLoading) {
     return (
@@ -72,8 +81,8 @@ export function TemplatesGallery({ canCreate }: TemplatesGalleryProps) {
           key={template.id}
           template={template}
           canCreate={canCreate}
-          onActivate={() => activateMutation.mutate(template.id)}
-          isActivating={activateMutation.isPending}
+          onActivate={() => handleActivate(template.id)}
+          isActivating={activatingId === template.id}
         />
       ))}
     </div>
@@ -117,7 +126,7 @@ function TemplateCard({
           </Badge>
         </div>
 
-        {/* Trigger → Action summary */}
+        {/* Trigger -> Action summary */}
         <div className="text-xs text-dark-300 mb-4 space-y-2">
           <div className="flex items-start gap-2">
             <span className="text-dark-500 flex-shrink-0 mt-px">Когда:</span>

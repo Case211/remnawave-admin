@@ -82,6 +82,8 @@ export interface PaginatedRules {
   page: number
   per_page: number
   pages: number
+  total_active: number
+  total_triggers: number
 }
 
 export interface PaginatedLogs {

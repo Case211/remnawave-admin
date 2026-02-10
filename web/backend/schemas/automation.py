@@ -67,6 +67,8 @@ class AutomationRuleListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+    total_active: int = 0
+    total_triggers: int = 0
 
 
 class AutomationLogEntry(BaseModel):
