@@ -36,6 +36,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { ExportDropdown } from '@/components/ExportDropdown'
+import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
+import { exportCSV, exportJSON } from '@/lib/export'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -1176,6 +1179,53 @@ export default function Violations() {
 
   const canResolve = useHasPermission('violations', 'resolve')
 
+  // Export handlers
+  const handleExportCSV = () => {
+    const items = data?.items
+    if (!items?.length) return
+    const exportData = items.map((v: Violation) => ({
+      date: v.detected_at || '',
+      username: v.username || '',
+      score: v.score,
+      severity: v.severity,
+      reasons: v.reasons?.join('; ') || '',
+      countries: v.countries?.join(', ') || '',
+      recommendation: v.recommended_action || '',
+      status: v.status || '',
+    }))
+    exportCSV(exportData, `violations-${new Date().toISOString().slice(0, 10)}`)
+    toast.success('Экспорт CSV завершён')
+  }
+  const handleExportJSON = () => {
+    const items = data?.items
+    if (!items?.length) return
+    exportJSON(items, `violations-${new Date().toISOString().slice(0, 10)}`)
+    toast.success('Экспорт JSON завершён')
+  }
+
+  // Saved filters
+  const currentViolationFilters: Record<string, unknown> = {
+    ...(severity && { severity }),
+    ...(days !== 7 && { days }),
+    ...(minScore > 0 && { minScore }),
+    ...(ipFilter && { ipFilter }),
+    ...(countryFilter && { countryFilter }),
+    ...(dateFrom && { dateFrom }),
+    ...(dateTo && { dateTo }),
+  }
+  const hasActiveViolationFilters = Object.keys(currentViolationFilters).length > 0
+  const handleLoadViolationFilter = (filters: Record<string, unknown>) => {
+    setSeverity((filters.severity as string) || '')
+    setDays((filters.days as number) || 7)
+    setMinScore((filters.minScore as number) || 0)
+    setIpFilter((filters.ipFilter as string) || '')
+    setCountryFilter((filters.countryFilter as string) || '')
+    setDateFrom((filters.dateFrom as string) || '')
+    setDateTo((filters.dateTo as string) || '')
+    setShowFilters(true)
+    setPage(1)
+  }
+
   // Derived filter for resolved status
   const resolved = tab === 'pending' ? false : undefined
 
@@ -1298,6 +1348,17 @@ export default function Violations() {
           >
             <RefreshCw className={cn('w-5 h-5', isLoading && 'animate-spin')} />
           </Button>
+          <ExportDropdown
+            onExportCSV={handleExportCSV}
+            onExportJSON={handleExportJSON}
+            disabled={!data?.items?.length}
+          />
+          <SavedFiltersDropdown
+            page="violations"
+            currentFilters={currentViolationFilters}
+            onLoadFilter={handleLoadViolationFilter}
+            hasActiveFilters={hasActiveViolationFilters}
+          />
         </div>
       </div>
 

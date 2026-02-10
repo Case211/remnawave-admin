@@ -35,6 +35,9 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useHasPermission } from '../components/PermissionGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ExportDropdown } from '@/components/ExportDropdown'
+import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
+import { exportCSV, exportJSON, formatBytesForExport } from '@/lib/export'
 
 // Types
 interface UserListItem {
@@ -649,6 +652,52 @@ export default function Users() {
 
   const activeFilterCount = [status, trafficType, expireFilter, onlineFilter, trafficUsage].filter(Boolean).length
 
+  // Export handlers
+  const handleExportCSV = () => {
+    const items = data?.items
+    if (!items?.length) return
+    const exportData = items.map((u: any) => ({
+      username: u.username || '',
+      status: u.status,
+      email: u.email || '',
+      telegram_id: u.telegram_id || '',
+      traffic_used: formatBytesForExport(u.used_traffic_bytes),
+      traffic_limit: u.traffic_limit_bytes ? formatBytesForExport(u.traffic_limit_bytes) : 'Безлимит',
+      hwid_count: u.hwid_device_count ?? 0,
+      hwid_limit: u.hwid_device_limit ?? 0,
+      online_at: u.online_at || '',
+      expire_at: u.expire_at || '',
+      created_at: u.created_at || '',
+    }))
+    exportCSV(exportData, `users-${new Date().toISOString().slice(0, 10)}`)
+    toast.success('Экспорт CSV завершён')
+  }
+  const handleExportJSON = () => {
+    const items = data?.items
+    if (!items?.length) return
+    exportJSON(items, `users-${new Date().toISOString().slice(0, 10)}`)
+    toast.success('Экспорт JSON завершён')
+  }
+
+  // Saved filters
+  const currentFilters: Record<string, unknown> = {
+    ...(status && { status }),
+    ...(trafficType && { trafficType }),
+    ...(expireFilter && { expireFilter }),
+    ...(onlineFilter && { onlineFilter }),
+    ...(trafficUsage && { trafficUsage }),
+  }
+  const hasActiveFilters = activeFilterCount > 0
+  const handleLoadFilter = (filters: Record<string, unknown>) => {
+    setStatus((filters.status as string) || '')
+    setTrafficType((filters.trafficType as string) || '')
+    setExpireFilter((filters.expireFilter as string) || '')
+    setOnlineFilter((filters.onlineFilter as string) || '')
+    setTrafficUsage((filters.trafficUsage as string) || '')
+    setShowFilters(true)
+    setPage(1)
+  }
+
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -917,6 +966,18 @@ export default function Users() {
               >
                 <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
               </Button>
+
+              <ExportDropdown
+                onExportCSV={handleExportCSV}
+                onExportJSON={handleExportJSON}
+                disabled={!data?.items?.length}
+              />
+              <SavedFiltersDropdown
+                page="users"
+                currentFilters={currentFilters}
+                onLoadFilter={handleLoadFilter}
+                hasActiveFilters={hasActiveFilters}
+              />
             </div>
 
             {/* Expandable filter panel */}
