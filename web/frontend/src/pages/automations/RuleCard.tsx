@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Clock,
   Zap,
+  Activity,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,12 @@ import {
   formatDateTime,
   triggerTypeLabel,
 } from './helpers'
+
+const TRIGGER_TYPE_ICONS: Record<string, React.ElementType> = {
+  event: Zap,
+  schedule: Clock,
+  threshold: Activity,
+}
 
 interface RuleCardProps {
   rule: AutomationRule
@@ -50,6 +57,8 @@ export function RuleCard({
   onTest,
   toggleLoading,
 }: RuleCardProps) {
+  const TriggerIcon = TRIGGER_TYPE_ICONS[rule.trigger_type] || Zap
+
   return (
     <Card className="bg-dark-800/50 border-dark-700 hover:border-dark-600 transition-colors">
       <CardContent className="p-4">
@@ -116,11 +125,15 @@ export function RuleCard({
         </div>
 
         {/* Trigger → Action */}
-        <div className="flex items-center gap-2 p-2.5 rounded-md bg-dark-900/50 border border-dark-700/50 mb-3">
-          <Zap className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
-          <span className="text-xs text-dark-200 truncate">{describeTrigger(rule)}</span>
-          <ArrowRight className="w-3 h-3 text-dark-500 flex-shrink-0" />
-          <span className="text-xs text-primary-400 truncate">{describeAction(rule)}</span>
+        <div className="p-2.5 rounded-md bg-dark-900/50 border border-dark-700/50 mb-3 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <TriggerIcon className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+            <span className="text-xs text-dark-200 truncate">{describeTrigger(rule)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <ArrowRight className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
+            <span className="text-xs text-primary-400 truncate">{describeAction(rule)}</span>
+          </div>
         </div>
 
         {/* Stats */}

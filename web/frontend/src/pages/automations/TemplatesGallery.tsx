@@ -118,15 +118,15 @@ function TemplateCard({
         </div>
 
         {/* Trigger → Action summary */}
-        <div className="text-xs text-dark-300 mb-4 space-y-1">
-          <p>
-            <span className="text-dark-500">Когда:</span>{' '}
-            {describeTrigger(template as any)}
-          </p>
-          <p>
-            <span className="text-dark-500">Тогда:</span>{' '}
-            {describeAction(template as any)}
-          </p>
+        <div className="text-xs text-dark-300 mb-4 space-y-2">
+          <div className="flex items-start gap-2">
+            <span className="text-dark-500 flex-shrink-0 mt-px">Когда:</span>
+            <span>{describeTrigger(template as any)}</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-dark-500 flex-shrink-0 mt-px">Тогда:</span>
+            <span className="text-primary-400">{describeAction(template as any)}</span>
+          </div>
         </div>
 
         {/* Activate button */}
