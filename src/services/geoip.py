@@ -130,6 +130,34 @@ class GeoIPService:
         else:
             logger.info("GeoIP provider: ip-api.com (HTTP API, rate-limited)")
 
+    async def ensure_maxmind_databases(self):
+        """Скачивает MaxMind базы если настроен лицензионный ключ и базы отсутствуют/устарели."""
+        license_key = self.settings.maxmind_license_key
+        if not license_key or not HAS_GEOIP2:
+            return
+
+        try:
+            from src.services.maxmind_updater import ensure_databases
+            city_path = self.settings.maxmind_city_db
+            asn_path = self.settings.maxmind_asn_db
+            results = await ensure_databases(license_key, city_path, asn_path)
+
+            # Переоткрываем readers если базы обновились
+            if any(results.values()):
+                self._close_maxmind()
+                self._init_maxmind()
+        except Exception as e:
+            logger.error("Failed to ensure MaxMind databases: %s", e)
+
+    def _close_maxmind(self):
+        """Закрывает MaxMind readers."""
+        if self._maxmind_city:
+            self._maxmind_city.close()
+            self._maxmind_city = None
+        if self._maxmind_asn:
+            self._maxmind_asn.close()
+            self._maxmind_asn = None
+
     @property
     def has_maxmind(self) -> bool:
         """Доступна ли локальная MaxMind база."""
@@ -555,12 +583,7 @@ class GeoIPService:
         if self._client:
             await self._client.aclose()
             self._client = None
-        if self._maxmind_city:
-            self._maxmind_city.close()
-            self._maxmind_city = None
-        if self._maxmind_asn:
-            self._maxmind_asn.close()
-            self._maxmind_asn = None
+        self._close_maxmind()
 
     def clear_cache(self):
         """Очистить кэш."""

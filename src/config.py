@@ -32,8 +32,11 @@ class Settings(BaseSettings):
     webhook_secret: str | None = Field(default=None, alias="WEBHOOK_SECRET")
     
     # GeoIP configuration (MaxMind GeoLite2 — optional, replaces ip-api.com)
-    maxmind_city_db: str | None = Field(default=None, alias="MAXMIND_CITY_DB")
-    maxmind_asn_db: str | None = Field(default=None, alias="MAXMIND_ASN_DB")
+    # Лицензионный ключ MaxMind (бесплатная регистрация на maxmind.com).
+    # Если указан — базы скачиваются и обновляются автоматически.
+    maxmind_license_key: str | None = Field(default=None, alias="MAXMIND_LICENSE_KEY")
+    maxmind_city_db: str | None = Field(default="/app/geoip/GeoLite2-City.mmdb", alias="MAXMIND_CITY_DB")
+    maxmind_asn_db: str | None = Field(default="/app/geoip/GeoLite2-ASN.mmdb", alias="MAXMIND_ASN_DB")
 
     # Database configuration
     database_url: str | None = Field(default=None, alias="DATABASE_URL")

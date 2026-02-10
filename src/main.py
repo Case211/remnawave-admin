@@ -231,6 +231,17 @@ async def main() -> None:
     health_checker_task = asyncio.create_task(health_checker.start())
     dp["health_checker"] = health_checker
 
+    # Инициализируем MaxMind updater (если настроен лицензионный ключ)
+    maxmind_updater = None
+    if settings.maxmind_license_key:
+        from src.services.maxmind_updater import MaxMindUpdater
+        maxmind_updater = MaxMindUpdater(
+            license_key=settings.maxmind_license_key,
+            city_path=settings.maxmind_city_db,
+            asn_path=settings.maxmind_asn_db,
+        )
+        await maxmind_updater.start()
+
     # Инициализируем сервисы (если БД подключена)
     if db_connected:
         config_initialized = await config_service.initialize()
@@ -287,6 +298,8 @@ async def main() -> None:
         pass
 
     # Cleanup services
+    if maxmind_updater:
+        maxmind_updater.stop()
     config_service.stop_auto_reload()
     if report_scheduler and report_scheduler.is_running:
         await report_scheduler.stop()
