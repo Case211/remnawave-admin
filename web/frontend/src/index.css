@@ -275,6 +275,44 @@
   }
 }
 
+/* Login page animations */
+@layer components {
+  @keyframes login-gradient {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  @keyframes login-orb-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -20px) scale(1.05); }
+    66% { transform: translate(-20px, 15px) scale(0.95); }
+  }
+
+  @keyframes login-card-appear {
+    0% { opacity: 0; transform: translateY(24px) scale(0.96); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .login-bg {
+    background: linear-gradient(135deg, #0a0e14 0%, #0d1117 25%, #111820 50%, #0d1117 75%, #0a0e14 100%);
+    background-size: 200% 200%;
+    animation: login-gradient 15s ease infinite;
+  }
+
+  .login-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.12;
+    pointer-events: none;
+    animation: login-orb-float 8s ease-in-out infinite;
+  }
+
+  .login-card-enter {
+    animation: login-card-appear 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
 /* Utilities */
 @layer utilities {
   .text-gradient {

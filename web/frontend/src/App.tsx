@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { usePermissionStore } from './store/permissionStore'
@@ -40,18 +40,32 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Main App component with routing
+ * Main App component with routing.
+ * Validates the persisted session on startup to clear expired tokens
+ * before rendering protected routes.
  */
 export default function App() {
-  // Clear permissions on logout
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const validateSession = useAuthStore((s) => s.validateSession)
   const clearPermissions = usePermissionStore((s) => s.clearPermissions)
+  const [isValidating, setIsValidating] = useState(true)
 
+  // Validate persisted session on app startup
+  useEffect(() => {
+    validateSession().finally(() => setIsValidating(false))
+  }, [validateSession])
+
+  // Clear permissions on logout
   useEffect(() => {
     if (!isAuthenticated) {
       clearPermissions()
     }
   }, [isAuthenticated, clearPermissions])
+
+  // Show nothing while validating to prevent flash of protected content
+  if (isValidating) {
+    return null
+  }
 
   return (
     <BrowserRouter>

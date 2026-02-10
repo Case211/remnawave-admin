@@ -196,7 +196,14 @@ async def password_login(request: Request, data: LoginRequest):
 async def refresh_tokens(request: Request, data: RefreshRequest):
     """
     Refresh access token using refresh token.
+
+    The old refresh token is blacklisted after successful rotation
+    to prevent reuse (one-time use refresh tokens).
     """
+    # Check if this refresh token has already been used (blacklisted)
+    if token_blacklist.is_blacklisted(data.refresh_token):
+        raise HTTPException(status_code=401, detail="Refresh token already used")
+
     payload = decode_token(data.refresh_token)
 
     if not payload or payload.get("type") != "refresh":
@@ -229,6 +236,10 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
         access_token = create_access_token(subject, payload.get("username", "admin"), auth_method="telegram")
 
     refresh_token = create_refresh_token(subject)
+
+    # Blacklist the old refresh token to prevent reuse
+    if "exp" in payload:
+        token_blacklist.add(data.refresh_token, float(payload["exp"]))
 
     return TokenResponse(
         access_token=access_token,
