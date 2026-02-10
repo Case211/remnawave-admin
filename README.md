@@ -356,6 +356,37 @@ docker compose config                # Проверка конфигурации
 - URL webhook доступен из панели?
 - Подробнее: [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
 
+### Потерян доступ к веб-панели
+
+Если вы забыли пароль, а Telegram-вход не работает — используйте CLI-утилиту `scripts/admin_cli.py`.
+
+**Сбросить пароль** (будет сгенерирован новый):
+
+```bash
+docker exec -it <container_name> python3 scripts/admin_cli.py reset-password
+```
+
+Для конкретного пользователя или с указанием пароля:
+
+```bash
+docker exec -it <container_name> python3 scripts/admin_cli.py reset-password --username myadmin
+docker exec -it <container_name> python3 scripts/admin_cli.py reset-password --password 'MyNew$ecure1'
+```
+
+**Создать нового суперадмина:**
+
+```bash
+docker exec -it <container_name> python3 scripts/admin_cli.py create-superadmin --username newadmin
+```
+
+**Посмотреть список всех администраторов:**
+
+```bash
+docker exec -it <container_name> python3 scripts/admin_cli.py list-admins
+```
+
+> Утилита подключается напрямую к PostgreSQL (читает `DATABASE_URL` из `.env`), не требует запущенной веб-панели.
+
 ---
 
 ## 🤝 Вклад в проект
