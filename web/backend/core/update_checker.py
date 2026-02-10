@@ -123,18 +123,37 @@ async def get_dependency_versions() -> Dict[str, Any]:
     except Exception:
         deps["fastapi"] = None
 
-    # Xray versions on nodes
+    # Xray versions on nodes (extract from raw_data JSON if available)
     try:
         from src.services.database import db_service
         if db_service.is_connected:
             async with db_service.acquire() as conn:
-                rows = await conn.fetch(
-                    "SELECT name, xray_version FROM nodes WHERE xray_version IS NOT NULL"
+                # Check if xray_version column exists
+                col_exists = await conn.fetchval(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'nodes' AND column_name = 'xray_version'
+                    )
+                    """
                 )
-                xray_versions = {}
-                for r in rows:
-                    xray_versions[r["name"]] = r["xray_version"]
-                deps["xray_nodes"] = xray_versions
+                if col_exists:
+                    rows = await conn.fetch(
+                        "SELECT name, xray_version FROM nodes WHERE xray_version IS NOT NULL"
+                    )
+                    deps["xray_nodes"] = {r["name"]: r["xray_version"] for r in rows}
+                else:
+                    # Try extracting from raw_data JSON
+                    rows = await conn.fetch(
+                        "SELECT name, raw_data FROM nodes WHERE raw_data IS NOT NULL"
+                    )
+                    xray_versions = {}
+                    for r in rows:
+                        rd = r["raw_data"] if isinstance(r["raw_data"], dict) else {}
+                        ver = rd.get("xray_version") or rd.get("xrayVersion")
+                        if ver and r["name"]:
+                            xray_versions[r["name"]] = ver
+                    deps["xray_nodes"] = xray_versions
     except Exception:
         deps["xray_nodes"] = {}
 

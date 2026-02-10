@@ -31,10 +31,10 @@ async def get_geo_connections(
             # Get country distribution from ip_metadata table
             country_rows = await conn.fetch(
                 """
-                SELECT country, country_code, COUNT(*) as count
+                SELECT country_name, country_code, COUNT(*) as count
                 FROM ip_metadata
-                WHERE lookup_time >= $1 AND country IS NOT NULL
-                GROUP BY country, country_code
+                WHERE created_at >= $1 AND country_name IS NOT NULL
+                GROUP BY country_name, country_code
                 ORDER BY count DESC
                 LIMIT 50
                 """,
@@ -43,7 +43,7 @@ async def get_geo_connections(
 
             countries = [
                 {
-                    "country": r["country"],
+                    "country": r["country_name"],
                     "country_code": r["country_code"],
                     "count": r["count"],
                 }
@@ -53,10 +53,10 @@ async def get_geo_connections(
             # Get city distribution
             city_rows = await conn.fetch(
                 """
-                SELECT city, country, lat, lon, COUNT(*) as count
+                SELECT city, country_name, latitude, longitude, COUNT(*) as count
                 FROM ip_metadata
-                WHERE lookup_time >= $1 AND city IS NOT NULL AND lat IS NOT NULL
-                GROUP BY city, country, lat, lon
+                WHERE created_at >= $1 AND city IS NOT NULL AND latitude IS NOT NULL
+                GROUP BY city, country_name, latitude, longitude
                 ORDER BY count DESC
                 LIMIT 100
                 """,
@@ -66,13 +66,13 @@ async def get_geo_connections(
             cities = [
                 {
                     "city": r["city"],
-                    "country": r["country"],
-                    "lat": float(r["lat"]) if r["lat"] else None,
-                    "lon": float(r["lon"]) if r["lon"] else None,
+                    "country": r["country_name"],
+                    "lat": float(r["latitude"]) if r["latitude"] else None,
+                    "lon": float(r["longitude"]) if r["longitude"] else None,
                     "count": r["count"],
                 }
                 for r in city_rows
-                if r["lat"] is not None and r["lon"] is not None
+                if r["latitude"] is not None and r["longitude"] is not None
             ]
 
             return {"countries": countries, "cities": cities}
@@ -97,8 +97,12 @@ async def get_top_users_by_traffic(
             rows = await conn.fetch(
                 """
                 SELECT uuid, username, status,
-                       used_traffic_bytes, lifetime_used_traffic_bytes,
-                       traffic_limit_bytes, online_at
+                       used_traffic_bytes,
+                       traffic_limit_bytes,
+                       COALESCE(
+                           raw_data->'userTraffic'->>'onlineAt',
+                           raw_data->>'onlineAt'
+                       ) as online_at
                 FROM users
                 WHERE used_traffic_bytes > 0
                 ORDER BY used_traffic_bytes DESC
@@ -116,14 +120,14 @@ async def get_top_users_by_traffic(
                     usage_pct = round((used / limit_bytes) * 100, 1)
 
                 items.append({
-                    "uuid": r["uuid"],
+                    "uuid": str(r["uuid"]),
                     "username": r["username"],
                     "status": r["status"],
                     "used_traffic_bytes": used,
-                    "lifetime_used_traffic_bytes": r["lifetime_used_traffic_bytes"] or 0,
+                    "lifetime_used_traffic_bytes": used,
                     "traffic_limit_bytes": limit_bytes,
                     "usage_percent": usage_pct,
-                    "online_at": str(r["online_at"]) if r["online_at"] else None,
+                    "online_at": r["online_at"],
                 })
 
             return {"items": items}
