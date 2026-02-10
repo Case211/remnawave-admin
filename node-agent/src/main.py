@@ -4,10 +4,7 @@ Remnawave Node Agent — entry point.
 Цикл: собрать подключения из Xray (access.log) → отправить в Collector API → sleep(interval).
 """
 import asyncio
-import gzip
 import logging
-import os
-import shutil
 import signal
 import sys
 import time
@@ -21,43 +18,18 @@ from .sender import CollectorSender
 
 # ── Logging setup ─────────────────────────────────────────────────
 
-_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
-_CONSOLE_DATEFMT = "%H:%M:%S"
 _FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
 _FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
+_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
+_CONSOLE_DATEFMT = "%H:%M:%S"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
-_BACKUP_COUNT = 5
+_BACKUP_COUNT = 3
 _LOG_DIR = Path("/app/logs")
 
-
-class _CompressedRotatingFileHandler(RotatingFileHandler):
-    """RotatingFileHandler с gzip-сжатием ротированных файлов."""
-
-    def doRollover(self):
-        if self.stream:
-            self.stream.close()
-            self.stream = None
-
-        for i in range(self.backupCount - 1, 0, -1):
-            sfn = self.rotation_filename(f"{self.baseFilename}.{i}.gz")
-            dfn = self.rotation_filename(f"{self.baseFilename}.{i + 1}.gz")
-            if os.path.exists(sfn):
-                if os.path.exists(dfn):
-                    os.remove(dfn)
-                os.rename(sfn, dfn)
-
-        dfn = self.rotation_filename(f"{self.baseFilename}.1.gz")
-        if os.path.exists(dfn):
-            os.remove(dfn)
-        if os.path.exists(self.baseFilename):
-            with open(self.baseFilename, "rb") as f_in:
-                with gzip.open(dfn, "wb") as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            with open(self.baseFilename, "w"):
-                pass
-
-        if not self.delay:
-            self.stream = self._open()
+# Подавляем шумные сторонние логгеры
+_SUPPRESSED_LOGGERS = (
+    "httpx", "httpcore", "asyncio", "hpack", "h2",
+)
 
 
 def _setup_logging() -> logging.Logger:
@@ -72,41 +44,32 @@ def _setup_logging() -> logging.Logger:
     console.setFormatter(logging.Formatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT))
     root.addHandler(console)
 
-    # File handlers (optional, shared volume may not be mounted)
+    # Подавляем шумные логгеры
+    for name in _SUPPRESSED_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+    # File handlers (optional — volume may not be mounted)
     try:
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         file_fmt = logging.Formatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT)
 
-        info_path = _LOG_DIR / "nodeagent_INFO.log"
-        warn_path = _LOG_DIR / "nodeagent_WARNING.log"
-
-        info_h = _CompressedRotatingFileHandler(
-            str(info_path),
+        info_h = RotatingFileHandler(
+            str(_LOG_DIR / "nodeagent_INFO.log"),
             maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
         )
         info_h.setLevel(logging.INFO)
         info_h.setFormatter(file_fmt)
         root.addHandler(info_h)
 
-        warn_h = _CompressedRotatingFileHandler(
-            str(warn_path),
+        warn_h = RotatingFileHandler(
+            str(_LOG_DIR / "nodeagent_WARNING.log"),
             maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
         )
         warn_h.setLevel(logging.WARNING)
         warn_h.setFormatter(file_fmt)
         root.addHandler(warn_h)
-
-        print(
-            f"[LOGGING] File logging active: {_LOG_DIR}",
-            file=sys.stderr, flush=True,
-        )
-    except OSError as exc:
-        console.setLevel(logging.INFO)
-        print(
-            f"[LOGGING] File logging DISABLED: {exc}. "
-            f"Mount ./logs:/app/logs volume to enable file logging.",
-            file=sys.stderr, flush=True,
-        )
+    except OSError:
+        pass  # no file logging — ok
 
     return logging.getLogger(__name__)
 
@@ -116,76 +79,64 @@ logger = _setup_logging()
 
 async def run_agent() -> None:
     settings = Settings()
-    # Устанавливаем уровень логирования
+
+    # Уровень логирования
     log_level = settings.log_level.upper()
     if log_level in ("DEBUG", "INFO", "WARNING", "ERROR"):
         logging.getLogger().setLevel(getattr(logging, log_level))
-        logger.info("Log level set to: %s", log_level)
     else:
-        logger.warning("Invalid log level '%s', using INFO", log_level)
         logging.getLogger().setLevel(logging.INFO)
 
-    # Выбираем коллектор в зависимости от режима парсинга
+    # Коллектор
     if settings.log_parsing_mode.lower() == "realtime":
         collector = XrayLogRealtimeCollector(settings)
-        logger.info("Using real-time log collector (tracks file position)")
+        logger.info("Mode: realtime, interval: %ss", settings.interval_seconds)
     else:
         collector = XrayLogCollector(settings)
-        logger.info("Using polling log collector (reads tail every interval)")
+        logger.info("Mode: polling, interval: %ss", settings.interval_seconds)
 
     sender = CollectorSender(settings)
     system_metrics_collector = SystemMetricsCollector()
 
-    # Первый вызов CPU — инициализация baseline (первое значение всегда 0)
+    # Инициализация CPU baseline
     await system_metrics_collector.collect()
-    logger.info("System metrics collector initialized")
 
-    # Проверяем связь с Collector API при старте
-    connectivity_ok = await sender.check_connectivity()
-    if not connectivity_ok:
-        logger.warning(
-            "Could not reach Collector API at %s — agent will keep trying to send batches",
-            settings.collector_url,
-        )
+    # Проверяем связь
+    if not await sender.check_connectivity():
+        logger.warning("Cannot reach Collector API at %s", settings.collector_url)
 
-    # Проверяем доступность файла логов при старте
+    # Проверяем файл логов
     log_path = Path(settings.xray_log_path)
     if log_path.exists():
-        stat = log_path.stat()
+        logger.info("Log file: %s (%d bytes)", settings.xray_log_path, log_path.stat().st_size)
+    else:
+        logger.warning("Log file not found: %s", settings.xray_log_path)
+
+    # Auto-restart
+    max_uptime_sec = settings.max_uptime_hours * 3600 if settings.max_uptime_hours > 0 else 0
+    start_time = time.monotonic()
+    if max_uptime_sec > 0:
         logger.info(
-            "Log file found: %s (size: %d bytes)",
-            settings.xray_log_path,
-            stat.st_size
+            "Node Agent started (node=%s, auto-restart in %.1fh)",
+            settings.node_uuid, settings.max_uptime_hours,
         )
     else:
-        logger.warning(
-            "Log file not found: %s - agent will wait for file to appear",
-            settings.xray_log_path
-        )
-
-    logger.info(
-        "Node Agent started: node_uuid=%s, collector=%s, mode=%s, interval=%ss",
-        settings.node_uuid,
-        settings.collector_url,
-        settings.log_parsing_mode,
-        settings.interval_seconds,
-    )
+        logger.info("Node Agent started (node=%s)", settings.node_uuid)
 
     cycle_count = 0
-    # В real-time режиме можем проверять новые строки чаще, чем отправлять батчи
     check_interval = settings.realtime_check_interval_seconds or settings.interval_seconds
     send_interval = settings.interval_seconds
 
-    # Накопленные подключения для батч-отправки
     accumulated_connections: list[ConnectionReport] = []
     last_send_time = time.monotonic()
+    total_sent = 0  # общий счётчик отправленных подключений
 
-    # Graceful shutdown через asyncio.Event
+    # Graceful shutdown
     shutdown_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
     def _signal_handler() -> None:
-        logger.info("Received shutdown signal, finishing current cycle...")
+        logger.info("Shutdown signal received")
         shutdown_event.set()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -194,93 +145,94 @@ async def run_agent() -> None:
     try:
         while not shutdown_event.is_set():
             cycle_count += 1
+
+            # ── Auto-restart по uptime ──
+            if max_uptime_sec > 0:
+                uptime = time.monotonic() - start_time
+                if uptime >= max_uptime_sec:
+                    logger.info(
+                        "Max uptime reached (%.1fh), restarting... (sent %d connections total)",
+                        uptime / 3600, total_sent,
+                    )
+                    break
+
             try:
-                logger.debug("Cycle #%d: collecting connections...", cycle_count)
                 connections = await collector.collect()
 
                 if connections:
-                    # В real-time режиме накапливаем подключения для батч-отправки
                     if settings.log_parsing_mode.lower() == "realtime":
                         accumulated_connections.extend(connections)
-                        logger.debug("Cycle #%d: collected %d connections (accumulated: %d)",
-                                     cycle_count, len(connections), len(accumulated_connections))
 
-                        # Ограничиваем буфер, чтобы избежать утечки памяти
+                        # Защита от утечки памяти
                         if len(accumulated_connections) > settings.max_buffer_size:
                             dropped = len(accumulated_connections) - settings.max_buffer_size
                             accumulated_connections = accumulated_connections[-settings.max_buffer_size:]
-                            logger.warning(
-                                "Buffer overflow: dropped %d oldest connections (max_buffer_size=%d)",
-                                dropped, settings.max_buffer_size,
-                            )
+                            logger.warning("Buffer overflow: dropped %d connections", dropped)
 
-                        # Проверяем, пора ли отправлять батч
+                        # Отправка по таймеру
                         current_time = time.monotonic()
                         if accumulated_connections and (current_time - last_send_time >= send_interval):
                             metrics = await system_metrics_collector.collect()
-                            logger.info("Cycle #%d: sending accumulated batch (%d connections)...",
-                                        cycle_count, len(accumulated_connections))
+                            count = len(accumulated_connections)
                             ok = await sender.send_batch(accumulated_connections, system_metrics=metrics)
                             if ok:
-                                logger.info("Cycle #%d: batch sent successfully", cycle_count)
+                                total_sent += count
                                 accumulated_connections.clear()
                                 last_send_time = current_time
-                            else:
-                                logger.warning("Cycle #%d: send failed, will retry next cycle", cycle_count)
+                                logger.debug("Batch sent: %d connections", count)
                     else:
-                        # В polling режиме отправляем сразу
+                        # polling — отправляем сразу
                         metrics = await system_metrics_collector.collect()
-                        logger.info("Cycle #%d: collected %d connections, sending batch...", cycle_count, len(connections))
+                        count = len(connections)
                         ok = await sender.send_batch(connections, system_metrics=metrics)
                         if ok:
-                            logger.info("Cycle #%d: batch sent successfully", cycle_count)
-                        else:
-                            logger.warning("Cycle #%d: send failed, will retry next cycle", cycle_count)
+                            total_sent += count
+                            logger.debug("Batch sent: %d connections", count)
                 else:
-                    # Даже без подключений отправляем метрики периодически
+                    # Метрики без подключений
                     current_time = time.monotonic()
                     if current_time - last_send_time >= send_interval:
                         metrics = await system_metrics_collector.collect()
-                        logger.debug("Cycle #%d: no connections, sending metrics only...", cycle_count)
                         ok = await sender.send_batch([], system_metrics=metrics)
                         if ok:
                             last_send_time = current_time
 
-                    # Показываем INFO каждые 10 циклов, чтобы видеть что агент работает
-                    if cycle_count % 10 == 0:
-                        logger.info("Cycle #%d: no connections found in log (agent is running)", cycle_count)
-                    else:
-                        logger.debug("Cycle #%d: no connections found in log", cycle_count)
+                # Heartbeat — каждые 100 циклов (примерно раз в 50 мин при интервале 30с)
+                if cycle_count % 100 == 0:
+                    uptime = time.monotonic() - start_time
+                    logger.info(
+                        "Heartbeat: cycle #%d, uptime %.1fh, total sent %d",
+                        cycle_count, uptime / 3600, total_sent,
+                    )
+
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 logger.exception("Cycle #%d error: %s", cycle_count, e)
 
-            # Используем wait с таймаутом вместо sleep, чтобы реагировать на shutdown
             try:
                 await asyncio.wait_for(shutdown_event.wait(), timeout=check_interval)
             except asyncio.TimeoutError:
                 pass
 
-        # Graceful shutdown: отправляем оставшиеся данные
+        # Graceful shutdown: отправляем остаток
         if accumulated_connections:
-            logger.info("Shutdown: sending remaining %d accumulated connections...", len(accumulated_connections))
+            logger.info("Shutdown: sending remaining %d connections...", len(accumulated_connections))
             ok = await sender.send_batch(accumulated_connections)
             if ok:
-                logger.info("Shutdown: remaining batch sent successfully")
-            else:
-                logger.warning("Shutdown: failed to send remaining %d connections", len(accumulated_connections))
+                total_sent += len(accumulated_connections)
 
     finally:
         await sender.close()
-        logger.info("Node Agent stopped")
+        uptime = time.monotonic() - start_time
+        logger.info("Node Agent stopped (uptime %.1fh, total sent %d)", uptime / 3600, total_sent)
 
 
 def main() -> None:
     try:
         asyncio.run(run_agent())
     except KeyboardInterrupt:
-        logger.info("Stopped by user")
+        pass
 
 
 if __name__ == "__main__":

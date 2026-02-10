@@ -54,3 +54,7 @@ class Settings(BaseSettings):
 
     # Логирование
     log_level: str = "INFO"
+
+    # Автоматический перезапуск: максимальное время работы (часы).
+    # 0 = без ограничения. Docker restart: unless-stopped перезапустит контейнер.
+    max_uptime_hours: float = 6.0

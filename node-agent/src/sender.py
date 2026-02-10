@@ -40,18 +40,15 @@ class CollectorSender:
             self._client = None
 
     async def check_connectivity(self) -> bool:
-        """
-        Проверяет связь с Collector API при старте.
-        Возвращает True если API доступен.
-        """
+        """Проверяет связь с Collector API при старте."""
         try:
             client = await self._get_client()
             resp = await client.get(self._health_url)
             resp.raise_for_status()
-            logger.info("Collector API connectivity check passed: %s", self._health_url)
+            logger.info("Collector API OK: %s", self._health_url)
             return True
         except Exception as e:
-            logger.warning("Collector API connectivity check failed (%s): %s", self._health_url, e)
+            logger.warning("Collector API unreachable: %s", e)
             return False
 
     async def send_batch(
@@ -76,59 +73,23 @@ class CollectorSender:
                 client = await self._get_client()
                 resp = await client.post(self._url, json=payload)
                 resp.raise_for_status()
-
-                # Проверяем, что ответ не пустой и содержит JSON
-                response_text = resp.text
-                if not response_text or not response_text.strip():
-                    logger.warning(
-                        "Collector returned empty response on attempt %s (status %s)",
-                        attempt,
-                        resp.status_code
-                    )
-                    # Если статус 200 и ответ пустой, считаем успехом (может быть особенность API)
-                    if resp.status_code == 200:
-                        logger.info(
-                            "Batch sent successfully: %s connections (empty response accepted)",
-                            len(connections)
-                        )
-                        return True
-                    continue
-
-                try:
-                    response_data = resp.json()
-                    logger.info(
-                        "Batch sent successfully: %s connections, response: %s",
-                        len(connections),
-                        response_data,
-                    )
-                    return True
-                except ValueError:
-                    logger.warning(
-                        "Collector returned non-JSON response on attempt %s: %s (status %s)",
-                        attempt,
-                        response_text[:200],
-                        resp.status_code
-                    )
-                    # Если статус 200, но не JSON - всё равно считаем успехом
-                    if resp.status_code == 200:
-                        logger.info(
-                            "Batch sent successfully: %s connections (non-JSON response accepted)",
-                            len(connections)
-                        )
-                        return True
-                    continue
+                # Любой 2xx после raise_for_status = успех
+                logger.debug("Batch OK: %d connections", len(connections))
+                return True
             except httpx.HTTPStatusError as e:
                 logger.warning(
-                    "Collector returned %s on attempt %s: %s",
-                    e.response.status_code,
-                    attempt,
-                    e.response.text[:500] if e.response.text else "(empty)",
+                    "Collector %s (attempt %d/%d)",
+                    e.response.status_code, attempt, self.settings.send_max_retries,
                 )
             except Exception as e:
-                logger.warning("Send attempt %s failed: %s", attempt, e, exc_info=True)
+                logger.warning(
+                    "Send failed (attempt %d/%d): %s",
+                    attempt, self.settings.send_max_retries, e,
+                )
 
             if attempt < self.settings.send_max_retries:
                 await asyncio.sleep(self.settings.send_retry_delay_seconds)
 
-        logger.error("Failed to send batch after %s attempts", self.settings.send_max_retries)
+        logger.error("Batch failed after %d attempts (%d connections lost)",
+                      self.settings.send_max_retries, len(connections))
         return False
