@@ -239,11 +239,22 @@ def upgrade() -> None:
 
     # ── 6. Migrate admin_credentials → admin_accounts ───────────
     # Copy existing DB-managed password accounts into admin_accounts
-    # with superadmin role
+    # with superadmin role.
+    # NOTE: We must check table existence via information_schema BEFORE
+    # querying it.  A failed SELECT inside a transaction puts PostgreSQL
+    # into "aborted" state and rolls back the entire migration chain.
     superadmin_role_id = role_id_map.get("superadmin")
     if superadmin_role_id:
-        # Check if admin_credentials table exists
-        try:
+        table_exists = conn.execute(
+            sa.text(
+                "SELECT EXISTS ("
+                "  SELECT 1 FROM information_schema.tables "
+                "  WHERE table_name = 'admin_credentials'"
+                ")"
+            )
+        ).scalar()
+
+        if table_exists:
             existing = conn.execute(
                 sa.text(
                     "SELECT username, password_hash, is_generated "
@@ -265,9 +276,6 @@ def upgrade() -> None:
                         "is_generated": row[2] if row[2] is not None else False,
                     },
                 )
-        except Exception:
-            # Table may not exist — that's fine
-            pass
 
 
 def downgrade() -> None:
