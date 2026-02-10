@@ -2,11 +2,11 @@
 
 ## Порядок реализации
 
-Реализация идёт снизу вверх: сначала фундамент (зависимости, базовые компоненты), затем фичи, которые используются повсеместно (toast, breadcrumbs), и в конце — крупные фичи (bulk ops, export, command palette).
+Реализация идёт снизу вверх: сначала фундамент (зависимости, базовые компоненты, RBAC-фикс), затем фичи, которые используются повсеместно (toast, breadcrumbs), и в конце — крупные фичи (bulk ops, export, command palette).
 
 ---
 
-## Шаг 0 — Подготовка: зависимости и базовые компоненты
+## Шаг 0 — Подготовка: зависимости, базовые компоненты, RBAC-фикс
 
 ### 0.1 Установка npm-зависимостей
 ```bash
@@ -26,6 +26,45 @@ npm install -D @types/papaparse
 ### 0.3 Интеграция Sonner в корень приложения
 - В `main.tsx` (или `App.tsx`) добавить `<Toaster />` от sonner
 - Настроить тему (dark), позицию (bottom-right), стили под Remnawave
+
+### 0.4 Обновление матрицы RBAC-прав
+
+**Проблема:** Frontend permission gates есть только на 3 из 8 страниц. На 5 страницах кнопки действий видны всем, защита только на уровне backend (403).
+
+#### 0.4.1 Backend: добавить action `bulk_operations`
+
+**Файл:** `web/backend/core/rbac.py` — добавить `bulk_operations` в `AVAILABLE_ACTIONS`
+
+**Файл:** Alembic миграция — добавить `bulk_operations` в permissions для ролей:
+- `superadmin`: users.bulk_operations ✅
+- `manager`: users.bulk_operations ✅
+- `operator`: ❌ (нет доступа к массовым операциям)
+- `viewer`: ❌
+
+#### 0.4.2 Frontend: добавить PermissionGate на все страницы
+
+**`Nodes.tsx`** — добавить гейты:
+- Кнопка «Создать ноду» → `<PermissionGate resource="nodes" action="create">`
+- Кнопки restart/enable/disable в строке → `useHasPermission('nodes', 'edit')`
+- Кнопка delete → `useHasPermission('nodes', 'delete')`
+- Кнопка agent-token → `useHasPermission('nodes', 'edit')`
+
+**`Hosts.tsx`** — добавить гейты:
+- Кнопка «Создать хост» → `<PermissionGate resource="hosts" action="create">`
+- Кнопки edit/enable/disable → `useHasPermission('hosts', 'edit')`
+- Кнопка delete → `useHasPermission('hosts', 'delete')`
+
+**`Violations.tsx`** — добавить гейты:
+- Кнопки Block/Warn/Dismiss → `useHasPermission('violations', 'resolve')`
+
+**`Settings.tsx`** — добавить гейты:
+- Все поля ввода и кнопки сохранения → `useHasPermission('settings', 'edit')`
+- При отсутствии прав — показывать значения read-only
+
+**`Dashboard.tsx`** — добавить гейты:
+- Быстрые действия на карточках нод (restart, enable/disable) → `useHasPermission('nodes', 'edit')`
+
+**`Fleet.tsx`** — проверить и добавить гейты при наличии мутирующих действий
 
 ---
 
@@ -293,15 +332,17 @@ interface SavedFilter {
 ## Итого: порядок выполнения и зависимости
 
 ```
-Шаг 0 (Подготовка)
-  └─→ Шаг 1 (Toast) — используется во всех последующих шагах
-       ├─→ Шаг 2 (Breadcrumbs) — независим
-       ├─→ Шаг 3 (Keyboard shortcuts) — частично зависит от Шага 5
-       ├─→ Шаг 4 (Bulk operations) — использует toast, alert-dialog, checkbox
-       ├─→ Шаг 5 (Command Palette) — использует command.tsx
-       ├─→ Шаг 6 (Поиск нарушений) — независим
-       ├─→ Шаг 7 (Экспорт) — независим
-       └─→ Шаг 8 (Сохранённые фильтры) — независим
+Шаг 0 (Подготовка + RBAC-фикс)
+  ├─→ 0.1-0.3 (npm, компоненты, sonner)
+  └─→ 0.4 (RBAC: bulk_operations action + PermissionGate на 5 страницах)
+       └─→ Шаг 1 (Toast) — используется во всех последующих шагах
+            ├─→ Шаг 2 (Breadcrumbs) — независим
+            ├─→ Шаг 3 (Keyboard shortcuts) — частично зависит от Шага 5
+            ├─→ Шаг 4 (Bulk operations) — использует toast, alert-dialog, checkbox, RBAC bulk_operations
+            ├─→ Шаг 5 (Command Palette) — использует command.tsx
+            ├─→ Шаг 6 (Поиск нарушений) — независим
+            ├─→ Шаг 7 (Экспорт) — независим
+            └─→ Шаг 8 (Сохранённые фильтры) — независим
 ```
 
 ## Файлы для создания (новые)
@@ -316,6 +357,7 @@ interface SavedFilter {
 | `components/CommandPalette.tsx` | Глобальный поиск Cmd+K |
 | `store/useFiltersStore.ts` | Сохранённые фильтры |
 | `web/backend/schemas/bulk.py` | Pydantic-схемы для bulk ops |
+| `alembic/versions/xxxx_add_bulk_operations_permission.py` | Миграция: добавить bulk_operations |
 
 ## Файлы для модификации
 
@@ -326,19 +368,21 @@ interface SavedFilter {
 | `Header.tsx` | Связать поиск с CommandPalette |
 | `pages/Users.tsx` | Checkboxes, bulk toolbar, export, saved filters, toast |
 | `pages/UserDetail.tsx` | Toast на мутации, breadcrumbs data |
-| `pages/Violations.tsx` | Расширенные фильтры, export, toast |
-| `pages/Dashboard.tsx` | Export PNG |
-| `pages/Nodes.tsx` | Toast на мутации |
-| `pages/Hosts.tsx` | Toast на мутации |
-| `pages/Settings.tsx` | Toast на мутации |
+| `pages/Violations.tsx` | Расширенные фильтры, export, toast, PermissionGate на resolve |
+| `pages/Dashboard.tsx` | Export PNG, PermissionGate на быстрые действия нод |
+| `pages/Nodes.tsx` | Toast на мутации, PermissionGate на create/edit/delete |
+| `pages/Hosts.tsx` | Toast на мутации, PermissionGate на create/edit/delete |
+| `pages/Settings.tsx` | Toast на мутации, PermissionGate на edit (read-only fallback) |
+| `pages/Fleet.tsx` | PermissionGate (проверить и добавить) |
 | `pages/Admins.tsx` | Toast на мутации |
-| `backend/api/v2/users.py` | Batch endpoints |
+| `backend/core/rbac.py` | Добавить `bulk_operations` в AVAILABLE_ACTIONS |
+| `backend/api/v2/users.py` | Batch endpoints с require_permission("users", "bulk_operations") |
 | `backend/api/v2/violations.py` | Расширенные фильтры |
 | `package.json` | Новые зависимости |
 
 ## Оценка объёма
 
-- **Новый код:** ~2500-3000 строк (frontend) + ~300-400 строк (backend)
-- **Модификации:** ~500-700 строк изменений в существующих файлах
-- **Новые компоненты:** 8 файлов
-- **Модифицированные файлы:** 14 файлов
+- **Новый код:** ~2500-3000 строк (frontend) + ~400-500 строк (backend)
+- **Модификации:** ~600-800 строк изменений в существующих файлах (включая RBAC-гейты)
+- **Новые файлы:** 9
+- **Модифицированные файлы:** 16
