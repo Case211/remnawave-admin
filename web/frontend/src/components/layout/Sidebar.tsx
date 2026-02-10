@@ -42,13 +42,13 @@ function RemnawaveLogo({ className }: { className?: string }) {
           <stop offset="100%" stopColor="#0d1f3c" />
         </linearGradient>
         <linearGradient id="logoRing" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#67e8f9" />
-          <stop offset="100%" stopColor="#06b6d4" />
+          <stop offset="0%" style={{ stopColor: 'var(--accent-to-light)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--accent-to)' }} />
         </linearGradient>
         <linearGradient id="logoWave" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#22d3ee" />
-          <stop offset="50%" stopColor="#67e8f9" />
-          <stop offset="100%" stopColor="#06b6d4" />
+          <stop offset="0%" style={{ stopColor: 'var(--accent-to-light)' }} />
+          <stop offset="50%" style={{ stopColor: 'var(--accent-from-light)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--accent-from)' }} />
         </linearGradient>
       </defs>
       <circle cx="32" cy="32" r="31" fill="url(#logoBg)" />
@@ -204,7 +204,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                               className={cn(
                                 "sidebar-nav-item group flex items-center justify-center px-0 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
                                 isActive
-                                  ? "text-white bg-gradient-to-r from-accent-teal/20 to-accent-cyan/10"
+                                  ? "text-white bg-primary/15"
                                   : "text-dark-200 hover:text-white"
                               )}
                             >
@@ -272,7 +272,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                                 className={cn(
                                   "group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200",
                                   isActive
-                                    ? "text-white bg-gradient-to-r from-accent-teal/20 to-accent-cyan/10 border-l-[3px] border-l-accent-teal border-r-[3px] border-r-accent-cyan"
+                                    ? "text-white bg-primary/15 border-l-[3px] border-l-primary border-r-[3px] border-r-primary/50"
                                     : "text-dark-200 hover:text-white hover:translate-x-1"
                                 )}
                               >
@@ -308,7 +308,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                     className={cn(
                       "sidebar-nav-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
                       isActive
-                        ? "text-white bg-gradient-to-r from-accent-teal/20 to-accent-cyan/10 border-l-[3px] border-l-accent-teal border-r-[3px] border-r-accent-cyan"
+                        ? "text-white bg-primary/15 border-l-[3px] border-l-primary border-r-[3px] border-r-primary/50"
                         : "text-dark-200 hover:text-white hover:translate-x-1",
                       collapsed && "justify-center px-0"
                     )}
@@ -358,7 +358,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>
               <div
-                className="w-9 h-9 rounded-full flex items-center justify-center bg-gradient-to-br from-accent-teal/30 to-accent-cyan/20 flex-shrink-0"
+                className="w-9 h-9 rounded-full flex items-center justify-center bg-primary/20 flex-shrink-0"
               >
                 <span className="text-sm font-medium text-primary-400">
                   {user?.username?.charAt(0).toUpperCase() || 'A'}

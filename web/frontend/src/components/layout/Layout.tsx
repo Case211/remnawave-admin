@@ -50,9 +50,9 @@ export default function Layout({ children }: LayoutProps) {
 
         {/* Page content - diagonal gradient background */}
         <main
-          className="flex-1 overflow-y-auto"
+          className="layout-main-bg flex-1 overflow-y-auto"
           style={{
-            background: 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%)',
+            background: 'linear-gradient(135deg, var(--surface-body) 0%, var(--surface-card) 50%, var(--surface-body) 100%)',
           }}
         >
           <PageBreadcrumbs />

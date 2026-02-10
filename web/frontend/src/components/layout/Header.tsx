@@ -28,7 +28,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
         {/* Search trigger — opens Command Palette */}
         <button
           onClick={onSearchClick}
-          className="flex-1 max-w-md hidden sm:flex items-center gap-2 h-10 rounded-md border border-dark-400/20 bg-dark-800 px-3 text-sm text-dark-300 hover:border-dark-400/40 hover:text-dark-200 transition-colors cursor-pointer"
+          className="header-search-bar flex-1 max-w-md hidden sm:flex items-center gap-2 h-10 rounded-md border border-dark-400/20 bg-dark-800 px-3 text-sm text-dark-300 hover:border-dark-400/40 hover:text-dark-200 transition-colors cursor-pointer"
         >
           <Search className="w-4 h-4 flex-shrink-0" />
           <span className="flex-1 text-left">Поиск...</span>
@@ -62,8 +62,8 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
         {/* Status indicator */}
         <Badge variant="default" className="gap-2 px-3 py-1.5">
           <span
-            className="w-2 h-2 rounded-full animate-pulse bg-accent-teal"
-            style={{ boxShadow: '0 0 8px rgba(13, 148, 136, 0.5)' }}
+            className="w-2 h-2 rounded-full animate-pulse"
+            style={{ backgroundColor: 'var(--accent-from)', boxShadow: '0 0 8px rgba(var(--glow-rgb), 0.5)' }}
           />
           <span className="hidden sm:inline text-xs">Online</span>
         </Badge>
