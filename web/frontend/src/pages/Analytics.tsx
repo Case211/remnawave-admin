@@ -164,7 +164,7 @@ function GeoMapCard() {
 24ч — за последние сутки
 7д — за последнюю неделю
 30д — за последний месяц"
-              side="bottom"
+              side="right"
             />
           </div>
           <PeriodSwitcher
@@ -294,7 +294,7 @@ function TopUsersCard() {
             <CardTitle className="text-base">Топ по трафику</CardTitle>
             <InfoTooltip
               text="Пользователи, отсортированные по объёму потреблённого трафика за всё время. Показывает статус, использованный трафик, лимит и процент использования. Зелёный индикатор Wi-Fi — пользователь онлайн (был активен в последние 5 мин)."
-              side="bottom"
+              side="right"
             />
           </div>
           <PeriodSwitcher
@@ -457,7 +457,7 @@ function TrendsCard() {
 Нарушения — обнаруженные нарушения.
 Трафик — объём потреблённого трафика.
 7д/30д/90д — временное окно анализа."
-              side="bottom"
+              side="right"
             />
           </div>
           <div className="flex items-center gap-2">

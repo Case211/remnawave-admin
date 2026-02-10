@@ -1025,7 +1025,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1">
               <p className="text-xs sm:text-sm text-dark-200">Критические</p>
-              <InfoTooltip text="Скор 80–100. Серьёзные аномалии, требующие немедленного вмешательства." side="bottom" iconClassName="w-3.5 h-3.5" />
+              <InfoTooltip text="Скор 80–100. Серьёзные аномалии, требующие немедленного вмешательства." side="right" iconClassName="w-3.5 h-3.5" />
             </div>
             <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">{stats.critical}</p>
           </CardContent>
@@ -1034,7 +1034,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1">
               <p className="text-xs sm:text-sm text-dark-200">Высокие</p>
-              <InfoTooltip text="Скор 60–79. Подозрительная активность, рекомендуется проверка." side="bottom" iconClassName="w-3.5 h-3.5" />
+              <InfoTooltip text="Скор 60–79. Подозрительная активность, рекомендуется проверка." side="right" iconClassName="w-3.5 h-3.5" />
             </div>
             <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">{stats.high}</p>
           </CardContent>
@@ -1043,7 +1043,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1">
               <p className="text-xs sm:text-sm text-dark-200">Средние</p>
-              <InfoTooltip text="Скор 40–59. Незначительные отклонения, рекомендуется мониторинг." side="bottom" iconClassName="w-3.5 h-3.5" />
+              <InfoTooltip text="Скор 40–59. Незначительные отклонения, рекомендуется мониторинг." side="right" iconClassName="w-3.5 h-3.5" />
             </div>
             <p className="text-xl md:text-2xl font-bold text-blue-400 mt-1">{stats.medium}</p>
           </CardContent>
@@ -1052,7 +1052,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1">
               <p className="text-xs sm:text-sm text-dark-200">Низкие</p>
-              <InfoTooltip text="Скор 0–39. Информационные уведомления, не требующие действий." side="bottom" iconClassName="w-3.5 h-3.5" />
+              <InfoTooltip text="Скор 0–39. Информационные уведомления, не требующие действий." side="right" iconClassName="w-3.5 h-3.5" />
             </div>
             <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">{stats.low}</p>
           </CardContent>
@@ -1068,7 +1068,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
               <div>
                 <div className="flex items-center gap-1">
                   <p className="text-xs text-dark-200">Всего</p>
-                  <InfoTooltip text="Общее количество зафиксированных нарушений за выбранный период." side="bottom" iconClassName="w-3 h-3" />
+                  <InfoTooltip text="Общее количество зафиксированных нарушений за выбранный период." side="right" iconClassName="w-3 h-3" />
                 </div>
                 <p className="text-lg font-bold text-white">{stats.total}</p>
               </div>
@@ -1082,7 +1082,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
               <div>
                 <div className="flex items-center gap-1">
                   <p className="text-xs text-dark-200">Уник. юзеров</p>
-                  <InfoTooltip text="Количество уникальных пользователей с нарушениями за выбранный период. Один пользователь может иметь несколько нарушений." side="bottom" iconClassName="w-3 h-3" />
+                  <InfoTooltip text="Количество уникальных пользователей с нарушениями за выбранный период. Один пользователь может иметь несколько нарушений." side="right" iconClassName="w-3 h-3" />
                 </div>
                 <p className="text-lg font-bold text-white">{stats.unique_users}</p>
               </div>
@@ -1096,7 +1096,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
               <div>
                 <div className="flex items-center gap-1">
                   <p className="text-xs text-dark-200">Средн. скор</p>
-                  <InfoTooltip text="Средний скор нарушений (0–100). Рассчитывается на основе временных, геолокационных, ASN, профильных и устройственных аномалий." side="bottom" iconClassName="w-3 h-3" />
+                  <InfoTooltip text="Средний скор нарушений (0–100). Рассчитывается на основе временных, геолокационных, ASN, профильных и устройственных аномалий." side="right" iconClassName="w-3 h-3" />
                 </div>
                 <p className="text-lg font-bold text-white">{Math.round(stats.avg_score)}</p>
               </div>
@@ -1110,7 +1110,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
               <div>
                 <div className="flex items-center gap-1">
                   <p className="text-xs text-dark-200">Макс. скор</p>
-                  <InfoTooltip text="Наивысший зафиксированный скор нарушения за выбранный период. Чем выше скор, тем больше аномалий обнаружено." side="bottom" iconClassName="w-3 h-3" />
+                  <InfoTooltip text="Наивысший зафиксированный скор нарушения за выбранный период. Чем выше скор, тем больше аномалий обнаружено." side="right" iconClassName="w-3 h-3" />
                 </div>
                 <p className="text-lg font-bold text-white">{Math.round(stats.max_score)}</p>
               </div>
