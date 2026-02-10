@@ -25,6 +25,6 @@ COPY alembic ./alembic
 COPY alembic.ini .
 COPY scripts ./scripts
 
-RUN mkdir -p /app/logs
+RUN mkdir -p /app/logs /app/geoip
 
 CMD ["python", "-m", "src.main"]

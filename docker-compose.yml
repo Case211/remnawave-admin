@@ -29,8 +29,12 @@ services:
       DB_POOL_MIN_SIZE: ${DB_POOL_MIN_SIZE:-2}
       DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-10}
       SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-300}
+      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:-}
+      MAXMIND_CITY_DB: ${MAXMIND_CITY_DB:-/app/geoip/GeoLite2-City.mmdb}
+      MAXMIND_ASN_DB: ${MAXMIND_ASN_DB:-/app/geoip/GeoLite2-ASN.mmdb}
     volumes:
       - ./logs:/app/logs
+      - geoip_data:/app/geoip
     ports:
       - "${WEBHOOK_PORT:-8080}:${WEBHOOK_PORT:-8080}"
     networks:
@@ -76,8 +80,12 @@ services:
       - API_BASE_URL=${API_BASE_URL}
       - API_TOKEN=${API_TOKEN}
       - ADMINS=${ADMINS}
+      - MAXMIND_LICENSE_KEY=${MAXMIND_LICENSE_KEY:-}
+      - MAXMIND_CITY_DB=${MAXMIND_CITY_DB:-/app/geoip/GeoLite2-City.mmdb}
+      - MAXMIND_ASN_DB=${MAXMIND_ASN_DB:-/app/geoip/GeoLite2-ASN.mmdb}
     volumes:
       - ./logs:/app/logs
+      - geoip_data:/app/geoip
     ports:
       - "${WEB_BACKEND_PORT:-8081}:8081"
     networks:
@@ -110,6 +118,7 @@ services:
 
 volumes:
   postgres_data:
+  geoip_data:
 
 networks:
   remnawave-network:

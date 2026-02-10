@@ -244,6 +244,23 @@ python -m src.main
 | `WEBHOOK_SECRET` | — | Webhook verification key (HMAC-SHA256) |
 | `WEBHOOK_PORT` | `8080` | Webhook server port |
 
+### 🌍 GeoIP (MaxMind GeoLite2)
+
+| Variable | Req. | Default | Description |
+|----------|------|---------|-------------|
+| `MAXMIND_LICENSE_KEY` | — | — | MaxMind license key (free). When set — databases download automatically |
+| `MAXMIND_CITY_DB` | — | `/app/geoip/GeoLite2-City.mmdb` | Path to GeoLite2-City database |
+| `MAXMIND_ASN_DB` | — | `/app/geoip/GeoLite2-ASN.mmdb` | Path to GeoLite2-ASN database |
+
+> **Without MaxMind** — uses ip-api.com (free but limited to ~1000 requests/day).
+> **With MaxMind** — local database, instant lookups, no rate limits.
+>
+> How to set up:
+> 1. Sign up at [maxmind.com/en/geolite2/signup](https://www.maxmind.com/en/geolite2/signup) (free)
+> 2. Account → Manage License Keys → Generate New License Key
+> 3. Add to `.env`: `MAXMIND_LICENSE_KEY=your_key`
+> 4. Databases will download automatically on startup and update every 24 hours
+
 ### 🌐 Web Panel
 
 | Variable | Req.* | Default | Description |

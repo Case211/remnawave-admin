@@ -189,6 +189,17 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("No DATABASE_URL, running without database")
 
+    # Ensure MaxMind GeoLite2 databases are downloaded if license key is set
+    maxmind_key = os.environ.get("MAXMIND_LICENSE_KEY")
+    if maxmind_key:
+        try:
+            from src.services.maxmind_updater import ensure_databases
+            city_path = os.environ.get("MAXMIND_CITY_DB", "/app/geoip/GeoLite2-City.mmdb")
+            asn_path = os.environ.get("MAXMIND_ASN_DB", "/app/geoip/GeoLite2-ASN.mmdb")
+            await ensure_databases(maxmind_key, city_path, asn_path)
+        except Exception as e:
+            logger.warning("MaxMind DB download failed: %s", e)
+
     yield
 
     # Shutdown
