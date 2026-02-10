@@ -270,6 +270,15 @@ async def main() -> None:
 
     # Stop polling gracefully
     logger.info("Shutting down...")
+
+    # Stop health checker first — it uses api_client which gets closed by dp.shutdown
+    health_checker.stop()
+    health_checker_task.cancel()
+    try:
+        await health_checker_task
+    except asyncio.CancelledError:
+        pass
+
     await dp.stop_polling()
     polling_task.cancel()
     try:
@@ -283,12 +292,6 @@ async def main() -> None:
         await report_scheduler.stop()
     if sync_service.is_running:
         await sync_service.stop()
-    health_checker.stop()
-    health_checker_task.cancel()
-    try:
-        await health_checker_task
-    except asyncio.CancelledError:
-        pass
     if webhook_task:
         webhook_task.cancel()
         try:

@@ -465,11 +465,11 @@ function TrendsCard() {
       <CardContent>
         {/* Growth summary */}
         <div className="flex items-center gap-3 mb-4 p-3 rounded-lg bg-dark-600/30 border border-dark-500/30">
-          <ArrowUpRight className="w-5 h-5 text-green-400 shrink-0" />
+          <ArrowUpRight className={cn('w-5 h-5 shrink-0', growth >= 0 ? 'text-green-400' : 'text-red-400 rotate-90')} />
           <div>
             <p className="text-sm font-medium text-white">
-              {metricLabel[metric] || metric}: +
-              {metric === 'traffic' ? formatBytes(growth) : growth.toLocaleString()}
+              {metricLabel[metric] || metric}: {growth >= 0 ? '+' : ''}
+              {metric === 'traffic' ? formatBytes(Math.abs(growth)) : growth.toLocaleString()}
             </p>
             <p className="text-xs text-muted-foreground">
               за {period === '7d' ? '7 дней' : period === '30d' ? '30 дней' : '90 дней'}

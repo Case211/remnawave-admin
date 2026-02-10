@@ -101,7 +101,7 @@ export default function SystemLogs() {
 
     const envUrl =
       (window as any).__ENV?.API_URL ||
-      (window as any).import?.meta?.env?.VITE_API_URL ||
+      import.meta.env.VITE_API_URL ||
       ''
     let base: string
     if (!envUrl) {
@@ -182,7 +182,7 @@ export default function SystemLogs() {
 
   // Combine initial data with streamed lines
   const allLines = isStreaming
-    ? streamLines
+    ? [...(initialData?.items ?? []), ...streamLines]
     : (initialData?.items ?? [])
 
   return (
