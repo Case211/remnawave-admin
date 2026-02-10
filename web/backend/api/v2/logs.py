@@ -1,7 +1,6 @@
-"""System Logs API — streaming and retrieval of backend/bot logs."""
+"""System Logs API — streaming and retrieval of backend/bot/infrastructure logs."""
 import asyncio
 import logging
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -20,34 +19,114 @@ router = APIRouter()
 
 LOG_DIR = Path("/app/logs")
 
-# Available log files
+# ── Available log files ──────────────────────────────────────────
+# key -> (filename, format)
+# format: "admin" = standard admin log, "nginx_error" = nginx error log,
+#          "postgres" = PostgreSQL log, "raw" = plain text lines
+
 LOG_FILES = {
-    "web_info": "web_INFO.log",
-    "web_warning": "web_WARNING.log",
-    "bot_info": "bot_INFO.log",
-    "bot_warning": "bot_WARNING.log",
+    # Web Backend
+    "web_info": ("web_INFO.log", "admin"),
+    "web_warning": ("web_WARNING.log", "admin"),
+    # Telegram Bot
+    "bot_info": ("bot_INFO.log", "admin"),
+    "bot_warning": ("bot_WARNING.log", "admin"),
+    # Nginx
+    "nginx_access": ("nginx_access.log", "admin"),
+    "nginx_error": ("nginx_error.log", "nginx_error"),
+    # PostgreSQL
+    "postgres": ("postgres.log", "postgres"),
+    # Node Agent
+    "nodeagent_info": ("nodeagent_INFO.log", "admin"),
+    "nodeagent_warning": ("nodeagent_WARNING.log", "admin"),
 }
 
-# Regex for parsing log lines
-# Format: 2026-02-10 14:30:00 | INFO    | web        | Message
-LOG_PATTERN = re.compile(
-    r"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*\|\s*(\w+)\s*\|\s*([\w\.-]+)\s*\|\s*(.*)$"
+# ── Log line parsers ─────────────────────────────────────────────
+
+# Admin format: 2026-02-10 14:30:00 | INFO    | web        | Message
+# Also handles ISO timestamps from nginx: 2026-02-10T14:30:00+03:00 | ...
+ADMIN_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})(?:[+\-]\d{2}:\d{2})?\s*\|\s*(\w+)\s*\|\s*([\w\.-]+)\s*\|\s*(.*)$"
+)
+
+# Nginx error format: 2026/02/10 14:30:00 [error] 1234#0: *1 message
+NGINX_ERROR_PATTERN = re.compile(
+    r"^(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})\s+\[(\w+)\]\s+\d+#\d+:\s*(?:\*\d+\s+)?(.*)$"
+)
+
+# PostgreSQL format: 2026-02-10 14:30:00.123 UTC [1] LOG:  message
+PG_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\.\d+\s+\w+\s+\[\d+\]\s+(\w+):\s+(.*)$"
 )
 
 
-def _parse_log_line(line: str) -> Optional[dict]:
-    """Parse a single log line into structured data."""
-    line = line.strip()
-    if not line:
-        return None
-    m = LOG_PATTERN.match(line)
+def _parse_admin_line(line: str) -> Optional[dict]:
+    m = ADMIN_PATTERN.match(line)
     if m:
+        ts = m.group(1).replace("T", " ")
         return {
-            "timestamp": m.group(1),
+            "timestamp": ts,
             "level": m.group(2).strip(),
             "source": m.group(3).strip(),
             "message": m.group(4).strip(),
         }
+    return None
+
+
+def _parse_nginx_error_line(line: str) -> Optional[dict]:
+    m = NGINX_ERROR_PATTERN.match(line)
+    if m:
+        ts = m.group(1).replace("/", "-")
+        level = m.group(2).upper()
+        if level == "WARN":
+            level = "WARNING"
+        elif level == "EMERG" or level == "ALERT" or level == "CRIT":
+            level = "ERROR"
+        return {
+            "timestamp": ts,
+            "level": level,
+            "source": "nginx",
+            "message": m.group(3).strip(),
+        }
+    return None
+
+
+def _parse_pg_line(line: str) -> Optional[dict]:
+    m = PG_PATTERN.match(line)
+    if m:
+        level = m.group(2).upper()
+        if level == "LOG":
+            level = "INFO"
+        elif level == "FATAL" or level == "PANIC":
+            level = "ERROR"
+        elif level == "NOTICE":
+            level = "INFO"
+        return {
+            "timestamp": m.group(1),
+            "level": level,
+            "source": "postgres",
+            "message": m.group(3).strip(),
+        }
+    return None
+
+
+def _parse_log_line(line: str, fmt: str = "admin") -> Optional[dict]:
+    """Parse a single log line into structured data."""
+    line = line.strip()
+    if not line:
+        return None
+
+    parsed = None
+    if fmt == "admin":
+        parsed = _parse_admin_line(line)
+    elif fmt == "nginx_error":
+        parsed = _parse_nginx_error_line(line)
+    elif fmt == "postgres":
+        parsed = _parse_pg_line(line)
+
+    if parsed:
+        return parsed
+
     # Continuation line (e.g., traceback) — return as-is
     return {
         "timestamp": None,
@@ -57,7 +136,7 @@ def _parse_log_line(line: str) -> Optional[dict]:
     }
 
 
-def _read_log_tail(file_path: Path, lines: int = 200) -> List[dict]:
+def _read_log_tail(file_path: Path, lines: int = 200, fmt: str = "admin") -> List[dict]:
     """Read last N lines from a log file."""
     if not file_path.exists():
         return []
@@ -67,7 +146,7 @@ def _read_log_tail(file_path: Path, lines: int = 200) -> List[dict]:
         tail = all_lines[-lines:]
         result = []
         for raw in tail:
-            parsed = _parse_log_line(raw)
+            parsed = _parse_log_line(raw, fmt)
             if parsed:
                 result.append(parsed)
         return result
@@ -78,11 +157,11 @@ def _read_log_tail(file_path: Path, lines: int = 200) -> List[dict]:
 
 @router.get("/files")
 async def list_log_files(
-    admin: AdminUser = Depends(require_permission("settings", "view")),
+    admin: AdminUser = Depends(require_permission("logs", "view")),
 ):
     """List available log files with sizes."""
     files = []
-    for key, filename in LOG_FILES.items():
+    for key, (filename, _fmt) in LOG_FILES.items():
         path = LOG_DIR / filename
         exists = path.exists()
         size = path.stat().st_size if exists else 0
@@ -105,28 +184,31 @@ async def tail_log(
     lines: int = Query(200, ge=10, le=2000),
     level: Optional[str] = Query(None, description="Filter by level: INFO, WARNING, ERROR"),
     search: Optional[str] = Query(None, description="Filter by message content"),
-    admin: AdminUser = Depends(require_permission("settings", "view")),
+    admin: AdminUser = Depends(require_permission("logs", "view")),
 ):
     """Read last N lines from a log file with optional filtering."""
-    filename = LOG_FILES.get(file)
-    if not filename:
+    file_info = LOG_FILES.get(file)
+    if not file_info:
         return {"items": [], "file": file, "error": "Unknown log file"}
 
+    filename, fmt = file_info
     path = LOG_DIR / filename
-    entries = _read_log_tail(path, lines * 2)  # read extra for filtering
+    entries = _read_log_tail(path, lines * 2, fmt)  # read extra for filtering
 
     # Filter by level
     if level:
         level_upper = level.upper()
         entries = [e for e in entries if e.get("level") == level_upper or e.get("level") is None]
 
-    # Filter by search
+    # Filter by search (case-insensitive)
     if search:
         search_lower = search.lower()
         entries = [
             e for e in entries
             if search_lower in (e.get("message") or "").lower()
             or search_lower in (e.get("source") or "").lower()
+            or search_lower in (e.get("level") or "").lower()
+            or search_lower in (e.get("timestamp") or "").lower()
         ]
 
     # Take last N entries
@@ -150,11 +232,12 @@ async def stream_logs(
     except Exception:
         return
 
-    filename = LOG_FILES.get(file)
-    if not filename:
+    file_info = LOG_FILES.get(file)
+    if not file_info:
         await websocket.close(code=4000, reason="Unknown log file")
         return
 
+    filename, fmt = file_info
     await websocket.accept()
     path = LOG_DIR / filename
 
@@ -174,7 +257,7 @@ async def stream_logs(
                 if fp and path.exists():
                     new_lines = fp.readlines()
                     for line in new_lines:
-                        parsed = _parse_log_line(line)
+                        parsed = _parse_log_line(line, fmt)
                         if parsed:
                             await websocket.send_json({
                                 "type": "log_line",
@@ -197,12 +280,12 @@ async def stream_logs(
                         data = json.loads(msg)
                         if data.get("type") == "switch_file":
                             new_file = data.get("file", "")
-                            new_filename = LOG_FILES.get(new_file)
-                            if new_filename:
+                            new_file_info = LOG_FILES.get(new_file)
+                            if new_file_info:
                                 if fp:
                                     fp.close()
                                 file = new_file
-                                filename = new_filename
+                                filename, fmt = new_file_info
                                 path = LOG_DIR / filename
                                 if path.exists():
                                     fp = open(path, "r", encoding="utf-8", errors="replace")

@@ -42,7 +42,7 @@ _CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
 _CONSOLE_DATEFMT = "%H:%M:%S"
 _FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
 _FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
-_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 5
 _LOG_DIR = Path("/app/logs")
 

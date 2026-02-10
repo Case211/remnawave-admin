@@ -36,8 +36,8 @@ _CONSOLE_DATEFMT = "%H:%M:%S"
 _FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
 _FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
 
-# Ротация: 50 MB, 5 файлов, с gzip-сжатием
-_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+# Ротация: 10 MB, 5 файлов, с gzip-сжатием
+_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 5
 _LOG_DIR = Path("/app/logs")
 
@@ -121,8 +121,8 @@ def setup_logger() -> logging.Logger:
     try:
         log_dir = _ensure_log_dir()
 
-        info_path = log_dir / "adminbot_INFO.log"
-        warn_path = log_dir / "adminbot_WARNING.log"
+        info_path = log_dir / "bot_INFO.log"
+        warn_path = log_dir / "bot_WARNING.log"
 
         # INFO+ файл
         info_handler = CompressedRotatingFileHandler(
