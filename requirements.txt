@@ -13,3 +13,4 @@ asyncpg==0.29.0
 sqlalchemy==2.0.36
 alembic==1.14.0
 psycopg2-binary==2.9.9  # Sync driver for alembic migrations
+bcrypt==4.2.1  # Used by scripts/admin_cli.py
