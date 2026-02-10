@@ -15,6 +15,7 @@ from web.backend.core.rbac import write_audit_log
 from web.backend.core.automation import (
     list_automation_rules,
     get_automation_rule_by_id,
+    get_automation_rules_stats,
     create_automation_rule,
     update_automation_rule,
     toggle_automation_rule,
@@ -106,6 +107,7 @@ async def list_automations(
         trigger_type=trigger_type,
         is_enabled=is_enabled,
     )
+    stats = await get_automation_rules_stats()
     pages = max(1, math.ceil(total / per_page))
     return AutomationRuleListResponse(
         items=[_rule_to_response(r) for r in items],
@@ -113,6 +115,8 @@ async def list_automations(
         page=page,
         per_page=per_page,
         pages=pages,
+        total_active=stats["total_active"],
+        total_triggers=stats["total_triggers"],
     )
 
 

@@ -116,7 +116,8 @@ export default function Automations() {
 
   // Stats
   const totalRules = data?.total ?? 0
-  const activeRules = data?.items?.filter((r) => r.is_enabled).length ?? 0
+  const activeRules = data?.total_active ?? 0
+  const totalTriggers = data?.total_triggers ?? 0
   const lastTriggered = data?.items
     ?.filter((r) => r.last_triggered_at)
     ?.sort((a, b) =>
@@ -128,7 +129,7 @@ export default function Automations() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-white">Automations</h1>
+          <h1 className="text-2xl font-display font-bold text-white">Автоматизация</h1>
           <p className="text-sm text-dark-400 mt-1">
             Правила автоматизации для управления инфраструктурой
           </p>
@@ -149,7 +150,7 @@ export default function Automations() {
         <StatCard label="Активных" value={activeRules} icon={Activity} />
         <StatCard
           label="Всего триггеров"
-          value={data?.items?.reduce((s, r) => s + r.trigger_count, 0) ?? 0}
+          value={totalTriggers}
           icon={Zap}
         />
         <StatCard

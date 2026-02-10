@@ -362,6 +362,8 @@ export const CONDITION_OPERATORS = [
   { value: '>=', label: 'больше или равно (\u2265)' },
   { value: '<', label: 'меньше (<)' },
   { value: '<=', label: 'меньше или равно (\u2264)' },
+  { value: 'contains', label: 'содержит' },
+  { value: 'not_contains', label: 'не содержит' },
 ] as const
 
 export const CONDITION_FIELDS = [

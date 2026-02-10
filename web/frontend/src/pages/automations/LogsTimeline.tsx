@@ -176,7 +176,7 @@ export function LogsTimeline() {
                         <span className="text-dark-600">/</span>
                         <span>
                           {entry.target_type}
-                          {entry.target_id && `: ${entry.target_id.substring(0, 12)}...`}
+                          {entry.target_id && `: ${entry.target_id.length > 12 ? entry.target_id.substring(0, 12) + '\u2026' : entry.target_id}`}
                         </span>
                       </>
                     )}

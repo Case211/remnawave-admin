@@ -70,12 +70,15 @@ def cron_matches_now(cron_expr: str) -> bool:
         month_set = _parse_cron_field(parts[3], 1, 12)
         dow_set = _parse_cron_field(parts[4], 0, 6)
 
+        # Convert Python weekday (Mon=0..Sun=6) to CRON weekday (Sun=0..Sat=6)
+        cron_dow = (now.weekday() + 1) % 7
+
         return (
             now.minute in minute_set
             and now.hour in hour_set
             and now.day in dom_set
             and now.month in month_set
-            and now.weekday() in dow_set  # Python: Monday=0, Sunday=6 — matches POSIX if 0=Sunday mapped
+            and cron_dow in dow_set
         )
     except Exception as e:
         logger.warning("CRON parse error for '%s': %s", cron_expr, e)

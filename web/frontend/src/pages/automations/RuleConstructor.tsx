@@ -292,7 +292,14 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       }
       if (triggerType === 'threshold') return !!(thresholdMetric && thresholdValue)
     }
-    if (step === 3) return !!actionType
+    if (step === 3) {
+      if (!actionType) return false
+      if (actionType === 'notify') {
+        if (!notifyMessage.trim()) return false
+        if (notifyChannel === 'webhook' && !webhookUrl.trim()) return false
+      }
+      return true
+    }
     if (step === 4) return !!name.trim()
     return true
   }
@@ -601,7 +608,6 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                         <SelectItem value="_custom">Другое...</SelectItem>
                       </SelectContent>
                     </Select>
-                    {(cond.field === '' || !CONDITION_FIELDS.some((f) => f.value === cond.field)) && cond.field !== '' && null}
                     {/* Show custom input if field is not from preset */}
                     {!CONDITION_FIELDS.some((f) => f.value === cond.field) && (
                       <Input
