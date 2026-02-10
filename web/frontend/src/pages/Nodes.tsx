@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { useHasPermission } from '@/components/PermissionGate'
 import {
   RefreshCw,
   Activity,
@@ -339,6 +341,10 @@ function AgentTokenModal({
     onSuccess: (data) => {
       setGeneratedToken(data.token)
       queryClient.invalidateQueries({ queryKey: ['node-agent-token', node.uuid] })
+      toast.success('Токен сгенерирован')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -349,6 +355,10 @@ function AgentTokenModal({
     onSuccess: () => {
       setGeneratedToken(null)
       queryClient.invalidateQueries({ queryKey: ['node-agent-token', node.uuid] })
+      toast.success('Токен отозван')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -496,6 +506,8 @@ function NodeCard({
   onDisable,
   onDelete,
   onTokenManage,
+  canEdit,
+  canDelete,
 }: {
   node: Node
   onRestart: () => void
@@ -504,6 +516,8 @@ function NodeCard({
   onDisable: () => void
   onDelete: () => void
   onTokenManage: () => void
+  canEdit: boolean
+  canDelete: boolean
 }) {
   const isOnline = node.is_connected && !node.is_disabled
 
@@ -557,50 +571,62 @@ function NodeCard({
             </Badge>
 
             {/* Actions menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onRestart}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Перезапустить
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onEdit}>
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Редактировать
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onTokenManage}>
-                  <Key className="w-4 h-4 mr-2" />
-                  Токен агента
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {node.is_disabled ? (
-                  <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
-                    <Play className="w-4 h-4 mr-2" />
-                    Включить
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
-                    <Square className="w-4 h-4 mr-2" />
-                    Отключить
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (confirm('Удалить ноду?')) {
-                      onDelete()
-                    }
-                  }}
-                  className="text-red-400 focus:text-red-400"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Удалить
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {(canEdit || canDelete) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canEdit && (
+                    <DropdownMenuItem onClick={onRestart}>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Перезапустить
+                    </DropdownMenuItem>
+                  )}
+                  {canEdit && (
+                    <DropdownMenuItem onClick={onEdit}>
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Редактировать
+                    </DropdownMenuItem>
+                  )}
+                  {canEdit && (
+                    <DropdownMenuItem onClick={onTokenManage}>
+                      <Key className="w-4 h-4 mr-2" />
+                      Токен агента
+                    </DropdownMenuItem>
+                  )}
+                  {(canEdit || canDelete) && <DropdownMenuSeparator />}
+                  {canEdit && (
+                    node.is_disabled ? (
+                      <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
+                        <Play className="w-4 h-4 mr-2" />
+                        Включить
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
+                        <Square className="w-4 h-4 mr-2" />
+                        Отключить
+                      </DropdownMenuItem>
+                    )
+                  )}
+                  {canDelete && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (confirm('Удалить ноду?')) {
+                          onDelete()
+                        }
+                      }}
+                      className="text-red-400 focus:text-red-400"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Удалить
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -694,6 +720,9 @@ function NodeSkeleton() {
 
 export default function Nodes() {
   const queryClient = useQueryClient()
+  const canCreate = useHasPermission('nodes', 'create')
+  const canEdit = useHasPermission('nodes', 'edit')
+  const canDelete = useHasPermission('nodes', 'delete')
   const [editingNode, setEditingNode] = useState<Node | null>(null)
   const [editError, setEditError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -712,6 +741,10 @@ export default function Nodes() {
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/restart`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success('Нода перезапущена')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -719,6 +752,10 @@ export default function Nodes() {
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/enable`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success('Нода включена')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -726,6 +763,10 @@ export default function Nodes() {
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/disable`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success('Нода отключена')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -733,6 +774,10 @@ export default function Nodes() {
     mutationFn: (uuid: string) => client.delete(`/nodes/${uuid}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
+      toast.success('Нода удалена')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -743,9 +788,11 @@ export default function Nodes() {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       setEditingNode(null)
       setEditError('')
+      toast.success('Нода обновлена')
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setEditError(err.response?.data?.detail || err.message || 'Ошибка сохранения')
+      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -755,9 +802,11 @@ export default function Nodes() {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       setShowCreateModal(false)
       setCreateError('')
+      toast.success('Нода создана')
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
+      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -789,12 +838,14 @@ export default function Nodes() {
           <p className="text-dark-200 mt-1 text-sm md:text-base">Управление серверами</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Button
-            onClick={() => { setShowCreateModal(true); setCreateError('') }}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Добавить</span>
-          </Button>
+          {canCreate && (
+            <Button
+              onClick={() => { setShowCreateModal(true); setCreateError('') }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Добавить</span>
+            </Button>
+          )}
           <Button
             variant="secondary"
             onClick={() => refetch()}
@@ -875,6 +926,8 @@ export default function Nodes() {
                 onDisable={() => disableNode.mutate(node.uuid)}
                 onDelete={() => deleteNode.mutate(node.uuid)}
                 onTokenManage={() => setTokenNode(node)}
+                canEdit={canEdit}
+                canDelete={canDelete}
               />
             </div>
           ))

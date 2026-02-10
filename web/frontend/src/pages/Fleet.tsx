@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { useHasPermission } from '@/components/PermissionGate'
 import {
   Activity,
   RefreshCw,
@@ -457,17 +459,20 @@ export default function Fleet() {
 
   const restartNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/restart`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fleet'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success('Нода перезапущена') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
 
   const enableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/enable`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fleet'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success('Нода включена') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
 
   const disableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/disable`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['fleet'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success('Нода отключена') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
 
   const mutationPending = restartNode.isPending || enableNode.isPending || disableNode.isPending

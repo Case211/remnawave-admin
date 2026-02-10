@@ -27,6 +27,7 @@ import {
   TrendingUp,
   Eye,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import client from '../api/client'
 import { useHasPermission } from '../components/PermissionGate'
 
@@ -583,6 +584,10 @@ export default function UserDetail() {
     mutationFn: async () => { await client.post(`/users/${uuid}/sync-hwid-devices`) },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
+      toast.success('HWID устройства синхронизированы')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка синхронизации')
     },
   })
 
@@ -603,19 +608,23 @@ export default function UserDetail() {
   // Mutations
   const enableMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/enable`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Пользователь включён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const disableMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/disable`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Пользователь отключён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const resetTrafficMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/reset-traffic`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Трафик сброшен') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const deleteMutation = useMutation({
     mutationFn: async () => { await client.delete(`/users/${uuid}`) },
-    onSuccess: () => { navigate('/users') },
+    onSuccess: () => { toast.success('Пользователь удалён'); navigate('/users') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка удаления') },
   })
 
   const updateUserMutation = useMutation({
@@ -626,6 +635,7 @@ export default function UserDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user', uuid] })
       queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('Пользователь обновлён')
       setEditSuccess(true)
       setEditError('')
       setTimeout(() => setEditSuccess(false), 3000)

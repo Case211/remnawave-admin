@@ -30,7 +30,7 @@ router = APIRouter()
 
 # All available resources and their allowed actions
 AVAILABLE_RESOURCES = {
-    "users": ["view", "create", "edit", "delete"],
+    "users": ["view", "create", "edit", "delete", "bulk_operations"],
     "nodes": ["view", "create", "edit", "delete"],
     "hosts": ["view", "create", "edit", "delete"],
     "violations": ["view", "resolve"],

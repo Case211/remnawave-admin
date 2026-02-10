@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   Plus,
   Pencil,
@@ -577,21 +578,23 @@ function AdminsTab({ roles }: { roles: Role[] }) {
 
   const createMutation = useMutation({
     mutationFn: (data: AdminAccountCreate) => adminsApi.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setFormError('') },
-    onError: (err: any) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setFormError(''); toast.success('Администратор создан') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: AdminAccountUpdate }) => adminsApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setEditingAdmin(null); setFormError('') },
-    onError: (err: any) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setEditingAdmin(null); setFormError(''); toast.success('Администратор обновлён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => adminsApi.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); toast.success('Администратор удалён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const toggleMutation = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) => adminsApi.update(id, { is_active }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); toast.success('Статус администратора обновлён') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
 
   const admins = adminsData?.items ?? []
@@ -732,17 +735,18 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
 
   const createMutation = useMutation({
     mutationFn: (data: RoleCreate) => rolesApi.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setFormError('') },
-    onError: (err: any) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setFormError(''); toast.success('Роль создана') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: RoleUpdate }) => rolesApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setEditingRole(null); setFormError('') },
-    onError: (err: any) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setEditingRole(null); setFormError(''); toast.success('Роль обновлена') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => rolesApi.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); toast.success('Роль удалена') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
 
   const handleSave = (data: RoleCreate | RoleUpdate) => {

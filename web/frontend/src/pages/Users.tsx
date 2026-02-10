@@ -31,6 +31,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { useHasPermission } from '../components/PermissionGate'
 
 // Types
@@ -674,17 +675,35 @@ export default function Users() {
   // Mutations
   const enableUser = useMutation({
     mutationFn: (uuid: string) => client.post(`/users/${uuid}/enable`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('Пользователь включён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка включения')
+    },
   })
 
   const disableUser = useMutation({
     mutationFn: (uuid: string) => client.post(`/users/${uuid}/disable`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('Пользователь отключён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка отключения')
+    },
   })
 
   const deleteUser = useMutation({
     mutationFn: (uuid: string) => client.delete(`/users/${uuid}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('Пользователь удалён')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка удаления')
+    },
   })
 
   const createUser = useMutation({
@@ -693,9 +712,11 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setShowCreateModal(false)
       setCreateError('')
+      toast.success('Пользователь создан')
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка создания')
     },
   })
 

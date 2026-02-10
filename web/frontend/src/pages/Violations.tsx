@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { useHasPermission } from '@/components/PermissionGate'
 import {
   ShieldAlert,
   RefreshCw,
@@ -347,6 +349,7 @@ function ScoreCircle({ score, size = 'md' }: { score: number; size?: 'sm' | 'md'
 
 function ViolationCard({
   violation,
+  canResolve,
   onBlock,
   onWarn,
   onDismiss,
@@ -354,6 +357,7 @@ function ViolationCard({
   onViewUser,
 }: {
   violation: Violation
+  canResolve: boolean
   onBlock: () => void
   onWarn: () => void
   onDismiss: () => void
@@ -418,7 +422,7 @@ function ViolationCard({
         </div>
 
         {/* Actions for pending violations */}
-        {isPending && (
+        {canResolve && isPending && (
           <div className="mt-4 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
             <Button variant="destructive" size="sm" onClick={onBlock} className="gap-1">
               <Ban className="w-4 h-4" />
@@ -494,6 +498,7 @@ function getPlatformInfo(platform: string | null): { icon: string; label: string
 
 function ViolationDetailPanel({
   violationId,
+  canResolve,
   onClose,
   onBlock,
   onWarn,
@@ -501,6 +506,7 @@ function ViolationDetailPanel({
   onViewUser,
 }: {
   violationId: number
+  canResolve: boolean
   onClose: () => void
   onBlock: (id: number) => void
   onWarn: (id: number) => void
@@ -856,7 +862,7 @@ function ViolationDetailPanel({
       )}
 
       {/* Action buttons for pending */}
-      {isPending && (
+      {canResolve && isPending && (
         <Card className="animate-fade-in-up border-primary-500/20" style={{ animationDelay: '0.35s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
@@ -1154,6 +1160,8 @@ export default function Violations() {
   const [minScore, setMinScore] = useState(0)
   const [selectedViolationId, setSelectedViolationId] = useState<number | null>(null)
 
+  const canResolve = useHasPermission('violations', 'resolve')
+
   // Derived filter for resolved status
   const resolved = tab === 'pending' ? false : undefined
 
@@ -1188,6 +1196,10 @@ export default function Violations() {
       queryClient.invalidateQueries({ queryKey: ['topViolators'] })
       queryClient.invalidateQueries({ queryKey: ['violationDetail'] })
       setSelectedViolationId(null)
+      toast.success('Нарушение обработано')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
     },
   })
 
@@ -1220,6 +1232,7 @@ export default function Violations() {
       <div className="space-y-6">
         <ViolationDetailPanel
           violationId={selectedViolationId}
+          canResolve={canResolve}
           onClose={() => setSelectedViolationId(null)}
           onBlock={handleBlock}
           onWarn={handleWarn}
@@ -1405,6 +1418,7 @@ export default function Violations() {
                 >
                   <ViolationCard
                     violation={violation}
+                    canResolve={canResolve}
                     onBlock={() => handleBlock(violation.id)}
                     onWarn={() => handleWarn(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}
