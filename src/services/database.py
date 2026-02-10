@@ -151,14 +151,16 @@ class DatabaseService:
         """Check if database connection is established."""
         return self._pool is not None and not self._pool._closed
     
-    async def connect(self, database_url: str = None) -> bool:
+    async def connect(self, database_url: str = None, max_retries: int = 5, retry_delay: float = 2.0) -> bool:
         """
-        Initialize database connection pool.
+        Initialize database connection pool with retry logic.
         Returns True if connection successful, False otherwise.
 
         Args:
             database_url: Optional database URL. If not provided, reads from
                           DATABASE_URL env var or Settings.
+            max_retries: Maximum number of connection attempts (default 5).
+            retry_delay: Initial delay between retries in seconds, doubles each attempt.
         """
         import os
 
@@ -190,26 +192,38 @@ class DatabaseService:
             if self._pool is not None:
                 return True
 
-            try:
-                logger.debug("Connecting to PostgreSQL...")
-                self._pool = await asyncpg.create_pool(
-                    dsn=database_url,
-                    min_size=min_size,
-                    max_size=max_size,
-                    command_timeout=30,
-                )
-                
-                # Initialize schema
-                await self._init_schema()
-                self._initialized = True
-                
-                logger.info("✅ Database connection established")
-                return True
-                
-            except Exception as e:
-                logger.error("❌ Failed to connect to database: %s", e)
-                self._pool = None
-                return False
+            delay = retry_delay
+            for attempt in range(1, max_retries + 1):
+                try:
+                    logger.debug("Connecting to PostgreSQL (attempt %d/%d)...", attempt, max_retries)
+                    self._pool = await asyncpg.create_pool(
+                        dsn=database_url,
+                        min_size=min_size,
+                        max_size=max_size,
+                        command_timeout=30,
+                    )
+
+                    # Initialize schema
+                    await self._init_schema()
+                    self._initialized = True
+
+                    logger.info("✅ Database connection established")
+                    return True
+
+                except Exception as e:
+                    self._pool = None
+                    if attempt < max_retries:
+                        logger.warning(
+                            "⚠️ Database connection attempt %d/%d failed: %s. Retrying in %.0fs...",
+                            attempt, max_retries, e, delay,
+                        )
+                        await asyncio.sleep(delay)
+                        delay = min(delay * 2, 30)
+                    else:
+                        logger.error("❌ Failed to connect to database after %d attempts: %s", max_retries, e)
+                        return False
+
+        return False
     
     async def disconnect(self) -> None:
         """Close database connection pool."""
