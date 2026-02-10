@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -14,6 +15,8 @@ import {
   Terminal,
   BarChart3,
   Zap,
+  ShieldCheck,
+  ChevronDown,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -59,7 +62,28 @@ function RemnawaveLogo({ className }: { className?: string }) {
   )
 }
 
-const navigation = [
+interface NavItem {
+  type?: 'item'
+  name: string
+  href: string
+  icon: typeof LayoutDashboard
+  permission: { resource: string; action: string } | null
+}
+
+interface NavGroup {
+  type: 'group'
+  name: string
+  icon: typeof LayoutDashboard
+  items: NavItem[]
+}
+
+type NavigationEntry = NavItem | NavGroup
+
+function isNavGroup(entry: NavigationEntry): entry is NavGroup {
+  return entry.type === 'group'
+}
+
+const navigation: NavigationEntry[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, permission: null },
   { name: 'Users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
   { name: 'Nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
@@ -67,10 +91,17 @@ const navigation = [
   { name: 'Hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'Violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
   { name: 'Automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
-  { name: 'Admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
-  { name: 'Audit Log', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
-  { name: 'Logs', href: '/logs', icon: Terminal, permission: { resource: 'logs', action: 'view' } },
+  {
+    type: 'group',
+    name: '\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435',
+    icon: ShieldCheck,
+    items: [
+      { name: '\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u044b', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
+      { name: '\u0416\u0443\u0440\u043d\u0430\u043b \u0430\u0443\u0434\u0438\u0442\u0430', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
+      { name: '\u0421\u0438\u0441\u0442\u0435\u043c\u043d\u044b\u0435 \u043b\u043e\u0433\u0438', href: '/logs', icon: Terminal, permission: { resource: 'logs', action: 'view' } },
+    ],
+  },
   { name: 'Settings', href: '/settings', icon: Settings, permission: { resource: 'settings', action: 'view' } },
 ]
 
@@ -84,16 +115,38 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const { logout, user } = useAuthStore()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
   const role = usePermissionStore((s) => s.role)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   const handleNavClick = () => {
     if (onClose) onClose()
   }
 
-  // Filter nav items based on permissions
-  const visibleNavigation = navigation.filter((item) => {
+  const toggleGroup = (name: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  // Check if a nav item is visible based on permissions
+  const isItemVisible = (item: NavItem) => {
     if (!item.permission) return true
     return hasPermission(item.permission.resource, item.permission.action)
+  }
+
+  // Filter navigation entries based on permissions
+  const visibleNavigation = navigation.filter((entry) => {
+    if (isNavGroup(entry)) {
+      return entry.items.some(isItemVisible)
+    }
+    return isItemVisible(entry)
   })
+
+  // Check if group has active child
+  const isGroupActive = (group: NavGroup) =>
+    group.items.some((item) => location.pathname === item.href)
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
@@ -117,7 +170,84 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
         <nav className="px-3 space-y-1">
-          {visibleNavigation.map((item) => {
+          {visibleNavigation.map((entry) => {
+            if (isNavGroup(entry)) {
+              const groupActive = isGroupActive(entry)
+              const isExpanded = expandedGroups.has(entry.name) || groupActive
+              const visibleItems = entry.items.filter(isItemVisible)
+
+              return (
+                <div key={entry.name} className="space-y-0.5">
+                  {/* Group header */}
+                  <button
+                    onClick={() => toggleGroup(entry.name)}
+                    className={cn(
+                      "group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      groupActive
+                        ? "text-white bg-dark-700/50"
+                        : "text-dark-200 hover:text-white"
+                    )}
+                  >
+                    <entry.icon
+                      className={cn(
+                        "w-5 h-5 mr-3 flex-shrink-0 transition-transform duration-200",
+                        groupActive ? "text-primary-400" : "group-hover:scale-110"
+                      )}
+                    />
+                    <span className="flex-1 text-left">{entry.name}</span>
+                    <ChevronDown
+                      className={cn(
+                        "w-4 h-4 text-dark-300 transition-transform duration-200",
+                        isExpanded && "rotate-180"
+                      )}
+                    />
+                  </button>
+
+                  {/* Group items */}
+                  <div
+                    className={cn(
+                      "overflow-hidden transition-all duration-200",
+                      isExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+                    )}
+                  >
+                    <div className="ml-3 pl-3 border-l border-dark-500/30 space-y-0.5">
+                      {visibleItems.map((item) => {
+                        const isActive = location.pathname === item.href
+                        return (
+                          <Tooltip key={item.name}>
+                            <TooltipTrigger asChild>
+                              <Link
+                                to={item.href}
+                                onClick={handleNavClick}
+                                className={cn(
+                                  "group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200",
+                                  isActive
+                                    ? "text-white bg-gradient-to-r from-accent-teal/20 to-accent-cyan/10 border-l-[3px] border-l-accent-teal border-r-[3px] border-r-accent-cyan"
+                                    : "text-dark-200 hover:text-white hover:translate-x-1"
+                                )}
+                              >
+                                <item.icon
+                                  className={cn(
+                                    "w-4 h-4 mr-2.5 flex-shrink-0 transition-transform duration-200",
+                                    isActive ? "text-primary-400" : "group-hover:scale-110"
+                                  )}
+                                />
+                                {item.name}
+                              </Link>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="md:hidden">
+                              {item.name}
+                            </TooltipContent>
+                          </Tooltip>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )
+            }
+
+            const item = entry as NavItem
             const isActive = location.pathname === item.href
             return (
               <Tooltip key={item.name}>
