@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/table'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
+import { useChartTheme } from '@/lib/useChartTheme'
 
 // ── Period Switcher ─────────────────────────────────────────────
 
@@ -103,20 +104,14 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ── Chart Tooltip ───────────────────────────────────────────────
 
-const tooltipStyle = {
-  backgroundColor: 'rgba(22, 27, 34, 0.95)',
-  border: '1px solid rgba(72, 79, 88, 0.3)',
-  borderRadius: '8px',
-  backdropFilter: 'blur(12px)',
-}
-
 function TrendTooltip({ active, payload, label, metric }: any) {
+  const chart = useChartTheme()
   if (!active || !payload?.length) return null
   const val = payload[0].value
   return (
-    <div style={tooltipStyle} className="px-3 py-2">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <p className="text-sm font-medium text-white">
+    <div style={chart.tooltipStyle} className="px-3 py-2">
+      <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{label}</p>
+      <p className={cn("text-sm font-medium", chart.tooltipTextClass)}>
         {metric === 'traffic' ? formatBytes(val) : val.toLocaleString()}
       </p>
     </div>
@@ -127,6 +122,7 @@ function TrendTooltip({ active, payload, label, metric }: any) {
 
 function GeoMapCard() {
   const [geoPeriod, setGeoPeriod] = useState('7d')
+  const chart = useChartTheme()
 
   const { data: geoData, isLoading } = useQuery({
     queryKey: ['advanced-geo', geoPeriod],
@@ -197,11 +193,11 @@ function GeoMapCard() {
                 center={center}
                 zoom={3}
                 className="h-full w-full"
-                style={{ background: '#0d1117' }}
+                style={{ background: chart.mapBackground }}
                 attributionControl={false}
               >
                 <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  url={chart.mapTileUrl}
                 />
                 {cities.map((city: GeoCity, idx: number) => {
                   const radius = Math.max(5, Math.min(25, (city.count / maxCount) * 25))
@@ -423,6 +419,7 @@ function UsageBar({ percent }: { percent: number }) {
 function TrendsCard() {
   const [metric, setMetric] = useState('users')
   const [period, setPeriod] = useState('30d')
+  const chart = useChartTheme()
 
   const { data, isLoading } = useQuery({
     queryKey: ['advanced-trends', metric, period],
@@ -515,17 +512,17 @@ function TrendsCard() {
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(72,79,88,0.2)"
+                  stroke={chart.grid}
                   vertical={false}
                 />
                 <XAxis
                   dataKey="date"
-                  tick={{ fill: '#8b949e', fontSize: 11 }}
+                  tick={{ fill: chart.tick, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fill: '#8b949e', fontSize: 11 }}
+                  tick={{ fill: chart.tick, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   width={50}
