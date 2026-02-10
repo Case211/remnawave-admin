@@ -84,7 +84,7 @@ BOT_TOKEN=1234567890:ABCdefGHIjklmNOPqrstUVWxyz
 # Если бот и панель в одной Docker-сети:
 API_BASE_URL=http://remnawave:3000
 # Если панель на другом сервере:
-# API_BASE_URL=https://panel.yourdomain.com/api
+# API_BASE_URL=https://panel.yourdomain.com
 
 # 🔑 API-токен из панели Remnawave
 API_TOKEN=ваш_токен_из_панели
@@ -195,7 +195,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Отредактируйте .env: API_BASE_URL=https://ваш-домен-панели.com/api
+# Отредактируйте .env: API_BASE_URL=https://ваш-домен-панели.com
 python -m src.main
 ```
 
