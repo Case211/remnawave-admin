@@ -169,64 +169,117 @@ function PermissionMatrix({
   const allActions = Array.from(new Set(Object.values(resources).flat()))
 
   return (
-    <div className="overflow-x-auto -mx-3">
-      <table className="w-full border-collapse text-sm" style={{ minWidth: '500px' }}>
-        <thead>
-          <tr>
-            <th className="text-left py-2 px-3 text-dark-200 font-medium border-b border-dark-400/20 sticky left-0 bg-dark-800 z-10 min-w-[120px]">
-              Ресурс
-            </th>
-            {allActions.map((action) => (
-              <th
-                key={action}
-                className="text-center py-2 px-1.5 text-dark-200 font-medium border-b border-dark-400/20 cursor-pointer hover:text-white transition-colors min-w-[60px]"
-                onClick={() => toggleAllAction(action)}
-              >
-                <span className="text-xs">{ACTION_LABELS[action] || action}</span>
+    <>
+      {/* ── Desktop: table layout ── */}
+      <div className="hidden sm:block overflow-x-auto -mx-3">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <th className="text-left py-2 px-3 text-dark-200 font-medium border-b border-dark-400/20 sticky left-0 bg-dark-800 z-10 w-[130px]">
+                Ресурс
               </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(resources).map(([resource, actions]) => (
-            <tr key={resource} className="border-b border-dark-400/10 hover:bg-dark-700/30">
-              <td
-                className="py-2 px-3 text-dark-50 font-medium cursor-pointer hover:text-primary-400 transition-colors sticky left-0 bg-dark-800 z-10 text-xs"
-                onClick={() => toggleAllResource(resource)}
-              >
-                {RESOURCE_LABELS[resource] || resource}
-              </td>
-              {allActions.map((action) => {
-                const available = actions.includes(action)
-                const checked = isChecked(resource, action)
-                return (
-                  <td key={action} className="text-center py-2 px-1.5">
-                    {available ? (
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => toggle(resource, action)}
-                        className={cn(
-                          "w-6 h-6 rounded border transition-all mx-auto flex items-center justify-center",
-                          checked
-                            ? "bg-primary-500/20 border-primary-500 text-primary-400"
-                            : "border-dark-400/30 hover:border-dark-300/50",
-                          disabled && "opacity-50 cursor-not-allowed"
-                        )}
-                      >
-                        {checked && <Check className="w-3.5 h-3.5" />}
-                      </button>
-                    ) : (
-                      <span className="text-dark-600">{'\u2014'}</span>
-                    )}
-                  </td>
-                )
-              })}
+              {allActions.map((action) => (
+                <th
+                  key={action}
+                  className="text-center py-2 px-1 text-dark-200 font-medium border-b border-dark-400/20 cursor-pointer hover:text-white transition-colors"
+                  onClick={() => toggleAllAction(action)}
+                >
+                  <span className="text-[11px]">{ACTION_LABELS[action] || action}</span>
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {Object.entries(resources).map(([resource, actions]) => (
+              <tr key={resource} className="border-b border-dark-400/10 hover:bg-dark-700/30">
+                <td
+                  className="py-1.5 px-3 text-dark-50 font-medium cursor-pointer hover:text-primary-400 transition-colors sticky left-0 bg-dark-800 z-10 text-xs"
+                  onClick={() => toggleAllResource(resource)}
+                >
+                  {RESOURCE_LABELS[resource] || resource}
+                </td>
+                {allActions.map((action) => {
+                  const available = actions.includes(action)
+                  const checked = isChecked(resource, action)
+                  return (
+                    <td key={action} className="text-center py-1.5 px-1">
+                      {available ? (
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => toggle(resource, action)}
+                          className={cn(
+                            "w-5 h-5 rounded border transition-all mx-auto flex items-center justify-center",
+                            checked
+                              ? "bg-primary-500/20 border-primary-500 text-primary-400"
+                              : "border-dark-400/30 hover:border-dark-300/50",
+                            disabled && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {checked && <Check className="w-3 h-3" />}
+                        </button>
+                      ) : null}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── Mobile: card layout ── */}
+      <div className="sm:hidden space-y-2 -mx-1">
+        {Object.entries(resources).map(([resource, actions]) => {
+          const resourcePerms = actions.filter((a) => isChecked(resource, a))
+          const allChecked = actions.every((a) => isChecked(resource, a))
+          return (
+            <div key={resource} className="rounded-lg border border-dark-400/20 bg-dark-800/50 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  type="button"
+                  onClick={() => toggleAllResource(resource)}
+                  disabled={disabled}
+                  className={cn(
+                    "text-sm font-medium transition-colors",
+                    allChecked ? "text-primary-400" : "text-dark-50 hover:text-primary-400",
+                    disabled && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {RESOURCE_LABELS[resource] || resource}
+                </button>
+                <span className="text-[10px] text-dark-300">
+                  {resourcePerms.length}/{actions.length}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {actions.map((action) => {
+                  const checked = isChecked(resource, action)
+                  return (
+                    <button
+                      key={action}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => toggle(resource, action)}
+                      className={cn(
+                        "inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] border transition-all",
+                        checked
+                          ? "bg-primary-500/15 border-primary-500/40 text-primary-400"
+                          : "bg-dark-700/50 border-dark-400/20 text-dark-300 hover:border-dark-300/40 hover:text-dark-100",
+                        disabled && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {checked && <Check className="w-3 h-3" />}
+                      {ACTION_LABELS[action] || action}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -466,8 +519,8 @@ function RoleFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             {editingRole ? 'Редактирование роли' : 'Создание роли'}
             {isSystem && (
@@ -483,13 +536,13 @@ function RoleFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-4 pr-1">
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
 
-        <div className="space-y-4">
           {!editingRole && (
             <div>
               <Label>{'Системное имя *'}</Label>
@@ -511,7 +564,7 @@ function RoleFormDialog({
           <div>
             <Label className="mb-3 block">{'Матрица прав'}</Label>
             <Card>
-              <CardContent className="p-3">
+              <CardContent className="p-2 sm:p-3">
                 <PermissionMatrix resources={resources} selected={permissions} onChange={setPermissions} />
               </CardContent>
             </Card>
@@ -521,7 +574,7 @@ function RoleFormDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 pt-4 border-t border-dark-400/20">
           <Button variant="secondary" onClick={onClose} disabled={isPending}>{'Отмена'}</Button>
           <Button onClick={handleSubmit} disabled={isPending || !displayName || (!editingRole && !name)}>
             {isPending ? 'Сохранение...' : editingRole ? 'Сохранить' : 'Создать'}
