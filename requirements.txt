@@ -6,6 +6,8 @@ pydantic-settings==2.4.0
 ujson==5.10.0
 fastapi==0.115.0
 uvicorn==0.32.0
+# GeoIP
+geoip2>=4.8.0
 # Database
 asyncpg==0.29.0
 sqlalchemy==2.0.36

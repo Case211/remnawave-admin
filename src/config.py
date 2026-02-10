@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     webhook_port: int = Field(default=8080, alias="WEBHOOK_PORT")
     webhook_secret: str | None = Field(default=None, alias="WEBHOOK_SECRET")
     
+    # GeoIP configuration (MaxMind GeoLite2 — optional, replaces ip-api.com)
+    maxmind_city_db: str | None = Field(default=None, alias="MAXMIND_CITY_DB")
+    maxmind_asn_db: str | None = Field(default=None, alias="MAXMIND_ASN_DB")
+
     # Database configuration
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     db_pool_min_size: int = Field(default=2, alias="DB_POOL_MIN_SIZE")
