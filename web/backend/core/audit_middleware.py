@@ -18,6 +18,23 @@ from web.backend.core.security import decode_token
 
 logger = logging.getLogger(__name__)
 
+# ── Fields to extract per resource type for audit details ─────
+# Only these fields are captured from request bodies.
+_EXTRACT_FIELDS: dict[str, set[str]] = {
+    "users": {
+        "username", "data_limit", "expire_date", "status", "note",
+        "data_limit_reset_strategy", "on_hold_expire_duration",
+        "on_hold_timeout", "inbound_tags",
+    },
+    "nodes": {"name", "address", "port"},
+    "hosts": {"remark", "address", "port", "sni", "host", "is_disabled", "alpn", "fingerprint"},
+    "settings": {"value"},
+    "violations": {},
+}
+
+# Sensitive fields that must never be logged
+_SENSITIVE_FIELDS = {"password", "password_hash", "token", "secret", "api_key", "subscription_url"}
+
 # ── URL → resource/action mapping ─────────────────────────────────
 # Maps URL patterns to (resource, action) tuples.
 # Order matters — first match wins.
@@ -149,6 +166,17 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if (resource, action) in _SKIP_DUPLICATES:
             return await call_next(request)
 
+        # Capture request body before forwarding (body is cached by Starlette)
+        request_body = None
+        try:
+            body_bytes = await request.body()
+            if body_bytes:
+                request_body = json.loads(body_bytes)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        except Exception:
+            pass
+
         # Execute the actual request
         response = await call_next(request)
 
@@ -156,10 +184,44 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if 200 <= response.status_code < 300:
             # Fire-and-forget audit log write
             asyncio.create_task(
-                _write_audit_entry(request, resource, action, resource_id)
+                _write_audit_entry(request, resource, action, resource_id, request_body)
             )
 
         return response
+
+
+def _build_details(
+    resource: str,
+    action: str,
+    resource_id: Optional[str],
+    body: Optional[dict],
+) -> Optional[str]:
+    """Extract relevant fields from request body for audit details."""
+    result: dict = {}
+
+    # For settings, include the setting key from the URL
+    if resource == "settings" and resource_id:
+        result["setting"] = resource_id
+
+    if body:
+        allowed = _EXTRACT_FIELDS.get(resource)
+        if allowed is not None:
+            result.update({k: v for k, v in body.items() if k in allowed})
+        else:
+            # Unknown resource: capture all non-sensitive fields
+            result.update({
+                k: v for k, v in body.items()
+                if k.lower() not in _SENSITIVE_FIELDS
+            })
+
+        # Always try to capture a name-like identifier
+        for key in ("username", "name", "remark", "title"):
+            if key in body and key not in result:
+                result[key] = body[key]
+
+    if not result:
+        return None
+    return json.dumps(result, ensure_ascii=False, default=str)
 
 
 async def _write_audit_entry(
@@ -167,6 +229,7 @@ async def _write_audit_entry(
     resource: str,
     action: str,
     resource_id: Optional[str],
+    request_body: Optional[dict] = None,
 ) -> None:
     """Write an audit log entry from middleware context."""
     try:
@@ -209,6 +272,9 @@ async def _write_audit_entry(
             request.client.host if request.client else "unknown"
         )
 
+        # Build details from request body
+        details = _build_details(resource, action, resource_id, request_body)
+
         # Write to DB
         from web.backend.core.rbac import write_audit_log
         await write_audit_log(
@@ -217,7 +283,7 @@ async def _write_audit_entry(
             action=f"{resource}.{action}",
             resource=resource,
             resource_id=resource_id,
-            details=None,
+            details=details,
             ip_address=ip_address,
         )
 
