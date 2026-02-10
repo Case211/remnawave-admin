@@ -51,7 +51,7 @@ docker compose up -d
 Настройте домен в Telegram BotFather:
 1. Откройте @BotFather
 2. /mybots → выберите бота → Bot Settings → Domain
-3. Добавьте ваш домен (например: `admin.yourdomain.com`)
+3. Добавьте ваш домен ПАНЕЛИ (например: `admin.yourdomain.com`)
 
 ## Порты
 
