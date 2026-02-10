@@ -1,7 +1,7 @@
 """Initial schema for Remnawave Admin Bot database.
 
 Revision ID: 0001
-Revises: 
+Revises:
 Create Date: 2026-01-24
 
 """
@@ -20,100 +20,104 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Users table
-    op.create_table(
-        'users',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('short_uuid', sa.String(16), nullable=True),
-        sa.Column('username', sa.String(255), nullable=True),
-        sa.Column('subscription_uuid', sa.UUID(), nullable=True),
-        sa.Column('telegram_id', sa.BigInteger(), nullable=True),
-        sa.Column('email', sa.String(255), nullable=True),
-        sa.Column('status', sa.String(50), nullable=True),
-        sa.Column('expire_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('traffic_limit_bytes', sa.BigInteger(), nullable=True),
-        sa.Column('used_traffic_bytes', sa.BigInteger(), nullable=True),
-        sa.Column('hwid_device_limit', sa.Integer(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('uuid')
-    )
-    op.create_index('idx_users_username', 'users', ['username'])
-    op.create_index('idx_users_telegram_id', 'users', ['telegram_id'])
-    op.create_index('idx_users_status', 'users', ['status'])
-    op.create_index('idx_users_short_uuid', 'users', ['short_uuid'])
-    op.create_index('idx_users_subscription_uuid', 'users', ['subscription_uuid'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            uuid UUID NOT NULL,
+            short_uuid VARCHAR(16),
+            username VARCHAR(255),
+            subscription_uuid UUID,
+            telegram_id BIGINT,
+            email VARCHAR(255),
+            status VARCHAR(50),
+            expire_at TIMESTAMP WITH TIME ZONE,
+            traffic_limit_bytes BIGINT,
+            used_traffic_bytes BIGINT,
+            hwid_device_limit INTEGER,
+            created_at TIMESTAMP WITH TIME ZONE,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (uuid)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users (telegram_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_users_status ON users (status)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_users_short_uuid ON users (short_uuid)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_users_subscription_uuid ON users (subscription_uuid)")
 
     # Nodes table
-    op.create_table(
-        'nodes',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('name', sa.String(255), nullable=True),
-        sa.Column('address', sa.String(255), nullable=True),
-        sa.Column('port', sa.Integer(), nullable=True),
-        sa.Column('is_disabled', sa.Boolean(), server_default='false', nullable=True),
-        sa.Column('is_connected', sa.Boolean(), server_default='false', nullable=True),
-        sa.Column('traffic_limit_bytes', sa.BigInteger(), nullable=True),
-        sa.Column('traffic_used_bytes', sa.BigInteger(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('uuid')
-    )
-    op.create_index('idx_nodes_name', 'nodes', ['name'])
-    op.create_index('idx_nodes_is_connected', 'nodes', ['is_connected'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS nodes (
+            uuid UUID NOT NULL,
+            name VARCHAR(255),
+            address VARCHAR(255),
+            port INTEGER,
+            is_disabled BOOLEAN DEFAULT false,
+            is_connected BOOLEAN DEFAULT false,
+            traffic_limit_bytes BIGINT,
+            traffic_used_bytes BIGINT,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (uuid)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_nodes_name ON nodes (name)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_nodes_is_connected ON nodes (is_connected)")
 
     # Hosts table
-    op.create_table(
-        'hosts',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('remark', sa.String(255), nullable=True),
-        sa.Column('address', sa.String(255), nullable=True),
-        sa.Column('port', sa.Integer(), nullable=True),
-        sa.Column('is_disabled', sa.Boolean(), server_default='false', nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('uuid')
-    )
-    op.create_index('idx_hosts_remark', 'hosts', ['remark'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS hosts (
+            uuid UUID NOT NULL,
+            remark VARCHAR(255),
+            address VARCHAR(255),
+            port INTEGER,
+            is_disabled BOOLEAN DEFAULT false,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (uuid)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_hosts_remark ON hosts (remark)")
 
     # Config profiles table
-    op.create_table(
-        'config_profiles',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('name', sa.String(255), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('uuid')
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS config_profiles (
+            uuid UUID NOT NULL,
+            name VARCHAR(255),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (uuid)
+        )
+    """)
 
     # Sync metadata table
-    op.create_table(
-        'sync_metadata',
-        sa.Column('key', sa.String(100), nullable=False),
-        sa.Column('last_sync_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('sync_status', sa.String(50), nullable=True),
-        sa.Column('error_message', sa.Text(), nullable=True),
-        sa.Column('records_synced', sa.Integer(), server_default='0', nullable=True),
-        sa.PrimaryKeyConstraint('key')
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS sync_metadata (
+            key VARCHAR(100) NOT NULL,
+            last_sync_at TIMESTAMP WITH TIME ZONE,
+            sync_status VARCHAR(50),
+            error_message TEXT,
+            records_synced INTEGER DEFAULT 0,
+            PRIMARY KEY (key)
+        )
+    """)
 
-    # User connections table (for future device tracking)
-    op.create_table(
-        'user_connections',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('user_uuid', sa.UUID(), nullable=True),
-        sa.Column('ip_address', sa.String(45), nullable=True),  # Using String instead of INET for compatibility
-        sa.Column('node_uuid', sa.UUID(), nullable=True),
-        sa.Column('connected_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('disconnected_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('device_info', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('id'),
-        sa.ForeignKeyConstraint(['user_uuid'], ['users.uuid'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['node_uuid'], ['nodes.uuid'], ondelete='SET NULL')
-    )
-    op.create_index('idx_user_connections_user', 'user_connections', ['user_uuid', 'connected_at'])
-    op.create_index('idx_user_connections_ip', 'user_connections', ['ip_address'])
-    op.create_index('idx_user_connections_node', 'user_connections', ['node_uuid'])
+    # User connections table
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS user_connections (
+            id SERIAL NOT NULL,
+            user_uuid UUID REFERENCES users(uuid) ON DELETE CASCADE,
+            ip_address VARCHAR(45),
+            node_uuid UUID REFERENCES nodes(uuid) ON DELETE SET NULL,
+            connected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            disconnected_at TIMESTAMP WITH TIME ZONE,
+            device_info JSON,
+            PRIMARY KEY (id)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_user_connections_user ON user_connections (user_uuid, connected_at)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_user_connections_ip ON user_connections (ip_address)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_user_connections_node ON user_connections (node_uuid)")
 
 
 def downgrade() -> None:

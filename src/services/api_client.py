@@ -77,26 +77,31 @@ class ValidationError(ApiClientError):
 class RemnawaveApiClient:
     def __init__(self) -> None:
         self.settings = get_settings()
-        # Увеличиваем таймауты для стабильности соединения
-        # connect - таймаут на установку соединения
-        # read - таймаут на чтение ответа
-        # write - таймаут на отправку запроса
-        # pool - таймаут на получение соединения из пула
+        self._client = self._create_client()
+
+    def _create_client(self) -> httpx.AsyncClient:
+        """Create a new httpx.AsyncClient instance."""
         timeout_config = httpx.Timeout(
-            connect=15.0,  # Увеличен с 20 до 15 для connect
-            read=30.0,     # Увеличен до 30 для read
-            write=15.0,    # Таймаут на запись
-            pool=10.0      # Таймаут на получение из пула
+            connect=15.0,
+            read=30.0,
+            write=15.0,
+            pool=10.0,
         )
-        # Убираем завершающий слеш из base_url, чтобы избежать двойного слеша при объединении с URL
         base_url = str(self.settings.api_base_url).rstrip("/")
-        self._client = httpx.AsyncClient(
+        return httpx.AsyncClient(
             base_url=base_url,
             headers=self._build_headers(),
             timeout=timeout_config,
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-            follow_redirects=True,  # Автоматически следовать редиректам (HTTP -> HTTPS)
+            follow_redirects=True,
         )
+
+    def _ensure_client(self) -> httpx.AsyncClient:
+        """Return the current client, recreating it if closed."""
+        if self._client.is_closed:
+            logger.warning("HTTPX client was closed, recreating")
+            self._client = self._create_client()
+        return self._client
 
     def _build_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -124,7 +129,7 @@ class RemnawaveApiClient:
 
         for attempt in range(max_retries):
             try:
-                response = await self._client.get(url, params=params)
+                response = await self._ensure_client().get(url, params=params)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("GET", url, status_code=response.status_code, duration_ms=duration_ms)
@@ -150,8 +155,10 @@ class RemnawaveApiClient:
                 else:
                     logger.error("❌ Timeout GET %s after %d attempts", url, max_retries)
                     raise TimeoutError(f"Request timeout on {url}") from exc
-            except (httpx.RemoteProtocolError, httpx.ConnectError) as exc:
+            except (httpx.RemoteProtocolError, httpx.ConnectError, RuntimeError) as exc:
                 last_exc = exc
+                if isinstance(exc, RuntimeError):
+                    self._client = self._create_client()
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
                     logger.warning("⏳ Network error GET %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
@@ -174,7 +181,7 @@ class RemnawaveApiClient:
 
         for attempt in range(max_retries):
             try:
-                response = await self._client.post(url, json=json)
+                response = await self._ensure_client().post(url, json=json)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("POST", url, status_code=response.status_code, duration_ms=duration_ms)
@@ -217,6 +224,15 @@ class RemnawaveApiClient:
                 else:
                     logger.error("❌ Network error POST %s after %d attempts", url, max_retries)
                     raise NetworkError(f"Connection failed to {url}") from exc
+            except RuntimeError as exc:
+                last_exc = exc
+                self._client = self._create_client()
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)
+                    logger.warning("⏳ Client closed POST %s (%d/%d), recreated, retry in %.1fs", url, attempt + 1, max_retries, delay)
+                    await asyncio.sleep(delay)
+                else:
+                    raise NetworkError(f"Client was closed for {url}") from exc
             except httpx.HTTPError as exc:
                 raise ApiClientError(f"HTTP error: {type(exc).__name__}", code="ERR_HTTP_001") from exc
 
@@ -232,7 +248,7 @@ class RemnawaveApiClient:
 
         for attempt in range(max_retries):
             try:
-                response = await self._client.patch(url, json=json)
+                response = await self._ensure_client().patch(url, json=json)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("PATCH", url, status_code=response.status_code, duration_ms=duration_ms)
@@ -275,6 +291,15 @@ class RemnawaveApiClient:
                 else:
                     logger.error("❌ Network error PATCH %s after %d attempts", url, max_retries)
                     raise NetworkError(f"Connection failed to {url}") from exc
+            except RuntimeError as exc:
+                last_exc = exc
+                self._client = self._create_client()
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)
+                    logger.warning("⏳ Client closed PATCH %s (%d/%d), recreated, retry in %.1fs", url, attempt + 1, max_retries, delay)
+                    await asyncio.sleep(delay)
+                else:
+                    raise NetworkError(f"Client was closed for {url}") from exc
             except httpx.HTTPError as exc:
                 raise ApiClientError(f"HTTP error: {type(exc).__name__}", code="ERR_HTTP_001") from exc
 
@@ -324,7 +349,7 @@ class RemnawaveApiClient:
     async def delete_user(self, user_uuid: str) -> dict:
         """Delete a single user by UUID."""
         try:
-            response = await self._client.delete(f"/api/users/{user_uuid}")
+            response = await self._ensure_client().delete(f"/api/users/{user_uuid}")
             response.raise_for_status()
             result = response.json()
             await cache.invalidate(CacheKeys.STATS)
@@ -371,7 +396,8 @@ class RemnawaveApiClient:
 
         for attempt in range(max_retries):
             try:
-                response = await self._client.get(url, timeout=custom_timeout)
+                client = self._ensure_client()
+                response = await client.get(url, timeout=custom_timeout)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("GET", url, status_code=response.status_code, duration_ms=duration_ms)
@@ -406,6 +432,15 @@ class RemnawaveApiClient:
                 else:
                     logger.error("❌ Network error GET %s after %d attempts", url, max_retries)
                     raise NetworkError(f"Connection failed to {url}") from exc
+            except RuntimeError as exc:
+                last_exc = exc
+                self._client = self._create_client()
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)
+                    logger.warning("⏳ Client closed GET %s (%d/%d), recreated, retry in %.1fs", url, attempt + 1, max_retries, delay)
+                    await asyncio.sleep(delay)
+                else:
+                    raise NetworkError(f"Client was closed for {url}") from exc
             except httpx.HTTPError as exc:
                 raise ApiClientError(f"HTTP error: {type(exc).__name__}", code="ERR_HTTP_001") from exc
 
@@ -638,7 +673,7 @@ class RemnawaveApiClient:
     async def delete_node(self, node_uuid: str) -> dict:
         """Удаление ноды."""
         try:
-            response = await self._client.delete(f"/api/nodes/{node_uuid}")
+            response = await self._ensure_client().delete(f"/api/nodes/{node_uuid}")
             response.raise_for_status()
             result = response.json()
             # Инвалидируем кэш ноды и списка нод
@@ -844,7 +879,7 @@ class RemnawaveApiClient:
 
     async def delete_token(self, token_uuid: str) -> dict:
         try:
-            response = await self._client.delete(f"/api/tokens/{token_uuid}")
+            response = await self._ensure_client().delete(f"/api/tokens/{token_uuid}")
             response.raise_for_status()
             return response.json()
         except HTTPStatusError as exc:
@@ -869,7 +904,7 @@ class RemnawaveApiClient:
 
     async def delete_template(self, template_uuid: str) -> dict:
         try:
-            response = await self._client.delete(f"/api/subscription-templates/{template_uuid}")
+            response = await self._ensure_client().delete(f"/api/subscription-templates/{template_uuid}")
             response.raise_for_status()
             return response.json()
         except HTTPStatusError as exc:
@@ -915,7 +950,7 @@ class RemnawaveApiClient:
 
     async def delete_snippet(self, name: str) -> dict:
         try:
-            response = await self._client.delete("/api/snippets", json={"name": name})
+            response = await self._ensure_client().delete("/api/snippets", json={"name": name})
             response.raise_for_status()
             return response.json()
         except HTTPStatusError as exc:
@@ -1010,7 +1045,7 @@ class RemnawaveApiClient:
 
     async def delete_infra_provider(self, provider_uuid: str) -> dict:
         try:
-            response = await self._client.delete(f"/api/infra-billing/providers/{provider_uuid}")
+            response = await self._ensure_client().delete(f"/api/infra-billing/providers/{provider_uuid}")
             response.raise_for_status()
             result = response.json()
             await cache.invalidate(CacheKeys.PROVIDERS)
@@ -1037,7 +1072,7 @@ class RemnawaveApiClient:
 
     async def delete_infra_billing_record(self, record_uuid: str) -> dict:
         try:
-            response = await self._client.delete(f"/api/infra-billing/history/{record_uuid}")
+            response = await self._ensure_client().delete(f"/api/infra-billing/history/{record_uuid}")
             response.raise_for_status()
             result = response.json()
             await cache.invalidate(CacheKeys.BILLING_HISTORY)
@@ -1074,7 +1109,7 @@ class RemnawaveApiClient:
 
     async def delete_infra_billing_node(self, record_uuid: str) -> dict:
         try:
-            response = await self._client.delete(f"/api/infra-billing/nodes/{record_uuid}")
+            response = await self._ensure_client().delete(f"/api/infra-billing/nodes/{record_uuid}")
             response.raise_for_status()
             result = response.json()
             await cache.invalidate(CacheKeys.BILLING_NODES)
@@ -1194,7 +1229,8 @@ class RemnawaveApiClient:
         return cache.get_stats()
 
     async def close(self) -> None:
-        await self._client.aclose()
+        if not self._client.is_closed:
+            await self._client.aclose()
 
 
 # Single shared instance

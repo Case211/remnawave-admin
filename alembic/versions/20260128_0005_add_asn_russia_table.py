@@ -19,31 +19,28 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Таблица для хранения базы ASN по РФ
-    op.create_table(
-        'asn_russia',
-        sa.Column('asn', sa.Integer(), nullable=False, primary_key=True, comment='ASN номер'),
-        sa.Column('org_name', sa.String(500), nullable=False, comment='Название организации'),
-        sa.Column('org_name_en', sa.String(500), nullable=True, comment='Название организации (английский)'),
-        sa.Column('provider_type', sa.String(20), nullable=True, comment='Тип провайдера: isp/regional_isp/fixed/mobile_isp/hosting/business/mobile/infrastructure/vpn'),
-        sa.Column('region', sa.String(100), nullable=True, comment='Регион РФ'),
-        sa.Column('city', sa.String(100), nullable=True, comment='Город'),
-        sa.Column('country_code', sa.String(2), nullable=False, server_default='RU', comment='Код страны'),
-        sa.Column('description', sa.Text(), nullable=True, comment='Описание ASN'),
-        sa.Column('ip_ranges', sa.Text(), nullable=True, comment='IP диапазоны (JSON массив)'),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true', comment='Активен ли ASN'),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Дата создания записи'),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Дата последнего обновления'),
-        sa.Column('last_synced_at', sa.DateTime(timezone=True), nullable=True, comment='Дата последней синхронизации с RIPE'),
-        comment='База данных ASN по РФ для точного определения местоположения и типа провайдера'
-    )
-    
-    # Индексы для быстрого поиска
-    op.create_index('idx_asn_russia_org_name', 'asn_russia', ['org_name'])
-    op.create_index('idx_asn_russia_provider_type', 'asn_russia', ['provider_type'])
-    op.create_index('idx_asn_russia_region', 'asn_russia', ['region'])
-    op.create_index('idx_asn_russia_city', 'asn_russia', ['city'])
-    op.create_index('idx_asn_russia_is_active', 'asn_russia', ['is_active'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS asn_russia (
+            asn INTEGER NOT NULL PRIMARY KEY,
+            org_name VARCHAR(500) NOT NULL,
+            org_name_en VARCHAR(500),
+            provider_type VARCHAR(20),
+            region VARCHAR(100),
+            city VARCHAR(100),
+            country_code VARCHAR(2) NOT NULL DEFAULT 'RU',
+            description TEXT,
+            ip_ranges TEXT,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_synced_at TIMESTAMPTZ
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_asn_russia_org_name ON asn_russia (org_name)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_asn_russia_provider_type ON asn_russia (provider_type)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_asn_russia_region ON asn_russia (region)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_asn_russia_city ON asn_russia (city)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_asn_russia_is_active ON asn_russia (is_active)")
 
 
 def downgrade() -> None:

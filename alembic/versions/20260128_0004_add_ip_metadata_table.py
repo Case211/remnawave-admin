@@ -19,37 +19,34 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Таблица для кэширования метаданных IP адресов
-    op.create_table(
-        'ip_metadata',
-        sa.Column('ip_address', sa.String(45), nullable=False, primary_key=True, comment='IP адрес'),
-        sa.Column('country_code', sa.String(2), nullable=True, comment='Код страны (ISO 3166-1 alpha-2)'),
-        sa.Column('country_name', sa.String(100), nullable=True, comment='Название страны'),
-        sa.Column('region', sa.String(100), nullable=True, comment='Регион/область'),
-        sa.Column('city', sa.String(100), nullable=True, comment='Город'),
-        sa.Column('latitude', sa.Numeric(9, 6), nullable=True, comment='Широта'),
-        sa.Column('longitude', sa.Numeric(9, 6), nullable=True, comment='Долгота'),
-        sa.Column('timezone', sa.String(50), nullable=True, comment='Часовой пояс'),
-        sa.Column('asn', sa.Integer(), nullable=True, comment='ASN номер'),
-        sa.Column('asn_org', sa.String(200), nullable=True, comment='ASN организация'),
-        sa.Column('connection_type', sa.String(20), nullable=True, comment='Тип подключения: mobile/residential/datacenter/vpn'),
-        sa.Column('is_proxy', sa.Boolean(), nullable=False, server_default='false', comment='Является ли прокси'),
-        sa.Column('is_vpn', sa.Boolean(), nullable=False, server_default='false', comment='Является ли VPN'),
-        sa.Column('is_tor', sa.Boolean(), nullable=False, server_default='false', comment='Является ли Tor'),
-        sa.Column('is_hosting', sa.Boolean(), nullable=False, server_default='false', comment='Является ли хостингом'),
-        sa.Column('is_mobile', sa.Boolean(), nullable=False, server_default='false', comment='Является ли мобильным оператором'),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Дата создания записи'),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Дата последнего обновления'),
-        sa.Column('last_checked_at', sa.DateTime(timezone=True), nullable=True, comment='Дата последней проверки через API'),
-        comment='Кэш метаданных IP адресов для GeoIP'
-    )
-    
-    # Индексы для быстрого поиска
-    op.create_index('idx_ip_metadata_country', 'ip_metadata', ['country_code'])
-    op.create_index('idx_ip_metadata_city', 'ip_metadata', ['city'])
-    op.create_index('idx_ip_metadata_asn', 'ip_metadata', ['asn'])
-    op.create_index('idx_ip_metadata_connection_type', 'ip_metadata', ['connection_type'])
-    op.create_index('idx_ip_metadata_updated_at', 'ip_metadata', ['updated_at'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS ip_metadata (
+            ip_address VARCHAR(45) NOT NULL PRIMARY KEY,
+            country_code VARCHAR(2),
+            country_name VARCHAR(100),
+            region VARCHAR(100),
+            city VARCHAR(100),
+            latitude NUMERIC(9, 6),
+            longitude NUMERIC(9, 6),
+            timezone VARCHAR(50),
+            asn INTEGER,
+            asn_org VARCHAR(200),
+            connection_type VARCHAR(20),
+            is_proxy BOOLEAN NOT NULL DEFAULT false,
+            is_vpn BOOLEAN NOT NULL DEFAULT false,
+            is_tor BOOLEAN NOT NULL DEFAULT false,
+            is_hosting BOOLEAN NOT NULL DEFAULT false,
+            is_mobile BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_checked_at TIMESTAMPTZ
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_ip_metadata_country ON ip_metadata (country_code)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_ip_metadata_city ON ip_metadata (city)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_ip_metadata_asn ON ip_metadata (asn)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_ip_metadata_connection_type ON ip_metadata (connection_type)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_ip_metadata_updated_at ON ip_metadata (updated_at)")
 
 
 def downgrade() -> None:

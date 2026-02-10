@@ -19,33 +19,30 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Таблица для хранения динамической конфигурации бота
-    op.create_table(
-        'bot_config',
-        sa.Column('key', sa.String(100), nullable=False, primary_key=True, comment='Уникальный ключ настройки'),
-        sa.Column('value', sa.Text(), nullable=True, comment='Значение настройки'),
-        sa.Column('value_type', sa.String(20), nullable=False, server_default='string', comment='Тип значения: string/int/float/bool/json'),
-        sa.Column('category', sa.String(50), nullable=False, server_default='general', comment='Категория настройки'),
-        sa.Column('subcategory', sa.String(50), nullable=True, comment='Подкатегория настройки'),
-        sa.Column('display_name', sa.String(200), nullable=True, comment='Отображаемое имя настройки'),
-        sa.Column('description', sa.Text(), nullable=True, comment='Описание настройки'),
-        sa.Column('default_value', sa.Text(), nullable=True, comment='Значение по умолчанию'),
-        sa.Column('env_var_name', sa.String(100), nullable=True, comment='Связанная переменная окружения'),
-        sa.Column('is_secret', sa.Boolean(), nullable=False, server_default='false', comment='Скрывать значение в интерфейсе'),
-        sa.Column('is_readonly', sa.Boolean(), nullable=False, server_default='false', comment='Только для чтения (из .env)'),
-        sa.Column('validation_regex', sa.String(500), nullable=True, comment='Regex для валидации значения'),
-        sa.Column('options_json', sa.Text(), nullable=True, comment='Допустимые значения (JSON массив)'),
-        sa.Column('sort_order', sa.Integer(), nullable=False, server_default='0', comment='Порядок сортировки'),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Дата создания'),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Дата обновления'),
-        comment='Динамическая конфигурация бота (дополнение к .env)'
-    )
-
-    # Индексы для быстрого поиска
-    op.create_index('idx_bot_config_category', 'bot_config', ['category'])
-    op.create_index('idx_bot_config_subcategory', 'bot_config', ['subcategory'])
-    op.create_index('idx_bot_config_env_var_name', 'bot_config', ['env_var_name'])
-    op.create_index('idx_bot_config_sort_order', 'bot_config', ['category', 'sort_order'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS bot_config (
+            key VARCHAR(100) NOT NULL PRIMARY KEY,
+            value TEXT,
+            value_type VARCHAR(20) NOT NULL DEFAULT 'string',
+            category VARCHAR(50) NOT NULL DEFAULT 'general',
+            subcategory VARCHAR(50),
+            display_name VARCHAR(200),
+            description TEXT,
+            default_value TEXT,
+            env_var_name VARCHAR(100),
+            is_secret BOOLEAN NOT NULL DEFAULT false,
+            is_readonly BOOLEAN NOT NULL DEFAULT false,
+            validation_regex VARCHAR(500),
+            options_json TEXT,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_bot_config_category ON bot_config (category)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_bot_config_subcategory ON bot_config (subcategory)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_bot_config_env_var_name ON bot_config (env_var_name)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_bot_config_sort_order ON bot_config (category, sort_order)")
 
 
 def downgrade() -> None:

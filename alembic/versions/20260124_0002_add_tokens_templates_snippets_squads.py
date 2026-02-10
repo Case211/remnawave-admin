@@ -20,67 +20,72 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # API Tokens table
-    op.create_table(
-        'api_tokens',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('name', sa.String(255), nullable=True),
-        sa.Column('token_hash', sa.String(255), nullable=True),  # Masked token for display
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('uuid')
-    )
-    op.create_index('idx_api_tokens_name', 'api_tokens', ['name'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS api_tokens (
+            uuid UUID NOT NULL,
+            name VARCHAR(255),
+            token_hash VARCHAR(255),
+            created_at TIMESTAMP WITH TIME ZONE,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (uuid)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_name ON api_tokens (name)")
 
     # Subscription Templates table
-    op.create_table(
-        'templates',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('name', sa.String(255), nullable=True),
-        sa.Column('template_type', sa.String(50), nullable=True),  # json, yaml, etc.
-        sa.Column('sort_order', sa.Integer(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('uuid')
-    )
-    op.create_index('idx_templates_name', 'templates', ['name'])
-    op.create_index('idx_templates_sort_order', 'templates', ['sort_order'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS templates (
+            uuid UUID NOT NULL,
+            name VARCHAR(255),
+            template_type VARCHAR(50),
+            sort_order INTEGER,
+            created_at TIMESTAMP WITH TIME ZONE,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (uuid)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_templates_name ON templates (name)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_templates_sort_order ON templates (sort_order)")
 
     # Snippets table (keyed by name, not UUID)
-    op.create_table(
-        'snippets',
-        sa.Column('name', sa.String(255), nullable=False),
-        sa.Column('snippet_data', sa.JSON(), nullable=True),  # The actual snippet content
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('name')
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS snippets (
+            name VARCHAR(255) NOT NULL,
+            snippet_data JSON,
+            created_at TIMESTAMP WITH TIME ZONE,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (name)
+        )
+    """)
 
     # Internal Squads table
-    op.create_table(
-        'internal_squads',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('name', sa.String(255), nullable=True),
-        sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('uuid')
-    )
-    op.create_index('idx_internal_squads_name', 'internal_squads', ['name'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS internal_squads (
+            uuid UUID NOT NULL,
+            name VARCHAR(255),
+            description TEXT,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (uuid)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_internal_squads_name ON internal_squads (name)")
 
     # External Squads table
-    op.create_table(
-        'external_squads',
-        sa.Column('uuid', sa.UUID(), nullable=False),
-        sa.Column('name', sa.String(255), nullable=True),
-        sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
-        sa.Column('raw_data', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('uuid')
-    )
-    op.create_index('idx_external_squads_name', 'external_squads', ['name'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS external_squads (
+            uuid UUID NOT NULL,
+            name VARCHAR(255),
+            description TEXT,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            raw_data JSON,
+            PRIMARY KEY (uuid)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_external_squads_name ON external_squads (name)")
 
 
 def downgrade() -> None:

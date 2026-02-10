@@ -19,22 +19,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("nodes", sa.Column("cpu_usage", sa.Float(), nullable=True))
-    op.add_column("nodes", sa.Column("memory_usage", sa.Float(), nullable=True))
-    op.add_column("nodes", sa.Column("memory_total_bytes", sa.BigInteger(), nullable=True))
-    op.add_column("nodes", sa.Column("memory_used_bytes", sa.BigInteger(), nullable=True))
-    op.add_column("nodes", sa.Column("disk_usage", sa.Float(), nullable=True))
-    op.add_column("nodes", sa.Column("disk_total_bytes", sa.BigInteger(), nullable=True))
-    op.add_column("nodes", sa.Column("disk_used_bytes", sa.BigInteger(), nullable=True))
-    op.add_column("nodes", sa.Column("uptime_seconds", sa.Integer(), nullable=True))
-    op.add_column(
-        "nodes",
-        sa.Column(
-            "metrics_updated_at",
-            sa.DateTime(timezone=True),
-            nullable=True,
-        ),
-    )
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS cpu_usage FLOAT")
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS memory_usage FLOAT")
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS memory_total_bytes BIGINT")
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS memory_used_bytes BIGINT")
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS disk_usage FLOAT")
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS disk_total_bytes BIGINT")
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS disk_used_bytes BIGINT")
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS uptime_seconds INTEGER")
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS metrics_updated_at TIMESTAMPTZ")
 
 
 def downgrade() -> None:
