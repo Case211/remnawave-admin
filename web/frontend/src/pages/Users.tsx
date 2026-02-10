@@ -855,9 +855,6 @@ export default function Users() {
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
   })
 
-  // Clear selection on page/filter change
-  useEffect(() => { clearSelection() }, [page, perPage, debouncedSearch, status, trafficType, expireFilter, onlineFilter, trafficUsage])
-
   const hasAnyFilter = activeFilterCount > 0 || debouncedSearch
 
   const users = data?.items ?? []
@@ -1192,6 +1189,13 @@ export default function Users() {
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-dark-400/20 bg-dark-700/95 backdrop-blur-xl shadow-deep">
             <span className="text-sm text-white font-medium">
               Выбрано: {selectedUuids.size}
+              {(() => {
+                const visibleCount = users.filter((u) => selectedUuids.has(u.uuid)).length
+                if (visibleCount < selectedUuids.size) {
+                  return <span className="text-dark-300 text-xs ml-1.5">(на странице: {visibleCount})</span>
+                }
+                return null
+              })()}
             </span>
             <div className="flex-1" />
             <Button
