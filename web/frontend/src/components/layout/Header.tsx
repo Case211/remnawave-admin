@@ -1,6 +1,7 @@
 import { Bell, Search, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { AppearancePanel } from '../AppearancePanel'
 
 interface HeaderProps {
   onMenuToggle?: () => void
@@ -49,6 +50,9 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
 
       {/* Right side */}
       <div className="flex items-center gap-2 md:gap-4">
+        {/* Appearance settings */}
+        <AppearancePanel />
+
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="w-5 h-5" />

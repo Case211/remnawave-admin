@@ -56,7 +56,7 @@ export default function Layout({ children }: LayoutProps) {
           }}
         >
           <PageBreadcrumbs />
-          <div className="p-4 md:p-6">
+          <div className="page-content-area p-4 md:p-6">
             {children}
           </div>
         </main>

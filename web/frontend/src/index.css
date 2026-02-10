@@ -358,3 +358,119 @@
     padding-top: env(safe-area-inset-top, 0px);
   }
 }
+
+/* ===== Appearance Customization ===== */
+
+/* --- Border Radius --- */
+[data-radius="sharp"] {
+  --radius: 0px;
+}
+[data-radius="default"] {
+  --radius: 0.5rem;
+}
+[data-radius="rounded"] {
+  --radius: 0.75rem;
+}
+[data-radius="pill"] {
+  --radius: 9999px;
+}
+
+/* --- Font Size --- */
+[data-font-size="small"] {
+  font-size: 13px;
+}
+[data-font-size="default"] {
+  font-size: 14px;
+}
+[data-font-size="large"] {
+  font-size: 16px;
+}
+
+/* --- UI Density --- */
+[data-density="compact"] {
+  --density-padding: 0.25rem;
+  --density-gap: 0.25rem;
+  --density-py: 0.25rem;
+  --density-px: 0.5rem;
+}
+[data-density="comfortable"] {
+  --density-padding: 0.5rem;
+  --density-gap: 0.5rem;
+  --density-py: 0.5rem;
+  --density-px: 0.75rem;
+}
+[data-density="spacious"] {
+  --density-padding: 0.75rem;
+  --density-gap: 0.75rem;
+  --density-py: 0.75rem;
+  --density-px: 1rem;
+}
+
+/* Table density overrides */
+[data-density="compact"] .table th {
+  @apply px-2 py-1.5 text-[10px];
+}
+[data-density="compact"] .table td {
+  @apply px-2 py-1.5 text-xs;
+}
+[data-density="spacious"] .table th {
+  @apply px-6 py-4;
+}
+[data-density="spacious"] .table td {
+  @apply px-6 py-4;
+}
+
+/* Card density overrides */
+[data-density="compact"] .card,
+[data-density="compact"] .card-glass {
+  @apply p-2;
+}
+[data-density="spacious"] .card,
+[data-density="spacious"] .card-glass {
+  @apply p-6;
+}
+
+/* Page content density */
+[data-density="compact"] .page-content-area {
+  @apply p-2 md:p-3;
+}
+[data-density="spacious"] .page-content-area {
+  @apply p-6 md:p-8;
+}
+
+/* --- Animations Disabled --- */
+[data-animations="false"],
+[data-animations="false"] * {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+}
+[data-animations="false"] .skeleton::after {
+  animation: none !important;
+}
+
+/* --- Sidebar Collapsed --- */
+.sidebar-collapsed {
+  width: 4.5rem !important;
+}
+.sidebar-collapsed .sidebar-brand-text,
+.sidebar-collapsed .sidebar-nav-text,
+.sidebar-collapsed .sidebar-user-info,
+.sidebar-collapsed .sidebar-group-chevron {
+  display: none;
+}
+.sidebar-collapsed .sidebar-logo-area {
+  @apply justify-center px-0;
+}
+.sidebar-collapsed .sidebar-nav-item {
+  @apply justify-center px-0;
+}
+.sidebar-collapsed .sidebar-nav-item svg {
+  @apply mr-0;
+}
+.sidebar-collapsed .sidebar-user-section {
+  @apply justify-center;
+}
+.sidebar-collapsed .sidebar-group-items {
+  @apply ml-0 pl-0 border-l-0;
+}

@@ -17,9 +17,12 @@ import {
   Zap,
   ShieldCheck,
   ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
+import { useAppearanceStore } from '../../store/useAppearanceStore'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -115,6 +118,8 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const { logout, user } = useAuthStore()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
   const role = usePermissionStore((s) => s.role)
+  const collapsed = useAppearanceStore((s) => s.sidebarCollapsed)
+  const toggleSidebar = useAppearanceStore((s) => s.toggleSidebar)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   const handleNavClick = () => {
@@ -151,10 +156,18 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center justify-between h-16 px-6 border-b border-sidebar-border">
-        <Link to="/" onClick={handleNavClick} className="flex items-center gap-2.5 hover:opacity-90 transition-opacity duration-200">
+      <div className={cn(
+        "sidebar-logo-area flex items-center justify-between h-16 px-6 border-b border-sidebar-border",
+        collapsed && "px-0 justify-center"
+      )}>
+        <Link to="/" onClick={handleNavClick} className={cn(
+          "flex items-center gap-2.5 hover:opacity-90 transition-opacity duration-200",
+          collapsed && "gap-0"
+        )}>
           <RemnawaveLogo className="w-8 h-8 flex-shrink-0" />
-          <span className="text-lg font-display font-bold text-white">Remnawave</span>
+          {!collapsed && (
+            <span className="sidebar-brand-text text-lg font-display font-bold text-white">Remnawave</span>
+          )}
         </Link>
         {/* Mobile close button */}
         <Button
@@ -169,12 +182,49 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
 
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
-        <nav className="px-3 space-y-1">
+        <nav className={cn("px-3 space-y-1", collapsed && "px-2")}>
           {visibleNavigation.map((entry) => {
             if (isNavGroup(entry)) {
               const groupActive = isGroupActive(entry)
               const isExpanded = expandedGroups.has(entry.name) || groupActive
               const visibleItems = entry.items.filter(isItemVisible)
+
+              // When collapsed, show group items as flat icons
+              if (collapsed) {
+                return (
+                  <div key={entry.name} className="space-y-0.5">
+                    {visibleItems.map((item) => {
+                      const isActive = location.pathname === item.href
+                      return (
+                        <Tooltip key={item.name} delayDuration={0}>
+                          <TooltipTrigger asChild>
+                            <Link
+                              to={item.href}
+                              onClick={handleNavClick}
+                              className={cn(
+                                "sidebar-nav-item group flex items-center justify-center px-0 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                                isActive
+                                  ? "text-white bg-gradient-to-r from-accent-teal/20 to-accent-cyan/10"
+                                  : "text-dark-200 hover:text-white"
+                              )}
+                            >
+                              <item.icon
+                                className={cn(
+                                  "w-5 h-5 flex-shrink-0 transition-transform duration-200",
+                                  isActive ? "text-primary-400" : "group-hover:scale-110"
+                                )}
+                              />
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            {item.name}
+                          </TooltipContent>
+                        </Tooltip>
+                      )
+                    })}
+                  </div>
+                )
+              }
 
               return (
                 <div key={entry.name} className="space-y-0.5">
@@ -182,7 +232,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                   <button
                     onClick={() => toggleGroup(entry.name)}
                     className={cn(
-                      "group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      "sidebar-nav-item group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
                       groupActive
                         ? "text-white bg-dark-700/50"
                         : "text-dark-200 hover:text-white"
@@ -194,10 +244,10 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                         groupActive ? "text-primary-400" : "group-hover:scale-110"
                       )}
                     />
-                    <span className="flex-1 text-left">{entry.name}</span>
+                    <span className="sidebar-nav-text flex-1 text-left">{entry.name}</span>
                     <ChevronDown
                       className={cn(
-                        "w-4 h-4 text-dark-300 transition-transform duration-200",
+                        "sidebar-group-chevron w-4 h-4 text-dark-300 transition-transform duration-200",
                         isExpanded && "rotate-180"
                       )}
                     />
@@ -210,11 +260,11 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                       isExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
                     )}
                   >
-                    <div className="ml-3 pl-3 border-l border-dark-500/30 space-y-0.5">
+                    <div className="sidebar-group-items ml-3 pl-3 border-l border-dark-500/30 space-y-0.5">
                       {visibleItems.map((item) => {
                         const isActive = location.pathname === item.href
                         return (
-                          <Tooltip key={item.name}>
+                          <Tooltip key={item.name} delayDuration={0}>
                             <TooltipTrigger asChild>
                               <Link
                                 to={item.href}
@@ -232,10 +282,10 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                                     isActive ? "text-primary-400" : "group-hover:scale-110"
                                   )}
                                 />
-                                {item.name}
+                                <span className="sidebar-nav-text">{item.name}</span>
                               </Link>
                             </TooltipTrigger>
-                            <TooltipContent side="right" className="md:hidden">
+                            <TooltipContent side="right">
                               {item.name}
                             </TooltipContent>
                           </Tooltip>
@@ -250,28 +300,30 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             const item = entry as NavItem
             const isActive = location.pathname === item.href
             return (
-              <Tooltip key={item.name}>
+              <Tooltip key={item.name} delayDuration={0}>
                 <TooltipTrigger asChild>
                   <Link
                     to={item.href}
                     onClick={handleNavClick}
                     className={cn(
-                      "group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      "sidebar-nav-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
                       isActive
                         ? "text-white bg-gradient-to-r from-accent-teal/20 to-accent-cyan/10 border-l-[3px] border-l-accent-teal border-r-[3px] border-r-accent-cyan"
-                        : "text-dark-200 hover:text-white hover:translate-x-1"
+                        : "text-dark-200 hover:text-white hover:translate-x-1",
+                      collapsed && "justify-center px-0"
                     )}
                   >
                     <item.icon
                       className={cn(
-                        "w-5 h-5 mr-3 flex-shrink-0 transition-transform duration-200",
+                        "w-5 h-5 flex-shrink-0 transition-transform duration-200",
+                        !collapsed && "mr-3",
                         isActive ? "text-primary-400" : "group-hover:scale-110"
                       )}
                     />
-                    {item.name}
+                    {!collapsed && <span className="sidebar-nav-text">{item.name}</span>}
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="md:hidden">
+                <TooltipContent side="right" className={cn(!collapsed && "md:hidden")}>
                   {item.name}
                 </TooltipContent>
               </Tooltip>
@@ -280,36 +332,83 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         </nav>
       </ScrollArea>
 
+      {/* Collapse toggle — desktop only */}
+      <div className="hidden md:flex justify-center py-2 border-t border-sidebar-border">
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleSidebar}
+              className="h-8 w-8 text-dark-300 hover:text-white"
+            >
+              {collapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            {collapsed ? 'Развернуть' : 'Свернуть'}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
       {/* User info */}
       <Separator className="bg-sidebar-border" />
-      <div className="p-4">
-        <div className="flex items-center">
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center bg-gradient-to-br from-accent-teal/30 to-accent-cyan/20"
-          >
-            <span className="text-sm font-medium text-primary-400">
-              {user?.username?.charAt(0).toUpperCase() || 'A'}
-            </span>
-          </div>
-          <div className="ml-3 flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">
-              {user?.username || 'Admin'}
-            </p>
-            <p className="text-xs text-muted-foreground capitalize">{role || 'Administrator'}</p>
-          </div>
-          <Tooltip>
+      <div className={cn("p-4", collapsed && "p-2")}>
+        <div className={cn("sidebar-user-section flex items-center", collapsed && "justify-center")}>
+          <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={logout}
-                className="h-9 w-9 text-dark-200 hover:text-red-400"
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center bg-gradient-to-br from-accent-teal/30 to-accent-cyan/20 flex-shrink-0"
               >
-                <LogOut className="w-5 h-5" />
-              </Button>
+                <span className="text-sm font-medium text-primary-400">
+                  {user?.username?.charAt(0).toUpperCase() || 'A'}
+                </span>
+              </div>
             </TooltipTrigger>
-            <TooltipContent>Logout</TooltipContent>
+            {collapsed && (
+              <TooltipContent side="right">
+                {user?.username || 'Admin'}
+              </TooltipContent>
+            )}
           </Tooltip>
+          {!collapsed && (
+            <>
+              <div className="sidebar-user-info ml-3 flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">
+                  {user?.username || 'Admin'}
+                </p>
+                <p className="text-xs text-muted-foreground capitalize">{role || 'Administrator'}</p>
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={logout}
+                    className="h-9 w-9 text-dark-200 hover:text-red-400"
+                  >
+                    <LogOut className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Logout</TooltipContent>
+              </Tooltip>
+            </>
+          )}
+          {collapsed && (
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={logout}
+                  className="h-8 w-8 text-dark-200 hover:text-red-400 mt-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Logout</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
     </div>
@@ -328,11 +427,12 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       {/* Sidebar */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col w-64",
+          "fixed inset-y-0 left-0 z-50 flex flex-col",
           "bg-sidebar border-r border-sidebar-border animate-fade-in",
-          "transform transition-transform duration-300 ease-in-out",
-          "md:relative md:translate-x-0 md:transition-none",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          "transform transition-all duration-300 ease-in-out",
+          "md:relative md:translate-x-0",
+          collapsed ? "w-[4.5rem]" : "w-64",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
         {sidebarContent}
