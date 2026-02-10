@@ -54,6 +54,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   audit: '\u0410\u0443\u0434\u0438\u0442',
   fleet: '\u0424\u043b\u043e\u0442',
   automation: '\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0437\u0430\u0446\u0438\u044f',
+  logs: '\u0421\u0438\u0441\u0442\u0435\u043c\u043d\u044b\u0435 \u043b\u043e\u0433\u0438',
 }
 
 const ACTION_LABELS: Record<string, string> = {
