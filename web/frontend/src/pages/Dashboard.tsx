@@ -1170,7 +1170,7 @@ export default function Dashboard() {
           <SystemStatusCard
             components={systemComponents?.components || []}
             uptime={systemComponents?.uptime_seconds ?? null}
-            version={systemComponents?.version || '2.0.0'}
+            version={systemComponents?.version || ''}
             loading={componentsLoading}
           />
         ) : (
