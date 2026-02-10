@@ -1033,3 +1033,23 @@ async def get_system_components(
         uptime_seconds=uptime,
         version="2.0.0",
     )
+
+
+# ── Update Checker ─────────────────────────────────────────────
+
+@router.get("/updates")
+async def check_updates(
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Check for available updates from GitHub Releases."""
+    from web.backend.core.update_checker import check_for_updates
+    return await check_for_updates()
+
+
+@router.get("/dependencies")
+async def get_dependencies(
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get versions of key system dependencies."""
+    from web.backend.core.update_checker import get_dependency_versions
+    return await get_dependency_versions()

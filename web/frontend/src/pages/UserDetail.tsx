@@ -530,6 +530,76 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
   )
 }
 
+/**
+ * User audit history — shows admin actions on this user.
+ */
+function UserHistory({ uuid }: { uuid: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['user-history', uuid],
+    queryFn: async () => {
+      const response = await client.get(`/audit/resource/users/${uuid}`, { params: { limit: 20 } })
+      return response.data
+    },
+    enabled: !!uuid,
+    staleTime: 30000,
+  })
+
+  const items = data?.items ?? []
+
+  if (isLoading) {
+    return (
+      <Card className="bg-dark-800 border-dark-700">
+        <CardHeader><CardTitle className="text-white text-base">История изменений</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (items.length === 0) return null
+
+  return (
+    <Card className="bg-dark-800 border-dark-700">
+      <CardHeader>
+        <CardTitle className="text-white text-base flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary-400" />
+          История изменений
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="relative pl-6 space-y-4">
+          {/* Timeline line */}
+          <div className="absolute left-[9px] top-2 bottom-2 w-px bg-dark-600" />
+          {items.map((item: any) => {
+            const dot = item.action?.indexOf('.') ?? -1
+            const action = dot > 0 ? item.action.slice(dot + 1) : item.action
+            return (
+              <div key={item.id} className="relative">
+                {/* Timeline dot */}
+                <div className="absolute -left-6 top-1 w-[7px] h-[7px] rounded-full bg-primary-400 ring-2 ring-dark-800" />
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-white">{item.admin_username}</span>
+                  <Badge variant="outline" className="text-xs bg-dark-700 border-dark-600">
+                    {action}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {item.created_at ? format(new Date(item.created_at), 'dd.MM.yyyy HH:mm') : ''}
+                  </span>
+                </div>
+                {item.details && (
+                  <p className="text-xs text-dark-300 mt-0.5 truncate max-w-md">{item.details}</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+
 export default function UserDetail() {
   const { uuid } = useParams<{ uuid: string }>()
   const navigate = useNavigate()
@@ -1288,6 +1358,9 @@ export default function UserDetail() {
           </Card>
         </div>
       </div>
+
+      {/* History */}
+      <UserHistory uuid={uuid!} />
 
       <ConfirmDialog
         open={showDeleteConfirm}

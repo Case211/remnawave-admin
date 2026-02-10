@@ -532,6 +532,139 @@ const TRAFFIC_PERIOD_OPTIONS = [
   { value: '30d', label: '30д' },
 ]
 
+// ── Update Checker Card ──────────────────────────────────────────
+
+interface UpdateInfo {
+  current_version: string
+  latest_version: string | null
+  update_available: boolean
+  release_url: string | null
+  changelog: string | null
+  published_at: string | null
+}
+
+interface DependencyVersions {
+  python: string | null
+  postgresql: string | null
+  fastapi: string | null
+  xray_nodes: Record<string, string>
+}
+
+function UpdateCheckerCard() {
+  const { data: updateInfo, isLoading } = useQuery<UpdateInfo>({
+    queryKey: ['updates'],
+    queryFn: async () => {
+      const { data } = await client.get('/analytics/updates')
+      return data
+    },
+    staleTime: 300000, // 5 min
+    retry: false,
+  })
+
+  const { data: deps } = useQuery<DependencyVersions>({
+    queryKey: ['dependencies'],
+    queryFn: async () => {
+      const { data } = await client.get('/analytics/dependencies')
+      return data
+    },
+    staleTime: 300000,
+    retry: false,
+  })
+
+  if (isLoading) {
+    return (
+      <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+        <CardContent className="p-4">
+          <Skeleton className="h-20 w-full" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!updateInfo) return null
+
+  const xrayNodes = deps?.xray_nodes || {}
+  const xrayVersions = Object.values(xrayNodes)
+  const uniqueXray = [...new Set(xrayVersions)]
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base md:text-lg flex items-center gap-2">
+          <Activity className="w-4 h-4 text-primary-400" />
+          Версии и обновления
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Current version + update */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-dark-200">Текущая версия</p>
+            <p className="text-lg font-bold text-white">v{updateInfo.current_version}</p>
+          </div>
+          {updateInfo.update_available && updateInfo.latest_version ? (
+            <a
+              href={updateInfo.release_url || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex"
+            >
+              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border gap-1 cursor-pointer hover:bg-emerald-500/30 transition-colors">
+                <ArrowUpRight className="w-3 h-3" />
+                v{updateInfo.latest_version} доступна
+              </Badge>
+            </a>
+          ) : (
+            <Badge className="bg-dark-600 text-dark-200 border-dark-500 border">
+              Актуально
+            </Badge>
+          )}
+        </div>
+
+        {/* Changelog preview */}
+        {updateInfo.update_available && updateInfo.changelog && (
+          <div className="bg-dark-700 rounded-lg p-3 max-h-24 overflow-auto">
+            <p className="text-xs text-dark-300 whitespace-pre-wrap line-clamp-4">
+              {updateInfo.changelog.slice(0, 300)}
+            </p>
+          </div>
+        )}
+
+        <Separator className="bg-dark-600" />
+
+        {/* Dependencies */}
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          {deps?.python && (
+            <div className="flex items-center justify-between bg-dark-700 rounded px-3 py-1.5">
+              <span className="text-dark-300">Python</span>
+              <span className="text-white font-mono text-xs">{deps.python}</span>
+            </div>
+          )}
+          {deps?.postgresql && (
+            <div className="flex items-center justify-between bg-dark-700 rounded px-3 py-1.5">
+              <span className="text-dark-300">PostgreSQL</span>
+              <span className="text-white font-mono text-xs">{deps.postgresql}</span>
+            </div>
+          )}
+          {deps?.fastapi && (
+            <div className="flex items-center justify-between bg-dark-700 rounded px-3 py-1.5">
+              <span className="text-dark-300">FastAPI</span>
+              <span className="text-white font-mono text-xs">{deps.fastapi}</span>
+            </div>
+          )}
+          {uniqueXray.length > 0 && (
+            <div className="flex items-center justify-between bg-dark-700 rounded px-3 py-1.5">
+              <span className="text-dark-300">Xray</span>
+              <span className="text-white font-mono text-xs">{uniqueXray.join(', ')}</span>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+
 // ── Main Dashboard Component ─────────────────────────────────────
 
 export default function Dashboard() {
@@ -1069,6 +1202,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Update checker */}
+        {canViewAnalytics && <UpdateCheckerCard />}
       </div>
     </div>
   )

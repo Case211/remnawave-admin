@@ -207,3 +207,22 @@ async def broadcast_activity(activity_type: str, message: str, details: Dict[str
         },
         "timestamp": datetime.utcnow().isoformat(),
     })
+
+
+async def broadcast_audit_event(
+    admin_username: str,
+    action: str,
+    resource: str,
+    resource_id: str = None,
+):
+    """Broadcast an audit log event for real-time admin notifications."""
+    await manager.broadcast({
+        "type": "audit",
+        "data": {
+            "admin_username": admin_username,
+            "action": action,
+            "resource": resource,
+            "resource_id": resource_id,
+        },
+        "timestamp": datetime.utcnow().isoformat(),
+    })

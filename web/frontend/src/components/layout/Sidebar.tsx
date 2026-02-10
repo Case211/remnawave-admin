@@ -10,6 +10,9 @@ import {
   LogOut,
   X,
   UserCog,
+  ClipboardList,
+  Terminal,
+  BarChart3,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -63,6 +66,9 @@ const navigation = [
   { name: 'Hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'Violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
   { name: 'Admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
+  { name: 'Audit Log', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
+  { name: 'Logs', href: '/logs', icon: Terminal, permission: { resource: 'settings', action: 'view' } },
   { name: 'Settings', href: '/settings', icon: Settings, permission: { resource: 'settings', action: 'view' } },
 ]
 

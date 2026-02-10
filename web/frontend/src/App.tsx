@@ -17,6 +17,9 @@ import Hosts from './pages/Hosts'
 import Violations from './pages/Violations'
 import Settings from './pages/Settings'
 import Admins from './pages/Admins'
+import AuditLog from './pages/AuditLog'
+import SystemLogs from './pages/SystemLogs'
+import Analytics from './pages/Analytics'
 
 /**
  * Protected route wrapper - redirects to login if not authenticated.
@@ -88,6 +91,9 @@ export default function App() {
                   <Route path="/hosts" element={<Hosts />} />
                   <Route path="/violations" element={<Violations />} />
                   <Route path="/admins" element={<Admins />} />
+                  <Route path="/audit" element={<AuditLog />} />
+                  <Route path="/logs" element={<SystemLogs />} />
+                  <Route path="/analytics" element={<Analytics />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

@@ -29,6 +29,9 @@ from web.backend.core.rate_limit import limiter
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 from web.backend.api.v2 import settings as settings_api
 from web.backend.api.v2 import admins as admins_api, roles as roles_api
+from web.backend.api.v2 import audit as audit_api
+from web.backend.api.v2 import logs as logs_api
+from web.backend.api.v2 import advanced_analytics
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -275,6 +278,10 @@ def create_app() -> FastAPI:
                 )
         return await call_next(request)
 
+    # Audit middleware — logs all mutable API actions automatically
+    from web.backend.core.audit_middleware import AuditMiddleware
+    app.add_middleware(AuditMiddleware)
+
     # Include routers
     app.include_router(auth.router, prefix="/api/v2/auth", tags=["auth"])
     app.include_router(users.router, prefix="/api/v2/users", tags=["users"])
@@ -285,6 +292,9 @@ def create_app() -> FastAPI:
     app.include_router(settings_api.router, prefix="/api/v2/settings", tags=["settings"])
     app.include_router(admins_api.router, prefix="/api/v2/admins", tags=["admins"])
     app.include_router(roles_api.router, prefix="/api/v2/roles", tags=["roles"])
+    app.include_router(audit_api.router, prefix="/api/v2/audit", tags=["audit"])
+    app.include_router(logs_api.router, prefix="/api/v2/logs", tags=["logs"])
+    app.include_router(advanced_analytics.router, prefix="/api/v2/analytics/advanced", tags=["advanced-analytics"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
 
     # Health check endpoint
