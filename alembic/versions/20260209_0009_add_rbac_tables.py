@@ -99,111 +99,83 @@ PERMISSIONS = {
 
 def upgrade() -> None:
     # ── 1. admin_roles ──────────────────────────────────────────
-    op.create_table(
-        "admin_roles",
-        sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column("name", sa.String(50), nullable=False, unique=True),
-        sa.Column("display_name", sa.String(100), nullable=False),
-        sa.Column("description", sa.Text, nullable=True),
-        sa.Column("is_system", sa.Boolean, nullable=False, server_default="false"),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("NOW()"),
-        ),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS admin_roles (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(50) NOT NULL UNIQUE,
+            display_name VARCHAR(100) NOT NULL,
+            description TEXT,
+            is_system BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
 
     # ── 2. admin_permissions ────────────────────────────────────
-    op.create_table(
-        "admin_permissions",
-        sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column(
-            "role_id",
-            sa.Integer,
-            sa.ForeignKey("admin_roles.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
-        sa.Column("resource", sa.String(50), nullable=False),
-        sa.Column("action", sa.String(50), nullable=False),
-    )
-    op.create_unique_constraint(
-        "uq_admin_permissions_role_resource_action",
-        "admin_permissions",
-        ["role_id", "resource", "action"],
-    )
-    op.create_index(
-        "ix_admin_permissions_role_id",
-        "admin_permissions",
-        ["role_id"],
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS admin_permissions (
+            id SERIAL PRIMARY KEY,
+            role_id INTEGER NOT NULL REFERENCES admin_roles(id) ON DELETE CASCADE,
+            resource VARCHAR(50) NOT NULL,
+            action VARCHAR(50) NOT NULL
+        )
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'uq_admin_permissions_role_resource_action'
+            ) THEN
+                ALTER TABLE admin_permissions
+                ADD CONSTRAINT uq_admin_permissions_role_resource_action
+                UNIQUE (role_id, resource, action);
+            END IF;
+        END $$
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admin_permissions_role_id ON admin_permissions (role_id)")
 
     # ── 3. admin_accounts ───────────────────────────────────────
-    op.create_table(
-        "admin_accounts",
-        sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column("username", sa.String(100), nullable=False, unique=True),
-        sa.Column("password_hash", sa.String(255), nullable=True),
-        sa.Column("telegram_id", sa.BigInteger, nullable=True, unique=True),
-        sa.Column(
-            "role_id",
-            sa.Integer,
-            sa.ForeignKey("admin_roles.id", ondelete="SET NULL"),
-            nullable=True,
-        ),
-        # Limits (NULL = unlimited)
-        sa.Column("max_users", sa.Integer, nullable=True),
-        sa.Column("max_traffic_gb", sa.Integer, nullable=True),
-        sa.Column("max_nodes", sa.Integer, nullable=True),
-        sa.Column("max_hosts", sa.Integer, nullable=True),
-        # Usage counters
-        sa.Column("users_created", sa.Integer, nullable=False, server_default="0"),
-        sa.Column("traffic_used_bytes", sa.BigInteger, nullable=False, server_default="0"),
-        sa.Column("nodes_created", sa.Integer, nullable=False, server_default="0"),
-        sa.Column("hosts_created", sa.Integer, nullable=False, server_default="0"),
-        # Status
-        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
-        sa.Column("is_generated_password", sa.Boolean, nullable=False, server_default="false"),
-        # Audit
-        sa.Column("created_by", sa.Integer, nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("NOW()"),
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("NOW()"),
-        ),
-    )
-    op.create_index("ix_admin_accounts_role_id", "admin_accounts", ["role_id"])
-    op.create_index("ix_admin_accounts_telegram_id", "admin_accounts", ["telegram_id"])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS admin_accounts (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(100) NOT NULL UNIQUE,
+            password_hash VARCHAR(255),
+            telegram_id BIGINT UNIQUE,
+            role_id INTEGER REFERENCES admin_roles(id) ON DELETE SET NULL,
+            max_users INTEGER,
+            max_traffic_gb INTEGER,
+            max_nodes INTEGER,
+            max_hosts INTEGER,
+            users_created INTEGER NOT NULL DEFAULT 0,
+            traffic_used_bytes BIGINT NOT NULL DEFAULT 0,
+            nodes_created INTEGER NOT NULL DEFAULT 0,
+            hosts_created INTEGER NOT NULL DEFAULT 0,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            is_generated_password BOOLEAN NOT NULL DEFAULT false,
+            created_by INTEGER,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admin_accounts_role_id ON admin_accounts (role_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admin_accounts_telegram_id ON admin_accounts (telegram_id)")
 
     # ── 4. admin_audit_log ──────────────────────────────────────
-    op.create_table(
-        "admin_audit_log",
-        sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-        sa.Column("admin_id", sa.Integer, nullable=True),
-        sa.Column("admin_username", sa.String(100), nullable=False),
-        sa.Column("action", sa.String(100), nullable=False),
-        sa.Column("resource", sa.String(50), nullable=True),
-        sa.Column("resource_id", sa.String(255), nullable=True),
-        sa.Column("details", sa.Text, nullable=True),
-        sa.Column("ip_address", sa.String(45), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("NOW()"),
-        ),
-    )
-    op.create_index("ix_admin_audit_log_admin_id", "admin_audit_log", ["admin_id"])
-    op.create_index("ix_admin_audit_log_action", "admin_audit_log", ["action"])
-    op.create_index("ix_admin_audit_log_resource", "admin_audit_log", ["resource"])
-    op.create_index("ix_admin_audit_log_created_at", "admin_audit_log", ["created_at"])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id BIGSERIAL PRIMARY KEY,
+            admin_id INTEGER,
+            admin_username VARCHAR(100) NOT NULL,
+            action VARCHAR(100) NOT NULL,
+            resource VARCHAR(50),
+            resource_id VARCHAR(255),
+            details TEXT,
+            ip_address VARCHAR(45),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_admin_id ON admin_audit_log (admin_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_action ON admin_audit_log (action)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_resource ON admin_audit_log (resource)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_created_at ON admin_audit_log (created_at)")
 
     # ── 5. Seed roles & permissions ─────────────────────────────
     conn = op.get_bind()
@@ -238,11 +210,6 @@ def upgrade() -> None:
                 )
 
     # ── 6. Migrate admin_credentials → admin_accounts ───────────
-    # Copy existing DB-managed password accounts into admin_accounts
-    # with superadmin role.
-    # NOTE: We must check table existence via information_schema BEFORE
-    # querying it.  A failed SELECT inside a transaction puts PostgreSQL
-    # into "aborted" state and rolls back the entire migration chain.
     superadmin_role_id = role_id_map.get("superadmin")
     if superadmin_role_id:
         table_exists = conn.execute(

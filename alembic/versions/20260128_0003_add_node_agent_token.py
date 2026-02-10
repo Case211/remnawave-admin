@@ -19,16 +19,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Добавляем поле agent_token в таблицу nodes
-    # NULL = токен не настроен (агент не может подключиться)
-    # Значение = секретный токен для аутентификации агента в Collector API
-    op.add_column(
-        'nodes',
-        sa.Column('agent_token', sa.String(255), nullable=True, comment='Токен для аутентификации Node Agent')
-    )
-    
-    # Индекс для быстрого поиска по токену
-    op.create_index('idx_nodes_agent_token', 'nodes', ['agent_token'], unique=True)
+    op.execute("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS agent_token VARCHAR(255)")
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_nodes_agent_token ON nodes (agent_token)")
 
 
 def downgrade() -> None:

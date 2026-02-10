@@ -19,39 +19,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Таблица для хранения HWID устройств пользователей
-    op.create_table(
-        'user_hwid_devices',
-        sa.Column('id', sa.BigInteger(), nullable=False, autoincrement=True, primary_key=True),
-        sa.Column('user_uuid', sa.UUID(), nullable=False, comment='UUID пользователя'),
-        sa.Column('hwid', sa.String(255), nullable=False, comment='HWID устройства'),
-
-        # Информация об устройстве
-        sa.Column('platform', sa.String(50), nullable=True, comment='Платформа (android, ios, windows, macos, linux)'),
-        sa.Column('os_version', sa.String(100), nullable=True, comment='Версия ОС'),
-        sa.Column('app_version', sa.String(50), nullable=True, comment='Версия приложения'),
-
-        # Метаданные
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Время добавления устройства'),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Время последнего обновления'),
-        sa.Column('synced_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('NOW()'), comment='Время последней синхронизации'),
-
-        comment='HWID устройства пользователей'
-    )
-
-    # Уникальный индекс на комбинацию user_uuid + hwid
-    op.create_index(
-        'idx_hwid_devices_user_hwid',
-        'user_hwid_devices',
-        ['user_uuid', 'hwid'],
-        unique=True
-    )
-
-    # Индекс для быстрого поиска устройств пользователя
-    op.create_index('idx_hwid_devices_user_uuid', 'user_hwid_devices', ['user_uuid'])
-
-    # Индекс для поиска по платформе (для статистики)
-    op.create_index('idx_hwid_devices_platform', 'user_hwid_devices', ['platform'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS user_hwid_devices (
+            id BIGSERIAL PRIMARY KEY,
+            user_uuid UUID NOT NULL,
+            hwid VARCHAR(255) NOT NULL,
+            platform VARCHAR(50),
+            os_version VARCHAR(100),
+            app_version VARCHAR(50),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hwid_devices_user_hwid ON user_hwid_devices (user_uuid, hwid)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_hwid_devices_user_uuid ON user_hwid_devices (user_uuid)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_hwid_devices_platform ON user_hwid_devices (platform)")
 
 
 def downgrade() -> None:
