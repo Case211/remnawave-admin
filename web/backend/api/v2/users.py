@@ -14,6 +14,7 @@ from web.backend.api.deps import get_current_admin, require_permission, require_
 from web.backend.core.api_helper import fetch_users_from_api
 from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate, HwidDevice
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
+from web.backend.schemas.bulk import BulkUserRequest, BulkOperationResult, BulkOperationError
 
 logger = logging.getLogger(__name__)
 
@@ -753,5 +754,102 @@ async def get_user_hwid_devices(
         logger.error("API HWID fetch also failed for %s: %s", user_uuid, e)
 
     return []
+
+
+# ── Bulk operations ──────────────────────────────────────────────
+
+
+@router.post("/bulk/enable", response_model=BulkOperationResult)
+async def bulk_enable_users(
+    body: BulkUserRequest,
+    admin: AdminUser = Depends(require_permission("users", "bulk_operations")),
+):
+    """Enable multiple users at once (max 100)."""
+    try:
+        from src.services.api_client import api_client
+    except ImportError:
+        raise HTTPException(status_code=503, detail="API service not available")
+
+    success, failed, errors = 0, 0, []
+    for uuid in body.uuids:
+        try:
+            await api_client.enable_user(uuid)
+            success += 1
+        except Exception as e:
+            failed += 1
+            errors.append(BulkOperationError(uuid=uuid, error=str(e)))
+    return BulkOperationResult(success=success, failed=failed, errors=errors)
+
+
+@router.post("/bulk/disable", response_model=BulkOperationResult)
+async def bulk_disable_users(
+    body: BulkUserRequest,
+    admin: AdminUser = Depends(require_permission("users", "bulk_operations")),
+):
+    """Disable multiple users at once (max 100)."""
+    try:
+        from src.services.api_client import api_client
+    except ImportError:
+        raise HTTPException(status_code=503, detail="API service not available")
+
+    success, failed, errors = 0, 0, []
+    for uuid in body.uuids:
+        try:
+            await api_client.disable_user(uuid)
+            success += 1
+        except Exception as e:
+            failed += 1
+            errors.append(BulkOperationError(uuid=uuid, error=str(e)))
+    return BulkOperationResult(success=success, failed=failed, errors=errors)
+
+
+@router.post("/bulk/delete", response_model=BulkOperationResult)
+async def bulk_delete_users(
+    body: BulkUserRequest,
+    admin: AdminUser = Depends(require_permission("users", "bulk_operations")),
+):
+    """Delete multiple users at once (max 100)."""
+    try:
+        from src.services.api_client import api_client
+    except ImportError:
+        raise HTTPException(status_code=503, detail="API service not available")
+
+    success, failed, errors = 0, 0, []
+    for uuid in body.uuids:
+        try:
+            await api_client.delete_user(uuid)
+            try:
+                from src.services.database import db_service
+                if db_service.is_connected:
+                    await db_service.delete_user(uuid)
+            except Exception:
+                pass
+            success += 1
+        except Exception as e:
+            failed += 1
+            errors.append(BulkOperationError(uuid=uuid, error=str(e)))
+    return BulkOperationResult(success=success, failed=failed, errors=errors)
+
+
+@router.post("/bulk/reset-traffic", response_model=BulkOperationResult)
+async def bulk_reset_traffic(
+    body: BulkUserRequest,
+    admin: AdminUser = Depends(require_permission("users", "bulk_operations")),
+):
+    """Reset traffic for multiple users at once (max 100)."""
+    try:
+        from src.services.api_client import api_client
+    except ImportError:
+        raise HTTPException(status_code=503, detail="API service not available")
+
+    success, failed, errors = 0, 0, []
+    for uuid in body.uuids:
+        try:
+            await api_client.reset_user_traffic(uuid)
+            success += 1
+        except Exception as e:
+            failed += 1
+            errors.append(BulkOperationError(uuid=uuid, error=str(e)))
+    return BulkOperationResult(success=success, failed=failed, errors=errors)
 
 

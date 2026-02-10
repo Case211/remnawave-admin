@@ -32,6 +32,8 @@ import client from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
@@ -130,6 +132,10 @@ const fetchViolations = async (params: {
   days: number
   resolved?: boolean
   min_score?: number
+  ip?: string
+  country?: string
+  date_from?: string
+  date_to?: string
 }): Promise<PaginatedResponse> => {
   const p: Record<string, unknown> = {
     page: params.page,
@@ -139,6 +145,10 @@ const fetchViolations = async (params: {
   if (params.severity) p.severity = params.severity
   if (params.resolved !== undefined) p.resolved = params.resolved
   if (params.min_score !== undefined && params.min_score > 0) p.min_score = params.min_score
+  if (params.ip) p.ip = params.ip
+  if (params.country) p.country = params.country
+  if (params.date_from) p.date_from = params.date_from
+  if (params.date_to) p.date_to = params.date_to
   const { data } = await client.get('/violations', { params: p })
   return data
 }
@@ -1158,6 +1168,10 @@ export default function Violations() {
   const [days, setDays] = useState(7)
   const [showFilters, setShowFilters] = useState(false)
   const [minScore, setMinScore] = useState(0)
+  const [ipFilter, setIpFilter] = useState('')
+  const [countryFilter, setCountryFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [selectedViolationId, setSelectedViolationId] = useState<number | null>(null)
 
   const canResolve = useHasPermission('violations', 'resolve')
@@ -1167,7 +1181,7 @@ export default function Violations() {
 
   // Fetch violations list
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['violations', page, perPage, severity, days, resolved, minScore],
+    queryKey: ['violations', page, perPage, severity, days, resolved, minScore, ipFilter, countryFilter, dateFrom, dateTo],
     queryFn: () =>
       fetchViolations({
         page,
@@ -1176,6 +1190,10 @@ export default function Violations() {
         days,
         resolved,
         min_score: minScore,
+        ...(ipFilter && { ip: ipFilter }),
+        ...(countryFilter && { country: countryFilter }),
+        ...(dateFrom && { date_from: dateFrom }),
+        ...(dateTo && { date_to: dateTo }),
       }),
     enabled: tab !== 'top',
   })

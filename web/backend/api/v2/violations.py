@@ -63,6 +63,10 @@ async def list_violations(
     severity: Optional[str] = None,
     user_uuid: Optional[str] = None,
     resolved: Optional[bool] = None,
+    ip: Optional[str] = Query(None, description="Filter by IP address"),
+    country: Optional[str] = Query(None, description="Filter by country code"),
+    date_from: Optional[str] = Query(None, description="Filter from date (ISO format)"),
+    date_to: Optional[str] = Query(None, description="Filter to date (ISO format)"),
     admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
@@ -74,6 +78,10 @@ async def list_violations(
     - **severity**: Фильтр по серьёзности (low, medium, high, critical)
     - **user_uuid**: Фильтр по пользователю
     - **resolved**: Фильтр по статусу разрешения
+    - **ip**: Фильтр по IP адресу
+    - **country**: Фильтр по коду страны
+    - **date_from**: Фильтр от даты (ISO формат)
+    - **date_to**: Фильтр до даты (ISO формат)
     """
     try:
         if not db.is_connected:
@@ -109,6 +117,45 @@ async def list_violations(
                 violations = [v for v in violations if v.get('action_taken')]
             else:
                 violations = [v for v in violations if not v.get('action_taken')]
+
+        if ip:
+            violations = [
+                v for v in violations
+                if ip in (v.get('ip_addresses') or v.get('ips') or [])
+            ]
+
+        if country:
+            country_upper = country.upper()
+            violations = [
+                v for v in violations
+                if country_upper in [c.upper() for c in (v.get('countries') or [])]
+            ]
+
+        if date_from:
+            try:
+                dt_from = datetime.fromisoformat(date_from)
+                violations = [
+                    v for v in violations
+                    if (v.get('detected_at') or datetime.min) >= dt_from
+                ]
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid date_from format. Use ISO format (e.g. 2024-01-15T00:00:00)",
+                )
+
+        if date_to:
+            try:
+                dt_to = datetime.fromisoformat(date_to)
+                violations = [
+                    v for v in violations
+                    if (v.get('detected_at') or datetime.max) <= dt_to
+                ]
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid date_to format. Use ISO format (e.g. 2024-01-15T23:59:59)",
+                )
 
         # Сортировка по дате (новые первыми)
         violations.sort(key=lambda x: x.get('detected_at', datetime.min), reverse=True)

@@ -30,6 +30,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useHasPermission } from '../components/PermissionGate'
@@ -625,7 +626,9 @@ export default function Users() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('users', 'create')
+  const canBulk = useHasPermission('users', 'bulk_operations')
 
+  const [selectedUuids, setSelectedUuids] = useState<Set<string>>(new Set())
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
   const [deleteConfirmUuid, setDeleteConfirmUuid] = useState<string | null>(null)
@@ -741,6 +744,70 @@ export default function Users() {
     setTrafficUsage('')
     setPage(1)
   }
+
+  // Selection helpers
+  const toggleSelect = (uuid: string) => {
+    setSelectedUuids(prev => {
+      const next = new Set(prev)
+      if (next.has(uuid)) next.delete(uuid)
+      else next.add(uuid)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (!users) return
+    const pageUuids = users.map((u: any) => u.uuid)
+    const allSelected = pageUuids.every((id: string) => selectedUuids.has(id))
+    if (allSelected) {
+      setSelectedUuids(prev => {
+        const next = new Set(prev)
+        pageUuids.forEach((id: string) => next.delete(id))
+        return next
+      })
+    } else {
+      setSelectedUuids(prev => {
+        const next = new Set(prev)
+        pageUuids.forEach((id: string) => next.add(id))
+        return next
+      })
+    }
+  }
+  const clearSelection = () => setSelectedUuids(new Set())
+
+  // Bulk mutations
+  const bulkEnable = useMutation({
+    mutationFn: (uuids: string[]) => client.post('/users/bulk/enable', { uuids }),
+    onSuccess: (res) => {
+      const d = res.data
+      toast.success(`Включено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      clearSelection()
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+  })
+  const bulkDisable = useMutation({
+    mutationFn: (uuids: string[]) => client.post('/users/bulk/disable', { uuids }),
+    onSuccess: (res) => {
+      const d = res.data
+      toast.success(`Отключено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      clearSelection()
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+  })
+  const bulkDelete = useMutation({
+    mutationFn: (uuids: string[]) => client.post('/users/bulk/delete', { uuids }),
+    onSuccess: (res) => {
+      const d = res.data
+      toast.success(`Удалено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      clearSelection()
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+  })
+
+  // Clear selection on page/filter change
+  useEffect(() => { clearSelection() }, [page, perPage, debouncedSearch, status, trafficType, expireFilter, onlineFilter, trafficUsage])
 
   const hasAnyFilter = activeFilterCount > 0 || debouncedSearch
 
@@ -1058,12 +1125,67 @@ export default function Users() {
         )}
       </div>
 
+      {/* Bulk action toolbar */}
+      {selectedUuids.size > 0 && canBulk && (
+        <div className="sticky bottom-4 z-30 mx-auto max-w-3xl animate-fade-in-up">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-dark-400/20 bg-dark-700/95 backdrop-blur-xl shadow-deep">
+            <span className="text-sm text-white font-medium">
+              Выбрано: {selectedUuids.size}
+            </span>
+            <div className="flex-1" />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => bulkEnable.mutate([...selectedUuids])}
+              disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
+              className="text-green-400 border-green-500/30 hover:bg-green-500/10"
+            >
+              Включить
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => bulkDisable.mutate([...selectedUuids])}
+              disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
+              className="text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10"
+            >
+              Отключить
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => bulkDelete.mutate([...selectedUuids])}
+              disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
+              className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+            >
+              Удалить
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              className="text-dark-300"
+            >
+              Отмена
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Desktop: Users table */}
       <Card className="p-0 overflow-hidden hidden md:block animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
               <tr>
+                {canBulk && (
+                  <th className="w-10 px-3">
+                    <Checkbox
+                      checked={users?.length > 0 && users.every((u: any) => selectedUuids.has(u.uuid))}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 <th><SortHeader label="Пользователь" field="username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
                 <th><SortHeader label="Статус" field="status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
                 <th><SortHeader label="Трафик" field="used_traffic_bytes" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
@@ -1101,6 +1223,14 @@ export default function Users() {
                     className="cursor-pointer hover:bg-dark-600/50"
                     onClick={() => navigate(`/users/${user.uuid}`)}
                   >
+                    {canBulk && (
+                      <td className="px-3" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedUuids.has(user.uuid)}
+                          onCheckedChange={() => toggleSelect(user.uuid)}
+                        />
+                      </td>
+                    )}
                     <td>
                       <div>
                         <span className="font-medium text-white">{user.username || user.short_uuid}</span>
