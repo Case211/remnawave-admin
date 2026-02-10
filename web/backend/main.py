@@ -26,6 +26,7 @@ from slowapi.errors import RateLimitExceeded
 from web.backend.core.config import get_web_settings
 from web.backend.core.ip_whitelist import get_allowed_ips, is_ip_allowed
 from web.backend.core.rate_limit import limiter
+from web.backend.core.update_checker import CURRENT_VERSION
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 from web.backend.api.v2 import settings as settings_api
 from web.backend.api.v2 import admins as admins_api, roles as roles_api
@@ -234,7 +235,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Remnawave Admin Web API",
         description="REST API for Remnawave Admin Web Panel",
-        version="2.0.0",
+        version=CURRENT_VERSION,
         docs_url="/api/docs" if settings.debug else None,
         redoc_url="/api/redoc" if settings.debug else None,
         openapi_url="/api/openapi.json" if settings.debug else None,
@@ -325,7 +326,7 @@ def create_app() -> FastAPI:
         """Health check endpoint."""
         return {
             "status": "ok",
-            "version": "2.0.0",
+            "version": CURRENT_VERSION,
             "service": "remnawave-admin-web",
         }
 
@@ -335,7 +336,7 @@ def create_app() -> FastAPI:
         """Root endpoint."""
         return {
             "service": "remnawave-admin-web",
-            "version": "2.0.0",
+            "version": CURRENT_VERSION,
             "docs": "/api/docs" if settings.debug else None,
         }
 

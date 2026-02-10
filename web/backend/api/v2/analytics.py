@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, Query
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission
+from web.backend.core.update_checker import CURRENT_VERSION
 from web.backend.core.api_helper import (
     fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api,
     fetch_bandwidth_stats, fetch_nodes_realtime_usage,
@@ -123,7 +124,7 @@ class SystemComponentsResponse(BaseModel):
     """Response for system components endpoint."""
     components: List[SystemComponentStatus] = []
     uptime_seconds: Optional[int] = None
-    version: str = "2.0.0"
+    version: str = CURRENT_VERSION
 
 
 async def _get_users_data() -> List[Dict[str, Any]]:
@@ -1031,7 +1032,7 @@ async def get_system_components(
     return SystemComponentsResponse(
         components=components,
         uptime_seconds=uptime,
-        version="2.0.0",
+        version=CURRENT_VERSION,
     )
 
 
