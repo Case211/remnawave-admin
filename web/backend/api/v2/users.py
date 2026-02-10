@@ -746,6 +746,23 @@ async def get_user_hwid_devices(
         response = result.get("response", result) if isinstance(result, dict) else result
         devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
 
+        # Save API-fetched devices to local DB so future list views show correct counts
+        try:
+            from src.services.database import db_service
+            if db_service.is_connected and devices:
+                for d in devices:
+                    await db_service.upsert_hwid_device(
+                        user_uuid=user_uuid,
+                        hwid=d.get("hwid", ""),
+                        platform=d.get("platform"),
+                        os_version=d.get("osVersion") or d.get("os_version"),
+                        device_model=d.get("deviceModel") or d.get("device_model"),
+                        app_version=d.get("appVersion") or d.get("app_version"),
+                        user_agent=d.get("userAgent") or d.get("user_agent"),
+                    )
+        except Exception as e:
+            logger.debug("Failed to cache API HWID devices for %s: %s", user_uuid, e)
+
         return _parse_devices(devices)
 
     except ImportError:
