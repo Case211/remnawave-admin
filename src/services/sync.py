@@ -826,12 +826,34 @@ class SyncService:
             return 0
 
         try:
-            response = await api_client.get_user_hwid_devices(user_uuid)
-            devices = response.get("response", [])
+            result = await api_client.get_user_hwid_devices(user_uuid)
+
+            # Handle various API response formats (same logic as GET endpoint)
+            response = result.get("response", result) if isinstance(result, dict) else result
+            if isinstance(response, list):
+                devices = response
+            elif isinstance(response, dict):
+                # Try common nested keys: "devices", "hwidDevices", "list"
+                devices = (
+                    response.get("devices")
+                    or response.get("hwidDevices")
+                    or response.get("list")
+                    or []
+                )
+            else:
+                devices = []
 
             if not devices:
                 # Если устройств нет - удаляем все из БД
                 await db_service.delete_all_user_hwid_devices(user_uuid)
+                return 0
+
+            # Validate that devices is a proper list of dicts/strings, not a misparse
+            if not isinstance(devices, list):
+                logger.warning(
+                    "Unexpected devices type %s for user %s, skipping sync",
+                    type(devices).__name__, user_uuid,
+                )
                 return 0
 
             synced = await db_service.sync_user_hwid_devices(user_uuid, devices)

@@ -250,6 +250,19 @@
   }
 }
 
+/* Card surface - theme-aware gradient using CSS variables */
+.card-surface {
+  background: linear-gradient(to bottom right, var(--surface-card-alpha), var(--surface-card));
+}
+
+.shadow-card-themed {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+[data-theme="light"] .shadow-card-themed {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+}
+
 /* Legacy component styles */
 @layer components {
   /* Card - diagonal gradient background with fadeIn animation */
@@ -756,6 +769,73 @@
 }
 [data-theme="light"] .bg-primary\/20 {
   background-color: hsl(var(--primary) / 0.15) !important;
+}
+
+/* Light theme: text-dark-400 (missing from original overrides) */
+[data-theme="light"] .text-dark-400 {
+  color: #94a3b8 !important;
+}
+
+/* Light theme: bg-dark-* with opacity variants */
+[data-theme="light"] .bg-dark-900\/50 {
+  background-color: rgba(226, 232, 240, 0.5) !important;
+}
+[data-theme="light"] .bg-dark-800\/50 {
+  background-color: rgba(248, 250, 252, 0.5) !important;
+}
+[data-theme="light"] .bg-dark-700\/95 {
+  background-color: rgba(241, 245, 249, 0.95) !important;
+}
+[data-theme="light"] .bg-dark-700\/80 {
+  background-color: rgba(241, 245, 249, 0.8) !important;
+}
+[data-theme="light"] .bg-dark-700\/50 {
+  background-color: rgba(241, 245, 249, 0.5) !important;
+}
+[data-theme="light"] .bg-dark-700\/40 {
+  background-color: rgba(241, 245, 249, 0.4) !important;
+}
+[data-theme="light"] .bg-dark-700\/30 {
+  background-color: rgba(241, 245, 249, 0.3) !important;
+}
+[data-theme="light"] .bg-dark-600\/50 {
+  background-color: rgba(226, 232, 240, 0.5) !important;
+}
+[data-theme="light"] .bg-dark-600\/30 {
+  background-color: rgba(226, 232, 240, 0.3) !important;
+}
+[data-theme="light"] .bg-dark-600\/20 {
+  background-color: rgba(226, 232, 240, 0.2) !important;
+}
+
+/* Light theme: border-dark-* variants */
+[data-theme="light"] .border-dark-700 {
+  border-color: rgba(203, 213, 225, 0.5) !important;
+}
+[data-theme="light"] .border-dark-600 {
+  border-color: rgba(203, 213, 225, 0.4) !important;
+}
+[data-theme="light"] .border-dark-700\/50 {
+  border-color: rgba(203, 213, 225, 0.3) !important;
+}
+[data-theme="light"] .border-dark-600\/20 {
+  border-color: rgba(203, 213, 225, 0.2) !important;
+}
+
+/* Light theme: hover states for borders */
+[data-theme="light"] .hover\:border-dark-600:hover {
+  border-color: rgba(203, 213, 225, 0.6) !important;
+}
+[data-theme="light"] .hover\:border-dark-500\/30:hover {
+  border-color: rgba(203, 213, 225, 0.3) !important;
+}
+
+/* Light theme: shadows should be much lighter */
+[data-theme="light"] .shadow-lg {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05) !important;
+}
+[data-theme="light"] .shadow-black\/25 {
+  --tw-shadow-color: rgb(0 0 0 / 0.06) !important;
 }
 
 /* Light theme: scrollbar track */

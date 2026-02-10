@@ -2747,6 +2747,13 @@ class DatabaseService:
         if not self.is_connected:
             return False
 
+        # Normalize empty strings to None so COALESCE preserves existing DB values
+        platform = (platform.strip() if isinstance(platform, str) else platform) or None
+        os_version = (os_version.strip() if isinstance(os_version, str) else os_version) or None
+        device_model = (device_model.strip() if isinstance(device_model, str) else device_model) or None
+        app_version = (app_version.strip() if isinstance(app_version, str) else app_version) or None
+        user_agent = (user_agent.strip() if isinstance(user_agent, str) else user_agent) or None
+
         try:
             async with self.acquire() as conn:
                 await conn.execute(
@@ -2952,11 +2959,12 @@ class DatabaseService:
                             hwid = device.get('hwid')
                             if not hwid:
                                 continue
-                            platform = device.get('platform')
-                            os_version = device.get('osVersion')
-                            device_model = device.get('deviceModel')
-                            app_version = device.get('appVersion')
-                            user_agent = device.get('userAgent')
+                            # Normalize empty strings to None so COALESCE preserves existing data
+                            platform = device.get('platform') or None
+                            os_version = device.get('osVersion') or None
+                            device_model = device.get('deviceModel') or None
+                            app_version = device.get('appVersion') or None
+                            user_agent = device.get('userAgent') or None
                             created_at = _parse_timestamp(device.get('createdAt'))
                             updated_at = _parse_timestamp(device.get('updatedAt'))
 
