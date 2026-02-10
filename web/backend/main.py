@@ -26,7 +26,7 @@ from slowapi.errors import RateLimitExceeded
 from web.backend.core.config import get_web_settings
 from web.backend.core.ip_whitelist import get_allowed_ips, is_ip_allowed
 from web.backend.core.rate_limit import limiter
-from web.backend.core.update_checker import CURRENT_VERSION
+from web.backend.core.update_checker import get_latest_version
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 from web.backend.api.v2 import settings as settings_api
 from web.backend.api.v2 import admins as admins_api, roles as roles_api
@@ -235,7 +235,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Remnawave Admin Web API",
         description="REST API for Remnawave Admin Web Panel",
-        version=CURRENT_VERSION,
+        version="0.0.0",  # Dynamic version served via /api/v2/health
         docs_url="/api/docs" if settings.debug else None,
         redoc_url="/api/redoc" if settings.debug else None,
         openapi_url="/api/openapi.json" if settings.debug else None,
@@ -324,9 +324,10 @@ def create_app() -> FastAPI:
     @app.get("/api/v2/health", tags=["health"])
     async def health_check():
         """Health check endpoint."""
+        version = await get_latest_version()
         return {
             "status": "ok",
-            "version": CURRENT_VERSION,
+            "version": version,
             "service": "remnawave-admin-web",
         }
 
@@ -334,9 +335,10 @@ def create_app() -> FastAPI:
     @app.get("/", tags=["health"])
     async def root():
         """Root endpoint."""
+        version = await get_latest_version()
         return {
             "service": "remnawave-admin-web",
-            "version": CURRENT_VERSION,
+            "version": version,
             "docs": "/api/docs" if settings.debug else None,
         }
 

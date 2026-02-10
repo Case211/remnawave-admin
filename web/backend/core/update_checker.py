@@ -1,4 +1,4 @@
-"""Update checker — compares current version with GitHub Releases."""
+"""Update checker — fetches current version from GitHub Releases."""
 import logging
 import time
 from typing import Optional, Dict, Any
@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "Case211/remnawave-admin"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-CURRENT_VERSION = "2.0.0"
+
+# Fallback version shown when GitHub API is unreachable
+_FALLBACK_VERSION = "unknown"
 
 # Cache: check at most once every 30 minutes
 _cache: Dict[str, Any] = {}
@@ -17,13 +19,8 @@ _cache_ts: float = 0
 _CACHE_TTL = 1800  # 30 min
 
 
-async def check_for_updates() -> Dict[str, Any]:
-    """Check GitHub for latest release. Returns version info with changelog."""
-    global _cache, _cache_ts
-
-    if time.time() - _cache_ts < _CACHE_TTL and _cache:
-        return _cache
-
+async def _fetch_latest_release() -> Optional[Dict[str, Any]]:
+    """Fetch latest release data from GitHub API. Returns None on failure."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
@@ -33,66 +30,61 @@ async def check_for_updates() -> Dict[str, Any]:
                     "User-Agent": "remnawave-admin/update-checker",
                 },
             )
-
             if resp.status_code == 404:
-                # No releases yet
-                result = {
-                    "current_version": CURRENT_VERSION,
-                    "latest_version": None,
-                    "update_available": False,
-                    "release_url": None,
-                    "changelog": None,
-                    "published_at": None,
-                }
-                _cache = result
-                _cache_ts = time.time()
-                return result
-
+                return None
             resp.raise_for_status()
-            data = resp.json()
-
-            latest_tag = data.get("tag_name", "").lstrip("v")
-            release_url = data.get("html_url", "")
-            changelog = data.get("body", "")
-            published_at = data.get("published_at")
-
-            update_available = _compare_versions(CURRENT_VERSION, latest_tag)
-
-            result = {
-                "current_version": CURRENT_VERSION,
-                "latest_version": latest_tag or None,
-                "update_available": update_available,
-                "release_url": release_url,
-                "changelog": changelog[:2000] if changelog else None,
-                "published_at": published_at,
-            }
-            _cache = result
-            _cache_ts = time.time()
-            return result
-
+            return resp.json()
     except Exception as e:
-        logger.warning("Update check failed: %s", e)
-        return {
-            "current_version": CURRENT_VERSION,
+        logger.warning("GitHub API request failed: %s", e)
+        return None
+
+
+async def get_latest_version() -> str:
+    """Return the latest release version from GitHub (cached)."""
+    if _cache and _cache.get("current_version"):
+        return _cache["current_version"]
+    result = await check_for_updates()
+    return result.get("current_version") or _FALLBACK_VERSION
+
+
+async def check_for_updates() -> Dict[str, Any]:
+    """Check GitHub for latest release. Returns version info with changelog."""
+    global _cache, _cache_ts
+
+    if time.time() - _cache_ts < _CACHE_TTL and _cache:
+        return _cache
+
+    data = await _fetch_latest_release()
+
+    if data is None:
+        result = {
+            "current_version": _cache.get("current_version") or _FALLBACK_VERSION,
             "latest_version": None,
             "update_available": False,
             "release_url": None,
             "changelog": None,
             "published_at": None,
-            "error": str(e),
         }
+        _cache = result
+        _cache_ts = time.time()
+        return result
 
+    latest_tag = data.get("tag_name", "").lstrip("v")
+    release_url = data.get("html_url", "")
+    changelog = data.get("body", "")
+    published_at = data.get("published_at")
 
-def _compare_versions(current: str, latest: str) -> bool:
-    """Simple semver comparison. Returns True if latest > current."""
-    if not latest:
-        return False
-    try:
-        current_parts = [int(x) for x in current.split(".")]
-        latest_parts = [int(x) for x in latest.split(".")]
-        return latest_parts > current_parts
-    except (ValueError, TypeError):
-        return False
+    result = {
+        "current_version": latest_tag or _FALLBACK_VERSION,
+        "latest_version": latest_tag or None,
+        "update_available": False,
+        "release_url": release_url,
+        "changelog": changelog[:2000] if changelog else None,
+        "published_at": published_at,
+    }
+    _cache = result
+    _cache_ts = time.time()
+    return result
 
 
 async def get_dependency_versions() -> Dict[str, Any]:
