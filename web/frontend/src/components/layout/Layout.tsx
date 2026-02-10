@@ -1,6 +1,8 @@
-import { ReactNode, useState } from 'react'
+import { ReactNode, useState, useEffect, useCallback } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import PageBreadcrumbs from './PageBreadcrumbs'
+import { CommandPalette } from '../CommandPalette'
 import { useRealtimeUpdates } from '../../store/useWebSocket'
 
 interface LayoutProps {
@@ -9,9 +11,26 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
 
   // Connect WebSocket for real-time updates (nodes, users, violations)
   useRealtimeUpdates()
+
+  // Global keyboard shortcut: Cmd/Ctrl + K → open command palette
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setCommandOpen((prev) => !prev)
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   return (
     <div className="flex h-screen overflow-hidden bg-dark-800">
@@ -24,18 +43,27 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Header */}
-        <Header onMenuToggle={() => setSidebarOpen(true)} />
+        <Header
+          onMenuToggle={() => setSidebarOpen(true)}
+          onSearchClick={() => setCommandOpen(true)}
+        />
 
         {/* Page content - diagonal gradient background */}
         <main
-          className="flex-1 overflow-y-auto p-4 md:p-6"
+          className="flex-1 overflow-y-auto"
           style={{
             background: 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%)',
           }}
         >
-          {children}
+          <PageBreadcrumbs />
+          <div className="p-4 md:p-6">
+            {children}
+          </div>
         </main>
       </div>
+
+      {/* Command Palette (Cmd+K) */}
+      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
     </div>
   )
 }

@@ -1,13 +1,13 @@
 import { Bell, Search, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 
 interface HeaderProps {
   onMenuToggle?: () => void
+  onSearchClick?: () => void
 }
 
-export default function Header({ onMenuToggle }: HeaderProps) {
+export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
   return (
     <header
       className="h-16 border-b border-dark-400/10 flex items-center justify-between px-4 md:px-6 animate-fade-in bg-dark-700/95 backdrop-blur-xl"
@@ -24,23 +24,24 @@ export default function Header({ onMenuToggle }: HeaderProps) {
           <Menu className="w-6 h-6" />
         </Button>
 
-        {/* Search */}
-        <div className="flex-1 max-w-md hidden sm:block">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-200" />
-            <Input
-              type="text"
-              placeholder="Search users, nodes..."
-              className="pl-10"
-            />
-          </div>
-        </div>
+        {/* Search trigger — opens Command Palette */}
+        <button
+          onClick={onSearchClick}
+          className="flex-1 max-w-md hidden sm:flex items-center gap-2 h-10 rounded-md border border-dark-400/20 bg-dark-800 px-3 text-sm text-dark-300 hover:border-dark-400/40 hover:text-dark-200 transition-colors cursor-pointer"
+        >
+          <Search className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 text-left">Поиск...</span>
+          <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border border-dark-400/30 bg-dark-700 px-1.5 font-mono text-[10px] font-medium text-dark-300">
+            <span className="text-xs">&#x2318;</span>K
+          </kbd>
+        </button>
 
         {/* Mobile search icon */}
         <Button
           variant="ghost"
           size="icon"
           className="sm:hidden"
+          onClick={onSearchClick}
         >
           <Search className="w-5 h-5" />
         </Button>

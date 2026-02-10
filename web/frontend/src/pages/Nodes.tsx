@@ -45,6 +45,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 // Types
 interface Node {
@@ -324,6 +325,7 @@ function AgentTokenModal({
   const queryClient = useQueryClient()
   const [generatedToken, setGeneratedToken] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [tokenConfirmAction, setTokenConfirmAction] = useState<'generate' | 'revoke' | null>(null)
 
   const { data: tokenStatus, isLoading } = useQuery<{ has_token: boolean; masked_token: string | null }>({
     queryKey: ['node-agent-token', node.uuid],
@@ -373,6 +375,7 @@ function AgentTokenModal({
     : null
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
@@ -462,9 +465,7 @@ function AgentTokenModal({
               <Button
                 onClick={() => {
                   if (tokenStatus?.has_token && !generatedToken) {
-                    if (confirm('Сгенерировать новый токен? Старый перестанет работать.')) {
-                      generateMutation.mutate()
-                    }
+                    setTokenConfirmAction('generate')
                   } else {
                     generateMutation.mutate()
                   }
@@ -480,9 +481,7 @@ function AgentTokenModal({
                   variant="secondary"
                   className="text-red-400 hover:text-red-300"
                   onClick={() => {
-                    if (confirm('Отозвать токен? Node Agent потеряет доступ.')) {
-                      revokeMutation.mutate()
-                    }
+                    setTokenConfirmAction('revoke')
                   }}
                   disabled={revokeMutation.isPending}
                 >
@@ -494,6 +493,20 @@ function AgentTokenModal({
         )}
       </DialogContent>
     </Dialog>
+    <ConfirmDialog
+      open={tokenConfirmAction !== null}
+      onOpenChange={(open) => { if (!open) setTokenConfirmAction(null) }}
+      title={tokenConfirmAction === 'generate' ? 'Сгенерировать новый токен?' : 'Отозвать токен?'}
+      description={tokenConfirmAction === 'generate' ? 'Старый токен перестанет работать.' : 'Node Agent потеряет доступ.'}
+      confirmLabel={tokenConfirmAction === 'generate' ? 'Сгенерировать' : 'Отозвать'}
+      variant={tokenConfirmAction === 'revoke' ? 'destructive' : 'default'}
+      onConfirm={() => {
+        if (tokenConfirmAction === 'generate') generateMutation.mutate()
+        if (tokenConfirmAction === 'revoke') revokeMutation.mutate()
+        setTokenConfirmAction(null)
+      }}
+    />
+    </>
   )
 }
 
@@ -613,11 +626,7 @@ function NodeCard({
                   )}
                   {canDelete && (
                     <DropdownMenuItem
-                      onClick={() => {
-                        if (confirm('Удалить ноду?')) {
-                          onDelete()
-                        }
-                      }}
+                      onClick={onDelete}
                       className="text-red-400 focus:text-red-400"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
@@ -728,6 +737,7 @@ export default function Nodes() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
   const [tokenNode, setTokenNode] = useState<Node | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ type: string; uuid: string } | null>(null)
 
   // Fetch nodes
   const { data: nodes = [], isLoading, refetch } = useQuery({
@@ -924,7 +934,7 @@ export default function Nodes() {
                 onEdit={() => { setEditingNode(node); setEditError('') }}
                 onEnable={() => enableNode.mutate(node.uuid)}
                 onDisable={() => disableNode.mutate(node.uuid)}
-                onDelete={() => deleteNode.mutate(node.uuid)}
+                onDelete={() => setConfirmAction({ type: 'delete', uuid: node.uuid })}
                 onTokenManage={() => setTokenNode(node)}
                 canEdit={canEdit}
                 canDelete={canDelete}
@@ -963,6 +973,27 @@ export default function Nodes() {
           onOpenChange={(open) => { if (!open) setTokenNode(null) }}
         />
       )}
+
+      {/* Confirm dialog */}
+      <ConfirmDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null) }}
+        title={
+          confirmAction?.type === 'delete' ? 'Удалить ноду?' : ''
+        }
+        description={
+          confirmAction?.type === 'delete' ? 'Нода будет удалена. Это действие нельзя отменить.' : ''
+        }
+        confirmLabel={
+          confirmAction?.type === 'delete' ? 'Удалить' : 'Подтвердить'
+        }
+        variant={confirmAction?.type === 'delete' ? 'destructive' : 'default'}
+        onConfirm={() => {
+          if (!confirmAction) return
+          if (confirmAction.type === 'delete') deleteNode.mutate(confirmAction.uuid)
+          setConfirmAction(null)
+        }}
+      />
     </div>
   )
 }

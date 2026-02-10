@@ -45,6 +45,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import client from '../api/client'
 
 // Types matching backend HostListItem
@@ -562,7 +563,7 @@ function HostCard({
                   )}
                   {canDelete && (
                     <DropdownMenuItem
-                      onSelect={() => { if (confirm('Удалить хост?')) onDelete() }}
+                      onSelect={onDelete}
                       className="text-red-400 focus:text-red-400"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
@@ -652,6 +653,7 @@ export default function Hosts() {
   const [editError, setEditError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [deleteConfirmUuid, setDeleteConfirmUuid] = useState<string | null>(null)
 
   // Fetch hosts
   const { data: hosts = [], isLoading, refetch } = useQuery({
@@ -805,7 +807,7 @@ export default function Hosts() {
                 onEdit={() => { setEditingHost(host); setEditError('') }}
                 onEnable={() => enableHost.mutate(host.uuid)}
                 onDisable={() => disableHost.mutate(host.uuid)}
-                onDelete={() => deleteHost.mutate(host.uuid)}
+                onDelete={() => setDeleteConfirmUuid(host.uuid)}
                 canEdit={canEdit}
                 canDelete={canDelete}
               />
@@ -834,6 +836,22 @@ export default function Hosts() {
           error={createError}
         />
       )}
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={deleteConfirmUuid !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirmUuid(null) }}
+        title="Удалить хост?"
+        description="Хост будет удалён. Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirmUuid) {
+            deleteHost.mutate(deleteConfirmUuid)
+            setDeleteConfirmUuid(null)
+          }
+        }}
+      />
     </div>
   )
 }

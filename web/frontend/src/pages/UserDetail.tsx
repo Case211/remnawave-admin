@@ -39,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
 
 interface UserDetailData {
@@ -548,6 +549,7 @@ export default function UserDetail() {
   })
   const [editError, setEditError] = useState('')
   const [editSuccess, setEditSuccess] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Fetch user data
   const { data: user, isLoading, error } = useQuery<UserDetailData>({
@@ -856,7 +858,7 @@ export default function UserDetail() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { if (confirm('Удалить пользователя?')) deleteMutation.mutate() }}
+                  onClick={() => setShowDeleteConfirm(true)}
                   disabled={deleteMutation.isPending}
                   className="text-red-400 hover:text-red-300"
                 >
@@ -1286,6 +1288,16 @@ export default function UserDetail() {
           </Card>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Удалить пользователя?"
+        description="Пользователь и все его данные будут удалены. Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => { deleteMutation.mutate(); setShowDeleteConfirm(false) }}
+      />
     </div>
   )
 }

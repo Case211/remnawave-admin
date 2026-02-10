@@ -34,6 +34,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -573,6 +574,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
   const [showDialog, setShowDialog] = useState(false)
   const [editingAdmin, setEditingAdmin] = useState<AdminAccount | null>(null)
   const [formError, setFormError] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
 
   const { data: adminsData, isLoading, refetch } = useQuery({ queryKey: ['admins'], queryFn: adminsApi.list })
 
@@ -644,7 +646,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
                     <AdminActions admin={admin}
                       onEdit={() => { setEditingAdmin(admin); setFormError(''); setShowDialog(true) }}
                       onToggle={() => toggleMutation.mutate({ id: admin.id, is_active: !admin.is_active })}
-                      onDelete={() => { if (confirm('Удалить администратора?')) deleteMutation.mutate(admin.id) }} />
+                      onDelete={() => setDeleteConfirm(admin.id)} />
                   </div>
                 </div>
                 <div className="mb-3"><RoleBadge name={admin.role_name} displayName={admin.role_display_name} /></div>
@@ -702,7 +704,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
                       <AdminActions admin={admin}
                         onEdit={() => { setEditingAdmin(admin); setFormError(''); setShowDialog(true) }}
                         onToggle={() => toggleMutation.mutate({ id: admin.id, is_active: !admin.is_active })}
-                        onDelete={() => { if (confirm('Удалить администратора?')) deleteMutation.mutate(admin.id) }} />
+                        onDelete={() => setDeleteConfirm(admin.id)} />
                     </td>
                   </tr>
                 ))
@@ -719,6 +721,21 @@ function AdminsTab({ roles }: { roles: Role[] }) {
           isPending={createMutation.isPending || updateMutation.isPending}
           error={formError} roles={roles} editingAdmin={editingAdmin} />
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirm(null) }}
+        title="Удалить администратора?"
+        description="Администратор потеряет доступ к панели."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirm !== null) {
+            deleteMutation.mutate(deleteConfirm)
+            setDeleteConfirm(null)
+          }
+        }}
+      />
     </>
   )
 }
@@ -730,6 +747,7 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
   const [showDialog, setShowDialog] = useState(false)
   const [editingRole, setEditingRole] = useState<Role | null>(null)
   const [formError, setFormError] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
 
   const { data: roles = [], isLoading, refetch } = useQuery({ queryKey: ['roles'], queryFn: rolesApi.list })
 
@@ -827,7 +845,7 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
                   </PermissionGate>
                   {!role.is_system && (
                     <PermissionGate resource="roles" action="delete">
-                      <Button variant="secondary" size="sm" onClick={() => { if (confirm('Удалить роль?')) deleteMutation.mutate(role.id) }} className="text-red-400 hover:text-red-300">
+                      <Button variant="secondary" size="sm" onClick={() => setDeleteConfirm(role.id)} className="text-red-400 hover:text-red-300">
                         <Trash2 className="w-3.5 h-3.5 mr-1.5" /> {'Удалить'}
                       </Button>
                     </PermissionGate>
@@ -846,6 +864,21 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
           isPending={createMutation.isPending || updateMutation.isPending}
           error={formError} resources={resources} editingRole={editingRole} />
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirm(null) }}
+        title="Удалить роль?"
+        description="Роль будет удалена. Администраторы с этой ролью потеряют права."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirm !== null) {
+            deleteMutation.mutate(deleteConfirm)
+            setDeleteConfirm(null)
+          }
+        }}
+      />
     </>
   )
 }

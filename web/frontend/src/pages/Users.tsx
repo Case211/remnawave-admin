@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useHasPermission } from '../components/PermissionGate'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 // Types
 interface UserListItem {
@@ -241,7 +242,7 @@ function UserActions({
         )}
         {canDelete && (
           <DropdownMenuItem
-            onClick={() => { if (confirm('Удалить пользователя?')) onDelete() }}
+            onClick={onDelete}
             className="text-red-400 focus:text-red-400"
           >
             <Trash2 className="w-4 h-4 mr-2" /> Удалить
@@ -627,6 +628,7 @@ export default function Users() {
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [deleteConfirmUuid, setDeleteConfirmUuid] = useState<string | null>(null)
 
   // State
   const [page, setPage] = useState(1)
@@ -1049,7 +1051,7 @@ export default function Users() {
                 onNavigate={() => navigate(`/users/${user.uuid}`)}
                 onEnable={() => enableUser.mutate(user.uuid)}
                 onDisable={() => disableUser.mutate(user.uuid)}
-                onDelete={() => deleteUser.mutate(user.uuid)}
+                onDelete={() => setDeleteConfirmUuid(user.uuid)}
               />
             </div>
           ))
@@ -1123,7 +1125,7 @@ export default function Users() {
                         user={user}
                         onEnable={() => enableUser.mutate(user.uuid)}
                         onDisable={() => disableUser.mutate(user.uuid)}
-                        onDelete={() => deleteUser.mutate(user.uuid)}
+                        onDelete={() => setDeleteConfirmUuid(user.uuid)}
                       />
                     </td>
                   </tr>
@@ -1161,6 +1163,21 @@ export default function Users() {
         onSave={(data) => createUser.mutate(data)}
         isPending={createUser.isPending}
         error={createError}
+      />
+
+      <ConfirmDialog
+        open={deleteConfirmUuid !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirmUuid(null) }}
+        title="Удалить пользователя?"
+        description="Это действие нельзя отменить. Пользователь и все его данные будут удалены."
+        confirmLabel="Удалить"
+        variant="destructive"
+        onConfirm={() => {
+          if (deleteConfirmUuid) {
+            deleteUser.mutate(deleteConfirmUuid)
+            setDeleteConfirmUuid(null)
+          }
+        }}
       />
     </div>
   )
