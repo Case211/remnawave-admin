@@ -439,7 +439,7 @@ function NodeDetailPanel({
 export default function Fleet() {
   const queryClient = useQueryClient()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
-  const canEditNodes = hasPermission('nodes', 'edit')
+  const canEditNodes = hasPermission('fleet', 'edit')
 
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDir, setSortDir] = useState<SortDir>('asc')

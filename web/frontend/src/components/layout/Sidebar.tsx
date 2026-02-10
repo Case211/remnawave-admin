@@ -59,7 +59,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, permission: null },
   { name: 'Users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
   { name: 'Nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
-  { name: 'Fleet', href: '/fleet', icon: Activity, permission: { resource: 'nodes', action: 'view' } },
+  { name: 'Fleet', href: '/fleet', icon: Activity, permission: { resource: 'fleet', action: 'view' } },
   { name: 'Hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'Violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
   { name: 'Admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
