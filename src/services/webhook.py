@@ -382,8 +382,8 @@ async def _handle_hwid_event(bot: Bot, event: str, event_data: dict) -> None:
     """Обрабатывает события HWID устройств."""
     logger.debug("HWID notification: event=%s", event)
     
-    # Данные об устройствах уже синхронизируются через sync_service в users.raw_data
-    # При следующей синхронизации пользователя количество устройств будет обновлено
+    # Устройства синхронизируются в user_hwid_devices через sync_service.handle_webhook_event()
+    # который вызывается выше в handle_webhook() до этого обработчика уведомлений
     
     await send_hwid_notification(
         bot=bot,
