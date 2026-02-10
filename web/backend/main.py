@@ -32,6 +32,7 @@ from web.backend.api.v2 import admins as admins_api, roles as roles_api
 from web.backend.api.v2 import audit as audit_api
 from web.backend.api.v2 import logs as logs_api
 from web.backend.api.v2 import advanced_analytics
+from web.backend.api.v2 import automations as automations_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -168,6 +169,10 @@ async def lifespan(app: FastAPI):
                 from web.backend.core.rbac import ensure_rbac_tables
                 await ensure_rbac_tables()
 
+                # Start automation engine
+                from web.backend.core.automation_engine import engine as automation_engine
+                await automation_engine.start()
+
                 from web.backend.core.admin_credentials import first_run_setup
                 generated_password = await first_run_setup()
                 if generated_password:
@@ -203,6 +208,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    try:
+        from web.backend.core.automation_engine import engine as automation_engine
+        await automation_engine.stop()
+    except Exception:
+        pass
     try:
         from src.services.database import db_service
         if db_service.is_connected:
@@ -241,7 +251,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
 
@@ -306,6 +316,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_api.router, prefix="/api/v2/audit", tags=["audit"])
     app.include_router(logs_api.router, prefix="/api/v2/logs", tags=["logs"])
     app.include_router(advanced_analytics.router, prefix="/api/v2/analytics/advanced", tags=["advanced-analytics"])
+    app.include_router(automations_api.router, prefix="/api/v2/automations", tags=["automations"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
 
     # Health check endpoint

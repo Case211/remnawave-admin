@@ -13,6 +13,7 @@ import {
   ClipboardList,
   Terminal,
   BarChart3,
+  Zap,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -65,6 +66,7 @@ const navigation = [
   { name: 'Fleet', href: '/fleet', icon: Activity, permission: { resource: 'fleet', action: 'view' } },
   { name: 'Hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'Violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
+  { name: 'Automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
   { name: 'Admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   { name: 'Audit Log', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
