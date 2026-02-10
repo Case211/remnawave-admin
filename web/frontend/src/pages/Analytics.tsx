@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
 
 // ── Period Switcher ─────────────────────────────────────────────
@@ -158,6 +159,13 @@ function GeoMapCard() {
           <div className="flex items-center gap-2">
             <Globe className="w-5 h-5 text-cyan-400" />
             <CardTitle className="text-base">География подключений</CardTitle>
+            <InfoTooltip
+              text="Карта географического распределения подключений пользователей по IP-адресам. Размер точки пропорционален количеству подключений из города.
+24ч — за последние сутки
+7д — за последнюю неделю
+30д — за последний месяц"
+              side="bottom"
+            />
           </div>
           <PeriodSwitcher
             value={geoPeriod}
@@ -284,6 +292,10 @@ function TopUsersCard() {
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-violet-400" />
             <CardTitle className="text-base">Топ по трафику</CardTitle>
+            <InfoTooltip
+              text="Пользователи, отсортированные по объёму потреблённого трафика за всё время. Показывает статус, использованный трафик, лимит и процент использования. Зелёный индикатор Wi-Fi — пользователь онлайн (был активен в последние 5 мин)."
+              side="bottom"
+            />
           </div>
           <PeriodSwitcher
             value={String(limit)}
@@ -439,6 +451,14 @@ function TrendsCard() {
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-green-400" />
             <CardTitle className="text-base">Тенденции</CardTitle>
+            <InfoTooltip
+              text="Динамика метрик по дням за выбранный период.
+Пользователи — количество новых регистраций.
+Нарушения — обнаруженные нарушения.
+Трафик — объём потреблённого трафика.
+7д/30д/90д — временное окно анализа."
+              side="bottom"
+            />
           </div>
           <div className="flex items-center gap-2">
             <PeriodSwitcher

@@ -35,6 +35,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
@@ -1022,25 +1023,37 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <CardContent className="p-4">
-            <p className="text-xs sm:text-sm text-dark-200">Критические</p>
+            <div className="flex items-center justify-center gap-1">
+              <p className="text-xs sm:text-sm text-dark-200">Критические</p>
+              <InfoTooltip text="Скор 80–100. Серьёзные аномалии, требующие немедленного вмешательства." side="bottom" iconClassName="w-3.5 h-3.5" />
+            </div>
             <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">{stats.critical}</p>
           </CardContent>
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <CardContent className="p-4">
-            <p className="text-xs sm:text-sm text-dark-200">Высокие</p>
+            <div className="flex items-center justify-center gap-1">
+              <p className="text-xs sm:text-sm text-dark-200">Высокие</p>
+              <InfoTooltip text="Скор 60–79. Подозрительная активность, рекомендуется проверка." side="bottom" iconClassName="w-3.5 h-3.5" />
+            </div>
             <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">{stats.high}</p>
           </CardContent>
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <CardContent className="p-4">
-            <p className="text-xs sm:text-sm text-dark-200">Средние</p>
+            <div className="flex items-center justify-center gap-1">
+              <p className="text-xs sm:text-sm text-dark-200">Средние</p>
+              <InfoTooltip text="Скор 40–59. Незначительные отклонения, рекомендуется мониторинг." side="bottom" iconClassName="w-3.5 h-3.5" />
+            </div>
             <p className="text-xl md:text-2xl font-bold text-blue-400 mt-1">{stats.medium}</p>
           </CardContent>
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <CardContent className="p-4">
-            <p className="text-xs sm:text-sm text-dark-200">Низкие</p>
+            <div className="flex items-center justify-center gap-1">
+              <p className="text-xs sm:text-sm text-dark-200">Низкие</p>
+              <InfoTooltip text="Скор 0–39. Информационные уведомления, не требующие действий." side="bottom" iconClassName="w-3.5 h-3.5" />
+            </div>
             <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">{stats.low}</p>
           </CardContent>
         </Card>
@@ -1053,7 +1066,10 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-primary-400" />
               <div>
-                <p className="text-xs text-dark-200">Всего</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-xs text-dark-200">Всего</p>
+                  <InfoTooltip text="Общее количество зафиксированных нарушений за выбранный период." side="bottom" iconClassName="w-3 h-3" />
+                </div>
                 <p className="text-lg font-bold text-white">{stats.total}</p>
               </div>
             </div>
@@ -1064,7 +1080,10 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
             <div className="flex items-center gap-2">
               <User className="w-5 h-5 text-primary-400" />
               <div>
-                <p className="text-xs text-dark-200">Уник. юзеров</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-xs text-dark-200">Уник. юзеров</p>
+                  <InfoTooltip text="Количество уникальных пользователей с нарушениями за выбранный период. Один пользователь может иметь несколько нарушений." side="bottom" iconClassName="w-3 h-3" />
+                </div>
                 <p className="text-lg font-bold text-white">{stats.unique_users}</p>
               </div>
             </div>
@@ -1075,7 +1094,10 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-primary-400" />
               <div>
-                <p className="text-xs text-dark-200">Средн. скор</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-xs text-dark-200">Средн. скор</p>
+                  <InfoTooltip text="Средний скор нарушений (0–100). Рассчитывается на основе временных, геолокационных, ASN, профильных и устройственных аномалий." side="bottom" iconClassName="w-3 h-3" />
+                </div>
                 <p className="text-lg font-bold text-white">{Math.round(stats.avg_score)}</p>
               </div>
             </div>
@@ -1086,7 +1108,10 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-400" />
               <div>
-                <p className="text-xs text-dark-200">Макс. скор</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-xs text-dark-200">Макс. скор</p>
+                  <InfoTooltip text="Наивысший зафиксированный скор нарушения за выбранный период. Чем выше скор, тем больше аномалий обнаружено." side="bottom" iconClassName="w-3 h-3" />
+                </div>
                 <p className="text-lg font-bold text-white">{Math.round(stats.max_score)}</p>
               </div>
             </div>
@@ -1316,7 +1341,13 @@ export default function Violations() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">Нарушения</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="page-header-title">Нарушения</h1>
+            <InfoTooltip
+              text="Система анти-абуза анализирует подключения пользователей и выявляет аномалии: подозрительные гео-перемещения, множественные ASN, необычные устройства и другие отклонения. Скор от 0 до 100 показывает степень подозрительности."
+              side="right"
+            />
+          </div>
           <p className="text-dark-200 mt-1 text-sm md:text-base">
             Анти-абуз система и управление нарушениями
             {stats ? (

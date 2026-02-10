@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
+import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -217,11 +218,12 @@ interface StatCardProps {
   index?: number
   delta?: number | null
   deltaType?: 'percent' | 'absolute'
+  tooltip?: string
 }
 
 function StatCard({
   title, value, icon: Icon, color, subtitle, onClick, loading, index = 0,
-  delta, deltaType = 'percent',
+  delta, deltaType = 'percent', tooltip,
 }: StatCardProps) {
   const colorConfig = {
     cyan: {
@@ -265,7 +267,10 @@ function StatCard({
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
-            <p className="text-sm text-muted-foreground">{title}</p>
+            <div className="flex items-center gap-1">
+              <p className="text-sm text-muted-foreground">{title}</p>
+              {tooltip && <InfoTooltip text={tooltip} side="bottom" iconClassName="w-3.5 h-3.5" />}
+            </div>
             {loading ? (
               <Skeleton className="h-8 w-20 mt-1" />
             ) : (
@@ -434,7 +439,17 @@ function SystemStatusCard({
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base md:text-lg">Состояние системы</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base md:text-lg">Состояние системы</CardTitle>
+            <InfoTooltip
+              text="Текущий статус компонентов системы.
+API — время отклика сервера
+PostgreSQL — свободные/всего соединения в пуле
+Ноды — онлайн/всего серверов
+WebSocket — активные WebSocket-сессии"
+              side="bottom"
+            />
+          </div>
           {version && (
             <Badge variant="secondary" className="text-[10px] font-mono">
               v{version}
@@ -593,6 +608,10 @@ function UpdateCheckerCard() {
         <CardTitle className="text-base md:text-lg flex items-center gap-2">
           <Activity className="w-4 h-4 text-primary-400" />
           Версии и обновления
+          <InfoTooltip
+            text="Информация о текущей версии Remnawave и доступных обновлениях. Зависимости показывают версии ключевых компонентов: Python, PostgreSQL, FastAPI, Xray. Проверка обновлений раз в 5 минут."
+            side="bottom"
+          />
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -851,6 +870,7 @@ export default function Dashboard() {
             index={0}
             delta={deltas?.users_delta}
             deltaType="percent"
+            tooltip="Общее количество зарегистрированных пользователей в системе. Показывает изменение в процентах за последние 24 часа."
           />
         )}
         {canViewNodes && (
@@ -865,6 +885,7 @@ export default function Dashboard() {
             index={1}
             delta={deltas?.nodes_delta}
             deltaType="absolute"
+            tooltip="Соотношение онлайн нод к общему количеству. Дельта показывает абсолютное изменение за последние 24 часа. Онлайн — количество подключённых пользователей."
           />
         )}
         {canViewViolations && (
@@ -879,6 +900,7 @@ export default function Dashboard() {
             index={2}
             delta={deltas?.violations_delta}
             deltaType="absolute"
+            tooltip="Количество нарушений, обнаруженных анти-абуз системой за сегодня. Дельта — абсолютное изменение за 24 часа. Нарушения включают геолокационные аномалии, подозрительные ASN и профильные отклонения."
           />
         )}
         {canViewAnalytics && (
@@ -889,7 +911,14 @@ export default function Dashboard() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Трафик</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm text-muted-foreground">Трафик</p>
+                    <InfoTooltip
+                      text="Общий объём потреблённого трафика всеми пользователями. Показывает изменение в процентах за 24 часа. Детализация: за сегодня, за неделю (7 дней), за месяц (30 дней)."
+                      side="bottom"
+                      iconClassName="w-3.5 h-3.5"
+                    />
+                  </div>
                   {(overviewLoading && trafficLoading) ? (
                     <Skeleton className="h-8 w-20 mt-1" />
                   ) : (
@@ -942,7 +971,16 @@ export default function Dashboard() {
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <CardHeader className="pb-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <CardTitle className="text-base md:text-lg">Трафик</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base md:text-lg">Трафик</CardTitle>
+                <InfoTooltip
+                  text="График потреблённого трафика за выбранный период. При наличии нескольких нод — разбивка по каждой ноде (стековая диаграмма).
+24ч — почасовые данные за сутки
+7д — данные по дням за неделю
+30д — данные по дням за месяц"
+                  side="bottom"
+                />
+              </div>
               <PeriodSwitcher
                 value={trafficPeriod}
                 onChange={setTrafficPeriod}
@@ -1030,7 +1068,13 @@ export default function Dashboard() {
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base md:text-lg">Подключения по нодам</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base md:text-lg">Подключения по нодам</CardTitle>
+                  <InfoTooltip
+                    text="Текущее количество активных подключений пользователей на каждой ноде в реальном времени. Данные обновляются автоматически каждые 30 секунд."
+                    side="bottom"
+                  />
+                </div>
                 <span className="text-xs text-muted-foreground">
                   Всего: {overview?.users_online || 0}
                 </span>
@@ -1079,7 +1123,17 @@ export default function Dashboard() {
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
             <CardHeader className="pb-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <CardTitle className="text-base md:text-lg">Нарушения по уровню (за 7 дней)</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base md:text-lg">Нарушения по уровню (за 7 дней)</CardTitle>
+                  <InfoTooltip
+                    text="Распределение нарушений по уровню серьёзности за последние 7 дней.
+Критический (80–100) — требуют немедленного вмешательства
+Высокий (60–79) — рекомендуется проверка
+Средний (40–59) — мониторинг
+Низкий (0–39) — информационные"
+                    side="bottom"
+                  />
+                </div>
                 {violationStats && (
                   <span className="text-xs text-muted-foreground">
                     Всего: {violationStats.total} | Уникальных: {violationStats.unique_users}
@@ -1116,7 +1170,17 @@ export default function Dashboard() {
         {canViewViolations && (
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base md:text-lg">По рекомендации</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base md:text-lg">По рекомендации</CardTitle>
+                <InfoTooltip
+                  text="Распределение нарушений по рекомендуемому действию анти-абуз системы.
+Нет действий — ложное срабатывание
+Мониторинг — наблюдение
+Предупреждение — уведомление пользователя
+Мягкая/Врем./Жёсткая блок. — ограничение доступа"
+                  side="bottom"
+                />
+              </div>
             </CardHeader>
             <CardContent>
               {violationsLoading ? (
