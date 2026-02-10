@@ -18,7 +18,7 @@ export function InfoTooltip({
   text,
   className,
   iconClassName,
-  side = 'top',
+  side = 'right',
   align = 'center',
 }: InfoTooltipProps) {
   return (

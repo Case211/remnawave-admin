@@ -269,7 +269,7 @@ function StatCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1">
               <p className="text-sm text-muted-foreground">{title}</p>
-              {tooltip && <InfoTooltip text={tooltip} side="bottom" iconClassName="w-3.5 h-3.5" />}
+              {tooltip && <InfoTooltip text={tooltip} side="right" iconClassName="w-3.5 h-3.5" />}
             </div>
             {loading ? (
               <Skeleton className="h-8 w-20 mt-1" />
@@ -447,7 +447,7 @@ API — время отклика сервера
 PostgreSQL — свободные/всего соединения в пуле
 Ноды — онлайн/всего серверов
 WebSocket — активные WebSocket-сессии"
-              side="bottom"
+              side="right"
             />
           </div>
           {version && (
@@ -610,7 +610,7 @@ function UpdateCheckerCard() {
           Версии и обновления
           <InfoTooltip
             text="Информация о текущей версии Remnawave и доступных обновлениях. Зависимости показывают версии ключевых компонентов: Python, PostgreSQL, FastAPI, Xray. Проверка обновлений раз в 5 минут."
-            side="bottom"
+            side="right"
           />
         </CardTitle>
       </CardHeader>
@@ -915,7 +915,7 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground">Трафик</p>
                     <InfoTooltip
                       text="Общий объём потреблённого трафика всеми пользователями. Показывает изменение в процентах за 24 часа. Детализация: за сегодня, за неделю (7 дней), за месяц (30 дней)."
-                      side="bottom"
+                      side="right"
                       iconClassName="w-3.5 h-3.5"
                     />
                   </div>
@@ -978,7 +978,7 @@ export default function Dashboard() {
 24ч — почасовые данные за сутки
 7д — данные по дням за неделю
 30д — данные по дням за месяц"
-                  side="bottom"
+                  side="right"
                 />
               </div>
               <PeriodSwitcher
@@ -1072,7 +1072,7 @@ export default function Dashboard() {
                   <CardTitle className="text-base md:text-lg">Подключения по нодам</CardTitle>
                   <InfoTooltip
                     text="Текущее количество активных подключений пользователей на каждой ноде в реальном времени. Данные обновляются автоматически каждые 30 секунд."
-                    side="bottom"
+                    side="right"
                   />
                 </div>
                 <span className="text-xs text-muted-foreground">
@@ -1131,7 +1131,7 @@ export default function Dashboard() {
 Высокий (60–79) — рекомендуется проверка
 Средний (40–59) — мониторинг
 Низкий (0–39) — информационные"
-                    side="bottom"
+                    side="right"
                   />
                 </div>
                 {violationStats && (
@@ -1178,7 +1178,7 @@ export default function Dashboard() {
 Мониторинг — наблюдение
 Предупреждение — уведомление пользователя
 Мягкая/Врем./Жёсткая блок. — ограничение доступа"
-                  side="bottom"
+                  side="right"
                 />
               </div>
             </CardHeader>
