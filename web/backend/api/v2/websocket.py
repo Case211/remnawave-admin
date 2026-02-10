@@ -167,6 +167,12 @@ async def broadcast_violation(violation_data: Dict[str, Any]):
         "data": violation_data,
         "timestamp": datetime.utcnow().isoformat(),
     })
+    # Dispatch to automation engine (fire-and-forget)
+    try:
+        from web.backend.core.automation_engine import engine as automation_engine
+        asyncio.create_task(automation_engine.handle_event("violation.detected", violation_data))
+    except Exception:
+        pass
 
 
 async def broadcast_connection(connection_data: Dict[str, Any]):
@@ -185,6 +191,14 @@ async def broadcast_node_status(node_data: Dict[str, Any]):
         "data": node_data,
         "timestamp": datetime.utcnow().isoformat(),
     })
+    # Dispatch to automation engine (fire-and-forget)
+    try:
+        from web.backend.core.automation_engine import engine as automation_engine
+        is_connected = node_data.get("is_connected", node_data.get("isConnected", True))
+        if not is_connected:
+            asyncio.create_task(automation_engine.handle_event("node.went_offline", node_data))
+    except Exception:
+        pass
 
 
 async def broadcast_user_update(user_data: Dict[str, Any]):
@@ -194,6 +208,15 @@ async def broadcast_user_update(user_data: Dict[str, Any]):
         "data": user_data,
         "timestamp": datetime.utcnow().isoformat(),
     })
+    # Dispatch traffic exceeded events to automation engine (fire-and-forget)
+    try:
+        from web.backend.core.automation_engine import engine as automation_engine
+        limit = user_data.get("traffic_limit_bytes", user_data.get("trafficLimitBytes", 0))
+        used = user_data.get("used_traffic_bytes", user_data.get("usedTrafficBytes", 0))
+        if limit and used and used > limit:
+            asyncio.create_task(automation_engine.handle_event("user.traffic_exceeded", user_data))
+    except Exception:
+        pass
 
 
 async def broadcast_activity(activity_type: str, message: str, details: Dict[str, Any] = None):
