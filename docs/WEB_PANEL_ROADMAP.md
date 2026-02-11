@@ -1,495 +1,99 @@
-# Web Panel — Roadmap
+# Web Panel — Roadmap v2
 
 План развития веб-панели Remnawave Admin.
 
 ---
 
-## Текущее состояние (v1.7)
+## Текущее состояние
 
-**Реализовано:**
-- Dashboard со статистикой (пользователи, ноды, нарушения, трафик)
-- CRUD пользователей с фильтрацией, сортировкой, пагинацией
-- Детальная карточка пользователя (трафик, HWID, нарушения)
-- Управление нодами (статус, перезапуск, агент-токены)
-- Управление хостами (создание, редактирование, включение/выключение)
-- Просмотр нарушений с IP Lookup и скор-разбивкой
-- Настройки с динамическим сохранением в БД
-- Авторизация: Telegram Login Widget + логин/пароль + JWT
-- WebSocket для real-time обновлений
-- Тёмная тема, адаптивный дизайн
+Веб-панель представляет собой полнофункциональную систему управления VPN-инфраструктурой. Ниже — сводка всего, что реализовано на данный момент.
 
-**Стек:** React 18, TypeScript, Tailwind CSS, Vite, React Query, Zustand, Recharts, Axios
+**Стек:** React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui (Radix UI), React Query, Zustand, Recharts, Leaflet, Axios, Sonner, cmdk
 
----
+### Инфраструктура UI
 
-## Фаза 1 — Миграция на shadcn/ui ✅ ВЫПОЛНЕНО
+- Дизайн-система на shadcn/ui: 17+ компонентов (Button, Card, Dialog, Table, Select, Badge, Tabs, Tooltip, DropdownMenu и др.)
+- Тёмная тема с CSS-переменными (teal/cyan акценты), единая цветовая схема
+- Иконки: lucide-react
+- Адаптивный дизайн: desktop-таблицы + мобильные карточки на всех страницах
+- Skeleton-загрузки, toast-уведомления (sonner), ConfirmDialog
+- Command Palette (Cmd/Ctrl+K): навигация, быстрые действия, live-поиск пользователей
+- Breadcrumbs с динамическим разрешением имён
+- Сохранённые фильтры (Zustand + localStorage)
 
-**Зачем:** Сейчас весь UI написан на голом Tailwind (inline классы в страницах). shadcn/ui даёт готовую библиотеку компонентов на базе Radix UI + Tailwind с единым дизайном, доступностью (a11y) и полной кастомизацией (код копируется в проект).
+### Страницы и функции
 
-**Что даст:**
-- Консистентный дизайн-система (Button, Card, Dialog, Table, Select, Badge, Tabs, Input, ...)
-- Встроенная доступность (клавиатурная навигация, ARIA)
-- Упрощение кода страниц (вместо 20 строк Tailwind — 1 компонент)
-- Единая тема с CSS-переменными (проще менять цвета)
+| Страница | Функциональность |
+|----------|-----------------|
+| **Dashboard** | Карточки статистики с дельта-индикаторами, графики трафика (stacked area chart по нодам, переключатель 24ч/7д/30д), парк серверов (компактные карточки с быстрыми действиями), системный статус (API, PostgreSQL, ноды, WebSocket), проверка обновлений (GitHub Releases API) |
+| **Users** | CRUD с пагинацией/фильтрацией/сортировкой, массовые операции (чекбоксы, enable/disable/delete/reset-traffic, до 100 за раз), экспорт CSV/JSON |
+| **User Detail** | Трафик, HWID устройства, нарушения, история действий админов (timeline) |
+| **Nodes** | CRUD, статус, перезапуск Xray, агент-токены (генерация/отзыв/статус), enable/disable |
+| **Fleet** | Мониторинг парка нод: CPU, RAM, диск, скорость DL/UL, uptime, Xray-версия, пользователи онлайн |
+| **Hosts** | CRUD, inbound конфигурация, security layer (TLS, Reality, XTLS), SNI/host/path, порты, позиционирование |
+| **Violations** | Просмотр нарушений с IP Lookup и скор-разбивкой (temporal, geo, ASN, profile, device), фильтры по IP/стране/дате, resolve-действия, экспорт CSV/JSON |
+| **Automations** | Конструктор правил (4-шаговый визард), 3 типа триггеров (событие/расписание/порог), 7 типов действий, 6 готовых шаблонов, лог срабатываний, dry-run тестирование, CRON-билдер |
+| **Analytics** | Географическая карта подключений (Leaflet), топ пользователей по трафику, анализ тенденций (area chart) |
+| **Admins** | CRUD админов, конструктор ролей (матрица прав 9 ресурсов × 5 действий), прогресс-бары лимитов, журнал аудита |
+| **Audit Log** | Автоматическое логирование всех мутаций (middleware), фильтры по админу/ресурсу/периоду, экспорт, real-time через WebSocket |
+| **System Logs** | Real-time стриминг логов через WebSocket, 4 источника (web/bot × INFO/WARNING), фильтр по уровню и тексту, live/paused режим |
+| **Settings** | Динамические настройки (3-tier: DB > .env > defaults), категории, маскировка секретов, IP whitelist, статус синхронизации |
+| **Login** | Telegram Login Widget + логин/пароль, JWT (access + refresh), определение первого запуска (форма регистрации первого админа) |
 
-### Задачи
+### Системные возможности
 
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 1.1 | Инициализация shadcn/ui | `components.json`, алиасы путей, `cn()` утилита, CSS-переменные для темы | ✅ |
-| 1.2 | Базовые компоненты | Button, Card, Badge, Input, Label, Select, Dialog, Table, Tabs, Tooltip, DropdownMenu, Sheet, Separator, Skeleton, ScrollArea, Switch, Popover (17 компонентов) | ✅ |
-| 1.3 | Рефакторинг Layout | Sidebar → lucide-react + Button/ScrollArea/Tooltip/Separator, Header → Button/Input/Badge | ✅ |
-| 1.4 | Рефакторинг Dashboard | Card, Badge, Button, Skeleton, Separator + lucide-react иконки | ✅ |
-| 1.5 | Рефакторинг Users + UserDetail | Table, Dialog, DropdownMenu, Badge, Button, Input, Select, Skeleton, Tabs | ✅ |
-| 1.6 | Рефакторинг остальных страниц | Nodes, Hosts, Violations, Settings, Login — полный рефакторинг на shadcn/ui + lucide-react | ✅ |
-| 1.7 | Удаление react-icons/hi | Полная замена react-icons/hi на lucide-react, исправление TS-ошибок | ✅ |
+- **RBAC**: 4 системные роли (superadmin, manager, operator, viewer), PermissionGate на всех страницах, квоты для админов
+- **WebSocket**: real-time обновления (ноды, пользователи, нарушения, аудит), автоматическая инвалидация React Query кеша, toast-уведомления о действиях других админов
+- **Движок автоматизаций**: обработка событий, CRON/interval планировщик (60с цикл), мониторинг порогов (5-мин цикл), lock на повторное срабатывание (30с), интеграция с WebSocket
+- **Аудит**: AuditMiddleware перехватывает все POST/PUT/PATCH/DELETE, broadcast через WebSocket
+- **Проверка обновлений**: GitHub Releases API с 30-мин кешем, семантическое сравнение версий
 
-**Зависимости (установлены):** `@radix-ui/*` (dialog, dropdown-menu, select, tabs, tooltip, separator, label, popover, scroll-area, switch, slot), `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react`, `tailwindcss-animate`
+### База данных (16 миграций Alembic)
 
-**Результат:** Все 8 страниц + Layout мигрированы на shadcn/ui. Единая дизайн-система с CSS-переменными (Remnawave тёмная тема с teal/cyan акцентами). Иконки: lucide-react вместо react-icons.
+Основные таблицы: `users`, `nodes`, `hosts`, `violations`, `ip_metadata`, `hwid_devices`, `bot_config`, `admin_roles`, `admin_permissions`, `admin_accounts`, `admin_audit_log`, `automation_rules`, `automation_log`, `node_agent_tokens`
 
----
+### Backend API (14 модулей маршрутов)
 
-## Фаза 2 — Система ролей и прав администраторов (RBAC) ✅ ВЫПОЛНЕНО
-
-**Зачем:** Сейчас все админы равноправны (проверяется только `telegram_id in ADMINS`). Нужен конструктор для создания админов с разными правами и лимитами.
-
-### 2.1 Модель данных ✅
-
-Новые таблицы в PostgreSQL:
-
-```sql
--- Роли администраторов
-CREATE TABLE admin_roles (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE,        -- "superadmin", "manager", "viewer", custom
-    display_name VARCHAR(200),                 -- "Супер-администратор"
-    description TEXT,
-    is_system BOOLEAN DEFAULT false,           -- системные роли нельзя удалить
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Права (permissions)
-CREATE TABLE admin_permissions (
-    id SERIAL PRIMARY KEY,
-    role_id INTEGER REFERENCES admin_roles(id) ON DELETE CASCADE,
-    resource VARCHAR(50) NOT NULL,             -- "users", "nodes", "hosts", "violations", "settings", "admins"
-    action VARCHAR(50) NOT NULL,               -- "view", "create", "edit", "delete", "bulk_operations"
-    UNIQUE(role_id, resource, action)
-);
-
--- Администраторы с ролями и лимитами
-CREATE TABLE admin_accounts (
-    id SERIAL PRIMARY KEY,
-    telegram_id BIGINT UNIQUE,                 -- NULL для password-only
-    username VARCHAR(100) NOT NULL UNIQUE,
-    password_hash VARCHAR(255),
-    role_id INTEGER REFERENCES admin_roles(id),
-
-    -- Лимиты (NULL = без ограничений)
-    max_users INTEGER,                         -- макс. количество создаваемых пользователей
-    max_traffic_gb INTEGER,                    -- макс. суммарный трафик для его пользователей
-    max_nodes INTEGER,                         -- макс. нод
-    max_hosts INTEGER,                         -- макс. хостов
-
-    -- Счётчики использования
-    users_created INTEGER DEFAULT 0,
-    traffic_used_bytes BIGINT DEFAULT 0,
-
-    is_active BOOLEAN DEFAULT true,
-    created_by INTEGER REFERENCES admin_accounts(id),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-**Реализация:** Alembic миграция `20260209_0009_add_rbac_tables.py` — все 4 таблицы (`admin_roles`, `admin_permissions`, `admin_accounts`, `admin_audit_log`) созданы с индексами и ограничениями. Автоматическая миграция существующих записей из `admin_credentials`.
-
-### 2.2 Предустановленные роли ✅
-
-| Роль | Описание | Права |
-|------|----------|-------|
-| **superadmin** | Полный доступ, управление другими админами | Всё |
-| **manager** | Управление пользователями, нодами, хостами | users.*, nodes.view/edit, hosts.view/edit |
-| **operator** | Только просмотр + базовые действия | *.view, users.create/edit |
-| **viewer** | Только просмотр | *.view |
-
-**Реализация:** 4 системные роли (is_system=true) с полной матрицей прав засеяны в миграции. 9 ресурсов × 5 действий.
-
-### 2.3 Backend
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 2.3.1 | Миграция БД | Alembic: создать таблицы admin_roles, admin_permissions, admin_accounts | ✅ |
-| 2.3.2 | Middleware прав | Декоратор `@require_permission("users", "create")` для эндпоинтов | ✅ |
-| 2.3.3 | Проверка лимитов | Middleware: при создании пользователя проверять `users_created < max_users` | ✅ |
-| 2.3.4 | API: Админы | CRUD `/api/v2/admins` — список, создание, редактирование, удаление | ✅ |
-| 2.3.5 | API: Роли | CRUD `/api/v2/roles` — управление ролями и правами | ✅ |
-| 2.3.6 | Аудит действий | Логирование: кто, когда, что сделал (таблица `admin_audit_log`) | ✅ |
-| 2.3.7 | Миграция auth | Переход от `admin_credentials` к `admin_accounts` (обратная совместимость) | ✅ |
-
-**Детали реализации:**
-- `rbac.py` (613 строк): `require_permission()`, `require_superadmin()`, кеширование прав (TTL 60с), `AdminUser` dataclass
-- `deps.py` (304 строки): резолвинг админа с fallback на legacy `admin_credentials` и `.env`
-- `admins.py` (266 строк): 6 эндпоинтов (CRUD + audit-log), валидация паролей, аудит всех действий
-- `roles.py` (224 строки): 6 эндпоинтов (CRUD + resources), защита системных ролей, инвалидация кеша
-- Права применены на **всех** API v2 эндпоинтах: users, nodes, hosts, violations, settings, analytics, admins, roles
-
-**2.3.3:** Dependency `require_quota()` в `deps.py` проверяет лимиты перед созданием. Подключён к POST-эндпоинтам users, nodes, hosts. После успешного создания вызывается `increment_usage_counter()`. Superadmin и legacy-админы обходят проверку.
-
-### 2.4 Frontend — Страница «Администраторы»
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 2.4.1 | Список админов | Таблица: имя, роль, лимиты, использование, статус, дата создания | ✅ |
-| 2.4.2 | Конструктор админа | Форма создания: имя, Telegram ID (опц.), роль, лимиты (ползунки/инпуты) | ✅ |
-| 2.4.3 | Редактирование | Изменение роли, лимитов, включение/выключение | ✅ |
-| 2.4.4 | Конструктор ролей | Матрица прав: ресурс × действие (чекбоксы), название роли | ✅ |
-| 2.4.5 | Визуализация лимитов | Прогресс-бары: 23/50 пользователей, 450/1000 ГБ трафика | ✅ |
-| 2.4.6 | Permission-aware UI | Скрывать/блокировать кнопки, на которые у админа нет прав | ✅ |
-
-**Детали реализации:**
-- `Admins.tsx`: страница с 3 вкладками (Админы, Роли, Журнал аудита), адаптивный дизайн (таблица + мобильные карточки)
-- `QuotaBar`: прогресс-бары с цветовой индикацией (зелёный/жёлтый/красный), поддержка ∞
-- `RoleBadge`: цветные бейджи ролей (superadmin=красный, manager=синий, operator=жёлтый, viewer=серый)
-- `PermissionGate.tsx`: компонент + хук `useHasPermission()` для условного рендеринга
-- `permissionStore.ts` (Zustand): загрузка прав из `/auth/me`, bypass для superadmin
-- `Sidebar.tsx`: фильтрация навигации по правам
-- `admins.ts`: TypeScript API-клиент для всех RBAC-эндпоинтов
-
-**Результат:** Полная RBAC-система с 4 системными ролями, матрицей прав (9 ресурсов × 5 действий), CRUD для админов и ролей, журнал аудита, Permission-aware UI на всех страницах. Обратная совместимость с legacy-авторизацией.
+`auth`, `users`, `nodes`, `hosts`, `violations`, `analytics`, `advanced_analytics`, `automations`, `settings`, `admins`, `roles`, `audit`, `logs`, `websocket`
 
 ---
 
-## Фаза 3 — Улучшение Dashboard ✅ ВЫПОЛНЕНО
-
-**Вдохновение:** Панель «Решала» — живые графики, карточки серверов с метриками, дельта-индикаторы.
-
-### 3.1 Графики трафика и подключений ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 3.1.1 | Backend: временные ряды | Новый эндпоинт `/analytics/timeseries` — трафик и подключения по часам/дням | ✅ |
-| 3.1.2 | График трафика | Line/Area chart: трафик за 24ч/7д/30д с переключателем периода | ✅ |
-| 3.1.3 | График подключений | Area chart: активные подключения по нодам (stacked) | ✅ |
-| 3.1.4 | Дельта-индикаторы | На карточках статистики: "+12% за сутки", "-3 ноды за неделю" | ✅ |
-
-**Детали реализации:**
-- `GET /analytics/timeseries` — период (24h/7d/30d), метрика (traffic/connections). Данные из upstream `/api/bandwidth-stats/nodes` с series. Для трафика — stacked AreaChart по нодам (при наличии series) или LineChart (fallback). Для подключений — текущий snapshot users_online по нодам.
-- `GET /analytics/deltas` — сравнение today vs yesterday для трафика (%) и нарушений (абсолютно)
-- `DeltaIndicator` компонент: зелёная стрелка вверх / красная вниз, показывает % или абсолют
-- `PeriodSwitcher` — компактный переключатель 24ч/7д/30д
-- Кастомные Recharts tooltip'ы с форматированием байт/подключений
-
-### 3.2 Node Fleet (карточки серверов) ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 3.2.1 | Backend: метрики нод | `GET /analytics/node-fleet` — все ноды с uptime, Xray версия, скорость DL/UL, CPU, RAM | ✅ |
-| 3.2.2 | Карточки нод на Dashboard | Компактные карточки: статус-индикатор, IP, пользователей онлайн, трафик сегодня, uptime | ✅ |
-| 3.2.3 | Быстрые действия | На карточках: перезапуск, включить/выключить (без перехода на страницу Nodes) | ✅ |
-| 3.2.4 | Группировка | По статусу: сначала проблемные (offline), потом рабочие, затем отключённые | ✅ |
-
-**Детали реализации:**
-- `NodeFleetCard` — компактная карточка ноды с сеткой метрик 2×N, иконки lucide-react
-- Метрики: онлайн пользователи, трафик сегодня, uptime, Xray версия, DL/UL скорость, CPU, RAM
-- Быстрые действия через Tooltip + Button: перезапуск, вкл/выкл (useMutation + invalidateQueries)
-- Сортировка: offline → online → disabled. Badge статуса с цветовой индикацией
-- Обогащение данных: traffic today из date-range API, скорость из realtime API
-
-### 3.3 Системный статус ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 3.3.1 | Расширенный health check | `GET /analytics/system/components` — Remnawave API (response time), PostgreSQL (pool), Nodes (online/total), WebSocket (sessions) | ✅ |
-| 3.3.2 | Карточка системы | Блок: компоненты с статусами (online/offline/degraded), версия, uptime сервиса | ✅ |
-
-**Детали реализации:**
-- `SystemStatusCard` — список компонентов с иконками, статус-бейджами, метриками
-- 4 компонента: Remnawave API (с замером response time), PostgreSQL (pool size/free), Nodes (online/total), WebSocket (active connections)
-- Статусы: online (зелёный пульс), offline (красный), degraded (жёлтый), unknown (серый)
-- Uptime процесса через psutil, версия из конфига
-
-**Результат:** Dashboard полностью обновлён: графики трафика с переключателем периода, stacked area chart по нодам, дельта-индикаторы на статистических карточках, парк серверов с компактными карточками и быстрыми действиями, расширенный системный статус с метриками компонентов. WebSocket-интеграция обновлена для инвалидации новых query keys.
-
----
-
-## Фаза 4 — Улучшение существующих функций ✅ ВЫПОЛНЕНО
-
-### 4.1 Массовые операции ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 4.1.1 | Выбор нескольких пользователей | Чекбоксы в таблице Users, кнопки "Выбрать всё / Снять" | ✅ |
-| 4.1.2 | Массовые действия | Включить / Выключить / Удалить / Сбросить трафик | ✅ |
-| 4.1.3 | Backend: batch endpoints | `POST /users/bulk/enable`, `/bulk/disable`, `/bulk/delete`, `/bulk/reset-traffic` | ✅ |
-| 4.1.4 | Подтверждение | ConfirmDialog: "Вы уверены? Затронуто N пользователей" | ✅ |
-
-**Детали реализации:**
-- `bulk.py` (backend): BulkUserRequest (uuids, max 100), BulkOperationResult (success/failed/errors)
-- 4 bulk-эндпоинта в `users.py` с `require_permission("users", "bulk_operations")`
-- Alembic миграция: добавлено право `bulk_operations` для ролей superadmin и manager
-- Frontend: чекбоксы в таблице, sticky toolbar при выделении, мутации с toast-уведомлениями
-
-### 4.2 Экспорт данных ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 4.2.1 | Экспорт пользователей | CSV/JSON: текущая выборка (с фильтрами) | ✅ |
-| 4.2.2 | Экспорт нарушений | CSV/JSON: дата, пользователь, скор, severity, причины, IP | ✅ |
-| 4.2.3 | Экспорт статистики | PDF/PNG dashboard — отложено (требуется html-to-image) | ⏳ |
-
-**Детали реализации:**
-- `export.ts`: exportCSV (papaparse), exportJSON, formatBytesForExport, downloadBlob
-- `ExportDropdown.tsx`: переиспользуемый компонент с CSV/JSON вариантами
-- Интегрирован на страницах Users и Violations
-
-### 4.3 Улучшенный поиск ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 4.3.1 | Глобальный поиск | Command Palette (Cmd+K): навигация, быстрые действия, live-поиск пользователей | ✅ |
-| 4.3.2 | Сохранённые фильтры | Zustand + localStorage: сохранение/загрузка/удаление наборов фильтров | ✅ |
-| 4.3.3 | Расширенный поиск нарушений | По IP, по стране, по диапазону дат (backend + frontend) | ✅ |
-
-**Детали реализации:**
-- `CommandPalette.tsx`: навигация по 8 страницам, быстрые действия, debounced поиск пользователей (React Query)
-- Горячая клавиша Cmd/Ctrl+K в Layout, кнопка-триггер в Header с бейджем ⌘K
-- `SavedFiltersDropdown.tsx`: dropdown с сохранёнными фильтрами, inline-ввод имени
-- `useFiltersStore.ts` (Zustand persist): SavedFilter {id, name, page, filters, createdAt}
-- Backend Violations: добавлены параметры ip, country, date_from, date_to
-
-### 4.4 Улучшения UX ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 4.4.1 | Toast-уведомления | sonner: success/error/info на всех мутациях всех страниц | ✅ |
-| 4.4.2 | Skeleton-загрузки | Уже реализовано в Фазе 1 (shadcn Skeleton) | ✅ |
-| 4.4.3 | Keyboard shortcuts | Cmd+K — Command Palette, Esc закрыть модал/диалог | ✅ |
-| 4.4.4 | Breadcrumbs | PageBreadcrumbs с динамическим разрешением имён пользователей | ✅ |
-
-**Детали реализации:**
-- `sonner.tsx`: Toaster с тёмной темой, position bottom-right, цветовые варианты (green/red/yellow/cyan)
-- `ConfirmDialog.tsx`: замена всех `confirm()` и `alert()` на AlertDialog
-- `PageBreadcrumbs.tsx`: автогенерация из React Router, ROUTE_LABELS, dynamic user name fetch
-- Toast добавлен на **всех** страницах: Users, UserDetail, Nodes, Hosts, Violations, Settings, Fleet, Admins
-
-### 4.5 RBAC: расширение Permission Gates ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 4.5.1 | Nodes.tsx | PermissionGate на create/edit/delete действиях | ✅ |
-| 4.5.2 | Hosts.tsx | PermissionGate на create/edit/delete действиях | ✅ |
-| 4.5.3 | Violations.tsx | useHasPermission для resolve-действий | ✅ |
-| 4.5.4 | Settings.tsx | useHasPermission('settings', 'edit') для всех input/sync | ✅ |
-
-**Зависимости (установлены):** `sonner`, `cmdk`, `@radix-ui/react-checkbox`, `papaparse`
-
-**Результат:** Все подсистемы Фазы 4 реализованы. Массовые операции с RBAC, экспорт CSV/JSON, Command Palette с Cmd+K, сохранённые фильтры, расширенный поиск нарушений, toast-уведомления на всех страницах, ConfirmDialog вместо confirm(), breadcrumbs с динамическими именами, Permission Gates на всех страницах.
-
----
-
-## Фаза 5 — Новые функции ✅ ВЫПОЛНЕНО
-
-### 5.1 Журнал аудита (Audit Log) ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 5.1.1 | Таблица `audit_log` | admin_id, action, resource, resource_id, details (JSON), ip, timestamp | ✅ |
-| 5.1.2 | Backend: автоматическая запись | Middleware: логировать все мутирующие действия (POST/PUT/DELETE) | ✅ |
-| 5.1.3 | Страница «Журнал» | Timeline с фильтрами: по админу, по ресурсу, по периоду, поиск, экспорт CSV/JSON | ✅ |
-| 5.1.4 | На карточке пользователя | Секция "История": кто и когда менял настройки пользователя | ✅ |
-
-**Детали реализации:**
-- `audit_middleware.py`: AuditMiddleware (BaseHTTPMiddleware) автоматически логирует все POST/PUT/PATCH/DELETE. URL-pattern matching для определения resource/action/resource_id. Skip-список для уже логируемых вручную эндпоинтов
-- `audit.py` (API): 4 эндпоинта — `GET /audit` (список с фильтрами), `GET /audit/actions` (для dropdown), `GET /audit/resource/{resource}/{resource_id}` (история ресурса), `GET /audit/stats` (статистика)
-- `AuditLog.tsx`: страница с карточками статистики, фильтрами (период, ресурс, действие, поиск), таблицей с мобильными карточками, пагинацией, экспортом CSV/JSON
-- `UserDetail.tsx`: компонент UserHistory — timeline действий админов с точечной визуализацией
-- WebSocket broadcast audit-событий для real-time обновления
-
-### 5.2 Системные логи ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 5.2.1 | API для чтения логов | Стриминг логов бота и бэкенда через WebSocket | ✅ |
-| 5.2.2 | Страница «Логи» | Real-time просмотр логов с фильтрами по уровню (INFO/WARNING/ERROR) | ✅ |
-| 5.2.3 | Поиск по логам | Grep-подобный поиск по содержимому | ✅ |
-
-**Детали реализации:**
-- `logs.py` (API): `GET /logs/files` (список лог-файлов), `GET /logs/tail` (чтение с конца), `WS /logs/stream` (real-time стриминг). Поддержка 4 файлов: web_INFO, web_WARNING, bot_INFO, bot_WARNING
-- WebSocket стриминг с поддержкой переключения файла через `{"type": "switch_file"}`
-- `SystemLogs.tsx`: карточки выбора файла, live/paused режим, auto-scroll, фильтр по уровню и тексту, буфер 2000 строк
-
-### 5.3 Проверка обновлений ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 5.3.1 | Backend: version check | Сравнение текущей версии с GitHub Releases API (30-мин кеш) | ✅ |
-| 5.3.2 | Блок на Dashboard | Текущая версия + доступное обновление + changelog | ✅ |
-| 5.3.3 | Проверка зависимостей | Версии Python, PostgreSQL, FastAPI, Xray на нодах | ✅ |
-
-**Детали реализации:**
-- `update_checker.py`: проверка `Case211/remnawave-admin` GitHub Releases API с кешем 30 мин. Семантическое сравнение версий. `get_dependency_versions()` для Python, PostgreSQL, FastAPI, Xray
-- Dashboard `UpdateCheckerCard`: бейдж обновления, changelog preview, сетка версий зависимостей
-
-### 5.4 Расширенная аналитика ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 5.4.1 | Географическая карта | Leaflet карта подключений с circle markers по городам | ✅ |
-| 5.4.2 | Топ пользователей по трафику | Таблица с индикаторами онлайна, статуса, прогресс-барами | ✅ |
-| 5.4.3 | Анализ тенденций | Area chart роста пользователей, трафика, нарушений за период | ✅ |
-
-**Детали реализации:**
-- `advanced_analytics.py` (API): `GET /analytics/advanced/geo` (страны + города с lat/lon), `GET /analytics/advanced/top-users` (по трафику), `GET /analytics/advanced/trends` (users/violations/traffic за период)
-- `Analytics.tsx`: страница с 3 секциями — Leaflet гео-карта с тёмными тайлами (CartoDB dark_all), таблица топ пользователей с кликабельными строками, area chart тенденций с переключателями метрик и периодов
-- Страница добавлена в навигацию (Sidebar, Command Palette, Breadcrumbs)
-
-### 5.5 Дополнительно: Реалтайм-уведомления ✅
-
-| # | Задача | Описание | Статус |
-|---|--------|----------|--------|
-| 5.5.1 | WebSocket audit broadcast | Трансляция audit-событий всем подключённым админам | ✅ |
-| 5.5.2 | Toast-уведомления | Показ toast при действиях **других** админов (sonner) | ✅ |
-
-**Детали реализации:**
-- `broadcast_audit_event()` в websocket.py: трансляция при каждом аудит-событии
-- `useWebSocket.ts`: при получении `audit` события — сравнение с текущим admin username, показ `toast.info()` для действий других админов. Словари `AUDIT_ACTION_LABELS` и `AUDIT_RESOURCE_LABELS` для русских подписей
-
-**Зависимости (установлены):** `leaflet`, `react-leaflet`, `@types/leaflet`
-
-**Результат:** Все подсистемы Фазы 5 реализованы. Автоматический аудит-лог с middleware + выделенная страница + история на UserDetail + экспорт. Real-time просмотр логов через WebSocket. Проверка обновлений с GitHub API. Расширенная аналитика с Leaflet гео-картой, топ пользователей и трендами. Реалтайм-уведомления о действиях других админов через toast.
-
----
-
-## Фаза 6 — Автоматизации (конструктор правил)
-
-**Зачем:** Сейчас все действия выполняются вручную. Нужна возможность задать правила «если X → сделать Y», которые срабатывают автоматически. Не система плагинов со сторонним кодом — а встроенный движок правил с визуальным конструктором.
-
-### 6.1 Модель данных
-
-```sql
--- Правила автоматизации
-CREATE TABLE automation_rules (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(200) NOT NULL,              -- "Блокировка при превышении трафика"
-    description TEXT,
-    is_enabled BOOLEAN DEFAULT true,
-    category VARCHAR(50) NOT NULL,           -- "users", "nodes", "violations", "system"
-
-    -- Триггер: что запускает правило
-    trigger_type VARCHAR(50) NOT NULL,       -- "event", "schedule", "threshold"
-    trigger_config JSONB NOT NULL,           -- конфигурация триггера (см. ниже)
-
-    -- Условия (опционально, дополнительные фильтры)
-    conditions JSONB,                        -- [{"field": "traffic_gb", "op": ">", "value": 100}]
-
-    -- Действие: что делать
-    action_type VARCHAR(50) NOT NULL,        -- "disable_user", "notify", "restart_node", "block_user", ...
-    action_config JSONB NOT NULL,            -- параметры действия
-
-    -- Мета
-    last_triggered_at TIMESTAMPTZ,
-    trigger_count INTEGER DEFAULT 0,
-    created_by INTEGER REFERENCES admin_accounts(id),
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Лог срабатываний
-CREATE TABLE automation_log (
-    id SERIAL PRIMARY KEY,
-    rule_id INTEGER REFERENCES automation_rules(id),
-    triggered_at TIMESTAMPTZ DEFAULT NOW(),
-    target_type VARCHAR(50),                 -- "user", "node"
-    target_id VARCHAR(200),                  -- UUID пользователя/ноды
-    action_taken VARCHAR(100),
-    result VARCHAR(50),                      -- "success", "error", "skipped"
-    details JSONB
-);
-```
-
-### 6.2 Типы триггеров
-
-| Триггер | trigger_type | trigger_config | Пример |
-|---------|-------------|----------------|--------|
-| Событие | `event` | `{"event": "user.traffic_exceeded"}` | Трафик превышен |
-| Событие | `event` | `{"event": "node.went_offline"}` | Нода ушла в offline |
-| Событие | `event` | `{"event": "violation.detected", "min_score": 80}` | Нарушение с высоким скором |
-| Расписание | `schedule` | `{"cron": "0 3 * * *"}` | Каждый день в 3:00 |
-| Расписание | `schedule` | `{"interval_minutes": 60}` | Каждый час |
-| Порог | `threshold` | `{"metric": "users_online", "op": ">", "value": 1000}` | Онлайн > 1000 |
-
-### 6.3 Типы действий
-
-| Действие | action_type | Описание |
-|----------|-------------|----------|
-| Отключить пользователя | `disable_user` | Выключить аккаунт |
-| Заблокировать пользователя | `block_user` | Блокировка через Anti-Abuse |
-| Уведомить | `notify` | Отправить в Telegram/webhook |
-| Перезапустить ноду | `restart_node` | Рестарт Xray |
-| Удалить просроченных | `cleanup_expired` | Удалить пользователей с истёкшей подпиской |
-| Сбросить трафик | `reset_traffic` | Обнулить счётчик трафика |
-| Запустить синхронизацию | `force_sync` | Принудительная синхронизация с API |
-
-### 6.4 Предустановленные шаблоны
-
-Готовые правила, которые можно включить одной кнопкой:
-
-| Шаблон | Триггер | Действие |
-|--------|---------|----------|
-| Автоблокировка шаринга | Нарушение с скором > 80 | Заблокировать пользователя |
-| Мониторинг нод | Нода offline > 5 мин | Уведомление в Telegram |
-| Очистка просроченных | Каждый день в 3:00 | Удалить expired > 30 дней |
-| Уведомление о трафике | Трафик пользователя > 90% лимита | Уведомить админа |
-| Авто-рестарт | Нода offline > 15 мин | Перезапустить ноду |
-| Отчёт за день | Каждый день в 23:00 | Сводка за день в Telegram |
-
-### 6.5 Backend
-
-| # | Задача | Описание |
-|---|--------|----------|
-| 6.5.1 | Миграция БД | Таблицы automation_rules, automation_log |
-| 6.5.2 | Движок правил | `AutomationEngine` — обработка событий, проверка условий, выполнение действий |
-| 6.5.3 | Планировщик | APScheduler или asyncio-задачи для cron/interval триггеров |
-| 6.5.4 | Интеграция с событиями | Хуки в существующих сервисах: при создании нарушения → проверить правила |
-| 6.5.5 | API: CRUD правил | `/api/v2/automations` — список, создание, редактирование, включение/выключение |
-| 6.5.6 | API: лог и шаблоны | `/api/v2/automations/log`, `/api/v2/automations/templates` |
-
-### 6.6 Frontend — Страница «Автоматизации»
-
-| # | Задача | Описание |
-|---|--------|----------|
-| 6.6.1 | Карточки правил | Grid карточек: название, категория, триггер, статус (вкл/выкл), счётчик срабатываний |
-| 6.6.2 | Конструктор правил | Пошаговая форма: 1) Триггер → 2) Условия → 3) Действие → 4) Название |
-| 6.6.3 | Шаблоны | Галерея готовых правил с кнопкой «Включить» |
-| 6.6.4 | Лог срабатываний | Timeline: когда, какое правило, что сделало, результат |
-| 6.6.5 | Тестирование | Кнопка «Тест» — запустить правило вручную, показать что бы произошло (dry run) |
+## Выполненные фазы (архив)
+
+| Фаза | Название | Описание |
+|------|----------|----------|
+| 1 | Миграция на shadcn/ui | Все страницы + Layout мигрированы. Единая дизайн-система, CSS-переменные, lucide-react |
+| 2 | RBAC | 4 роли, матрица прав, CRUD админов и ролей, квоты, Permission-aware UI, совместимость с legacy auth |
+| 3 | Улучшение Dashboard | Графики трафика, дельта-индикаторы, карточки нод с быстрыми действиями, системный статус |
+| 4 | Улучшение функций | Массовые операции, экспорт CSV/JSON, Command Palette, сохранённые фильтры, toast/ConfirmDialog/breadcrumbs |
+| 5 | Новые функции | Аудит-лог с middleware, системные логи, проверка обновлений, расширенная аналитика (гео + тренды), реалтайм-уведомления |
+| 6 | Автоматизации | Конструктор правил, 3 типа триггеров, 7 действий, 6 шаблонов, движок с CRON/threshold/event, dry-run |
 
 ---
 
 ## Фаза 7 — Визард первого запуска и компоненты системы
 
-**Зачем:** Сейчас вся настройка через `.env` — для новых пользователей это неудобно. Визард проведёт по шагам при первом запуске, а страница «Компоненты» покажет статус всех частей системы.
+**Зачем:** Сейчас при первом запуске есть только форма создания первого админа. Полноценный визард проведёт по всем шагам настройки, а страница «Компоненты» даст единую точку мониторинга и управления всеми частями системы.
+
+**Текущее состояние:** Реализовано определение первого запуска (`GET /auth/setup-status`) и регистрация первого админа на странице Login. Многошагового визарда и страницы компонентов нет.
 
 ### 7.1 Визард первого запуска (Setup Wizard)
 
-При первом входе в веб-панель (если нет настроенных админов) — показывать пошаговый визард:
+При первом входе в панель (если нет админов) — пошаговый визард вместо простой формы регистрации:
 
 | Шаг | Что делает |
 |-----|-----------|
 | 1. Приветствие | Описание системы, что будет настроено |
 | 2. Подключение к API | Ввод API_BASE_URL и API_TOKEN, кнопка «Проверить соединение» |
 | 3. Настройка бота | BOT_TOKEN, проверка что бот отвечает |
-| 4. Создание админа | Имя, пароль, привязка Telegram (опционально) |
-| 5. Webhook (опционально) | Включить/выключить, настроить WEBHOOK_SECRET, тест |
+| 4. Создание админа | Имя, пароль, привязка Telegram (опционально). Уже реализовано — интегрировать в визард |
+| 5. Webhook (опционально) | Включить/выключить, WEBHOOK_SECRET, тест |
 | 6. Anti-Abuse (опционально) | Включить/выключить, базовые пороги |
 | 7. Готово | Сводка настроек, кнопка «Перейти в панель» |
 
-Настройки из визарда сохраняются в БД (динамические настройки), т.е. `.env` не нужно редактировать вручную для базовой настройки.
-
 ### 7.2 Страница «Компоненты системы»
 
-Карточки всех компонентов с статусом и быстрыми действиями:
+Выделенная страница с карточками всех компонентов:
 
 | Компонент | Статус | Метрики | Действия |
 |-----------|--------|---------|----------|
@@ -505,87 +109,243 @@ CREATE TABLE automation_log (
 
 | # | Задача | Описание |
 |---|--------|----------|
-| 7.3.1 | Backend: health endpoints | Расширенный `/system/components` — статус каждого компонента |
-| 7.3.2 | Backend: setup wizard API | `/api/v2/setup/status`, `/api/v2/setup/step/{n}` — проверка и сохранение |
-| 7.3.3 | Frontend: Setup Wizard | Многошаговая форма с валидацией на каждом шаге |
-| 7.3.4 | Frontend: Components page | Карточки компонентов с real-time статусом |
-| 7.3.5 | Определение первого запуска | Проверка: есть ли админы в БД? Настроен ли API? → показать wizard |
+| 7.1.1 | Backend: setup wizard API | `POST /api/v2/setup/step/{n}` — валидация и сохранение каждого шага. Проверка соединения с API, ботом, БД |
+| 7.1.2 | Frontend: Setup Wizard | Многошаговая форма (Stepper) с валидацией, прогресс-баром, возможностью пропуска опциональных шагов |
+| 7.1.3 | Интеграция с Login | Заменить текущую форму регистрации на полноценный визард при `needs_setup=true` |
+| 7.2.1 | Backend: расширенный health | `GET /api/v2/system/components` — статус, метрики и доступные действия для каждого компонента |
+| 7.2.2 | Frontend: Components page | Карточки компонентов с real-time статусом, метриками, быстрыми действиями |
+| 7.2.3 | Навигация | Добавить в Sidebar (секция «Администрирование»), Command Palette, breadcrumbs |
+
+---
+
+## Фаза 8 — Управление подписками и тарифами
+
+**Зачем:** Сейчас пользователи создаются вручную с указанием лимита трафика и срока. Нужна система тарифных планов, чтобы упростить управление и обеспечить единообразие.
+
+### 8.1 Модель данных
+
+```sql
+CREATE TABLE subscription_plans (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,             -- "Базовый", "Про", "Безлимит"
+    description TEXT,
+    traffic_limit_gb INTEGER,               -- NULL = безлимит
+    duration_days INTEGER NOT NULL,         -- 30, 90, 365
+    max_devices INTEGER DEFAULT 1,          -- лимит HWID
+    speed_limit_mbps INTEGER,               -- NULL = без ограничений
+    allowed_nodes UUID[],                   -- NULL = все ноды
+    price DECIMAL(10,2),                    -- для отображения (фактическая оплата — вне системы)
+    is_active BOOLEAN DEFAULT true,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Связь пользователя с планом
+ALTER TABLE users ADD COLUMN plan_id INTEGER REFERENCES subscription_plans(id);
+ALTER TABLE users ADD COLUMN plan_started_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN plan_expires_at TIMESTAMPTZ;
+```
+
+### 8.2 Задачи
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 8.1.1 | Миграция БД | Таблица `subscription_plans`, связь с `users` |
+| 8.1.2 | Backend: CRUD планов | `/api/v2/plans` — список, создание, редактирование, удаление, активация/деактивация |
+| 8.1.3 | Backend: назначение | При создании/редактировании пользователя — выбор плана (автозаполнение лимитов) |
+| 8.1.4 | Backend: продление | `POST /api/v2/users/{uuid}/renew` — продление по текущему плану |
+| 8.2.1 | Frontend: страница «Тарифы» | Карточки планов с метриками (сколько пользователей на каждом), создание/редактирование |
+| 8.2.2 | Frontend: выбор плана при создании пользователя | Dropdown план → автозаполнение полей (трафик, срок, устройства) |
+| 8.2.3 | Frontend: массовое продление | Выбрать пользователей → продлить на N дней или по плану |
+| 8.2.4 | Dashboard: виджет подписок | Распределение по планам (pie chart), скоро истекающие подписки |
+
+---
+
+## Фаза 9 — Уведомления и алерты
+
+**Зачем:** Сейчас уведомления — это toast'ы в панели и Telegram через автоматизации. Нужна полноценная подсистема уведомлений: центр уведомлений в UI, гибкая настройка каналов, эскалация.
+
+### 9.1 Центр уведомлений (in-app)
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 9.1.1 | Модель данных | Таблица `notifications`: admin_id, type, title, body, is_read, link, created_at |
+| 9.1.2 | Backend: API | CRUD, mark read/unread, mark all read, delete old |
+| 9.1.3 | Frontend: иконка в Header | Bell с бейджем непрочитанных, dropdown с последними уведомлениями |
+| 9.1.4 | Frontend: страница уведомлений | Полный список с фильтрами, группировкой по дате, массовой пометкой |
+| 9.1.5 | WebSocket интеграция | Новое уведомление → push через WS → обновление бейджа + toast |
+
+### 9.2 Каналы доставки
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 9.2.1 | Telegram | Отправка в личку админа / группу. Уже частично есть в автоматизациях — унифицировать |
+| 9.2.2 | Webhook | POST на указанный URL с JSON payload. Шаблоны для Discord, Slack |
+| 9.2.3 | Email (опционально) | SMTP настройка, HTML-шаблоны для отчётов и алертов |
+| 9.2.4 | Настройка каналов на уровне админа | Каждый админ выбирает: какие события, через какой канал |
+
+### 9.3 Правила алертов
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 9.3.1 | Пороговые алерты | Диск > 90%, ноды offline > N мин, трафик > X ГБ/сутки |
+| 9.3.2 | Группировка и дедупликация | Не дублировать одинаковые алерты, группировать по типу |
+| 9.3.3 | Эскалация | Если алерт не подтверждён за N минут → уведомить вышестоящего админа |
+
+---
+
+## Фаза 10 — Тестирование и стабильность
+
+**Зачем:** Проект вырос до 14 страниц, 14 API-модулей, 16 миграций. Без тестов любое изменение может сломать существующую функциональность.
+
+### 10.1 Frontend-тесты
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 10.1.1 | Настройка Vitest | vitest.config.ts, jsdom, setup файл с моками (React Query, Zustand, Axios) |
+| 10.1.2 | Тесты утилит | export.ts, helpers.ts (автоматизации), форматирование байт/дат, CRON-парсер |
+| 10.1.3 | Тесты хуков | useHasPermission, useWebSocket, useFiltersStore — поведение и edge cases |
+| 10.1.4 | Компонентные тесты | PermissionGate, ConfirmDialog, ExportDropdown, CommandPalette — рендеринг и взаимодействие |
+| 10.1.5 | Тесты страниц (smoke) | Каждая страница рендерится без ошибок с замоканными данными |
+
+### 10.2 Backend-тесты
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 10.2.1 | Настройка pytest | conftest.py, фикстуры (тестовая БД, admin user, mock upstream API) |
+| 10.2.2 | Тесты API | Каждый эндпоинт: happy path + ошибки + RBAC (403 для недостаточных прав) |
+| 10.2.3 | Тесты RBAC | Матрица: каждая роль × каждый ресурс × каждое действие |
+| 10.2.4 | Тесты автоматизаций | AutomationEngine: события, CRON, пороги, условия, блокировка повторов |
+| 10.2.5 | Тесты миграций | Alembic upgrade/downgrade для всех 16 миграций |
+
+### 10.3 E2E-тесты
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 10.3.1 | Настройка Playwright | playwright.config.ts, docker-compose для тестового окружения |
+| 10.3.2 | Критические сценарии | Логин → создание пользователя → редактирование → удаление. Создание ноды → проверка статуса. RBAC: viewer не видит кнопку «Создать» |
+| 10.3.3 | CI интеграция | GitHub Actions: lint + typecheck + unit tests + E2E на каждый PR |
+
+---
+
+## Фаза 11 — Мультиязычность (i18n)
+
+**Зачем:** Панель используется не только русскоязычными админами. i18n позволит расширить аудиторию без дублирования кода.
+
+### 11.1 Инфраструктура
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 11.1.1 | Настройка react-i18next | i18n.ts, языковые файлы в `locales/`, определение языка из настроек админа |
+| 11.1.2 | Извлечение строк | Все hardcoded строки → `t('key')`. Namespace-разделение: common, pages/*, components/* |
+| 11.1.3 | Русский (ru) | Базовый язык — перенос текущих строк |
+| 11.1.4 | Английский (en) | Полный перевод |
+
+### 11.2 Интеграция
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 11.2.1 | Переключатель языка | В Header или Settings, сохранение в профиле админа |
+| 11.2.2 | Форматирование | Даты, числа, байты — через Intl API с учётом локали |
+| 11.2.3 | Backend: i18n ошибок | Коды ошибок вместо текстовых сообщений, перевод на фронте |
+| 11.2.4 | Автоматизации: шаблоны уведомлений | Шаблоны Telegram/webhook с поддержкой языка |
+
+---
+
+## Фаза 12 — Оптимизация производительности
+
+**Зачем:** С ростом числа пользователей и нод таблицы становятся тяжёлыми, дашборд загружает много данных параллельно, бандл фронтенда растёт.
+
+### 12.1 Frontend
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 12.1.1 | Code splitting | React.lazy + Suspense для каждой страницы. Уменьшить initial bundle |
+| 12.1.2 | Виртуализация таблиц | @tanstack/react-virtual для Users/Violations (1000+ строк) |
+| 12.1.3 | Оптимизация re-renders | React.memo, useMemo, useCallback для тяжёлых компонентов (графики, карта, таблицы) |
+| 12.1.4 | Оптимизация Leaflet | Lazy-load карты, кластеризация маркеров (react-leaflet-cluster) при 100+ точек |
+| 12.1.5 | Service Worker | Кеширование статики, offline-индикатор |
+
+### 12.2 Backend
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 12.2.1 | Кеширование Redis | Результаты analytics, geo-данных, top users (TTL 1-5 мин) |
+| 12.2.2 | Пагинация cursor-based | Заменить offset-пагинацию для больших таблиц (users, audit_log, automation_log) |
+| 12.2.3 | Индексы БД | Аудит текущих запросов (EXPLAIN ANALYZE), добавление составных индексов |
+| 12.2.4 | Сжатие WebSocket | Включить permessage-deflate для WebSocket при большом трафике данных |
+| 12.2.5 | Rate limiting | Гранулярные лимиты по эндпоинтам (не только глобальный) |
+
+---
+
+## Фаза 13 — Бэкап, импорт и миграция
+
+**Зачем:** Возможность экспортировать всю конфигурацию, перенести на другой сервер, восстановить после сбоя.
+
+### 13.1 Задачи
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 13.1.1 | Экспорт конфигурации | JSON-файл со всеми настройками, ролями, планами, правилами автоматизации |
+| 13.1.2 | Импорт конфигурации | Загрузка JSON + валидация + применение (с диалогом конфликтов) |
+| 13.1.3 | Бэкап БД из панели | Кнопка → pg_dump → скачивание архива. Расписание через автоматизации |
+| 13.1.4 | Восстановление из бэкапа | Загрузка архива → pg_restore с подтверждением |
+| 13.1.5 | Миграция пользователей | Импорт пользователей из CSV/JSON (массовое создание с валидацией) |
+| 13.1.6 | Лог миграций | История импортов/экспортов с результатами (N успешно, M ошибок) |
+
+---
+
+## Фаза 14 — API для внешних интеграций
+
+**Зачем:** Позволить внешним системам (биллинг, CRM, боты продаж, мониторинг) взаимодействовать с панелью по API без доступа к внутренним эндпоинтам.
+
+### 14.1 Задачи
+
+| # | Задача | Описание |
+|---|--------|----------|
+| 14.1.1 | API-ключи | Генерация API-ключей для внешних систем с привязкой к роли/правам |
+| 14.1.2 | Public API (v3) | Отдельный набор эндпоинтов: создание/управление пользователями, проверка статуса, получение подписки |
+| 14.1.3 | Webhook-подписки | Подписка внешних систем на события (user.created, user.expired, node.offline) |
+| 14.1.4 | Документация API | OpenAPI/Swagger UI с примерами, доступный из панели |
+| 14.1.5 | Rate limiting для API-ключей | Индивидуальные лимиты на каждый ключ |
+| 14.1.6 | SDK / примеры | Python и JavaScript клиенты, примеры интеграции с WHMCS, Telegram-ботами продаж |
 
 ---
 
 ## Приоритетность фаз
 
 ```
-Фаза 1 (shadcn/ui)          ██████████  Фундамент — делается первой        ✅
-Фаза 2 (RBAC)               █████████   Ключевая фича — сразу после UI      ✅
-Фаза 3 (Dashboard)          ████████    Улучшение главной страницы           ✅
-Фаза 4 (Improvements)       ███████     Параллельно с Фазой 3               ✅
-Фаза 5 (New features)       ██████      После стабилизации основы            ✅
-Фаза 6 (Automations)        ██████      Конструктор правил
-Фаза 7 (Setup + Components) █████       Удобство первого запуска
+Выполнено:
+  Фаза 1 (shadcn/ui)          ██████████  Дизайн-система                      ✅
+  Фаза 2 (RBAC)               ██████████  Роли и права                        ✅
+  Фаза 3 (Dashboard)          ██████████  Графики и мониторинг                ✅
+  Фаза 4 (Improvements)       ██████████  Массовые операции, поиск, UX        ✅
+  Фаза 5 (New features)       ██████████  Аудит, логи, аналитика              ✅
+  Фаза 6 (Automations)        ██████████  Конструктор правил                  ✅
+
+Планируется:
+  Фаза 7  (Setup + Components) █████████  Визард настройки, мониторинг
+  Фаза 8  (Subscriptions)      ████████   Тарифные планы
+  Фаза 9  (Notifications)      ████████   Центр уведомлений, каналы
+  Фаза 10 (Testing)            ███████    Unit + E2E тесты, CI
+  Фаза 11 (i18n)               ██████     Мультиязычность
+  Фаза 12 (Performance)        ██████     Оптимизация, кеширование
+  Фаза 13 (Backup)             █████      Бэкап, импорт, миграция
+  Фаза 14 (External API)       █████      API-ключи, SDK, документация
 ```
 
 ### Порядок реализации
 
-1. **Фаза 1** — сначала, потому что все дальнейшие страницы будут строиться на shadcn/ui
-2. **Фаза 2** — RBAC нужен рано, т.к. влияет на все остальные фичи (permission-aware UI)
-3. **Фаза 3 + 4** — параллельно, улучшают разные части панели
-4. **Фаза 5** — после стабилизации основы
-5. **Фаза 6** — автоматизации требуют стабильного RBAC и аудит-лога
-6. **Фаза 7** — визард и компоненты полезнее, когда основные фичи уже работают
+1. **Фаза 7** — визард и компоненты: улучшает первый опыт и мониторинг. Фундамент для всех дальнейших настроек
+2. **Фаза 8** — подписки: часто запрашиваемая функция, упрощает ежедневное управление
+3. **Фаза 9** — уведомления: дополняет автоматизации и мониторинг, даёт админам контроль над каналами
+4. **Фаза 10** — тестирование: к этому моменту кодовая база достаточно большая, тесты — необходимость
+5. **Фаза 11** — i18n: расширение аудитории, не блокирует другие фичи
+6. **Фаза 12** — производительность: оптимизация после стабилизации функциональности
+7. **Фаза 13** — бэкап: важно для production, но не блокирует разработку
+8. **Фаза 14** — внешний API: последняя, т.к. требует стабильного внутреннего API
 
----
-
-## Технические решения
-
-### shadcn/ui + Vite
-
-shadcn/ui официально поддерживает Vite. Настройка:
-```bash
-npx shadcn-ui@latest init
-# Framework: Vite
-# Style: Default
-# Base color: Slate (для тёмной темы)
-# CSS variables: Yes
-```
-
-Замена иконок: `react-icons/hi` → `lucide-react` (shadcn использует Lucide).
-
-### RBAC: проверка прав
-
-```python
-# Backend: декоратор
-@router.post("/users")
-async def create_user(
-    data: CreateUserRequest,
-    admin: AdminUser = Depends(get_current_admin),
-    _: None = Depends(require_permission("users", "create")),
-    __: None = Depends(check_quota("max_users")),
-):
-    ...
-```
-
-```tsx
-// Frontend: компонент
-<PermissionGate resource="users" action="create">
-  <Button onClick={openCreateDialog}>Создать пользователя</Button>
-</PermissionGate>
-```
-
-### Временные ряды для графиков
-
-Новая таблица для хранения метрик (или агрегация из существующих данных):
-```sql
-CREATE TABLE metrics_snapshots (
-    id SERIAL PRIMARY KEY,
-    metric_name VARCHAR(100),     -- "traffic_bytes", "users_online", "connections"
-    metric_value DOUBLE PRECISION,
-    node_uuid UUID,               -- NULL для глобальных метрик
-    recorded_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_metrics_name_time ON metrics_snapshots(metric_name, recorded_at);
-```
+Фазы 10-14 могут выполняться параллельно, т.к. затрагивают разные слои.
 
 ---
 
@@ -593,9 +353,10 @@ CREATE INDEX idx_metrics_name_time ON metrics_snapshots(metric_name, recorded_at
 
 | Идея | Причина отказа |
 |------|---------------|
-| Полноценная система плагинов | Сторонний код, маркетплейс, sandbox — overkill. Вместо этого Фаза 6 (встроенные автоматизации) |
-| Мультиязычность веб-панели | Русский достаточен, бот уже поддерживает en/ru |
-| Мониторинг CPU/RAM серверов | Требует системного агента на каждом сервере, лучше использовать Prometheus/Grafana |
+| Система плагинов | Сторонний код, sandbox, маркетплейс — overkill. Автоматизации (Фаза 6) + внешний API (Фаза 14) закрывают эту потребность |
+| Мониторинг CPU/RAM серверов | Требует системного агента на каждом сервере. Fleet уже показывает базовые метрики с Xray, для глубокого мониторинга лучше Prometheus + Grafana |
+| Встроенная платёжная система | Интеграция с платёжными шлюзами — отдельный продукт. Внешний API (Фаза 14) позволит подключить любой биллинг |
+| PWA / мобильное приложение | Адаптивный дизайн достаточен для мобильных. Нативное приложение не оправдывает затраты для админ-панели |
 
 ---
 
