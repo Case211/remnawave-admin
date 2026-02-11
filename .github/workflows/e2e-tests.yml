@@ -36,10 +36,24 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Start preview server
+        run: npx vite preview --port 4173 --host 0.0.0.0 &
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 15); do
+            if curl -sf http://127.0.0.1:4173 > /dev/null 2>&1; then
+              echo "Server is ready"
+              break
+            fi
+            echo "Waiting for server... ($i)"
+            sleep 2
+          done
+
       - name: Run E2E tests
         run: npx playwright test --project=chromium
         env:
-          E2E_BASE_URL: http://localhost:4173
+          E2E_BASE_URL: http://127.0.0.1:4173
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
