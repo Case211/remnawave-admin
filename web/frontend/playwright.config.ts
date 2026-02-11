@@ -32,13 +32,11 @@ export default defineConfig({
     },
   ],
 
-  /* Start dev server before running tests (local only) */
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: 'npm run dev',
-        url: 'http://localhost:5173',
-        reuseExistingServer: true,
-        timeout: 60_000,
-      },
+  /* Start server before running tests */
+  webServer: {
+    command: process.env.CI ? 'npm run preview' : 'npm run dev',
+    url: process.env.CI ? 'http://localhost:4173' : 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
+  },
 });
