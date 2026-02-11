@@ -35,8 +35,8 @@ class AdminUser:
 async def _validate_token_payload(payload: dict) -> AdminUser:
     """Validate token payload and return AdminUser.
 
-    Resolves admin account from the new admin_accounts table (RBAC),
-    falling back to legacy admin_credentials / .env for backwards compat.
+    Resolves admin account from admin_accounts (RBAC) table,
+    falling back to .env for backwards compat.
     """
     subject = payload.get("sub", "")
     settings = get_web_settings()
@@ -50,7 +50,7 @@ async def _validate_token_payload(payload: dict) -> AdminUser:
 
 async def _resolve_password_admin(username: str, settings) -> AdminUser:
     """Resolve a password-authenticated admin."""
-    # 1. Try RBAC admin_accounts table
+    # 1. Try admin_accounts table (RBAC)
     try:
         from web.backend.core.rbac import (
             get_admin_account_by_username,
@@ -80,20 +80,7 @@ async def _resolve_password_admin(username: str, settings) -> AdminUser:
     except Exception:
         pass
 
-    # 2. Fallback: legacy admin_credentials
-    try:
-        from web.backend.core.admin_credentials import get_admin_by_username
-        admin_row = await get_admin_by_username(username)
-        if admin_row:
-            return AdminUser(
-                username=username,
-                role="superadmin",
-                auth_method="password",
-            )
-    except Exception:
-        pass
-
-    # 3. Fallback: .env
+    # 2. Fallback: .env
     if settings.admin_login and username.lower() == settings.admin_login.lower():
         return AdminUser(
             username=username,

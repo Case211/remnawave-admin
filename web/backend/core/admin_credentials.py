@@ -1,12 +1,10 @@
-"""Admin credentials management — DB storage, validation, generation.
+"""Admin credentials utilities — password hashing, validation, generation.
 
-Table `admin_credentials` is auto-created on first startup.
-On first run (no rows in table), a secure password is generated and
-printed to the console. The admin can then change it from the web UI.
+All admin accounts are stored in the admin_accounts (RBAC) table.
+This module provides password-related utility functions used across the app.
 """
 import logging
 import secrets
-import string
 import re
 from typing import Optional, Tuple
 
@@ -100,121 +98,55 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-# ── Database operations ──────────────────────────────────────────
-
-_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS admin_credentials (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(100) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    is_generated BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-"""
-
-
-async def ensure_table() -> None:
-    """Create admin_credentials table if it doesn't exist."""
-    try:
-        from src.services.database import db_service
-        if not db_service.is_connected:
-            return
-        async with db_service.acquire() as conn:
-            await conn.execute(_TABLE_SQL)
-    except Exception as e:
-        logger.error("Failed to create admin_credentials table: %s", e)
-
-
-async def get_admin_by_username(username: str) -> Optional[dict]:
-    """Look up admin credentials by username (case-insensitive)."""
-    try:
-        from src.services.database import db_service
-        if not db_service.is_connected:
-            return None
-        async with db_service.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT id, username, password_hash, is_generated "
-                "FROM admin_credentials WHERE LOWER(username) = LOWER($1)",
-                username,
-            )
-            return dict(row) if row else None
-    except Exception as e:
-        logger.error("Failed to query admin_credentials: %s", e)
-        return None
-
-
-async def admin_exists() -> bool:
-    """Check if any admin account exists in the database."""
-    try:
-        from src.services.database import db_service
-        if not db_service.is_connected:
-            return False
-        async with db_service.acquire() as conn:
-            row = await conn.fetchrow("SELECT 1 FROM admin_credentials LIMIT 1")
-            return row is not None
-    except Exception as e:
-        logger.error("Failed to check admin_credentials: %s", e)
-        return False
-
-
-async def create_admin(username: str, password: str, is_generated: bool = False) -> bool:
-    """Create a new admin account with hashed password."""
-    try:
-        from src.services.database import db_service
-        if not db_service.is_connected:
-            return False
-        pw_hash = hash_password(password)
-        async with db_service.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO admin_credentials (username, password_hash, is_generated) "
-                "VALUES ($1, $2, $3) "
-                "ON CONFLICT (username) DO UPDATE SET "
-                "password_hash = $2, is_generated = $3, updated_at = NOW()",
-                username, pw_hash, is_generated,
-            )
-        return True
-    except Exception as e:
-        logger.error("Failed to create admin: %s", e)
-        return False
-
-
-async def update_password(username: str, new_password: str) -> bool:
-    """Update admin password (marks is_generated=false)."""
-    try:
-        from src.services.database import db_service
-        if not db_service.is_connected:
-            return False
-        pw_hash = hash_password(new_password)
-        async with db_service.acquire() as conn:
-            result = await conn.execute(
-                "UPDATE admin_credentials SET password_hash = $2, "
-                "is_generated = false, updated_at = NOW() "
-                "WHERE LOWER(username) = LOWER($1)",
-                username, pw_hash,
-            )
-            return "UPDATE 1" in result
-    except Exception as e:
-        logger.error("Failed to update password: %s", e)
-        return False
-
+# ── First-run setup (creates account in admin_accounts) ──────────
 
 async def first_run_setup() -> Optional[str]:
-    """Run on startup: create table, generate password if first run.
+    """Run on startup: generate admin password if no accounts exist.
+
+    Creates the initial admin in admin_accounts (RBAC) table.
 
     Returns:
         The generated password if first run, None otherwise.
     """
-    await ensure_table()
+    try:
+        from web.backend.core.rbac import (
+            admin_account_exists,
+            get_role_by_name,
+            create_admin_account,
+        )
 
-    if await admin_exists():
-        logger.info("Admin account exists in database")
+        if await admin_account_exists():
+            logger.info("Admin account exists in database")
+            return None
+
+        # Get superadmin role
+        role = await get_role_by_name("superadmin")
+        if not role:
+            logger.error(
+                "Cannot create first admin: 'superadmin' role not found. "
+                "Run migrations first."
+            )
+            return None
+
+        # First run — generate credentials
+        password = generate_password()
+        username = "admin"
+        pw_hash = hash_password(password)
+
+        account = await create_admin_account(
+            username=username,
+            password_hash=pw_hash,
+            telegram_id=None,
+            role_id=role["id"],
+            is_generated_password=True,
+        )
+
+        if account:
+            return password
+
+        logger.error("Failed to create initial admin account")
         return None
 
-    # First run — generate credentials
-    password = generate_password()
-    username = "admin"
-
-    if await create_admin(username, password, is_generated=True):
-        return password
-    return None
+    except Exception as e:
+        logger.error("first_run_setup failed: %s", e)
+        return None

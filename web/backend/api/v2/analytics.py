@@ -744,7 +744,7 @@ async def get_delta_stats(
 
 @router.get("/node-fleet", response_model=NodeFleetResponse)
 async def get_node_fleet(
-    admin: AdminUser = Depends(require_permission("nodes", "view")),
+    admin: AdminUser = Depends(require_permission("fleet", "view")),
 ):
     """Get compact node fleet data for dashboard cards.
 

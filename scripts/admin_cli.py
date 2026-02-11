@@ -74,7 +74,7 @@ except ImportError:
 
 
 # ── Password helpers (self-contained, no heavy imports) ──────────
-# Mirrors logic from web.backend.core.admin_credentials but avoids
+# Same logic as web.backend.core.admin_credentials but avoids
 # importing the full web.backend.core package (which pulls in jose,
 # pydantic-settings, etc.).
 
@@ -179,23 +179,13 @@ async def cmd_reset_password(args: argparse.Namespace) -> None:
     conn = await _connect()
 
     try:
-        # Try admin_accounts (RBAC) first
         account = await conn.fetchrow(
             "SELECT id, username, is_active FROM admin_accounts "
             "WHERE LOWER(username) = LOWER($1)",
             username,
         )
 
-        # Fallback to legacy admin_credentials
-        legacy = None
         if not account:
-            legacy = await conn.fetchrow(
-                "SELECT id, username FROM admin_credentials "
-                "WHERE LOWER(username) = LOWER($1)",
-                username,
-            )
-
-        if not account and not legacy:
             print(_red(f"Администратор '{username}' не найден."))
             print()
             # Show available admins
@@ -229,29 +219,16 @@ async def cmd_reset_password(args: argparse.Namespace) -> None:
             generated = True
 
         pw_hash = hash_password(password)
-        actual_username = (account or legacy)["username"]
+        actual_username = account["username"]
 
-        # Update in admin_accounts
-        if account:
-            await conn.execute(
-                "UPDATE admin_accounts SET password_hash = $1, "
-                "is_generated_password = $2, updated_at = NOW() "
-                "WHERE id = $3",
-                pw_hash,
-                generated,
-                account["id"],
-            )
-
-        # Update in legacy admin_credentials too (for backward compatibility)
-        if legacy or account:
-            await conn.execute(
-                "UPDATE admin_credentials SET password_hash = $1, "
-                "is_generated = $2, updated_at = NOW() "
-                "WHERE LOWER(username) = LOWER($3)",
-                pw_hash,
-                generated,
-                username,
-            )
+        await conn.execute(
+            "UPDATE admin_accounts SET password_hash = $1, "
+            "is_generated_password = $2, updated_at = NOW() "
+            "WHERE id = $3",
+            pw_hash,
+            generated,
+            account["id"],
+        )
 
         print()
         print(_green("=" * 55))
@@ -322,19 +299,6 @@ async def cmd_create_superadmin(args: argparse.Namespace) -> None:
             generated,
         )
 
-        # Also insert into legacy admin_credentials for backward compatibility
-        await conn.execute(
-            """
-            INSERT INTO admin_credentials (username, password_hash, is_generated)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (username) DO UPDATE
-                SET password_hash = $2, is_generated = $3, updated_at = NOW()
-            """,
-            username,
-            pw_hash,
-            generated,
-        )
-
         print()
         print(_green("=" * 55))
         print(_green(f"  Суперадмин '{username}' успешно создан!"))
@@ -375,17 +339,7 @@ async def cmd_list_admins(_args: argparse.Namespace) -> None:
         )
 
         if not rows:
-            print(_yellow("Администраторов не найдено в admin_accounts."))
-            print()
-            # Check legacy table
-            legacy = await conn.fetch(
-                "SELECT id, username, is_generated FROM admin_credentials ORDER BY id"
-            )
-            if legacy:
-                print("Найдены записи в legacy-таблице admin_credentials:")
-                for r in legacy:
-                    gen = " (auto-generated password)" if r["is_generated"] else ""
-                    print(f"  - {r['username']}{gen}")
+            print(_yellow("Администраторов не найдено."))
             return
 
         print()
