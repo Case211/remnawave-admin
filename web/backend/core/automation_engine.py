@@ -92,20 +92,25 @@ class AutomationEngine:
         self._running = False
         self._schedule_task: Optional[asyncio.Task] = None
         self._threshold_task: Optional[asyncio.Task] = None
+        self._event_detect_task: Optional[asyncio.Task] = None
+        # State tracking for event detection
+        self._node_offline_since: Dict[str, datetime] = {}
+        self._user_traffic_exceeded: set = set()
 
     async def start(self):
-        """Start the scheduler and threshold loops."""
+        """Start the scheduler, threshold, and event detection loops."""
         if self._running:
             return
         self._running = True
         self._schedule_task = asyncio.create_task(self._schedule_loop())
         self._threshold_task = asyncio.create_task(self._threshold_loop())
+        self._event_detect_task = asyncio.create_task(self._event_detection_loop())
         logger.info("Automation engine started")
 
     async def stop(self):
         """Stop all background tasks."""
         self._running = False
-        for task in (self._schedule_task, self._threshold_task):
+        for task in (self._schedule_task, self._threshold_task, self._event_detect_task):
             if task and not task.done():
                 task.cancel()
                 try:
@@ -114,6 +119,7 @@ class AutomationEngine:
                     pass
         self._schedule_task = None
         self._threshold_task = None
+        self._event_detect_task = None
         logger.info("Automation engine stopped")
 
     # ── Event triggers ───────────────────────────────────────
@@ -250,8 +256,23 @@ class AutomationEngine:
                 if not await try_acquire_trigger(rule["id"], min_interval_seconds=min_interval):
                     continue
 
-                # Execute action
-                context = {"trigger": "schedule", "cron": cron, "interval_minutes": interval}
+                # Execute action — enrich context for notify actions
+                context: Dict[str, Any] = {
+                    "trigger": "schedule", "cron": cron, "interval_minutes": interval,
+                }
+                if rule["action_type"] == "notify":
+                    try:
+                        from web.backend.core.api_helper import fetch_users_from_api, fetch_nodes_from_api
+                        users = await fetch_users_from_api()
+                        nodes = await fetch_nodes_from_api()
+                        context["users_total"] = len(users)
+                        context["users_online"] = sum(1 for u in users if u.get("online_at"))
+                        context["nodes_total"] = len(nodes)
+                        context["nodes_online"] = sum(1 for n in nodes if n.get("is_connected"))
+                        total_traffic = sum(n.get("traffic_today_bytes", 0) for n in nodes)
+                        context["traffic_today"] = f"{total_traffic / (1024 ** 3):.2f} GB"
+                    except Exception:
+                        pass
                 result, details = await self._execute_action(rule, "system", None, context)
 
                 await write_automation_log(
@@ -384,6 +405,102 @@ class AutomationEngine:
             except Exception as e:
                 logger.error("Error checking threshold rule %d: %s", rule.get("id"), e)
 
+    # ── Event detection loop ────────────────────────────────
+
+    async def _event_detection_loop(self):
+        """Poll Remnawave API to detect state changes and dispatch events.
+
+        Runs every 120 seconds. Detects:
+        - Node going offline (state transition from connected to disconnected)
+        - User traffic exceeding limit (newly exceeded)
+        """
+        while self._running:
+            try:
+                await asyncio.sleep(120)
+                if not self._running:
+                    break
+                await self._detect_events()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("Event detection loop error: %s", e)
+
+    async def _detect_events(self):
+        """Single pass of event detection."""
+        from web.backend.core.api_helper import fetch_nodes_from_api, fetch_users_from_api
+        from web.backend.core.automation import get_enabled_event_rules
+
+        # ── Detect node offline transitions ───────────────
+        try:
+            nodes = await fetch_nodes_from_api()
+            current_connected: Dict[str, bool] = {}
+
+            for node in nodes:
+                uuid = node.get("uuid", "")
+                if not uuid:
+                    continue
+                is_connected = node.get("is_connected", True)
+                current_connected[uuid] = is_connected
+
+                if is_connected:
+                    # Node is online — remove from offline tracking
+                    self._node_offline_since.pop(uuid, None)
+                else:
+                    # Node is offline
+                    if uuid not in self._node_offline_since:
+                        self._node_offline_since[uuid] = datetime.now(timezone.utc)
+
+                    offline_duration = datetime.now(timezone.utc) - self._node_offline_since[uuid]
+                    offline_minutes = offline_duration.total_seconds() / 60
+
+                    # Dispatch event — trigger lock prevents duplicate execution
+                    await self.handle_event("node.went_offline", {
+                        "node_uuid": uuid,
+                        "uuid": uuid,
+                        "node_name": node.get("name", ""),
+                        "is_connected": False,
+                        "offline_minutes": offline_minutes,
+                    })
+
+            # Clean up stale entries for removed nodes
+            stale = [u for u in self._node_offline_since if u not in current_connected]
+            for u in stale:
+                del self._node_offline_since[u]
+
+        except Exception as e:
+            logger.warning("Node event detection error: %s", e)
+
+        # ── Detect user traffic exceeded ──────────────────
+        try:
+            # Only fetch users if there are enabled rules for this event
+            traffic_rules = await get_enabled_event_rules("user.traffic_exceeded")
+            if traffic_rules:
+                users = await fetch_users_from_api()
+                current_exceeded: set = set()
+
+                for user in users:
+                    limit = user.get("traffic_limit_bytes", 0)
+                    used = user.get("used_traffic_bytes", 0)
+                    uuid = user.get("uuid", "")
+                    if not (limit and used and uuid):
+                        continue
+
+                    if used > limit:
+                        current_exceeded.add(uuid)
+                        if uuid not in self._user_traffic_exceeded:
+                            # Newly exceeded — dispatch event
+                            await self.handle_event("user.traffic_exceeded", {
+                                "user_uuid": uuid,
+                                "uuid": uuid,
+                                "username": user.get("username", ""),
+                                "traffic_limit_bytes": limit,
+                                "used_traffic_bytes": used,
+                            })
+
+                self._user_traffic_exceeded = current_exceeded
+        except Exception as e:
+            logger.warning("User traffic event detection error: %s", e)
+
     # ── Condition evaluation ─────────────────────────────────
 
     def _evaluate_conditions(self, rule: dict, context: dict) -> bool:
@@ -464,6 +581,9 @@ class AutomationEngine:
         self, config: dict, target_type: str, target_id: str, context: dict,
     ) -> dict:
         """Disable a user via Remnawave API."""
+        target_id = target_id or config.get("user_uuid")
+        if not target_id:
+            raise ValueError("No target user specified (target_id and action_config.user_uuid are empty)")
         from web.backend.core.api_helper import _get_client
         client = _get_client()
         resp = await client.post(
@@ -477,6 +597,9 @@ class AutomationEngine:
         self, config: dict, target_type: str, target_id: str, context: dict,
     ) -> dict:
         """Block a user (disable + mark reason) via Remnawave API."""
+        target_id = target_id or config.get("user_uuid")
+        if not target_id:
+            raise ValueError("No target user specified (target_id and action_config.user_uuid are empty)")
         from web.backend.core.api_helper import _get_client
         reason = config.get("reason", "Blocked by automation")
         client = _get_client()
@@ -524,15 +647,52 @@ class AutomationEngine:
     async def _action_restart_node(
         self, config: dict, target_type: str, target_id: str, context: dict,
     ) -> dict:
-        """Restart a node via Remnawave API."""
-        from web.backend.core.api_helper import _get_client
+        """Restart a node via Remnawave API.
+
+        If target_id is None (e.g. schedule trigger), restarts all connected
+        nodes or a specific node from action_config['node_uuid'].
+        """
+        from web.backend.core.api_helper import _get_client, fetch_nodes_from_api
+
+        # Check action_config for a specific node
+        specific_node = config.get("node_uuid")
+        if specific_node:
+            target_id = specific_node
+
+        if target_id:
+            client = _get_client()
+            resp = await client.post(
+                f"/api/nodes/{target_id}/actions/restart",
+                json={},
+            )
+            resp.raise_for_status()
+            return {"action": "restart_node", "node_uuid": target_id, "status": resp.status_code}
+
+        # No specific target — restart all connected nodes
+        nodes = await fetch_nodes_from_api()
         client = _get_client()
-        resp = await client.post(
-            f"/api/nodes/{target_id}/actions/restart",
-            json={},
-        )
-        resp.raise_for_status()
-        return {"action": "restart_node", "node_uuid": target_id, "status": resp.status_code}
+        restarted = []
+        errors = []
+        for node in nodes:
+            uuid = node.get("uuid", "")
+            if not uuid or not node.get("is_connected", False):
+                continue
+            try:
+                resp = await client.post(f"/api/nodes/{uuid}/actions/restart", json={})
+                if resp.status_code < 400:
+                    restarted.append(uuid)
+                else:
+                    errors.append(uuid)
+            except Exception as e:
+                logger.warning("Failed to restart node %s: %s", uuid, e)
+                errors.append(uuid)
+
+        return {
+            "action": "restart_node",
+            "restarted_count": len(restarted),
+            "restarted_nodes": restarted,
+            "errors": errors,
+        }
 
     async def _action_cleanup_expired(
         self, config: dict, target_type: str, target_id: str, context: dict,
@@ -584,6 +744,9 @@ class AutomationEngine:
         self, config: dict, target_type: str, target_id: str, context: dict,
     ) -> dict:
         """Reset traffic counter for a user via Remnawave API."""
+        target_id = target_id or config.get("user_uuid")
+        if not target_id:
+            raise ValueError("No target user specified (target_id and action_config.user_uuid are empty)")
         from web.backend.core.api_helper import _get_client
         client = _get_client()
         resp = await client.post(
@@ -617,7 +780,7 @@ class AutomationEngine:
                 "would_trigger": False,
                 "matching_targets": [],
                 "estimated_actions": 0,
-                "details": "Rule not found",
+                "details": "Правило не найдено",
             }
 
         trigger_type = rule["trigger_type"]
@@ -629,10 +792,37 @@ class AutomationEngine:
         would_trigger = False
         details_parts = []
 
+        # Localized labels for action types
+        _ACTION_LABELS = {
+            "disable_user": "Отключить пользователя",
+            "block_user": "Заблокировать пользователя",
+            "notify": "Отправить уведомление",
+            "restart_node": "Перезапустить ноду",
+            "cleanup_expired": "Очистить истёкших",
+            "reset_traffic": "Сбросить трафик",
+            "force_sync": "Синхронизация нод",
+        }
+        _EVENT_LABELS = {
+            "violation.detected": "Обнаружено нарушение",
+            "node.went_offline": "Нода ушла офлайн",
+            "user.traffic_exceeded": "Трафик превышен",
+        }
+        _METRIC_LABELS = {
+            "users_online": "Пользователей онлайн",
+            "traffic_today": "Трафик за сегодня (ГБ)",
+            "node_uptime_percent": "Аптайм ноды (%)",
+            "user_traffic_percent": "Использование трафика (%)",
+        }
+        _OPERATOR_LABELS = {
+            "==": "=", "!=": "≠", ">": ">", ">=": "≥",
+            "<": "<", "<=": "≤", "contains": "содержит", "not_contains": "не содержит",
+        }
+
         if trigger_type == "event":
             event = trigger_config.get("event", "")
-            details_parts.append(f"Event trigger: {event}")
-            details_parts.append("Would fire on next matching event.")
+            event_label = _EVENT_LABELS.get(event, event)
+            details_parts.append(f"Триггер по событию: {event_label}")
+            details_parts.append("Сработает при следующем совпадающем событии.")
             would_trigger = True
 
         elif trigger_type == "schedule":
@@ -640,7 +830,7 @@ class AutomationEngine:
             interval = trigger_config.get("interval_minutes")
             if cron:
                 would_trigger = cron_matches_now(cron)
-                details_parts.append(f"CRON: {cron} — {'matches now' if would_trigger else 'does not match now'}")
+                details_parts.append(f"CRON: {cron} — {'совпадает с текущим временем' if would_trigger else 'не совпадает с текущим временем'}")
             elif interval:
                 last = rule.get("last_triggered_at")
                 if last is None:
@@ -652,7 +842,7 @@ class AutomationEngine:
                         last = last.replace(tzinfo=timezone.utc)
                     elapsed = (datetime.now(timezone.utc) - last).total_seconds() / 60
                     would_trigger = elapsed >= interval
-                details_parts.append(f"Interval: every {interval} min")
+                details_parts.append(f"Интервал: каждые {interval} мин.")
 
         elif trigger_type == "threshold":
             metric = trigger_config.get("metric", "")
@@ -698,11 +888,14 @@ class AutomationEngine:
                             })
 
             would_trigger = len(matching_targets) > 0
-            details_parts.append(f"Threshold: {metric} {operator_str} {threshold_value}")
+            metric_label = _METRIC_LABELS.get(metric, metric)
+            op_label = _OPERATOR_LABELS.get(operator_str, operator_str)
+            details_parts.append(f"Порог: {metric_label} {op_label} {threshold_value}")
 
-        details_parts.append(f"Action: {rule['action_type']}")
+        action_label = _ACTION_LABELS.get(rule['action_type'], rule['action_type'])
+        details_parts.append(f"Действие: {action_label}")
         if matching_targets:
-            details_parts.append(f"Matching targets: {len(matching_targets)}")
+            details_parts.append(f"Подходящих целей: {len(matching_targets)}")
 
         return {
             "rule_id": rule_id,
