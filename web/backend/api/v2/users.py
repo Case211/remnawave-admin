@@ -311,27 +311,46 @@ async def list_users(
 
 # ── Squad endpoints (must be before /{user_uuid} routes) ──────
 
+
+def _normalize_squad(sq: dict) -> dict:
+    """Ensure squad dict has squadTag/squadName fields for frontend compatibility.
+
+    Remnawave API returns 'name' / 'tag', but frontend expects 'squadName' / 'squadTag'.
+    """
+    result = dict(sq)
+    if "squadName" not in result:
+        result["squadName"] = sq.get("name") or sq.get("tag") or sq.get("squadTag") or ""
+    if "squadTag" not in result:
+        result["squadTag"] = sq.get("tag") or sq.get("name") or sq.get("squadName") or ""
+    return result
+
+
 @router.get("/meta/internal-squads")
 async def get_internal_squads(
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """Get available internal squads — reads from DB (synced), falls back to API."""
+    squads = []
     try:
         from src.services.data_access import get_all_internal_squads
-        return await get_all_internal_squads()
+        squads = await get_all_internal_squads()
     except ImportError:
-        pass
+        # Fallback: direct API call if data_access module is unavailable
+        try:
+            from src.services.api_client import api_client
+            result = await api_client.get_internal_squads()
+            payload = result.get("response", result) if isinstance(result, dict) else result
+            if isinstance(payload, dict):
+                squads = payload.get("internalSquads", [])
+            elif isinstance(payload, list):
+                squads = payload
+        except ImportError:
+            raise HTTPException(status_code=503, detail="API service not available")
+        except Exception as e:
+            logger.error("Error fetching internal squads: %s", e)
+            return []
 
-    # Fallback: direct API call if data_access module is unavailable
-    try:
-        from src.services.api_client import api_client
-        result = await api_client.get_internal_squads()
-        return result.get("response", result) if isinstance(result, dict) else result
-    except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
-    except Exception as e:
-        logger.error("Error fetching internal squads: %s", e)
-        return []
+    return [_normalize_squad(sq) for sq in squads if isinstance(sq, dict)]
 
 
 @router.get("/meta/external-squads")
@@ -339,22 +358,27 @@ async def get_external_squads(
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """Get available external squads — reads from DB (synced), falls back to API."""
+    squads = []
     try:
         from src.services.data_access import get_all_external_squads
-        return await get_all_external_squads()
+        squads = await get_all_external_squads()
     except ImportError:
-        pass
+        # Fallback: direct API call if data_access module is unavailable
+        try:
+            from src.services.api_client import api_client
+            result = await api_client.get_external_squads()
+            payload = result.get("response", result) if isinstance(result, dict) else result
+            if isinstance(payload, dict):
+                squads = payload.get("externalSquads", [])
+            elif isinstance(payload, list):
+                squads = payload
+        except ImportError:
+            raise HTTPException(status_code=503, detail="API service not available")
+        except Exception as e:
+            logger.error("Error fetching external squads: %s", e)
+            return []
 
-    # Fallback: direct API call if data_access module is unavailable
-    try:
-        from src.services.api_client import api_client
-        result = await api_client.get_external_squads()
-        return result.get("response", result) if isinstance(result, dict) else result
-    except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
-    except Exception as e:
-        logger.error("Error fetching external squads: %s", e)
-        return []
+    return [_normalize_squad(sq) for sq in squads if isinstance(sq, dict)]
 
 
 @router.get("/{user_uuid}", response_model=UserDetail)

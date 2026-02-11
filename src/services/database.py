@@ -1600,7 +1600,9 @@ class DatabaseService:
         uuid = squad.get("uuid")
         if not uuid:
             return False
-        
+
+        name = squad.get("name") or squad.get("squadName") or squad.get("tag") or squad.get("squadTag")
+
         async with self.acquire() as conn:
             await conn.execute(
                 """
@@ -1613,7 +1615,7 @@ class DatabaseService:
                     raw_data = EXCLUDED.raw_data
                 """,
                 uuid,
-                squad.get("name"),
+                name,
                 squad.get("description"),
                 json.dumps(squad)
             )
@@ -1639,7 +1641,9 @@ class DatabaseService:
         uuid = squad.get("uuid")
         if not uuid:
             return False
-        
+
+        name = squad.get("name") or squad.get("squadName") or squad.get("tag") or squad.get("squadTag")
+
         async with self.acquire() as conn:
             await conn.execute(
                 """
@@ -1652,7 +1656,7 @@ class DatabaseService:
                     raw_data = EXCLUDED.raw_data
                 """,
                 uuid,
-                squad.get("name"),
+                name,
                 squad.get("description"),
                 json.dumps(squad)
             )
