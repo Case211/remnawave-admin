@@ -305,6 +305,7 @@ async def change_password(
     from web.backend.core.admin_credentials import (
         get_admin_by_username,
         verify_password,
+        hash_password,
         update_password,
         validate_password_strength,
     )
@@ -314,22 +315,65 @@ async def change_password(
     if not is_strong:
         raise HTTPException(status_code=400, detail=strength_error)
 
-    # Find admin in DB
-    db_admin = await get_admin_by_username(admin.username)
-    if not db_admin:
+    # Verify current password against the source used for login
+    # Check RBAC admin_accounts first (same order as login flow)
+    rbac_account = None
+    legacy_admin = None
+
+    if admin.account_id:
+        try:
+            from web.backend.core.rbac import get_admin_account_by_id
+            rbac_account = await get_admin_account_by_id(admin.account_id)
+        except Exception:
+            pass
+
+    if not rbac_account:
+        try:
+            from web.backend.core.rbac import get_admin_account_by_username
+            rbac_account = await get_admin_account_by_username(admin.username)
+        except Exception:
+            pass
+
+    if not rbac_account:
+        legacy_admin = await get_admin_by_username(admin.username)
+
+    if not rbac_account and not legacy_admin:
         raise HTTPException(
             status_code=400,
             detail="Password change is only available for DB-managed accounts",
         )
 
-    # Verify current password
-    if not verify_password(data.current_password, db_admin["password_hash"]):
+    # Verify current password against the correct source
+    current_hash = (
+        rbac_account["password_hash"] if rbac_account and rbac_account.get("password_hash")
+        else legacy_admin["password_hash"] if legacy_admin
+        else None
+    )
+    if not current_hash or not verify_password(data.current_password, current_hash):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
 
-    # Update password
-    success = await update_password(admin.username, data.new_password)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to update password")
+    # Update password in admin_accounts (RBAC) if account exists there
+    new_hash = hash_password(data.new_password)
+    if rbac_account:
+        try:
+            from web.backend.core.rbac import update_admin_account
+            updated = await update_admin_account(
+                rbac_account["id"],
+                password_hash=new_hash,
+                is_generated_password=False,
+            )
+            if not updated:
+                raise HTTPException(status_code=500, detail="Failed to update password")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to update password in admin_accounts: %s", e)
+            raise HTTPException(status_code=500, detail="Failed to update password")
+
+    # Also update in legacy admin_credentials (for backward compatibility)
+    legacy_admin = legacy_admin or await get_admin_by_username(admin.username)
+    if legacy_admin:
+        await update_password(admin.username, data.new_password)
 
     logger.info("Password changed for user '%s'", admin.username)
     return SuccessResponse(message="Password changed successfully")
