@@ -110,27 +110,13 @@ def verify_telegram_auth_simple(auth_data: Dict[str, Any]) -> bool:
 
 def verify_admin_password(username: str, password: str) -> bool:
     """
-    Verify admin credentials.
+    Verify admin credentials against .env (sync fallback).
 
-    Priority: database (admin_credentials table) > .env (WEB_ADMIN_LOGIN/PASSWORD).
+    Used as last resort when async DB checks have already been tried.
 
     Returns:
         True if credentials match, False otherwise.
     """
-    # Try database first (sync wrapper for the async DB call)
-    # Since this is called from an async context, we import and check directly
-    try:
-        from web.backend.core.admin_credentials import get_admin_by_username, verify_password
-        import asyncio
-
-        # If we're inside a running event loop, we can't use asyncio.run()
-        # The caller (auth endpoint) is async, so we'll check a cached result
-        # Instead, use a simpler approach: check in _verify_admin_password_sync
-        pass
-    except ImportError:
-        pass
-
-    # Fallback to .env
     settings = get_web_settings()
 
     if not settings.admin_login or not settings.admin_password:
@@ -159,12 +145,12 @@ async def verify_admin_password_async(username: str, password: str) -> bool:
     """
     Async version of verify_admin_password.
 
-    Checks RBAC admin_accounts first, then legacy admin_credentials, then .env.
+    Checks RBAC admin_accounts first, then .env.
 
     Returns:
         True if credentials match, False otherwise.
     """
-    # 1. Check RBAC admin_accounts table (new)
+    # 1. Check admin_accounts table (RBAC)
     try:
         from web.backend.core.rbac import get_admin_account_by_username
         from web.backend.core.admin_credentials import verify_password
@@ -175,18 +161,9 @@ async def verify_admin_password_async(username: str, password: str) -> bool:
                 return False
             return verify_password(password, account["password_hash"])
     except Exception as e:
-        logger.warning("RBAC admin_accounts check failed: %s", e)
+        logger.warning("admin_accounts check failed: %s", e)
 
-    # 2. Fallback: legacy admin_credentials table
-    try:
-        from web.backend.core.admin_credentials import get_admin_by_username, verify_password
-        admin = await get_admin_by_username(username)
-        if admin:
-            return verify_password(password, admin["password_hash"])
-    except Exception as e:
-        logger.warning("DB credential check failed, falling back to .env: %s", e)
-
-    # 3. Fallback to .env
+    # 2. Fallback to .env
     return verify_admin_password(username, password)
 
 

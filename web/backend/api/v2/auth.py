@@ -144,8 +144,8 @@ async def password_login(request: Request, data: LoginRequest):
     has_env_auth = settings.admin_login and settings.admin_password
     has_db_auth = False
     try:
-        from web.backend.core.admin_credentials import admin_exists
-        has_db_auth = await admin_exists()
+        from web.backend.core.rbac import admin_account_exists
+        has_db_auth = await admin_account_exists()
     except Exception:
         pass
 
@@ -218,9 +218,9 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
         username = subject[4:]
         is_valid = False
         try:
-            from web.backend.core.admin_credentials import get_admin_by_username
-            admin_row = await get_admin_by_username(username)
-            if admin_row:
+            from web.backend.core.rbac import get_admin_account_by_username
+            account = await get_admin_account_by_username(username)
+            if account and account.get("is_active", True):
                 is_valid = True
         except Exception:
             pass
@@ -255,25 +255,14 @@ async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
     """
     # Check if password is auto-generated (needs changing)
     password_is_generated = False
-    if admin.auth_method == "password":
-        # Check new admin_accounts table first
-        if admin.account_id:
-            try:
-                from web.backend.core.rbac import get_admin_account_by_id
-                account = await get_admin_account_by_id(admin.account_id)
-                if account and account.get("is_generated_password"):
-                    password_is_generated = True
-            except Exception:
-                pass
-        else:
-            # Fallback to legacy admin_credentials
-            try:
-                from web.backend.core.admin_credentials import get_admin_by_username
-                db_admin = await get_admin_by_username(admin.username)
-                if db_admin and db_admin.get("is_generated"):
-                    password_is_generated = True
-            except Exception:
-                pass
+    if admin.auth_method == "password" and admin.account_id:
+        try:
+            from web.backend.core.rbac import get_admin_account_by_id
+            account = await get_admin_account_by_id(admin.account_id)
+            if account and account.get("is_generated_password"):
+                password_is_generated = True
+        except Exception:
+            pass
 
     # Build permissions list
     permissions = [
@@ -303,11 +292,14 @@ async def change_password(
     Only available for password-based accounts stored in DB.
     """
     from web.backend.core.admin_credentials import (
-        get_admin_by_username,
         verify_password,
         hash_password,
-        update_password,
         validate_password_strength,
+    )
+    from web.backend.core.rbac import (
+        get_admin_account_by_id,
+        get_admin_account_by_username,
+        update_admin_account,
     )
 
     # Validate new password strength
@@ -315,60 +307,32 @@ async def change_password(
     if not is_strong:
         raise HTTPException(status_code=400, detail=strength_error)
 
-    # Look up admin in both tables (mirrors verify_admin_password_async order)
-    rbac_account = None
-    legacy_admin = None
+    # Look up admin in admin_accounts
+    account = None
+    if admin.account_id:
+        account = await get_admin_account_by_id(admin.account_id)
+    if not account:
+        account = await get_admin_account_by_username(admin.username)
 
-    try:
-        from web.backend.core.rbac import get_admin_account_by_username, update_admin_account
-
-        if admin.account_id:
-            from web.backend.core.rbac import get_admin_account_by_id
-            rbac_account = await get_admin_account_by_id(admin.account_id)
-        if not rbac_account:
-            rbac_account = await get_admin_account_by_username(admin.username)
-    except Exception:
-        pass
-
-    legacy_admin = await get_admin_by_username(admin.username)
-
-    if not rbac_account and not legacy_admin:
+    if not account or not account.get("password_hash"):
         raise HTTPException(
             status_code=400,
             detail="Password change is only available for DB-managed accounts",
         )
 
-    # Verify current password against the same source as login:
-    # admin_accounts (if has password_hash) -> admin_credentials -> fail
-    current_hash = None
-    if rbac_account and rbac_account.get("password_hash"):
-        current_hash = rbac_account["password_hash"]
-    elif legacy_admin:
-        current_hash = legacy_admin["password_hash"]
-
-    if not current_hash or not verify_password(data.current_password, current_hash):
+    # Verify current password
+    if not verify_password(data.current_password, account["password_hash"]):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
 
-    # Update password everywhere it exists
+    # Update password
     new_hash = hash_password(data.new_password)
-
-    if rbac_account:
-        try:
-            updated = await update_admin_account(
-                rbac_account["id"],
-                password_hash=new_hash,
-                is_generated_password=False,
-            )
-            if not updated:
-                raise HTTPException(status_code=500, detail="Failed to update password")
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("Failed to update password in admin_accounts: %s", e)
-            raise HTTPException(status_code=500, detail="Failed to update password")
-
-    if legacy_admin:
-        await update_password(admin.username, data.new_password)
+    updated = await update_admin_account(
+        account["id"],
+        password_hash=new_hash,
+        is_generated_password=False,
+    )
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to update password")
 
     logger.info("Password changed for user '%s'", admin.username)
     return SuccessResponse(message="Password changed successfully")
