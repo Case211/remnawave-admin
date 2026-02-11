@@ -315,7 +315,14 @@ async def list_users(
 async def get_internal_squads(
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
-    """Get available internal squads from Remnawave API."""
+    """Get available internal squads — reads from DB (synced), falls back to API."""
+    try:
+        from src.services.data_access import get_all_internal_squads
+        return await get_all_internal_squads()
+    except ImportError:
+        pass
+
+    # Fallback: direct API call if data_access module is unavailable
     try:
         from src.services.api_client import api_client
         result = await api_client.get_internal_squads()
@@ -331,7 +338,14 @@ async def get_internal_squads(
 async def get_external_squads(
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
-    """Get available external squads from Remnawave API."""
+    """Get available external squads — reads from DB (synced), falls back to API."""
+    try:
+        from src.services.data_access import get_all_external_squads
+        return await get_all_external_squads()
+    except ImportError:
+        pass
+
+    # Fallback: direct API call if data_access module is unavailable
     try:
         from src.services.api_client import api_client
         result = await api_client.get_external_squads()

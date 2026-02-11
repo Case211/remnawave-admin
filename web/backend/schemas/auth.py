@@ -51,6 +51,19 @@ class PermissionEntry(BaseModel):
     action: str
 
 
+class RegisterRequest(BaseModel):
+    """First-time admin registration request."""
+
+    username: str = Field(..., min_length=3, max_length=100)
+    password: str = Field(..., min_length=8, max_length=200)
+
+
+class SetupStatusResponse(BaseModel):
+    """Setup status — whether initial admin registration is needed."""
+
+    needs_setup: bool
+
+
 class AdminInfo(BaseModel):
     """Current admin info with RBAC data."""
 
