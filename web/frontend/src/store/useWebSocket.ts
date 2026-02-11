@@ -90,9 +90,6 @@ const AUTH_FAILURE_CODE = 4001
 
 export function useRealtimeUpdates() {
   const queryClient = useQueryClient()
-  const accessToken = useAuthStore((s) => s.accessToken)
-  const refreshToken = useAuthStore((s) => s.refreshToken)
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const setTokens = useAuthStore((s) => s.setTokens)
   const logout = useAuthStore((s) => s.logout)
 

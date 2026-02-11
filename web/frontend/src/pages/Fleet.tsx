@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { useHasPermission } from '@/components/PermissionGate'
 import {
   Activity,
   RefreshCw,

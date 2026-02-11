@@ -6,7 +6,6 @@ import {
   Play,
   ArrowDown,
   Trash2,
-  FileText,
   Terminal,
   Globe,
   Database,
