@@ -337,22 +337,22 @@ export function formatDateTime(dateStr: string | null): string {
 // ── Constants for forms ─────────────────────────────────────
 
 export const TRIGGER_TYPES = [
-  { value: 'event', label: 'Событие', description: 'Реакция на конкретное событие в системе' },
-  { value: 'schedule', label: 'Расписание', description: 'Запуск по времени или через интервал' },
-  { value: 'threshold', label: 'Порог', description: 'Срабатывает при достижении порога метрики' },
+  { value: 'event', label: 'Событие', description: 'Реагирует на действия в системе в реальном времени' },
+  { value: 'schedule', label: 'Расписание', description: 'Запускается периодически по CRON или интервалу' },
+  { value: 'threshold', label: 'Порог', description: 'Следит за метрикой и срабатывает при достижении порога' },
 ] as const
 
 export const EVENT_TYPES = [
-  { value: 'violation.detected', label: 'Обнаружено нарушение', description: 'Система обнаружила нарушение у пользователя' },
-  { value: 'node.went_offline', label: 'Нода ушла офлайн', description: 'Узел потерял связь и стал недоступен' },
-  { value: 'user.traffic_exceeded', label: 'Трафик превышен', description: 'Пользователь исчерпал лимит трафика' },
+  { value: 'violation.detected', label: 'Обнаружено нарушение', description: 'Сработает при обнаружении нарушения (шеринг, подозрительная активность)' },
+  { value: 'node.went_offline', label: 'Нода ушла офлайн', description: 'Сработает когда узел потеряет связь и станет недоступен для подключений' },
+  { value: 'user.traffic_exceeded', label: 'Трафик превышен', description: 'Сработает когда пользователь исчерпает свой лимит трафика по тарифу' },
 ] as const
 
 export const THRESHOLD_METRICS = [
-  { value: 'users_online', label: 'Пользователей онлайн', description: 'Текущее количество активных подключений' },
-  { value: 'traffic_today', label: 'Трафик за сегодня (ГБ)', description: 'Суммарный трафик за текущие сутки' },
-  { value: 'node_uptime_percent', label: 'Аптайм ноды (%)', description: 'Процент времени доступности узла' },
-  { value: 'user_traffic_percent', label: 'Использование трафика (%)', description: 'Процент использования от лимита' },
+  { value: 'users_online', label: 'Пользователей онлайн', description: 'Текущее количество активных подключений ко всем нодам' },
+  { value: 'traffic_today', label: 'Трафик за сегодня (ГБ)', description: 'Суммарный объём трафика за текущие сутки (в гигабайтах)' },
+  { value: 'node_uptime_percent', label: 'Аптайм ноды (%)', description: 'Процент времени доступности узла за последние 24 часа' },
+  { value: 'user_traffic_percent', label: 'Использование трафика (%)', description: 'Процент использованного трафика от лимита по тарифу' },
 ] as const
 
 export const CONDITION_OPERATORS = [
@@ -376,13 +376,13 @@ export const CONDITION_FIELDS = [
 ] as const
 
 export const ACTION_TYPES = [
-  { value: 'disable_user', label: 'Отключить пользователя', category: 'users', description: 'Деактивирует аккаунт пользователя' },
-  { value: 'block_user', label: 'Заблокировать пользователя', category: 'users', description: 'Блокирует аккаунт с указанием причины' },
-  { value: 'notify', label: 'Отправить уведомление', category: 'system', description: 'Telegram или Webhook-уведомление' },
-  { value: 'restart_node', label: 'Перезапустить ноду', category: 'nodes', description: 'Отправляет команду перезапуска' },
-  { value: 'cleanup_expired', label: 'Очистить истёкших', category: 'system', description: 'Удаляет просроченные подписки' },
-  { value: 'reset_traffic', label: 'Сбросить трафик', category: 'users', description: 'Обнуляет счётчики трафика' },
-  { value: 'force_sync', label: 'Синхронизация нод', category: 'system', description: 'Принудительно обновляет конфигурацию' },
+  { value: 'disable_user', label: 'Отключить пользователя', category: 'users', description: 'Деактивирует аккаунт, подключения будут разорваны' },
+  { value: 'block_user', label: 'Заблокировать пользователя', category: 'users', description: 'Блокирует аккаунт с указанием причины в карточке' },
+  { value: 'notify', label: 'Отправить уведомление', category: 'system', description: 'Отправка сообщения в Telegram или на Webhook URL' },
+  { value: 'restart_node', label: 'Перезапустить ноду', category: 'nodes', description: 'Перезагрузка ноды, временное прерывание соединений' },
+  { value: 'cleanup_expired', label: 'Очистить истёкших', category: 'system', description: 'Отключает пользователей с просроченной подпиской' },
+  { value: 'reset_traffic', label: 'Сбросить трафик', category: 'users', description: 'Обнуляет использованный трафик до нуля' },
+  { value: 'force_sync', label: 'Синхронизация нод', category: 'system', description: 'Принудительно обновляет конфигурацию на всех нодах' },
 ] as const
 
 export const CATEGORIES = [

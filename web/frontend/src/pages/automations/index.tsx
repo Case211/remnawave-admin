@@ -177,7 +177,7 @@ export default function Automations() {
               value={categoryFilter}
               onValueChange={(v) => { setCategoryFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-40 h-8 text-xs bg-dark-800 border-dark-700">
+              <SelectTrigger className="w-40 h-8 text-xs bg-dark-800 border-dark-600">
                 <SelectValue placeholder="Категория" />
               </SelectTrigger>
               <SelectContent>
@@ -192,7 +192,7 @@ export default function Automations() {
               value={triggerFilter}
               onValueChange={(v) => { setTriggerFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-36 h-8 text-xs bg-dark-800 border-dark-700">
+              <SelectTrigger className="w-36 h-8 text-xs bg-dark-800 border-dark-600">
                 <SelectValue placeholder="Триггер" />
               </SelectTrigger>
               <SelectContent>
@@ -207,7 +207,7 @@ export default function Automations() {
               value={enabledFilter}
               onValueChange={(v) => { setEnabledFilter(v === 'all' ? '' : v); setPage(1) }}
             >
-              <SelectTrigger className="w-32 h-8 text-xs bg-dark-800 border-dark-700">
+              <SelectTrigger className="w-32 h-8 text-xs bg-dark-800 border-dark-600">
                 <SelectValue placeholder="Статус" />
               </SelectTrigger>
               <SelectContent>
@@ -341,7 +341,7 @@ function StatCard({
   isText?: boolean
 }) {
   return (
-    <div className="p-4 rounded-xl bg-dark-800/50 border border-dark-700">
+    <div className="p-4 rounded-xl bg-dark-800/50 border-2 border-dark-600">
       <div className="flex items-center gap-2 mb-2">
         <Icon className="w-4 h-4 text-dark-400" />
         <span className="text-xs text-dark-400">{label}</span>

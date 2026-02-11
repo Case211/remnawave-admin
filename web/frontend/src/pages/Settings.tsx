@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Check,
@@ -12,6 +12,10 @@ import {
   RefreshCw,
   Database,
   X,
+  Eye,
+  EyeOff,
+  Copy,
+  KeyRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import client from '../api/client'
@@ -355,6 +359,156 @@ function useDebounce(callback: (key: string, value: string) => void, delay: numb
   return debouncedFn
 }
 
+// Password generation constants
+const PW_LOWER = 'abcdefghjkmnpqrstuvwxyz'
+const PW_UPPER = 'ABCDEFGHJKMNPQRSTUVWXYZ'
+const PW_DIGITS = '23456789'
+const PW_SPECIAL = '!@#$%^&*_+-='
+const PW_ALL = PW_LOWER + PW_UPPER + PW_DIGITS + PW_SPECIAL
+
+function generatePassword(length = 16): string {
+  const arr = new Uint32Array(length)
+  crypto.getRandomValues(arr)
+  const pick = (charset: string, rnd: number) => charset[rnd % charset.length]
+  const chars = [
+    pick(PW_LOWER, arr[0]),
+    pick(PW_UPPER, arr[1]),
+    pick(PW_DIGITS, arr[2]),
+    pick(PW_SPECIAL, arr[3]),
+  ]
+  for (let i = 4; i < length; i++) {
+    chars.push(pick(PW_ALL, arr[i]))
+  }
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = arr[i] % (i + 1)
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  return chars.join('')
+}
+
+interface PasswordStrengthResult {
+  score: number
+  level: 'none' | 'weak' | 'fair' | 'good' | 'strong'
+  label: string
+  color: string
+  checks: {
+    length: boolean
+    lower: boolean
+    upper: boolean
+    digit: boolean
+    special: boolean
+  }
+}
+
+function getPasswordStrength(password: string): PasswordStrengthResult {
+  const checks = {
+    length: password.length >= 8,
+    lower: /[a-z]/.test(password),
+    upper: /[A-Z]/.test(password),
+    digit: /\d/.test(password),
+    special: /[!@#$%^&*_+\-=\[\]{}|;:',.<>?/\\~`"()]/.test(password),
+  }
+  const passedCount = Object.values(checks).filter(Boolean).length
+  let score = passedCount * 16
+  if (password.length >= 12) score += 10
+  if (password.length >= 16) score += 10
+  score = Math.min(100, score)
+
+  if (password.length === 0) return { score: 0, level: 'none', label: '', color: '', checks }
+  if (score < 30) return { score, level: 'weak', label: 'Слабый', color: '#ef4444', checks }
+  if (score < 60) return { score, level: 'fair', label: 'Средний', color: '#f59e0b', checks }
+  if (score < 80) return { score, level: 'good', label: 'Хороший', color: '#22c55e', checks }
+  return { score, level: 'strong', label: 'Надёжный', color: '#10b981', checks }
+}
+
+function SettingsPasswordStrengthBar({ password }: { password: string }) {
+  const strength = useMemo(() => getPasswordStrength(password), [password])
+
+  if (password.length === 0) return null
+
+  return (
+    <div className="space-y-2 mt-2">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 rounded-full bg-dark-600/50 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500 ease-out"
+            style={{
+              width: `${strength.score}%`,
+              backgroundColor: strength.color,
+              boxShadow: `0 0 8px ${strength.color}40`,
+            }}
+          />
+        </div>
+        <span
+          className="text-[11px] font-medium min-w-[60px] text-right transition-colors duration-300"
+          style={{ color: strength.color }}
+        >
+          {strength.label}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+        {[
+          { ok: strength.checks.length, text: '8+ символов' },
+          { ok: strength.checks.lower, text: 'Строчная (a-z)' },
+          { ok: strength.checks.upper, text: 'Заглавная (A-Z)' },
+          { ok: strength.checks.digit, text: 'Цифра (0-9)' },
+          { ok: strength.checks.special, text: 'Спецсимвол' },
+        ].map((c) => (
+          <div
+            key={c.text}
+            className={cn(
+              'text-[11px] flex items-center gap-1 transition-colors duration-200',
+              c.ok ? 'text-green-400' : 'text-dark-300'
+            )}
+          >
+            {c.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+            {c.text}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SettingsPasswordInput({
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+  disabled,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  autoComplete?: string
+  disabled?: boolean
+}) {
+  const [show, setShow] = useState(false)
+
+  return (
+    <div className="relative">
+      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-400 pointer-events-none" />
+      <Input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder || '••••••••'}
+        autoComplete={autoComplete}
+        disabled={disabled}
+        className="w-full text-sm pl-10 pr-10 bg-dark-900 border-2 border-dark-600 text-white focus:border-accent-teal"
+      />
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200 transition-colors"
+        tabIndex={-1}
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  )
+}
+
 function ChangePasswordBlock() {
   const [isOpen, setIsOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
@@ -363,6 +517,7 @@ function ChangePasswordBlock() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [copied, setCopied] = useState(false)
   const user = useAuthStore((s) => s.user)
 
   const { data: adminInfo } = useQuery({
@@ -372,18 +527,27 @@ function ChangePasswordBlock() {
 
   const isPasswordAuth = user?.authMethod === 'password'
   const isGenerated = adminInfo?.password_is_generated ?? false
-
-  // Password strength checks
-  const checks = {
-    length: newPassword.length >= 8,
-    lower: /[a-z]/.test(newPassword),
-    upper: /[A-Z]/.test(newPassword),
-    digit: /\d/.test(newPassword),
-    special: /[!@#$%^&*_+\-=\[\]{}|;:',.<>?/\\~`"()]/.test(newPassword),
-  }
-  const allChecks = Object.values(checks).every(Boolean)
+  const strength = useMemo(() => getPasswordStrength(newPassword), [newPassword])
+  const allChecks = Object.values(strength.checks).every(Boolean)
   const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0
   const canSubmit = currentPassword.length > 0 && allChecks && passwordsMatch && !saving
+
+  const handleGenerate = () => {
+    const pw = generatePassword(16)
+    setNewPassword(pw)
+    setConfirmPassword(pw)
+  }
+
+  const handleCopyNew = async () => {
+    if (!newPassword) return
+    try {
+      await navigator.clipboard.writeText(newPassword)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // clipboard may not be available
+    }
+  }
 
   const handleSubmit = async () => {
     if (!canSubmit) return
@@ -431,15 +595,15 @@ function ChangePasswordBlock() {
       </button>
 
       {isOpen && (
-        <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50 animate-fade-in-down space-y-3">
+        <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50 animate-fade-in-down space-y-4">
           {isGenerated && (
-            <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded px-3 py-2">
+            <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2.5">
               Вы используете автоматически сгенерированный пароль. Рекомендуется сменить его на свой.
             </div>
           )}
 
           {error && (
-            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2 flex items-center">
+            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5 flex items-center">
               <span className="flex-1">{error}</span>
               <Button
                 variant="ghost"
@@ -453,70 +617,84 @@ function ChangePasswordBlock() {
           )}
 
           {success && (
-            <div className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded px-3 py-2">
+            <div className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2.5">
               {success}
             </div>
           )}
 
           <div>
-            <Label className="block text-xs text-dark-200 mb-1">Текущий пароль</Label>
-            <Input
-              type="password"
-              className="w-full text-sm"
+            <Label className="block text-xs font-medium text-dark-300 mb-1.5">Текущий пароль</Label>
+            <SettingsPasswordInput
               value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              disabled={saving}
+              onChange={setCurrentPassword}
+              placeholder="Введите текущий пароль"
               autoComplete="current-password"
+              disabled={saving}
             />
           </div>
 
+          <Separator className="bg-dark-700/50" />
+
           <div>
-            <Label className="block text-xs text-dark-200 mb-1">Новый пароль</Label>
-            <Input
-              type="password"
-              className="w-full text-sm"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              disabled={saving}
-              autoComplete="new-password"
-            />
-            {newPassword.length > 0 && (
-              <div className="mt-1.5 space-y-0.5">
-                {[
-                  { ok: checks.length, text: 'Минимум 8 символов' },
-                  { ok: checks.lower, text: 'Строчная буква (a-z)' },
-                  { ok: checks.upper, text: 'Заглавная буква (A-Z)' },
-                  { ok: checks.digit, text: 'Цифра (0-9)' },
-                  { ok: checks.special, text: 'Спецсимвол (!@#$%...)' },
-                ].map((c) => (
-                  <div key={c.text} className={cn('text-[11px] flex items-center gap-1', c.ok ? 'text-green-400' : 'text-dark-300')}>
-                    {c.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                    {c.text}
-                  </div>
-                ))}
+            <div className="flex items-center justify-between mb-1.5">
+              <Label className="text-xs font-medium text-dark-300">Новый пароль</Label>
+              <div className="flex items-center gap-1">
+                {newPassword && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopyNew}
+                    className="h-6 px-2 text-[11px] text-dark-400 hover:text-dark-200"
+                  >
+                    {copied ? <Check className="w-3 h-3 mr-1 text-green-400" /> : <Copy className="w-3 h-3 mr-1" />}
+                    {copied ? 'Скопировано' : 'Копировать'}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleGenerate}
+                  disabled={saving}
+                  className="h-6 px-2 text-[11px] text-accent-teal hover:text-accent-teal/80 hover:bg-accent-teal/10"
+                >
+                  <KeyRound className="w-3 h-3 mr-1" />
+                  Генератор
+                </Button>
               </div>
-            )}
+            </div>
+            <SettingsPasswordInput
+              value={newPassword}
+              onChange={setNewPassword}
+              placeholder="Введите новый пароль"
+              autoComplete="new-password"
+              disabled={saving}
+            />
+            <SettingsPasswordStrengthBar password={newPassword} />
           </div>
 
           <div>
-            <Label className="block text-xs text-dark-200 mb-1">Подтвердите новый пароль</Label>
-            <Input
-              type="password"
-              className="w-full text-sm"
+            <Label className="block text-xs font-medium text-dark-300 mb-1.5">Подтвердите новый пароль</Label>
+            <SettingsPasswordInput
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={saving}
+              onChange={setConfirmPassword}
+              placeholder="Повторите новый пароль"
               autoComplete="new-password"
+              disabled={saving}
             />
             {confirmPassword.length > 0 && !passwordsMatch && (
-              <p className="text-[11px] text-red-400 mt-0.5">Пароли не совпадают</p>
+              <p className="text-[11px] text-red-400 mt-1">Пароли не совпадают</p>
+            )}
+            {confirmPassword.length > 0 && passwordsMatch && (
+              <p className="text-[11px] text-green-400 mt-1 flex items-center gap-1">
+                <Check className="w-3 h-3" /> Пароли совпадают
+              </p>
             )}
           </div>
 
           <Button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="w-full text-sm"
+            className="w-full text-sm bg-accent-teal text-white hover:bg-accent-teal/90 disabled:opacity-40"
           >
             {saving ? 'Сохранение...' : 'Сменить пароль'}
           </Button>
