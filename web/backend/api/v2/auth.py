@@ -22,6 +22,8 @@ from web.backend.core.token_blacklist import token_blacklist
 from web.backend.schemas.auth import (
     TelegramAuthData,
     LoginRequest,
+    RegisterRequest,
+    SetupStatusResponse,
     ChangePasswordRequest,
     TokenResponse,
     RefreshRequest,
@@ -41,6 +43,104 @@ def _get_client_ip(request: Request) -> str:
         # First IP in the chain is the original client
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+@router.get("/setup-status", response_model=SetupStatusResponse)
+async def get_setup_status(request: Request):
+    """
+    Check whether initial admin setup is needed.
+
+    Returns needs_setup=true when no admin account exists in the DB
+    and no .env credentials are configured.
+    """
+    settings = get_web_settings()
+    has_env_auth = bool(settings.admin_login and settings.admin_password)
+
+    has_db_auth = False
+    try:
+        from web.backend.core.admin_credentials import admin_exists
+        has_db_auth = await admin_exists()
+    except Exception:
+        pass
+
+    # Also check RBAC admin_accounts table
+    has_rbac_accounts = False
+    try:
+        from web.backend.core.rbac import admin_account_exists
+        has_rbac_accounts = await admin_account_exists()
+    except Exception:
+        pass
+
+    needs_setup = not has_env_auth and not has_db_auth and not has_rbac_accounts
+    return SetupStatusResponse(needs_setup=needs_setup)
+
+
+@router.post("/register", response_model=TokenResponse)
+@limiter.limit("3/minute")
+async def register_admin(request: Request, data: RegisterRequest):
+    """
+    Register the first admin account. Only works when no admin exists.
+
+    This endpoint is only available during initial setup.
+    """
+    settings = get_web_settings()
+    client_ip = _get_client_ip(request)
+
+    # Check that no admin exists yet (guard against abuse)
+    has_env_auth = bool(settings.admin_login and settings.admin_password)
+    has_db_auth = False
+    try:
+        from web.backend.core.admin_credentials import admin_exists
+        has_db_auth = await admin_exists()
+    except Exception:
+        pass
+
+    has_rbac_accounts = False
+    try:
+        from web.backend.core.rbac import admin_account_exists
+        has_rbac_accounts = await admin_account_exists()
+    except Exception:
+        pass
+
+    if has_env_auth or has_db_auth or has_rbac_accounts:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin account already exists. Registration is disabled.",
+        )
+
+    # Validate password strength
+    from web.backend.core.admin_credentials import (
+        validate_password_strength,
+        create_admin,
+        ensure_table,
+    )
+
+    is_strong, strength_error = validate_password_strength(data.password)
+    if not is_strong:
+        raise HTTPException(status_code=400, detail=strength_error)
+
+    # Validate username
+    if len(data.username.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+
+    # Create the admin account
+    await ensure_table()
+    success = await create_admin(data.username.strip(), data.password, is_generated=False)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to create admin account")
+
+    logger.info("First admin registered: '%s' from %s", data.username, client_ip)
+
+    # Auto-login after registration
+    subject = f"pwd:{data.username.strip()}"
+    access_token = create_access_token(subject, data.username.strip(), auth_method="password")
+    refresh_token = create_refresh_token(subject)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.jwt_expire_minutes * 60,
+    )
 
 
 @router.post("/telegram", response_model=TokenResponse)

@@ -19,6 +19,10 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
+  User,
+  Wifi,
+  Users as UsersIcon,
+  Infinity,
 } from 'lucide-react'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -31,6 +35,8 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useHasPermission } from '../components/PermissionGate'
@@ -471,191 +477,247 @@ function CreateUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>Создание пользователя</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="w-5 h-5 text-primary-400" />
+            Создание пользователя
+          </DialogTitle>
           <DialogDescription>Заполните данные для нового пользователя</DialogDescription>
         </DialogHeader>
 
         {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2">
+            <X className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         )}
 
-        <div className="space-y-4">
-          <div>
-            <Label>Имя пользователя</Label>
-            <Input
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-              placeholder="username"
-              className="mt-1.5"
-            />
-          </div>
+        <div className="space-y-5">
+          {/* Section: Basic info */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-dark-300 uppercase tracking-wider">
+              <User className="w-3.5 h-3.5" />
+              Основная информация
+            </div>
 
-          <div>
-            <Label>Telegram ID</Label>
-            <Input
-              type="number"
-              value={form.telegram_id}
-              onChange={(e) => setForm({ ...form, telegram_id: e.target.value })}
-              placeholder="123456789"
-              className="mt-1.5"
-            />
-          </div>
-
-          <div>
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="user@example.com"
-              className="mt-1.5"
-            />
-          </div>
-
-          <div>
-            <Label>Тег</Label>
-            <Input
-              value={form.tag}
-              onChange={(e) => setForm({ ...form, tag: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })}
-              placeholder="MY_TAG"
-              maxLength={16}
-              className="mt-1.5 font-mono"
-            />
-            <p className="text-xs text-dark-300 mt-1">A-Z, 0-9, _ (макс. 16 символов)</p>
-          </div>
-
-          <div>
-            <Label>Описание</Label>
-            <Input
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Заметки..."
-              className="mt-1.5"
-            />
-          </div>
-
-          <div>
-            <Label>Лимит трафика</Label>
-            <div className="flex items-center gap-3 mt-1.5 mb-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.is_unlimited}
-                  onChange={(e) => setForm({
-                    ...form,
-                    is_unlimited: e.target.checked,
-                    traffic_limit_gb: e.target.checked ? '' : form.traffic_limit_gb,
-                  })}
-                  className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-dark-200">Имя пользователя</Label>
+                <Input
+                  value={form.username}
+                  onChange={(e) => setForm({ ...form, username: e.target.value })}
+                  placeholder="username"
+                  className="mt-1"
                 />
-                <span className="text-sm text-dark-100">Безлимитный</span>
-              </label>
-            </div>
-            {!form.is_unlimited && (
-              <>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={form.traffic_limit_gb}
-                    onChange={(e) => setForm({ ...form, traffic_limit_gb: e.target.value })}
-                    placeholder="Введите лимит"
-                    className="pr-12"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
-                </div>
-                <div className="mt-2">
-                  <Label className="text-xs text-dark-300">Стратегия сброса</Label>
-                  <select
-                    value={form.traffic_limit_strategy}
-                    onChange={(e) => setForm({ ...form, traffic_limit_strategy: e.target.value })}
-                    className="mt-1 w-full rounded-md border border-dark-400/30 bg-dark-800 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                  >
-                    <option value="MONTH">Ежемесячный</option>
-                    <option value="WEEK">Еженедельный</option>
-                    <option value="DAY">Ежедневный</option>
-                    <option value="NO_RESET">Без сброса</option>
-                  </select>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div>
-            <Label>Дата истечения</Label>
-            <Input
-              type="datetime-local"
-              value={form.expire_at}
-              onChange={(e) => setForm({ ...form, expire_at: e.target.value })}
-              className="mt-1.5"
-            />
-            <p className="text-xs text-dark-300 mt-1">Оставьте пустым для бессрочной подписки</p>
-          </div>
-
-          <div>
-            <Label>Лимит устройств (HWID)</Label>
-            <Input
-              type="number"
-              min="0"
-              value={form.hwid_device_limit}
-              onChange={(e) => setForm({ ...form, hwid_device_limit: e.target.value })}
-              className="mt-1.5"
-            />
-          </div>
-
-          {/* External squad */}
-          {externalSquads.length > 0 && (
-            <div>
-              <Label>Внешний сквад</Label>
-              <select
-                value={form.external_squad_uuid}
-                onChange={(e) => setForm({ ...form, external_squad_uuid: e.target.value })}
-                className="mt-1.5 w-full rounded-md border border-dark-400/30 bg-dark-800 text-white text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-              >
-                <option value="">Не выбран</option>
-                {externalSquads.map((sq: Squad) => (
-                  <option key={sq.uuid} value={sq.uuid}>
-                    {sq.squadName || sq.squadTag || sq.uuid}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Internal squads */}
-          {internalSquads.length > 0 && (
-            <div>
-              <Label>Внутренние сквады</Label>
-              <div className="mt-1.5 space-y-1.5 max-h-32 overflow-y-auto">
-                {internalSquads.map((sq: Squad) => (
-                  <label key={sq.uuid} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.active_internal_squads.includes(sq.uuid)}
-                      onChange={() => toggleInternalSquad(sq.uuid)}
-                      className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
-                    />
-                    <span className="text-sm text-dark-100">
-                      {sq.squadName || sq.squadTag || sq.uuid}
-                    </span>
-                  </label>
-                ))}
+              </div>
+              <div>
+                <Label className="text-xs text-dark-200">Telegram ID</Label>
+                <Input
+                  type="number"
+                  value={form.telegram_id}
+                  onChange={(e) => setForm({ ...form, telegram_id: e.target.value })}
+                  placeholder="123456789"
+                  className="mt-1"
+                />
               </div>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-dark-200">Email</Label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="user@example.com"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-dark-200">Тег</Label>
+                <Input
+                  value={form.tag}
+                  onChange={(e) => setForm({ ...form, tag: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })}
+                  placeholder="MY_TAG"
+                  maxLength={16}
+                  className="mt-1 font-mono"
+                />
+                <p className="text-[10px] text-dark-300 mt-0.5">A-Z, 0-9, _ (макс. 16)</p>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs text-dark-200">Описание</Label>
+              <Input
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="Заметки о пользователе..."
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          <Separator className="bg-dark-400/15" />
+
+          {/* Section: Traffic */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-dark-300 uppercase tracking-wider">
+              <Wifi className="w-3.5 h-3.5" />
+              Трафик и лимиты
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-dark-100 flex items-center gap-2">
+                <Infinity className="w-4 h-4 text-dark-300" />
+                Безлимитный трафик
+              </Label>
+              <Switch
+                checked={form.is_unlimited}
+                onCheckedChange={(checked) => setForm({
+                  ...form,
+                  is_unlimited: checked,
+                  traffic_limit_gb: checked ? '' : form.traffic_limit_gb,
+                })}
+              />
+            </div>
+
+            {!form.is_unlimited && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
+                <div>
+                  <Label className="text-xs text-dark-200">Лимит трафика</Label>
+                  <div className="relative mt-1">
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={form.traffic_limit_gb}
+                      onChange={(e) => setForm({ ...form, traffic_limit_gb: e.target.value })}
+                      placeholder="0.0"
+                      className="pr-12"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dark-300 font-medium">ГБ</span>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-dark-200">Стратегия сброса</Label>
+                  <Select
+                    value={form.traffic_limit_strategy}
+                    onValueChange={(value) => setForm({ ...form, traffic_limit_strategy: value })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MONTH">Ежемесячный</SelectItem>
+                      <SelectItem value="WEEK">Еженедельный</SelectItem>
+                      <SelectItem value="DAY">Ежедневный</SelectItem>
+                      <SelectItem value="NO_RESET">Без сброса</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-dark-200">Дата истечения</Label>
+                <Input
+                  type="datetime-local"
+                  value={form.expire_at}
+                  onChange={(e) => setForm({ ...form, expire_at: e.target.value })}
+                  className="mt-1"
+                />
+                <p className="text-[10px] text-dark-300 mt-0.5">Пусто = бессрочно</p>
+              </div>
+              <div>
+                <Label className="text-xs text-dark-200">Лимит устройств (HWID)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={form.hwid_device_limit}
+                  onChange={(e) => setForm({ ...form, hwid_device_limit: e.target.value })}
+                  className="mt-1"
+                />
+                <p className="text-[10px] text-dark-300 mt-0.5">0 = без ограничений</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Squads */}
+          {(externalSquads.length > 0 || internalSquads.length > 0) && (
+            <>
+              <Separator className="bg-dark-400/15" />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-medium text-dark-300 uppercase tracking-wider">
+                  <UsersIcon className="w-3.5 h-3.5" />
+                  Сквады
+                </div>
+
+                {externalSquads.length > 0 && (
+                  <div>
+                    <Label className="text-xs text-dark-200">Внешний сквад</Label>
+                    <Select
+                      value={form.external_squad_uuid || '_none'}
+                      onValueChange={(value) => setForm({ ...form, external_squad_uuid: value === '_none' ? '' : value })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Не выбран" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Не выбран</SelectItem>
+                        {externalSquads.map((sq: Squad) => (
+                          <SelectItem key={sq.uuid} value={sq.uuid}>
+                            {sq.squadName || sq.squadTag || sq.uuid}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {internalSquads.length > 0 && (
+                  <div>
+                    <Label className="text-xs text-dark-200">Внутренние сквады</Label>
+                    <div className="mt-1.5 space-y-1 max-h-32 overflow-y-auto rounded-md border border-dark-400/20 p-2">
+                      {internalSquads.map((sq: Squad) => (
+                        <label
+                          key={sq.uuid}
+                          className="flex items-center gap-2.5 cursor-pointer rounded-md px-2 py-1.5 hover:bg-dark-600/50 transition-colors"
+                        >
+                          <Checkbox
+                            checked={form.active_internal_squads.includes(sq.uuid)}
+                            onCheckedChange={() => toggleInternalSquad(sq.uuid)}
+                          />
+                          <span className="text-sm text-dark-100">
+                            {sq.squadName || sq.squadTag || sq.uuid}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="secondary" onClick={onClose} disabled={isPending}>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={onClose} disabled={isPending}>
             Отмена
           </Button>
           <Button onClick={handleSubmit} disabled={isPending}>
-            {isPending ? 'Создание...' : 'Создать'}
+            {isPending ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Создание...
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4 mr-2" />
+                Создать
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -972,23 +1034,23 @@ export default function Users() {
                   )}
                 </Button>
 
-                <div className="relative flex-1 sm:flex-none sm:w-48">
-                  <select
-                    value={sortBy}
-                    onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
-                    className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                  >
-                    <option value="created_at">Дата создания</option>
-                    <option value="used_traffic_bytes">Трафик (текущий)</option>
-                    <option value="lifetime_used_traffic_bytes">Трафик (за всё время)</option>
-                    <option value="hwid_device_limit">Устройства (HWID)</option>
-                    <option value="online_at">Последняя активность</option>
-                    <option value="expire_at">Дата истечения</option>
-                    <option value="traffic_limit_bytes">Лимит трафика</option>
-                    <option value="username">Имя</option>
-                    <option value="status">Статус</option>
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
+                <div className="flex-1 sm:flex-none sm:w-48">
+                  <Select value={sortBy} onValueChange={(value) => { setSortBy(value); setPage(1) }}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="created_at">Дата создания</SelectItem>
+                      <SelectItem value="used_traffic_bytes">Трафик (текущий)</SelectItem>
+                      <SelectItem value="lifetime_used_traffic_bytes">Трафик (за всё время)</SelectItem>
+                      <SelectItem value="hwid_device_limit">Устройства (HWID)</SelectItem>
+                      <SelectItem value="online_at">Последняя активность</SelectItem>
+                      <SelectItem value="expire_at">Дата истечения</SelectItem>
+                      <SelectItem value="traffic_limit_bytes">Лимит трафика</SelectItem>
+                      <SelectItem value="username">Имя</SelectItem>
+                      <SelectItem value="status">Статус</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -1021,89 +1083,95 @@ export default function Users() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">Статус</Label>
-                    <select
-                      value={status}
-                      onChange={(e) => { setStatus(e.target.value); setPage(1) }}
-                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
-                    >
-                      <option value="">Все статусы</option>
-                      <option value="active">Активные</option>
-                      <option value="disabled">Отключённые</option>
-                      <option value="limited">Ограниченные</option>
-                      <option value="expired">Истёкшие</option>
-                    </select>
+                    <Select value={status || '_all'} onValueChange={(v) => { setStatus(v === '_all' ? '' : v); setPage(1) }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">Все статусы</SelectItem>
+                        <SelectItem value="active">Активные</SelectItem>
+                        <SelectItem value="disabled">Отключённые</SelectItem>
+                        <SelectItem value="limited">Ограниченные</SelectItem>
+                        <SelectItem value="expired">Истёкшие</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">Тип трафика</Label>
-                    <select
-                      value={trafficType}
-                      onChange={(e) => { setTrafficType(e.target.value); setPage(1) }}
-                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
-                    >
-                      <option value="">Любой</option>
-                      <option value="unlimited">Безлимитные</option>
-                      <option value="limited">С лимитом</option>
-                    </select>
+                    <Select value={trafficType || '_all'} onValueChange={(v) => { setTrafficType(v === '_all' ? '' : v); setPage(1) }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">Любой</SelectItem>
+                        <SelectItem value="unlimited">Безлимитные</SelectItem>
+                        <SelectItem value="limited">С лимитом</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">Расход трафика</Label>
-                    <select
-                      value={trafficUsage}
-                      onChange={(e) => { setTrafficUsage(e.target.value); setPage(1) }}
-                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
-                    >
-                      <option value="">Любой расход</option>
-                      <option value="above_90">Более 90% лимита</option>
-                      <option value="above_70">Более 70% лимита</option>
-                      <option value="above_50">Более 50% лимита</option>
-                      <option value="zero">Без трафика (0)</option>
-                    </select>
+                    <Select value={trafficUsage || '_all'} onValueChange={(v) => { setTrafficUsage(v === '_all' ? '' : v); setPage(1) }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">Любой расход</SelectItem>
+                        <SelectItem value="above_90">Более 90% лимита</SelectItem>
+                        <SelectItem value="above_70">Более 70% лимита</SelectItem>
+                        <SelectItem value="above_50">Более 50% лимита</SelectItem>
+                        <SelectItem value="zero">Без трафика (0)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">Срок действия</Label>
-                    <select
-                      value={expireFilter}
-                      onChange={(e) => { setExpireFilter(e.target.value); setPage(1) }}
-                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
-                    >
-                      <option value="">Любой срок</option>
-                      <option value="expiring_7d">Истекает за 7 дней</option>
-                      <option value="expiring_30d">Истекает за 30 дней</option>
-                      <option value="expired">Уже истёк</option>
-                      <option value="no_expiry">Бессрочные</option>
-                    </select>
+                    <Select value={expireFilter || '_all'} onValueChange={(v) => { setExpireFilter(v === '_all' ? '' : v); setPage(1) }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">Любой срок</SelectItem>
+                        <SelectItem value="expiring_7d">Истекает за 7 дней</SelectItem>
+                        <SelectItem value="expiring_30d">Истекает за 30 дней</SelectItem>
+                        <SelectItem value="expired">Уже истёк</SelectItem>
+                        <SelectItem value="no_expiry">Бессрочные</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">Активность</Label>
-                    <select
-                      value={onlineFilter}
-                      onChange={(e) => { setOnlineFilter(e.target.value); setPage(1) }}
-                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
-                    >
-                      <option value="">Любая активность</option>
-                      <option value="online_24h">Были онлайн за 24ч</option>
-                      <option value="online_7d">Были онлайн за 7 дней</option>
-                      <option value="online_30d">Были онлайн за 30 дней</option>
-                      <option value="never">Никогда не подключались</option>
-                    </select>
+                    <Select value={onlineFilter || '_all'} onValueChange={(v) => { setOnlineFilter(v === '_all' ? '' : v); setPage(1) }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">Любая активность</SelectItem>
+                        <SelectItem value="online_24h">Были онлайн за 24ч</SelectItem>
+                        <SelectItem value="online_7d">Были онлайн за 7 дней</SelectItem>
+                        <SelectItem value="online_30d">Были онлайн за 30 дней</SelectItem>
+                        <SelectItem value="never">Никогда не подключались</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">На странице</Label>
-                    <select
-                      value={perPage}
-                      onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1) }}
-                      className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1"
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
+                    <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1) }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -1241,8 +1309,9 @@ export default function Users() {
               variant="outline"
               onClick={() => bulkEnable.mutate([...selectedUuids])}
               disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
-              className="text-green-400 border-green-500/30 hover:bg-green-500/10"
+              className="text-green-400 border-green-500/30 hover:bg-green-500/10 gap-1.5"
             >
+              <Check className="w-3.5 h-3.5" />
               Включить
             </Button>
             <Button
@@ -1250,8 +1319,9 @@ export default function Users() {
               variant="outline"
               onClick={() => bulkDisable.mutate([...selectedUuids])}
               disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
-              className="text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10"
+              className="text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10 gap-1.5"
             >
+              <Ban className="w-3.5 h-3.5" />
               Отключить
             </Button>
             <Button
@@ -1259,16 +1329,18 @@ export default function Users() {
               variant="outline"
               onClick={() => bulkDelete.mutate([...selectedUuids])}
               disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
-              className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+              className="text-red-400 border-red-500/30 hover:bg-red-500/10 gap-1.5"
             >
+              <Trash2 className="w-3.5 h-3.5" />
               Удалить
             </Button>
             <Button
               size="sm"
-              variant="ghost"
+              variant="outline"
               onClick={clearSelection}
-              className="text-dark-300"
+              className="text-dark-300 gap-1.5"
             >
+              <X className="w-3.5 h-3.5" />
               Отмена
             </Button>
           </div>
