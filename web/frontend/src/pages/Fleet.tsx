@@ -131,6 +131,7 @@ function formatUptime(seconds: number | null | undefined): string {
 function formatTimeAgo(dateStr: string | null): string {
   if (!dateStr) return 'Никогда'
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return 'Никогда'
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffSec = Math.floor(diffMs / 1000)

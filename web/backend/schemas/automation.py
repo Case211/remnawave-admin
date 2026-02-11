@@ -1,7 +1,7 @@
 """Automation schemas for web panel API."""
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Any
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ── Enums / Literals ─────────────────────────────────────────
@@ -13,6 +13,39 @@ ActionType = Literal[
     "cleanup_expired", "reset_traffic", "force_sync",
 ]
 LogResult = Literal["success", "error", "skipped"]
+
+# ── Config validation helpers ────────────────────────────────
+
+_ALLOWED_TRIGGER_KEYS: dict[str, set[str]] = {
+    "event": {"event", "min_score", "offline_minutes"},
+    "schedule": {"cron", "interval_minutes"},
+    "threshold": {"metric", "operator", "value"},
+}
+_ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
+    "disable_user": {"reason"},
+    "block_user": {"reason"},
+    "notify": {"channel", "webhook_url", "message_template"},
+    "restart_node": {"node_uuid"},
+    "cleanup_expired": {"older_than_days"},
+    "reset_traffic": {"target_status"},
+    "force_sync": {"node_uuid"},
+}
+_MAX_CONFIG_DEPTH = 2
+_MAX_CONFIG_STR_LEN = 1000
+
+
+def _validate_config_values(obj: Any, depth: int = 0) -> None:
+    """Reject deeply nested or excessively large config values."""
+    if depth > _MAX_CONFIG_DEPTH:
+        raise ValueError("Config nesting too deep")
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _validate_config_values(v, depth + 1)
+    elif isinstance(obj, list):
+        for item in obj:
+            _validate_config_values(item, depth + 1)
+    elif isinstance(obj, str) and len(obj) > _MAX_CONFIG_STR_LEN:
+        raise ValueError(f"Config string value exceeds {_MAX_CONFIG_STR_LEN} chars")
 
 
 # ── Request schemas ──────────────────────────────────────────
@@ -27,6 +60,23 @@ class AutomationRuleCreate(BaseModel):
     conditions: list = Field(default_factory=list)
     action_type: ActionType
     action_config: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_configs(self) -> "AutomationRuleCreate":
+        allowed_t = _ALLOWED_TRIGGER_KEYS.get(self.trigger_type)
+        if allowed_t:
+            bad = set(self.trigger_config.keys()) - allowed_t
+            if bad:
+                raise ValueError(f"Unknown trigger_config keys for '{self.trigger_type}': {bad}")
+        allowed_a = _ALLOWED_ACTION_KEYS.get(self.action_type)
+        if allowed_a:
+            bad_a = set(self.action_config.keys()) - allowed_a
+            if bad_a:
+                raise ValueError(f"Unknown action_config keys for '{self.action_type}': {bad_a}")
+        _validate_config_values(self.trigger_config)
+        _validate_config_values(self.action_config)
+        _validate_config_values(self.conditions)
+        return self
 
 
 class AutomationRuleUpdate(BaseModel):

@@ -254,7 +254,7 @@ export default function Login() {
     }
 
     const botUsername =
-      (window as any).__ENV?.TELEGRAM_BOT_USERNAME || import.meta.env.VITE_TELEGRAM_BOT_USERNAME
+      window.__ENV?.TELEGRAM_BOT_USERNAME || import.meta.env.VITE_TELEGRAM_BOT_USERNAME
     if (!botUsername) {
       setShowPasswordForm(true)
       return

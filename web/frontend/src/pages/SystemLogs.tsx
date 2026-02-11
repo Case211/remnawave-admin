@@ -52,10 +52,11 @@ const LEVEL_COLORS: Record<string, string> = {
 }
 
 function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
+  if (!bytes || bytes <= 0) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
+  if (i < 0 || i >= sizes.length) return '0 B'
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
 }
 
@@ -105,7 +106,7 @@ export default function SystemLogs() {
     if (!isStreaming || !accessToken) return
 
     const envUrl =
-      (window as any).__ENV?.API_URL ||
+      window.__ENV?.API_URL ||
       import.meta.env.VITE_API_URL ||
       ''
     let base: string

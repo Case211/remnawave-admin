@@ -114,10 +114,11 @@ interface EditFormData {
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
+  if (!bytes || bytes <= 0) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
+  if (i < 0 || i >= sizes.length) return '0 B'
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
@@ -552,8 +553,16 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
 /**
  * User audit history — shows admin actions on this user.
  */
+interface AuditItem {
+  id: number
+  action: string
+  admin_username: string
+  created_at: string | null
+  details: string | null
+}
+
 function UserHistory({ uuid }: { uuid: string }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<{ items: AuditItem[] }>({
     queryKey: ['user-history', uuid],
     queryFn: async () => {
       const response = await client.get(`/audit/resource/users/${uuid}`, { params: { limit: 20 } })
@@ -590,7 +599,7 @@ function UserHistory({ uuid }: { uuid: string }) {
         <div className="relative pl-6 space-y-4">
           {/* Timeline line */}
           <div className="absolute left-[9px] top-2 bottom-2 w-px bg-dark-600" />
-          {items.map((item: any) => {
+          {items.map((item) => {
             const dot = item.action?.indexOf('.') ?? -1
             const action = dot > 0 ? item.action.slice(dot + 1) : item.action
             return (

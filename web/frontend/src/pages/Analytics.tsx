@@ -104,7 +104,14 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ── Chart Tooltip ───────────────────────────────────────────────
 
-function TrendTooltip({ active, payload, label, metric }: any) {
+interface TrendTooltipProps {
+  active?: boolean
+  payload?: { value: number }[]
+  label?: string
+  metric?: string
+}
+
+function TrendTooltip({ active, payload, label, metric }: TrendTooltipProps) {
   const chart = useChartTheme()
   if (!active || !payload?.length) return null
   const val = payload[0].value
@@ -143,6 +150,7 @@ function GeoMapCard() {
   const center = useMemo(() => {
     if (cities.length === 0) return [50, 40] as [number, number]
     const totalWeight = cities.reduce((s: number, c: GeoCity) => s + c.count, 0)
+    if (totalWeight === 0) return [50, 40] as [number, number]
     const lat = cities.reduce((s: number, c: GeoCity) => s + c.lat * c.count, 0) / totalWeight
     const lon = cities.reduce((s: number, c: GeoCity) => s + c.lon * c.count, 0) / totalWeight
     return [lat, lon] as [number, number]

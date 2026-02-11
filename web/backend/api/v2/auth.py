@@ -314,19 +314,25 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
 
     # Determine auth method from subject format
     if subject.startswith("pwd:"):
-        # Password-based auth — verify account still exists (DB or .env)
+        # Password-based auth — verify account still exists and is active
         username = subject[4:]
         is_valid = False
         try:
             from web.backend.core.rbac import get_admin_account_by_username
             account = await get_admin_account_by_username(username)
-            if account and account.get("is_active", True):
+            if account:
+                # DB account exists — it is the source of truth
+                if not account.get("is_active", True):
+                    raise HTTPException(status_code=403, detail="Admin account disabled")
                 is_valid = True
+        except HTTPException:
+            raise
         except Exception:
             pass
+        # Fallback to .env only when no DB account was found
         if not is_valid:
             if not settings.admin_login or username.lower() != settings.admin_login.lower():
-                raise HTTPException(status_code=403, detail="Admin account disabled")
+                raise HTTPException(status_code=403, detail="Admin account not found")
         access_token = create_access_token(subject, username, auth_method="password")
     else:
         # Telegram-based auth — verify still in admins list

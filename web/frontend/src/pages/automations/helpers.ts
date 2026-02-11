@@ -1,5 +1,8 @@
 import type { AutomationRule, AutomationTemplate } from '../../api/automations'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyConfig = Record<string, any>
+
 // ── Category ────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -186,8 +189,8 @@ const OPERATOR_LABELS: Record<string, string> = {
   'not_contains': 'не содержит',
 }
 
-export function describeTrigger(rule: AutomationRule | AutomationTemplate): string {
-  const cfg = rule.trigger_config as Record<string, any>
+export function describeTrigger(rule: { trigger_type: string; trigger_config: Record<string, unknown> }): string {
+  const cfg = rule.trigger_config as AnyConfig
 
   if (rule.trigger_type === 'event') {
     const event = cfg.event || ''
@@ -251,8 +254,8 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
   force_sync: 'Принудительно синхронизирует конфигурацию нод',
 }
 
-export function describeAction(rule: AutomationRule | AutomationTemplate): string {
-  const cfg = rule.action_config as Record<string, any>
+export function describeAction(rule: { action_type: string; action_config: Record<string, unknown> }): string {
+  const cfg = rule.action_config as AnyConfig
   const base = ACTION_LABELS[rule.action_type] || rule.action_type
 
   if (rule.action_type === 'notify') {

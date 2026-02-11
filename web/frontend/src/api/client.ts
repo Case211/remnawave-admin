@@ -11,7 +11,7 @@ import { getAuthState } from '../store/authBridge'
  * with fallback to Vite's import.meta.env for local development.
  */
 function getApiBaseUrl(): string {
-  const envUrl = (window as any).__ENV?.API_URL || import.meta.env.VITE_API_URL || ''
+  const envUrl = window.__ENV?.API_URL || import.meta.env.VITE_API_URL || ''
   if (!envUrl) return '/api/v2'
 
   // Auto-fix Mixed Content: upgrade http:// to https:// if page is served over HTTPS
@@ -122,10 +122,10 @@ client.interceptors.response.use(
         // Retry original request
         originalRequest.headers.Authorization = `Bearer ${access_token}`
         return client(originalRequest)
-      } catch {
+      } catch (refreshError) {
         // Refresh failed - force logout
         forceLogout()
-        return Promise.reject(error)
+        return Promise.reject(refreshError)
       }
     }
 
