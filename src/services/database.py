@@ -45,7 +45,6 @@ CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_short_uuid ON users(short_uuid);
 CREATE INDEX IF NOT EXISTS idx_users_subscription_uuid ON users(subscription_uuid);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_users_tag ON users(tag) WHERE tag IS NOT NULL;
 
 -- Ноды
 CREATE TABLE IF NOT EXISTS nodes (
@@ -92,7 +91,6 @@ CREATE TABLE IF NOT EXISTS hosts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_hosts_remark ON hosts(remark);
-CREATE INDEX IF NOT EXISTS idx_hosts_tag ON hosts(tag) WHERE tag IS NOT NULL;
 
 -- Профили конфигурации (редко меняются)
 CREATE TABLE IF NOT EXISTS config_profiles (
