@@ -46,7 +46,7 @@ test.describe('Login Page', () => {
     // Wait for the password form to appear (auto-shown when no Telegram bot configured)
     await expect(page.locator('#username')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('#password')).toBeVisible();
-    await expect(page.getByRole('button', { name: /войти/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible();
   });
 
   test('shows validation on empty submit', async ({ page }) => {
@@ -54,7 +54,7 @@ test.describe('Login Page', () => {
     await page.waitForLoadState('domcontentloaded');
 
     // Wait for the form to appear
-    const loginButton = page.getByRole('button', { name: /войти/i });
+    const loginButton = page.getByRole('button', { name: 'Войти', exact: true });
     await expect(loginButton).toBeVisible({ timeout: 10_000 });
 
     // Button should be disabled when fields are empty
