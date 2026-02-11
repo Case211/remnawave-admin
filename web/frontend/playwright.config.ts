@@ -32,7 +32,7 @@ export default defineConfig({
     },
   ],
 
-  /* Start dev server before running tests (local only) */
+  /* Start dev server before running tests (local only; CI starts server in workflow) */
   webServer: process.env.CI
     ? undefined
     : {
