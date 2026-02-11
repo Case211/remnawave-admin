@@ -13851,6 +13851,131 @@
         ]
       }
     },
+    "/api/nodes/bulk-actions": {
+      "post": {
+        "operationId": "NodesController_bulkNodesActions",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkNodesActionsRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkNodesActionsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Perform actions for many nodes",
+        "tags": [
+          "Nodes Controller"
+        ]
+      }
+    },
     "/api/hosts/tags": {
       "get": {
         "operationId": "HostsController_getAllHostTags",
@@ -15605,9 +15730,10 @@
             "name": "start",
             "required": true,
             "in": "query",
-            "description": "Start date",
+            "description": "Start date (YYYY-MM-DD)",
             "schema": {
-              "format": "date-time",
+              "format": "date",
+              "example": "2026-01-31",
               "type": "string"
             }
           },
@@ -15615,9 +15741,10 @@
             "name": "end",
             "required": true,
             "in": "query",
-            "description": "End date",
+            "description": "End date (YYYY-MM-DD)",
             "schema": {
-              "format": "date-time",
+              "format": "date",
+              "example": "2026-01-01",
               "type": "string"
             }
           },
@@ -15778,7 +15905,7 @@
         ],
         "responses": {
           "200": {
-            "description": "User usage by range fetched successfully",
+            "description": "User usage by range (legacy) fetched successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -15907,9 +16034,10 @@
             "name": "start",
             "required": true,
             "in": "query",
-            "description": "Start date",
+            "description": "Start date (YYYY-MM-DD)",
             "schema": {
-              "format": "date-time",
+              "format": "date",
+              "example": "2026-01-31",
               "type": "string"
             }
           },
@@ -15917,9 +16045,10 @@
             "name": "end",
             "required": true,
             "in": "query",
-            "description": "End date",
+            "description": "End date (YYYY-MM-DD)",
             "schema": {
-              "format": "date-time",
+              "format": "date",
+              "example": "2026-01-01",
               "type": "string"
             }
           },
@@ -16954,9 +17083,10 @@
             "name": "start",
             "required": true,
             "in": "query",
-            "description": "Start date",
+            "description": "Start date (YYYY-MM-DD)",
             "schema": {
-              "format": "date-time",
+              "format": "date",
+              "example": "2026-01-31",
               "type": "string"
             }
           },
@@ -16964,9 +17094,10 @@
             "name": "end",
             "required": true,
             "in": "query",
-            "description": "End date",
+            "description": "End date (YYYY-MM-DD)",
             "schema": {
-              "format": "date-time",
+              "format": "date",
+              "example": "2026-01-01",
               "type": "string"
             }
           }
@@ -18788,6 +18919,121 @@
         ]
       }
     },
+    "/api/system/metadata": {
+      "get": {
+        "operationId": "SystemController_getMetadata",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Returns system metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetMetadataResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "statusCode": {
+                      "type": "number",
+                      "example": 400
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "validation": {
+                            "type": "string",
+                            "example": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "invalid_string"
+                          },
+                          "message": {
+                            "type": "string",
+                            "example": "Invalid uuid"
+                          },
+                          "path": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "uuid"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "validation",
+                          "code",
+                          "message",
+                          "path"
+                        ]
+                      },
+                      "example": [
+                        {
+                          "validation": "uuid",
+                          "code": "invalid_string",
+                          "message": "Invalid uuid",
+                          "path": [
+                            "uuid"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errorCode": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Authorization": []
+          }
+        ],
+        "summary": "Get Remnawave Information",
+        "tags": [
+          "System Controller"
+        ]
+      }
+    },
     "/api/system/stats": {
       "get": {
         "operationId": "SystemController_getStats",
@@ -19968,9 +20214,9 @@
     }
   },
   "info": {
-    "title": "Remnawave API v2.4.4",
+    "title": "Remnawave API v2.6.0",
     "description": "\nRemnawave is a powerful proxy managment tool, built on top of Xray-core, with a focus on simplicity and ease of use.\n\n## Resources\n* https://t.me/remnawave\n* https://github.com/remnawave\n* https://docs.rw\n",
-    "version": "2.4.4",
+    "version": "2.6.0",
     "contact": {},
     "license": {
       "name": "AGPL-3.0",
@@ -20212,6 +20458,115 @@
                       "clientSecret",
                       "allowedEmails"
                     ]
+                  },
+                  "keycloak": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "realm": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "clientId": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "clientSecret": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "frontendDomain": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "keycloakDomain": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "allowedEmails": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "realm",
+                      "clientId",
+                      "clientSecret",
+                      "frontendDomain",
+                      "keycloakDomain",
+                      "allowedEmails"
+                    ],
+                    "default": {
+                      "enabled": false,
+                      "realm": null,
+                      "frontendDomain": null,
+                      "keycloakDomain": null,
+                      "clientId": null,
+                      "clientSecret": null,
+                      "allowedEmails": []
+                    }
+                  },
+                  "generic": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "clientId": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "clientSecret": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "withPkce": {
+                        "type": "boolean"
+                      },
+                      "authorizationUrl": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "tokenUrl": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "frontendDomain": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "allowedEmails": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "clientId",
+                      "clientSecret",
+                      "withPkce",
+                      "authorizationUrl",
+                      "tokenUrl",
+                      "frontendDomain",
+                      "allowedEmails"
+                    ],
+                    "default": {
+                      "enabled": false,
+                      "frontendDomain": null,
+                      "tokenUrl": null,
+                      "clientId": null,
+                      "clientSecret": null,
+                      "withPkce": false,
+                      "authorizationUrl": null,
+                      "allowedEmails": []
+                    }
                   }
                 },
                 "required": [
@@ -20405,6 +20760,115 @@
                   "clientSecret",
                   "allowedEmails"
                 ]
+              },
+              "keycloak": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "realm": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "clientSecret": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "frontendDomain": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "keycloakDomain": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "allowedEmails": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "realm",
+                  "clientId",
+                  "clientSecret",
+                  "frontendDomain",
+                  "keycloakDomain",
+                  "allowedEmails"
+                ],
+                "default": {
+                  "enabled": false,
+                  "realm": null,
+                  "frontendDomain": null,
+                  "keycloakDomain": null,
+                  "clientId": null,
+                  "clientSecret": null,
+                  "allowedEmails": []
+                }
+              },
+              "generic": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "clientSecret": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "withPkce": {
+                    "type": "boolean"
+                  },
+                  "authorizationUrl": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "tokenUrl": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "frontendDomain": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "allowedEmails": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "clientId",
+                  "clientSecret",
+                  "withPkce",
+                  "authorizationUrl",
+                  "tokenUrl",
+                  "frontendDomain",
+                  "allowedEmails"
+                ],
+                "default": {
+                  "enabled": false,
+                  "frontendDomain": null,
+                  "tokenUrl": null,
+                  "clientId": null,
+                  "clientSecret": null,
+                  "withPkce": false,
+                  "authorizationUrl": null,
+                  "allowedEmails": []
+                }
               }
             },
             "required": [
@@ -20586,6 +21050,115 @@
                       "clientSecret",
                       "allowedEmails"
                     ]
+                  },
+                  "keycloak": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "realm": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "clientId": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "clientSecret": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "frontendDomain": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "keycloakDomain": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "allowedEmails": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "realm",
+                      "clientId",
+                      "clientSecret",
+                      "frontendDomain",
+                      "keycloakDomain",
+                      "allowedEmails"
+                    ],
+                    "default": {
+                      "enabled": false,
+                      "realm": null,
+                      "frontendDomain": null,
+                      "keycloakDomain": null,
+                      "clientId": null,
+                      "clientSecret": null,
+                      "allowedEmails": []
+                    }
+                  },
+                  "generic": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "clientId": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "clientSecret": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "withPkce": {
+                        "type": "boolean"
+                      },
+                      "authorizationUrl": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "tokenUrl": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "frontendDomain": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "allowedEmails": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "clientId",
+                      "clientSecret",
+                      "withPkce",
+                      "authorizationUrl",
+                      "tokenUrl",
+                      "frontendDomain",
+                      "allowedEmails"
+                    ],
+                    "default": {
+                      "enabled": false,
+                      "frontendDomain": null,
+                      "tokenUrl": null,
+                      "clientId": null,
+                      "clientSecret": null,
+                      "withPkce": false,
+                      "authorizationUrl": null,
+                      "allowedEmails": []
+                    }
                   }
                 },
                 "required": [
@@ -21103,12 +21676,16 @@
             "enum": [
               "github",
               "pocketid",
-              "yandex"
+              "yandex",
+              "keycloak",
+              "generic"
             ],
             "x-enumNames": [
               "GITHUB",
               "POCKETID",
-              "YANDEX"
+              "YANDEX",
+              "KEYCLOAK",
+              "GENERIC"
             ]
           }
         },
@@ -21145,12 +21722,16 @@
             "enum": [
               "github",
               "pocketid",
-              "yandex"
+              "yandex",
+              "keycloak",
+              "generic"
             ],
             "x-enumNames": [
               "GITHUB",
               "POCKETID",
-              "YANDEX"
+              "YANDEX",
+              "KEYCLOAK",
+              "GENERIC"
             ]
           },
           "code": {
@@ -24092,6 +24673,11 @@
       "RevokeUserSubscriptionBodyDto": {
         "type": "object",
         "properties": {
+          "revokeOnlyPasswords": {
+            "description": "Optional. If true, only passwords will be revoked, without changing the short UUID (Subscription URL).",
+            "type": "boolean",
+            "default": false
+          },
           "shortUuid": {
             "description": "Optional. If not provided, a new short UUID will be generated by Remnawave. Please note that it is strongly recommended to allow Remnawave to generate the short UUID.",
             "type": "string",
@@ -29203,7 +29789,14 @@
                             "type": "string"
                           }
                         },
-                        "emptyInternalSquads": {
+                        "HWIDMaxDevicesExceeded": {
+                          "type": "array",
+                          "minItems": 1,
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "HWIDNotSupported": {
                           "type": "array",
                           "minItems": 1,
                           "items": {
@@ -29216,7 +29809,8 @@
                         "limitedUsers",
                         "disabledUsers",
                         "emptyHosts",
-                        "emptyInternalSquads"
+                        "HWIDMaxDevicesExceeded",
+                        "HWIDNotSupported"
                       ],
                       "nullable": true
                     },
@@ -29440,7 +30034,14 @@
                       "type": "string"
                     }
                   },
-                  "emptyInternalSquads": {
+                  "HWIDMaxDevicesExceeded": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "HWIDNotSupported": {
                     "type": "array",
                     "minItems": 1,
                     "items": {
@@ -29453,7 +30054,8 @@
                   "limitedUsers",
                   "disabledUsers",
                   "emptyHosts",
-                  "emptyInternalSquads"
+                  "HWIDMaxDevicesExceeded",
+                  "HWIDNotSupported"
                 ],
                 "nullable": true
               },
@@ -29684,7 +30286,14 @@
                       "type": "string"
                     }
                   },
-                  "emptyInternalSquads": {
+                  "HWIDMaxDevicesExceeded": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "HWIDNotSupported": {
                     "type": "array",
                     "minItems": 1,
                     "items": {
@@ -29697,7 +30306,8 @@
                   "limitedUsers",
                   "disabledUsers",
                   "emptyHosts",
-                  "emptyInternalSquads"
+                  "HWIDMaxDevicesExceeded",
+                  "HWIDNotSupported"
                 ],
                 "nullable": true
               },
@@ -29898,7 +30508,14 @@
                   "type": "string"
                 }
               },
-              "emptyInternalSquads": {
+              "HWIDMaxDevicesExceeded": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "HWIDNotSupported": {
                 "type": "array",
                 "minItems": 1,
                 "items": {
@@ -29911,7 +30528,8 @@
               "limitedUsers",
               "disabledUsers",
               "emptyHosts",
-              "emptyInternalSquads"
+              "HWIDMaxDevicesExceeded",
+              "HWIDNotSupported"
             ],
             "nullable": true
           },
@@ -30103,7 +30721,14 @@
                       "type": "string"
                     }
                   },
-                  "emptyInternalSquads": {
+                  "HWIDMaxDevicesExceeded": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "HWIDNotSupported": {
                     "type": "array",
                     "minItems": 1,
                     "items": {
@@ -30116,7 +30741,8 @@
                   "limitedUsers",
                   "disabledUsers",
                   "emptyHosts",
-                  "emptyInternalSquads"
+                  "HWIDMaxDevicesExceeded",
+                  "HWIDNotSupported"
                 ],
                 "nullable": true
               },
@@ -30425,7 +31051,14 @@
                             "type": "string"
                           }
                         },
-                        "emptyInternalSquads": {
+                        "HWIDMaxDevicesExceeded": {
+                          "type": "array",
+                          "minItems": 1,
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "HWIDNotSupported": {
                           "type": "array",
                           "minItems": 1,
                           "items": {
@@ -30438,7 +31071,8 @@
                         "limitedUsers",
                         "disabledUsers",
                         "emptyHosts",
-                        "emptyInternalSquads"
+                        "HWIDMaxDevicesExceeded",
+                        "HWIDNotSupported"
                       ],
                       "nullable": true
                     },
@@ -32614,6 +33248,57 @@
         ]
       },
       "ProfileModificationResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "eventSent": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "eventSent"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "BulkNodesActionsRequestDto": {
+        "type": "object",
+        "properties": {
+          "uuids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "ENABLE",
+              "DISABLE",
+              "RESTART",
+              "RESET_TRAFFIC"
+            ],
+            "x-enumNames": [
+              "ENABLE",
+              "DISABLE",
+              "RESTART",
+              "RESET_TRAFFIC"
+            ]
+          }
+        },
+        "required": [
+          "uuids",
+          "action"
+        ]
+      },
+      "BulkNodesActionsResponseDto": {
         "type": "object",
         "properties": {
           "response": {
@@ -37126,6 +37811,85 @@
           "response"
         ]
       },
+      "GetMetadataResponseDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "build": {
+                "type": "object",
+                "properties": {
+                  "time": {
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "time",
+                  "number"
+                ]
+              },
+              "git": {
+                "type": "object",
+                "properties": {
+                  "backend": {
+                    "type": "object",
+                    "properties": {
+                      "commitSha": {
+                        "type": "string"
+                      },
+                      "branch": {
+                        "type": "string"
+                      },
+                      "commitUrl": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "commitSha",
+                      "branch",
+                      "commitUrl"
+                    ]
+                  },
+                  "frontend": {
+                    "type": "object",
+                    "properties": {
+                      "commitSha": {
+                        "type": "string"
+                      },
+                      "commitUrl": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "commitSha",
+                      "commitUrl"
+                    ]
+                  }
+                },
+                "required": [
+                  "backend",
+                  "frontend"
+                ]
+              }
+            },
+            "required": [
+              "version",
+              "build",
+              "git"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
       "GetStatsResponseDto": {
         "type": "object",
         "properties": {
@@ -38087,7 +38851,14 @@
                       "type": "string"
                     }
                   },
-                  "emptyInternalSquads": {
+                  "HWIDMaxDevicesExceeded": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "HWIDNotSupported": {
                     "type": "array",
                     "minItems": 1,
                     "items": {
@@ -38100,7 +38871,8 @@
                   "limitedUsers",
                   "disabledUsers",
                   "emptyHosts",
-                  "emptyInternalSquads"
+                  "HWIDMaxDevicesExceeded",
+                  "HWIDNotSupported"
                 ]
               },
               "happAnnounce": {
@@ -38430,7 +39202,14 @@
                   "type": "string"
                 }
               },
-              "emptyInternalSquads": {
+              "HWIDMaxDevicesExceeded": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "HWIDNotSupported": {
                 "type": "array",
                 "minItems": 1,
                 "items": {
@@ -38443,7 +39222,8 @@
               "limitedUsers",
               "disabledUsers",
               "emptyHosts",
-              "emptyInternalSquads"
+              "HWIDMaxDevicesExceeded",
+              "HWIDNotSupported"
             ]
           },
           "customResponseHeaders": {
@@ -38730,7 +39510,14 @@
                       "type": "string"
                     }
                   },
-                  "emptyInternalSquads": {
+                  "HWIDMaxDevicesExceeded": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "HWIDNotSupported": {
                     "type": "array",
                     "minItems": 1,
                     "items": {
@@ -38743,7 +39530,8 @@
                   "limitedUsers",
                   "disabledUsers",
                   "emptyHosts",
-                  "emptyInternalSquads"
+                  "HWIDMaxDevicesExceeded",
+                  "HWIDNotSupported"
                 ]
               },
               "happAnnounce": {
@@ -39006,6 +39794,1008 @@
         },
         "required": [
           "response"
+        ]
+      },
+      "RemnawaveWebhookUserEventsDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "user"
+            ]
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "user.created",
+              "user.modified",
+              "user.deleted",
+              "user.revoked",
+              "user.disabled",
+              "user.enabled",
+              "user.limited",
+              "user.expired",
+              "user.traffic_reset",
+              "user.expires_in_72_hours",
+              "user.expires_in_48_hours",
+              "user.expires_in_24_hours",
+              "user.expired_24_hours_ago",
+              "user.first_connected",
+              "user.bandwidth_usage_threshold_reached",
+              "user.not_connected"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "uuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "id": {
+                "type": "number"
+              },
+              "shortUuid": {
+                "type": "string"
+              },
+              "username": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "DISABLED",
+                  "LIMITED",
+                  "EXPIRED"
+                ],
+                "x-enumNames": [
+                  "ACTIVE",
+                  "DISABLED",
+                  "LIMITED",
+                  "EXPIRED"
+                ],
+                "default": "ACTIVE"
+              },
+              "trafficLimitBytes": {
+                "type": "integer",
+                "default": 0
+              },
+              "trafficLimitStrategy": {
+                "description": "Available reset periods",
+                "type": "string",
+                "enum": [
+                  "NO_RESET",
+                  "DAY",
+                  "WEEK",
+                  "MONTH"
+                ],
+                "x-enumNames": [
+                  "NO_RESET",
+                  "DAY",
+                  "WEEK",
+                  "MONTH"
+                ],
+                "default": "NO_RESET"
+              },
+              "expireAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "telegramId": {
+                "type": "integer",
+                "nullable": true
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "nullable": true
+              },
+              "description": {
+                "type": "string",
+                "nullable": true
+              },
+              "tag": {
+                "type": "string",
+                "nullable": true
+              },
+              "hwidDeviceLimit": {
+                "type": "integer",
+                "nullable": true
+              },
+              "externalSquadUuid": {
+                "type": "string",
+                "format": "uuid",
+                "nullable": true
+              },
+              "trojanPassword": {
+                "type": "string"
+              },
+              "vlessUuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "ssPassword": {
+                "type": "string"
+              },
+              "lastTriggeredThreshold": {
+                "type": "integer",
+                "default": 0
+              },
+              "subRevokedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "subLastUserAgent": {
+                "type": "string",
+                "nullable": true
+              },
+              "subLastOpenedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "lastTrafficResetAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "subscriptionUrl": {
+                "type": "string"
+              },
+              "activeInternalSquads": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uuid": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uuid",
+                    "name"
+                  ]
+                }
+              },
+              "userTraffic": {
+                "type": "object",
+                "properties": {
+                  "usedTrafficBytes": {
+                    "type": "number"
+                  },
+                  "lifetimeUsedTrafficBytes": {
+                    "type": "number"
+                  },
+                  "onlineAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "firstConnectedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "lastConnectedNodeUuid": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "usedTrafficBytes",
+                  "lifetimeUsedTrafficBytes",
+                  "onlineAt",
+                  "firstConnectedAt",
+                  "lastConnectedNodeUuid"
+                ]
+              }
+            },
+            "required": [
+              "uuid",
+              "id",
+              "shortUuid",
+              "username",
+              "expireAt",
+              "telegramId",
+              "email",
+              "description",
+              "tag",
+              "hwidDeviceLimit",
+              "externalSquadUuid",
+              "trojanPassword",
+              "vlessUuid",
+              "ssPassword",
+              "subRevokedAt",
+              "subLastUserAgent",
+              "subLastOpenedAt",
+              "lastTrafficResetAt",
+              "createdAt",
+              "updatedAt",
+              "subscriptionUrl",
+              "activeInternalSquads",
+              "userTraffic"
+            ]
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "notConnectedAfterHours": {
+                "type": "integer",
+                "nullable": true
+              }
+            },
+            "nullable": true
+          }
+        },
+        "required": [
+          "scope",
+          "event",
+          "timestamp",
+          "data",
+          "meta"
+        ]
+      },
+      "RemnawaveWebhookUserHwidDevicesEventsDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "user_hwid_devices"
+            ]
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "user_hwid_devices.added",
+              "user_hwid_devices.deleted"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "type": "object",
+                "properties": {
+                  "uuid": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "id": {
+                    "type": "number"
+                  },
+                  "shortUuid": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ACTIVE",
+                      "DISABLED",
+                      "LIMITED",
+                      "EXPIRED"
+                    ],
+                    "x-enumNames": [
+                      "ACTIVE",
+                      "DISABLED",
+                      "LIMITED",
+                      "EXPIRED"
+                    ],
+                    "default": "ACTIVE"
+                  },
+                  "trafficLimitBytes": {
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "trafficLimitStrategy": {
+                    "description": "Available reset periods",
+                    "type": "string",
+                    "enum": [
+                      "NO_RESET",
+                      "DAY",
+                      "WEEK",
+                      "MONTH"
+                    ],
+                    "x-enumNames": [
+                      "NO_RESET",
+                      "DAY",
+                      "WEEK",
+                      "MONTH"
+                    ],
+                    "default": "NO_RESET"
+                  },
+                  "expireAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "telegramId": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "nullable": true
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "tag": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "hwidDeviceLimit": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "externalSquadUuid": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "trojanPassword": {
+                    "type": "string"
+                  },
+                  "vlessUuid": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "ssPassword": {
+                    "type": "string"
+                  },
+                  "lastTriggeredThreshold": {
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "subRevokedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "subLastUserAgent": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "subLastOpenedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "lastTrafficResetAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "subscriptionUrl": {
+                    "type": "string"
+                  },
+                  "activeInternalSquads": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "uuid": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "uuid",
+                        "name"
+                      ]
+                    }
+                  },
+                  "userTraffic": {
+                    "type": "object",
+                    "properties": {
+                      "usedTrafficBytes": {
+                        "type": "number"
+                      },
+                      "lifetimeUsedTrafficBytes": {
+                        "type": "number"
+                      },
+                      "onlineAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                      },
+                      "firstConnectedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                      },
+                      "lastConnectedNodeUuid": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "usedTrafficBytes",
+                      "lifetimeUsedTrafficBytes",
+                      "onlineAt",
+                      "firstConnectedAt",
+                      "lastConnectedNodeUuid"
+                    ]
+                  }
+                },
+                "required": [
+                  "uuid",
+                  "id",
+                  "shortUuid",
+                  "username",
+                  "expireAt",
+                  "telegramId",
+                  "email",
+                  "description",
+                  "tag",
+                  "hwidDeviceLimit",
+                  "externalSquadUuid",
+                  "trojanPassword",
+                  "vlessUuid",
+                  "ssPassword",
+                  "subRevokedAt",
+                  "subLastUserAgent",
+                  "subLastOpenedAt",
+                  "lastTrafficResetAt",
+                  "createdAt",
+                  "updatedAt",
+                  "subscriptionUrl",
+                  "activeInternalSquads",
+                  "userTraffic"
+                ]
+              },
+              "hwidUserDevice": {
+                "type": "object",
+                "properties": {
+                  "hwid": {
+                    "type": "string"
+                  },
+                  "userUuid": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "platform": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "osVersion": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deviceModel": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "userAgent": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "hwid",
+                  "userUuid",
+                  "platform",
+                  "osVersion",
+                  "deviceModel",
+                  "userAgent",
+                  "createdAt",
+                  "updatedAt"
+                ]
+              }
+            },
+            "required": [
+              "user",
+              "hwidUserDevice"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "event",
+          "timestamp",
+          "data"
+        ]
+      },
+      "RemnawaveWebhookNodeEventsDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "node"
+            ]
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "node.created",
+              "node.modified",
+              "node.disabled",
+              "node.enabled",
+              "node.deleted",
+              "node.connection_lost",
+              "node.connection_restored",
+              "node.traffic_notify"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "uuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "port": {
+                "type": "integer",
+                "nullable": true
+              },
+              "isConnected": {
+                "type": "boolean"
+              },
+              "isDisabled": {
+                "type": "boolean"
+              },
+              "isConnecting": {
+                "type": "boolean"
+              },
+              "lastStatusChange": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "lastStatusMessage": {
+                "type": "string",
+                "nullable": true
+              },
+              "xrayVersion": {
+                "type": "string",
+                "nullable": true
+              },
+              "nodeVersion": {
+                "type": "string",
+                "nullable": true
+              },
+              "xrayUptime": {
+                "type": "string"
+              },
+              "isTrafficTrackingActive": {
+                "type": "boolean"
+              },
+              "trafficResetDay": {
+                "type": "integer",
+                "nullable": true
+              },
+              "trafficLimitBytes": {
+                "type": "number",
+                "nullable": true
+              },
+              "trafficUsedBytes": {
+                "type": "number",
+                "nullable": true
+              },
+              "notifyPercent": {
+                "type": "integer",
+                "nullable": true
+              },
+              "usersOnline": {
+                "type": "integer",
+                "nullable": true
+              },
+              "viewPosition": {
+                "type": "integer"
+              },
+              "countryCode": {
+                "type": "string"
+              },
+              "consumptionMultiplier": {
+                "type": "number"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cpuCount": {
+                "type": "integer",
+                "nullable": true
+              },
+              "cpuModel": {
+                "type": "string",
+                "nullable": true
+              },
+              "totalRam": {
+                "type": "string",
+                "nullable": true
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "configProfile": {
+                "type": "object",
+                "properties": {
+                  "activeConfigProfileUuid": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "activeInbounds": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "uuid": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "profileUuid": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "tag": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "network": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "security": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "port": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "rawInbound": {
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "uuid",
+                        "profileUuid",
+                        "tag",
+                        "type",
+                        "network",
+                        "security",
+                        "port",
+                        "rawInbound"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "activeConfigProfileUuid",
+                  "activeInbounds"
+                ]
+              },
+              "providerUuid": {
+                "type": "string",
+                "format": "uuid",
+                "nullable": true
+              },
+              "provider": {
+                "type": "object",
+                "properties": {
+                  "uuid": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "faviconLink": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "loginUrl": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "uuid",
+                  "name",
+                  "faviconLink",
+                  "loginUrl",
+                  "createdAt",
+                  "updatedAt"
+                ],
+                "nullable": true
+              }
+            },
+            "required": [
+              "uuid",
+              "name",
+              "address",
+              "port",
+              "isConnected",
+              "isDisabled",
+              "isConnecting",
+              "lastStatusChange",
+              "lastStatusMessage",
+              "xrayVersion",
+              "nodeVersion",
+              "xrayUptime",
+              "isTrafficTrackingActive",
+              "trafficResetDay",
+              "trafficLimitBytes",
+              "trafficUsedBytes",
+              "notifyPercent",
+              "usersOnline",
+              "viewPosition",
+              "countryCode",
+              "consumptionMultiplier",
+              "tags",
+              "cpuCount",
+              "cpuModel",
+              "totalRam",
+              "createdAt",
+              "updatedAt",
+              "configProfile",
+              "providerUuid",
+              "provider"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "event",
+          "timestamp",
+          "data"
+        ]
+      },
+      "RemnawaveWebhookServiceEventsDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "service"
+            ]
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "service.panel_started",
+              "service.login_attempt_failed",
+              "service.login_attempt_success",
+              "service.subpage_config_changed"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "loginAttempt": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "ip": {
+                    "type": "string"
+                  },
+                  "userAgent": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "username",
+                  "ip",
+                  "userAgent"
+                ]
+              },
+              "panelVersion": {
+                "type": "string"
+              },
+              "subpageConfig": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "CREATED",
+                      "UPDATED",
+                      "DELETED"
+                    ]
+                  },
+                  "uuid": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "action",
+                  "uuid"
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "scope",
+          "event",
+          "timestamp",
+          "data"
+        ]
+      },
+      "RemnawaveWebhookErrorsEventsDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "errors"
+            ]
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "errors.bandwidth_usage_threshold_reached_max_notifications"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "description"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "event",
+          "timestamp",
+          "data"
+        ]
+      },
+      "RemnawaveWebhookCrmEventsDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "crm"
+            ]
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "crm.infra_billing_node_payment_in_7_days",
+              "crm.infra_billing_node_payment_in_48hrs",
+              "crm.infra_billing_node_payment_in_24hrs",
+              "crm.infra_billing_node_payment_due_today",
+              "crm.infra_billing_node_payment_overdue_24hrs",
+              "crm.infra_billing_node_payment_overdue_48hrs",
+              "crm.infra_billing_node_payment_overdue_7_days"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "providerName": {
+                "type": "string"
+              },
+              "nodeName": {
+                "type": "string"
+              },
+              "nextBillingAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "loginUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "providerName",
+              "nodeName",
+              "nextBillingAt",
+              "loginUrl"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "event",
+          "timestamp",
+          "data"
         ]
       }
     }
