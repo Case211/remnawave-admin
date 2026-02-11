@@ -1,0 +1,38 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/backend/**"
+      - "alembic/**"
+  pull_request:
+    paths:
+      - "web/backend/**"
+      - "alembic/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: web/backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r web/backend/requirements.txt
+
+      - name: Run tests
+        run: |
+          python -m pytest web/backend/tests/ -v --tb=short
