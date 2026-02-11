@@ -14,6 +14,53 @@ from web.backend.schemas.host import (
 router = APIRouter()
 
 
+def _map_host(h: dict) -> dict:
+    """Маппинг полей хоста из camelCase API ответа."""
+    inbound = h.get('inbound', {})
+    return dict(
+        uuid=h.get('uuid'),
+        remark=h.get('remark', ''),
+        address=h.get('address', ''),
+        port=h.get('port', 443),
+        is_disabled=h.get('isDisabled', False),
+        view_position=h.get('viewPosition', 0),
+        inbound_uuid=inbound.get('configProfileInboundUuid') if isinstance(inbound, dict) else h.get('inboundUuid'),
+        inbound=inbound if isinstance(inbound, dict) else None,
+        sni=h.get('sni'),
+        host=h.get('host'),
+        path=h.get('path'),
+        security=h.get('security'),
+        security_layer=h.get('securityLayer'),
+        alpn=h.get('alpn'),
+        fingerprint=h.get('fingerprint'),
+        tag=h.get('tag'),
+        server_description=h.get('serverDescription'),
+        is_hidden=h.get('isHidden', False),
+        shuffle_host=h.get('shuffleHost', False),
+        mihomo_x25519=h.get('mihomoX25519', False),
+        nodes=h.get('nodes'),
+        excluded_internal_squads=h.get('excludedInternalSquads'),
+    )
+
+
+def _map_host_detail(h: dict) -> dict:
+    """Маппинг полей детальной информации о хосте."""
+    base = _map_host(h)
+    base.update(
+        created_at=h.get('createdAt'),
+        updated_at=h.get('updatedAt'),
+        allow_insecure=h.get('allowInsecure', False),
+        override_sni_from_address=h.get('overrideSniFromAddress', False),
+        keep_sni_blank=h.get('keepSniBlank', False),
+        vless_route_id=h.get('vlessRouteId'),
+        x_http_extra_params=h.get('xHttpExtraParams'),
+        mux_params=h.get('muxParams'),
+        sockopt_params=h.get('sockoptParams'),
+        xray_json_template_uuid=h.get('xrayJsonTemplateUuid'),
+    )
+    return base
+
+
 @router.get("", response_model=HostListResponse)
 async def list_hosts(
     admin: AdminUser = Depends(require_permission("hosts", "view")),
@@ -23,22 +70,7 @@ async def list_hosts(
     data = await api_client.get_hosts()
     hosts = data.get('response', []) if isinstance(data, dict) else data
 
-    items = []
-    for h in hosts:
-        items.append(HostListItem(
-            uuid=h.get('uuid'),
-            remark=h.get('remark', ''),
-            address=h.get('address', ''),
-            port=h.get('port', 443),
-            is_disabled=h.get('isDisabled', False),
-            inbound_uuid=h.get('inboundUuid'),
-            sni=h.get('sni'),
-            host=h.get('host'),
-            path=h.get('path'),
-            security=h.get('security'),
-            alpn=h.get('alpn'),
-            fingerprint=h.get('fingerprint'),
-        ))
+    items = [HostListItem(**_map_host(h)) for h in hosts]
 
     return HostListResponse(
         items=items,
@@ -60,25 +92,7 @@ async def get_host(
 
     h = data.get('response', data) if isinstance(data, dict) else data
 
-    return HostDetail(
-        uuid=h.get('uuid'),
-        remark=h.get('remark', ''),
-        address=h.get('address', ''),
-        port=h.get('port', 443),
-        is_disabled=h.get('isDisabled', False),
-        inbound_uuid=h.get('inboundUuid'),
-        sni=h.get('sni'),
-        host=h.get('host'),
-        path=h.get('path'),
-        security=h.get('security'),
-        alpn=h.get('alpn'),
-        fingerprint=h.get('fingerprint'),
-        allow_insecure=h.get('allowInsecure', False),
-        reality_public_key=h.get('realityPublicKey'),
-        reality_short_id=h.get('realityShortId'),
-        created_at=h.get('createdAt'),
-        updated_at=h.get('updatedAt'),
-    )
+    return HostDetail(**_map_host_detail(h))
 
 
 @router.post("", response_model=HostDetail)
@@ -89,28 +103,68 @@ async def create_host(
     api_client=Depends(get_api_client),
 ):
     """Создать новый хост."""
+    # Формируем payload в формате Remnawave API
     payload = {
         'remark': data.remark,
         'address': data.address,
         'port': data.port,
     }
 
-    if data.inbound_uuid:
+    # Inbound object
+    if data.inbound:
+        payload['inbound'] = data.inbound
+    elif data.inbound_uuid:
         payload['inboundUuid'] = data.inbound_uuid
-    if data.sni:
-        payload['sni'] = data.sni
-    if data.host:
-        payload['host'] = data.host
-    if data.path:
-        payload['path'] = data.path
-    if data.security:
-        payload['security'] = data.security
-    if data.alpn:
-        payload['alpn'] = data.alpn
-    if data.fingerprint:
-        payload['fingerprint'] = data.fingerprint
 
-    result = await api_client.create_host(payload)
+    # Все опциональные поля
+    if data.sni is not None:
+        payload['sni'] = data.sni
+    if data.host is not None:
+        payload['host'] = data.host
+    if data.path is not None:
+        payload['path'] = data.path
+    if data.alpn is not None:
+        payload['alpn'] = data.alpn
+    if data.fingerprint is not None:
+        payload['fingerprint'] = data.fingerprint
+    if data.tag is not None:
+        payload['tag'] = data.tag
+    if data.security_layer is not None:
+        payload['securityLayer'] = data.security_layer
+    elif data.security is not None:
+        payload['securityLayer'] = data.security
+    if data.is_disabled:
+        payload['isDisabled'] = data.is_disabled
+    if data.is_hidden:
+        payload['isHidden'] = data.is_hidden
+    if data.server_description is not None:
+        payload['serverDescription'] = data.server_description
+    if data.override_sni_from_address:
+        payload['overrideSniFromAddress'] = data.override_sni_from_address
+    if data.keep_sni_blank:
+        payload['keepSniBlank'] = data.keep_sni_blank
+    if data.allow_insecure:
+        payload['allowInsecure'] = data.allow_insecure
+    if data.vless_route_id is not None:
+        payload['vlessRouteId'] = data.vless_route_id
+    if data.shuffle_host:
+        payload['shuffleHost'] = data.shuffle_host
+    if data.mihomo_x25519:
+        payload['mihomoX25519'] = data.mihomo_x25519
+    if data.nodes is not None:
+        payload['nodes'] = data.nodes
+    if data.xray_json_template_uuid is not None:
+        payload['xrayJsonTemplateUuid'] = data.xray_json_template_uuid
+    if data.excluded_internal_squads is not None:
+        payload['excludedInternalSquads'] = data.excluded_internal_squads
+    if data.x_http_extra_params is not None:
+        payload['xHttpExtraParams'] = data.x_http_extra_params
+    if data.mux_params is not None:
+        payload['muxParams'] = data.mux_params
+    if data.sockopt_params is not None:
+        payload['sockoptParams'] = data.sockopt_params
+
+    result = await api_client.create_host_raw(payload)
 
     if not result:
         raise HTTPException(status_code=400, detail="Failed to create host")
@@ -122,20 +176,7 @@ async def create_host(
         from web.backend.core.rbac import increment_usage_counter
         await increment_usage_counter(admin.account_id, "hosts_created")
 
-    return HostDetail(
-        uuid=h.get('uuid'),
-        remark=h.get('remark', ''),
-        address=h.get('address', ''),
-        port=h.get('port', 443),
-        is_disabled=h.get('isDisabled', False),
-        inbound_uuid=h.get('inboundUuid'),
-        sni=h.get('sni'),
-        host=h.get('host'),
-        path=h.get('path'),
-        security=h.get('security'),
-        alpn=h.get('alpn'),
-        fingerprint=h.get('fingerprint'),
-    )
+    return HostDetail(**_map_host_detail(h))
 
 
 @router.patch("/{host_uuid}", response_model=HostDetail)
@@ -146,7 +187,7 @@ async def update_host(
     api_client=Depends(get_api_client),
 ):
     """Обновить хост."""
-    payload = {}
+    payload = {'uuid': host_uuid}
 
     if data.remark is not None:
         payload['remark'] = data.remark
@@ -156,40 +197,61 @@ async def update_host(
         payload['port'] = data.port
     if data.is_disabled is not None:
         payload['isDisabled'] = data.is_disabled
+    if data.inbound is not None:
+        payload['inbound'] = data.inbound
     if data.sni is not None:
         payload['sni'] = data.sni
     if data.host is not None:
         payload['host'] = data.host
     if data.path is not None:
         payload['path'] = data.path
-    if data.security is not None:
-        payload['security'] = data.security
     if data.alpn is not None:
         payload['alpn'] = data.alpn
     if data.fingerprint is not None:
         payload['fingerprint'] = data.fingerprint
+    if data.tag is not None:
+        payload['tag'] = data.tag
+    if data.security_layer is not None:
+        payload['securityLayer'] = data.security_layer
+    elif data.security is not None:
+        payload['securityLayer'] = data.security
+    if data.is_hidden is not None:
+        payload['isHidden'] = data.is_hidden
+    if data.server_description is not None:
+        payload['serverDescription'] = data.server_description
+    if data.override_sni_from_address is not None:
+        payload['overrideSniFromAddress'] = data.override_sni_from_address
+    if data.keep_sni_blank is not None:
+        payload['keepSniBlank'] = data.keep_sni_blank
+    if data.allow_insecure is not None:
+        payload['allowInsecure'] = data.allow_insecure
+    if data.vless_route_id is not None:
+        payload['vlessRouteId'] = data.vless_route_id
+    if data.shuffle_host is not None:
+        payload['shuffleHost'] = data.shuffle_host
+    if data.mihomo_x25519 is not None:
+        payload['mihomoX25519'] = data.mihomo_x25519
+    if data.nodes is not None:
+        payload['nodes'] = data.nodes
+    if data.xray_json_template_uuid is not None:
+        payload['xrayJsonTemplateUuid'] = data.xray_json_template_uuid
+    if data.excluded_internal_squads is not None:
+        payload['excludedInternalSquads'] = data.excluded_internal_squads
+    if data.x_http_extra_params is not None:
+        payload['xHttpExtraParams'] = data.x_http_extra_params
+    if data.mux_params is not None:
+        payload['muxParams'] = data.mux_params
+    if data.sockopt_params is not None:
+        payload['sockoptParams'] = data.sockopt_params
 
-    result = await api_client.update_host(host_uuid, payload)
+    result = await api_client.update_host_raw(payload)
 
     if not result:
         raise HTTPException(status_code=404, detail="Host not found or update failed")
 
     h = result.get('response', result) if isinstance(result, dict) else result
 
-    return HostDetail(
-        uuid=h.get('uuid'),
-        remark=h.get('remark', ''),
-        address=h.get('address', ''),
-        port=h.get('port', 443),
-        is_disabled=h.get('isDisabled', False),
-        inbound_uuid=h.get('inboundUuid'),
-        sni=h.get('sni'),
-        host=h.get('host'),
-        path=h.get('path'),
-        security=h.get('security'),
-        alpn=h.get('alpn'),
-        fingerprint=h.get('fingerprint'),
-    )
+    return HostDetail(**_map_host_detail(h))
 
 
 @router.delete("/{host_uuid}")

@@ -39,15 +39,27 @@ def _ensure_snake_case(user: dict) -> dict:
         'telegramId': 'telegram_id',
         'expireAt': 'expire_at',
         'trafficLimitBytes': 'traffic_limit_bytes',
+        'trafficLimitStrategy': 'traffic_limit_strategy',
         'usedTrafficBytes': 'used_traffic_bytes',
         'lifetimeUsedTrafficBytes': 'lifetime_used_traffic_bytes',
         'hwidDeviceLimit': 'hwid_device_limit',
         'hwidDeviceCount': 'hwid_device_count',
         'activeDeviceCount': 'hwid_device_count',
+        'externalSquadUuid': 'external_squad_uuid',
+        'activeInternalSquads': 'active_internal_squads',
         'createdAt': 'created_at',
         'updatedAt': 'updated_at',
         'onlineAt': 'online_at',
         'subLastUserAgent': 'sub_last_user_agent',
+        'subLastOpenedAt': 'sub_last_opened_at',
+        'subRevokedAt': 'sub_revoked_at',
+        'lastTrafficResetAt': 'last_traffic_reset_at',
+        'trojanPassword': 'trojan_password',
+        'vlessUuid': 'vless_uuid',
+        'ssPassword': 'ss_password',
+        'lastTriggeredThreshold': 'last_triggered_threshold',
+        'firstConnectedAt': 'first_connected_at',
+        'lastConnectedNodeUuid': 'last_connected_node_uuid',
     }
     for camel, snake in mappings.items():
         if camel in result and snake not in result:
@@ -424,6 +436,16 @@ async def create_user(
             traffic_limit_strategy=data.traffic_limit_strategy,
             external_squad_uuid=data.external_squad_uuid,
             active_internal_squads=data.active_internal_squads,
+            status=data.status,
+            tag=data.tag,
+            email=data.email,
+            short_uuid=data.short_uuid,
+            trojan_password=data.trojan_password,
+            vless_uuid=data.vless_uuid,
+            ss_password=data.ss_password,
+            uuid=data.uuid,
+            created_at=data.created_at.isoformat() if data.created_at else None,
+            last_traffic_reset_at=data.last_traffic_reset_at.isoformat() if data.last_traffic_reset_at else None,
         )
 
         user = result.get('response', result) if isinstance(result, dict) else result
@@ -452,7 +474,20 @@ async def update_user(
         from src.services.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True, mode='json')
-        resp = await api_client.update_user(user_uuid, **update_data)
+        # Convert snake_case keys to camelCase for Remnawave API
+        snake_to_camel = {
+            'traffic_limit_bytes': 'trafficLimitBytes',
+            'traffic_limit_strategy': 'trafficLimitStrategy',
+            'expire_at': 'expireAt',
+            'hwid_device_limit': 'hwidDeviceLimit',
+            'telegram_id': 'telegramId',
+            'active_internal_squads': 'activeInternalSquads',
+            'external_squad_uuid': 'externalSquadUuid',
+        }
+        camel_data = {}
+        for k, v in update_data.items():
+            camel_data[snake_to_camel.get(k, k)] = v
+        resp = await api_client.update_user(user_uuid, **camel_data)
         user = resp.get('response', resp) if isinstance(resp, dict) else resp
 
         return UserDetail(**_ensure_snake_case(user))

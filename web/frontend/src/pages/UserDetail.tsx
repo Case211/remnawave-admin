@@ -48,17 +48,31 @@ interface UserDetailData {
   username: string | null
   email: string | null
   telegram_id: number | null
+  description: string | null
+  tag: string | null
   status: string
   expire_at: string | null
   traffic_limit_bytes: number | null
+  traffic_limit_strategy: string | null
   used_traffic_bytes: number
   lifetime_used_traffic_bytes: number
   hwid_device_limit: number
+  external_squad_uuid: string | null
+  active_internal_squads: { uuid: string; name: string }[] | null
   created_at: string
+  updated_at: string | null
   online_at: string | null
   subscription_uuid: string | null
   subscription_url: string | null
   sub_last_user_agent: string | null
+  sub_last_opened_at: string | null
+  sub_revoked_at: string | null
+  last_traffic_reset_at: string | null
+  trojan_password: string | null
+  vless_uuid: string | null
+  ss_password: string | null
+  first_connected_at: string | null
+  last_connected_node_uuid: string | null
   // Anti-abuse
   trust_score: number | null
   violation_count_30d: number
@@ -89,9 +103,14 @@ interface EditFormData {
   status: string
   traffic_limit_bytes: number | null
   traffic_limit_gb: string
+  traffic_limit_strategy: string
   is_unlimited: boolean
   expire_at: string
   hwid_device_limit: string
+  description: string
+  tag: string
+  email: string
+  telegram_id: string
 }
 
 function formatBytes(bytes: number): string {
@@ -613,9 +632,14 @@ export default function UserDetail() {
     status: '',
     traffic_limit_bytes: null,
     traffic_limit_gb: '',
+    traffic_limit_strategy: 'NO_RESET',
     is_unlimited: false,
     expire_at: '',
     hwid_device_limit: '',
+    description: '',
+    tag: '',
+    email: '',
+    telegram_id: '',
   })
   const [editError, setEditError] = useState('')
   const [editSuccess, setEditSuccess] = useState(false)
@@ -670,9 +694,14 @@ export default function UserDetail() {
         status: user.status,
         traffic_limit_bytes: user.traffic_limit_bytes,
         traffic_limit_gb: bytesToGb(user.traffic_limit_bytes),
+        traffic_limit_strategy: user.traffic_limit_strategy || 'NO_RESET',
         is_unlimited: !user.traffic_limit_bytes,
         expire_at: formatDateForInput(user.expire_at),
         hwid_device_limit: String(user.hwid_device_limit),
+        description: user.description || '',
+        tag: user.tag || '',
+        email: user.email || '',
+        telegram_id: user.telegram_id ? String(user.telegram_id) : '',
       })
     }
   }, [user])
@@ -734,6 +763,11 @@ export default function UserDetail() {
       updateData.traffic_limit_bytes = newTrafficLimit
     }
 
+    // Traffic limit strategy
+    if (user && editForm.traffic_limit_strategy !== (user.traffic_limit_strategy || 'NO_RESET')) {
+      updateData.traffic_limit_strategy = editForm.traffic_limit_strategy
+    }
+
     // Expire at
     if (editForm.expire_at) {
       const newExpire = new Date(editForm.expire_at).toISOString()
@@ -748,6 +782,30 @@ export default function UserDetail() {
     const newHwid = parseInt(editForm.hwid_device_limit, 10)
     if (!isNaN(newHwid) && user && newHwid !== user.hwid_device_limit) {
       updateData.hwid_device_limit = newHwid
+    }
+
+    // Description
+    const newDesc = editForm.description.trim()
+    if (user && newDesc !== (user.description || '')) {
+      updateData.description = newDesc || null
+    }
+
+    // Tag
+    const newTag = editForm.tag.trim().toUpperCase()
+    if (user && newTag !== (user.tag || '')) {
+      updateData.tag = newTag || null
+    }
+
+    // Email
+    const newEmail = editForm.email.trim()
+    if (user && newEmail !== (user.email || '')) {
+      updateData.email = newEmail || null
+    }
+
+    // Telegram ID
+    const newTgId = editForm.telegram_id.trim() ? parseInt(editForm.telegram_id, 10) : null
+    if (user && newTgId !== user.telegram_id) {
+      updateData.telegram_id = newTgId
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -768,9 +826,14 @@ export default function UserDetail() {
         status: user.status,
         traffic_limit_bytes: user.traffic_limit_bytes,
         traffic_limit_gb: bytesToGb(user.traffic_limit_bytes),
+        traffic_limit_strategy: user.traffic_limit_strategy || 'NO_RESET',
         is_unlimited: !user.traffic_limit_bytes,
         expire_at: formatDateForInput(user.expire_at),
         hwid_device_limit: String(user.hwid_device_limit),
+        description: user.description || '',
+        tag: user.tag || '',
+        email: user.email || '',
+        telegram_id: user.telegram_id ? String(user.telegram_id) : '',
       })
     }
   }
@@ -854,6 +917,9 @@ export default function UserDetail() {
                 <span className={cn('h-1.5 w-1.5 rounded-full mr-1.5', statusBadge.dotColor)} />
                 {statusBadge.label}
               </Badge>
+              {user.tag && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
+              )}
             </div>
             <p className="text-xs md:text-sm text-dark-200 truncate font-mono">{user.uuid}</p>
           </div>
@@ -1003,6 +1069,51 @@ export default function UserDetail() {
                     </Select>
                   </div>
 
+                  {/* Description */}
+                  <div className="space-y-2">
+                    <Label>Описание</Label>
+                    <Input
+                      value={editForm.description}
+                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      placeholder="Заметки о пользователе..."
+                    />
+                  </div>
+
+                  {/* Tag */}
+                  <div className="space-y-2">
+                    <Label>Тег</Label>
+                    <Input
+                      value={editForm.tag}
+                      onChange={(e) => setEditForm({ ...editForm, tag: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })}
+                      placeholder="MY_TAG"
+                      maxLength={16}
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-dark-300">A-Z, 0-9, _ (макс. 16 символов)</p>
+                  </div>
+
+                  {/* Email */}
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                      placeholder="user@example.com"
+                    />
+                  </div>
+
+                  {/* Telegram ID */}
+                  <div className="space-y-2">
+                    <Label>Telegram ID</Label>
+                    <Input
+                      type="number"
+                      value={editForm.telegram_id}
+                      onChange={(e) => setEditForm({ ...editForm, telegram_id: e.target.value })}
+                      placeholder="123456789"
+                    />
+                  </div>
+
                   {/* Traffic limit */}
                   <div className="space-y-2">
                     <Label>Лимит трафика</Label>
@@ -1035,6 +1146,25 @@ export default function UserDetail() {
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Traffic reset strategy */}
+                  <div className="space-y-2">
+                    <Label>Сброс трафика</Label>
+                    <Select
+                      value={editForm.traffic_limit_strategy}
+                      onValueChange={(value) => setEditForm({ ...editForm, traffic_limit_strategy: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NO_RESET">Без сброса</SelectItem>
+                        <SelectItem value="DAY">Ежедневно</SelectItem>
+                        <SelectItem value="WEEK">Еженедельно</SelectItem>
+                        <SelectItem value="MONTH">Ежемесячно</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Expire date */}
@@ -1078,14 +1208,6 @@ export default function UserDetail() {
                         <p className="text-white text-sm">{user.username || '\u2014'}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-dark-200">Email</p>
-                        <p className="text-white text-sm truncate">{user.email || '\u2014'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-dark-200">Telegram ID</p>
-                        <p className="text-white text-sm">{user.telegram_id || '\u2014'}</p>
-                      </div>
-                      <div>
                         <p className="text-xs text-dark-200">Short UUID</p>
                         <p className="text-white text-sm font-mono">{user.short_uuid || '\u2014'}</p>
                       </div>
@@ -1094,56 +1216,137 @@ export default function UserDetail() {
                 </div>
               ) : (
                 /* View mode */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-dark-200">Username</p>
-                    <p className="text-white">{user.username || '\u2014'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-dark-200">Email</p>
-                    <p className="text-white truncate">{user.email || '\u2014'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-dark-200">Telegram ID</p>
-                    <p className="text-white">{user.telegram_id || '\u2014'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-dark-200">Short UUID</p>
-                    <p className="text-white font-mono">{user.short_uuid || '\u2014'}</p>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <Clock className="h-3.5 w-3.5 text-dark-300" />
-                      <p className="text-sm text-dark-200">Создан</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-dark-200">Username</p>
+                      <p className="text-white">{user.username || '\u2014'}</p>
                     </div>
-                    <p className="text-white">
-                      {user.created_at
-                        ? format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                        : '\u2014'}
-                    </p>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <Clock className="h-3.5 w-3.5 text-dark-300" />
-                      <p className="text-sm text-dark-200">Истекает</p>
+                    <div>
+                      <p className="text-sm text-dark-200">Email</p>
+                      <p className="text-white truncate">{user.email || '\u2014'}</p>
                     </div>
-                    <p className="text-white">
-                      {user.expire_at
-                        ? format(new Date(user.expire_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                        : 'Бессрочно'}
-                    </p>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <Activity className="h-3.5 w-3.5 text-dark-300" />
-                      <p className="text-sm text-dark-200">Последняя активность</p>
+                    <div>
+                      <p className="text-sm text-dark-200">Telegram ID</p>
+                      <p className="text-white">{user.telegram_id || '\u2014'}</p>
                     </div>
-                    <p className="text-white">
-                      {user.online_at
-                        ? format(new Date(user.online_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                        : '\u2014'}
-                    </p>
+                    <div>
+                      <p className="text-sm text-dark-200">Short UUID</p>
+                      <p className="text-white font-mono">{user.short_uuid || '\u2014'}</p>
+                    </div>
+                    {user.tag && (
+                      <div>
+                        <p className="text-sm text-dark-200">Тег</p>
+                        <span className="text-xs font-mono px-2 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
+                      </div>
+                    )}
+                    {user.description && (
+                      <div className="sm:col-span-2">
+                        <p className="text-sm text-dark-200">Описание</p>
+                        <p className="text-white text-sm">{user.description}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm text-dark-200">Сброс трафика</p>
+                      <p className="text-white">
+                        {{ NO_RESET: 'Без сброса', DAY: 'Ежедневно', WEEK: 'Еженедельно', MONTH: 'Ежемесячно' }[user.traffic_limit_strategy || 'NO_RESET'] || user.traffic_limit_strategy || '\u2014'}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <Clock className="h-3.5 w-3.5 text-dark-300" />
+                        <p className="text-sm text-dark-200">Создан</p>
+                      </div>
+                      <p className="text-white">
+                        {user.created_at
+                          ? format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                          : '\u2014'}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <Clock className="h-3.5 w-3.5 text-dark-300" />
+                        <p className="text-sm text-dark-200">Истекает</p>
+                      </div>
+                      <p className="text-white">
+                        {user.expire_at
+                          ? format(new Date(user.expire_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                          : 'Бессрочно'}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <Activity className="h-3.5 w-3.5 text-dark-300" />
+                        <p className="text-sm text-dark-200">Последняя активность</p>
+                      </div>
+                      <p className="text-white">
+                        {user.online_at
+                          ? format(new Date(user.online_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                          : '\u2014'}
+                      </p>
+                    </div>
+                    {user.last_traffic_reset_at && (
+                      <div>
+                        <p className="text-sm text-dark-200">Последний сброс трафика</p>
+                        <p className="text-white">
+                          {format(new Date(user.last_traffic_reset_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
+                        </p>
+                      </div>
+                    )}
+                    {user.first_connected_at && (
+                      <div>
+                        <p className="text-sm text-dark-200">Первое подключение</p>
+                        <p className="text-white">
+                          {format(new Date(user.first_connected_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
+                        </p>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Internal squads */}
+                  {user.active_internal_squads && user.active_internal_squads.length > 0 && (
+                    <>
+                      <Separator />
+                      <div>
+                        <p className="text-sm text-dark-200 mb-2">Внутренние отряды</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {user.active_internal_squads.map((sq) => (
+                            <Badge key={sq.uuid} variant="outline" className="text-xs">{sq.name}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Protocol credentials */}
+                  {(user.trojan_password || user.vless_uuid || user.ss_password) && (
+                    <>
+                      <Separator />
+                      <div>
+                        <p className="text-sm text-dark-200 mb-2">Протоколы</p>
+                        <div className="grid grid-cols-1 gap-2">
+                          {user.vless_uuid && (
+                            <div className="bg-dark-700/40 rounded-lg p-2.5">
+                              <p className="text-xs text-dark-300 mb-0.5">VLESS UUID</p>
+                              <p className="text-xs font-mono text-white break-all">{user.vless_uuid}</p>
+                            </div>
+                          )}
+                          {user.trojan_password && (
+                            <div className="bg-dark-700/40 rounded-lg p-2.5">
+                              <p className="text-xs text-dark-300 mb-0.5">Trojan Password</p>
+                              <p className="text-xs font-mono text-white break-all">{user.trojan_password}</p>
+                            </div>
+                          )}
+                          {user.ss_password && (
+                            <div className="bg-dark-700/40 rounded-lg p-2.5">
+                              <p className="text-xs text-dark-300 mb-0.5">Shadowsocks Password</p>
+                              <p className="text-xs font-mono text-white break-all">{user.ss_password}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1289,6 +1492,28 @@ export default function UserDetail() {
                   <div>
                     <p className="text-xs text-dark-200 mb-1">UUID подписки</p>
                     <p className="text-dark-100 text-xs font-mono break-all">{user.subscription_uuid}</p>
+                  </div>
+                )}
+                {user.sub_last_opened_at && (
+                  <div>
+                    <p className="text-xs text-dark-200 mb-1">Последнее открытие</p>
+                    <p className="text-dark-100 text-xs">
+                      {format(new Date(user.sub_last_opened_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
+                    </p>
+                  </div>
+                )}
+                {user.sub_revoked_at && (
+                  <div>
+                    <p className="text-xs text-dark-200 mb-1">Отозвана</p>
+                    <p className="text-red-400 text-xs">
+                      {format(new Date(user.sub_revoked_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
+                    </p>
+                  </div>
+                )}
+                {user.sub_last_user_agent && (
+                  <div>
+                    <p className="text-xs text-dark-200 mb-1">User-Agent</p>
+                    <p className="text-dark-100 text-xs truncate" title={user.sub_last_user_agent}>{user.sub_last_user_agent}</p>
                   </div>
                 )}
               </div>

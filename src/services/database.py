@@ -25,11 +25,15 @@ CREATE TABLE IF NOT EXISTS users (
     subscription_uuid UUID,
     telegram_id BIGINT,
     email VARCHAR(255),
+    tag VARCHAR(16),
+    description TEXT,
     status VARCHAR(50),
+    traffic_limit_strategy VARCHAR(20) DEFAULT 'NO_RESET',
     expire_at TIMESTAMP WITH TIME ZONE,
     traffic_limit_bytes BIGINT,
     used_traffic_bytes BIGINT,
     hwid_device_limit INTEGER,
+    external_squad_uuid UUID,
     created_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     raw_data JSONB
@@ -40,6 +44,8 @@ CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_short_uuid ON users(short_uuid);
 CREATE INDEX IF NOT EXISTS idx_users_subscription_uuid ON users(subscription_uuid);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_tag ON users(tag) WHERE tag IS NOT NULL;
 
 -- Ноды
 CREATE TABLE IF NOT EXISTS nodes (
@@ -76,11 +82,17 @@ CREATE TABLE IF NOT EXISTS hosts (
     address VARCHAR(255),
     port INTEGER,
     is_disabled BOOLEAN DEFAULT FALSE,
+    is_hidden BOOLEAN DEFAULT FALSE,
+    tag VARCHAR(32),
+    security_layer VARCHAR(20) DEFAULT 'DEFAULT',
+    server_description VARCHAR(30),
+    view_position INTEGER DEFAULT 0,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     raw_data JSONB
 );
 
 CREATE INDEX IF NOT EXISTS idx_hosts_remark ON hosts(remark);
+CREATE INDEX IF NOT EXISTS idx_hosts_tag ON hosts(tag) WHERE tag IS NOT NULL;
 
 -- Профили конфигурации (редко меняются)
 CREATE TABLE IF NOT EXISTS config_profiles (
@@ -257,6 +269,46 @@ class DatabaseService:
             if not exists:
                 await conn.execute(f"ALTER TABLE user_hwid_devices ADD COLUMN {col} {col_type}")
                 logger.info("Migration: added column %s to user_hwid_devices", col)
+
+        # v2.6.0: Add new user columns
+        user_new_cols = [
+            ("tag", "VARCHAR(16)"),
+            ("description", "TEXT"),
+            ("traffic_limit_strategy", "VARCHAR(20) DEFAULT 'NO_RESET'"),
+            ("external_squad_uuid", "UUID"),
+        ]
+        for col, col_type in user_new_cols:
+            exists = await conn.fetchval(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'users' AND column_name = $1",
+                col,
+            )
+            if not exists:
+                await conn.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+                logger.info("Migration: added column %s to users", col)
+
+        # v2.6.0: Add new host columns
+        host_new_cols = [
+            ("is_hidden", "BOOLEAN DEFAULT FALSE"),
+            ("tag", "VARCHAR(32)"),
+            ("security_layer", "VARCHAR(20) DEFAULT 'DEFAULT'"),
+            ("server_description", "VARCHAR(30)"),
+            ("view_position", "INTEGER DEFAULT 0"),
+        ]
+        for col, col_type in host_new_cols:
+            exists = await conn.fetchval(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'hosts' AND column_name = $1",
+                col,
+            )
+            if not exists:
+                await conn.execute(f"ALTER TABLE hosts ADD COLUMN {col} {col_type}")
+                logger.info("Migration: added column %s to hosts", col)
+
+        # v2.6.0: Add new indexes (safe with IF NOT EXISTS)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_tag ON users(tag) WHERE tag IS NOT NULL")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_hosts_tag ON hosts(tag) WHERE tag IS NOT NULL")
 
         # Remove stale tokens sync metadata (tokens sync removed)
         await conn.execute("DELETE FROM sync_metadata WHERE key = 'tokens'")

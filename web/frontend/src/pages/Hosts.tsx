@@ -55,13 +55,23 @@ interface Host {
   address: string
   port: number
   is_disabled: boolean
+  is_hidden: boolean
   inbound_uuid: string | null
+  inbound: { uuid: string; tag: string; type: string } | null
+  tag: string | null
+  server_description: string | null
+  security_layer: string | null
+  view_position: number | null
   sni: string | null
   host: string | null
   path: string | null
   security: string | null
   alpn: string | null
   fingerprint: string | null
+  shuffle_host: boolean
+  mihomo_x25519: string | null
+  nodes: { uuid: string; name: string }[] | null
+  excluded_internal_squads: { uuid: string; name: string }[] | null
 }
 
 interface HostListResponse {
@@ -75,21 +85,24 @@ const fetchHosts = async (): Promise<Host[]> => {
   return data.items || data
 }
 
-function getSecurityLabel(security: string | null): string {
-  if (!security) return '-'
+function getSecurityLabel(host: Host): string {
+  const sec = host.security_layer || host.security
+  if (!sec) return '-'
   const labels: Record<string, string> = {
     'tls': 'TLS',
     'reality': 'Reality',
     'none': 'Без шифрования',
     'xtls': 'XTLS',
+    'default': 'По умолчанию',
   }
-  return labels[security] || security
+  return labels[sec] || sec
 }
 
-function getSecurityColor(security: string | null): string {
-  if (!security || security === 'none') return 'text-red-400'
-  if (security === 'reality') return 'text-green-400'
-  if (security === 'tls' || security === 'xtls') return 'text-blue-400'
+function getSecurityColor(host: Host): string {
+  const sec = host.security_layer || host.security
+  if (!sec || sec === 'none') return 'text-red-400'
+  if (sec === 'reality') return 'text-green-400'
+  if (sec === 'tls' || sec === 'xtls') return 'text-blue-400'
   return 'text-dark-200'
 }
 
@@ -103,6 +116,9 @@ interface HostEditFormData {
   security: string
   alpn: string
   fingerprint: string
+  tag: string
+  server_description: string
+  is_hidden: boolean
 }
 
 // Suppress unused interface warning — kept for API contract reference
@@ -129,9 +145,12 @@ function HostEditModal({
     sni: host.sni || '',
     host: host.host || '',
     path: host.path || '',
-    security: host.security || 'none',
+    security: host.security_layer || host.security || 'none',
     alpn: host.alpn || '',
     fingerprint: host.fingerprint || '',
+    tag: host.tag || '',
+    server_description: host.server_description || '',
+    is_hidden: host.is_hidden || false,
   })
 
   useEffect(() => {
@@ -142,9 +161,12 @@ function HostEditModal({
       sni: host.sni || '',
       host: host.host || '',
       path: host.path || '',
-      security: host.security || 'none',
+      security: host.security_layer || host.security || 'none',
       alpn: host.alpn || '',
       fingerprint: host.fingerprint || '',
+      tag: host.tag || '',
+      server_description: host.server_description || '',
+      is_hidden: host.is_hidden || false,
     })
   }, [host])
 
@@ -157,9 +179,13 @@ function HostEditModal({
     if (form.sni !== (host.sni || '')) updateData.sni = form.sni || null
     if (form.host !== (host.host || '')) updateData.host = form.host || null
     if (form.path !== (host.path || '')) updateData.path = form.path || null
-    if (form.security !== (host.security || 'none')) updateData.security = form.security
+    const curSecurity = host.security_layer || host.security || 'none'
+    if (form.security !== curSecurity) updateData.security_layer = form.security
     if (form.alpn !== (host.alpn || '')) updateData.alpn = form.alpn || null
     if (form.fingerprint !== (host.fingerprint || '')) updateData.fingerprint = form.fingerprint || null
+    if (form.tag !== (host.tag || '')) updateData.tag = form.tag || null
+    if (form.server_description !== (host.server_description || '')) updateData.server_description = form.server_description || null
+    if (form.is_hidden !== (host.is_hidden || false)) updateData.is_hidden = form.is_hidden
 
     if (Object.keys(updateData).length === 0) {
       onClose()
@@ -281,6 +307,39 @@ function HostEditModal({
               placeholder="chrome, firefox, safari..."
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>Тег</Label>
+            <Input
+              type="text"
+              value={form.tag}
+              onChange={(e) => setForm({ ...form, tag: e.target.value })}
+              placeholder="Тег хоста"
+              maxLength={32}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Описание сервера</Label>
+            <Input
+              type="text"
+              value={form.server_description}
+              onChange={(e) => setForm({ ...form, server_description: e.target.value })}
+              placeholder="Описание сервера"
+              maxLength={30}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="edit-is-hidden"
+              checked={form.is_hidden}
+              onChange={(e) => setForm({ ...form, is_hidden: e.target.checked })}
+              className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+            />
+            <Label htmlFor="edit-is-hidden" className="cursor-pointer">Скрытый хост</Label>
+          </div>
         </div>
 
         <DialogFooter>
@@ -325,6 +384,9 @@ function HostCreateModal({
     security: 'tls',
     alpn: '',
     fingerprint: '',
+    tag: '',
+    server_description: '',
+    is_hidden: false,
   })
 
   const handleSubmit = () => {
@@ -334,12 +396,15 @@ function HostCreateModal({
     }
     const port = parseInt(form.port, 10)
     if (!isNaN(port)) createData.port = port
-    createData.security = form.security
+    createData.security_layer = form.security
     if (form.sni.trim()) createData.sni = form.sni.trim()
     if (form.host.trim()) createData.host = form.host.trim()
     if (form.path.trim()) createData.path = form.path.trim()
     if (form.alpn.trim()) createData.alpn = form.alpn.trim()
     if (form.fingerprint.trim()) createData.fingerprint = form.fingerprint.trim()
+    if (form.tag.trim()) createData.tag = form.tag.trim()
+    if (form.server_description.trim()) createData.server_description = form.server_description.trim()
+    if (form.is_hidden) createData.is_hidden = true
     onSave(createData)
   }
 
@@ -456,6 +521,39 @@ function HostCreateModal({
               placeholder="chrome, firefox, safari..."
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>Тег</Label>
+            <Input
+              type="text"
+              value={form.tag}
+              onChange={(e) => setForm({ ...form, tag: e.target.value })}
+              placeholder="Тег хоста"
+              maxLength={32}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Описание сервера</Label>
+            <Input
+              type="text"
+              value={form.server_description}
+              onChange={(e) => setForm({ ...form, server_description: e.target.value })}
+              placeholder="Описание сервера"
+              maxLength={30}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="create-is-hidden"
+              checked={form.is_hidden}
+              onChange={(e) => setForm({ ...form, is_hidden: e.target.checked })}
+              className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
+            />
+            <Label htmlFor="create-is-hidden" className="cursor-pointer">Скрытый хост</Label>
+          </div>
         </div>
 
         <DialogFooter>
@@ -513,11 +611,22 @@ function HostCard({
               )}
             </div>
             <div className="min-w-0">
-              <h3 className="font-semibold text-white truncate">{host.remark || 'Без имени'}</h3>
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-semibold text-white truncate">{host.remark || 'Без имени'}</h3>
+                {host.tag && (
+                  <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20 flex-shrink-0">{host.tag}</span>
+                )}
+                {host.is_hidden && (
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 flex-shrink-0">Скрыт</span>
+                )}
+              </div>
               <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
                 <Globe className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="truncate">{host.address}:{host.port}</span>
               </p>
+              {host.server_description && (
+                <p className="text-xs text-dark-300 truncate">{host.server_description}</p>
+              )}
             </div>
           </div>
 
@@ -580,16 +689,29 @@ function HostCard({
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="bg-dark-800/50 rounded-lg p-2">
             <span className="text-dark-200 text-xs">Безопасность</span>
-            <p className={cn('font-medium', getSecurityColor(host.security))}>
-              {host.security === 'reality' && <ShieldCheck className="w-3.5 h-3.5 inline mr-1" />}
-              {host.security === 'tls' && <Lock className="w-3.5 h-3.5 inline mr-1" />}
-              {getSecurityLabel(host.security)}
+            <p className={cn('font-medium', getSecurityColor(host))}>
+              {(host.security_layer || host.security) === 'reality' && <ShieldCheck className="w-3.5 h-3.5 inline mr-1" />}
+              {(host.security_layer || host.security) === 'tls' && <Lock className="w-3.5 h-3.5 inline mr-1" />}
+              {getSecurityLabel(host)}
             </p>
           </div>
           <div className="bg-dark-800/50 rounded-lg p-2">
             <span className="text-dark-200 text-xs">SNI</span>
             <p className="font-medium text-white truncate">{host.sni || '-'}</p>
           </div>
+          {host.inbound && (
+            <div className="bg-dark-800/50 rounded-lg p-2">
+              <span className="text-dark-200 text-xs">Inbound</span>
+              <p className="font-medium text-white truncate">{host.inbound.tag}</p>
+              <p className="text-[10px] text-dark-300">{host.inbound.type}</p>
+            </div>
+          )}
+          {host.nodes && host.nodes.length > 0 && (
+            <div className="bg-dark-800/50 rounded-lg p-2">
+              <span className="text-dark-200 text-xs">Ноды ({host.nodes.length})</span>
+              <p className="font-medium text-white truncate text-xs">{host.nodes.map(n => n.name).join(', ')}</p>
+            </div>
+          )}
           {host.host && (
             <div className="bg-dark-800/50 rounded-lg p-2">
               <span className="text-dark-200 text-xs">Host</span>
@@ -729,6 +851,7 @@ export default function Hosts() {
   const totalHosts = hosts.length
   const activeHosts = hosts.filter((h) => !h.is_disabled).length
   const disabledHosts = hosts.filter((h) => h.is_disabled).length
+  const hiddenHosts = hosts.filter((h) => h.is_hidden).length
 
   return (
     <div className="space-y-6">
@@ -761,7 +884,7 @@ export default function Hosts() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <CardContent className="p-4">
             <p className="text-xs md:text-sm text-dark-200">Всего</p>
@@ -783,6 +906,14 @@ export default function Hosts() {
             <p className="text-xs md:text-sm text-dark-200">Отключены</p>
             <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
               {isLoading ? '-' : disabledHosts}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <CardContent className="p-4">
+            <p className="text-xs md:text-sm text-dark-200">Скрытые</p>
+            <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">
+              {isLoading ? '-' : hiddenHosts}
             </p>
           </CardContent>
         </Card>

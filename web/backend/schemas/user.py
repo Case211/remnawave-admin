@@ -21,14 +21,19 @@ class UserListItem(UserBase):
     uuid: str
     short_uuid: Optional[str] = None
     description: Optional[str] = None
+    tag: Optional[str] = None
     expire_at: Optional[datetime] = None
     traffic_limit_bytes: Optional[int] = None
+    traffic_limit_strategy: Optional[str] = None
     used_traffic_bytes: Optional[int] = 0
     lifetime_used_traffic_bytes: Optional[int] = 0
     hwid_device_limit: Optional[int] = 0
     hwid_device_count: Optional[int] = 0
+    external_squad_uuid: Optional[str] = None
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     online_at: Optional[datetime] = None
+    last_triggered_threshold: Optional[int] = None
 
     @model_validator(mode='before')
     @classmethod
@@ -60,6 +65,17 @@ class UserDetail(UserListItem):
     subscription_url: Optional[str] = None
     online_at: Optional[datetime] = None
     sub_last_user_agent: Optional[str] = None
+    sub_last_opened_at: Optional[datetime] = None
+    sub_revoked_at: Optional[datetime] = None
+    last_traffic_reset_at: Optional[datetime] = None
+    trojan_password: Optional[str] = None
+    vless_uuid: Optional[str] = None
+    ss_password: Optional[str] = None
+    active_internal_squads: Optional[list] = None
+    updated_at: Optional[datetime] = None
+    last_triggered_threshold: Optional[int] = None
+    first_connected_at: Optional[datetime] = None
+    last_connected_node_uuid: Optional[str] = None
 
     # Anti-abuse info
     trust_score: Optional[int] = None
@@ -73,23 +89,43 @@ class UserCreate(BaseModel):
     model_config = ConfigDict(extra='ignore')
 
     username: str
-    traffic_limit_bytes: Optional[int] = None
     expire_at: Optional[datetime] = None
-    hwid_device_limit: int = 3
-    telegram_id: Optional[int] = None
+    status: Optional[str] = None
+    short_uuid: Optional[str] = None
+    trojan_password: Optional[str] = None
+    vless_uuid: Optional[str] = None
+    ss_password: Optional[str] = None
+    traffic_limit_bytes: Optional[int] = None
+    traffic_limit_strategy: str = "NO_RESET"
+    created_at: Optional[datetime] = None
+    last_traffic_reset_at: Optional[datetime] = None
     description: Optional[str] = None
-    traffic_limit_strategy: str = "MONTH"
-    external_squad_uuid: Optional[str] = None
+    tag: Optional[str] = None
+    telegram_id: Optional[int] = None
+    email: Optional[str] = None
+    hwid_device_limit: Optional[int] = None
     active_internal_squads: Optional[List[str]] = None
+    uuid: Optional[str] = None
+    external_squad_uuid: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
     """Update user request."""
+    model_config = ConfigDict(extra='ignore')
 
+    username: Optional[str] = None
+    uuid: Optional[str] = None
     status: Optional[str] = None
     traffic_limit_bytes: Optional[int] = None
+    traffic_limit_strategy: Optional[str] = None
     expire_at: Optional[datetime] = None
+    description: Optional[str] = None
+    tag: Optional[str] = None
+    telegram_id: Optional[int] = None
+    email: Optional[str] = None
     hwid_device_limit: Optional[int] = None
+    active_internal_squads: Optional[List[str]] = None
+    external_squad_uuid: Optional[str] = None
 
 
 class HwidDevice(BaseModel):
