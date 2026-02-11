@@ -617,7 +617,7 @@ class AutomationEngine:
                 "would_trigger": False,
                 "matching_targets": [],
                 "estimated_actions": 0,
-                "details": "Rule not found",
+                "details": "Правило не найдено",
             }
 
         trigger_type = rule["trigger_type"]
@@ -629,10 +629,37 @@ class AutomationEngine:
         would_trigger = False
         details_parts = []
 
+        # Localized labels for action types
+        _ACTION_LABELS = {
+            "disable_user": "Отключить пользователя",
+            "block_user": "Заблокировать пользователя",
+            "notify": "Отправить уведомление",
+            "restart_node": "Перезапустить ноду",
+            "cleanup_expired": "Очистить истёкших",
+            "reset_traffic": "Сбросить трафик",
+            "force_sync": "Синхронизация нод",
+        }
+        _EVENT_LABELS = {
+            "violation.detected": "Обнаружено нарушение",
+            "node.went_offline": "Нода ушла офлайн",
+            "user.traffic_exceeded": "Трафик превышен",
+        }
+        _METRIC_LABELS = {
+            "users_online": "Пользователей онлайн",
+            "traffic_today": "Трафик за сегодня (ГБ)",
+            "node_uptime_percent": "Аптайм ноды (%)",
+            "user_traffic_percent": "Использование трафика (%)",
+        }
+        _OPERATOR_LABELS = {
+            "==": "=", "!=": "≠", ">": ">", ">=": "≥",
+            "<": "<", "<=": "≤", "contains": "содержит", "not_contains": "не содержит",
+        }
+
         if trigger_type == "event":
             event = trigger_config.get("event", "")
-            details_parts.append(f"Event trigger: {event}")
-            details_parts.append("Would fire on next matching event.")
+            event_label = _EVENT_LABELS.get(event, event)
+            details_parts.append(f"Триггер по событию: {event_label}")
+            details_parts.append("Сработает при следующем совпадающем событии.")
             would_trigger = True
 
         elif trigger_type == "schedule":
@@ -640,7 +667,7 @@ class AutomationEngine:
             interval = trigger_config.get("interval_minutes")
             if cron:
                 would_trigger = cron_matches_now(cron)
-                details_parts.append(f"CRON: {cron} — {'matches now' if would_trigger else 'does not match now'}")
+                details_parts.append(f"CRON: {cron} — {'совпадает с текущим временем' if would_trigger else 'не совпадает с текущим временем'}")
             elif interval:
                 last = rule.get("last_triggered_at")
                 if last is None:
@@ -652,7 +679,7 @@ class AutomationEngine:
                         last = last.replace(tzinfo=timezone.utc)
                     elapsed = (datetime.now(timezone.utc) - last).total_seconds() / 60
                     would_trigger = elapsed >= interval
-                details_parts.append(f"Interval: every {interval} min")
+                details_parts.append(f"Интервал: каждые {interval} мин.")
 
         elif trigger_type == "threshold":
             metric = trigger_config.get("metric", "")
@@ -698,11 +725,14 @@ class AutomationEngine:
                             })
 
             would_trigger = len(matching_targets) > 0
-            details_parts.append(f"Threshold: {metric} {operator_str} {threshold_value}")
+            metric_label = _METRIC_LABELS.get(metric, metric)
+            op_label = _OPERATOR_LABELS.get(operator_str, operator_str)
+            details_parts.append(f"Порог: {metric_label} {op_label} {threshold_value}")
 
-        details_parts.append(f"Action: {rule['action_type']}")
+        action_label = _ACTION_LABELS.get(rule['action_type'], rule['action_type'])
+        details_parts.append(f"Действие: {action_label}")
         if matching_targets:
-            details_parts.append(f"Matching targets: {len(matching_targets)}")
+            details_parts.append(f"Подходящих целей: {len(matching_targets)}")
 
         return {
             "rule_id": rule_id,
