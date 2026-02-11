@@ -265,6 +265,9 @@ export function describeAction(rule: AutomationRule | AutomationTemplate): strin
   if (rule.action_type === 'cleanup_expired' && cfg.older_than_days) {
     return `${base} старше ${cfg.older_than_days} дн.`
   }
+  if (rule.action_type === 'restart_node' && cfg.node_uuid) {
+    return `${base} (конкретная)`
+  }
   return base
 }
 

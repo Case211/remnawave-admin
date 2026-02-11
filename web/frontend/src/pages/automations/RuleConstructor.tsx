@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ChevronLeft,
@@ -15,6 +15,8 @@ import {
   Shield,
   Info,
   HelpCircle,
+  Loader2,
+  Server,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -34,6 +36,7 @@ import {
   type AutomationRuleCreate,
   type AutomationRuleUpdate,
 } from '../../api/automations'
+import client from '../../api/client'
 import {
   TRIGGER_TYPES,
   EVENT_TYPES,
@@ -122,6 +125,26 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const [blockReason, setBlockReason] = useState('')
   const [cleanupDays, setCleanupDays] = useState('30')
 
+  // Target selectors
+  const [targetNodeUuid, setTargetNodeUuid] = useState('')  // '' = all nodes
+
+  // Fetch nodes for the target selector
+  const { data: nodesList, isLoading: nodesLoading } = useQuery({
+    queryKey: ['automation-nodes'],
+    queryFn: async () => {
+      const { data: resp } = await client.get('/nodes')
+      return (resp.items || resp) as Array<{
+        uuid: string
+        name: string
+        address: string
+        is_connected: boolean
+        is_disabled: boolean
+      }>
+    },
+    enabled: open && actionType === 'restart_node',
+    staleTime: 30_000,
+  })
+
   // Reset form when dialog opens/closes
   useEffect(() => {
     if (open) {
@@ -171,6 +194,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         } else if (editRule.action_type === 'cleanup_expired') {
           setCleanupDays(ac.older_than_days?.toString() || '30')
         }
+        // Target selectors
+        setTargetNodeUuid(ac.node_uuid?.toString() || '')
 
         setStep(1)
       } else {
@@ -195,6 +220,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setWebhookUrl('')
         setBlockReason('')
         setCleanupDays('30')
+        setTargetNodeUuid('')
         setStep(1)
       }
     }
@@ -242,6 +268,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
     }
     if (actionType === 'cleanup_expired') {
       return { older_than_days: parseInt(cleanupDays) || 30 }
+    }
+    if (actionType === 'restart_node' && targetNodeUuid) {
+      return { node_uuid: targetNodeUuid }
     }
     return {}
   }
@@ -902,6 +931,21 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   className="bg-dark-900 border-dark-500 text-white"
                   placeholder="Например: Обнаружен шеринг аккаунта"
                 />
+                {triggerType === 'event' || triggerType === 'threshold' ? (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/5 border border-blue-500/20">
+                    <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                    <span className="text-[11px] text-blue-300/80">
+                      Целевой пользователь определяется автоматически из триггера
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/5 border border-yellow-500/20">
+                    <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                    <span className="text-[11px] text-yellow-300/80">
+                      Блокировка по расписанию требует событийного или порогового триггера для определения пользователя
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 p-2 rounded-md bg-red-500/5 border border-red-500/20">
                   <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
                   <span className="text-[11px] text-red-300/80">
@@ -919,12 +963,21 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   Аккаунт пользователя будет деактивирован. Пользователь не сможет подключаться,
                   но его данные сохранятся. Аккаунт можно будет включить обратно вручную.
                 </p>
-                <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/5 border border-yellow-500/20">
-                  <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
-                  <span className="text-[11px] text-yellow-300/80">
-                    Пользователь будет отключён автоматически при каждом срабатывании правила
-                  </span>
-                </div>
+                {triggerType === 'event' || triggerType === 'threshold' ? (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/5 border border-blue-500/20">
+                    <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                    <span className="text-[11px] text-blue-300/80">
+                      Целевой пользователь определяется автоматически из триггера
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/5 border border-yellow-500/20">
+                    <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                    <span className="text-[11px] text-yellow-300/80">
+                      Для расписания рекомендуется использовать «Очистить истёкших» — отключение конкретного пользователя требует событийного или порогового триггера
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -950,18 +1003,95 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               </div>
             )}
 
-            {/* Restart node info */}
+            {/* Restart node config with target selector */}
             {actionType === 'restart_node' && (
-              <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-                <Label className="text-xs font-medium text-dark-300">Перезапуск ноды</Label>
-                <p className="text-xs text-dark-400">
-                  Будет отправлена команда перезапуска на ноду. Все активные подключения на этой ноде
-                  будут временно прерваны. Клиенты переподключатся автоматически.
-                </p>
+              <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-3">
+                <div>
+                  <Label className="text-xs font-medium text-dark-300">Перезапуск ноды</Label>
+                  <p className="text-xs text-dark-400 mt-0.5">
+                    Будет отправлена команда перезапуска. Активные подключения будут временно прерваны.
+                  </p>
+                </div>
+
+                {/* Target node selection */}
+                <div className="space-y-2">
+                  <Label className="text-[11px] text-dark-400">
+                    Какую ноду перезапускать?
+                    {triggerType === 'event' && (
+                      <span className="text-dark-500 ml-1">(для событийных триггеров обычно определяется автоматически)</span>
+                    )}
+                  </Label>
+
+                  {/* Mode toggle */}
+                  <div className="flex gap-1 p-1 rounded-lg bg-dark-900 border border-dark-600">
+                    <button
+                      onClick={() => setTargetNodeUuid('')}
+                      className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all ${
+                        !targetNodeUuid
+                          ? 'bg-accent-teal/20 text-accent-teal border border-accent-teal/30 shadow-sm'
+                          : 'text-dark-300 hover:text-dark-200 border border-transparent'
+                      }`}
+                    >
+                      {triggerType === 'event' ? 'Из триггера / все' : 'Все ноды'}
+                    </button>
+                    <button
+                      onClick={() => setTargetNodeUuid('_select')}
+                      className={`flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all ${
+                        targetNodeUuid
+                          ? 'bg-accent-teal/20 text-accent-teal border border-accent-teal/30 shadow-sm'
+                          : 'text-dark-300 hover:text-dark-200 border border-transparent'
+                      }`}
+                    >
+                      Конкретная нода
+                    </button>
+                  </div>
+
+                  {/* Node selector dropdown */}
+                  {targetNodeUuid && (
+                    <div>
+                      {nodesLoading ? (
+                        <div className="flex items-center gap-2 py-3 justify-center text-dark-400">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-xs">Загрузка нод...</span>
+                        </div>
+                      ) : nodesList && nodesList.length > 0 ? (
+                        <Select
+                          value={targetNodeUuid === '_select' ? '' : targetNodeUuid}
+                          onValueChange={setTargetNodeUuid}
+                        >
+                          <SelectTrigger className="bg-dark-900 border-dark-500 text-white">
+                            <SelectValue placeholder="Выберите ноду" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {nodesList.map((node) => (
+                              <SelectItem key={node.uuid} value={node.uuid}>
+                                <div className="flex items-center gap-2">
+                                  <Server className="w-3 h-3 flex-shrink-0" />
+                                  <span>{node.name}</span>
+                                  <span className="text-dark-500 text-[10px]">{node.address}</span>
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                      node.is_connected ? 'bg-emerald-400' : 'bg-red-400'
+                                    }`}
+                                  />
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="text-xs text-dark-500 py-2">Ноды не найдены</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/5 border border-yellow-500/20">
                   <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
                   <span className="text-[11px] text-yellow-300/80">
-                    Кратковременное прерывание соединений у всех пользователей ноды
+                    {targetNodeUuid && targetNodeUuid !== '_select'
+                      ? 'Кратковременное прерывание соединений на выбранной ноде'
+                      : 'Кратковременное прерывание соединений у всех пользователей'}
                   </span>
                 </div>
               </div>
@@ -973,8 +1103,23 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 <Label className="text-xs font-medium text-dark-300">Сброс трафика</Label>
                 <p className="text-xs text-dark-400">
                   Счётчики использованного трафика будут обнулены. Это вернёт пользователям полный
-                  объём трафика по их тарифу. Обычно используется для периодического сброса лимитов.
+                  объём трафика по их тарифу.
                 </p>
+                {triggerType === 'event' || triggerType === 'threshold' ? (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/5 border border-blue-500/20">
+                    <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                    <span className="text-[11px] text-blue-300/80">
+                      Целевой пользователь определяется автоматически из триггера
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/5 border border-yellow-500/20">
+                    <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                    <span className="text-[11px] text-yellow-300/80">
+                      Сброс трафика по расписанию требует событийного или порогового триггера для определения пользователя
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1083,6 +1228,29 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     } as any)}
                   </span>
                 </div>
+                {/* Target info */}
+                {actionType === 'restart_node' && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Server className="w-3 h-3 text-dark-400 flex-shrink-0" />
+                    <span className="text-xs text-dark-300">
+                      {targetNodeUuid && targetNodeUuid !== '_select'
+                        ? `Нода: ${nodesList?.find((n) => n.uuid === targetNodeUuid)?.name || targetNodeUuid}`
+                        : triggerType === 'event'
+                          ? 'Цель: из триггера или все ноды'
+                          : 'Цель: все подключённые ноды'}
+                    </span>
+                  </div>
+                )}
+                {['disable_user', 'block_user', 'reset_traffic'].includes(actionType) && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Info className="w-3 h-3 text-dark-400 flex-shrink-0" />
+                    <span className="text-xs text-dark-300">
+                      {triggerType === 'event' || triggerType === 'threshold'
+                        ? 'Цель: из триггера (автоматически)'
+                        : 'Цель: не определена (требуется событийный триггер)'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
