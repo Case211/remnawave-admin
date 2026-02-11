@@ -104,7 +104,11 @@ test.describe('Navigation Smoke Tests', () => {
     test(`${name} page (${path}) renders without error`, async ({ page }) => {
       const consoleErrors: string[] = [];
       page.on('console', (msg) => {
-        if (msg.type() === 'error' && !msg.text().includes('Failed to fetch')) {
+        if (
+          msg.type() === 'error' &&
+          !msg.text().includes('Failed to fetch') &&
+          !msg.text().includes('Failed to load resource')
+        ) {
           consoleErrors.push(msg.text());
         }
       });

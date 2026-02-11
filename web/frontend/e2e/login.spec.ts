@@ -41,21 +41,26 @@ test.describe('Login Page', () => {
 
   test('renders login form', async ({ page }) => {
     await page.goto('/login');
+    await page.waitForLoadState('domcontentloaded');
 
-    // Should display login form elements
-    await expect(page.locator('input[type="text"], input[name="username"]')).toBeVisible();
-    await expect(page.locator('input[type="password"]')).toBeVisible();
-    await expect(page.getByRole('button', { name: /войти|вход|login|sign in/i })).toBeVisible();
+    // Wait for the password form to appear (auto-shown when no Telegram bot configured)
+    await expect(page.locator('#username')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('#password')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible();
   });
 
   test('shows validation on empty submit', async ({ page }) => {
     await page.goto('/login');
+    await page.waitForLoadState('domcontentloaded');
 
-    // Click login button without filling fields
-    const loginButton = page.getByRole('button', { name: /войти|вход|login|sign in/i });
-    await loginButton.click();
+    // Wait for the form to appear
+    const loginButton = page.getByRole('button', { name: 'Войти', exact: true });
+    await expect(loginButton).toBeVisible({ timeout: 10_000 });
 
-    // Should stay on login page (no redirect)
+    // Button should be disabled when fields are empty
+    await expect(loginButton).toBeDisabled();
+
+    // Should stay on login page
     await expect(page).toHaveURL(/login/);
   });
 
