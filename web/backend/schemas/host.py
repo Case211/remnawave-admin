@@ -32,8 +32,8 @@ class HostListItem(HostBase):
     # Inbound nested object
     inbound: Optional[dict] = None
     # Node associations
-    nodes: Optional[List[str]] = None
-    excluded_internal_squads: Optional[List[str]] = None
+    nodes: Optional[list] = None
+    excluded_internal_squads: Optional[list] = None
 
     @field_validator('alpn', mode='before')
     @classmethod

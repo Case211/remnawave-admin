@@ -46,14 +46,18 @@ interface UserListItem {
   username: string | null
   email: string | null
   description: string | null
+  tag: string | null
   status: string
   expire_at: string | null
   traffic_limit_bytes: number | null
+  traffic_limit_strategy: string | null
   used_traffic_bytes: number
   lifetime_used_traffic_bytes: number
   hwid_device_limit: number
   hwid_device_count: number
+  external_squad_uuid: string | null
   created_at: string | null
+  updated_at: string | null
   online_at: string | null
 }
 
@@ -310,9 +314,14 @@ function MobileUserCard({
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-white truncate">
-              {user.username || user.short_uuid}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="font-medium text-white truncate">
+                {user.username || user.short_uuid}
+              </p>
+              {user.tag && (
+                <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20 flex-shrink-0">{user.tag}</span>
+              )}
+            </div>
             {user.description && (
               <p className="text-xs text-dark-300 truncate" title={user.description}>{user.description}</p>
             )}
@@ -348,6 +357,8 @@ interface Squad {
 
 interface CreateUserFormData {
   username: string
+  email: string
+  tag: string
   telegram_id: string
   description: string
   traffic_limit_gb: string
@@ -374,11 +385,13 @@ function CreateUserModal({
 }) {
   const [form, setForm] = useState<CreateUserFormData>({
     username: '',
+    email: '',
+    tag: '',
     telegram_id: '',
     description: '',
     traffic_limit_gb: '',
     is_unlimited: true,
-    traffic_limit_strategy: 'MONTH',
+    traffic_limit_strategy: 'NO_RESET',
     expire_at: '',
     hwid_device_limit: '0',
     external_squad_uuid: '',
@@ -412,6 +425,8 @@ function CreateUserModal({
       if (!isNaN(tgId)) createData.telegram_id = tgId
     }
 
+    if (form.email.trim()) createData.email = form.email.trim()
+    if (form.tag.trim()) createData.tag = form.tag.trim().toUpperCase()
     if (form.description.trim()) createData.description = form.description.trim()
 
     if (!form.is_unlimited && form.traffic_limit_gb) {
@@ -491,11 +506,34 @@ function CreateUserModal({
           </div>
 
           <div>
+            <Label>Email</Label>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder="user@example.com"
+              className="mt-1.5"
+            />
+          </div>
+
+          <div>
+            <Label>Тег</Label>
+            <Input
+              value={form.tag}
+              onChange={(e) => setForm({ ...form, tag: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })}
+              placeholder="MY_TAG"
+              maxLength={16}
+              className="mt-1.5 font-mono"
+            />
+            <p className="text-xs text-dark-300 mt-1">A-Z, 0-9, _ (макс. 16 символов)</p>
+          </div>
+
+          <div>
             <Label>Описание</Label>
             <Input
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Имя, email, заметки..."
+              placeholder="Заметки..."
               className="mt-1.5"
             />
           </div>
@@ -1298,7 +1336,12 @@ export default function Users() {
                     )}
                     <td>
                       <div>
-                        <span className="font-medium text-white">{user.username || user.short_uuid}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-white">{user.username || user.short_uuid}</span>
+                          {user.tag && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
+                          )}
+                        </div>
                         {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
                         {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
                       </div>
