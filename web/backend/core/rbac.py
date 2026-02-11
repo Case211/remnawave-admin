@@ -261,20 +261,21 @@ async def delete_admin_account(admin_id: int) -> bool:
 
 async def increment_usage_counter(admin_id: int, counter: str, amount: int = 1) -> bool:
     """Increment a usage counter (users_created, nodes_created, etc.)."""
-    allowed_counters = {
-        "users_created", "traffic_used_bytes", "nodes_created", "hosts_created",
+    _COUNTER_QUERIES = {
+        "users_created": "UPDATE admin_accounts SET users_created = users_created + $1 WHERE id = $2",
+        "traffic_used_bytes": "UPDATE admin_accounts SET traffic_used_bytes = traffic_used_bytes + $1 WHERE id = $2",
+        "nodes_created": "UPDATE admin_accounts SET nodes_created = nodes_created + $1 WHERE id = $2",
+        "hosts_created": "UPDATE admin_accounts SET hosts_created = hosts_created + $1 WHERE id = $2",
     }
-    if counter not in allowed_counters:
+    query = _COUNTER_QUERIES.get(counter)
+    if not query:
         return False
     try:
         from src.services.database import db_service
         if not db_service.is_connected:
             return False
         async with db_service.acquire() as conn:
-            await conn.execute(
-                f"UPDATE admin_accounts SET {counter} = {counter} + $1 WHERE id = $2",
-                amount, admin_id,
-            )
+            await conn.execute(query, amount, admin_id)
             return True
     except Exception as e:
         logger.error("increment_usage_counter failed: %s", e)

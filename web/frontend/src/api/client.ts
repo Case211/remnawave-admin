@@ -122,10 +122,10 @@ client.interceptors.response.use(
         // Retry original request
         originalRequest.headers.Authorization = `Bearer ${access_token}`
         return client(originalRequest)
-      } catch {
+      } catch (refreshError) {
         // Refresh failed - force logout
         forceLogout()
-        return Promise.reject(error)
+        return Promise.reject(refreshError)
       }
     }
 

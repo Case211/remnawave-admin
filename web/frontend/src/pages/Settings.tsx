@@ -563,8 +563,8 @@ function ChangePasswordBlock() {
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-    } catch (e: any) {
-      setError(e?.message || 'Ошибка при смене пароля')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Ошибка при смене пароля')
     } finally {
       setSaving(false)
     }
@@ -727,8 +727,9 @@ function IpWhitelistBlock() {
     try {
       await client.put('/settings/ip-whitelist', { value: newList.join(',') })
       await refetch()
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || 'Error')
+    } catch (e: unknown) {
+      const axiosErr = e as { response?: { data?: { detail?: string } }; message?: string }
+      setError(axiosErr?.response?.data?.detail || axiosErr?.message || 'Error')
     } finally {
       setSaving(false)
     }

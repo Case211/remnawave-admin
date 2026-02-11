@@ -143,6 +143,7 @@ function GeoMapCard() {
   const center = useMemo(() => {
     if (cities.length === 0) return [50, 40] as [number, number]
     const totalWeight = cities.reduce((s: number, c: GeoCity) => s + c.count, 0)
+    if (totalWeight === 0) return [50, 40] as [number, number]
     const lat = cities.reduce((s: number, c: GeoCity) => s + c.lat * c.count, 0) / totalWeight
     const lon = cities.reduce((s: number, c: GeoCity) => s + c.lon * c.count, 0) / totalWeight
     return [lat, lon] as [number, number]

@@ -473,14 +473,15 @@ WebSocket — активные WebSocket-сессии"
 
               // Build detail string
               let detail = ''
-              if (comp.name === 'Remnawave API' && comp.details.response_time_ms) {
-                detail = `${comp.details.response_time_ms}мс`
+              const d = comp.details || {}
+              if (comp.name === 'Remnawave API' && d.response_time_ms) {
+                detail = `${d.response_time_ms}мс`
               } else if (comp.name === 'Nodes') {
-                detail = `${comp.details.online || 0}/${comp.details.total || 0}`
+                detail = `${d.online || 0}/${d.total || 0}`
               } else if (comp.name === 'WebSocket') {
-                detail = `${comp.details.active_connections || 0} сессий`
-              } else if (comp.name === 'PostgreSQL' && comp.details.size != null) {
-                detail = `pool: ${comp.details.free_size || 0}/${comp.details.size || 0}`
+                detail = `${d.active_connections || 0} сессий`
+              } else if (comp.name === 'PostgreSQL' && d.size != null) {
+                detail = `pool: ${d.free_size || 0}/${d.size || 0}`
               }
 
               return (
