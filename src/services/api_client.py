@@ -305,9 +305,75 @@ class RemnawaveApiClient:
 
         raise NetworkError(f"Failed to connect to {url} after {max_retries} attempts") from last_exc
 
+    async def _delete(self, url: str, json: dict | None = None, max_retries: int = 3) -> dict:
+        """Выполняет DELETE запрос с retry для сетевых ошибок."""
+        from src.utils.logger import log_api_call, log_api_error
+        import time
+
+        last_exc = None
+        start_time = time.time()
+
+        for attempt in range(max_retries):
+            try:
+                kwargs: dict = {}
+                if json is not None:
+                    kwargs["json"] = json
+                response = await self._ensure_client().delete(url, **kwargs)
+                duration_ms = (time.time() - start_time) * 1000
+                response.raise_for_status()
+                log_api_call("DELETE", url, status_code=response.status_code, duration_ms=duration_ms)
+                return response.json()
+            except HTTPStatusError as exc:
+                log_api_error("DELETE", url, exc, status_code=exc.response.status_code)
+                status = exc.response.status_code
+                if status in (401, 403):
+                    raise UnauthorizedError(f"Access denied: {status}") from exc
+                if status == 404:
+                    raise NotFoundError(f"Resource not found: {url}") from exc
+                if status == 429:
+                    raise RateLimitError(f"Rate limit exceeded on {url}") from exc
+                if status >= 500:
+                    raise ServerError(f"Server error {status} on {url}", status_code=status) from exc
+                raise ApiClientError(f"API error {status}", code=f"ERR_API_{status}") from exc
+            except httpx.ReadTimeout as exc:
+                last_exc = exc
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)
+                    logger.warning("⏳ Timeout DELETE %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("❌ Timeout DELETE %s after %d attempts", url, max_retries)
+                    raise TimeoutError(f"Request timeout on {url}") from exc
+            except (httpx.RemoteProtocolError, httpx.ConnectError) as exc:
+                last_exc = exc
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)
+                    logger.warning("⏳ Network error DELETE %s (%d/%d), retry in %.1fs", url, attempt + 1, max_retries, delay)
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("❌ Network error DELETE %s after %d attempts", url, max_retries)
+                    raise NetworkError(f"Connection failed to {url}") from exc
+            except RuntimeError as exc:
+                last_exc = exc
+                self._client = self._create_client()
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)
+                    logger.warning("⏳ Client closed DELETE %s (%d/%d), recreated, retry in %.1fs", url, attempt + 1, max_retries, delay)
+                    await asyncio.sleep(delay)
+                else:
+                    raise NetworkError(f"Client was closed for {url}") from exc
+            except httpx.HTTPError as exc:
+                raise ApiClientError(f"HTTP error: {type(exc).__name__}", code="ERR_HTTP_001") from exc
+
+        raise NetworkError(f"Failed to connect to {url} after {max_retries} attempts") from last_exc
+
     # --- Settings ---
     async def get_settings(self) -> dict:
         return await self._get("/api/remnawave-settings")
+
+    async def update_settings(self, settings: dict) -> dict:
+        """Обновляет настройки панели Remnawave."""
+        return await self._patch("/api/remnawave-settings", json=settings)
 
     # --- Users ---
     async def get_user_by_username(self, username: str) -> dict:
@@ -319,6 +385,21 @@ class RemnawaveApiClient:
 
     async def get_user_by_uuid(self, user_uuid: str) -> dict:
         return await self._get(f"/api/users/{user_uuid}")
+
+    async def get_user_by_short_uuid(self, short_uuid: str) -> dict:
+        return await self._get(f"/api/users/by-short-uuid/{short_uuid}")
+
+    async def get_user_by_id(self, user_id: int) -> dict:
+        return await self._get(f"/api/users/by-id/{user_id}")
+
+    async def get_users_by_email(self, email: str) -> dict:
+        return await self._get(f"/api/users/by-email/{email}")
+
+    async def get_users_by_tag(self, tag: str) -> dict:
+        return await self._get(f"/api/users/by-tag/{tag}")
+
+    async def get_all_user_tags(self) -> dict:
+        return await self._get("/api/users/tags")
 
     async def get_users(self, start: int = 0, size: int = 100, page: int | None = None, skip_cache: bool = False) -> dict:
         """
@@ -348,24 +429,9 @@ class RemnawaveApiClient:
 
     async def delete_user(self, user_uuid: str) -> dict:
         """Delete a single user by UUID."""
-        try:
-            response = await self._ensure_client().delete(f"/api/users/{user_uuid}")
-            response.raise_for_status()
-            result = response.json()
-            await cache.invalidate(CacheKeys.STATS)
-            return result
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status in (401, 403):
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on DELETE /api/users/%s: %s", status, user_uuid, exc.response.text)
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on DELETE /api/users/%s: %s (%s)", user_uuid, exc, error_type)
-            raise ApiClientError from exc
+        result = await self._delete(f"/api/users/{user_uuid}")
+        await cache.invalidate(CacheKeys.STATS)
+        return result
 
     async def reset_user_traffic(self, user_uuid: str) -> dict:
         return await self._post(f"/api/users/{user_uuid}/actions/reset-traffic")
@@ -457,7 +523,18 @@ class RemnawaveApiClient:
         external_squad_uuid: str | None = None,
         active_internal_squads: list[str] | None = None,
         traffic_limit_strategy: str = "MONTH",
+        status: str | None = None,
+        tag: str | None = None,
+        email: str | None = None,
+        short_uuid: str | None = None,
+        trojan_password: str | None = None,
+        vless_uuid: str | None = None,
+        ss_password: str | None = None,
+        uuid: str | None = None,
+        created_at: str | None = None,
+        last_traffic_reset_at: str | None = None,
     ) -> dict:
+        """Создание нового пользователя."""
         payload: dict[str, object] = {"username": username, "expireAt": expire_at}
         if telegram_id is not None:
             payload["telegramId"] = telegram_id
@@ -467,12 +544,32 @@ class RemnawaveApiClient:
             payload["trafficLimitStrategy"] = traffic_limit_strategy
         if hwid_device_limit is not None:
             payload["hwidDeviceLimit"] = hwid_device_limit
-        if description:
+        if description is not None:
             payload["description"] = description
-        if external_squad_uuid:
+        if external_squad_uuid is not None:
             payload["externalSquadUuid"] = external_squad_uuid
         if active_internal_squads:
             payload["activeInternalSquads"] = active_internal_squads
+        if status is not None:
+            payload["status"] = status
+        if tag is not None:
+            payload["tag"] = tag
+        if email is not None:
+            payload["email"] = email
+        if short_uuid is not None:
+            payload["shortUuid"] = short_uuid
+        if trojan_password is not None:
+            payload["trojanPassword"] = trojan_password
+        if vless_uuid is not None:
+            payload["vlessUuid"] = vless_uuid
+        if ss_password is not None:
+            payload["ssPassword"] = ss_password
+        if uuid is not None:
+            payload["uuid"] = uuid
+        if created_at is not None:
+            payload["createdAt"] = created_at
+        if last_traffic_reset_at is not None:
+            payload["lastTrafficResetAt"] = last_traffic_reset_at
         return await self._post("/api/users", json=payload)
 
     # --- System ---
@@ -505,10 +602,26 @@ class RemnawaveApiClient:
             cached = await cache.get(CacheKeys.BANDWIDTH_STATS)
             if cached is not None:
                 return cached
-        
+
         data = await self._get("/api/system/stats/bandwidth")
         await cache.set(CacheKeys.BANDWIDTH_STATS, data, CacheManager.STATS_TTL)
         return data
+
+    async def get_nodes_statistics(self) -> dict:
+        """Получает статистику нод (последние 7 дней)."""
+        return await self._get("/api/system/stats/nodes")
+
+    async def get_nodes_metrics(self) -> dict:
+        """Получает метрики нод (inbounds/outbounds stats)."""
+        return await self._get("/api/system/nodes/metrics")
+
+    async def generate_x25519_keypairs(self) -> dict:
+        """Генерирует 30 X25519 ключевых пар."""
+        return await self._get("/api/system/tools/x25519/generate")
+
+    async def debug_srr_matcher(self, response_rules: dict) -> dict:
+        """Тестирует SRR Matcher с указанными правилами."""
+        return await self._post("/api/system/testers/srr-matcher", json={"responseRules": response_rules})
 
     # --- Nodes ---
     async def get_nodes(self, use_cache: bool = True, skip_cache: bool = False) -> dict:
@@ -672,27 +785,31 @@ class RemnawaveApiClient:
 
     async def delete_node(self, node_uuid: str) -> dict:
         """Удаление ноды."""
-        try:
-            response = await self._ensure_client().delete(f"/api/nodes/{node_uuid}")
-            response.raise_for_status()
-            result = response.json()
-            # Инвалидируем кэш ноды и списка нод
-            await cache.invalidate(CacheKeys.node(node_uuid))
-            await cache.invalidate(CacheKeys.NODES)
-            await cache.invalidate(CacheKeys.STATS)
-            return result
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status in (401, 403):
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on DELETE /api/nodes/%s: %s", status, node_uuid, exc.response.text)
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on DELETE /api/nodes/%s: %s (%s)", node_uuid, exc, error_type)
-            raise ApiClientError from exc
+        result = await self._delete(f"/api/nodes/{node_uuid}")
+        await cache.invalidate(CacheKeys.node(node_uuid))
+        await cache.invalidate(CacheKeys.NODES)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
+
+    async def get_all_node_tags(self) -> dict:
+        """Получает все теги нод."""
+        return await self._get("/api/nodes/tags")
+
+    async def restart_all_nodes(self, force_restart: bool = False) -> dict:
+        """Перезапускает все ноды."""
+        payload: dict[str, object] = {}
+        if force_restart:
+            payload["forceRestart"] = True
+        result = await self._post("/api/nodes/actions/restart-all", json=payload)
+        await cache.invalidate(CacheKeys.NODES)
+        await cache.invalidate_pattern("node:")
+        return result
+
+    async def reorder_nodes(self, items: list[dict]) -> dict:
+        """Изменяет порядок нод. items: [{"uuid": "...", "viewPosition": 1}, ...]"""
+        result = await self._post("/api/nodes/actions/reorder", json={"nodes": items})
+        await cache.invalidate(CacheKeys.NODES)
+        return result
 
     async def get_nodes_realtime_usage(self) -> dict:
         return await self._get("/api/bandwidth-stats/nodes/realtime")
@@ -703,7 +820,18 @@ class RemnawaveApiClient:
             params={"start": start, "end": end, "topNodesLimit": top_nodes_limit}
         )
 
+    async def get_node_users_usage_legacy(self, node_uuid: str, start: str, end: str) -> dict:
+        """Получает статистику использования ноды пользователями (legacy)."""
+        return await self._get(
+            f"/api/bandwidth-stats/nodes/{node_uuid}/users/legacy",
+            params={"start": start, "end": end}
+        )
+
     # --- Hosts ---
+    async def get_all_host_tags(self) -> dict:
+        """Получает все теги хостов."""
+        return await self._get("/api/hosts/tags")
+
     async def get_hosts(self, use_cache: bool = True, skip_cache: bool = False) -> dict:
         """Получает список хостов с кэшированием.
         
@@ -758,6 +886,27 @@ class RemnawaveApiClient:
         config_profile_uuid: str,
         config_profile_inbound_uuid: str,
         tag: str | None = None,
+        path: str | None = None,
+        sni: str | None = None,
+        host: str | None = None,
+        alpn: str | None = None,
+        fingerprint: str | None = None,
+        is_disabled: bool = False,
+        security_layer: str | None = None,
+        x_http_extra_params: object | None = None,
+        mux_params: object | None = None,
+        sockopt_params: object | None = None,
+        server_description: str | None = None,
+        is_hidden: bool = False,
+        override_sni_from_address: bool = False,
+        keep_sni_blank: bool = False,
+        allow_insecure: bool = False,
+        vless_route_id: int | None = None,
+        shuffle_host: bool = False,
+        mihomo_x25519: bool = False,
+        nodes: list[str] | None = None,
+        xray_json_template_uuid: str | None = None,
+        excluded_internal_squads: list[str] | None = None,
     ) -> dict:
         """Создание нового хоста."""
         payload: dict[str, object] = {
@@ -769,10 +918,58 @@ class RemnawaveApiClient:
                 "configProfileInboundUuid": config_profile_inbound_uuid,
             },
         }
-        if tag:
+        if tag is not None:
             payload["tag"] = tag
+        if path is not None:
+            payload["path"] = path
+        if sni is not None:
+            payload["sni"] = sni
+        if host is not None:
+            payload["host"] = host
+        if alpn is not None:
+            payload["alpn"] = alpn
+        if fingerprint is not None:
+            payload["fingerprint"] = fingerprint
+        if is_disabled:
+            payload["isDisabled"] = is_disabled
+        if security_layer is not None:
+            payload["securityLayer"] = security_layer
+        if x_http_extra_params is not None:
+            payload["xHttpExtraParams"] = x_http_extra_params
+        if mux_params is not None:
+            payload["muxParams"] = mux_params
+        if sockopt_params is not None:
+            payload["sockoptParams"] = sockopt_params
+        if server_description is not None:
+            payload["serverDescription"] = server_description
+        if is_hidden:
+            payload["isHidden"] = is_hidden
+        if override_sni_from_address:
+            payload["overrideSniFromAddress"] = override_sni_from_address
+        if keep_sni_blank:
+            payload["keepSniBlank"] = keep_sni_blank
+        if allow_insecure:
+            payload["allowInsecure"] = allow_insecure
+        if vless_route_id is not None:
+            payload["vlessRouteId"] = vless_route_id
+        if shuffle_host:
+            payload["shuffleHost"] = shuffle_host
+        if mihomo_x25519:
+            payload["mihomoX25519"] = mihomo_x25519
+        if nodes is not None:
+            payload["nodes"] = nodes
+        if xray_json_template_uuid is not None:
+            payload["xrayJsonTemplateUuid"] = xray_json_template_uuid
+        if excluded_internal_squads is not None:
+            payload["excludedInternalSquads"] = excluded_internal_squads
         result = await self._post("/api/hosts", json=payload)
-        # Инвалидируем кэш хостов после создания
+        await cache.invalidate(CacheKeys.HOSTS)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
+
+    async def create_host_raw(self, payload: dict) -> dict:
+        """Создание нового хоста из готового payload (для web backend)."""
+        result = await self._post("/api/hosts", json=payload)
         await cache.invalidate(CacheKeys.HOSTS)
         await cache.invalidate(CacheKeys.STATS)
         return result
@@ -785,6 +982,27 @@ class RemnawaveApiClient:
         port: int | None = None,
         tag: str | None = None,
         inbound: dict | None = None,
+        path: str | None = None,
+        sni: str | None = None,
+        host: str | None = None,
+        alpn: str | None = None,
+        fingerprint: str | None = None,
+        is_disabled: bool | None = None,
+        security_layer: str | None = None,
+        x_http_extra_params: object | None = None,
+        mux_params: object | None = None,
+        sockopt_params: object | None = None,
+        server_description: str | None = None,
+        is_hidden: bool | None = None,
+        override_sni_from_address: bool | None = None,
+        keep_sni_blank: bool | None = None,
+        allow_insecure: bool | None = None,
+        vless_route_id: int | None = None,
+        shuffle_host: bool | None = None,
+        mihomo_x25519: bool | None = None,
+        nodes: list[str] | None = None,
+        xray_json_template_uuid: str | None = None,
+        excluded_internal_squads: list[str] | None = None,
     ) -> dict:
         """Обновление хоста."""
         payload: dict[str, object] = {"uuid": host_uuid}
@@ -798,9 +1016,73 @@ class RemnawaveApiClient:
             payload["tag"] = tag
         if inbound is not None:
             payload["inbound"] = inbound
+        if path is not None:
+            payload["path"] = path
+        if sni is not None:
+            payload["sni"] = sni
+        if host is not None:
+            payload["host"] = host
+        if alpn is not None:
+            payload["alpn"] = alpn
+        if fingerprint is not None:
+            payload["fingerprint"] = fingerprint
+        if is_disabled is not None:
+            payload["isDisabled"] = is_disabled
+        if security_layer is not None:
+            payload["securityLayer"] = security_layer
+        if x_http_extra_params is not None:
+            payload["xHttpExtraParams"] = x_http_extra_params
+        if mux_params is not None:
+            payload["muxParams"] = mux_params
+        if sockopt_params is not None:
+            payload["sockoptParams"] = sockopt_params
+        if server_description is not None:
+            payload["serverDescription"] = server_description
+        if is_hidden is not None:
+            payload["isHidden"] = is_hidden
+        if override_sni_from_address is not None:
+            payload["overrideSniFromAddress"] = override_sni_from_address
+        if keep_sni_blank is not None:
+            payload["keepSniBlank"] = keep_sni_blank
+        if allow_insecure is not None:
+            payload["allowInsecure"] = allow_insecure
+        if vless_route_id is not None:
+            payload["vlessRouteId"] = vless_route_id
+        if shuffle_host is not None:
+            payload["shuffleHost"] = shuffle_host
+        if mihomo_x25519 is not None:
+            payload["mihomoX25519"] = mihomo_x25519
+        if nodes is not None:
+            payload["nodes"] = nodes
+        if xray_json_template_uuid is not None:
+            payload["xrayJsonTemplateUuid"] = xray_json_template_uuid
+        if excluded_internal_squads is not None:
+            payload["excludedInternalSquads"] = excluded_internal_squads
         result = await self._patch("/api/hosts", json=payload)
-        # Инвалидируем кэш хоста и списка хостов
         await cache.invalidate(CacheKeys.host(host_uuid))
+        await cache.invalidate(CacheKeys.HOSTS)
+        return result
+
+    async def update_host_raw(self, payload: dict) -> dict:
+        """Обновление хоста из готового payload (для web backend)."""
+        result = await self._patch("/api/hosts", json=payload)
+        host_uuid = payload.get("uuid")
+        if host_uuid:
+            await cache.invalidate(CacheKeys.host(host_uuid))
+        await cache.invalidate(CacheKeys.HOSTS)
+        return result
+
+    async def delete_host(self, host_uuid: str) -> dict:
+        """Удаление хоста."""
+        result = await self._delete(f"/api/hosts/{host_uuid}")
+        await cache.invalidate(CacheKeys.host(host_uuid))
+        await cache.invalidate(CacheKeys.HOSTS)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
+
+    async def reorder_hosts(self, items: list[dict]) -> dict:
+        """Изменяет порядок хостов. items: [{"uuid": "...", "viewPosition": 1}, ...]"""
+        result = await self._post("/api/hosts/actions/reorder", json={"hosts": items})
         await cache.invalidate(CacheKeys.HOSTS)
         return result
 
@@ -878,22 +1160,7 @@ class RemnawaveApiClient:
         return await self._post("/api/tokens", json={"tokenName": token_name})
 
     async def delete_token(self, token_uuid: str) -> dict:
-        try:
-            response = await self._ensure_client().delete(f"/api/tokens/{token_uuid}")
-            response.raise_for_status()
-            return response.json()
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status in (401, 403):
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on DELETE %s: %s", status, response.url, exc.response.text)
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on DELETE /api/tokens/%s: %s (%s)", token_uuid, exc, error_type)
-            raise ApiClientError from exc
+        return await self._delete(f"/api/tokens/{token_uuid}")
 
     # --- Subscription templates ---
     async def get_templates(self) -> dict:
@@ -903,22 +1170,8 @@ class RemnawaveApiClient:
         return await self._get(f"/api/subscription-templates/{template_uuid}")
 
     async def delete_template(self, template_uuid: str) -> dict:
-        try:
-            response = await self._ensure_client().delete(f"/api/subscription-templates/{template_uuid}")
-            response.raise_for_status()
-            return response.json()
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 401:
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on DELETE %s: %s", status, response.url, exc.response.text)
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on DELETE /api/subscription-templates/%s: %s (%s)", template_uuid, exc, error_type)
-            raise ApiClientError from exc
+        return await self._delete(f"/api/subscription-templates/{template_uuid}")
+
     async def create_template(self, name: str, template_type: str) -> dict:
         return await self._post(
             "/api/subscription-templates", json={"name": name, "templateType": template_type}
@@ -949,22 +1202,7 @@ class RemnawaveApiClient:
         return await self._patch("/api/snippets", json={"name": name, "snippet": snippet})
 
     async def delete_snippet(self, name: str) -> dict:
-        try:
-            response = await self._ensure_client().delete("/api/snippets", json={"name": name})
-            response.raise_for_status()
-            return response.json()
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 401:
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on DELETE /api/snippets: %s", status, exc.response.text)
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on DELETE /api/snippets: %s (%s)", exc, error_type)
-            raise ApiClientError from exc
+        return await self._delete("/api/snippets", json={"name": name})
 
     # --- Config profiles ---
     async def get_config_profiles(self, use_cache: bool = True, skip_cache: bool = False) -> dict:
@@ -986,6 +1224,205 @@ class RemnawaveApiClient:
 
     async def get_config_profile_computed(self, profile_uuid: str) -> dict:
         return await self._get(f"/api/config-profiles/{profile_uuid}/computed-config")
+
+    async def get_config_profile_by_uuid(self, profile_uuid: str) -> dict:
+        return await self._get(f"/api/config-profiles/{profile_uuid}")
+
+    async def create_config_profile(self, payload: dict) -> dict:
+        """Создание нового профиля конфигурации."""
+        result = await self._post("/api/config-profiles", json=payload)
+        await cache.invalidate(CacheKeys.CONFIG_PROFILES)
+        return result
+
+    async def update_config_profile(self, payload: dict) -> dict:
+        """Обновление профиля конфигурации."""
+        result = await self._patch("/api/config-profiles", json=payload)
+        await cache.invalidate(CacheKeys.CONFIG_PROFILES)
+        return result
+
+    async def delete_config_profile(self, profile_uuid: str) -> dict:
+        """Удаление профиля конфигурации."""
+        result = await self._delete(f"/api/config-profiles/{profile_uuid}")
+        await cache.invalidate(CacheKeys.CONFIG_PROFILES)
+        return result
+
+    async def get_all_inbounds(self) -> dict:
+        """Получает все inbounds из всех профилей конфигурации."""
+        return await self._get("/api/config-profiles/inbounds")
+
+    async def get_inbounds_by_profile_uuid(self, profile_uuid: str) -> dict:
+        """Получает inbounds для указанного профиля."""
+        return await self._get(f"/api/config-profiles/{profile_uuid}/inbounds")
+
+    async def reorder_config_profiles(self, items: list[dict]) -> dict:
+        """Изменяет порядок профилей. items: [{"uuid": "...", "viewPosition": 1}, ...]"""
+        result = await self._post("/api/config-profiles/actions/reorder", json={"items": items})
+        await cache.invalidate(CacheKeys.CONFIG_PROFILES)
+        return result
+
+    # --- Internal Squads ---
+    async def get_internal_squad_by_uuid(self, squad_uuid: str) -> dict:
+        return await self._get(f"/api/internal-squads/{squad_uuid}")
+
+    async def create_internal_squad(self, name: str, inbounds: list[str]) -> dict:
+        return await self._post("/api/internal-squads", json={"name": name, "inbounds": inbounds})
+
+    async def update_internal_squad(self, squad_uuid: str, name: str | None = None, inbounds: list[str] | None = None) -> dict:
+        payload: dict[str, object] = {"uuid": squad_uuid}
+        if name is not None:
+            payload["name"] = name
+        if inbounds is not None:
+            payload["inbounds"] = inbounds
+        return await self._patch("/api/internal-squads", json=payload)
+
+    async def delete_internal_squad(self, squad_uuid: str) -> dict:
+        return await self._delete(f"/api/internal-squads/{squad_uuid}")
+
+    async def get_internal_squad_accessible_nodes(self, squad_uuid: str) -> dict:
+        return await self._get(f"/api/internal-squads/{squad_uuid}/accessible-nodes")
+
+    async def add_users_to_internal_squad(self, squad_uuid: str) -> dict:
+        """Добавляет всех пользователей во внутренний squad."""
+        return await self._post(f"/api/internal-squads/{squad_uuid}/bulk-actions/add-users")
+
+    async def remove_users_from_internal_squad(self, squad_uuid: str) -> dict:
+        """Удаляет пользователей из внутреннего squad."""
+        return await self._delete(f"/api/internal-squads/{squad_uuid}/bulk-actions/remove-users")
+
+    async def reorder_internal_squads(self, items: list[dict]) -> dict:
+        """Изменяет порядок внутренних squads."""
+        return await self._post("/api/internal-squads/actions/reorder", json={"items": items})
+
+    # --- External Squads ---
+    async def get_external_squad_by_uuid(self, squad_uuid: str) -> dict:
+        return await self._get(f"/api/external-squads/{squad_uuid}")
+
+    async def create_external_squad(self, name: str) -> dict:
+        return await self._post("/api/external-squads", json={"name": name})
+
+    async def update_external_squad(self, payload: dict) -> dict:
+        """Обновляет внешний squad. payload должен содержать uuid."""
+        return await self._patch("/api/external-squads", json=payload)
+
+    async def delete_external_squad(self, squad_uuid: str) -> dict:
+        return await self._delete(f"/api/external-squads/{squad_uuid}")
+
+    async def add_users_to_external_squad(self, squad_uuid: str) -> dict:
+        """Добавляет всех пользователей во внешний squad."""
+        return await self._post(f"/api/external-squads/{squad_uuid}/bulk-actions/add-users")
+
+    async def remove_users_from_external_squad(self, squad_uuid: str) -> dict:
+        """Удаляет пользователей из внешнего squad."""
+        return await self._delete(f"/api/external-squads/{squad_uuid}/bulk-actions/remove-users")
+
+    async def reorder_external_squads(self, items: list[dict]) -> dict:
+        """Изменяет порядок внешних squads."""
+        return await self._post("/api/external-squads/actions/reorder", json={"items": items})
+
+    # --- Subscription Settings ---
+    async def get_subscription_settings(self) -> dict:
+        """Получает настройки подписки."""
+        return await self._get("/api/subscription-settings")
+
+    async def update_subscription_settings(self, payload: dict) -> dict:
+        """Обновляет настройки подписки. payload должен содержать uuid."""
+        return await self._patch("/api/subscription-settings", json=payload)
+
+    # --- Subscription Page Configs ---
+    async def get_subscription_page_configs(self) -> dict:
+        """Получает все конфигурации страницы подписки."""
+        return await self._get("/api/subscription-page-configs")
+
+    async def get_subscription_page_config_by_uuid(self, config_uuid: str) -> dict:
+        return await self._get(f"/api/subscription-page-configs/{config_uuid}")
+
+    async def create_subscription_page_config(self, name: str) -> dict:
+        return await self._post("/api/subscription-page-configs", json={"name": name})
+
+    async def update_subscription_page_config(self, config_uuid: str, name: str | None = None, config: object | None = None) -> dict:
+        payload: dict[str, object] = {"uuid": config_uuid}
+        if name is not None:
+            payload["name"] = name
+        if config is not None:
+            payload["config"] = config
+        return await self._patch("/api/subscription-page-configs", json=payload)
+
+    async def delete_subscription_page_config(self, config_uuid: str) -> dict:
+        return await self._delete(f"/api/subscription-page-configs/{config_uuid}")
+
+    async def reorder_subscription_page_configs(self, items: list[dict]) -> dict:
+        return await self._post("/api/subscription-page-configs/actions/reorder", json={"items": items})
+
+    async def clone_subscription_page_config(self, clone_from_uuid: str) -> dict:
+        return await self._post("/api/subscription-page-configs/actions/clone", json={"cloneFromUuid": clone_from_uuid})
+
+    # --- Protected Subscriptions ---
+    async def get_all_subscriptions(self) -> dict:
+        return await self._get("/api/subscriptions")
+
+    async def get_subscription_by_username(self, username: str) -> dict:
+        return await self._get(f"/api/subscriptions/by-username/{username}")
+
+    async def get_subscription_by_short_uuid_protected(self, short_uuid: str) -> dict:
+        return await self._get(f"/api/subscriptions/by-short-uuid/{short_uuid}")
+
+    async def get_subscription_by_uuid(self, uuid: str) -> dict:
+        return await self._get(f"/api/subscriptions/by-uuid/{uuid}")
+
+    async def get_raw_subscription_by_short_uuid(self, short_uuid: str) -> dict:
+        return await self._get(f"/api/subscriptions/by-short-uuid/{short_uuid}/raw")
+
+    async def get_subpage_config_by_short_uuid(self, short_uuid: str) -> dict:
+        return await self._get(f"/api/subscriptions/subpage-config/{short_uuid}")
+
+    # --- Subscription Request History (global) ---
+    async def get_subscription_request_history(self, start: int = 0, size: int = 100) -> dict:
+        """Получает глобальную историю запросов подписок."""
+        return await self._get("/api/subscription-request-history", params={"start": start, "size": size})
+
+    async def get_subscription_request_history_stats(self) -> dict:
+        """Получает статистику запросов подписок."""
+        return await self._get("/api/subscription-request-history/stats")
+
+    # --- Auth ---
+    async def auth_login(self, username: str, password: str) -> dict:
+        return await self._post("/api/auth/login", json={"username": username, "password": password})
+
+    async def auth_register(self, username: str, password: str) -> dict:
+        return await self._post("/api/auth/register", json={"username": username, "password": password})
+
+    async def get_auth_status(self) -> dict:
+        return await self._get("/api/auth/status")
+
+    async def auth_telegram_callback(self, payload: dict) -> dict:
+        return await self._post("/api/auth/oauth2/tg/callback", json=payload)
+
+    async def auth_oauth2_authorize(self, payload: dict) -> dict:
+        return await self._post("/api/auth/oauth2/authorize", json=payload)
+
+    async def auth_oauth2_callback(self, payload: dict) -> dict:
+        return await self._post("/api/auth/oauth2/callback", json=payload)
+
+    # --- Passkeys ---
+    async def get_passkey_registration_options(self) -> dict:
+        return await self._get("/api/passkeys/registration/options")
+
+    async def verify_passkey_registration(self, payload: dict) -> dict:
+        return await self._post("/api/passkeys/registration/verify", json=payload)
+
+    async def get_active_passkeys(self) -> dict:
+        return await self._get("/api/passkeys")
+
+    async def delete_passkey(self, passkey_id: str) -> dict:
+        return await self._delete("/api/passkeys", json={"id": passkey_id})
+
+    async def update_passkey(self, payload: dict) -> dict:
+        return await self._patch("/api/passkeys", json=payload)
+
+    # --- Keygen ---
+    async def generate_ssl_cert_key(self) -> dict:
+        """Генерирует SSL_CERT для Remnawave Node."""
+        return await self._get("/api/keygen")
 
     # --- Infra billing ---
     async def get_infra_billing_history(self, use_cache: bool = True) -> dict:
@@ -1044,24 +1481,9 @@ class RemnawaveApiClient:
         return result
 
     async def delete_infra_provider(self, provider_uuid: str) -> dict:
-        try:
-            response = await self._ensure_client().delete(f"/api/infra-billing/providers/{provider_uuid}")
-            response.raise_for_status()
-            result = response.json()
-            await cache.invalidate(CacheKeys.PROVIDERS)
-            return result
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 401:
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning("API error %s on DELETE /api/infra-billing/providers/%s: %s", status, provider_uuid, exc.response.text)
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on DELETE /api/infra-billing/providers/%s: %s (%s)", provider_uuid, exc, error_type)
-            raise ApiClientError from exc
+        result = await self._delete(f"/api/infra-billing/providers/{provider_uuid}")
+        await cache.invalidate(CacheKeys.PROVIDERS)
+        return result
 
     async def create_infra_billing_record(self, provider_uuid: str, amount: float, billed_at: str) -> dict:
         result = await self._post(
@@ -1071,26 +1493,9 @@ class RemnawaveApiClient:
         return result
 
     async def delete_infra_billing_record(self, record_uuid: str) -> dict:
-        try:
-            response = await self._ensure_client().delete(f"/api/infra-billing/history/{record_uuid}")
-            response.raise_for_status()
-            result = response.json()
-            await cache.invalidate(CacheKeys.BILLING_HISTORY)
-            return result
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 401:
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning(
-                "API error %s on DELETE /api/infra-billing/history/%s: %s", status, record_uuid, exc.response.text
-            )
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on DELETE /api/infra-billing/history/%s: %s (%s)", record_uuid, exc, error_type)
-            raise ApiClientError from exc
+        result = await self._delete(f"/api/infra-billing/history/{record_uuid}")
+        await cache.invalidate(CacheKeys.BILLING_HISTORY)
+        return result
 
     async def create_infra_billing_node(
         self, provider_uuid: str, node_uuid: str, next_billing_at: str | None = None
@@ -1108,26 +1513,9 @@ class RemnawaveApiClient:
         return result
 
     async def delete_infra_billing_node(self, record_uuid: str) -> dict:
-        try:
-            response = await self._ensure_client().delete(f"/api/infra-billing/nodes/{record_uuid}")
-            response.raise_for_status()
-            result = response.json()
-            await cache.invalidate(CacheKeys.BILLING_NODES)
-            return result
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 401:
-                raise UnauthorizedError from exc
-            if status == 404:
-                raise NotFoundError from exc
-            logger.warning(
-                "API error %s on DELETE /api/infra-billing/nodes/%s: %s", status, record_uuid, exc.response.text
-            )
-            raise ApiClientError from exc
-        except httpx.HTTPError as exc:
-            error_type = type(exc).__name__
-            logger.warning("HTTP client error on DELETE /api/infra-billing/nodes/%s: %s (%s)", record_uuid, exc, error_type)
-            raise ApiClientError from exc
+        result = await self._delete(f"/api/infra-billing/nodes/{record_uuid}")
+        await cache.invalidate(CacheKeys.BILLING_NODES)
+        return result
 
     # --- Users bulk ---
     async def bulk_reset_traffic_all_users(self) -> dict:
@@ -1170,6 +1558,27 @@ class RemnawaveApiClient:
         await cache.invalidate(CacheKeys.STATS)
         return result
 
+    async def bulk_update_users(self, uuids: list[str], fields: dict) -> dict:
+        """Массовое обновление пользователей с произвольными полями."""
+        result = await self._post("/api/users/bulk/update", json={"uuids": uuids, "fields": fields})
+        await cache.invalidate(CacheKeys.STATS)
+        return result
+
+    async def bulk_update_users_squads(self, uuids: list[str], active_internal_squads: list[str]) -> dict:
+        """Массовое обновление internal squads пользователей."""
+        result = await self._post(
+            "/api/users/bulk/update-squads",
+            json={"uuids": uuids, "activeInternalSquads": active_internal_squads},
+        )
+        await cache.invalidate(CacheKeys.STATS)
+        return result
+
+    async def bulk_update_all_users(self, fields: dict) -> dict:
+        """Массовое обновление ВСЕХ пользователей."""
+        result = await self._post("/api/users/bulk/all/update", json=fields)
+        await cache.invalidate(CacheKeys.STATS)
+        return result
+
     # --- Infra billing nodes ---
     async def get_infra_billing_nodes(self, use_cache: bool = True) -> dict:
         """Получает список биллинга нод с кэшированием."""
@@ -1199,6 +1608,18 @@ class RemnawaveApiClient:
         result = await self._post("/api/hosts/bulk/delete", json={"uuids": uuids})
         await cache.invalidate(CacheKeys.HOSTS)
         await cache.invalidate(CacheKeys.STATS)
+        return result
+
+    async def bulk_set_inbound_hosts(self, uuids: list[str], inbound: dict) -> dict:
+        """Массовая установка inbound для хостов."""
+        result = await self._post("/api/hosts/bulk/set-inbound", json={"uuids": uuids, "inbound": inbound})
+        await cache.invalidate(CacheKeys.HOSTS)
+        return result
+
+    async def bulk_set_port_hosts(self, uuids: list[str], port: int) -> dict:
+        """Массовая установка порта для хостов."""
+        result = await self._post("/api/hosts/bulk/set-port", json={"uuids": uuids, "port": port})
+        await cache.invalidate(CacheKeys.HOSTS)
         return result
 
     # --- Nodes bulk ---
