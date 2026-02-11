@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Clock } from 'lucide-react'
+import { Clock, HelpCircle } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -34,12 +34,12 @@ const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => i + 1)
 
 type VisualFrequency = 'every_n_minutes' | 'hourly' | 'daily' | 'weekly' | 'monthly'
 
-const FREQUENCY_OPTIONS: { value: VisualFrequency; label: string }[] = [
-  { value: 'every_n_minutes', label: 'Каждые N минут' },
-  { value: 'hourly', label: 'Каждый час' },
-  { value: 'daily', label: 'Каждый день' },
-  { value: 'weekly', label: 'Каждую неделю' },
-  { value: 'monthly', label: 'Каждый месяц' },
+const FREQUENCY_OPTIONS: { value: VisualFrequency; label: string; description: string }[] = [
+  { value: 'every_n_minutes', label: 'Каждые N минут', description: 'Повторяется через равные промежутки' },
+  { value: 'hourly', label: 'Каждый час', description: 'В определённую минуту каждого часа' },
+  { value: 'daily', label: 'Каждый день', description: 'В определённое время каждый день' },
+  { value: 'weekly', label: 'Каждую неделю', description: 'В определённый день и время' },
+  { value: 'monthly', label: 'Каждый месяц', description: 'В определённую дату и время' },
 ]
 
 function pad2(n: number): string {
@@ -130,7 +130,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
   return (
     <div className="space-y-3">
       {/* Mode tabs */}
-      <div className="flex gap-1 p-0.5 rounded-lg bg-dark-900/50 border border-dark-700/50">
+      <div className="flex gap-1 p-1 rounded-lg bg-dark-800 border-2 border-dark-600">
         {[
           { key: 'preset' as const, label: 'Готовые' },
           { key: 'visual' as const, label: 'Настроить' },
@@ -139,10 +139,10 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           <button
             key={tab.key}
             onClick={() => setMode(tab.key)}
-            className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+            className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all ${
               mode === tab.key
-                ? 'bg-accent-teal/20 text-accent-teal border border-accent-teal/30'
-                : 'text-dark-400 hover:text-dark-200 border border-transparent'
+                ? 'bg-accent-teal/20 text-accent-teal border border-accent-teal/30 shadow-sm'
+                : 'text-dark-300 hover:text-dark-200 border border-transparent'
             }`}
           >
             {tab.label}
@@ -157,14 +157,14 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <button
               key={preset.id}
               onClick={() => onChange(preset.cron)}
-              className={`p-2.5 rounded-lg border text-left transition-colors ${
+              className={`p-2.5 rounded-lg border-2 text-left transition-all ${
                 value === preset.cron
                   ? 'border-accent-teal bg-accent-teal/10'
-                  : 'border-dark-700/50 bg-dark-800/30 hover:border-dark-600 hover:bg-dark-800/50'
+                  : 'border-dark-600 bg-dark-800 hover:border-dark-500'
               }`}
             >
               <p className="text-xs font-medium text-white">{preset.label}</p>
-              <p className="text-[10px] text-dark-500 font-mono mt-0.5">{preset.cron}</p>
+              <p className="text-[10px] text-dark-400 font-mono mt-0.5">{preset.cron}</p>
             </button>
           ))}
         </div>
@@ -174,9 +174,9 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       {mode === 'visual' && (
         <div className="space-y-3">
           <div>
-            <Label className="text-xs text-dark-400">Частота</Label>
+            <Label className="text-xs font-medium text-dark-300">Частота</Label>
             <Select value={frequency} onValueChange={(v) => setFrequency(v as VisualFrequency)}>
-              <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+              <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -185,21 +185,24 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-[11px] text-dark-500 mt-1">
+              {FREQUENCY_OPTIONS.find((f) => f.value === frequency)?.description}
+            </p>
           </div>
 
           {/* Every N minutes */}
           {frequency === 'every_n_minutes' && (
             <div>
-              <Label className="text-xs text-dark-400">Интервал (минуты)</Label>
+              <Label className="text-xs font-medium text-dark-300">Интервал (минуты)</Label>
               <div className="flex flex-wrap gap-1.5 mt-1.5">
                 {[1, 5, 10, 15, 20, 30, 45].map((n) => (
                   <button
                     key={n}
                     onClick={() => setEveryNMinutes(n)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                       everyNMinutes === n
-                        ? 'bg-accent-teal/20 text-accent-teal border border-accent-teal/30'
-                        : 'bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600'
+                        ? 'bg-accent-teal/20 text-accent-teal border-2 border-accent-teal/30'
+                        : 'bg-dark-900 text-dark-300 border-2 border-dark-500 hover:border-dark-400'
                     }`}
                   >
                     {n}
@@ -212,12 +215,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {/* Hourly: pick minute */}
           {frequency === 'hourly' && (
             <div>
-              <Label className="text-xs text-dark-400">В минуту</Label>
+              <Label className="text-xs font-medium text-dark-300">В минуту</Label>
               <Select
                 value={minute.toString()}
                 onValueChange={(v) => setMinute(parseInt(v))}
               >
-                <SelectTrigger className="mt-1 bg-dark-800 border-dark-700 w-28">
+                <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white w-28">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -233,12 +236,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {frequency === 'daily' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-dark-400">Час</Label>
+                <Label className="text-xs font-medium text-dark-300">Час</Label>
                 <Select
                   value={hour.toString()}
                   onValueChange={(v) => setHour(parseInt(v))}
                 >
-                  <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                  <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -249,12 +252,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs text-dark-400">Минута</Label>
+                <Label className="text-xs font-medium text-dark-300">Минута</Label>
                 <Select
                   value={minute.toString()}
                   onValueChange={(v) => setMinute(parseInt(v))}
                 >
-                  <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                  <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -271,16 +274,16 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {frequency === 'weekly' && (
             <div className="space-y-3">
               <div>
-                <Label className="text-xs text-dark-400">День недели</Label>
+                <Label className="text-xs font-medium text-dark-300">День недели</Label>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {DAYS_OF_WEEK.map((d) => (
                     <button
                       key={d.value}
                       onClick={() => setDayOfWeek(d.value)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                         dayOfWeek === d.value
-                          ? 'bg-accent-teal/20 text-accent-teal border border-accent-teal/30'
-                          : 'bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600'
+                          ? 'bg-accent-teal/20 text-accent-teal border-2 border-accent-teal/30'
+                          : 'bg-dark-900 text-dark-300 border-2 border-dark-500 hover:border-dark-400'
                       }`}
                     >
                       {d.short}
@@ -290,12 +293,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs text-dark-400">Час</Label>
+                  <Label className="text-xs font-medium text-dark-300">Час</Label>
                   <Select
                     value={hour.toString()}
                     onValueChange={(v) => setHour(parseInt(v))}
                   >
-                    <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                    <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -306,12 +309,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-dark-400">Минута</Label>
+                  <Label className="text-xs font-medium text-dark-300">Минута</Label>
                   <Select
                     value={minute.toString()}
                     onValueChange={(v) => setMinute(parseInt(v))}
                   >
-                    <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                    <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -329,12 +332,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {frequency === 'monthly' && (
             <div className="space-y-3">
               <div>
-                <Label className="text-xs text-dark-400">День месяца</Label>
+                <Label className="text-xs font-medium text-dark-300">День месяца</Label>
                 <Select
                   value={dayOfMonth.toString()}
                   onValueChange={(v) => setDayOfMonth(parseInt(v))}
                 >
-                  <SelectTrigger className="mt-1 bg-dark-800 border-dark-700 w-28">
+                  <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white w-28">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -346,12 +349,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs text-dark-400">Час</Label>
+                  <Label className="text-xs font-medium text-dark-300">Час</Label>
                   <Select
                     value={hour.toString()}
                     onValueChange={(v) => setHour(parseInt(v))}
                   >
-                    <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                    <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -362,12 +365,12 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-dark-400">Минута</Label>
+                  <Label className="text-xs font-medium text-dark-300">Минута</Label>
                   <Select
                     value={minute.toString()}
                     onValueChange={(v) => setMinute(parseInt(v))}
                   >
-                    <SelectTrigger className="mt-1 bg-dark-800 border-dark-700">
+                    <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -387,37 +390,42 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       {mode === 'custom' && (
         <div className="space-y-2">
           <div>
-            <Label className="text-xs text-dark-400">CRON-выражение (5 полей)</Label>
+            <Label className="text-xs font-medium text-dark-300">CRON-выражение (5 полей)</Label>
             <Input
               value={customCron}
               onChange={(e) => {
                 setCustomCron(e.target.value)
                 onChange(e.target.value)
               }}
-              className="mt-1 bg-dark-800 border-dark-700 font-mono"
+              className="mt-1 bg-dark-900 border-dark-500 text-white font-mono"
               placeholder="* * * * *"
             />
           </div>
-          <div className="flex items-center gap-4 text-[10px] text-dark-500 font-mono">
+          <div className="flex items-center gap-4 text-[11px] text-dark-400 font-mono px-1">
             <span>мин</span>
             <span>час</span>
             <span>день</span>
             <span>мес</span>
             <span>день_нед</span>
           </div>
-          <div className="text-[10px] text-dark-500 space-y-0.5">
-            <p>* = любое значение, */N = каждые N, 1-5 = диапазон, 1,3,5 = список</p>
+          <div className="p-2 rounded-md bg-dark-800 border border-dark-600">
+            <div className="flex items-start gap-1.5">
+              <HelpCircle className="w-3 h-3 text-dark-400 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-dark-400">
+                <code className="text-dark-300">*</code> = любое, <code className="text-dark-300">*/N</code> = каждые N, <code className="text-dark-300">1-5</code> = диапазон, <code className="text-dark-300">1,3,5</code> = список
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {/* Human-readable preview */}
       {(value || (mode === 'visual' && visualCron) || (mode === 'custom' && customCron)) && (
-        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-dark-900/50 border border-dark-700/50">
+        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-dark-900 border-2 border-dark-600">
           <Clock className="w-3.5 h-3.5 text-accent-teal flex-shrink-0" />
-          <span className="text-xs text-dark-200">{preview || 'Расписание не задано'}</span>
+          <span className="text-xs text-dark-200 font-medium">{preview || 'Расписание не задано'}</span>
           {mode !== 'custom' && (
-            <Badge variant="outline" className="text-[9px] ml-auto text-dark-500 border-dark-700 font-mono">
+            <Badge variant="outline" className="text-[9px] ml-auto text-dark-400 border-dark-500 font-mono">
               {mode === 'visual' ? visualCron : value}
             </Badge>
           )}
