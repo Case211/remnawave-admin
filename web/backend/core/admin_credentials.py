@@ -98,39 +98,50 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-# ── First-run setup (creates account in admin_accounts) ──────────
+# ── Registration helpers (used by /register endpoint) ─────────────
 
-async def first_run_setup() -> Optional[str]:
-    """Run on startup: generate admin password if no accounts exist.
 
-    Creates the initial admin in admin_accounts (RBAC) table.
+async def admin_exists() -> bool:
+    """Check if any admin account exists in admin_accounts (RBAC) table."""
+    try:
+        from web.backend.core.rbac import admin_account_exists
+        return await admin_account_exists()
+    except Exception as e:
+        logger.error("admin_exists check failed: %s", e)
+        return False
+
+
+async def ensure_table() -> None:
+    """Ensure RBAC tables exist (delegates to rbac.ensure_rbac_tables)."""
+    try:
+        from web.backend.core.rbac import ensure_rbac_tables
+        await ensure_rbac_tables()
+    except Exception as e:
+        logger.error("ensure_table failed: %s", e)
+
+
+async def create_admin(username: str, password: str, is_generated: bool = False) -> bool:
+    """Create admin account in admin_accounts (RBAC) table with superadmin role.
+
+    Used by the /register endpoint for first admin registration via web UI.
 
     Returns:
-        The generated password if first run, None otherwise.
+        True if account was created, False otherwise.
     """
     try:
         from web.backend.core.rbac import (
-            admin_account_exists,
             get_role_by_name,
             create_admin_account,
         )
 
-        if await admin_account_exists():
-            logger.info("Admin account exists in database")
-            return None
-
-        # Get superadmin role
         role = await get_role_by_name("superadmin")
         if not role:
             logger.error(
-                "Cannot create first admin: 'superadmin' role not found. "
+                "Cannot create admin: 'superadmin' role not found. "
                 "Run migrations first."
             )
-            return None
+            return False
 
-        # First run — generate credentials
-        password = generate_password()
-        username = "admin"
         pw_hash = hash_password(password)
 
         account = await create_admin_account(
@@ -138,15 +149,16 @@ async def first_run_setup() -> Optional[str]:
             password_hash=pw_hash,
             telegram_id=None,
             role_id=role["id"],
-            is_generated_password=True,
+            is_generated_password=is_generated,
         )
 
         if account:
-            return password
+            logger.info("Admin account '%s' created via web registration", username)
+            return True
 
-        logger.error("Failed to create initial admin account")
-        return None
+        logger.error("Failed to create admin account '%s'", username)
+        return False
 
     except Exception as e:
-        logger.error("first_run_setup failed: %s", e)
-        return None
+        logger.error("create_admin failed: %s", e)
+        return False

@@ -359,6 +359,8 @@ interface Squad {
   uuid: string
   squadTag: string
   squadName?: string
+  name?: string
+  tag?: string
 }
 
 interface CreateUserFormData {
@@ -668,7 +670,7 @@ function CreateUserModal({
                         <SelectItem value="_none">Не выбран</SelectItem>
                         {externalSquads.map((sq: Squad) => (
                           <SelectItem key={sq.uuid} value={sq.uuid}>
-                            {sq.squadName || sq.squadTag || sq.uuid}
+                            {sq.squadName || sq.name || sq.squadTag || sq.tag || sq.uuid}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -690,7 +692,7 @@ function CreateUserModal({
                             onCheckedChange={() => toggleInternalSquad(sq.uuid)}
                           />
                           <span className="text-sm text-dark-100">
-                            {sq.squadName || sq.squadTag || sq.uuid}
+                            {sq.squadName || sq.name || sq.squadTag || sq.tag || sq.uuid}
                           </span>
                         </label>
                       ))}
