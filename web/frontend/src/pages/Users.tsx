@@ -759,7 +759,7 @@ export default function Users() {
   const handleExportCSV = () => {
     const items = data?.items
     if (!items?.length) return
-    const exportData = items.map((u: any) => ({
+    const exportData = items.map((u) => ({
       username: u.username || '',
       status: u.status,
       email: u.email || '',
@@ -908,7 +908,7 @@ export default function Users() {
   }
   const toggleSelectAll = () => {
     if (!users) return
-    const pageUuids = users.map((u: any) => u.uuid)
+    const pageUuids = users.map((u) => u.uuid)
     const allSelected = pageUuids.every((id: string) => selectedUuids.has(id))
     if (allSelected) {
       setSelectedUuids(prev => {
@@ -1359,7 +1359,7 @@ export default function Users() {
                 {canBulk && (
                   <th className="w-10 px-3">
                     <Checkbox
-                      checked={users?.length > 0 && users.every((u: any) => selectedUuids.has(u.uuid))}
+                      checked={users?.length > 0 && users.every((u) => selectedUuids.has(u.uuid))}
                       onCheckedChange={toggleSelectAll}
                     />
                   </th>

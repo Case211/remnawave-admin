@@ -130,11 +130,11 @@ function TemplateCard({
         <div className="text-xs text-dark-300 mb-4 space-y-2">
           <div className="flex items-start gap-2">
             <span className="text-dark-500 flex-shrink-0 mt-px">Когда:</span>
-            <span>{describeTrigger(template as any)}</span>
+            <span>{describeTrigger(template)}</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-dark-500 flex-shrink-0 mt-px">Тогда:</span>
-            <span className="text-primary-400">{describeAction(template as any)}</span>
+            <span className="text-primary-400">{describeAction(template)}</span>
           </div>
         </div>
 

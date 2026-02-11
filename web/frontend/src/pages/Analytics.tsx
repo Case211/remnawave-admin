@@ -104,7 +104,14 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ── Chart Tooltip ───────────────────────────────────────────────
 
-function TrendTooltip({ active, payload, label, metric }: any) {
+interface TrendTooltipProps {
+  active?: boolean
+  payload?: { value: number }[]
+  label?: string
+  metric?: string
+}
+
+function TrendTooltip({ active, payload, label, metric }: TrendTooltipProps) {
   const chart = useChartTheme()
   if (!active || !payload?.length) return null
   const val = payload[0].value

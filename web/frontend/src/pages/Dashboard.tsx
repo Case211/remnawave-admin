@@ -388,13 +388,19 @@ function PeriodSwitcher({
 
 // ── Custom Chart Tooltip ─────────────────────────────────────────
 
-function TrafficChartTooltip({ active, payload, label }: any) {
+interface TooltipPayloadEntry {
+  name: string
+  value: number
+  color: string
+}
+
+function TrafficChartTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadEntry[]; label?: string }) {
   const chart = useChartTheme()
   if (!active || !payload?.length) return null
   return (
     <div style={chart.tooltipStyle} className="px-3 py-2">
       <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{label}</p>
-      {payload.map((entry: any, i: number) => (
+      {payload.map((entry, i) => (
         <p key={i} className="text-xs" style={{ color: entry.color }}>
           {entry.name}: {formatBytes(entry.value)}
         </p>

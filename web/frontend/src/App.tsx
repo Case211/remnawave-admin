@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { usePermissionStore } from './store/permissionStore'
 import { AppearanceProvider } from './components/AppearanceProvider'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 // Layout
 import Layout from './components/layout/Layout'
@@ -73,40 +74,42 @@ export default function App() {
   }
 
   return (
-    <AppearanceProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<Login />} />
+    <ErrorBoundary>
+      <AppearanceProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<Login />} />
 
-          {/* Protected routes */}
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/users" element={<Users />} />
-                    <Route path="/users/:uuid" element={<UserDetail />} />
-                    <Route path="/nodes" element={<Nodes />} />
-                    <Route path="/fleet" element={<Fleet />} />
-                    <Route path="/hosts" element={<Hosts />} />
-                    <Route path="/violations" element={<Violations />} />
-                    <Route path="/automations" element={<Automations />} />
-                    <Route path="/admins" element={<Admins />} />
-                    <Route path="/audit" element={<AuditLog />} />
-                    <Route path="/logs" element={<SystemLogs />} />
-                    <Route path="/analytics" element={<Analytics />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </BrowserRouter>
-    </AppearanceProvider>
+            {/* Protected routes */}
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Routes>
+                      <Route path="/" element={<Dashboard />} />
+                      <Route path="/users" element={<Users />} />
+                      <Route path="/users/:uuid" element={<UserDetail />} />
+                      <Route path="/nodes" element={<Nodes />} />
+                      <Route path="/fleet" element={<Fleet />} />
+                      <Route path="/hosts" element={<Hosts />} />
+                      <Route path="/violations" element={<Violations />} />
+                      <Route path="/automations" element={<Automations />} />
+                      <Route path="/admins" element={<Admins />} />
+                      <Route path="/audit" element={<AuditLog />} />
+                      <Route path="/logs" element={<SystemLogs />} />
+                      <Route path="/analytics" element={<Analytics />} />
+                      <Route path="/settings" element={<Settings />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </BrowserRouter>
+      </AppearanceProvider>
+    </ErrorBoundary>
   )
 }

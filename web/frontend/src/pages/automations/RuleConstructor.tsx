@@ -156,7 +156,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setTriggerType(editRule.trigger_type)
         setActionType(editRule.action_type)
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const tc = editRule.trigger_config as Record<string, any>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ac = editRule.action_config as Record<string, any>
 
         // Trigger config
@@ -175,6 +177,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         }
 
         // Conditions
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const conds = editRule.conditions as Array<Record<string, any>>
         setConditions(
           conds.map((c) => ({
@@ -1192,7 +1195,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     {describeTrigger({
                       trigger_type: triggerType,
                       trigger_config: buildTriggerConfig(),
-                    } as any)}
+                    })}
                   </span>
                 </div>
               </div>
@@ -1225,7 +1228,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     {describeAction({
                       action_type: actionType,
                       action_config: buildActionConfig(),
-                    } as any)}
+                    })}
                   </span>
                 </div>
                 {/* Target info */}

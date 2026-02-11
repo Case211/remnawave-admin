@@ -233,9 +233,11 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # CORS middleware (restricted methods and headers)
+    # Prevent insecure "*" with allow_credentials=True
+    cors_origins = [o for o in settings.cors_origins if o != "*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
@@ -268,10 +270,17 @@ def create_app() -> FastAPI:
 
         allowed = get_allowed_ips()
         if allowed:
+            import ipaddress as _ipa
             forwarded = request.headers.get("x-forwarded-for")
-            client_ip = forwarded.split(",")[0].strip() if forwarded else (
-                request.client.host if request.client else "unknown"
-            )
+            client_ip = request.client.host if request.client else "unknown"
+            if forwarded:
+                candidate = forwarded.split(",")[0].strip()
+                # Validate it's a real IP to prevent header spoofing bypass
+                try:
+                    _ipa.ip_address(candidate)
+                    client_ip = candidate
+                except ValueError:
+                    logger.warning("Invalid IP in X-Forwarded-For: %s", candidate)
             if not is_ip_allowed(client_ip, allowed):
                 logger.warning("IP %s rejected by whitelist (path: %s)", client_ip, request.url.path)
                 # Async notification (fire-and-forget)

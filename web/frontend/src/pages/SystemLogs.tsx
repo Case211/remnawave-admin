@@ -106,7 +106,7 @@ export default function SystemLogs() {
     if (!isStreaming || !accessToken) return
 
     const envUrl =
-      (window as any).__ENV?.API_URL ||
+      window.__ENV?.API_URL ||
       import.meta.env.VITE_API_URL ||
       ''
     let base: string

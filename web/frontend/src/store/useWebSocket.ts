@@ -20,7 +20,7 @@ interface WsMessage {
 }
 
 function getWsUrl(token: string): string {
-  const envUrl = (window as any).__ENV?.API_URL || (window as any).import?.meta?.env?.VITE_API_URL || ''
+  const envUrl = window.__ENV?.API_URL || import.meta.env.VITE_API_URL || ''
 
   let base: string
   if (!envUrl) {
