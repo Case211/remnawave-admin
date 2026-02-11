@@ -111,9 +111,10 @@ def setup_logger() -> logging.Logger:
     root.handlers.clear()
     root.setLevel(logging.DEBUG)  # root ловит всё, фильтрация на хэндлерах
 
-    # === Console handler: только WARNING+ (для docker compose logs) ===
+    # === Console handler ===
+    # При DEBUG уровне показываем всё в консоли, иначе только WARNING+
     console = logging.StreamHandler()
-    console.setLevel(logging.WARNING)
+    console.setLevel(logging.DEBUG if level <= logging.DEBUG else logging.WARNING)
     console.setFormatter(CleanFormatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT))
     root.addHandler(console)
 
@@ -121,8 +122,21 @@ def setup_logger() -> logging.Logger:
     try:
         log_dir = _ensure_log_dir()
 
+        debug_path = log_dir / "bot_DEBUG.log"
         info_path = log_dir / "bot_INFO.log"
         warn_path = log_dir / "bot_WARNING.log"
+
+        # DEBUG файл (создаётся только при LOG_LEVEL=DEBUG)
+        if level <= logging.DEBUG:
+            debug_handler = CompressedRotatingFileHandler(
+                filename=str(debug_path),
+                maxBytes=_MAX_BYTES,
+                backupCount=_BACKUP_COUNT,
+                encoding="utf-8",
+            )
+            debug_handler.setLevel(logging.DEBUG)
+            debug_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
+            root.addHandler(debug_handler)
 
         # INFO+ файл
         info_handler = CompressedRotatingFileHandler(
@@ -166,9 +180,10 @@ def setup_logger() -> logging.Logger:
             flush=True,
         )
 
-    # Подавляем шумные сторонние логгеры
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    # Подавляем шумные сторонние логгеры (при DEBUG показываем httpx/httpcore)
+    http_level = logging.DEBUG if level <= logging.DEBUG else logging.WARNING
+    logging.getLogger("httpx").setLevel(http_level)
+    logging.getLogger("httpcore").setLevel(http_level)
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
     logging.getLogger("aiosqlite").setLevel(logging.WARNING)
     logging.getLogger("aiogram").setLevel(level)
