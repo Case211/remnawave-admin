@@ -21,6 +21,7 @@
     "reset": "Reset",
     "loading": "Loading...",
     "error": "Error",
+    "retry": "Retry",
     "total": "Total",
     "online": "Online",
     "offline": "Offline",
@@ -50,7 +51,11 @@
       "kb": "KB",
       "mb": "MB",
       "gb": "GB",
-      "tb": "TB"
+      "tb": "TB",
+      "kb_short": "K",
+      "mb_short": "M",
+      "gb_short": "G",
+      "tb_short": "T"
     },
     "speed": {
       "bps": "bps",
@@ -77,7 +82,10 @@
       "enterName": "Enter name...",
       "filtersActive": "Filters active",
       "saved": "Filter saved",
-      "deleted": "Filter deleted"
+      "deleted": "Filter deleted",
+      "filterSaved": "Filter saved",
+      "filterApplied": "Filter applied",
+      "filterDeleted": "Filter deleted"
     },
     "confirmDialog": {
       "defaultTitle": "Confirm action",
@@ -92,24 +100,32 @@
     "hosts": "Hosts",
     "violations": "Violations",
     "automations": "Automations",
-    "admins": "Admins",
+    "admins": "Admins & Roles",
     "audit": "Audit Log",
     "logs": "System Logs",
     "analytics": "Analytics",
-    "settings": "Settings"
+    "settings": "Settings",
+    "administration": "Administration"
   },
   "header": {
     "searchPlaceholder": "Search...",
     "commandHint": "Cmd+K to search"
   },
+  "sidebar": {
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
   "commandPalette": {
-    "placeholder": "Type a command or search...",
+    "placeholder": "Search pages, users, actions...",
     "navigation": "Navigation",
     "quickActions": "Quick Actions",
+    "administration": "Administration",
     "users": "Go to Users",
     "nodes": "Go to Nodes",
     "hosts": "Go to Hosts",
     "settings": "Go to Settings",
+    "createUser": "Create user",
+    "searchUsers": "Search users",
     "noResults": "No results found"
   },
   "appearance": {
@@ -123,11 +139,16 @@
     "fontSize": "Font Size",
     "compact": "Compact",
     "comfortable": "Comfortable",
-    "spacious": "Spacious"
+    "spacious": "Spacious",
+    "resetToDefaults": "Reset to defaults",
+    "density": "Density",
+    "borderRadius": "Border radius",
+    "animations": "Animations"
   },
   "errorBoundary": {
     "title": "Something went wrong",
     "description": "An error occurred while rendering this component.",
+    "defaultError": "An unexpected error occurred.",
     "retry": "Try again",
     "reload": "Reload page"
   },
@@ -143,19 +164,98 @@
     "enterUsername": "Enter username",
     "enterPassword": "Enter password",
     "or": "or",
-    "error": "Login error"
+    "error": "Login error",
+    "passwordStrength": {
+      "weak": "Weak",
+      "fair": "Fair",
+      "good": "Good",
+      "strong": "Strong"
+    },
+    "passwordChecks": {
+      "length": "8+ characters",
+      "lower": "Lowercase (a-z)",
+      "upper": "Uppercase (A-Z)",
+      "digit": "Digit (0-9)",
+      "special": "Special character"
+    }
   },
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "System overview",
+    "details": "Details",
+    "loading": "Loading...",
+    "refresh": "Refresh",
+    "loadError": "Failed to load data",
+    "retry": "Retry",
+    "period24h": "24h",
+    "period7d": "7d",
+    "period30d": "30d",
     "totalUsers": "Total users",
+    "totalUsersTooltip": "Total number of registered users",
+    "usersSubtitle": "Active: {{active}}, expired: {{expired}}",
     "activeUsers": "Active",
     "onlineUsers": "Online",
+    "activeNodes": "Active nodes",
+    "activeNodesTooltip": "Nodes currently online and serving connections",
+    "nodesSubtitle": "Offline: {{offline}}, disabled: {{disabled}}, users: {{online}}",
     "totalNodes": "Total nodes",
     "onlineNodes": "Nodes online",
     "totalTraffic": "Traffic today",
     "violations": "Violations",
+    "violationsSubtitle": "Today: {{today}}, this week: {{week}}",
+    "violationsTooltip": "Recorded anti-abuse system violations",
     "systemStatus": "System status",
+    "systemStatusTooltip": "Current status of system components",
+    "statusOnline": "Online",
+    "statusOffline": "Offline",
+    "statusDegraded": "Degraded",
+    "statusUnknown": "Unknown",
+    "ms": "ms",
+    "sessions": "sessions",
+    "uptime": "Uptime",
+    "uptimeDH": "{{days}}d {{hours}}h",
+    "uptimeHM": "{{hours}}h {{minutes}}m",
+    "uptimeM": "{{minutes}}m",
+    "versionsAndUpdates": "Versions & Updates",
+    "versionsTooltip": "Current component versions and available updates",
+    "currentVersion": "Current version",
+    "versionAvailable": "v{{version}} available",
+    "upToDate": "Up to date",
+    "traffic": "Traffic",
+    "trafficTooltip": "Total traffic volume for all time",
+    "trafficChartTooltip": "Traffic chart by node for the selected period",
+    "today": "Today",
+    "thisWeek": "This week",
+    "thisMonth": "This month",
+    "connectionsByNode": "Connections by node",
+    "connectionsByNodeTooltip": "Current distribution of user connections across nodes",
+    "total": "Total",
+    "violationsBySeverity": "Violations by severity",
+    "violationsBySeverityTooltip": "Distribution of violations by severity level",
+    "unique": "Unique",
+    "byRecommendation": "By recommendation",
+    "byRecommendationTooltip": "Distribution of violations by recommended action",
+    "avgScore": "Avg score",
+    "maxScore": "Max score",
+    "quickActions": "Quick actions",
+    "users": "Users",
+    "nodes": "Nodes",
+    "violationsLabel": "Violations",
+    "settings": "Settings",
+    "noData": "No data",
+    "noDataForPeriod": "No data for the selected period",
+    "noConnectionData": "No connection data",
+    "usersOnline": "{{count}} users online",
+    "severityLow": "Low",
+    "severityMedium": "Medium",
+    "severityHigh": "High",
+    "severityCritical": "Critical",
+    "actionNoAction": "No action",
+    "actionMonitor": "Monitor",
+    "actionWarn": "Warning",
+    "actionSoftBlock": "Soft block",
+    "actionTempBlock": "Temp block",
+    "actionHardBlock": "Hard block",
     "recentActivity": "Recent activity",
     "topUsers": "Top users",
     "trafficChart": "Traffic",
@@ -173,7 +273,24 @@
     "lastActive": "Last active",
     "searchPlaceholder": "Search by name, email or UUID...",
     "noUsers": "No users",
+    "usersNotFound": "Users not found",
     "createUser": "Create user",
+    "create": "Create",
+    "creating": "Creating...",
+    "cancel": "Cancel",
+    "refresh": "Refresh",
+    "found": "Found",
+    "usersCount": "users",
+    "resetAllFilters": "Reset all filters",
+    "resetAll": "Reset all",
+    "loadError": "Load error",
+    "unknownError": "Unknown error",
+    "retry": "Retry",
+    "noData": "No data",
+    "showing": "{{from}}–{{to}} of {{total}}",
+    "hwidDevices": "HWID devices",
+    "expires": "Expires",
+    "unlimited": "Unlimited",
     "statuses": {
       "active": "Active",
       "disabled": "Disabled",
@@ -181,27 +298,177 @@
       "limited": "Limited"
     },
     "filters": {
+      "title": "Filters",
       "allStatuses": "All statuses",
+      "status": "Status",
+      "statusActive": "Active",
+      "statusDisabled": "Disabled",
+      "statusLimited": "Limited",
+      "statusExpired": "Expired",
+      "trafficType": "Traffic type",
+      "any": "Any",
+      "unlimited": "Unlimited",
+      "withLimit": "With limit",
+      "trafficUsage": "Traffic usage",
+      "anyUsage": "Any",
+      "above90": "> 90%",
+      "above70": "> 70%",
+      "above50": "> 50%",
+      "zeroTraffic": "Zero",
+      "expiry": "Expiry",
+      "anyExpiry": "Any",
+      "expiring7d": "Expiring in 7d",
+      "expiring30d": "Expiring in 30d",
+      "alreadyExpired": "Already expired",
+      "noExpiry": "No expiry",
+      "activity": "Activity",
+      "anyActivity": "Any",
+      "online24h": "Online in 24h",
+      "online7d": "Online in 7d",
+      "online30d": "Online in 30d",
+      "neverConnected": "Never connected",
+      "perPage": "Per page",
       "sortBy": "Sort by",
       "sortName": "By name",
       "sortTraffic": "By traffic",
       "sortDate": "By date",
       "sortStatus": "By status"
     },
+    "sort": {
+      "createdAt": "Created date",
+      "trafficCurrent": "Traffic (current)",
+      "trafficLifetime": "Traffic (lifetime)",
+      "hwidDevices": "HWID devices",
+      "lastActivity": "Last activity",
+      "expireDate": "Expire date",
+      "trafficLimit": "Traffic limit",
+      "name": "Name",
+      "status": "Status",
+      "descending": "Descending",
+      "ascending": "Ascending"
+    },
+    "table": {
+      "user": "User",
+      "status": "Status",
+      "traffic": "Traffic",
+      "hwid": "HWID",
+      "activity": "Activity",
+      "expires": "Expires",
+      "created": "Created"
+    },
+    "createModal": {
+      "title": "Create user",
+      "description": "Fill in new user details",
+      "basicInfo": "Basic info",
+      "username": "Username",
+      "telegramId": "Telegram ID",
+      "email": "Email",
+      "tag": "Tag",
+      "tagHint": "A-Z, 0-9, _ (max 16 chars)",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Notes about user...",
+      "trafficAndLimits": "Traffic & Limits",
+      "unlimitedTraffic": "Unlimited traffic",
+      "trafficLimit": "Traffic limit",
+      "gb": "GB",
+      "resetStrategy": "Reset strategy",
+      "expireDate": "Expiration date",
+      "expireHint": "Leave empty for indefinite access",
+      "hwidLimit": "Device limit",
+      "hwidHint": "0 = unlimited",
+      "squads": "Squads",
+      "externalSquad": "External squad",
+      "notSelected": "Not selected",
+      "internalSquads": "Internal squads"
+    },
+    "strategies": {
+      "monthly": "Monthly",
+      "weekly": "Weekly",
+      "daily": "Daily",
+      "noReset": "No reset"
+    },
+    "actions": {
+      "view": "View",
+      "edit": "Edit",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete"
+    },
+    "toasts": {
+      "userEnabled": "User enabled",
+      "userDisabled": "User disabled",
+      "userDeleted": "User deleted",
+      "userCreated": "User created",
+      "createError": "Create error",
+      "enableError": "Enable error",
+      "disableError": "Disable error",
+      "deleteError": "Delete error",
+      "error": "Error",
+      "csvExported": "CSV export completed",
+      "jsonExported": "JSON export completed",
+      "bulkEnabled": "Enabled: {{success}}, errors: {{failed}}",
+      "bulkDisabled": "Disabled: {{success}}, errors: {{failed}}",
+      "bulkDeleted": "Deleted: {{success}}, errors: {{failed}}"
+    },
+    "bulkSelected": "Selected: {{count}}",
+    "bulkOnPage": "{{count}} on page",
+    "bulkEnable": "Enable",
+    "bulkDisable": "Disable",
+    "bulkDelete": "Delete",
+    "deleteConfirm": {
+      "title": "Delete user?",
+      "description": "User and all data will be deleted. This action cannot be undone.",
+      "confirm": "Delete"
+    },
     "perPage": "per page",
     "selected": "Selected",
-    "bulkActions": "Bulk actions",
-    "bulkEnable": "Enable selected",
-    "bulkDisable": "Disable selected",
-    "bulkDelete": "Delete selected",
-    "unlimited": "Unlimited"
+    "bulkActions": "Bulk actions"
   },
   "userDetail": {
+    "notFound": "User not found",
+    "backToList": "Back to list",
     "userNotFound": "User not found",
     "returnToList": "Return to list",
     "editing": "Editing",
     "generalInfo": "General Info",
     "changesSaved": "Changes saved",
+    "unknown": "Unknown",
+    "indefinite": "Indefinite",
+    "trafficUnlimited": "Unlimited",
+    "protocols": "Protocols",
+    "internalSquads": "Internal squads",
+    "violations": {
+      "title": "Violations"
+    },
+    "statuses": {
+      "active": "Active",
+      "disabled": "Disabled",
+      "expired": "Expired",
+      "limited": "Limited"
+    },
+    "fields": {
+      "status": "Status",
+      "selectStatus": "Select status",
+      "description": "Description",
+      "descriptionPlaceholder": "Notes about user...",
+      "tag": "Tag",
+      "tagHint": "A-Z, 0-9, _ (max 16 chars)",
+      "email": "Email",
+      "telegramId": "Telegram ID",
+      "trafficLimit": "Traffic limit",
+      "gb": "GB",
+      "enterLimit": "Enter limit",
+      "trafficReset": "Traffic reset",
+      "expireDate": "Expiration date",
+      "removeDate": "Remove date (indefinite)",
+      "hwidLimit": "Device limit (HWID)",
+      "readOnly": "Info (read-only)",
+      "created": "Created",
+      "expires": "Expires",
+      "lastActivity": "Last activity",
+      "lastTrafficReset": "Last traffic reset",
+      "firstConnection": "First connection"
+    },
     "statusLabel": "Status",
     "selectStatus": "Select status",
     "description": "Description",
@@ -209,7 +476,7 @@
     "tag": "Tag",
     "tagHint": "A-Z, 0-9, _ (max 16 chars)",
     "trafficLimit": "Traffic limit",
-    "trafficUnlimited": "Unlimited",
+    "trafficUnlimited_v2": "Unlimited",
     "trafficEnterLimit": "Enter limit",
     "trafficGB": "GB",
     "trafficReset": "Traffic reset",
@@ -225,11 +492,8 @@
     "readonlyInfo": "Info (read-only)",
     "created": "Created",
     "expires": "Expires",
-    "indefinite": "Indefinite",
     "lastTrafficReset": "Last traffic reset",
     "firstConnection": "First connection",
-    "internalSquads": "Internal squads",
-    "protocols": "Protocols",
     "traffic": {
       "title": "Traffic",
       "currentPeriod": "Current period",
@@ -237,8 +501,11 @@
       "used": "Used",
       "limit": "Limit",
       "unlimited": "Unlimited",
+      "loading": "Loading...",
+      "total": "Total",
       "percentUsed": "{{percent}}% used",
       "perNode": "Breakdown by nodes",
+      "nodeBreakdown": "Breakdown by nodes",
       "nodeTotal": "Total",
       "noNodeData": "No traffic data by nodes for this period",
       "periods": {
@@ -251,6 +518,7 @@
         "6month": "6 months",
         "year": "Year",
         "nodes": "By nodes",
+        "byNodes": "By nodes",
         "3monthShort": "3 mo.",
         "6monthShort": "6 mo."
       }
@@ -258,21 +526,25 @@
     "devices": {
       "title": "Devices",
       "syncButton": "Sync devices",
+      "sync": "Sync",
       "limitLabel": "Limit",
       "noDevices": "No registered devices",
       "osVersion": "OS Version",
       "model": "Model",
       "app": "App",
+      "userAgent": "User Agent",
       "added": "Added"
     },
-    "violations": "Violations",
     "subscription": {
       "title": "Subscription",
       "link": "Subscription link",
+      "copy": "Copy",
       "uuid": "Subscription UUID",
       "noSubscription": "No active subscription",
+      "noActive": "No active subscription",
       "lastOpened": "Last opened",
-      "revoked": "Revoked"
+      "revoked": "Revoked",
+      "userAgent": "User Agent"
     },
     "antiAbuse": {
       "title": "Anti-Abuse",
@@ -285,13 +557,37 @@
       "title": "Change history"
     },
     "actions": {
+      "save": "Save",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "edit": "Edit",
       "editUser": "Edit",
+      "enable": "Enable",
       "enableUser": "Enable",
+      "disable": "Disable",
       "disableUser": "Disable",
       "resetTraffic": "Reset traffic",
+      "delete": "Delete",
       "deleteUser": "Delete",
       "deleteConfirmTitle": "Delete user?",
       "deleteConfirmDesc": "User and all data will be deleted. This action cannot be undone."
+    },
+    "deleteConfirm": {
+      "title": "Delete user?",
+      "description": "User and all data will be deleted. This action cannot be undone.",
+      "confirm": "Delete"
+    },
+    "toasts": {
+      "hwidSynced": "HWID devices synced",
+      "syncError": "Sync error",
+      "userEnabled": "User enabled",
+      "userDisabled": "User disabled",
+      "trafficReset": "Traffic reset",
+      "error": "Error",
+      "userUpdated": "User updated",
+      "saveError": "Save error",
+      "userDeleted": "User deleted",
+      "deleteError": "Delete error"
     },
     "toast": {
       "enabled": "User enabled",
@@ -353,7 +649,12 @@
       "agentToken": "Agent token",
       "enable": "Enable",
       "disable": "Disable",
-      "delete": "Delete"
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "create": "Create",
+      "creating": "Creating..."
     },
     "status": {
       "online": "Online",
@@ -388,6 +689,7 @@
     "statusOnline": "Online",
     "statusOffline": "Offline",
     "statusDisabled": "Disabled",
+    "statusNever": "No data",
     "noNodes": "No nodes",
     "nothingFound": "Nothing found",
     "table": {
@@ -417,7 +719,10 @@
       "users": "Users",
       "restartNode": "Restart node",
       "enableNode": "Enable node",
-      "disableNode": "Disable node"
+      "disableNode": "Disable node",
+      "uptimeDaysHours": "{{days}}d {{hours}}h",
+      "uptimeHoursMinutes": "{{hours}}h {{minutes}}m",
+      "uptimeMinutes": "{{minutes}}m"
     },
     "toast": {
       "restarted": "Node restarted",
@@ -620,6 +925,7 @@
     "nodes": "Nodes",
     "hosts": "Hosts",
     "status": "Status",
+    "resource": "Resource",
     "createAdmin": "Create admin",
     "editAdmin": "Edit admin",
     "editAdminDescription": "Edit admin parameters",
@@ -639,7 +945,6 @@
     "maxTraffic": "Max traffic (GB)",
     "maxNodes": "Max nodes",
     "maxHosts": "Max hosts",
-    "resource": "Resource",
     "editRole": "Edit role",
     "createRole": "Create role",
     "editRoleDescription": "Edit role parameters",
@@ -668,6 +973,33 @@
       "created": "Admin created",
       "updated": "Admin updated",
       "deleted": "Admin deleted"
+    },
+    "actions": {
+      "create": "Create",
+      "update": "Update",
+      "delete": "Delete",
+      "enable": "Enable",
+      "disable": "Disable",
+      "login": "Login",
+      "logout": "Logout",
+      "reset_traffic": "Reset traffic",
+      "sync": "Sync",
+      "change_password": "Change password",
+      "generate_token": "Generate token",
+      "revoke_token": "Revoke token",
+      "restart": "Restart",
+      "resolve": "Resolve"
+    },
+    "resources": {
+      "user": "User",
+      "node": "Node",
+      "host": "Host",
+      "admin": "Admin",
+      "role": "Role",
+      "settings": "Settings",
+      "violation": "Violation",
+      "automation": "Automation",
+      "system": "System"
     }
   },
   "audit": {
@@ -687,11 +1019,137 @@
     "totalRecords": "Total records",
     "activeAdmins": "Active admins",
     "resourceTypes": "Resource types",
-    "find": "Find"
+    "find": "Find",
+    "noRecords": "No records for the selected period",
+    "totalEntries": "Total: {{count}}",
+    "moreDetails": "More details",
+    "resourceId": "Resource ID",
+    "stats": {
+      "totalRecords": "Total records",
+      "today": "Today",
+      "activeAdmins": "Active admins",
+      "resourceTypes": "Resource types"
+    },
+    "period": {
+      "all": "All",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "table": {
+      "date": "Date",
+      "admin": "Admin",
+      "action": "Action",
+      "details": "Details"
+    },
+    "resources": {
+      "user": "User",
+      "node": "Node",
+      "host": "Host",
+      "admin": "Admin",
+      "role": "Role",
+      "settings": "Settings",
+      "violation": "Violation",
+      "automation": "Automation",
+      "system": "System"
+    },
+    "actions": {
+      "create": "Create",
+      "update": "Update",
+      "delete": "Delete",
+      "enable": "Enable",
+      "disable": "Disable",
+      "login": "Login",
+      "logout": "Logout",
+      "reset_traffic": "Reset traffic",
+      "sync": "Sync",
+      "change_password": "Change password",
+      "generate_token": "Generate token",
+      "revoke_token": "Revoke token",
+      "restart": "Restart",
+      "resolve": "Resolve"
+    },
+    "details_map": {
+      "username": "Username",
+      "status": "Status",
+      "role": "Role",
+      "ip": "IP",
+      "traffic": "Traffic",
+      "name": "Name",
+      "address": "Address",
+      "key": "Key",
+      "value": "Value"
+    },
+    "descriptions": {
+      "create": {
+        "user": "User created",
+        "node": "Node created",
+        "host": "Host created",
+        "admin": "Admin created",
+        "role": "Role created",
+        "automation": "Automation created"
+      },
+      "update": {
+        "user": "User updated",
+        "node": "Node updated",
+        "host": "Host updated",
+        "admin": "Admin updated",
+        "role": "Role updated",
+        "settings": "Settings changed",
+        "automation": "Automation updated"
+      },
+      "delete": {
+        "user": "User deleted",
+        "node": "Node deleted",
+        "host": "Host deleted",
+        "admin": "Admin deleted",
+        "role": "Role deleted",
+        "automation": "Automation deleted"
+      },
+      "enable": {
+        "user": "User enabled",
+        "node": "Node enabled",
+        "host": "Host enabled",
+        "admin": "Admin enabled"
+      },
+      "disable": {
+        "user": "User disabled",
+        "node": "Node disabled",
+        "host": "Host disabled",
+        "admin": "Admin disabled"
+      },
+      "login": {
+        "admin": "System login"
+      },
+      "logout": {
+        "admin": "System logout"
+      },
+      "reset_traffic": {
+        "user": "User traffic reset"
+      },
+      "sync": {
+        "system": "System sync"
+      },
+      "change_password": {
+        "admin": "Password changed"
+      },
+      "generate_token": {
+        "node": "Node token generated"
+      },
+      "revoke_token": {
+        "node": "Node token revoked"
+      },
+      "restart": {
+        "node": "Node restarted"
+      },
+      "resolve": {
+        "violation": "Violation resolved"
+      }
+    }
   },
   "logs": {
     "title": "System Logs",
-    "subtitle": "Bot log viewer",
+    "subtitle": "System log viewer",
     "level": "Level",
     "message": "Message",
     "source": "Source",
@@ -700,7 +1158,16 @@
     "autoRefresh": "Auto-refresh",
     "searchPlaceholder": "Search by message...",
     "noLogs": "No logs",
-    "clearFilters": "Clear filters"
+    "clearFilters": "Clear filters",
+    "pauseStreaming": "Pause streaming",
+    "resumeStreaming": "Resume streaming",
+    "autoScrollOn": "Auto-scroll on",
+    "autoScrollOff": "Auto-scroll off",
+    "clear": "Clear",
+    "notFound": "File not found",
+    "linesCount": "{{count}} lines",
+    "waitingForEntries": "Waiting for entries...",
+    "noEntries": "No entries"
   },
   "analytics": {
     "title": "Analytics",
@@ -716,7 +1183,53 @@
       "day": "Day",
       "week": "Week",
       "month": "Month",
-      "year": "Year"
+      "year": "Year",
+      "24h": "24h",
+      "7d": "7d",
+      "30d": "30d",
+      "90d": "90d"
+    },
+    "geo": {
+      "title": "Connection Geography",
+      "tooltip": "Geographic distribution of user connections by city",
+      "noData": "No geolocation data",
+      "noDataHint": "Data will appear after first connections",
+      "connections": "{{count}} connections"
+    },
+    "topUsers": {
+      "title": "Top users by traffic",
+      "tooltip": "Users with the highest traffic consumption",
+      "top10": "Top 10",
+      "top20": "Top 20",
+      "top50": "Top 50",
+      "noData": "No data",
+      "user": "User",
+      "status": "Status",
+      "traffic": "Traffic",
+      "limit": "Limit",
+      "usage": "Usage"
+    },
+    "status": {
+      "ACTIVE": "Active",
+      "DISABLED": "Disabled",
+      "EXPIRED": "Expired",
+      "LIMITED": "Limited"
+    },
+    "trends": {
+      "title": "Trends",
+      "tooltip": "Metric trends over the selected period",
+      "users": "Users",
+      "violations": "Violations",
+      "traffic": "Traffic",
+      "last7d": "last 7 days",
+      "last30d": "last 30 days",
+      "last90d": "last 90 days",
+      "noData": "No data for the selected period",
+      "metric": {
+        "users": "Users",
+        "violations": "Violations",
+        "traffic": "Traffic"
+      }
     }
   },
   "automations": {
@@ -808,8 +1321,13 @@
       "syncAll": "Sync all",
       "syncDone": "Sync completed",
       "syncAllDone": "Full sync completed",
+      "syncComplete": "Sync completed",
+      "fullSyncComplete": "Full sync completed",
       "syncError": "Sync error",
+      "syncEntity": "Sync",
+      "never": "Never",
       "records": "{{count}} records",
+      "recordsSynced": "{{count}} records synced",
       "entities": {
         "users": "Users",
         "nodes": "Nodes",
@@ -834,10 +1352,21 @@
       "confirmPlaceholder": "Repeat new password",
       "generate": "Generator",
       "passwordChanged": "Password changed successfully",
+      "success": "Password changed successfully",
       "changeError": "Error changing password",
+      "error": "Error changing password",
       "mismatch": "Passwords do not match",
       "match": "Passwords match",
       "submit": "Change password",
+      "enterCurrentPassword": "Enter current password",
+      "enterNewPassword": "Enter new password",
+      "confirmNewPassword": "Confirm new password",
+      "repeatNewPassword": "Repeat new password",
+      "passwordsDoNotMatch": "Passwords do not match",
+      "passwordsMatch": "Passwords match",
+      "changePassword": "Change password",
+      "generator": "Generator",
+      "generatedWarning": "Save the password! It won't be shown again.",
       "strength": {
         "weak": "Weak",
         "fair": "Fair",
@@ -865,14 +1394,23 @@
       "defaultTitle": "Default value"
     },
     "resetTooltip": "Reset (use .env or default value)",
+    "resetToFallback": "Reset to fallback",
+    "reset": "Reset",
+    "inDb": "In DB",
     "readOnly": "Read only",
     "legend": {
       "title": "Value priority",
+      "db": "DB",
+      "env": ".env",
+      "default": "Default",
+      "readOnly": "Read only",
       "dbDesc": "— set in DB (primary)",
       "envDesc": "— from .env file (fallback)",
       "defaultDesc": "— default value",
       "readonlyDesc": "— read only",
       "resetDesc": "— reset to fallback",
+      "resetToFallback": "Reset to fallback",
+      "hint": "Settings are applied instantly after changes.",
       "applyNote": "Settings are applied instantly after changes. To reset, hover over a setting and click X.",
       "inDb": "{{count}} in DB"
     }

@@ -21,6 +21,7 @@
     "reset": "Сбросить",
     "loading": "Загрузка...",
     "error": "Ошибка",
+    "retry": "Повторить",
     "total": "Всего",
     "online": "Онлайн",
     "offline": "Офлайн",
@@ -50,7 +51,11 @@
       "kb": "КБ",
       "mb": "МБ",
       "gb": "ГБ",
-      "tb": "ТБ"
+      "tb": "ТБ",
+      "kb_short": "К",
+      "mb_short": "М",
+      "gb_short": "Г",
+      "tb_short": "Т"
     },
     "speed": {
       "bps": "б/с",
@@ -77,7 +82,10 @@
       "enterName": "Введите название...",
       "filtersActive": "Фильтры активны",
       "saved": "Фильтр сохранён",
-      "deleted": "Фильтр удалён"
+      "deleted": "Фильтр удалён",
+      "filterSaved": "Фильтр сохранён",
+      "filterApplied": "Фильтр применён",
+      "filterDeleted": "Фильтр удалён"
     },
     "confirmDialog": {
       "defaultTitle": "Подтвердите действие",
@@ -92,24 +100,32 @@
     "hosts": "Хосты",
     "violations": "Нарушения",
     "automations": "Автоматизации",
-    "admins": "Администраторы",
+    "admins": "Администраторы и роли",
     "audit": "Журнал аудита",
     "logs": "Системные логи",
     "analytics": "Аналитика",
-    "settings": "Настройки"
+    "settings": "Настройки",
+    "administration": "Администрирование"
   },
   "header": {
     "searchPlaceholder": "Поиск...",
     "commandHint": "Cmd+K для поиска"
   },
+  "sidebar": {
+    "expand": "Развернуть",
+    "collapse": "Свернуть"
+  },
   "commandPalette": {
-    "placeholder": "Введите команду или поиск...",
+    "placeholder": "Поиск страниц, пользователей, действий...",
     "navigation": "Навигация",
     "quickActions": "Быстрые действия",
+    "administration": "Администрирование",
     "users": "Перейти к пользователям",
     "nodes": "Перейти к нодам",
     "hosts": "Перейти к хостам",
     "settings": "Перейти к настройкам",
+    "createUser": "Создать пользователя",
+    "searchUsers": "Поиск пользователей",
     "noResults": "Ничего не найдено"
   },
   "appearance": {
@@ -123,11 +139,16 @@
     "fontSize": "Размер шрифта",
     "compact": "Компактный",
     "comfortable": "Комфортный",
-    "spacious": "Просторный"
+    "spacious": "Просторный",
+    "resetToDefaults": "Сбросить настройки",
+    "density": "Плотность",
+    "borderRadius": "Скругление углов",
+    "animations": "Анимации"
   },
   "errorBoundary": {
     "title": "Что-то пошло не так",
     "description": "Произошла ошибка при отображении этого компонента.",
+    "defaultError": "Произошла непредвиденная ошибка.",
     "retry": "Попробовать снова",
     "reload": "Перезагрузить страницу"
   },
@@ -143,19 +164,98 @@
     "enterUsername": "Введите имя",
     "enterPassword": "Введите пароль",
     "or": "или",
-    "error": "Ошибка входа"
+    "error": "Ошибка входа",
+    "passwordStrength": {
+      "weak": "Слабый",
+      "fair": "Средний",
+      "good": "Хороший",
+      "strong": "Надёжный"
+    },
+    "passwordChecks": {
+      "length": "8+ символов",
+      "lower": "Строчная (a-z)",
+      "upper": "Заглавная (A-Z)",
+      "digit": "Цифра (0-9)",
+      "special": "Спецсимвол"
+    }
   },
   "dashboard": {
     "title": "Дашборд",
     "subtitle": "Обзор системы",
+    "details": "Подробнее",
+    "loading": "Загрузка...",
+    "refresh": "Обновить",
+    "loadError": "Ошибка загрузки данных",
+    "retry": "Повторить",
+    "period24h": "24ч",
+    "period7d": "7д",
+    "period30d": "30д",
     "totalUsers": "Всего пользователей",
+    "totalUsersTooltip": "Общее число зарегистрированных пользователей",
+    "usersSubtitle": "Активных: {{active}}, истёкших: {{expired}}",
     "activeUsers": "Активные",
     "onlineUsers": "Онлайн",
+    "activeNodes": "Активные ноды",
+    "activeNodesTooltip": "Ноды, которые сейчас онлайн и обслуживают подключения",
+    "nodesSubtitle": "Офлайн: {{offline}}, откл.: {{disabled}}, юзеров: {{online}}",
     "totalNodes": "Всего нод",
     "onlineNodes": "Онлайн нод",
     "totalTraffic": "Трафик сегодня",
     "violations": "Нарушения",
+    "violationsSubtitle": "Сегодня: {{today}}, за неделю: {{week}}",
+    "violationsTooltip": "Зафиксированные нарушения анти-абуз системы",
     "systemStatus": "Статус системы",
+    "systemStatusTooltip": "Текущее состояние компонентов системы",
+    "statusOnline": "Онлайн",
+    "statusOffline": "Офлайн",
+    "statusDegraded": "Деградация",
+    "statusUnknown": "Неизвестно",
+    "ms": "мс",
+    "sessions": "сессий",
+    "uptime": "Аптайм",
+    "uptimeDH": "{{days}}д {{hours}}ч",
+    "uptimeHM": "{{hours}}ч {{minutes}}м",
+    "uptimeM": "{{minutes}}м",
+    "versionsAndUpdates": "Версии и обновления",
+    "versionsTooltip": "Текущие версии компонентов и доступные обновления",
+    "currentVersion": "Текущая версия",
+    "versionAvailable": "v{{version}} доступна",
+    "upToDate": "Актуально",
+    "traffic": "Трафик",
+    "trafficTooltip": "Общий объём трафика за всё время",
+    "trafficChartTooltip": "График трафика по нодам за выбранный период",
+    "today": "Сегодня",
+    "thisWeek": "За неделю",
+    "thisMonth": "За месяц",
+    "connectionsByNode": "Подключения по нодам",
+    "connectionsByNodeTooltip": "Текущее распределение подключений пользователей по нодам",
+    "total": "Всего",
+    "violationsBySeverity": "Нарушения по уровню",
+    "violationsBySeverityTooltip": "Распределение нарушений по уровню серьёзности",
+    "unique": "Уник.",
+    "byRecommendation": "По рекомендации",
+    "byRecommendationTooltip": "Распределение нарушений по рекомендуемому действию",
+    "avgScore": "Средний скор",
+    "maxScore": "Макс. скор",
+    "quickActions": "Быстрые действия",
+    "users": "Пользователи",
+    "nodes": "Ноды",
+    "violationsLabel": "Нарушения",
+    "settings": "Настройки",
+    "noData": "Нет данных",
+    "noDataForPeriod": "Нет данных за выбранный период",
+    "noConnectionData": "Нет данных о подключениях",
+    "usersOnline": "{{count}} пользователей онлайн",
+    "severityLow": "Низкий",
+    "severityMedium": "Средний",
+    "severityHigh": "Высокий",
+    "severityCritical": "Критический",
+    "actionNoAction": "Нет действий",
+    "actionMonitor": "Мониторинг",
+    "actionWarn": "Предупреждение",
+    "actionSoftBlock": "Мягкая блокировка",
+    "actionTempBlock": "Временная блокировка",
+    "actionHardBlock": "Жёсткая блокировка",
     "recentActivity": "Последняя активность",
     "topUsers": "Топ пользователей",
     "trafficChart": "Трафик",
@@ -173,7 +273,24 @@
     "lastActive": "Последняя активность",
     "searchPlaceholder": "Поиск по имени, email или UUID...",
     "noUsers": "Нет пользователей",
+    "usersNotFound": "Пользователи не найдены",
     "createUser": "Создать пользователя",
+    "create": "Создать",
+    "creating": "Создание...",
+    "cancel": "Отмена",
+    "refresh": "Обновить",
+    "found": "Найдено",
+    "usersCount": "пользователей",
+    "resetAllFilters": "Сбросить все фильтры",
+    "resetAll": "Сбросить всё",
+    "loadError": "Ошибка загрузки",
+    "unknownError": "Неизвестная ошибка",
+    "retry": "Повторить",
+    "noData": "Нет данных",
+    "showing": "{{from}}–{{to}} из {{total}}",
+    "hwidDevices": "HWID устройства",
+    "expires": "Истекает",
+    "unlimited": "Безлимит",
     "statuses": {
       "active": "Активен",
       "disabled": "Отключён",
@@ -181,27 +298,177 @@
       "limited": "Ограничен"
     },
     "filters": {
+      "title": "Фильтры",
       "allStatuses": "Все статусы",
+      "status": "Статус",
+      "statusActive": "Активен",
+      "statusDisabled": "Отключён",
+      "statusLimited": "Ограничен",
+      "statusExpired": "Истёк",
+      "trafficType": "Тип трафика",
+      "any": "Любой",
+      "unlimited": "Безлимит",
+      "withLimit": "С лимитом",
+      "trafficUsage": "Использование трафика",
+      "anyUsage": "Любое",
+      "above90": "> 90%",
+      "above70": "> 70%",
+      "above50": "> 50%",
+      "zeroTraffic": "Нулевой",
+      "expiry": "Срок действия",
+      "anyExpiry": "Любой",
+      "expiring7d": "Истекает через 7д",
+      "expiring30d": "Истекает через 30д",
+      "alreadyExpired": "Уже истёк",
+      "noExpiry": "Без срока",
+      "activity": "Активность",
+      "anyActivity": "Любая",
+      "online24h": "Онлайн за 24ч",
+      "online7d": "Онлайн за 7д",
+      "online30d": "Онлайн за 30д",
+      "neverConnected": "Не подключался",
+      "perPage": "На страницу",
       "sortBy": "Сортировка",
       "sortName": "По имени",
       "sortTraffic": "По трафику",
       "sortDate": "По дате",
       "sortStatus": "По статусу"
     },
+    "sort": {
+      "createdAt": "Дата создания",
+      "trafficCurrent": "Трафик (текущий)",
+      "trafficLifetime": "Трафик (за всё время)",
+      "hwidDevices": "HWID устройства",
+      "lastActivity": "Последняя активность",
+      "expireDate": "Дата истечения",
+      "trafficLimit": "Лимит трафика",
+      "name": "Имя",
+      "status": "Статус",
+      "descending": "По убыванию",
+      "ascending": "По возрастанию"
+    },
+    "table": {
+      "user": "Пользователь",
+      "status": "Статус",
+      "traffic": "Трафик",
+      "hwid": "HWID",
+      "activity": "Активность",
+      "expires": "Истекает",
+      "created": "Создан"
+    },
+    "createModal": {
+      "title": "Создание пользователя",
+      "description": "Заполните данные нового пользователя",
+      "basicInfo": "Основная информация",
+      "username": "Имя пользователя",
+      "telegramId": "Telegram ID",
+      "email": "Email",
+      "tag": "Тег",
+      "tagHint": "A-Z, 0-9, _ (макс. 16 символов)",
+      "descriptionLabel": "Описание",
+      "descriptionPlaceholder": "Заметки о пользователе...",
+      "trafficAndLimits": "Трафик и лимиты",
+      "unlimitedTraffic": "Безлимитный трафик",
+      "trafficLimit": "Лимит трафика",
+      "gb": "ГБ",
+      "resetStrategy": "Стратегия сброса",
+      "expireDate": "Дата истечения",
+      "expireHint": "Оставьте пустым для бессрочного доступа",
+      "hwidLimit": "Лимит устройств",
+      "hwidHint": "0 = без ограничений",
+      "squads": "Отряды",
+      "externalSquad": "Внешний отряд",
+      "notSelected": "Не выбрано",
+      "internalSquads": "Внутренние отряды"
+    },
+    "strategies": {
+      "monthly": "Ежемесячно",
+      "weekly": "Еженедельно",
+      "daily": "Ежедневно",
+      "noReset": "Без сброса"
+    },
+    "actions": {
+      "view": "Просмотреть",
+      "edit": "Редактировать",
+      "enable": "Включить",
+      "disable": "Отключить",
+      "delete": "Удалить"
+    },
+    "toasts": {
+      "userEnabled": "Пользователь включён",
+      "userDisabled": "Пользователь отключён",
+      "userDeleted": "Пользователь удалён",
+      "userCreated": "Пользователь создан",
+      "createError": "Ошибка создания",
+      "enableError": "Ошибка включения",
+      "disableError": "Ошибка отключения",
+      "deleteError": "Ошибка удаления",
+      "error": "Ошибка",
+      "csvExported": "Экспорт CSV завершён",
+      "jsonExported": "Экспорт JSON завершён",
+      "bulkEnabled": "Включено: {{success}}, ошибок: {{failed}}",
+      "bulkDisabled": "Отключено: {{success}}, ошибок: {{failed}}",
+      "bulkDeleted": "Удалено: {{success}}, ошибок: {{failed}}"
+    },
+    "bulkSelected": "Выбрано: {{count}}",
+    "bulkOnPage": "{{count}} на стр.",
+    "bulkEnable": "Включить",
+    "bulkDisable": "Отключить",
+    "bulkDelete": "Удалить",
+    "deleteConfirm": {
+      "title": "Удалить пользователя?",
+      "description": "Пользователь и все его данные будут удалены. Это действие нельзя отменить.",
+      "confirm": "Удалить"
+    },
     "perPage": "на страницу",
     "selected": "Выбрано",
-    "bulkActions": "Массовые действия",
-    "bulkEnable": "Включить выбранных",
-    "bulkDisable": "Отключить выбранных",
-    "bulkDelete": "Удалить выбранных",
-    "unlimited": "Безлимит"
+    "bulkActions": "Массовые действия"
   },
   "userDetail": {
+    "notFound": "Пользователь не найден",
+    "backToList": "Вернуться к списку",
     "userNotFound": "Пользователь не найден",
     "returnToList": "Вернуться к списку",
     "editing": "Редактирование",
     "generalInfo": "Общая информация",
     "changesSaved": "Изменения сохранены",
+    "unknown": "Неизвестно",
+    "indefinite": "Бессрочно",
+    "trafficUnlimited": "Безлимит",
+    "protocols": "Протоколы",
+    "internalSquads": "Внутренние отряды",
+    "violations": {
+      "title": "Нарушения"
+    },
+    "statuses": {
+      "active": "Активен",
+      "disabled": "Отключён",
+      "expired": "Истёк",
+      "limited": "Ограничен"
+    },
+    "fields": {
+      "status": "Статус",
+      "selectStatus": "Выберите статус",
+      "description": "Описание",
+      "descriptionPlaceholder": "Заметки о пользователе...",
+      "tag": "Тег",
+      "tagHint": "A-Z, 0-9, _ (макс. 16 символов)",
+      "email": "Email",
+      "telegramId": "Telegram ID",
+      "trafficLimit": "Лимит трафика",
+      "gb": "ГБ",
+      "enterLimit": "Введите лимит",
+      "trafficReset": "Сброс трафика",
+      "expireDate": "Дата истечения",
+      "removeDate": "Убрать дату (бессрочно)",
+      "hwidLimit": "Лимит устройств (HWID)",
+      "readOnly": "Информация (только чтение)",
+      "created": "Создан",
+      "expires": "Истекает",
+      "lastActivity": "Последняя активность",
+      "lastTrafficReset": "Последний сброс трафика",
+      "firstConnection": "Первое подключение"
+    },
     "statusLabel": "Статус",
     "selectStatus": "Выберите статус",
     "description": "Описание",
@@ -209,7 +476,7 @@
     "tag": "Тег",
     "tagHint": "A-Z, 0-9, _ (макс. 16 символов)",
     "trafficLimit": "Лимит трафика",
-    "trafficUnlimited": "Безлимитный",
+    "trafficUnlimited_v2": "Безлимитный",
     "trafficEnterLimit": "Введите лимит",
     "trafficGB": "ГБ",
     "trafficReset": "Сброс трафика",
@@ -225,11 +492,8 @@
     "readonlyInfo": "Информация (только чтение)",
     "created": "Создан",
     "expires": "Истекает",
-    "indefinite": "Бессрочно",
     "lastTrafficReset": "Последний сброс трафика",
     "firstConnection": "Первое подключение",
-    "internalSquads": "Внутренние отряды",
-    "protocols": "Протоколы",
     "traffic": {
       "title": "Трафик",
       "currentPeriod": "Текущий период",
@@ -237,8 +501,11 @@
       "used": "Использовано",
       "limit": "Лимит",
       "unlimited": "Безлимит",
+      "loading": "Загрузка...",
+      "total": "Итого",
       "percentUsed": "{{percent}}% использовано",
       "perNode": "Разбивка по нодам",
+      "nodeBreakdown": "Разбивка по нодам",
       "nodeTotal": "Итого",
       "noNodeData": "Нет данных о трафике по нодам за этот период",
       "periods": {
@@ -251,6 +518,7 @@
         "6month": "6 месяцев",
         "year": "Год",
         "nodes": "По нодам",
+        "byNodes": "По нодам",
         "3monthShort": "3 мес.",
         "6monthShort": "6 мес."
       }
@@ -258,21 +526,25 @@
     "devices": {
       "title": "Устройства",
       "syncButton": "Синхронизировать устройства",
+      "sync": "Синхронизировать",
       "limitLabel": "Лимит",
       "noDevices": "Нет зарегистрированных устройств",
       "osVersion": "Версия ОС",
       "model": "Модель",
       "app": "Приложение",
+      "userAgent": "User Agent",
       "added": "Добавлено"
     },
-    "violations": "Нарушения",
     "subscription": {
       "title": "Подписка",
       "link": "Ссылка подписки",
+      "copy": "Копировать",
       "uuid": "UUID подписки",
       "noSubscription": "Нет активной подписки",
+      "noActive": "Нет активной подписки",
       "lastOpened": "Последнее открытие",
-      "revoked": "Отозвана"
+      "revoked": "Отозвана",
+      "userAgent": "User Agent"
     },
     "antiAbuse": {
       "title": "Anti-Abuse",
@@ -285,13 +557,37 @@
       "title": "История изменений"
     },
     "actions": {
+      "save": "Сохранить",
+      "saving": "Сохранение...",
+      "cancel": "Отмена",
+      "edit": "Редактировать",
       "editUser": "Редактировать",
+      "enable": "Включить",
       "enableUser": "Включить",
+      "disable": "Отключить",
       "disableUser": "Отключить",
       "resetTraffic": "Сбросить трафик",
+      "delete": "Удалить",
       "deleteUser": "Удалить",
       "deleteConfirmTitle": "Удалить пользователя?",
       "deleteConfirmDesc": "Пользователь и все его данные будут удалены. Это действие нельзя отменить."
+    },
+    "deleteConfirm": {
+      "title": "Удалить пользователя?",
+      "description": "Пользователь и все его данные будут удалены. Это действие нельзя отменить.",
+      "confirm": "Удалить"
+    },
+    "toasts": {
+      "hwidSynced": "HWID устройства синхронизированы",
+      "syncError": "Ошибка синхронизации",
+      "userEnabled": "Пользователь включён",
+      "userDisabled": "Пользователь отключён",
+      "trafficReset": "Трафик сброшен",
+      "error": "Ошибка",
+      "userUpdated": "Пользователь обновлён",
+      "saveError": "Ошибка сохранения",
+      "userDeleted": "Пользователь удалён",
+      "deleteError": "Ошибка удаления"
     },
     "toast": {
       "enabled": "Пользователь включён",
@@ -353,7 +649,12 @@
       "agentToken": "Токен агента",
       "enable": "Включить",
       "disable": "Отключить",
-      "delete": "Удалить"
+      "delete": "Удалить",
+      "cancel": "Отмена",
+      "save": "Сохранить",
+      "saving": "Сохранение...",
+      "create": "Создать",
+      "creating": "Создание..."
     },
     "status": {
       "online": "Онлайн",
@@ -388,6 +689,7 @@
     "statusOnline": "Онлайн",
     "statusOffline": "Офлайн",
     "statusDisabled": "Откл.",
+    "statusNever": "Нет данных",
     "noNodes": "Нет нод",
     "nothingFound": "Ничего не найдено",
     "table": {
@@ -417,7 +719,10 @@
       "users": "Пользователей",
       "restartNode": "Перезапустить ноду",
       "enableNode": "Включить ноду",
-      "disableNode": "Отключить ноду"
+      "disableNode": "Отключить ноду",
+      "uptimeDaysHours": "{{days}}д {{hours}}ч",
+      "uptimeHoursMinutes": "{{hours}}ч {{minutes}}м",
+      "uptimeMinutes": "{{minutes}}м"
     },
     "toast": {
       "restarted": "Нода перезапущена",
@@ -542,11 +847,11 @@
       "total": "Всего",
       "totalTooltip": "Общее количество зафиксированных нарушений за выбранный период.",
       "uniqueUsers": "Уник. юзеров",
-      "uniqueUsersTooltip": "Количество уникальных пользователей с нарушениями за выбранный период. Один пользователь может иметь несколько нарушений.",
+      "uniqueUsersTooltip": "Количество уникальных пользователей с нарушениями за выбранный период.",
       "avgScore": "Средн. скор",
-      "avgScoreTooltip": "Средний скор нарушений (0–100). Рассчитывается на основе временных, геолокационных, ASN, профильных и устройственных аномалий.",
+      "avgScoreTooltip": "Средний скор нарушений (0–100).",
       "maxScore": "Макс. скор",
-      "maxScoreTooltip": "Наивысший зафиксированный скор нарушения за выбранный период. Чем выше скор, тем больше аномалий обнаружено.",
+      "maxScoreTooltip": "Наивысший зафиксированный скор нарушения за выбранный период.",
       "byCountries": "По странам"
     },
     "confidence": "Уверенность",
@@ -620,6 +925,7 @@
     "nodes": "Ноды",
     "hosts": "Хосты",
     "status": "Статус",
+    "resource": "Ресурс",
     "createAdmin": "Создать администратора",
     "editAdmin": "Редактировать администратора",
     "editAdminDescription": "Измените параметры администратора",
@@ -639,7 +945,6 @@
     "maxTraffic": "Макс. трафик (ГБ)",
     "maxNodes": "Макс. нод",
     "maxHosts": "Макс. хостов",
-    "resource": "Ресурс",
     "editRole": "Редактировать роль",
     "createRole": "Создать роль",
     "editRoleDescription": "Измените параметры роли",
@@ -668,6 +973,33 @@
       "created": "Администратор создан",
       "updated": "Администратор обновлён",
       "deleted": "Администратор удалён"
+    },
+    "actions": {
+      "create": "Создание",
+      "update": "Обновление",
+      "delete": "Удаление",
+      "enable": "Включение",
+      "disable": "Отключение",
+      "login": "Вход",
+      "logout": "Выход",
+      "reset_traffic": "Сброс трафика",
+      "sync": "Синхронизация",
+      "change_password": "Смена пароля",
+      "generate_token": "Генерация токена",
+      "revoke_token": "Отзыв токена",
+      "restart": "Перезапуск",
+      "resolve": "Решение"
+    },
+    "resources": {
+      "user": "Пользователь",
+      "node": "Нода",
+      "host": "Хост",
+      "admin": "Администратор",
+      "role": "Роль",
+      "settings": "Настройки",
+      "violation": "Нарушение",
+      "automation": "Автоматизация",
+      "system": "Система"
     }
   },
   "audit": {
@@ -687,11 +1019,137 @@
     "totalRecords": "Всего записей",
     "activeAdmins": "Активных админов",
     "resourceTypes": "Типов ресурсов",
-    "find": "Найти"
+    "find": "Найти",
+    "noRecords": "Нет записей за выбранный период",
+    "totalEntries": "Всего: {{count}}",
+    "moreDetails": "Подробнее",
+    "resourceId": "ID ресурса",
+    "stats": {
+      "totalRecords": "Всего записей",
+      "today": "Сегодня",
+      "activeAdmins": "Активных админов",
+      "resourceTypes": "Типов ресурсов"
+    },
+    "period": {
+      "all": "Все",
+      "24h": "24 часа",
+      "7d": "7 дней",
+      "30d": "30 дней"
+    },
+    "table": {
+      "date": "Дата",
+      "admin": "Админ",
+      "action": "Действие",
+      "details": "Детали"
+    },
+    "resources": {
+      "user": "Пользователь",
+      "node": "Нода",
+      "host": "Хост",
+      "admin": "Администратор",
+      "role": "Роль",
+      "settings": "Настройки",
+      "violation": "Нарушение",
+      "automation": "Автоматизация",
+      "system": "Система"
+    },
+    "actions": {
+      "create": "Создание",
+      "update": "Обновление",
+      "delete": "Удаление",
+      "enable": "Включение",
+      "disable": "Отключение",
+      "login": "Вход",
+      "logout": "Выход",
+      "reset_traffic": "Сброс трафика",
+      "sync": "Синхронизация",
+      "change_password": "Смена пароля",
+      "generate_token": "Генерация токена",
+      "revoke_token": "Отзыв токена",
+      "restart": "Перезапуск",
+      "resolve": "Решение"
+    },
+    "details_map": {
+      "username": "Имя",
+      "status": "Статус",
+      "role": "Роль",
+      "ip": "IP",
+      "traffic": "Трафик",
+      "name": "Название",
+      "address": "Адрес",
+      "key": "Ключ",
+      "value": "Значение"
+    },
+    "descriptions": {
+      "create": {
+        "user": "Создан пользователь",
+        "node": "Создана нода",
+        "host": "Создан хост",
+        "admin": "Создан администратор",
+        "role": "Создана роль",
+        "automation": "Создана автоматизация"
+      },
+      "update": {
+        "user": "Обновлён пользователь",
+        "node": "Обновлена нода",
+        "host": "Обновлён хост",
+        "admin": "Обновлён администратор",
+        "role": "Обновлена роль",
+        "settings": "Изменены настройки",
+        "automation": "Обновлена автоматизация"
+      },
+      "delete": {
+        "user": "Удалён пользователь",
+        "node": "Удалена нода",
+        "host": "Удалён хост",
+        "admin": "Удалён администратор",
+        "role": "Удалена роль",
+        "automation": "Удалена автоматизация"
+      },
+      "enable": {
+        "user": "Включён пользователь",
+        "node": "Включена нода",
+        "host": "Включён хост",
+        "admin": "Включён администратор"
+      },
+      "disable": {
+        "user": "Отключён пользователь",
+        "node": "Отключена нода",
+        "host": "Отключён хост",
+        "admin": "Отключён администратор"
+      },
+      "login": {
+        "admin": "Вход в систему"
+      },
+      "logout": {
+        "admin": "Выход из системы"
+      },
+      "reset_traffic": {
+        "user": "Сброшен трафик пользователя"
+      },
+      "sync": {
+        "system": "Синхронизация системы"
+      },
+      "change_password": {
+        "admin": "Изменён пароль"
+      },
+      "generate_token": {
+        "node": "Сгенерирован токен ноды"
+      },
+      "revoke_token": {
+        "node": "Отозван токен ноды"
+      },
+      "restart": {
+        "node": "Перезапущена нода"
+      },
+      "resolve": {
+        "violation": "Нарушение обработано"
+      }
+    }
   },
   "logs": {
     "title": "Системные логи",
-    "subtitle": "Просмотр логов бота",
+    "subtitle": "Просмотр логов системы",
     "level": "Уровень",
     "message": "Сообщение",
     "source": "Источник",
@@ -700,7 +1158,16 @@
     "autoRefresh": "Авто-обновление",
     "searchPlaceholder": "Поиск по сообщению...",
     "noLogs": "Нет логов",
-    "clearFilters": "Очистить фильтры"
+    "clearFilters": "Очистить фильтры",
+    "pauseStreaming": "Приостановить стриминг",
+    "resumeStreaming": "Возобновить стриминг",
+    "autoScrollOn": "Авто-прокрутка включена",
+    "autoScrollOff": "Авто-прокрутка выключена",
+    "clear": "Очистить",
+    "notFound": "Файл не найден",
+    "linesCount": "{{count}} строк",
+    "waitingForEntries": "Ожидание записей...",
+    "noEntries": "Нет записей"
   },
   "analytics": {
     "title": "Аналитика",
@@ -716,7 +1183,53 @@
       "day": "День",
       "week": "Неделя",
       "month": "Месяц",
-      "year": "Год"
+      "year": "Год",
+      "24h": "24ч",
+      "7d": "7д",
+      "30d": "30д",
+      "90d": "90д"
+    },
+    "geo": {
+      "title": "География подключений",
+      "tooltip": "Географическое распределение подключений пользователей по городам",
+      "noData": "Нет данных о геолокации",
+      "noDataHint": "Данные появятся после первых подключений",
+      "connections": "{{count}} подключений"
+    },
+    "topUsers": {
+      "title": "Топ пользователей по трафику",
+      "tooltip": "Пользователи с наибольшим потреблением трафика",
+      "top10": "Топ 10",
+      "top20": "Топ 20",
+      "top50": "Топ 50",
+      "noData": "Нет данных",
+      "user": "Пользователь",
+      "status": "Статус",
+      "traffic": "Трафик",
+      "limit": "Лимит",
+      "usage": "Исп."
+    },
+    "status": {
+      "ACTIVE": "Активен",
+      "DISABLED": "Отключён",
+      "EXPIRED": "Истёк",
+      "LIMITED": "Ограничен"
+    },
+    "trends": {
+      "title": "Тренды",
+      "tooltip": "Динамика изменения показателей за выбранный период",
+      "users": "Юзеры",
+      "violations": "Нарушения",
+      "traffic": "Трафик",
+      "last7d": "за 7 дней",
+      "last30d": "за 30 дней",
+      "last90d": "за 90 дней",
+      "noData": "Нет данных за выбранный период",
+      "metric": {
+        "users": "Пользователи",
+        "violations": "Нарушения",
+        "traffic": "Трафик"
+      }
     }
   },
   "automations": {
@@ -808,8 +1321,13 @@
       "syncAll": "Синхронизировать всё",
       "syncDone": "Синхронизация завершена",
       "syncAllDone": "Полная синхронизация завершена",
+      "syncComplete": "Синхронизация завершена",
+      "fullSyncComplete": "Полная синхронизация завершена",
       "syncError": "Ошибка синхронизации",
+      "syncEntity": "Синхронизировать",
+      "never": "Никогда",
       "records": "{{count}} записей",
+      "recordsSynced": "{{count}} записей синхронизировано",
       "entities": {
         "users": "Пользователи",
         "nodes": "Ноды",
@@ -834,10 +1352,21 @@
       "confirmPlaceholder": "Повторите новый пароль",
       "generate": "Генератор",
       "passwordChanged": "Пароль успешно изменён",
+      "success": "Пароль успешно изменён",
       "changeError": "Ошибка при смене пароля",
+      "error": "Ошибка при смене пароля",
       "mismatch": "Пароли не совпадают",
       "match": "Пароли совпадают",
       "submit": "Сменить пароль",
+      "enterCurrentPassword": "Введите текущий пароль",
+      "enterNewPassword": "Введите новый пароль",
+      "confirmNewPassword": "Подтвердите новый пароль",
+      "repeatNewPassword": "Повторите новый пароль",
+      "passwordsDoNotMatch": "Пароли не совпадают",
+      "passwordsMatch": "Пароли совпадают",
+      "changePassword": "Сменить пароль",
+      "generator": "Генератор",
+      "generatedWarning": "Сохраните пароль! Он не будет показан повторно.",
       "strength": {
         "weak": "Слабый",
         "fair": "Средний",
@@ -854,7 +1383,7 @@
     },
     "ipWhitelist": {
       "description": "Если список пуст — доступ разрешён с любого IP. При добавлении IP доступ будет ограничен только указанными адресами. Поддерживаются CIDR (например, 10.0.0.0/8).",
-      "disableWhitelist": "Disable whitelist (allow all IPs)"
+      "disableWhitelist": "Отключить белый список (разрешить все IP)"
     },
     "source": {
       "db": "БД",
@@ -865,14 +1394,23 @@
       "defaultTitle": "Значение по умолчанию"
     },
     "resetTooltip": "Сбросить (использовать .env или значение по умолчанию)",
+    "resetToFallback": "Сбросить к fallback",
+    "reset": "Сбросить",
+    "inDb": "В БД",
     "readOnly": "Только для чтения",
     "legend": {
       "title": "Приоритет значений",
+      "db": "БД",
+      "env": ".env",
+      "default": "По умолч.",
+      "readOnly": "Только чтение",
       "dbDesc": "-- установлено в БД (главный)",
       "envDesc": "-- из .env файла (fallback)",
       "defaultDesc": "-- значение по умолчанию",
       "readonlyDesc": "-- только чтение",
       "resetDesc": "-- сбросить к fallback",
+      "resetToFallback": "Сбросить к fallback",
+      "hint": "Настройки применяются мгновенно после изменения.",
       "applyNote": "Настройки применяются мгновенно после изменения. Для сброса наведите на настройку и нажмите X.",
       "inDb": "{{count}} в БД"
     }

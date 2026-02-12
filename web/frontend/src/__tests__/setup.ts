@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+// ── Initialize i18n for tests (Russian is the default/fallback) ──
+import i18n from '../i18n'
+i18n.changeLanguage('ru')
+
 // ── Mock window.__ENV ────────────────────────────────────────
 declare global {
   interface Window {
