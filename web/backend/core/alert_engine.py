@@ -90,55 +90,55 @@ class AlertEngine:
             logger.error("Rule check failed: %s", e)
 
     async def _collect_metrics(self) -> Dict[str, Any]:
-        """Collect current system metrics for rule evaluation."""
+        """Collect current system metrics for rule evaluation.
+
+        Uses DB columns for hardware metrics (cpu, memory, disk) and the
+        Remnawave API for live data (users_online, traffic_today).
+        """
         metrics: Dict[str, Any] = {}
 
         try:
             from src.services.database import db_service
 
             async with db_service.acquire() as conn:
-                # Node metrics
+                # Node metrics from DB (only columns that actually exist)
                 nodes = await conn.fetch(
                     "SELECT uuid, name, is_connected, is_disabled, "
-                    "cpu_usage, ram_usage, disk_usage, "
-                    "traffic_today, traffic_total, users_online, "
-                    "last_seen_at "
+                    "cpu_usage, memory_usage, disk_usage, "
+                    "traffic_used_bytes, metrics_updated_at "
                     "FROM nodes WHERE is_disabled = false"
                 )
 
                 max_cpu = 0.0
                 max_ram = 0.0
                 max_disk = 0.0
-                total_traffic_today = 0
-                total_users_online = 0
                 offline_nodes: List[Dict[str, Any]] = []
 
                 for node in nodes:
                     cpu = node.get("cpu_usage") or 0
-                    ram = node.get("ram_usage") or 0
+                    ram = node.get("memory_usage") or 0
                     disk = node.get("disk_usage") or 0
 
                     max_cpu = max(max_cpu, cpu)
                     max_ram = max(max_ram, ram)
                     max_disk = max(max_disk, disk)
 
-                    total_traffic_today += node.get("traffic_today") or 0
-                    total_users_online += node.get("users_online") or 0
-
                     if not node.get("is_connected", True):
-                        last_seen = node.get("last_seen_at")
+                        last_update = node.get("metrics_updated_at")
                         offline_min = 0
-                        if last_seen:
-                            delta = datetime.now(timezone.utc) - last_seen.replace(tzinfo=timezone.utc)
+                        if last_update:
+                            if last_update.tzinfo is None:
+                                last_update = last_update.replace(tzinfo=timezone.utc)
+                            delta = datetime.now(timezone.utc) - last_update
                             offline_min = delta.total_seconds() / 60
                         offline_nodes.append({
-                            "uuid": node["uuid"],
+                            "uuid": str(node["uuid"]),
                             "name": node["name"],
                             "offline_minutes": offline_min,
                         })
 
                     # Per-node metrics
-                    node_name = node["name"] or node["uuid"]
+                    node_name = node["name"] or str(node["uuid"])
                     metrics[f"node_{node_name}_cpu"] = cpu
                     metrics[f"node_{node_name}_ram"] = ram
                     metrics[f"node_{node_name}_disk"] = disk
@@ -146,8 +146,6 @@ class AlertEngine:
                 metrics["cpu_usage_percent"] = max_cpu
                 metrics["ram_usage_percent"] = max_ram
                 metrics["disk_usage_percent"] = max_disk
-                metrics["traffic_today_gb"] = total_traffic_today / (1024 ** 3) if total_traffic_today else 0
-                metrics["users_online"] = total_users_online
                 metrics["offline_nodes"] = offline_nodes
 
                 # Node offline minutes (max)
@@ -155,6 +153,22 @@ class AlertEngine:
                     metrics["node_offline_minutes"] = max(n["offline_minutes"] for n in offline_nodes)
                 else:
                     metrics["node_offline_minutes"] = 0
+
+            # Fetch live data from Remnawave API for users_online & traffic
+            try:
+                from web.backend.core.api_helper import fetch_nodes_from_api
+                api_nodes = await fetch_nodes_from_api()
+                total_users_online = 0
+                total_traffic_today = 0
+                for n in api_nodes:
+                    total_users_online += int(n.get("users_online") or n.get("usersOnline") or 0)
+                    total_traffic_today += int(n.get("traffic_today_bytes") or n.get("trafficTodayBytes") or 0)
+                metrics["users_online"] = total_users_online
+                metrics["traffic_today_gb"] = total_traffic_today / (1024 ** 3) if total_traffic_today else 0
+            except Exception as e:
+                logger.warning("Could not fetch API metrics: %s", e)
+                metrics.setdefault("users_online", 0)
+                metrics.setdefault("traffic_today_gb", 0)
 
         except Exception as e:
             logger.error("Metric collection error: %s", e)

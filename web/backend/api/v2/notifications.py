@@ -35,6 +35,21 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _get_admin_id(admin: AdminUser) -> Optional[int]:
+    """Return the admin's account_id or None for legacy admins."""
+    return admin.account_id if admin.account_id else None
+
+
+def _require_account_id(admin: AdminUser) -> int:
+    """Return account_id or raise 400 for legacy admins without one."""
+    if not admin.account_id:
+        raise HTTPException(
+            status_code=400,
+            detail="This feature requires an admin account. Legacy admins authenticated via ADMINS env cannot use notification channels.",
+        )
+    return admin.account_id
+
+
 # ══════════════════════════════════════════════════════════════════
 # Notifications
 # ══════════════════════════════════════════════════════════════════
@@ -51,9 +66,15 @@ async def list_notifications(
     """List notifications for the current admin."""
     from src.services.database import db_service
 
-    conditions = ["admin_id = $1"]
-    params = [admin.account_id or 0]
-    idx = 2
+    aid = _get_admin_id(admin)
+    if aid is not None:
+        conditions = ["(admin_id = $1 OR admin_id IS NULL)"]
+        params: list = [aid]
+    else:
+        # Legacy admin — show broadcast (NULL) notifications
+        conditions = ["admin_id IS NULL"]
+        params = []
+    idx = len(params) + 1
 
     if is_read is not None:
         conditions.append(f"is_read = ${idx}")
@@ -93,11 +114,17 @@ async def get_unread_count(
     """Get count of unread notifications for the current admin."""
     from src.services.database import db_service
 
+    aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
-        count = await conn.fetchval(
-            "SELECT COUNT(*) FROM notifications WHERE admin_id = $1 AND is_read = false",
-            admin.account_id or 0,
-        )
+        if aid is not None:
+            count = await conn.fetchval(
+                "SELECT COUNT(*) FROM notifications WHERE (admin_id = $1 OR admin_id IS NULL) AND is_read = false",
+                aid,
+            )
+        else:
+            count = await conn.fetchval(
+                "SELECT COUNT(*) FROM notifications WHERE admin_id IS NULL AND is_read = false",
+            )
 
     return NotificationUnreadCount(count=count or 0)
 
@@ -110,17 +137,29 @@ async def mark_notifications_read(
     """Mark notifications as read. Empty ids = mark all."""
     from src.services.database import db_service
 
+    aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
         if data.ids:
-            await conn.execute(
-                "UPDATE notifications SET is_read = true WHERE admin_id = $1 AND id = ANY($2::bigint[])",
-                admin.account_id or 0, data.ids,
-            )
+            if aid is not None:
+                await conn.execute(
+                    "UPDATE notifications SET is_read = true WHERE (admin_id = $1 OR admin_id IS NULL) AND id = ANY($2::bigint[])",
+                    aid, data.ids,
+                )
+            else:
+                await conn.execute(
+                    "UPDATE notifications SET is_read = true WHERE admin_id IS NULL AND id = ANY($1::bigint[])",
+                    data.ids,
+                )
         else:
-            await conn.execute(
-                "UPDATE notifications SET is_read = true WHERE admin_id = $1 AND is_read = false",
-                admin.account_id or 0,
-            )
+            if aid is not None:
+                await conn.execute(
+                    "UPDATE notifications SET is_read = true WHERE (admin_id = $1 OR admin_id IS NULL) AND is_read = false",
+                    aid,
+                )
+            else:
+                await conn.execute(
+                    "UPDATE notifications SET is_read = true WHERE admin_id IS NULL AND is_read = false",
+                )
 
     return SuccessResponse(message="Marked as read")
 
@@ -133,11 +172,18 @@ async def delete_notification(
     """Delete a single notification."""
     from src.services.database import db_service
 
+    aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
-        deleted = await conn.fetchval(
-            "DELETE FROM notifications WHERE id = $1 AND admin_id = $2 RETURNING id",
-            notification_id, admin.account_id or 0,
-        )
+        if aid is not None:
+            deleted = await conn.fetchval(
+                "DELETE FROM notifications WHERE id = $1 AND (admin_id = $2 OR admin_id IS NULL) RETURNING id",
+                notification_id, aid,
+            )
+        else:
+            deleted = await conn.fetchval(
+                "DELETE FROM notifications WHERE id = $1 AND admin_id IS NULL RETURNING id",
+                notification_id,
+            )
 
     if not deleted:
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -153,11 +199,18 @@ async def delete_old_notifications(
     """Delete old notifications."""
     from src.services.database import db_service
 
+    aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
-        count = await conn.fetchval(
-            "DELETE FROM notifications WHERE admin_id = $1 AND created_at < NOW() - ($2 || ' days')::interval RETURNING COUNT(*)",
-            admin.account_id or 0, str(days),
-        )
+        if aid is not None:
+            count = await conn.fetchval(
+                "DELETE FROM notifications WHERE (admin_id = $1 OR admin_id IS NULL) AND created_at < NOW() - ($2 || ' days')::interval RETURNING COUNT(*)",
+                aid, str(days),
+            )
+        else:
+            count = await conn.fetchval(
+                "DELETE FROM notifications WHERE admin_id IS NULL AND created_at < NOW() - ($1 || ' days')::interval RETURNING COUNT(*)",
+                str(days),
+            )
 
     return SuccessResponse(message=f"Deleted {count or 0} notifications")
 
@@ -195,10 +248,11 @@ async def list_channels(
     """Get notification channels for the current admin."""
     from src.services.database import db_service
 
+    aid = _require_account_id(admin)
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             "SELECT * FROM notification_channels WHERE admin_id = $1 ORDER BY channel_type",
-            admin.account_id or 0,
+            aid,
         )
 
     items = []
@@ -218,6 +272,7 @@ async def create_channel(
     """Create or update a notification channel for the current admin."""
     from src.services.database import db_service
 
+    aid = _require_account_id(admin)
     config_json = json.dumps(data.config)
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
@@ -226,7 +281,7 @@ async def create_channel(
             "ON CONFLICT (admin_id, channel_type) DO UPDATE SET "
             "is_enabled = $3, config = $4::jsonb, updated_at = NOW() "
             "RETURNING *",
-            admin.account_id or 0, data.channel_type, data.is_enabled, config_json,
+            aid, data.channel_type, data.is_enabled, config_json,
         )
 
     d = dict(row)
@@ -244,8 +299,9 @@ async def update_channel(
     """Update a notification channel."""
     from src.services.database import db_service
 
+    aid = _require_account_id(admin)
     updates = []
-    params = [channel_id, admin.account_id or 0]
+    params = [channel_id, aid]
     idx = 3
 
     if data.is_enabled is not None:
@@ -287,10 +343,11 @@ async def delete_channel(
     """Delete a notification channel."""
     from src.services.database import db_service
 
+    aid = _require_account_id(admin)
     async with db_service.acquire() as conn:
         deleted = await conn.fetchval(
             "DELETE FROM notification_channels WHERE id = $1 AND admin_id = $2 RETURNING id",
-            channel_id, admin.account_id or 0,
+            channel_id, aid,
         )
 
     if not deleted:
@@ -568,18 +625,19 @@ async def acknowledge_alerts(
     """Acknowledge alert log entries."""
     from src.services.database import db_service
 
+    aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
         if data.ids:
             await conn.execute(
                 "UPDATE alert_rule_log SET acknowledged = true, acknowledged_by = $1, "
                 "acknowledged_at = NOW() WHERE id = ANY($2::bigint[])",
-                admin.account_id or 0, data.ids,
+                aid, data.ids,
             )
         else:
             await conn.execute(
                 "UPDATE alert_rule_log SET acknowledged = true, acknowledged_by = $1, "
                 "acknowledged_at = NOW() WHERE acknowledged = false",
-                admin.account_id or 0,
+                aid,
             )
 
     return SuccessResponse(message="Acknowledged")

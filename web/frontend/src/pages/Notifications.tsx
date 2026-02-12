@@ -13,7 +13,7 @@ import { toast } from 'sonner'
 import {
   Bell, BellRing, Settings2, Shield, Mail, MessageSquare, Webhook,
   Check, Trash2, Plus, Power, PowerOff, Pencil, Send, AlertTriangle,
-  CheckCircle2, XCircle, ChevronDown, ChevronRight, Info,
+  CheckCircle2, XCircle, ChevronDown, ChevronRight, Info, MonitorSmartphone,
 } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -374,6 +374,9 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
                       <span>{t('notifications.alerts.condition')}: <span className="text-dark-200">{rule.operator} {rule.threshold}</span></span>
                       <span>{t('notifications.alerts.cooldown')}: <span className="text-dark-200">{rule.cooldown_minutes} {t('notifications.alerts.min')}</span></span>
                       <span>{t('notifications.alerts.triggered')}: <span className="text-dark-200">{rule.trigger_count}x</span></span>
+                      {rule.channels && rule.channels.length > 0 && (
+                        <span>{t('notifications.alerts.channelsLabel')}: <span className="text-dark-200">{rule.channels.join(', ')}</span></span>
+                      )}
                       {rule.last_triggered_at && (
                         <span>{t('notifications.alerts.lastTriggered')}: <span className="text-dark-200">{formatDate(rule.last_triggered_at)}</span></span>
                       )}
@@ -566,6 +569,44 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
               value={form.escalation_minutes}
               onChange={(e) => setForm({ ...form, escalation_minutes: parseInt(e.target.value) || 0 })}
             />
+          </div>
+
+          {/* Channel selection */}
+          <div>
+            <Label className="mb-2 block">{t('notifications.alerts.channelsLabel')}</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { key: 'in_app', label: t('notifications.alerts.channelInApp'), Icon: MonitorSmartphone },
+                { key: 'telegram', label: 'Telegram', Icon: MessageSquare },
+                { key: 'webhook', label: 'Webhook', Icon: Webhook },
+                { key: 'email', label: 'Email', Icon: Mail },
+              ].map(({ key, label, Icon }) => {
+                const checked = form.channels.includes(key)
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      const next = checked
+                        ? form.channels.filter((c) => c !== key)
+                        : [...form.channels, key]
+                      setForm({ ...form, channels: next.length > 0 ? next : ['in_app'] })
+                    }}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors text-left',
+                      checked
+                        ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-400'
+                        : 'border-dark-400/20 bg-dark-800 text-dark-300 hover:border-dark-400/40',
+                    )}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="flex-1">{label}</span>
+                    {checked && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[10px] text-dark-400 mt-1">{t('notifications.alerts.channelsHint')}</p>
           </div>
 
           <div className="flex items-center gap-2">
