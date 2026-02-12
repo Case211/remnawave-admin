@@ -4,12 +4,27 @@ import email
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
+from email.header import decode_header as _decode_header
 from email.utils import parseaddr, parsedate_to_datetime
 from typing import Optional
 
 from aiosmtpd.smtp import SMTP as SMTPProtocol, Envelope, Session
 
 logger = logging.getLogger(__name__)
+
+
+def _decode_mime_header(raw: str) -> str:
+    """Decode a MIME-encoded header value (e.g. =?UTF-8?B?...?=) into a plain string."""
+    if not raw:
+        return raw
+    parts = []
+    for fragment, charset in _decode_header(raw):
+        if isinstance(fragment, bytes):
+            parts.append(fragment.decode(charset or "utf-8", errors="replace"))
+        else:
+            parts.append(fragment)
+    return "".join(parts)
+
 
 # Rate limiting: max 100 messages per IP per hour
 _IP_COUNTER: dict = defaultdict(lambda: {"count": 0, "reset_at": datetime.min.replace(tzinfo=timezone.utc)})
@@ -67,9 +82,9 @@ class InboundMailHandler:
         try:
             msg = email.message_from_bytes(envelope.content if isinstance(envelope.content, bytes) else envelope.content.encode())
 
-            from_header = msg.get("From", "")
-            to_header = msg.get("To", "")
-            subject = msg.get("Subject", "(no subject)")
+            from_header = _decode_mime_header(msg.get("From", ""))
+            to_header = _decode_mime_header(msg.get("To", ""))
+            subject = _decode_mime_header(msg.get("Subject", "")) or "(no subject)"
             message_id = msg.get("Message-ID", "")
             in_reply_to = msg.get("In-Reply-To", "")
 
