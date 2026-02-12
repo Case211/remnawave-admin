@@ -14,6 +14,19 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+def _get_global_telegram_config() -> tuple:
+    """Return (bot_token, chat_id, topic_id) from global settings or (None, None, None)."""
+    try:
+        from web.backend.core.config import get_web_settings
+        settings = get_web_settings()
+        bot_token = settings.telegram_bot_token or None
+        chat_id = settings.notifications_chat_id or None
+        topic_id = settings.notifications_topic_service or settings.notifications_topic_id or None
+        return bot_token, chat_id, topic_id
+    except Exception:
+        return None, None, None
+
+
 # ── Email (SMTP) ─────────────────────────────────────────────────
 
 async def _get_smtp_config() -> Optional[Dict[str, Any]]:
@@ -137,14 +150,19 @@ async def send_telegram(
     title: str,
     body: str,
     topic_id: Optional[str] = None,
+    bot_token: Optional[str] = None,
 ) -> bool:
-    """Send notification to Telegram chat/group."""
+    """Send notification to Telegram chat/group.
+
+    Uses the provided bot_token, or falls back to the global BOT_TOKEN from settings.
+    """
     try:
-        from web.backend.core.config import get_web_settings
-        settings = get_web_settings()
-        bot_token = settings.telegram_bot_token
         if not bot_token:
-            logger.warning("No Telegram bot token configured")
+            from web.backend.core.config import get_web_settings
+            settings = get_web_settings()
+            bot_token = settings.telegram_bot_token
+        if not bot_token:
+            logger.warning("No Telegram bot token configured, skipping send to %s", chat_id)
             return False
 
         text = f"<b>{title}</b>\n\n{body}"
@@ -157,17 +175,19 @@ async def send_telegram(
         if topic_id and str(topic_id) != "0":
             payload["message_thread_id"] = int(topic_id)
 
+        logger.debug("Sending Telegram notification to chat_id=%s", chat_id)
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"https://api.telegram.org/bot{bot_token}/sendMessage",
                 json=payload,
             )
             if resp.status_code == 200:
+                logger.info("Telegram notification sent to chat_id=%s", chat_id)
                 return True
-            logger.error("Telegram send failed: %s %s", resp.status_code, resp.text)
+            logger.error("Telegram send failed (chat_id=%s): %s %s", chat_id, resp.status_code, resp.text)
             return False
     except Exception as e:
-        logger.error("Telegram notification error: %s", e)
+        logger.error("Telegram notification error (chat_id=%s): %s", chat_id, e)
         return False
 
 
@@ -300,28 +320,63 @@ async def create_notification(
                 },
                 "timestamp": datetime.utcnow().isoformat(),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("WebSocket broadcast failed: %s", e)
 
-        # Dispatch to external channels
+        # Dispatch to external channels (per-admin configured channels)
         if admin_id is not None:
             asyncio.create_task(_dispatch_external(admin_id, title, body, severity, link, channels))
+            # We can't easily track what was dispatched in the async task,
+            # but we still send to global fallback below for broadcast safety
         else:
             # For broadcasts, dispatch to all admins' external channels
             try:
                 async with db_service.acquire() as conn:
                     admin_ids_rows = await conn.fetch("SELECT id FROM admin_accounts WHERE is_active = true")
+
+                if admin_ids_rows:
+                    logger.debug("Broadcasting external channels to %d admin accounts", len(admin_ids_rows))
                     for row in admin_ids_rows:
                         asyncio.create_task(
                             _dispatch_external(row["id"], title, body, severity, link, channels)
                         )
-            except Exception:
-                pass
+                else:
+                    logger.debug("No admin_accounts found for external dispatch")
+            except Exception as e:
+                logger.error("Failed to dispatch to admin channels: %s", e)
+
+        # Global channel fallback: send to NOTIFICATIONS_CHAT_ID for Telegram
+        # This ensures alerts reach the configured Telegram chat even if
+        # no per-admin Telegram channel is set up
+        if "telegram" in channels or "all" in channels:
+            asyncio.create_task(
+                _send_to_global_telegram(title, body, severity)
+            )
 
     except Exception as e:
         logger.error("Failed to create notification: %s", e)
 
     return notification_id
+
+
+async def _send_to_global_telegram(title: str, body: str, severity: str):
+    """Send notification to the global NOTIFICATIONS_CHAT_ID as a fallback."""
+    try:
+        bot_token, chat_id, topic_id = _get_global_telegram_config()
+        if not chat_id or not bot_token:
+            logger.debug("No global NOTIFICATIONS_CHAT_ID configured, skipping global Telegram dispatch")
+            return
+
+        severity_emoji = {"info": "\u2139\ufe0f", "warning": "\u26a0\ufe0f", "critical": "\ud83d\udea8", "success": "\u2705"}.get(severity, "")
+        full_title = f"{severity_emoji} {title}" if severity_emoji else title
+
+        ok = await send_telegram(chat_id, full_title, body, topic_id, bot_token)
+        if ok:
+            logger.info("Global Telegram notification sent to chat_id=%s", chat_id)
+        else:
+            logger.warning("Global Telegram notification failed for chat_id=%s", chat_id)
+    except Exception as e:
+        logger.error("Global Telegram dispatch error: %s", e)
 
 
 async def _dispatch_external(
@@ -342,33 +397,50 @@ async def _dispatch_external(
                 admin_id,
             )
 
+        if not channels:
+            logger.debug(
+                "No enabled notification_channels found for admin_id=%s (requested: %s)",
+                admin_id, requested_channels,
+            )
+            return
+
         for ch in channels:
             ch_type = ch["channel_type"]
             config = ch["config"] if isinstance(ch["config"], dict) else json.loads(ch["config"] or "{}")
 
-            if ch_type not in requested_channels and ch_type != "in_app":
-                # Only dispatch to channels that were requested
-                if "all" not in requested_channels:
-                    continue
+            # Skip channels not in the requested list
+            if ch_type not in requested_channels and "all" not in requested_channels:
+                logger.debug("Skipping channel %s for admin %s (not in requested: %s)", ch_type, admin_id, requested_channels)
+                continue
 
             try:
                 if ch_type == "telegram":
                     chat_id = config.get("chat_id")
                     topic_id = config.get("topic_id")
+                    bot_token_override = config.get("bot_token")
                     if chat_id:
-                        await send_telegram(chat_id, title, body, topic_id)
+                        logger.info("Dispatching Telegram to chat_id=%s for admin_id=%s", chat_id, admin_id)
+                        await send_telegram(chat_id, title, body, topic_id, bot_token_override)
+                    else:
+                        logger.warning("Telegram channel for admin %s has no chat_id in config: %s", admin_id, config)
 
                 elif ch_type == "webhook":
                     url = config.get("url")
                     if url:
+                        logger.info("Dispatching webhook to %s for admin_id=%s", url[:60], admin_id)
                         await send_webhook(url, title, body, severity)
+                    else:
+                        logger.warning("Webhook channel for admin %s has no url in config", admin_id)
 
                 elif ch_type == "email":
                     email = config.get("email")
                     if email:
+                        logger.info("Dispatching email to %s for admin_id=%s", email, admin_id)
                         await send_email(email, title, body, severity, link)
+                    else:
+                        logger.warning("Email channel for admin %s has no email in config", admin_id)
             except Exception as e:
-                logger.error("Channel dispatch error (%s): %s", ch_type, e)
+                logger.error("Channel dispatch error (%s, admin=%s): %s", ch_type, admin_id, e)
 
     except Exception as e:
         logger.error("External dispatch failed for admin %s: %s", admin_id, e)
