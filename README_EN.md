@@ -247,6 +247,84 @@ ports:
 
 > ⚠️ Many cloud providers (AWS, GCP, Azure) block port 25 by default. Use a VPS with open port 25 (Hetzner, OVH, DigitalOcean).
 
+#### Behind a reverse proxy (nginx, Caddy, Traefik)
+
+The web panel (HTTP API) goes through reverse proxy as usual — `/api/v2/mailserver/*` endpoints work without extra configuration.
+
+**SMTP is a separate protocol** and **cannot** be proxied through an HTTP reverse proxy. Two options:
+
+**Option 1 — Direct port mapping (recommended):**
+
+```yaml
+# docker-compose.yml — SMTP port bypasses the proxy
+services:
+  remnawave-admin:
+    ports:
+      - "25:2525"    # inbound email directly
+```
+
+**Option 2 — nginx stream proxy (TCP):**
+
+```nginx
+# Separate stream {} block, NOT inside http {}
+stream {
+    server {
+        listen 25;
+        proxy_pass remnawave-admin:2525;
+    }
+}
+```
+
+**Option 3 — Caddy L4 (TCP proxy):**
+
+Caddy requires the [caddy-l4](https://github.com/mholt/caddy-l4) plugin for TCP proxying:
+
+```json
+{
+  "apps": {
+    "layer4": {
+      "servers": {
+        "smtp": {
+          "listen": [":25"],
+          "routes": [{
+            "handle": [{
+              "handler": "proxy",
+              "upstreams": [{"dial": ["remnawave-admin:2525"]}]
+            }]
+          }]
+        }
+      }
+    }
+  }
+}
+```
+
+Or via Caddyfile (with `caddy-l4`):
+
+```caddyfile
+:25 {
+    route {
+        proxy remnawave-admin:2525
+    }
+}
+```
+
+**Connection diagram:**
+
+```
+Internet
+  │
+  ├── :443 (HTTPS) → nginx/Caddy → :8081 (web panel API)
+  │                               → :3000 (web panel frontend)
+  │
+  └── :25  (SMTP)  → directly    → :2525 (built-in SMTP server)
+```
+
+**Important:**
+- MX, SPF, PTR records must point to your server's **public IP**
+- PTR record (reverse DNS) is configured at your hosting provider — improves deliverability
+- If the proxy and app are on the same machine — simply map port 25/2525 in docker-compose, bypassing nginx/Caddy
+
 #### Testing
 
 1. Activate the domain (toggle switch on the domain card)

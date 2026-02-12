@@ -248,6 +248,84 @@ ports:
 
 > ⚠️ Многие облачные хостинги (AWS, GCP, Azure) блокируют порт 25. Используйте VPS с открытым портом 25 (Hetzner, OVH, DigitalOcean).
 
+#### За reverse proxy (nginx, Caddy, Traefik)
+
+Веб-панель (HTTP API) проходит через reverse proxy как обычно — эндпоинты `/api/v2/mailserver/*` работают без дополнительных настроек.
+
+**SMTP — отдельный протокол**, он **не может** проксироваться через HTTP reverse proxy. Два варианта:
+
+**Вариант 1 — Прямой проброс порта (рекомендуется):**
+
+```yaml
+# docker-compose.yml — SMTP-порт минует proxy
+services:
+  remnawave-admin:
+    ports:
+      - "25:2525"    # входящая почта напрямую
+```
+
+**Вариант 2 — nginx stream proxy (TCP):**
+
+```nginx
+# Отдельный блок stream {}, НЕ внутри http {}
+stream {
+    server {
+        listen 25;
+        proxy_pass remnawave-admin:2525;
+    }
+}
+```
+
+**Вариант 3 — Caddy L4 (TCP proxy):**
+
+Для TCP-проксирования Caddy нужен плагин [caddy-l4](https://github.com/mholt/caddy-l4):
+
+```json
+{
+  "apps": {
+    "layer4": {
+      "servers": {
+        "smtp": {
+          "listen": [":25"],
+          "routes": [{
+            "handle": [{
+              "handler": "proxy",
+              "upstreams": [{"dial": ["remnawave-admin:2525"]}]
+            }]
+          }]
+        }
+      }
+    }
+  }
+}
+```
+
+Или через Caddyfile (с `caddy-l4`):
+
+```caddyfile
+:25 {
+    route {
+        proxy remnawave-admin:2525
+    }
+}
+```
+
+**Схема подключения:**
+
+```
+Интернет
+  │
+  ├── :443 (HTTPS) → nginx/Caddy → :8081 (веб-панель API)
+  │                              → :3000 (веб-панель frontend)
+  │
+  └── :25  (SMTP)  → напрямую   → :2525 (встроенный SMTP-сервер)
+```
+
+**Важно:**
+- MX, SPF, PTR записи должны указывать на **публичный IP** вашего сервера
+- PTR-запись (reverse DNS) настраивается у хостера — улучшает доставляемость
+- Если proxy и приложение на одной машине — просто пробросьте порт 25/2525 в docker-compose мимо nginx
+
 #### Проверка
 
 1. Активируйте домен (переключатель в карточке домена)
