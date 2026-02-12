@@ -108,6 +108,7 @@ function DomainsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; can
   const queryClient = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
   const [newDomain, setNewDomain] = useState('')
+  const [newFromName, setNewFromName] = useState('')
   const [inboundEnabled, setInboundEnabled] = useState(false)
   const [selectedDomain, setSelectedDomain] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
@@ -118,12 +119,17 @@ function DomainsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; can
   })
 
   const createMut = useMutation({
-    mutationFn: () => mailserverApi.createDomain({ domain: newDomain, inbound_enabled: inboundEnabled }),
+    mutationFn: () => mailserverApi.createDomain({
+      domain: newDomain,
+      from_name: newFromName || undefined,
+      inbound_enabled: inboundEnabled,
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mailserver-domains'] })
       toast.success(t('mailServer.domainCreated'))
       setShowAdd(false)
       setNewDomain('')
+      setNewFromName('')
     },
     onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
   })
@@ -206,6 +212,16 @@ function DomainsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; can
                 className="mt-1"
               />
             </div>
+            <div>
+              <Label>{t('mailServer.senderName')}</Label>
+              <Input
+                placeholder={t('mailServer.senderNamePlaceholder')}
+                value={newFromName}
+                onChange={(e) => setNewFromName(e.target.value)}
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">{t('mailServer.senderNameHint')}</p>
+            </div>
             <div className="flex items-center gap-3">
               <Switch checked={inboundEnabled} onCheckedChange={setInboundEnabled} />
               <Label>{t('mailServer.enableInbound')}</Label>
@@ -258,7 +274,20 @@ function DomainCard({
   onViewDns: () => void
 }) {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [editingFromName, setEditingFromName] = useState(false)
+  const [fromNameValue, setFromNameValue] = useState(domain.from_name || '')
   const dnsCount = [domain.dns_mx_ok, domain.dns_spf_ok, domain.dns_dkim_ok, domain.dns_dmarc_ok].filter(Boolean).length
+
+  const updateFromNameMut = useMutation({
+    mutationFn: () => mailserverApi.updateDomain(domain.id, { from_name: fromNameValue || null } as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mailserver-domains'] })
+      setEditingFromName(false)
+      toast.success(t('mailServer.senderNameUpdated'))
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+  })
 
   return (
     <Card className="bg-dark-700/50 border-dark-400/20">
@@ -298,6 +327,38 @@ function DomainCard({
               <Button size="sm" variant="ghost" onClick={onDelete} className="text-red-400 hover:text-red-300">
                 <Trash2 className="w-4 h-4" />
               </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Sender name */}
+        <div className="flex items-center gap-3 mt-4 p-3 rounded-lg bg-dark-600/30 border border-dark-400/10">
+          <div className="flex-1 min-w-0">
+            <span className="text-xs text-muted-foreground">{t('mailServer.senderName')}:</span>
+            {editingFromName ? (
+              <div className="flex items-center gap-2 mt-1">
+                <Input
+                  value={fromNameValue}
+                  onChange={(e) => setFromNameValue(e.target.value)}
+                  placeholder={t('mailServer.senderNamePlaceholder')}
+                  className="h-8 text-sm"
+                />
+                <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={() => updateFromNameMut.mutate()} disabled={updateFromNameMut.isPending}>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                </Button>
+                <Button size="sm" variant="ghost" className="h-8 shrink-0" onClick={() => { setEditingFromName(false); setFromNameValue(domain.from_name || '') }}>
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-sm text-white">{domain.from_name || <span className="text-dark-300 italic">{t('mailServer.notSet')}</span>}</span>
+                {canEdit && (
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditingFromName(true)}>
+                    <Mail className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -735,6 +796,7 @@ function ComposeTab() {
         subject,
         body_text: body,
         from_email: domain ? `noreply@${domain.domain}` : undefined,
+        from_name: domain?.from_name || undefined,
         domain_id: domain?.id,
       })
     },
@@ -753,6 +815,7 @@ function ComposeTab() {
       return mailserverApi.sendTestEmail({
         to_email: to,
         from_email: domain ? `test@${domain.domain}` : undefined,
+        from_name: domain?.from_name || undefined,
       })
     },
     onSuccess: () => toast.success(t('mailServer.testSent')),

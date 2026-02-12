@@ -43,9 +43,9 @@ async def create_domain(
         async with db_service.acquire() as conn:
             await conn.execute(
                 "UPDATE domain_config SET inbound_enabled = $1, outbound_enabled = $2, "
-                "max_send_per_hour = $3 WHERE id = $4",
+                "max_send_per_hour = $3, from_name = $4 WHERE id = $5",
                 payload.inbound_enabled, payload.outbound_enabled,
-                payload.max_send_per_hour, row["id"],
+                payload.max_send_per_hour, payload.from_name, row["id"],
             )
             updated = await conn.fetchrow("SELECT * FROM domain_config WHERE id = $1", row["id"])
         return dict(updated)
@@ -379,15 +379,15 @@ async def send_test_email(
     """Send a test email to verify mail server setup."""
     from web.backend.core.mail.mail_service import mail_service
 
-    subject = payload.subject or "Remnawave Mail Server Test"
-    body_text = payload.body_text or "This is a test email from your Remnawave mail server. If you received this, your setup is working correctly!"
+    subject = payload.subject or "Mail Server Test"
+    body_text = payload.body_text or "This is a test email from your mail server. If you received this, your setup is working correctly!"
 
     queue_id = await mail_service.send_email(
         to_email=payload.to_email,
         subject=subject,
         body_text=body_text,
         from_email=payload.from_email,
-        from_name=payload.from_name or "Remnawave Mail Test",
+        from_name=payload.from_name,
         category="test",
         priority=2,
     )

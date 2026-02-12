@@ -75,7 +75,7 @@ class SmtpConfigRead(BaseModel):
     port: int = 587
     username: Optional[str] = None
     from_email: str
-    from_name: str = "Remnawave Admin"
+    from_name: Optional[str] = None
     use_tls: bool = True
     use_ssl: bool = False
     is_enabled: bool = False

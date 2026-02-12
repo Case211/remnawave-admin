@@ -207,8 +207,11 @@ class OutboundMailQueue:
         """Build an EmailMessage from a queue row."""
         msg = EmailMessage()
         msg["Subject"] = row["subject"]
-        from_name = row.get("from_name") or "Remnawave"
-        msg["From"] = formataddr((from_name, row["from_email"]))
+        from_name = row.get("from_name")
+        if from_name:
+            msg["From"] = formataddr((from_name, row["from_email"]))
+        else:
+            msg["From"] = row["from_email"]
         msg["To"] = row["to_email"]
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain=row.get("domain") or "localhost")
