@@ -171,9 +171,6 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           collapsed && "gap-0"
         )}>
           <RemnawaveLogo className="w-8 h-8 flex-shrink-0" />
-          {!collapsed && (
-            <span className="sidebar-brand-text text-lg font-display font-bold text-white">Remnawave</span>
-          )}
         </Link>
         {/* Mobile close button */}
         <Button
