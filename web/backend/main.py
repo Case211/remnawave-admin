@@ -35,6 +35,7 @@ from web.backend.api.v2 import logs as logs_api
 from web.backend.api.v2 import advanced_analytics
 from web.backend.api.v2 import automations as automations_api
 from web.backend.api.v2 import notifications as notifications_api
+from web.backend.api.v2 import mailserver as mailserver_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -178,6 +179,13 @@ async def lifespan(app: FastAPI):
                 # Start alert engine
                 from web.backend.core.alert_engine import alert_engine
                 await alert_engine.start()
+
+                # Start mail service
+                try:
+                    from web.backend.core.mail.mail_service import mail_service
+                    await mail_service.start()
+                except Exception as e:
+                    logger.warning("Mail service start failed: %s", e)
             else:
                 logger.warning("Database connection failed")
         except Exception as e:
@@ -199,6 +207,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    try:
+        from web.backend.core.mail.mail_service import mail_service
+        await mail_service.stop()
+    except Exception:
+        pass
     try:
         from web.backend.core.alert_engine import alert_engine
         await alert_engine.stop()
@@ -323,6 +336,7 @@ def create_app() -> FastAPI:
     app.include_router(advanced_analytics.router, prefix="/api/v2/analytics/advanced", tags=["advanced-analytics"])
     app.include_router(automations_api.router, prefix="/api/v2/automations", tags=["automations"])
     app.include_router(notifications_api.router, prefix="/api/v2", tags=["notifications"])
+    app.include_router(mailserver_api.router, prefix="/api/v2", tags=["mailserver"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
 
     # Health check endpoint

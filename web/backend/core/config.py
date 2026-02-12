@@ -66,6 +66,11 @@ class WebSettings(BaseSettings):
     notifications_topic_errors: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_ERRORS")
     notifications_topic_violations: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_VIOLATIONS")
 
+    # Embedded mail server
+    mail_server_enabled: bool = Field(default=False, alias="MAIL_SERVER_ENABLED")
+    mail_inbound_port: int = Field(default=2525, alias="MAIL_INBOUND_PORT")
+    mail_server_hostname: str = Field(default="0.0.0.0", alias="MAIL_SERVER_HOSTNAME")
+
     def get_topic_for(self, topic_type: str) -> Optional[str]:
         """Get topic ID for a given notification type, falling back to the general topic."""
         mapping = {
