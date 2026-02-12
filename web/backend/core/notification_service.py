@@ -127,8 +127,12 @@ async def send_email(
 
     def _send():
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"[Remnawave] {title}"
-        msg["From"] = f"{config.get('from_name', 'Remnawave Admin')} <{config['from_email']}>"
+        msg["Subject"] = title
+        from_name = config.get("from_name")
+        if from_name:
+            msg["From"] = f"{from_name} <{config['from_email']}>"
+        else:
+            msg["From"] = config["from_email"]
         msg["To"] = to_email
 
         msg.attach(MIMEText(body, "plain", "utf-8"))

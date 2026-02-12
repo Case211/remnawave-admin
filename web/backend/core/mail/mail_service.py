@@ -79,7 +79,7 @@ class MailService:
             domain = await self.get_active_outbound_domain()
             if domain:
                 from_email = f"noreply@{domain['domain']}"
-                from_name = from_name or "Remnawave"
+                from_name = from_name or domain.get("from_name")
             else:
                 logger.warning("No active outbound domain configured")
                 return None

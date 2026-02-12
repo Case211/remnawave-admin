@@ -11,6 +11,7 @@ export interface MailDomain {
   is_active: boolean
   dkim_selector: string
   dkim_public_key: string | null
+  from_name: string | null
   inbound_enabled: boolean
   outbound_enabled: boolean
   max_send_per_hour: number
@@ -105,6 +106,7 @@ export const mailserverApi = {
 
   createDomain: async (payload: {
     domain: string
+    from_name?: string
     inbound_enabled?: boolean
     outbound_enabled?: boolean
     max_send_per_hour?: number

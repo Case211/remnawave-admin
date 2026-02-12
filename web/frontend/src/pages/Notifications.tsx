@@ -1169,7 +1169,7 @@ function SmtpConfigSection() {
               <Input
                 value={form.from_name || ''}
                 onChange={(e) => setForm({ ...form, from_name: e.target.value })}
-                placeholder="Remnawave Admin"
+                placeholder={t('mailServer.senderNamePlaceholder')}
               />
             </div>
           </div>

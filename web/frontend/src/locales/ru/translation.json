@@ -2079,7 +2079,12 @@
     "sending": "Отправка...",
     "sendTest": "Тестовое письмо",
     "emailQueued": "Письмо добавлено в очередь",
-    "testSent": "Тестовое письмо поставлено в очередь"
+    "testSent": "Тестовое письмо поставлено в очередь",
+    "senderName": "Имя отправителя",
+    "senderNamePlaceholder": "Например: My Service",
+    "senderNameHint": "Отображается в поле «От» вместо email-адреса",
+    "senderNameUpdated": "Имя отправителя обновлено",
+    "notSet": "не задано"
   },
   "language": {
     "title": "Язык",

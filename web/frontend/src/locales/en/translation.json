@@ -2079,7 +2079,12 @@
     "sending": "Sending...",
     "sendTest": "Send Test",
     "emailQueued": "Email added to queue",
-    "testSent": "Test email queued"
+    "testSent": "Test email queued",
+    "senderName": "Sender name",
+    "senderNamePlaceholder": "e.g. My Service",
+    "senderNameHint": "Displayed in the 'From' field instead of email address",
+    "senderNameUpdated": "Sender name updated",
+    "notSet": "not set"
   },
   "language": {
     "title": "Language",

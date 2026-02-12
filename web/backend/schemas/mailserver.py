@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class DomainCreate(BaseModel):
     domain: str
+    from_name: Optional[str] = None
     inbound_enabled: bool = False
     outbound_enabled: bool = True
     max_send_per_hour: int = 100
@@ -22,6 +23,7 @@ class DomainRead(BaseModel):
     is_active: bool = False
     dkim_selector: str = "rw"
     dkim_public_key: Optional[str] = None
+    from_name: Optional[str] = None
     inbound_enabled: bool = False
     outbound_enabled: bool = True
     max_send_per_hour: int = 100
@@ -36,6 +38,7 @@ class DomainRead(BaseModel):
 
 class DomainUpdate(BaseModel):
     is_active: Optional[bool] = None
+    from_name: Optional[str] = None
     inbound_enabled: Optional[bool] = None
     outbound_enabled: Optional[bool] = None
     max_send_per_hour: Optional[int] = None
