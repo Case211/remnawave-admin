@@ -1450,6 +1450,100 @@
     "resetTooltip": "Сбросить (использовать .env или значение по умолчанию)",
     "resetToFallback": "Сбросить к fallback",
     "reset": "Сбросить",
+    "configItems": {
+      "bot_language": {
+        "label": "Язык бота",
+        "description": "Язык интерфейса бота"
+      },
+      "log_level": {
+        "label": "Уровень логирования",
+        "description": "Уровень детализации логов (требует перезапуск)"
+      },
+      "notifications_chat_id": {
+        "label": "ID чата уведомлений",
+        "description": "Telegram ID чата/группы для уведомлений"
+      },
+      "notifications_topic_users": {
+        "label": "Топик: Пользователи",
+        "description": "ID топика для уведомлений о пользователях"
+      },
+      "notifications_topic_nodes": {
+        "label": "Топик: Ноды",
+        "description": "ID топика для уведомлений о нодах"
+      },
+      "notifications_topic_service": {
+        "label": "Топик: Сервис",
+        "description": "ID топика для сервисных уведомлений"
+      },
+      "notifications_topic_hwid": {
+        "label": "Топик: HWID",
+        "description": "ID топика для HWID уведомлений"
+      },
+      "notifications_topic_violations": {
+        "label": "Топик: Нарушения",
+        "description": "ID топика для уведомлений о нарушениях"
+      },
+      "notifications_topic_errors": {
+        "label": "Топик: Ошибки",
+        "description": "ID топика для уведомлений об ошибках"
+      },
+      "sync_interval_seconds": {
+        "label": "Интервал синхронизации",
+        "description": "Интервал синхронизации данных с API (секунды, требует перезапуск)"
+      },
+      "reports_enabled": {
+        "label": "Отчёты включены",
+        "description": "Глобальное включение/выключение автоматических отчётов"
+      },
+      "reports_daily_enabled": {
+        "label": "Ежедневные отчёты",
+        "description": "Включить ежедневные отчёты по нарушениям"
+      },
+      "reports_daily_time": {
+        "label": "Время дневного отчёта",
+        "description": "Время отправки ежедневного отчёта (HH:MM по UTC)"
+      },
+      "reports_weekly_enabled": {
+        "label": "Еженедельные отчёты",
+        "description": "Включить еженедельные отчёты по нарушениям"
+      },
+      "reports_weekly_day": {
+        "label": "День недельного отчёта",
+        "description": "День недели для еженедельного отчёта (0=Пн, 6=Вс)"
+      },
+      "reports_weekly_time": {
+        "label": "Время недельного отчёта",
+        "description": "Время отправки еженедельного отчёта (HH:MM по UTC)"
+      },
+      "reports_monthly_enabled": {
+        "label": "Ежемесячные отчёты",
+        "description": "Включить ежемесячные отчёты по нарушениям"
+      },
+      "reports_monthly_day": {
+        "label": "День месячного отчёта",
+        "description": "День месяца для ежемесячного отчёта (1-28)"
+      },
+      "reports_monthly_time": {
+        "label": "Время месячного отчёта",
+        "description": "Время отправки ежемесячного отчёта (HH:MM по UTC)"
+      },
+      "reports_min_score": {
+        "label": "Минимальный скор",
+        "description": "Минимальный скор нарушения для включения в отчёт"
+      },
+      "reports_top_violators_count": {
+        "label": "Топ нарушителей",
+        "description": "Количество пользователей в топе нарушителей"
+      },
+      "reports_send_empty": {
+        "label": "Отправлять пустые",
+        "description": "Отправлять отчёт если нет нарушений за период"
+      },
+      "reports_topic_id": {
+        "label": "Топик отчётов",
+        "description": "ID топика для отправки отчётов (0 = основной чат)"
+      }
+    },
     "inDb": "В БД",
     "readOnly": "Только для чтения",
     "legend": {

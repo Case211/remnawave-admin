@@ -1450,6 +1450,100 @@
     "resetTooltip": "Reset (use .env or default value)",
     "resetToFallback": "Reset to fallback",
     "reset": "Reset",
+    "configItems": {
+      "bot_language": {
+        "label": "Bot language",
+        "description": "Bot interface language"
+      },
+      "log_level": {
+        "label": "Log level",
+        "description": "Log detail level (requires restart)"
+      },
+      "notifications_chat_id": {
+        "label": "Notifications chat ID",
+        "description": "Telegram chat/group ID for notifications"
+      },
+      "notifications_topic_users": {
+        "label": "Topic: Users",
+        "description": "Topic ID for user notifications"
+      },
+      "notifications_topic_nodes": {
+        "label": "Topic: Nodes",
+        "description": "Topic ID for node notifications"
+      },
+      "notifications_topic_service": {
+        "label": "Topic: Service",
+        "description": "Topic ID for service notifications"
+      },
+      "notifications_topic_hwid": {
+        "label": "Topic: HWID",
+        "description": "Topic ID for HWID notifications"
+      },
+      "notifications_topic_violations": {
+        "label": "Topic: Violations",
+        "description": "Topic ID for violation notifications"
+      },
+      "notifications_topic_errors": {
+        "label": "Topic: Errors",
+        "description": "Topic ID for error notifications"
+      },
+      "sync_interval_seconds": {
+        "label": "Sync interval",
+        "description": "Data sync interval with API (seconds, requires restart)"
+      },
+      "reports_enabled": {
+        "label": "Reports enabled",
+        "description": "Global toggle for automatic reports"
+      },
+      "reports_daily_enabled": {
+        "label": "Daily reports",
+        "description": "Enable daily violation reports"
+      },
+      "reports_daily_time": {
+        "label": "Daily report time",
+        "description": "Daily report send time (HH:MM UTC)"
+      },
+      "reports_weekly_enabled": {
+        "label": "Weekly reports",
+        "description": "Enable weekly violation reports"
+      },
+      "reports_weekly_day": {
+        "label": "Weekly report day",
+        "description": "Day of week for weekly report (0=Mon, 6=Sun)"
+      },
+      "reports_weekly_time": {
+        "label": "Weekly report time",
+        "description": "Weekly report send time (HH:MM UTC)"
+      },
+      "reports_monthly_enabled": {
+        "label": "Monthly reports",
+        "description": "Enable monthly violation reports"
+      },
+      "reports_monthly_day": {
+        "label": "Monthly report day",
+        "description": "Day of month for monthly report (1-28)"
+      },
+      "reports_monthly_time": {
+        "label": "Monthly report time",
+        "description": "Monthly report send time (HH:MM UTC)"
+      },
+      "reports_min_score": {
+        "label": "Minimum score",
+        "description": "Minimum violation score to include in report"
+      },
+      "reports_top_violators_count": {
+        "label": "Top violators",
+        "description": "Number of users in top violators list"
+      },
+      "reports_send_empty": {
+        "label": "Send empty reports",
+        "description": "Send report when there are no violations for the period"
+      },
+      "reports_topic_id": {
+        "label": "Reports topic",
+        "description": "Topic ID for sending reports (0 = main chat)"
+      }
+    },
     "inDb": "In DB",
     "readOnly": "Read only",
     "legend": {
