@@ -38,6 +38,13 @@
 - ⚡ Automatic actions based on scoring thresholds
 - 📡 Integration with [Node Agent](node-agent/README.md) for data collection
 
+### 📧 Built-in Mail Server
+- 📤 Direct MX delivery without external SMTP providers
+- 🔏 DKIM signing (RSA-2048) + automatic SPF/DKIM/DMARC verification
+- 📥 Inbound email receiving (embedded SMTP server)
+- 📊 Outbound queue with retries, rate limiting, and monitoring
+- ✍️ Built-in compose editor + inbox viewer
+
 ### 🔧 Additional
 - ⚙️ Dynamic settings without restart (Telegram and web panel)
 - 🔔 Webhook notifications with topic routing
@@ -187,6 +194,69 @@ NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Violations
 
 ---
 
+### Step 7️⃣ — Built-in Mail Server (optional)
+
+The web panel includes an embedded mail server with DKIM signing, direct MX delivery, and inbound email receiving — no external SMTP providers needed.
+
+#### Enabling
+
+Go to **Settings** in the web panel → **"Mail Server"** section → enable **"Mail Server Enabled"**. Restart the container.
+
+Or via `.env`:
+
+```env
+MAIL_SERVER_ENABLED=true
+MAIL_INBOUND_PORT=2525          # Inbound SMTP port (default 2525)
+MAIL_SERVER_HOSTNAME=0.0.0.0    # SMTP server bind address
+```
+
+> 💡 All settings can be changed from the web UI (Settings page). `.env` values serve as fallback.
+
+#### Adding a domain
+
+1. Go to **Mail Server** → **Domains** tab → **Add Domain**
+2. Enter your domain (e.g. `example.com`)
+3. The system will auto-generate DKIM keys (RSA-2048)
+
+#### DNS configuration
+
+Click **"DNS Records"** on your domain — the system shows 4 records to add at your DNS provider:
+
+| Type | Host | Purpose |
+|------|------|---------|
+| **MX** | `example.com` | Routes incoming mail to your server |
+| **TXT** | `example.com` | SPF — authorizes your IP to send email |
+| **TXT** | `rw._domainkey.example.com` | DKIM — email signature verification |
+| **TXT** | `_dmarc.example.com` | DMARC — policy for unverified emails |
+
+Values can be copied from the interface. After adding, click **"Check DNS"** to verify.
+
+#### Network ports
+
+```
+Port 25   — outbound (for direct MX delivery to recipient servers)
+Port 2525 — inbound (receiving emails, configurable)
+```
+
+Add to `docker-compose.yml`:
+
+```yaml
+ports:
+  - "25:2525"    # inbound email
+```
+
+> ⚠️ Many cloud providers (AWS, GCP, Azure) block port 25 by default. Use a VPS with open port 25 (Hetzner, OVH, DigitalOcean).
+
+#### Testing
+
+1. Activate the domain (toggle switch on the domain card)
+2. Go to the **Compose** tab → select domain → enter address → **Send Test**
+3. Check the **Queue** tab — status should become `sent`
+
+> 📬 When an active outbound domain is configured, the notification system automatically uses the built-in mail server (falls back to SMTP relay).
+
+---
+
 ## 💻 Local Development
 
 ```bash
@@ -275,6 +345,16 @@ python -m src.main
 | `WEB_ALLOWED_IPS` | — | — | IP whitelist (CIDR) |
 
 *\* Required only when running with `--profile web`*
+
+### 📧 Mail Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAIL_SERVER_ENABLED` | `false` | Enable the built-in mail server |
+| `MAIL_INBOUND_PORT` | `2525` | Inbound SMTP server port |
+| `MAIL_SERVER_HOSTNAME` | `0.0.0.0` | SMTP server bind address |
+
+> 💡 These variables are fallbacks. Settings can be changed from the web panel (Settings → Mail Server).
 
 ---
 
