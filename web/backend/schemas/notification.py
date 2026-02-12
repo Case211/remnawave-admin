@@ -115,6 +115,8 @@ class AlertRuleBase(BaseModel):
     cooldown_minutes: int = 30
     escalation_admin_id: Optional[int] = None
     escalation_minutes: int = 0
+    title_template: str = "Alert: {rule_name}"
+    body_template: str = "{metric}: {value} ({operator} {threshold})"
 
 
 class AlertRuleCreate(AlertRuleBase):
@@ -135,6 +137,8 @@ class AlertRuleUpdate(BaseModel):
     cooldown_minutes: Optional[int] = None
     escalation_admin_id: Optional[int] = None
     escalation_minutes: Optional[int] = None
+    title_template: Optional[str] = None
+    body_template: Optional[str] = None
 
 
 class AlertRuleItem(AlertRuleBase):

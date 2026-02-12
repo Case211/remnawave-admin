@@ -21,6 +21,13 @@ OPERATORS = {
 }
 
 
+class _SafeDict(dict):
+    """Dict that returns '{key}' for missing keys, so str.format_map never raises."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
 class AlertEngine:
     """Background engine for monitoring alert rules."""
 
@@ -234,17 +241,41 @@ class AlertEngine:
         }
         topic_type = METRIC_TOPIC_MAP.get(metric, "service")
 
-        title = f"Alert: {rule_name}"
-        body = (
-            f"{metric}: {current_value:.1f} "
-            f"({rule.get('operator', '>')} {threshold:.1f})"
-        )
+        # Operator symbols for display
+        OP_SYMBOLS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<=", "eq": "=", "neq": "!="}
+        op_symbol = OP_SYMBOLS.get(rule.get("operator", "gt"), rule.get("operator", ">"))
 
-        # Build details with offline node info if applicable
+        # Gather offline node names
+        offline = metrics.get("offline_nodes") or []
+        node_names = ", ".join(n["name"] for n in offline[:5]) if offline else ""
+
+        # Template variables available for substitution
+        tpl_vars = {
+            "rule_name": rule_name,
+            "metric": metric,
+            "value": f"{current_value:.1f}",
+            "threshold": f"{threshold:.1f}",
+            "operator": op_symbol,
+            "severity": severity,
+            "node_names": node_names,
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        }
+
+        # Render templates (with safe fallback if template has unknown keys)
+        title_tpl = rule.get("title_template") or "Alert: {rule_name}"
+        body_tpl = rule.get("body_template") or "{metric}: {value} ({operator} {threshold})"
+        try:
+            title = title_tpl.format_map(_SafeDict(tpl_vars))
+        except Exception:
+            title = f"Alert: {rule_name}"
+        try:
+            body = body_tpl.format_map(_SafeDict(tpl_vars))
+        except Exception:
+            body = f"{metric}: {current_value:.1f} ({op_symbol} {threshold:.1f})"
+
+        # Append offline node info if not already in body
         details = body
-        if metric == "node_offline_minutes" and metrics.get("offline_nodes"):
-            offline = metrics["offline_nodes"]
-            node_names = ", ".join(n["name"] for n in offline[:5])
+        if metric == "node_offline_minutes" and node_names and node_names not in body:
             details += f" | Nodes: {node_names}"
 
         try:

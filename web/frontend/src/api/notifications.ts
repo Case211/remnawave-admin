@@ -59,6 +59,8 @@ export interface AlertRule {
   group_key: string | null
   escalation_admin_id: number | null
   escalation_minutes: number
+  title_template: string
+  body_template: string
   last_triggered_at: string | null
   last_value: number | null
   trigger_count: number
