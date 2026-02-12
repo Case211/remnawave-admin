@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -87,25 +88,25 @@ function isNavGroup(entry: NavigationEntry): entry is NavGroup {
 }
 
 const navigation: NavigationEntry[] = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard, permission: null },
-  { name: 'Users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
-  { name: 'Nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
-  { name: 'Fleet', href: '/fleet', icon: Activity, permission: { resource: 'fleet', action: 'view' } },
-  { name: 'Hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
-  { name: 'Violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
-  { name: 'Automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
+  { name: 'nav.dashboard', href: '/', icon: LayoutDashboard, permission: null },
+  { name: 'nav.users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
+  { name: 'nav.nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
+  { name: 'nav.fleet', href: '/fleet', icon: Activity, permission: { resource: 'fleet', action: 'view' } },
+  { name: 'nav.hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
+  { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
+  { name: 'nav.automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
+  { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   {
     type: 'group',
-    name: '\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435',
+    name: 'nav.administration',
     icon: ShieldCheck,
     items: [
-      { name: '\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u044b', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
-      { name: '\u0416\u0443\u0440\u043d\u0430\u043b \u0430\u0443\u0434\u0438\u0442\u0430', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
-      { name: '\u0421\u0438\u0441\u0442\u0435\u043c\u043d\u044b\u0435 \u043b\u043e\u0433\u0438', href: '/logs', icon: Terminal, permission: { resource: 'logs', action: 'view' } },
+      { name: 'nav.admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
+      { name: 'nav.audit', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
+      { name: 'nav.logs', href: '/logs', icon: Terminal, permission: { resource: 'logs', action: 'view' } },
     ],
   },
-  { name: 'Settings', href: '/settings', icon: Settings, permission: { resource: 'settings', action: 'view' } },
+  { name: 'nav.settings', href: '/settings', icon: Settings, permission: { resource: 'settings', action: 'view' } },
 ]
 
 interface SidebarProps {
@@ -114,6 +115,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
+  const { t } = useTranslation()
   const location = useLocation()
   const { logout, user } = useAuthStore()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
@@ -217,7 +219,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                             </Link>
                           </TooltipTrigger>
                           <TooltipContent side="right">
-                            {item.name}
+                            {t(item.name)}
                           </TooltipContent>
                         </Tooltip>
                       )
@@ -244,7 +246,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                         groupActive ? "text-primary-400" : "group-hover:scale-110"
                       )}
                     />
-                    <span className="sidebar-nav-text flex-1 text-left">{entry.name}</span>
+                    <span className="sidebar-nav-text flex-1 text-left">{t(entry.name)}</span>
                     <ChevronDown
                       className={cn(
                         "sidebar-group-chevron w-4 h-4 text-dark-300 transition-transform duration-200",
@@ -282,11 +284,11 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                                     isActive ? "text-primary-400" : "group-hover:scale-110"
                                   )}
                                 />
-                                <span className="sidebar-nav-text">{item.name}</span>
+                                <span className="sidebar-nav-text">{t(item.name)}</span>
                               </Link>
                             </TooltipTrigger>
                             <TooltipContent side="right">
-                              {item.name}
+                              {t(item.name)}
                             </TooltipContent>
                           </Tooltip>
                         )
@@ -320,11 +322,11 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                         isActive ? "text-primary-400" : "group-hover:scale-110"
                       )}
                     />
-                    {!collapsed && <span className="sidebar-nav-text">{item.name}</span>}
+                    {!collapsed && <span className="sidebar-nav-text">{t(item.name)}</span>}
                   </Link>
                 </TooltipTrigger>
                 <TooltipContent side="right" className={cn(!collapsed && "md:hidden")}>
-                  {item.name}
+                  {t(item.name)}
                 </TooltipContent>
               </Tooltip>
             )
@@ -346,7 +348,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             </Button>
           </TooltipTrigger>
           <TooltipContent side="right">
-            {collapsed ? 'Развернуть' : 'Свернуть'}
+            {collapsed ? t('sidebar.expand') : t('sidebar.collapse')}
           </TooltipContent>
         </Tooltip>
       </div>

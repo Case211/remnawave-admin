@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
+import { useFormatters } from '@/lib/useFormatters'
 import {
   Activity,
   RefreshCw,
@@ -100,67 +102,6 @@ const fetchFleet = async (): Promise<FleetResponse> => {
 
 // ── Utilities ────────────────────────────────────────────────────
 
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 Б'
-  const k = 1024
-  const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 Б'
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-function formatSpeed(bps: number): string {
-  if (!bps || bps <= 0) return '-'
-  const k = 1024
-  const sizes = ['б/с', 'Кб/с', 'Мб/с', 'Гб/с']
-  const i = Math.floor(Math.log(bps) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 б/с'
-  return parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-function formatUptime(seconds: number | null | undefined): string {
-  if (!seconds || seconds <= 0) return '-'
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (d > 0) return `${d}д ${h}ч`
-  if (h > 0) return `${h}ч ${m}м`
-  return `${m}м`
-}
-
-function formatTimeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Никогда'
-  const date = new Date(dateStr)
-  if (isNaN(date.getTime())) return 'Никогда'
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHour = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHour / 24)
-  if (diffSec < 60) return 'Только что'
-  if (diffMin < 60) return `${diffMin} мин назад`
-  if (diffHour < 24) return `${diffHour} ч назад`
-  return `${diffDay} дн назад`
-}
-
-function getNodeStatus(node: FleetNode): 'online' | 'offline' | 'disabled' {
-  if (node.is_disabled) return 'disabled'
-  if (node.is_connected) return 'online'
-  return 'offline'
-}
-
-function getStatusBadge(status: 'online' | 'offline' | 'disabled') {
-  switch (status) {
-    case 'online':
-      return <Badge variant="success" className="text-[10px] gap-1"><Wifi className="w-3 h-3" />Онлайн</Badge>
-    case 'offline':
-      return <Badge variant="destructive" className="text-[10px] gap-1"><WifiOff className="w-3 h-3" />Офлайн</Badge>
-    case 'disabled':
-      return <Badge variant="secondary" className="text-[10px] gap-1">Отключена</Badge>
-  }
-}
-
 function getCpuColor(cpu: number | null): string {
   if (cpu == null) return 'text-dark-300'
   if (cpu >= 95) return 'text-red-400'
@@ -173,6 +114,12 @@ function getRamColor(ram: number | null): string {
   if (ram >= 95) return 'text-red-400'
   if (ram >= 80) return 'text-yellow-400'
   return 'text-white'
+}
+
+function getNodeStatus(node: FleetNode): 'online' | 'offline' | 'disabled' {
+  if (node.is_disabled) return 'disabled'
+  if (node.is_connected) return 'online'
+  return 'offline'
 }
 
 // ── Sort Header ──────────────────────────────────────────────────
@@ -224,7 +171,19 @@ function NodeDetailPanel({
   onDisable: () => void
   isPending: boolean
 }) {
+  const { t } = useTranslation()
+  const { formatBytes, formatSpeed, formatTimeAgo } = useFormatters()
   const status = getNodeStatus(node)
+
+  const formatUptime = (seconds: number | null | undefined): string => {
+    if (!seconds || seconds <= 0) return '-'
+    const d = Math.floor(seconds / 86400)
+    const h = Math.floor((seconds % 86400) / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    if (d > 0) return t('fleet.detail.uptimeDaysHours', { days: d, hours: h })
+    if (h > 0) return t('fleet.detail.uptimeHoursMinutes', { hours: h, minutes: m })
+    return t('fleet.detail.uptimeMinutes', { minutes: m })
+  }
 
   return (
     <div className="px-4 pb-4 pt-1 animate-fade-in">
@@ -232,11 +191,11 @@ function NodeDetailPanel({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Column 1: Connection info */}
           <div className="space-y-3">
-            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">Информация</h4>
+            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.info')}</h4>
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-dark-300" />
-                <span className="text-dark-200">Адрес</span>
+                <span className="text-dark-200">{t('fleet.detail.address')}</span>
                 <span className="text-white ml-auto font-mono text-xs">{node.address}:{node.port}</span>
               </div>
               <div className="flex items-center gap-2">
@@ -246,7 +205,7 @@ function NodeDetailPanel({
               </div>
               <div className="flex items-center gap-2">
                 <Activity className="w-3.5 h-3.5 text-dark-300" />
-                <span className="text-dark-200">Xray запущен</span>
+                <span className="text-dark-200">{t('fleet.detail.xrayRunning')}</span>
                 <span className="ml-auto">
                   {node.is_xray_running ? (
                     <ShieldCheck className="w-4 h-4 text-green-400" />
@@ -257,15 +216,15 @@ function NodeDetailPanel({
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5 text-dark-300" />
-                <span className="text-dark-200">Последняя связь</span>
-                <span className="text-white ml-auto text-xs">{formatTimeAgo(node.last_seen_at)}</span>
+                <span className="text-dark-200">{t('fleet.detail.lastSeen')}</span>
+                <span className="text-white ml-auto text-xs">{node.last_seen_at ? formatTimeAgo(node.last_seen_at) : t('fleet.statusNever')}</span>
               </div>
             </div>
           </div>
 
           {/* Column 2: Detailed metrics */}
           <div className="space-y-3">
-            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">Метрики</h4>
+            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.metrics')}</h4>
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <Cpu className="w-3.5 h-3.5 text-orange-400" />
@@ -305,7 +264,7 @@ function NodeDetailPanel({
               )}
               <div className="flex items-center gap-2">
                 <HardDrive className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-dark-200">Диск</span>
+                <span className="text-dark-200">{t('fleet.detail.disk')}</span>
                 <span className={cn('ml-auto font-mono', node.disk_usage != null && node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage != null && node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
                   {node.disk_usage != null ? `${node.disk_usage.toFixed(1)}%` : '-'}
                   {node.disk_total_bytes != null && <span className="text-dark-400 text-[10px] ml-1">({formatBytes(node.disk_used_bytes ?? 0)} / {formatBytes(node.disk_total_bytes)})</span>}
@@ -345,21 +304,21 @@ function NodeDetailPanel({
 
           {/* Column 3: Actions + Traffic */}
           <div className="space-y-3">
-            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">Трафик и действия</h4>
+            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.trafficAndActions')}</h4>
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-dark-200">Сегодня</span>
+                <span className="text-dark-200">{t('fleet.detail.today')}</span>
                 <span className="text-white ml-auto font-mono text-xs">{formatBytes(node.traffic_today_bytes)}</span>
               </div>
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-3.5 h-3.5 text-dark-300" />
-                <span className="text-dark-200">Всего</span>
+                <span className="text-dark-200">{t('fleet.detail.total')}</span>
                 <span className="text-white ml-auto font-mono text-xs">{formatBytes(node.traffic_total_bytes)}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Users className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-dark-200">Пользователей</span>
+                <span className="text-dark-200">{t('fleet.detail.users')}</span>
                 <span className="text-white ml-auto font-mono">{node.users_online}</span>
               </div>
               <div className="flex items-center gap-2">
@@ -385,10 +344,10 @@ function NodeDetailPanel({
                           onClick={onRestart}
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
-                          Рестарт
+                          {t('fleet.actions.restart')}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Перезапустить ноду</TooltipContent>
+                      <TooltipContent>{t('fleet.actions.restartTooltip')}</TooltipContent>
                     </Tooltip>
                   )}
                   {node.is_disabled ? (
@@ -402,10 +361,10 @@ function NodeDetailPanel({
                           onClick={onEnable}
                         >
                           <Play className="w-3.5 h-3.5" />
-                          Включить
+                          {t('fleet.actions.enable')}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Включить ноду</TooltipContent>
+                      <TooltipContent>{t('fleet.actions.enableTooltip')}</TooltipContent>
                     </Tooltip>
                   ) : (
                     <Tooltip>
@@ -418,10 +377,10 @@ function NodeDetailPanel({
                           onClick={onDisable}
                         >
                           <Square className="w-3.5 h-3.5" />
-                          Отключить
+                          {t('fleet.actions.disable')}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Отключить ноду</TooltipContent>
+                      <TooltipContent>{t('fleet.actions.disableTooltip')}</TooltipContent>
                     </Tooltip>
                   )}
                 </div>
@@ -437,6 +396,8 @@ function NodeDetailPanel({
 // ── Main Component ───────────────────────────────────────────────
 
 export default function Fleet() {
+  const { t } = useTranslation()
+  const { formatBytes, formatSpeed } = useFormatters()
   const queryClient = useQueryClient()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
   const canEditNodes = hasPermission('fleet', 'edit')
@@ -459,20 +420,20 @@ export default function Fleet() {
 
   const restartNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/restart`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success('Нода перезапущена') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success(t('fleet.toast.restarted')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('fleet.toast.error')) },
   })
 
   const enableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/enable`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success('Нода включена') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success(t('fleet.toast.enabled')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('fleet.toast.error')) },
   })
 
   const disableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/disable`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success('Нода отключена') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success(t('fleet.toast.disabled')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('fleet.toast.error')) },
   })
 
   const mutationPending = restartNode.isPending || enableNode.isPending || disableNode.isPending
@@ -486,6 +447,16 @@ export default function Fleet() {
       setSortField(field)
       setSortDir('asc')
     }
+  }
+
+  const formatUptime = (seconds: number | null | undefined): string => {
+    if (!seconds || seconds <= 0) return '-'
+    const d = Math.floor(seconds / 86400)
+    const h = Math.floor((seconds % 86400) / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    if (d > 0) return t('fleet.detail.uptimeDaysHours', { days: d, hours: h })
+    if (h > 0) return t('fleet.detail.uptimeHoursMinutes', { hours: h, minutes: m })
+    return t('fleet.detail.uptimeMinutes', { minutes: m })
   }
 
   const sortedNodes = useMemo(() => {
@@ -572,6 +543,19 @@ export default function Fleet() {
     return { avgCpu, avgRam, totalDl, totalUl, totalUsers }
   }, [fleet?.nodes])
 
+  // ── Status badge helper ────────────────────────────────────────
+
+  const getStatusBadge = (status: 'online' | 'offline' | 'disabled') => {
+    switch (status) {
+      case 'online':
+        return <Badge variant="success" className="text-[10px] gap-1"><Wifi className="w-3 h-3" />{t('fleet.statusOnline')}</Badge>
+      case 'offline':
+        return <Badge variant="destructive" className="text-[10px] gap-1"><WifiOff className="w-3 h-3" />{t('fleet.statusOffline')}</Badge>
+      case 'disabled':
+        return <Badge variant="secondary" className="text-[10px] gap-1">{t('fleet.statusDisabled')}</Badge>
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────
 
   return (
@@ -579,8 +563,8 @@ export default function Fleet() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">Fleet</h1>
-          <p className="text-dark-200 mt-1 text-sm md:text-base">Мониторинг серверного парка</p>
+          <h1 className="page-header-title">{t('fleet.title')}</h1>
+          <p className="text-dark-200 mt-1 text-sm md:text-base">{t('fleet.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <Button
@@ -589,7 +573,7 @@ export default function Fleet() {
             disabled={isLoading}
           >
             <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
-            <span className="hidden sm:inline">Обновить</span>
+            <span className="hidden sm:inline">{t('fleet.actions.refresh')}</span>
           </Button>
         </div>
       </div>
@@ -600,7 +584,7 @@ export default function Fleet() {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1.5 text-dark-200 mb-1">
               <Server className="w-3.5 h-3.5" />
-              <span className="text-xs">Всего</span>
+              <span className="text-xs">{t('fleet.stats.total')}</span>
             </div>
             <p className="text-2xl font-bold text-white">{isLoading ? '-' : fleet?.total ?? 0}</p>
           </CardContent>
@@ -609,7 +593,7 @@ export default function Fleet() {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1.5 text-dark-200 mb-1">
               <Wifi className="w-3.5 h-3.5 text-green-400" />
-              <span className="text-xs">Онлайн</span>
+              <span className="text-xs">{t('fleet.stats.online')}</span>
             </div>
             <p className="text-2xl font-bold text-green-400">{isLoading ? '-' : fleet?.online ?? 0}</p>
           </CardContent>
@@ -618,7 +602,7 @@ export default function Fleet() {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1.5 text-dark-200 mb-1">
               <WifiOff className="w-3.5 h-3.5 text-red-400" />
-              <span className="text-xs">Офлайн</span>
+              <span className="text-xs">{t('fleet.stats.offline')}</span>
             </div>
             <p className="text-2xl font-bold text-red-400">{isLoading ? '-' : fleet?.offline ?? 0}</p>
           </CardContent>
@@ -627,7 +611,7 @@ export default function Fleet() {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1.5 text-dark-200 mb-1">
               <Cpu className="w-3.5 h-3.5 text-orange-400" />
-              <span className="text-xs">Сред. CPU</span>
+              <span className="text-xs">{t('fleet.stats.avgCpu')}</span>
             </div>
             <p className={cn('text-2xl font-bold', getCpuColor(aggregates.avgCpu))}>
               {isLoading ? '-' : aggregates.avgCpu != null ? `${aggregates.avgCpu.toFixed(0)}%` : '-'}
@@ -638,7 +622,7 @@ export default function Fleet() {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1.5 text-dark-200 mb-1">
               <MemoryStick className="w-3.5 h-3.5 text-pink-400" />
-              <span className="text-xs">Сред. RAM</span>
+              <span className="text-xs">{t('fleet.stats.avgRam')}</span>
             </div>
             <p className={cn('text-2xl font-bold', getRamColor(aggregates.avgRam))}>
               {isLoading ? '-' : aggregates.avgRam != null ? `${aggregates.avgRam.toFixed(0)}%` : '-'}
@@ -649,7 +633,7 @@ export default function Fleet() {
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1.5 text-dark-200 mb-1">
               <Activity className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-xs">Throughput</span>
+              <span className="text-xs">{t('fleet.stats.throughput')}</span>
             </div>
             <p className="text-lg font-bold text-white leading-tight">
               {isLoading ? '-' : (
@@ -669,7 +653,7 @@ export default function Fleet() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300" />
           <Input
-            placeholder="Поиск по имени или адресу..."
+            placeholder={t('fleet.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -677,10 +661,10 @@ export default function Fleet() {
         </div>
         <div className="flex items-center gap-1.5">
           {([
-            { value: 'all', label: 'Все', count: fleet?.total },
-            { value: 'online', label: 'Онлайн', count: fleet?.online },
-            { value: 'offline', label: 'Офлайн', count: fleet?.offline },
-            { value: 'disabled', label: 'Откл.', count: fleet?.disabled },
+            { value: 'all', label: t('fleet.filter.all'), count: fleet?.total },
+            { value: 'online', label: t('fleet.filter.online'), count: fleet?.online },
+            { value: 'offline', label: t('fleet.filter.offline'), count: fleet?.offline },
+            { value: 'disabled', label: t('fleet.filter.disabled'), count: fleet?.disabled },
           ] as const).map(({ value, label, count }) => (
             <Button
               key={value}
@@ -710,14 +694,14 @@ export default function Fleet() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10" />
-                <SortableHead label="Статус" field="status" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-28" />
-                <SortableHead label="Нода" field="name" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
+                <SortableHead label={t('fleet.table.status')} field="status" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-28" />
+                <SortableHead label={t('fleet.table.node')} field="name" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
                 <SortableHead label="CPU" field="cpu" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
                 <SortableHead label="RAM" field="ram" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
-                <SortableHead label="Диск" field="disk" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
-                <SortableHead label="Скорость" field="speed" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-44" />
-                <SortableHead label="Юзеры" field="users" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-20" />
-                <SortableHead label="Трафик" field="traffic" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-28" />
+                <SortableHead label={t('fleet.table.disk')} field="disk" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
+                <SortableHead label={t('fleet.table.speed')} field="speed" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-44" />
+                <SortableHead label={t('fleet.table.users')} field="users" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-20" />
+                <SortableHead label={t('fleet.table.traffic')} field="traffic" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-28" />
                 <SortableHead label="Uptime" field="uptime" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
               </TableRow>
             </TableHeader>
@@ -735,7 +719,7 @@ export default function Fleet() {
                   <TableCell colSpan={10} className="text-center py-12">
                     <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
                     <p className="text-dark-200">
-                      {searchQuery || statusFilter !== 'all' ? 'Ничего не найдено' : 'Нет нод'}
+                      {searchQuery || statusFilter !== 'all' ? t('fleet.statusNothingFound') : t('fleet.statusNoNodes')}
                     </p>
                   </TableCell>
                 </TableRow>
@@ -895,7 +879,7 @@ export default function Fleet() {
             <CardContent className="p-8 text-center">
               <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
               <p className="text-dark-200">
-                {searchQuery || statusFilter !== 'all' ? 'Ничего не найдено' : 'Нет нод'}
+                {searchQuery || statusFilter !== 'all' ? t('fleet.statusNothingFound') : t('fleet.statusNoNodes')}
               </p>
             </CardContent>
           </Card>
@@ -944,13 +928,13 @@ export default function Fleet() {
                       </p>
                     </div>
                     <div className="p-2 bg-dark-800/50 rounded-lg">
-                      <p className="text-[10px] text-dark-300 mb-0.5">Диск</p>
+                      <p className="text-[10px] text-dark-300 mb-0.5">{t('fleet.detail.disk')}</p>
                       <p className={cn('text-sm font-mono font-semibold', node.disk_usage != null && node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage != null && node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
                         {node.disk_usage != null ? `${node.disk_usage.toFixed(0)}%` : '-'}
                       </p>
                     </div>
                     <div className="p-2 bg-dark-800/50 rounded-lg">
-                      <p className="text-[10px] text-dark-300 mb-0.5">Юзеры</p>
+                      <p className="text-[10px] text-dark-300 mb-0.5">{t('fleet.table.users')}</p>
                       <p className="text-sm font-mono font-semibold text-white">{node.users_online}</p>
                     </div>
                   </div>

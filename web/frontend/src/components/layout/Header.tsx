@@ -1,7 +1,8 @@
-import { Bell, Search, Menu } from 'lucide-react'
+import { Bell, Search, Menu, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AppearancePanel } from '../AppearancePanel'
+import { useTranslation } from 'react-i18next'
 
 interface HeaderProps {
   onMenuToggle?: () => void
@@ -9,6 +10,8 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
+  const { t, i18n } = useTranslation()
+
   return (
     <header
       className="h-16 border-b border-dark-400/10 flex items-center justify-between px-4 md:px-6 animate-fade-in bg-dark-700/95 backdrop-blur-xl"
@@ -31,7 +34,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
           className="header-search-bar flex-1 max-w-md hidden sm:flex items-center gap-2 h-10 rounded-md border border-dark-400/20 bg-dark-800 px-3 text-sm text-dark-300 hover:border-dark-400/40 hover:text-dark-200 transition-colors cursor-pointer"
         >
           <Search className="w-4 h-4 flex-shrink-0" />
-          <span className="flex-1 text-left">Поиск...</span>
+          <span className="flex-1 text-left">{t('header.searchPlaceholder')}</span>
           <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border border-dark-400/30 bg-dark-700 px-1.5 font-mono text-[10px] font-medium text-dark-300">
             <span className="text-xs">&#x2318;</span>K
           </kbd>
@@ -52,6 +55,17 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
       <div className="flex items-center gap-2 md:gap-4">
         {/* Appearance settings */}
         <AppearancePanel />
+
+        {/* Language switcher */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => i18n.changeLanguage(i18n.language === 'ru' ? 'en' : 'ru')}
+          className="relative"
+        >
+          <Globe className="w-5 h-5" />
+          <span className="sr-only">{i18n.language === 'ru' ? 'EN' : 'RU'}</span>
+        </Button>
 
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative">

@@ -1,4 +1,3 @@
-import type { AutomationRule, AutomationTemplate } from '../../api/automations'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyConfig = Record<string, any>

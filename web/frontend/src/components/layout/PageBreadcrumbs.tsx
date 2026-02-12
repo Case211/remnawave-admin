@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,18 +11,19 @@ import {
 } from '@/components/ui/breadcrumb'
 import client from '@/api/client'
 
-const ROUTE_LABELS: Record<string, string> = {
-  '': 'Дашборд',
-  users: 'Пользователи',
-  nodes: 'Ноды',
-  fleet: 'Флот',
-  hosts: 'Хосты',
-  violations: 'Нарушения',
-  admins: 'Администраторы',
-  analytics: 'Аналитика',
-  audit: 'Журнал аудита',
-  logs: 'Системные логи',
-  settings: 'Настройки',
+const ROUTE_LABEL_KEYS: Record<string, string> = {
+  '': 'nav.dashboard',
+  users: 'nav.users',
+  nodes: 'nav.nodes',
+  fleet: 'nav.fleet',
+  hosts: 'nav.hosts',
+  violations: 'nav.violations',
+  admins: 'nav.admins',
+  analytics: 'nav.analytics',
+  audit: 'nav.audit',
+  logs: 'nav.logs',
+  settings: 'nav.settings',
+  automations: 'nav.automations',
 }
 
 /**
@@ -52,8 +54,10 @@ interface CrumbProps {
 }
 
 function BreadcrumbEntry({ segment, parentSegment, path, isLast }: CrumbProps) {
+  const { t } = useTranslation()
   const dynamicLabel = useDynamicLabel(segment, parentSegment)
-  const label = dynamicLabel || ROUTE_LABELS[segment] || segment
+  const labelKey = ROUTE_LABEL_KEYS[segment]
+  const label = dynamicLabel || (labelKey ? t(labelKey) : segment)
 
   if (isLast) {
     return (
@@ -73,6 +77,7 @@ function BreadcrumbEntry({ segment, parentSegment, path, isLast }: CrumbProps) {
 }
 
 export default function PageBreadcrumbs() {
+  const { t } = useTranslation()
   const location = useLocation()
 
   // Don't show breadcrumbs on the dashboard (root)
@@ -87,7 +92,7 @@ export default function PageBreadcrumbs() {
         {/* Home */}
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link to="/">Дашборд</Link>
+            <Link to="/">{t('nav.dashboard')}</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
 

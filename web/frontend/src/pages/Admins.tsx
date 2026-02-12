@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
   Plus,
@@ -32,40 +33,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PermissionGate } from '@/components/PermissionGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
+import { useFormatters } from '@/lib/useFormatters'
 
 // ── Helpers ────────────────────────────────────────────────────
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '\u2014'
-  return new Date(dateStr).toLocaleDateString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  })
-}
-
-const RESOURCE_LABELS: Record<string, string> = {
-  users: '\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438',
-  nodes: '\u041d\u043e\u0434\u044b',
-  hosts: '\u0425\u043e\u0441\u0442\u044b',
-  violations: '\u041d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u044f',
-  settings: '\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438',
-  analytics: '\u0410\u043d\u0430\u043b\u0438\u0442\u0438\u043a\u0430',
-  admins: '\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u044b',
-  roles: '\u0420\u043e\u043b\u0438',
-  audit: '\u0410\u0443\u0434\u0438\u0442',
-  fleet: '\u0424\u043b\u043e\u0442',
-  automation: '\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0437\u0430\u0446\u0438\u044f',
-  logs: '\u0421\u0438\u0441\u0442\u0435\u043c\u043d\u044b\u0435 \u043b\u043e\u0433\u0438',
-}
-
-const ACTION_LABELS: Record<string, string> = {
-  view: '\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440',
-  create: '\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435',
-  edit: '\u0420\u0435\u0434\u0430\u043a\u0442.',
-  delete: '\u0423\u0434\u0430\u043b\u0435\u043d\u0438\u0435',
-  resolve: '\u0420\u0430\u0437\u0440\u0435\u0448.',
-  bulk_operations: '\u041c\u0430\u0441\u0441\u043e\u0432\u044b\u0435',
-  run: '\u0417\u0430\u043f\u0443\u0441\u043a',
-}
 
 function RoleBadge({ name, displayName }: { name: string | null; displayName: string | null }) {
   const label = displayName || name || 'No role'
@@ -128,6 +98,7 @@ function PermissionMatrix({
   onChange: (perms: Permission[]) => void
   disabled?: boolean
 }) {
+  const { t } = useTranslation()
   const isChecked = (resource: string, action: string) =>
     selected.some((p) => p.resource === resource && p.action === action)
 
@@ -177,7 +148,7 @@ function PermissionMatrix({
           <thead>
             <tr>
               <th className="text-left py-2 px-3 text-dark-200 font-medium border-b border-dark-400/20 sticky left-0 bg-dark-800 z-10 w-[130px]">
-                Ресурс
+                {t('admins.resource')}
               </th>
               {allActions.map((action) => (
                 <th
@@ -185,7 +156,7 @@ function PermissionMatrix({
                   className="text-center py-2 px-1 text-dark-200 font-medium border-b border-dark-400/20 cursor-pointer hover:text-white transition-colors"
                   onClick={() => toggleAllAction(action)}
                 >
-                  <span className="text-[11px]">{ACTION_LABELS[action] || action}</span>
+                  <span className="text-[11px]">{t(`admins.actions.${action}`, { defaultValue: action })}</span>
                 </th>
               ))}
             </tr>
@@ -197,7 +168,7 @@ function PermissionMatrix({
                   className="py-1.5 px-3 text-dark-50 font-medium cursor-pointer hover:text-primary-400 transition-colors sticky left-0 bg-dark-800 z-10 text-xs"
                   onClick={() => toggleAllResource(resource)}
                 >
-                  {RESOURCE_LABELS[resource] || resource}
+                  {t(`admins.resources.${resource}`, { defaultValue: resource })}
                 </td>
                 {allActions.map((action) => {
                   const available = actions.includes(action)
@@ -247,7 +218,7 @@ function PermissionMatrix({
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
                 >
-                  {RESOURCE_LABELS[resource] || resource}
+                  {t(`admins.resources.${resource}`, { defaultValue: resource })}
                 </button>
                 <span className="text-[10px] text-dark-300">
                   {resourcePerms.length}/{actions.length}
@@ -271,7 +242,7 @@ function PermissionMatrix({
                       )}
                     >
                       {checked && <Check className="w-3 h-3" />}
-                      {ACTION_LABELS[action] || action}
+                      {t(`admins.actions.${action}`, { defaultValue: action })}
                     </button>
                   )
                 })}
@@ -325,6 +296,7 @@ function AdminFormDialog({
   roles: Role[]
   editingAdmin: AdminAccount | null
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<AdminFormData>(() => {
     if (editingAdmin) {
       return {
@@ -378,9 +350,9 @@ function AdminFormDialog({
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editingAdmin ? '\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430' : '\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430'}</DialogTitle>
+          <DialogTitle>{editingAdmin ? t('admins.editAdmin') : t('admins.createAdmin')}</DialogTitle>
           <DialogDescription>
-            {editingAdmin ? '\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430' : '\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u043d\u043e\u0432\u043e\u0433\u043e \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430'}
+            {editingAdmin ? t('admins.editAdminDescription') : t('admins.createAdminDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -392,7 +364,7 @@ function AdminFormDialog({
 
         <div className="space-y-4">
           <div>
-            <Label>{'Имя пользователя *'}</Label>
+            <Label>{t('admins.username')} *</Label>
             <Input
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -410,17 +382,17 @@ function AdminFormDialog({
               placeholder="123456789"
               className="mt-1.5"
             />
-            <p className="text-xs text-dark-300 mt-1">{'Для входа через Telegram Login Widget'}</p>
+            <p className="text-xs text-dark-300 mt-1">{t('admins.telegramIdHint')}</p>
           </div>
 
           <div>
-            <Label>{'Роль *'}</Label>
+            <Label>{t('admins.role')} *</Label>
             <select
               value={form.role_id}
               onChange={(e) => setForm({ ...form, role_id: e.target.value })}
               className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-dark-50 mt-1.5"
             >
-              <option value="">{'Выберите роль'}</option>
+              <option value="">{t('admins.selectRole')}</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>{r.display_name}</option>
               ))}
@@ -428,39 +400,39 @@ function AdminFormDialog({
           </div>
 
           <div>
-            <Label>{editingAdmin ? 'Новый пароль' : 'Пароль'}</Label>
+            <Label>{editingAdmin ? t('admins.newPassword') : t('admins.password')}</Label>
             <Input
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder={editingAdmin ? 'Оставьте пустым, чтобы не менять' : 'Минимум 8 символов'}
+              placeholder={editingAdmin ? t('admins.passwordLeaveEmpty') : t('admins.passwordMinLength')}
               className="mt-1.5"
             />
           </div>
 
           <div className="pt-2 border-t border-dark-400/20">
-            <p className="text-sm font-medium text-dark-100 mb-3">{'Лимиты (пусто = безлимитно)'}</p>
+            <p className="text-sm font-medium text-dark-100 mb-3">{t('admins.limitsHint')}</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">{'Макс. пользователей'}</Label>
+                <Label className="text-xs">{t('admins.maxUsers')}</Label>
                 <Input type="number" min="0" value={form.max_users}
                   onChange={(e) => setForm({ ...form, max_users: e.target.value })}
                   placeholder={'\u221e'} className="mt-1" />
               </div>
               <div>
-                <Label className="text-xs">{'Макс. трафик (GB)'}</Label>
+                <Label className="text-xs">{t('admins.maxTraffic')}</Label>
                 <Input type="number" min="0" value={form.max_traffic_gb}
                   onChange={(e) => setForm({ ...form, max_traffic_gb: e.target.value })}
                   placeholder={'\u221e'} className="mt-1" />
               </div>
               <div>
-                <Label className="text-xs">{'Макс. нод'}</Label>
+                <Label className="text-xs">{t('admins.maxNodes')}</Label>
                 <Input type="number" min="0" value={form.max_nodes}
                   onChange={(e) => setForm({ ...form, max_nodes: e.target.value })}
                   placeholder={'\u221e'} className="mt-1" />
               </div>
               <div>
-                <Label className="text-xs">{'Макс. хостов'}</Label>
+                <Label className="text-xs">{t('admins.maxHosts')}</Label>
                 <Input type="number" min="0" value={form.max_hosts}
                   onChange={(e) => setForm({ ...form, max_hosts: e.target.value })}
                   placeholder={'\u221e'} className="mt-1" />
@@ -470,9 +442,9 @@ function AdminFormDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="secondary" onClick={onClose} disabled={isPending}>{'Отмена'}</Button>
+          <Button variant="secondary" onClick={onClose} disabled={isPending}>{t('common.cancel')}</Button>
           <Button onClick={handleSubmit} disabled={isPending || !form.username || !form.role_id}>
-            {isPending ? 'Сохранение...' : editingAdmin ? 'Сохранить' : 'Создать'}
+            {isPending ? t('common.saving') : editingAdmin ? t('common.save') : t('common.create')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -499,6 +471,7 @@ function RoleFormDialog({
   resources: AvailableResources
   editingRole: Role | null
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(editingRole?.name || '')
   const [displayName, setDisplayName] = useState(editingRole?.display_name || '')
   const [description, setDescription] = useState(editingRole?.description || '')
@@ -523,17 +496,17 @@ function RoleFormDialog({
       <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            {editingRole ? 'Редактирование роли' : 'Создание роли'}
+            {editingRole ? t('admins.editRole') : t('admins.createRole')}
             {isSystem && (
               <Badge variant="secondary" className="ml-2">
-                <Lock className="w-3 h-3 mr-1" /> {'Системная'}
+                <Lock className="w-3 h-3 mr-1" /> {t('admins.system')}
               </Badge>
             )}
           </DialogTitle>
           <DialogDescription>
             {editingRole
-              ? 'Настройте отображаемое имя и набор прав для этой роли'
-              : 'Задайте имя и набор прав для новой роли'}
+              ? t('admins.editRoleDescription')
+              : t('admins.createRoleDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -546,39 +519,39 @@ function RoleFormDialog({
 
           {!editingRole && (
             <div>
-              <Label>{'Системное имя *'}</Label>
+              <Label>{t('admins.systemName')} *</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)}
                 placeholder="custom_role" className="mt-1.5" disabled={isSystem} />
-              <p className="text-xs text-dark-300 mt-1">{'Латиница, нижнее подчёркивание. Нельзя изменить после создания.'}</p>
+              <p className="text-xs text-dark-300 mt-1">{t('admins.systemNameHint')}</p>
             </div>
           )}
           <div>
-            <Label>{'Отображаемое имя *'}</Label>
+            <Label>{t('admins.displayName')} *</Label>
             <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Custom Role" className="mt-1.5" />
           </div>
           <div>
-            <Label>{'Описание'}</Label>
+            <Label>{t('admins.description')}</Label>
             <Input value={description} onChange={(e) => setDescription(e.target.value)}
-              placeholder="Описание роли..." className="mt-1.5" />
+              placeholder={t('admins.roleDescriptionPlaceholder')} className="mt-1.5" />
           </div>
           <div>
-            <Label className="mb-3 block">{'Матрица прав'}</Label>
+            <Label className="mb-3 block">{t('admins.permissionMatrix')}</Label>
             <Card>
               <CardContent className="p-2 sm:p-3">
                 <PermissionMatrix resources={resources} selected={permissions} onChange={setPermissions} />
               </CardContent>
             </Card>
             <p className="text-xs text-dark-300 mt-2">
-              {'Выбрано: '}{permissions.length}{' прав. Клик на заголовок столбца/строки переключает все права в группе.'}
+              {t('admins.selectedPermissions', { count: permissions.length })}
             </p>
           </div>
         </div>
 
         <DialogFooter className="shrink-0 pt-4 border-t border-dark-400/20">
-          <Button variant="secondary" onClick={onClose} disabled={isPending}>{'Отмена'}</Button>
+          <Button variant="secondary" onClick={onClose} disabled={isPending}>{t('common.cancel')}</Button>
           <Button onClick={handleSubmit} disabled={isPending || !displayName || (!editingRole && !name)}>
-            {isPending ? 'Сохранение...' : editingRole ? 'Сохранить' : 'Создать'}
+            {isPending ? t('common.saving') : editingRole ? t('common.save') : t('common.create')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -591,6 +564,7 @@ function RoleFormDialog({
 function AdminActions({ admin, onEdit, onToggle, onDelete }: {
   admin: AdminAccount; onEdit: () => void; onToggle: () => void; onDelete: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -601,19 +575,19 @@ function AdminActions({ admin, onEdit, onToggle, onDelete }: {
       <DropdownMenuContent align="end" className="w-44">
         <PermissionGate resource="admins" action="edit">
           <DropdownMenuItem onClick={onEdit}>
-            <Pencil className="w-4 h-4 mr-2" /> {'Редактировать'}
+            <Pencil className="w-4 h-4 mr-2" /> {t('common.edit')}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onToggle}>
             {admin.is_active
-              ? <><UserX className="w-4 h-4 mr-2" /> {'Отключить'}</>
-              : <><UserCheck className="w-4 h-4 mr-2" /> {'Включить'}</>
+              ? <><UserX className="w-4 h-4 mr-2" /> {t('admins.disable')}</>
+              : <><UserCheck className="w-4 h-4 mr-2" /> {t('admins.enable')}</>
             }
           </DropdownMenuItem>
         </PermissionGate>
         <PermissionGate resource="admins" action="delete">
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onDelete} className="text-red-400 focus:text-red-400">
-            <Trash2 className="w-4 h-4 mr-2" /> {'Удалить'}
+            <Trash2 className="w-4 h-4 mr-2" /> {t('common.delete')}
           </DropdownMenuItem>
         </PermissionGate>
       </DropdownMenuContent>
@@ -624,6 +598,8 @@ function AdminActions({ admin, onEdit, onToggle, onDelete }: {
 // ── Admins Tab ─────────────────────────────────────────────────
 
 function AdminsTab({ roles }: { roles: Role[] }) {
+  const { t } = useTranslation()
+  const { formatDateShort } = useFormatters()
   const queryClient = useQueryClient()
   const [showDialog, setShowDialog] = useState(false)
   const [editingAdmin, setEditingAdmin] = useState<AdminAccount | null>(null)
@@ -634,23 +610,23 @@ function AdminsTab({ roles }: { roles: Role[] }) {
 
   const createMutation = useMutation({
     mutationFn: (data: AdminAccountCreate) => adminsApi.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setFormError(''); toast.success('Администратор создан') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setFormError(''); toast.success(t('admins.adminCreated')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || t('common.error')); toast.error(err.response?.data?.detail || err.message || t('common.error')) },
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: AdminAccountUpdate }) => adminsApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setEditingAdmin(null); setFormError(''); toast.success('Администратор обновлён') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); setShowDialog(false); setEditingAdmin(null); setFormError(''); toast.success(t('admins.adminUpdated')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || t('common.error')); toast.error(err.response?.data?.detail || err.message || t('common.error')) },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => adminsApi.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); toast.success('Администратор удалён') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); toast.success(t('admins.adminDeleted')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('common.error')) },
   })
   const toggleMutation = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) => adminsApi.update(id, { is_active }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); toast.success('Статус администратора обновлён') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admins'] }); toast.success(t('admins.statusUpdated')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('common.error')) },
   })
 
   const admins = adminsData?.items ?? []
@@ -671,8 +647,8 @@ function AdminsTab({ roles }: { roles: Role[] }) {
           <PermissionGate resource="admins" action="create">
             <Button size="sm" onClick={() => { setEditingAdmin(null); setFormError(''); setShowDialog(true) }}>
               <Plus className="w-4 h-4 mr-1.5" />
-              <span className="hidden sm:inline">{'Создать администратора'}</span>
-              <span className="sm:hidden">{'Создать'}</span>
+              <span className="hidden sm:inline">{t('admins.createAdmin')}</span>
+              <span className="sm:hidden">{t('common.create')}</span>
             </Button>
           </PermissionGate>
         </div>
@@ -685,7 +661,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
             <Card key={i}><CardContent className="p-4"><Skeleton className="h-5 w-32 mb-2" /><Skeleton className="h-4 w-24 mb-3" /><Skeleton className="h-2 w-full" /></CardContent></Card>
           ))
         ) : admins.length === 0 ? (
-          <Card><CardContent className="p-8 text-center text-muted-foreground">{'Нет администраторов'}</CardContent></Card>
+          <Card><CardContent className="p-8 text-center text-muted-foreground">{t('admins.noAdmins')}</CardContent></Card>
         ) : (
           admins.map((admin) => (
             <Card key={admin.id}>
@@ -696,7 +672,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
                     {admin.telegram_id && <p className="text-xs text-dark-300">TG: {admin.telegram_id}</p>}
                   </div>
                   <div className="flex items-center gap-2">
-                    {admin.is_active ? <Badge variant="success">{'Активен'}</Badge> : <Badge variant="destructive">{'Отключён'}</Badge>}
+                    {admin.is_active ? <Badge variant="success">{t('admins.active')}</Badge> : <Badge variant="destructive">{t('admins.disabled')}</Badge>}
                     <AdminActions admin={admin}
                       onEdit={() => { setEditingAdmin(admin); setFormError(''); setShowDialog(true) }}
                       onToggle={() => toggleMutation.mutate({ id: admin.id, is_active: !admin.is_active })}
@@ -705,11 +681,11 @@ function AdminsTab({ roles }: { roles: Role[] }) {
                 </div>
                 <div className="mb-3"><RoleBadge name={admin.role_name} displayName={admin.role_display_name} /></div>
                 <div className="space-y-2">
-                  <QuotaBar used={admin.users_created} limit={admin.max_users} label="Пользователи" />
-                  <QuotaBar used={admin.nodes_created} limit={admin.max_nodes} label="Ноды" />
-                  <QuotaBar used={admin.hosts_created} limit={admin.max_hosts} label="Хосты" />
+                  <QuotaBar used={admin.users_created} limit={admin.max_users} label={t('admins.users')} />
+                  <QuotaBar used={admin.nodes_created} limit={admin.max_nodes} label={t('admins.nodes')} />
+                  <QuotaBar used={admin.hosts_created} limit={admin.max_hosts} label={t('admins.hosts')} />
                 </div>
-                <p className="text-xs text-dark-300 mt-3">{'Создан: '}{formatDate(admin.created_at)}</p>
+                <p className="text-xs text-dark-300 mt-3">{t('admins.created')}: {admin.created_at ? formatDateShort(admin.created_at) : '\u2014'}</p>
               </CardContent>
             </Card>
           ))
@@ -722,13 +698,13 @@ function AdminsTab({ roles }: { roles: Role[] }) {
           <table className="table">
             <thead>
               <tr>
-                <th>{'Администратор'}</th>
-                <th>{'Роль'}</th>
-                <th>{'Статус'}</th>
-                <th>{'Пользователи'}</th>
-                <th>{'Ноды'}</th>
-                <th>{'Хосты'}</th>
-                <th>{'Создан'}</th>
+                <th>{t('admins.admin')}</th>
+                <th>{t('admins.role')}</th>
+                <th>{t('admins.status')}</th>
+                <th>{t('admins.users')}</th>
+                <th>{t('admins.nodes')}</th>
+                <th>{t('admins.hosts')}</th>
+                <th>{t('admins.created')}</th>
                 <th className="w-10"></th>
               </tr>
             </thead>
@@ -738,7 +714,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
                   <tr key={i}><td><Skeleton className="h-4 w-28" /></td><td><Skeleton className="h-5 w-24" /></td><td><Skeleton className="h-5 w-20" /></td><td><Skeleton className="h-4 w-16" /></td><td><Skeleton className="h-4 w-16" /></td><td><Skeleton className="h-4 w-16" /></td><td><Skeleton className="h-4 w-20" /></td><td></td></tr>
                 ))
               ) : admins.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">{'Нет администраторов'}</td></tr>
+                <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">{t('admins.noAdmins')}</td></tr>
               ) : (
                 admins.map((admin) => (
                   <tr key={admin.id}>
@@ -749,11 +725,11 @@ function AdminsTab({ roles }: { roles: Role[] }) {
                       </div>
                     </td>
                     <td><RoleBadge name={admin.role_name} displayName={admin.role_display_name} /></td>
-                    <td>{admin.is_active ? <Badge variant="success">{'Активен'}</Badge> : <Badge variant="destructive">{'Отключён'}</Badge>}</td>
+                    <td>{admin.is_active ? <Badge variant="success">{t('admins.active')}</Badge> : <Badge variant="destructive">{t('admins.disabled')}</Badge>}</td>
                     <td><div className="min-w-[100px]"><QuotaBar used={admin.users_created} limit={admin.max_users} label="" /></div></td>
                     <td><div className="min-w-[80px]"><QuotaBar used={admin.nodes_created} limit={admin.max_nodes} label="" /></div></td>
                     <td><div className="min-w-[80px]"><QuotaBar used={admin.hosts_created} limit={admin.max_hosts} label="" /></div></td>
-                    <td className="text-dark-200 text-sm">{formatDate(admin.created_at)}</td>
+                    <td className="text-dark-200 text-sm">{admin.created_at ? formatDateShort(admin.created_at) : '\u2014'}</td>
                     <td>
                       <AdminActions admin={admin}
                         onEdit={() => { setEditingAdmin(admin); setFormError(''); setShowDialog(true) }}
@@ -779,9 +755,9 @@ function AdminsTab({ roles }: { roles: Role[] }) {
       <ConfirmDialog
         open={deleteConfirm !== null}
         onOpenChange={(open) => { if (!open) setDeleteConfirm(null) }}
-        title="Удалить администратора?"
-        description="Администратор потеряет доступ к панели."
-        confirmLabel="Удалить"
+        title={t('admins.deleteAdminTitle')}
+        description={t('admins.deleteAdminDescription')}
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteConfirm !== null) {
@@ -797,6 +773,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
 // ── Roles Tab ──────────────────────────────────────────────────
 
 function RolesTab({ resources }: { resources: AvailableResources }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [showDialog, setShowDialog] = useState(false)
   const [editingRole, setEditingRole] = useState<Role | null>(null)
@@ -807,18 +784,18 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
 
   const createMutation = useMutation({
     mutationFn: (data: RoleCreate) => rolesApi.create(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setFormError(''); toast.success('Роль создана') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setFormError(''); toast.success(t('admins.roleCreated')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || t('common.error')); toast.error(err.response?.data?.detail || err.message || t('common.error')) },
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: RoleUpdate }) => rolesApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setEditingRole(null); setFormError(''); toast.success('Роль обновлена') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || 'Ошибка'); toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); setShowDialog(false); setEditingRole(null); setFormError(''); toast.success(t('admins.roleUpdated')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { setFormError(err.response?.data?.detail || err.message || t('common.error')); toast.error(err.response?.data?.detail || err.message || t('common.error')) },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => rolesApi.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); toast.success('Роль удалена') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['roles'] }); toast.success(t('admins.roleDeleted')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('common.error')) },
   })
 
   const handleSave = (data: RoleCreate | RoleUpdate) => {
@@ -842,8 +819,8 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
           <PermissionGate resource="roles" action="create">
             <Button size="sm" onClick={() => { setEditingRole(null); setFormError(''); setShowDialog(true) }}>
               <Plus className="w-4 h-4 mr-1.5" />
-              <span className="hidden sm:inline">{'Создать роль'}</span>
-              <span className="sm:hidden">{'Создать'}</span>
+              <span className="hidden sm:inline">{t('admins.createRole')}</span>
+              <span className="sm:hidden">{t('common.create')}</span>
             </Button>
           </PermissionGate>
         </div>
@@ -855,7 +832,7 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
             <Card key={i}><CardContent className="p-5"><Skeleton className="h-5 w-32 mb-2" /><Skeleton className="h-4 w-48 mb-4" /><Skeleton className="h-3 w-20" /></CardContent></Card>
           ))
         ) : roles.length === 0 ? (
-          <Card className="col-span-full"><CardContent className="p-8 text-center text-muted-foreground">{'Нет ролей'}</CardContent></Card>
+          <Card className="col-span-full"><CardContent className="p-8 text-center text-muted-foreground">{t('admins.noRoles')}</CardContent></Card>
         ) : (
           roles.map((role) => (
             <Card key={role.id} className={cn("border-l-[3px] transition-all hover:border-dark-300/50", roleColorMap[role.name] || 'border-l-purple-500')}>
@@ -872,14 +849,14 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
                   </div>
                   {role.is_system && (
                     <Badge variant="secondary" className="text-[10px]">
-                      <Lock className="w-2.5 h-2.5 mr-0.5" /> {'Системная'}
+                      <Lock className="w-2.5 h-2.5 mr-0.5" /> {t('admins.system')}
                     </Badge>
                   )}
                 </div>
                 {role.description && <p className="text-sm text-dark-200 mb-3">{role.description}</p>}
                 <div className="flex items-center gap-4 text-xs text-dark-300 mb-4">
-                  <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />{role.permissions_count ?? role.permissions?.length ?? 0}{' прав'}</span>
-                  <span className="flex items-center gap-1"><UsersIcon className="w-3.5 h-3.5" />{role.admins_count ?? 0}{' админов'}</span>
+                  <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />{role.permissions_count ?? role.permissions?.length ?? 0} {t('admins.permissions')}</span>
+                  <span className="flex items-center gap-1"><UsersIcon className="w-3.5 h-3.5" />{role.admins_count ?? 0} {t('admins.adminsCount')}</span>
                 </div>
                 <div className="flex flex-wrap gap-1 mb-4">
                   {role.permissions?.slice(0, 8).map((p) => (
@@ -894,13 +871,13 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
                 <div className="flex items-center gap-2 pt-3 border-t border-dark-400/20">
                   <PermissionGate resource="roles" action="edit">
                     <Button variant="secondary" size="sm" onClick={() => { setEditingRole(role); setFormError(''); setShowDialog(true) }}>
-                      <Pencil className="w-3.5 h-3.5 mr-1.5" /> {'Редактировать'}
+                      <Pencil className="w-3.5 h-3.5 mr-1.5" /> {t('common.edit')}
                     </Button>
                   </PermissionGate>
                   {!role.is_system && (
                     <PermissionGate resource="roles" action="delete">
                       <Button variant="secondary" size="sm" onClick={() => setDeleteConfirm(role.id)} className="text-red-400 hover:text-red-300">
-                        <Trash2 className="w-3.5 h-3.5 mr-1.5" /> {'Удалить'}
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" /> {t('common.delete')}
                       </Button>
                     </PermissionGate>
                   )}
@@ -922,9 +899,9 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
       <ConfirmDialog
         open={deleteConfirm !== null}
         onOpenChange={(open) => { if (!open) setDeleteConfirm(null) }}
-        title="Удалить роль?"
-        description="Роль будет удалена. Администраторы с этой ролью потеряют права."
-        confirmLabel="Удалить"
+        title={t('admins.deleteRoleTitle')}
+        description={t('admins.deleteRoleDescription')}
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => {
           if (deleteConfirm !== null) {
@@ -940,6 +917,7 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
 // ── Main Page ──────────────────────────────────────────────────
 
 export default function Admins() {
+  const { t } = useTranslation()
   const { data: roles = [] } = useQuery({ queryKey: ['roles'], queryFn: rolesApi.list })
   const { data: resources = {} } = useQuery({ queryKey: ['roles-resources'], queryFn: rolesApi.getResources })
 
@@ -947,17 +925,17 @@ export default function Admins() {
     <div className="space-y-4 md:space-y-6">
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">{'\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u044b \u0438 \u0440\u043e\u043b\u0438'}</h1>
+          <h1 className="page-header-title">{t('admins.title')}</h1>
           <p className="text-muted-foreground mt-1 text-sm md:text-base">
-            {'\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0443\u0447\u0451\u0442\u043d\u044b\u043c\u0438 \u0437\u0430\u043f\u0438\u0441\u044f\u043c\u0438 \u0438 \u0440\u043e\u043b\u044f\u043c\u0438'}
+            {t('admins.subtitle')}
           </p>
         </div>
       </div>
 
       <Tabs defaultValue="admins">
         <TabsList>
-          <TabsTrigger value="admins">{'\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u044b'}</TabsTrigger>
-          <TabsTrigger value="roles">{'\u0420\u043e\u043b\u0438'}</TabsTrigger>
+          <TabsTrigger value="admins">{t('admins.adminsTab')}</TabsTrigger>
+          <TabsTrigger value="roles">{t('admins.rolesTab')}</TabsTrigger>
         </TabsList>
         <TabsContent value="admins">
           <AdminsTab roles={roles} />

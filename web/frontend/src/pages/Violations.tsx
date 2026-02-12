@@ -2,7 +2,9 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import { useHasPermission } from '@/components/PermissionGate'
+import { useFormatters } from '@/lib/useFormatters'
 import {
   ShieldAlert,
   RefreshCw,
@@ -181,54 +183,28 @@ const fetchIPLookup = async (ips: string[]): Promise<Record<string, IPInfo>> => 
 
 // ── Utilities ────────────────────────────────────────────────────
 
-function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHour = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHour / 24)
-
-  if (diffSec < 60) return 'Только что'
-  if (diffMin < 60) return `${diffMin} мин назад`
-  if (diffHour < 24) return `${diffHour} ч назад`
-  if (diffDay < 7) return `${diffDay} дн назад`
-  return date.toLocaleDateString('ru-RU')
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function getSeverityConfig(severity: string) {
-  const config: Record<string, { label: string; variant: 'destructive' | 'warning' | 'default' | 'secondary'; iconClass: string; bg: string }> = {
+  const config: Record<string, { labelKey: string; variant: 'destructive' | 'warning' | 'default' | 'secondary'; iconClass: string; bg: string }> = {
     critical: {
-      label: 'Критический',
+      labelKey: 'violations.severity.critical',
       variant: 'destructive',
       iconClass: 'text-red-400',
       bg: 'bg-red-500/10',
     },
     high: {
-      label: 'Высокий',
+      labelKey: 'violations.severity.high',
       variant: 'warning',
       iconClass: 'text-yellow-400',
       bg: 'bg-yellow-500/10',
     },
     medium: {
-      label: 'Средний',
+      labelKey: 'violations.severity.medium',
       variant: 'default',
       iconClass: 'text-blue-400',
       bg: 'bg-blue-500/10',
     },
     low: {
-      label: 'Низкий',
+      labelKey: 'violations.severity.low',
       variant: 'secondary',
       iconClass: 'text-dark-200',
       bg: 'bg-dark-600/50',
@@ -245,29 +221,29 @@ function getSeverityFromScore(score: number): string {
 }
 
 function getActionConfig(action: string | null) {
-  if (!action) return { label: 'Ожидает', variant: 'warning' as const }
-  const config: Record<string, { label: string; variant: 'destructive' | 'default' | 'secondary' | 'success' | 'warning' }> = {
-    block: { label: 'Заблокирован', variant: 'destructive' },
-    blocked: { label: 'Заблокирован', variant: 'destructive' },
-    warn: { label: 'Предупреждён', variant: 'default' },
-    warned: { label: 'Предупреждён', variant: 'default' },
-    ignore: { label: 'Отклонено', variant: 'secondary' },
-    dismissed: { label: 'Отклонено', variant: 'secondary' },
-    resolved: { label: 'Разрешено', variant: 'success' },
+  if (!action) return { labelKey: 'violations.actionStatuses.pending', variant: 'warning' as const }
+  const config: Record<string, { labelKey: string; variant: 'destructive' | 'default' | 'secondary' | 'success' | 'warning' }> = {
+    block: { labelKey: 'violations.actionStatuses.blocked', variant: 'destructive' },
+    blocked: { labelKey: 'violations.actionStatuses.blocked', variant: 'destructive' },
+    warn: { labelKey: 'violations.actionStatuses.warned', variant: 'default' },
+    warned: { labelKey: 'violations.actionStatuses.warned', variant: 'default' },
+    ignore: { labelKey: 'violations.actionStatuses.dismissed', variant: 'secondary' },
+    dismissed: { labelKey: 'violations.actionStatuses.dismissed', variant: 'secondary' },
+    resolved: { labelKey: 'violations.actionStatuses.resolved', variant: 'success' },
   }
-  return config[action] || { label: action, variant: 'secondary' as const }
+  return config[action] || { labelKey: action, variant: 'secondary' as const }
 }
 
-function getRecommendedActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    no_action: 'Нет действий',
-    monitor: 'Мониторинг',
-    warn: 'Предупреждение',
-    soft_block: 'Мягкая блокировка',
-    temp_block: 'Временная блокировка',
-    hard_block: 'Жёсткая блокировка',
+function getRecommendedActionLabelKey(action: string): string {
+  const keys: Record<string, string> = {
+    no_action: 'violations.recommendedActions.no_action',
+    monitor: 'violations.recommendedActions.monitor',
+    warn: 'violations.recommendedActions.warn',
+    soft_block: 'violations.recommendedActions.soft_block',
+    temp_block: 'violations.recommendedActions.temp_block',
+    hard_block: 'violations.recommendedActions.hard_block',
   }
-  return labels[action] || action
+  return keys[action] || action
 }
 
 function getRecommendedActionClass(action: string): string {
@@ -296,28 +272,28 @@ function getScoreBg(score: number): string {
   return 'bg-green-500/20'
 }
 
-function getConnectionTypeLabel(type: string | null): string | null {
+function getConnectionTypeLabelKey(type: string | null): string | null {
   if (!type) return null
-  const labels: Record<string, string> = {
-    residential: 'Домашний',
-    mobile: 'Мобильный',
-    mobile_isp: 'Моб. оператор',
-    datacenter: 'Датацентр',
-    hosting: 'Хостинг',
-    vpn: 'VPN',
-    unknown: 'Неизвестно',
+  const keys: Record<string, string> = {
+    residential: 'violations.connectionTypes.residential',
+    mobile: 'violations.connectionTypes.mobile',
+    mobile_isp: 'violations.connectionTypes.mobile_isp',
+    datacenter: 'violations.connectionTypes.datacenter',
+    hosting: 'violations.connectionTypes.hosting',
+    vpn: 'violations.connectionTypes.vpn',
+    unknown: 'violations.connectionTypes.unknown',
   }
-  return labels[type] || type
+  return keys[type] || type
 }
 
-function getConnectionTypeBadge(info: IPInfo): { label: string; cls: string } | null {
+function getConnectionTypeBadge(info: IPInfo, t: (key: string) => string): { label: string; cls: string } | null {
   if (info.is_vpn) return { label: 'VPN', cls: 'text-red-400 bg-red-500/10 border-red-500/30' }
   if (info.is_proxy) return { label: 'Proxy', cls: 'text-orange-400 bg-orange-500/10 border-orange-500/30' }
-  if (info.is_hosting) return { label: 'Хостинг', cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' }
-  if (info.is_mobile) return { label: 'Моб.', cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' }
-  const typeLabel = getConnectionTypeLabel(info.connection_type)
-  if (typeLabel && info.connection_type !== 'unknown') {
-    return { label: typeLabel, cls: 'text-dark-200 bg-dark-600/50 border-dark-400/30' }
+  if (info.is_hosting) return { label: t('violations.connectionTypes.hosting'), cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' }
+  if (info.is_mobile) return { label: t('violations.connectionTypes.mobileShort'), cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' }
+  const typeLabelKey = getConnectionTypeLabelKey(info.connection_type)
+  if (typeLabelKey && info.connection_type !== 'unknown') {
+    return { label: t(typeLabelKey), cls: 'text-dark-200 bg-dark-600/50 border-dark-400/30' }
   }
   return null
 }
@@ -379,6 +355,8 @@ function ViolationCard({
   onViewDetail: () => void
   onViewUser: () => void
 }) {
+  const { t } = useTranslation()
+  const { formatTimeAgo } = useFormatters()
   const severityConfig = getSeverityConfig(violation.severity)
   const isPending = !violation.action_taken
 
@@ -402,12 +380,12 @@ function ViolationCard({
                 onClick={onViewUser}
                 className="font-semibold text-white hover:text-primary-400 transition-colors"
               >
-                {violation.username || violation.email || 'Неизвестный'}
+                {violation.username || violation.email || t('common.unknown')}
               </button>
               <SeverityBadge severity={violation.severity} />
               <ActionBadge action={violation.action_taken} />
               {violation.notified && (
-                <span className="text-xs text-dark-200" title="Уведомлён">
+                <span className="text-xs text-dark-200" title={t('violations.notified')}>
                   <MessageCircle className="w-3.5 h-3.5 inline" />
                 </span>
               )}
@@ -415,10 +393,10 @@ function ViolationCard({
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-dark-200 mb-1">
               <span className={getRecommendedActionClass(violation.recommended_action)}>
-                {getRecommendedActionLabel(violation.recommended_action)}
+                {t(getRecommendedActionLabelKey(violation.recommended_action))}
               </span>
               {violation.confidence > 0 && (
-                <span>Уверенность: {Math.round(violation.confidence * 100)}%</span>
+                <span>{t('violations.confidence')}: {Math.round(violation.confidence * 100)}%</span>
               )}
             </div>
 
@@ -441,20 +419,20 @@ function ViolationCard({
           <div className="mt-4 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
             <Button variant="destructive" size="sm" onClick={onBlock} className="gap-1">
               <Ban className="w-4 h-4" />
-              <span className="hidden sm:inline">Заблокировать</span>
-              <span className="sm:hidden">Блок</span>
+              <span className="hidden sm:inline">{t('violations.actions.block')}</span>
+              <span className="sm:hidden">{t('violations.actions.blockShort')}</span>
             </Button>
             <Button variant="secondary" size="sm" onClick={onWarn} className="gap-1">
               <AlertTriangle className="w-4 h-4" />
-              <span className="hidden sm:inline">Предупредить</span>
-              <span className="sm:hidden">Пред.</span>
+              <span className="hidden sm:inline">{t('violations.actions.warn')}</span>
+              <span className="sm:hidden">{t('violations.actions.warnShort')}</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={onDismiss} className="gap-1">
-              <X className="w-4 h-4" /> Отклонить
+              <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
             </Button>
             <Button variant="ghost" size="sm" onClick={onViewDetail} className="gap-1 ml-auto">
               <Eye className="w-4 h-4" />
-              <span className="hidden sm:inline">Подробнее</span>
+              <span className="hidden sm:inline">{t('common.details')}</span>
             </Button>
           </div>
         )}
@@ -462,12 +440,12 @@ function ViolationCard({
         {/* Resolved footer */}
         {!isPending && (
           <div className="mt-4 pt-3 border-t border-dark-400/10 flex items-center justify-between text-xs text-dark-200">
-            <span>Действие: {getActionConfig(violation.action_taken).label}</span>
+            <span>{t('violations.actionLabel')}: {t(getActionConfig(violation.action_taken).labelKey)}</span>
             <button
               onClick={onViewDetail}
               className="text-primary-400 hover:text-primary-300 flex items-center gap-1 transition-colors"
             >
-              <Eye className="w-4 h-4" /> Подробнее
+              <Eye className="w-4 h-4" /> {t('common.details')}
             </button>
           </div>
         )}
@@ -479,13 +457,15 @@ function ViolationCard({
 // ── Badges ───────────────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: string }) {
+  const { t } = useTranslation()
   const config = getSeverityConfig(severity)
-  return <Badge variant={config.variant}>{config.label}</Badge>
+  return <Badge variant={config.variant}>{t(config.labelKey)}</Badge>
 }
 
 function ActionBadge({ action }: { action: string | null }) {
+  const { t } = useTranslation()
   const config = getActionConfig(action)
-  return <Badge variant={config.variant}>{config.label}</Badge>
+  return <Badge variant={config.variant}>{t(config.labelKey)}</Badge>
 }
 
 // ── Detail panel ─────────────────────────────────────────────────
@@ -501,14 +481,14 @@ interface HwidDevice {
   updated_at: string | null
 }
 
-function getPlatformInfo(platform: string | null): { icon: string; label: string } {
+function getPlatformInfo(platform: string | null, unknownLabel: string): { icon: string; label: string } {
   const p = (platform || '').toLowerCase()
   if (p.includes('windows') || p === 'win') return { icon: '🖥️', label: 'Windows' }
   if (p.includes('android')) return { icon: '📱', label: 'Android' }
   if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return { icon: '📱', label: 'iOS' }
   if (p.includes('macos') || p.includes('mac') || p.includes('darwin')) return { icon: '💻', label: 'macOS' }
   if (p.includes('linux')) return { icon: '🐧', label: 'Linux' }
-  return { icon: '📟', label: platform || 'Неизвестно' }
+  return { icon: '📟', label: platform || unknownLabel }
 }
 
 function ViolationDetailPanel({
@@ -528,6 +508,9 @@ function ViolationDetailPanel({
   onDismiss: (id: number) => void
   onViewUser: (uuid: string) => void
 }) {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+
   const { data: detail, isLoading } = useQuery({
     queryKey: ['violationDetail', violationId],
     queryFn: () => fetchViolationDetail(violationId),
@@ -574,10 +557,10 @@ function ViolationDetailPanel({
     return (
       <div className="space-y-4">
         <Button variant="ghost" onClick={onClose} className="gap-2">
-          <ArrowLeft className="w-5 h-5" /> Назад
+          <ArrowLeft className="w-5 h-5" /> {t('common.back')}
         </Button>
         <Card>
-          <CardContent className="text-center py-8 text-dark-200">Нарушение не найдено</CardContent>
+          <CardContent className="text-center py-8 text-dark-200">{t('violations.detail.notFound')}</CardContent>
         </Card>
       </div>
     )
@@ -596,7 +579,7 @@ function ViolationDetailPanel({
         </Button>
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-bold text-white truncate">
-            Нарушение #{detail.id}
+            {t('violations.detail.title', { id: detail.id })}
           </h2>
           <p className="text-sm text-dark-200">{formatDate(detail.detected_at)}</p>
         </div>
@@ -607,14 +590,14 @@ function ViolationDetailPanel({
       <Card className="animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
         <CardContent className="p-4">
           <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-            Пользователь
+            {t('violations.detail.user')}
           </h3>
           <div className="flex flex-wrap items-center gap-3">
             <div className={`p-2 rounded-lg ${severityConfig.bg}`}>
               <User className={`w-5 h-5 ${severityConfig.iconClass}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-white">{detail.username || 'Неизвестный'}</p>
+              <p className="font-medium text-white">{detail.username || t('common.unknown')}</p>
               {detail.email && <p className="text-sm text-dark-200 truncate">{detail.email}</p>}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -622,29 +605,29 @@ function ViolationDetailPanel({
               <ActionBadge action={detail.action_taken} />
             </div>
             <Button variant="secondary" size="sm" onClick={() => onViewUser(detail.user_uuid)} className="gap-1">
-              <ExternalLink className="w-4 h-4" /> Профиль
+              <ExternalLink className="w-4 h-4" /> {t('common.profile')}
             </Button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
             <div className="text-center p-2 rounded-lg bg-dark-800/50">
-              <p className="text-xs text-dark-200">Рекомендация</p>
+              <p className="text-xs text-dark-200">{t('violations.detail.recommendation')}</p>
               <p className={`text-sm font-medium ${getRecommendedActionClass(detail.recommended_action)}`}>
-                {getRecommendedActionLabel(detail.recommended_action)}
+                {t(getRecommendedActionLabelKey(detail.recommended_action))}
               </p>
             </div>
             <div className="text-center p-2 rounded-lg bg-dark-800/50">
-              <p className="text-xs text-dark-200">Уверенность</p>
+              <p className="text-xs text-dark-200">{t('violations.confidence')}</p>
               <p className="text-sm font-medium text-white">
                 {Math.round(detail.confidence * 100)}%
               </p>
             </div>
             <div className="text-center p-2 rounded-lg bg-dark-800/50">
-              <p className="text-xs text-dark-200">Стран</p>
+              <p className="text-xs text-dark-200">{t('violations.detail.countries')}</p>
               <p className="text-sm font-medium text-white">{detail.countries.length}</p>
             </div>
             <div className="text-center p-2 rounded-lg bg-dark-800/50">
-              <p className="text-xs text-dark-200">IP-адресов</p>
+              <p className="text-xs text-dark-200">{t('violations.detail.ipAddresses')}</p>
               <p className="text-sm font-medium text-white">{detail.ips.length}</p>
             </div>
           </div>
@@ -655,37 +638,37 @@ function ViolationDetailPanel({
       <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
         <CardContent className="p-4">
           <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-4">
-            Разбор скоринга
+            {t('violations.detail.scoreBreakdown')}
           </h3>
           <div className="space-y-3">
             <ScoreBar
-              label="Временной"
+              label={t('violations.detail.temporal')}
               score={detail.temporal_score}
               icon={<Clock className="w-4 h-4" />}
             />
             <ScoreBar
-              label="Гео"
+              label={t('violations.detail.geo')}
               score={detail.geo_score}
               icon={<Globe className="w-4 h-4" />}
             />
             <ScoreBar
-              label="Провайдер"
+              label={t('violations.detail.provider')}
               score={detail.asn_score}
               icon={<Server className="w-4 h-4" />}
             />
             <ScoreBar
-              label="Профиль"
+              label={t('violations.detail.profileScore')}
               score={detail.profile_score}
               icon={<Fingerprint className="w-4 h-4" />}
             />
             <ScoreBar
-              label="Устройство"
+              label={t('violations.detail.device')}
               score={detail.device_score}
               icon={<Smartphone className="w-4 h-4" />}
             />
           </div>
           <div className="mt-4 pt-3 border-t border-dark-400/10 flex items-center justify-between">
-            <span className="text-sm text-dark-200">Итоговый скор</span>
+            <span className="text-sm text-dark-200">{t('violations.detail.finalScore')}</span>
             <span className={`text-lg font-bold ${getScoreColor(detail.score)}`}>
               {Math.round(detail.score)} / 100
             </span>
@@ -698,7 +681,7 @@ function ViolationDetailPanel({
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-              Причины ({detail.reasons.length})
+              {t('violations.detail.reasons')} ({detail.reasons.length})
             </h3>
             <ul className="space-y-2">
               {detail.reasons.map((reason, i) => (
@@ -720,7 +703,7 @@ function ViolationDetailPanel({
             <CardContent className="p-4">
               <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
                 <MapPin className="w-4 h-4 inline mr-1" />
-                Страны
+                {t('violations.detail.countriesTitle')}
               </h3>
               <div className="flex flex-wrap gap-2">
                 {detail.countries.map((country, i) => (
@@ -737,7 +720,7 @@ function ViolationDetailPanel({
             <CardContent className="p-4">
               <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
                 <Server className="w-4 h-4 inline mr-1" />
-                Типы провайдеров
+                {t('violations.detail.providerTypes')}
               </h3>
               <div className="flex flex-wrap gap-2">
                 {detail.asn_types.map((asn, i) => (
@@ -754,12 +737,12 @@ function ViolationDetailPanel({
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-              IP-адреса ({detail.ips.length})
+              {t('violations.detail.ipTitle')} ({detail.ips.length})
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {detail.ips.map((ip, i) => {
                 const info = ipInfo?.[ip]
-                const badge = info ? getConnectionTypeBadge(info) : null
+                const badge = info ? getConnectionTypeBadge(info, t) : null
                 return (
                   <div
                     key={i}
@@ -803,11 +786,11 @@ function ViolationDetailPanel({
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
               <Smartphone className="w-4 h-4 inline mr-1" />
-              Устройства ({hwidDevices.length})
+              {t('violations.detail.devicesTitle')} ({hwidDevices.length})
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {hwidDevices.map((device, idx) => {
-                const pi = getPlatformInfo(device.platform)
+                const pi = getPlatformInfo(device.platform, t('common.unknown'))
                 return (
                   <div
                     key={device.hwid || idx}
@@ -823,13 +806,13 @@ function ViolationDetailPanel({
                     <div className="space-y-1 text-xs">
                       {device.device_model && (
                         <div className="flex justify-between">
-                          <span className="text-dark-300">Модель</span>
+                          <span className="text-dark-300">{t('violations.detail.model')}</span>
                           <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right">{device.device_model}</span>
                         </div>
                       )}
                       {device.os_version && (
                         <div className="flex justify-between">
-                          <span className="text-dark-300">ОС</span>
+                          <span className="text-dark-300">{t('violations.detail.os')}</span>
                           <span className="text-dark-100 truncate ml-2 max-w-[60%] text-right">{device.os_version}</span>
                         </div>
                       )}
@@ -841,7 +824,7 @@ function ViolationDetailPanel({
                       )}
                       {device.created_at && (
                         <div className="flex justify-between">
-                          <span className="text-dark-300">Добавлено</span>
+                          <span className="text-dark-300">{t('violations.detail.addedAt')}</span>
                           <span className="text-dark-100">{formatDate(device.created_at)}</span>
                         </div>
                       )}
@@ -864,7 +847,7 @@ function ViolationDetailPanel({
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-              Решение администратора
+              {t('violations.detail.adminDecision')}
             </h3>
             <div className="flex items-center gap-3">
               <ActionBadge action={detail.action_taken} />
@@ -881,17 +864,17 @@ function ViolationDetailPanel({
         <Card className="animate-fade-in-up border-primary-500/20" style={{ animationDelay: '0.35s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-              Принять решение
+              {t('violations.actions.resolve')}
             </h3>
             <div className="flex flex-wrap gap-3">
               <Button variant="destructive" onClick={() => onBlock(detail.id)} className="gap-2">
-                <Ban className="w-4 h-4" /> Заблокировать
+                <Ban className="w-4 h-4" /> {t('violations.actions.block')}
               </Button>
               <Button variant="secondary" onClick={() => onWarn(detail.id)} className="gap-2">
-                <AlertTriangle className="w-4 h-4" /> Предупредить
+                <AlertTriangle className="w-4 h-4" /> {t('violations.actions.warn')}
               </Button>
               <Button variant="ghost" onClick={() => onDismiss(detail.id)} className="gap-2">
-                <X className="w-4 h-4" /> Отклонить
+                <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
               </Button>
             </div>
           </CardContent>
@@ -904,6 +887,9 @@ function ViolationDetailPanel({
 // ── Top violators tab ────────────────────────────────────────────
 
 function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid: string) => void }) {
+  const { t } = useTranslation()
+  const { formatTimeAgo } = useFormatters()
+
   const { data: violators, isLoading } = useQuery({
     queryKey: ['topViolators', days],
     queryFn: () => fetchTopViolators(days),
@@ -934,7 +920,7 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
       <Card className="text-center py-12">
         <CardContent>
           <Check className="w-12 h-12 text-green-500 mx-auto mb-3" />
-          <p className="text-dark-200">Нет нарушителей за период</p>
+          <p className="text-dark-200">{t('violations.topViolators.noViolators')}</p>
         </CardContent>
       </Card>
     )
@@ -970,17 +956,17 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
                       onClick={() => onViewUser(v.user_uuid)}
                       className="font-semibold text-white hover:text-primary-400 transition-colors"
                     >
-                      {v.username || 'Неизвестный'}
+                      {v.username || t('common.unknown')}
                     </button>
                     <SeverityBadge severity={severity} />
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dark-200">
                     <span>
                       <ShieldAlert className="w-3.5 h-3.5 inline mr-0.5" />
-                      {v.violations_count} нарушени{v.violations_count === 1 ? 'е' : v.violations_count < 5 ? 'я' : 'й'}
+                      {t('violations.topViolators.violationsCount_many', { count: v.violations_count })}
                     </span>
-                    <span>Макс: {Math.round(v.max_score)}</span>
-                    <span>Средн: {Math.round(v.avg_score)}</span>
+                    <span>{t('violations.topViolators.max')}: {Math.round(v.max_score)}</span>
+                    <span>{t('violations.topViolators.avg')}: {Math.round(v.avg_score)}</span>
                     <span>
                       <Clock className="w-3.5 h-3.5 inline mr-0.5" />
                       {formatTimeAgo(v.last_violation_at)}
@@ -1011,6 +997,7 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
 // ── Stats overview ───────────────────────────────────────────────
 
 function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
+  const { t } = useTranslation()
   const [showCountries, setShowCountries] = useState(false)
 
   if (!stats) return null
@@ -1025,8 +1012,8 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1">
-              <p className="text-xs sm:text-sm text-dark-200">Критические</p>
-              <InfoTooltip text="Скор 80–100. Серьёзные аномалии, требующие немедленного вмешательства." side="right" iconClassName="w-3.5 h-3.5" />
+              <p className="text-xs sm:text-sm text-dark-200">{t('violations.severity.critical')}</p>
+              <InfoTooltip text={t('violations.severityTooltips.critical')} side="right" iconClassName="w-3.5 h-3.5" />
             </div>
             <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">{stats.critical}</p>
           </CardContent>
@@ -1034,8 +1021,8 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1">
-              <p className="text-xs sm:text-sm text-dark-200">Высокие</p>
-              <InfoTooltip text="Скор 60–79. Подозрительная активность, рекомендуется проверка." side="right" iconClassName="w-3.5 h-3.5" />
+              <p className="text-xs sm:text-sm text-dark-200">{t('violations.severity.high')}</p>
+              <InfoTooltip text={t('violations.severityTooltips.high')} side="right" iconClassName="w-3.5 h-3.5" />
             </div>
             <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">{stats.high}</p>
           </CardContent>
@@ -1043,8 +1030,8 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1">
-              <p className="text-xs sm:text-sm text-dark-200">Средние</p>
-              <InfoTooltip text="Скор 40–59. Незначительные отклонения, рекомендуется мониторинг." side="right" iconClassName="w-3.5 h-3.5" />
+              <p className="text-xs sm:text-sm text-dark-200">{t('violations.severity.medium')}</p>
+              <InfoTooltip text={t('violations.severityTooltips.medium')} side="right" iconClassName="w-3.5 h-3.5" />
             </div>
             <p className="text-xl md:text-2xl font-bold text-blue-400 mt-1">{stats.medium}</p>
           </CardContent>
@@ -1052,8 +1039,8 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-1">
-              <p className="text-xs sm:text-sm text-dark-200">Низкие</p>
-              <InfoTooltip text="Скор 0–39. Информационные уведомления, не требующие действий." side="right" iconClassName="w-3.5 h-3.5" />
+              <p className="text-xs sm:text-sm text-dark-200">{t('violations.severity.low')}</p>
+              <InfoTooltip text={t('violations.severityTooltips.low')} side="right" iconClassName="w-3.5 h-3.5" />
             </div>
             <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">{stats.low}</p>
           </CardContent>
@@ -1068,8 +1055,8 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
               <ShieldAlert className="w-5 h-5 text-primary-400" />
               <div>
                 <div className="flex items-center gap-1">
-                  <p className="text-xs text-dark-200">Всего</p>
-                  <InfoTooltip text="Общее количество зафиксированных нарушений за выбранный период." side="right" iconClassName="w-3 h-3" />
+                  <p className="text-xs text-dark-200">{t('violations.stats.total')}</p>
+                  <InfoTooltip text={t('violations.stats.totalTooltip')} side="right" iconClassName="w-3 h-3" />
                 </div>
                 <p className="text-lg font-bold text-white">{stats.total}</p>
               </div>
@@ -1082,8 +1069,8 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
               <User className="w-5 h-5 text-primary-400" />
               <div>
                 <div className="flex items-center gap-1">
-                  <p className="text-xs text-dark-200">Уник. юзеров</p>
-                  <InfoTooltip text="Количество уникальных пользователей с нарушениями за выбранный период. Один пользователь может иметь несколько нарушений." side="right" iconClassName="w-3 h-3" />
+                  <p className="text-xs text-dark-200">{t('violations.stats.uniqueUsers')}</p>
+                  <InfoTooltip text={t('violations.stats.uniqueUsersTooltip')} side="right" iconClassName="w-3 h-3" />
                 </div>
                 <p className="text-lg font-bold text-white">{stats.unique_users}</p>
               </div>
@@ -1096,8 +1083,8 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
               <TrendingUp className="w-5 h-5 text-primary-400" />
               <div>
                 <div className="flex items-center gap-1">
-                  <p className="text-xs text-dark-200">Средн. скор</p>
-                  <InfoTooltip text="Средний скор нарушений (0–100). Рассчитывается на основе временных, геолокационных, ASN, профильных и устройственных аномалий." side="right" iconClassName="w-3 h-3" />
+                  <p className="text-xs text-dark-200">{t('violations.stats.avgScore')}</p>
+                  <InfoTooltip text={t('violations.stats.avgScoreTooltip')} side="right" iconClassName="w-3 h-3" />
                 </div>
                 <p className="text-lg font-bold text-white">{Math.round(stats.avg_score)}</p>
               </div>
@@ -1110,8 +1097,8 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
               <AlertTriangle className="w-5 h-5 text-red-400" />
               <div>
                 <div className="flex items-center gap-1">
-                  <p className="text-xs text-dark-200">Макс. скор</p>
-                  <InfoTooltip text="Наивысший зафиксированный скор нарушения за выбранный период. Чем выше скор, тем больше аномалий обнаружено." side="right" iconClassName="w-3 h-3" />
+                  <p className="text-xs text-dark-200">{t('violations.stats.maxScore')}</p>
+                  <InfoTooltip text={t('violations.stats.maxScoreTooltip')} side="right" iconClassName="w-3 h-3" />
                 </div>
                 <p className="text-lg font-bold text-white">{Math.round(stats.max_score)}</p>
               </div>
@@ -1130,7 +1117,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
             >
               <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider flex items-center gap-2">
                 <Globe className="w-4 h-4" />
-                По странам ({countryEntries.length})
+                {t('violations.stats.byCountries')} ({countryEntries.length})
               </h3>
               {showCountries ? (
                 <ChevronUp className="w-5 h-5 text-dark-200" />
@@ -1145,7 +1132,7 @@ function StatsOverview({ stats }: { stats: ViolationStats | undefined }) {
                     key={country}
                     className="flex items-center justify-between bg-dark-800/50 rounded-lg px-3 py-2"
                   >
-                    <span className="text-sm text-dark-100">{country || 'Неизвестно'}</span>
+                    <span className="text-sm text-dark-100">{country || t('common.unknown')}</span>
                     <span className="text-sm font-medium text-primary-400">{count}</span>
                   </div>
                 ))}
@@ -1186,6 +1173,7 @@ function ViolationSkeleton() {
 type Tab = 'all' | 'pending' | 'top'
 
 export default function Violations() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -1220,13 +1208,13 @@ export default function Violations() {
       status: v.status || '',
     }))
     exportCSV(exportData, `violations-${new Date().toISOString().slice(0, 10)}`)
-    toast.success('Экспорт CSV завершён')
+    toast.success(t('common.export.csvDone'))
   }
   const handleExportJSON = () => {
     const items = data?.items
     if (!items?.length) return
     exportJSON(items, `violations-${new Date().toISOString().slice(0, 10)}`)
-    toast.success('Экспорт JSON завершён')
+    toast.success(t('common.export.jsonDone'))
   }
 
   // Saved filters
@@ -1290,10 +1278,10 @@ export default function Violations() {
       queryClient.invalidateQueries({ queryKey: ['topViolators'] })
       queryClient.invalidateQueries({ queryKey: ['violationDetail'] })
       setSelectedViolationId(null)
-      toast.success('Нарушение обработано')
+      toast.success(t('violations.toast.resolved'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
     },
   })
 
@@ -1343,18 +1331,20 @@ export default function Violations() {
       <div className="page-header">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="page-header-title">Нарушения</h1>
+            <h1 className="page-header-title">{t('violations.title')}</h1>
             <InfoTooltip
-              text="Система анти-абуза анализирует подключения пользователей и выявляет аномалии: подозрительные гео-перемещения, множественные ASN, необычные устройства и другие отклонения. Скор от 0 до 100 показывает степень подозрительности."
+              text={t('violations.tooltip')}
               side="right"
             />
           </div>
           <p className="text-dark-200 mt-1 text-sm md:text-base">
-            Анти-абуз система и управление нарушениями
+            {t('violations.subtitle')}
             {stats ? (
               <span className="text-dark-200 ml-1">
-                — {stats.total} за{' '}
-                {days === 1 ? 'сегодня' : days === 7 ? 'неделю' : days === 30 ? 'месяц' : `${days} дн`}
+                {t('violations.periodSummary', {
+                  count: stats.total,
+                  period: days === 1 ? t('violations.periodToday') : days === 7 ? t('violations.periodWeek') : days === 30 ? t('violations.periodMonth') : t('violations.periodDays', { count: days }),
+                })}
               </span>
             ) : null}
           </p>
@@ -1366,7 +1356,7 @@ export default function Violations() {
             className={cn('gap-2', showFilters && 'ring-2 ring-primary-500')}
           >
             <Filter className="w-4 h-4" />
-            <span className="hidden sm:inline">Фильтры</span>
+            <span className="hidden sm:inline">{t('common.filters')}</span>
           </Button>
           <Button
             variant="secondary"
@@ -1400,7 +1390,7 @@ export default function Violations() {
           <CardContent className="p-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
               <div>
-                <label className="block text-xs text-dark-200 mb-1">Уровень</label>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.level')}</label>
                 <select
                   value={severity}
                   onChange={(e) => {
@@ -1409,15 +1399,15 @@ export default function Violations() {
                   }}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 >
-                  <option value="">Все</option>
-                  <option value="critical">Критический</option>
-                  <option value="high">Высокий</option>
-                  <option value="medium">Средний</option>
-                  <option value="low">Низкий</option>
+                  <option value="">{t('common.all')}</option>
+                  <option value="critical">{t('violations.severity.critical')}</option>
+                  <option value="high">{t('violations.severity.high')}</option>
+                  <option value="medium">{t('violations.severity.medium')}</option>
+                  <option value="low">{t('violations.severity.low')}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-dark-200 mb-1">Период</label>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.period')}</label>
                 <select
                   value={days}
                   onChange={(e) => {
@@ -1426,15 +1416,15 @@ export default function Violations() {
                   }}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 >
-                  <option value={1}>Сегодня</option>
-                  <option value={7}>Неделя</option>
-                  <option value={30}>Месяц</option>
-                  <option value={90}>3 месяца</option>
+                  <option value={1}>{t('violations.filters.today')}</option>
+                  <option value={7}>{t('violations.filters.week')}</option>
+                  <option value={30}>{t('violations.filters.month')}</option>
+                  <option value={90}>{t('violations.filters.threeMonths')}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-dark-200 mb-1">
-                  Мин. скор: {minScore}
+                  {t('violations.filters.minScore')}: {minScore}
                 </label>
                 <input
                   type="range"
@@ -1461,7 +1451,7 @@ export default function Violations() {
                   }}
                   className="w-full"
                 >
-                  Сбросить
+                  {t('violations.filters.reset')}
                 </Button>
               </div>
             </div>
@@ -1472,23 +1462,23 @@ export default function Violations() {
       {/* Tabs */}
       <div className="flex gap-1 bg-dark-800/50 rounded-lg p-1 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
         {([
-          { key: 'all' as Tab, label: 'Все', count: stats?.total },
-          { key: 'pending' as Tab, label: 'Ожидают', count: undefined },
-          { key: 'top' as Tab, label: 'Топ нарушителей', count: undefined },
-        ]).map((t) => (
+          { key: 'all' as Tab, label: t('violations.tabs.all'), count: stats?.total },
+          { key: 'pending' as Tab, label: t('violations.tabs.pending'), count: undefined },
+          { key: 'top' as Tab, label: t('violations.tabs.topViolators'), count: undefined },
+        ]).map((tabItem) => (
           <button
-            key={t.key}
-            onClick={() => handleTabChange(t.key)}
+            key={tabItem.key}
+            onClick={() => handleTabChange(tabItem.key)}
             className={cn(
               'flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-md font-medium transition-all',
-              tab === t.key
+              tab === tabItem.key
                 ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
                 : 'text-dark-200 hover:text-white hover:bg-dark-700/50'
             )}
           >
-            {t.label}
-            {t.count !== undefined && t.count > 0 && (
-              <span className="ml-1.5 text-xs opacity-70">({t.count})</span>
+            {tabItem.label}
+            {tabItem.count !== undefined && tabItem.count > 0 && (
+              <span className="ml-1.5 text-xs opacity-70">({tabItem.count})</span>
             )}
           </button>
         ))}
@@ -1511,12 +1501,12 @@ export default function Violations() {
                 <CardContent>
                   <Check className="w-12 h-12 text-green-500 mx-auto mb-3" />
                   <p className="text-dark-200 text-lg">
-                    {tab === 'pending' ? 'Нет ожидающих нарушений' : 'Нарушений не обнаружено'}
+                    {tab === 'pending' ? t('violations.noPending') : t('violations.noViolations')}
                   </p>
                   <p className="text-sm text-dark-200 mt-1">
                     {tab === 'pending'
-                      ? 'Все нарушения обработаны'
-                      : 'За выбранный период нет записей о нарушениях'}
+                      ? t('violations.allProcessed')
+                      : t('violations.noRecords')}
                   </p>
                 </CardContent>
               </Card>
@@ -1545,8 +1535,8 @@ export default function Violations() {
           {total > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in" style={{ animationDelay: '0.1s' }}>
               <p className="text-sm text-dark-200 order-2 sm:order-1">
-                Показано {(page - 1) * perPage + 1}–
-                {Math.min(page * perPage, total)} из {total}
+                {t('common.shown')} {(page - 1) * perPage + 1}–
+                {Math.min(page * perPage, total)} {t('common.of')} {total}
               </p>
               <div className="flex items-center gap-2 order-1 sm:order-2">
                 <Button

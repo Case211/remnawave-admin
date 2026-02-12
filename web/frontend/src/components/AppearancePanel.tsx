@@ -1,4 +1,5 @@
 import { Paintbrush, RotateCcw, Sun } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   useAppearanceStore,
   type UIDensity,
@@ -78,6 +79,7 @@ const fontSizeOptions: { value: FontSize; label: string }[] = [
 ]
 
 export function AppearancePanel() {
+  const { t } = useTranslation()
   const {
     theme,
     density,
@@ -102,13 +104,13 @@ export function AppearancePanel() {
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Appearance</TooltipContent>
+        <TooltipContent>{t('appearance.title')}</TooltipContent>
       </Tooltip>
 
       <PopoverContent align="end" className="w-80 p-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-dark-400/20">
-          <h4 className="text-sm font-semibold text-white">Appearance</h4>
+          <h4 className="text-sm font-semibold text-white">{t('appearance.title')}</h4>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -120,7 +122,7 @@ export function AppearancePanel() {
                 <RotateCcw className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Reset to defaults</TooltipContent>
+            <TooltipContent>{t('appearance.resetToDefaults')}</TooltipContent>
           </Tooltip>
         </div>
 
@@ -128,7 +130,7 @@ export function AppearancePanel() {
           <div className="p-4 space-y-4">
             {/* Theme */}
             <div className="space-y-2">
-              <Label className="text-xs text-dark-200 uppercase tracking-wider">Theme</Label>
+              <Label className="text-xs text-dark-200 uppercase tracking-wider">{t('appearance.theme')}</Label>
               <div className="grid grid-cols-4 gap-1.5">
                 {themePresets.map((preset) => {
                   const isActive = preset.value === theme
@@ -176,7 +178,7 @@ export function AppearancePanel() {
 
             {/* UI Density */}
             <div className="space-y-2">
-              <Label className="text-xs text-dark-200 uppercase tracking-wider">Density</Label>
+              <Label className="text-xs text-dark-200 uppercase tracking-wider">{t('appearance.density')}</Label>
               <div className="flex gap-1.5">
                 {densityOptions.map((opt) => (
                   <OptionButton
@@ -194,7 +196,7 @@ export function AppearancePanel() {
 
             {/* Border Radius */}
             <div className="space-y-2">
-              <Label className="text-xs text-dark-200 uppercase tracking-wider">Border Radius</Label>
+              <Label className="text-xs text-dark-200 uppercase tracking-wider">{t('appearance.borderRadius')}</Label>
               <div className="flex gap-1.5">
                 {radiusOptions.map((opt) => (
                   <button
@@ -218,7 +220,7 @@ export function AppearancePanel() {
 
             {/* Font Size */}
             <div className="space-y-2">
-              <Label className="text-xs text-dark-200 uppercase tracking-wider">Font Size</Label>
+              <Label className="text-xs text-dark-200 uppercase tracking-wider">{t('appearance.fontSize')}</Label>
               <div className="flex gap-1.5">
                 {fontSizeOptions.map((opt) => (
                   <OptionButton
@@ -237,7 +239,7 @@ export function AppearancePanel() {
             {/* Animations */}
             <div className="flex items-center justify-between">
               <Label htmlFor="animations-toggle" className="text-sm text-dark-100 cursor-pointer">
-                Animations
+                {t('appearance.animations')}
               </Label>
               <Switch
                 id="animations-toggle"

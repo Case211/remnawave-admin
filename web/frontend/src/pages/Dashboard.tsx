@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Users,
@@ -41,6 +42,7 @@ import { Separator } from '@/components/ui/separator'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
 import { useChartTheme } from '@/lib/useChartTheme'
+import { useFormatters } from '@/lib/useFormatters'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -155,32 +157,38 @@ const fetchSystemComponents = async (): Promise<SystemComponentsResponse> => {
 
 // ── Utilities ────────────────────────────────────────────────────
 
-function formatBytes(bytes: number | null | undefined): string {
-  if (!bytes || bytes <= 0) return '0 Б'
-  const k = 1024
-  const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 Б'
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+function createFormatBytes(t: (key: string) => string) {
+  return function formatBytes(bytes: number | null | undefined): string {
+    if (!bytes || bytes <= 0) return `0 ${t('common.bytes.b')}`
+    const k = 1024
+    const sizes = [t('common.bytes.b'), t('common.bytes.kb'), t('common.bytes.mb'), t('common.bytes.gb'), t('common.bytes.tb')]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    if (i < 0 || i >= sizes.length) return `0 ${t('common.bytes.b')}`
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+  }
 }
 
-function formatBytesShort(bytes: number): string {
-  if (bytes <= 0) return '0'
-  const k = 1024
-  const sizes = ['Б', 'К', 'М', 'Г', 'Т']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0'
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i]
+function createFormatBytesShort(t: (key: string) => string) {
+  return function formatBytesShort(bytes: number): string {
+    if (bytes <= 0) return '0'
+    const k = 1024
+    const sizes = [t('common.bytes.b'), t('common.bytes.kb_short'), t('common.bytes.mb_short'), t('common.bytes.gb_short'), t('common.bytes.tb_short')]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    if (i < 0 || i >= sizes.length) return '0'
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i]
+  }
 }
 
-function formatUptime(seconds: number | null | undefined): string {
-  if (!seconds || seconds <= 0) return '-'
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (d > 0) return `${d}д ${h}ч`
-  if (h > 0) return `${h}ч ${m}м`
-  return `${m}м`
+function createFormatUptime(t: (key: string, opts?: Record<string, unknown>) => string) {
+  return function formatUptime(seconds: number | null | undefined): string {
+    if (!seconds || seconds <= 0) return '-'
+    const d = Math.floor(seconds / 86400)
+    const h = Math.floor((seconds % 86400) / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    if (d > 0) return t('dashboard.uptimeDH', { days: d, hours: h })
+    if (h > 0) return t('dashboard.uptimeHM', { hours: h, minutes: m })
+    return t('dashboard.uptimeM', { minutes: m })
+  }
 }
 
 function formatTimestamp(ts: string): string {
@@ -226,6 +234,7 @@ function StatCard({
   title, value, icon: Icon, color, subtitle, onClick, loading, index = 0,
   delta, deltaType = 'percent', tooltip,
 }: StatCardProps) {
+  const { t } = useTranslation()
   const colorConfig = {
     cyan: {
       bg: 'rgba(34, 211, 238, 0.15)',
@@ -300,7 +309,7 @@ function StatCard({
           <>
             <Separator className="mt-3" />
             <span className="text-xs text-muted-foreground group-hover:text-primary-400 flex items-center gap-1 transition-colors duration-200 mt-3">
-              Подробнее <ExternalLink className="w-3 h-3" />
+              {t('dashboard.details')} <ExternalLink className="w-3 h-3" />
             </span>
           </>
         )}
@@ -342,6 +351,7 @@ function DeltaIndicator({ value, type = 'percent' }: { value: number; type?: 'pe
 // ── ChartSkeleton ────────────────────────────────────────────────
 
 function ChartSkeleton() {
+  const { t } = useTranslation()
   return (
     <div className="h-64 flex items-center justify-center">
       <div className="flex flex-col items-center gap-2">
@@ -349,7 +359,7 @@ function ChartSkeleton() {
           className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
           style={{ borderColor: '#0d9488', borderTopColor: 'transparent' }}
         />
-        <span className="text-sm text-muted-foreground">Загрузка...</span>
+        <span className="text-sm text-muted-foreground">{t('dashboard.loading')}</span>
       </div>
     </div>
   )
@@ -395,14 +405,16 @@ interface TooltipPayloadEntry {
 }
 
 function TrafficChartTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadEntry[]; label?: string }) {
+  const { t } = useTranslation()
   const chart = useChartTheme()
+  const formatBytesLocal = createFormatBytes(t)
   if (!active || !payload?.length) return null
   return (
     <div style={chart.tooltipStyle} className="px-3 py-2">
       <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{label}</p>
       {payload.map((entry, i) => (
         <p key={i} className="text-xs" style={{ color: entry.color }}>
-          {entry.name}: {formatBytes(entry.value)}
+          {entry.name}: {formatBytesLocal(entry.value)}
         </p>
       ))}
     </div>
@@ -422,6 +434,9 @@ function SystemStatusCard({
   version: string
   loading: boolean
 }) {
+  const { t } = useTranslation()
+  const formatUptime = createFormatUptime(t)
+
   const iconMap: Record<string, React.ElementType> = {
     'Remnawave API': Globe,
     'PostgreSQL': Database,
@@ -441,13 +456,9 @@ function SystemStatusCard({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-base md:text-lg">Состояние системы</CardTitle>
+            <CardTitle className="text-base md:text-lg">{t('dashboard.systemStatus')}</CardTitle>
             <InfoTooltip
-              text="Текущий статус компонентов системы.
-API — время отклика сервера
-PostgreSQL — свободные/всего соединения в пуле
-Ноды — онлайн/всего серверов
-WebSocket — активные WebSocket-сессии"
+              text={t('dashboard.systemStatusTooltip')}
               side="right"
             />
           </div>
@@ -471,21 +482,21 @@ WebSocket — активные WebSocket-сессии"
               const IconComp = iconMap[comp.name] || Activity
               const statusColor = statusColorMap[comp.status] || '#6b7280'
               const statusLabel = {
-                online: 'Работает',
-                offline: 'Недоступен',
-                degraded: 'Проблемы',
-                unknown: 'Неизвестно',
+                online: t('dashboard.statusOnline'),
+                offline: t('dashboard.statusOffline'),
+                degraded: t('dashboard.statusDegraded'),
+                unknown: t('dashboard.statusUnknown'),
               }[comp.status] || comp.status
 
               // Build detail string
               let detail = ''
               const d = comp.details || {}
               if (comp.name === 'Remnawave API' && d.response_time_ms) {
-                detail = `${d.response_time_ms}мс`
+                detail = `${d.response_time_ms}${t('dashboard.ms')}`
               } else if (comp.name === 'Nodes') {
                 detail = `${d.online || 0}/${d.total || 0}`
               } else if (comp.name === 'WebSocket') {
-                detail = `${d.active_connections || 0} сессий`
+                detail = `${d.active_connections || 0} ${t('dashboard.sessions')}`
               } else if (comp.name === 'PostgreSQL' && d.size != null) {
                 detail = `pool: ${d.free_size || 0}/${d.size || 0}`
               }
@@ -524,7 +535,7 @@ WebSocket — активные WebSocket-сессии"
           <>
             <Separator className="mt-3" />
             <div className="flex items-center justify-between mt-3">
-              <span className="text-xs text-muted-foreground">Время работы</span>
+              <span className="text-xs text-muted-foreground">{t('dashboard.uptime')}</span>
               <span className="text-xs text-white font-mono">{formatUptime(uptime)}</span>
             </div>
           </>
@@ -543,11 +554,6 @@ const SEVERITY_COLORS: Record<string, string> = {
   critical: '#fa5252',
 }
 
-const TRAFFIC_PERIOD_OPTIONS = [
-  { value: '24h', label: '24ч' },
-  { value: '7d', label: '7д' },
-  { value: '30d', label: '30д' },
-]
 
 // ── Update Checker Card ──────────────────────────────────────────
 
@@ -568,6 +574,7 @@ interface DependencyVersions {
 }
 
 function UpdateCheckerCard() {
+  const { t } = useTranslation()
   const { data: updateInfo, isLoading } = useQuery<UpdateInfo>({
     queryKey: ['updates'],
     queryFn: async () => {
@@ -609,9 +616,9 @@ function UpdateCheckerCard() {
       <CardHeader className="pb-2">
         <CardTitle className="text-base md:text-lg flex items-center gap-2">
           <Activity className="w-4 h-4 text-primary-400" />
-          Версии и обновления
+          {t('dashboard.versionsAndUpdates')}
           <InfoTooltip
-            text="Информация о текущей версии Remnawave и доступных обновлениях. Зависимости показывают версии ключевых компонентов: Python, PostgreSQL, FastAPI, Xray. Проверка обновлений раз в 5 минут."
+            text={t('dashboard.versionsTooltip')}
             side="right"
           />
         </CardTitle>
@@ -620,7 +627,7 @@ function UpdateCheckerCard() {
         {/* Current version + update */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-dark-200">Текущая версия</p>
+            <p className="text-sm text-dark-200">{t('dashboard.currentVersion')}</p>
             <p className="text-lg font-bold text-white">v{updateInfo.current_version}</p>
           </div>
           {updateInfo.update_available && updateInfo.latest_version ? (
@@ -632,12 +639,12 @@ function UpdateCheckerCard() {
             >
               <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 border gap-1 cursor-pointer hover:bg-emerald-500/30 transition-colors">
                 <ArrowUpRight className="w-3 h-3" />
-                v{updateInfo.latest_version} доступна
+                {t('dashboard.versionAvailable', { version: updateInfo.latest_version })}
               </Badge>
             </a>
           ) : (
             <Badge className="bg-dark-600 text-dark-200 border-dark-500 border">
-              Актуально
+              {t('dashboard.upToDate')}
             </Badge>
           )}
         </div>
@@ -689,9 +696,13 @@ function UpdateCheckerCard() {
 // ── Main Dashboard Component ─────────────────────────────────────
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
+  const { formatBytes: formatBytesUtil } = useFormatters()
+  const formatBytes = (bytes: number | null | undefined) => (!bytes || bytes <= 0) ? `0 ${t('common.bytes.b')}` : formatBytesUtil(bytes)
+  const formatBytesShort = createFormatBytesShort(t)
 
   const canViewUsers = hasPermission('users', 'view')
   const canViewNodes = hasPermission('nodes', 'view')
@@ -700,6 +711,12 @@ export default function Dashboard() {
   // Chart state
   const [trafficPeriod, setTrafficPeriod] = useState('7d')
   const chart = useChartTheme()
+
+  const trafficPeriodOptions = [
+    { value: '24h', label: t('dashboard.period24h') },
+    { value: '7d', label: t('dashboard.period7d') },
+    { value: '30d', label: t('dashboard.period30d') },
+  ]
 
   // ── Queries ──────────────────────────────────────────────────
 
@@ -795,25 +812,25 @@ export default function Dashboard() {
   // Violations chart
   const violationsChartData = violationStats
     ? [
-        { name: 'Низкий', value: violationStats.low, key: 'low' },
-        { name: 'Средний', value: violationStats.medium, key: 'medium' },
-        { name: 'Высокий', value: violationStats.high, key: 'high' },
-        { name: 'Критический', value: violationStats.critical, key: 'critical' },
+        { name: t('dashboard.severityLow'), value: violationStats.low, key: 'low' },
+        { name: t('dashboard.severityMedium'), value: violationStats.medium, key: 'medium' },
+        { name: t('dashboard.severityHigh'), value: violationStats.high, key: 'high' },
+        { name: t('dashboard.severityCritical'), value: violationStats.critical, key: 'critical' },
       ]
     : [
-        { name: 'Низкий', value: 0, key: 'low' },
-        { name: 'Средний', value: 0, key: 'medium' },
-        { name: 'Высокий', value: 0, key: 'high' },
-        { name: 'Критический', value: 0, key: 'critical' },
+        { name: t('dashboard.severityLow'), value: 0, key: 'low' },
+        { name: t('dashboard.severityMedium'), value: 0, key: 'medium' },
+        { name: t('dashboard.severityHigh'), value: 0, key: 'high' },
+        { name: t('dashboard.severityCritical'), value: 0, key: 'critical' },
       ]
 
   const actionLabels: Record<string, string> = {
-    'no_action': 'Нет действий',
-    'monitor': 'Мониторинг',
-    'warn': 'Предупреждение',
-    'soft_block': 'Мягкая блок.',
-    'temp_block': 'Врем. блок.',
-    'hard_block': 'Жёсткая блок.',
+    'no_action': t('dashboard.actionNoAction'),
+    'monitor': t('dashboard.actionMonitor'),
+    'warn': t('dashboard.actionWarn'),
+    'soft_block': t('dashboard.actionSoftBlock'),
+    'temp_block': t('dashboard.actionTempBlock'),
+    'hard_block': t('dashboard.actionHardBlock'),
   }
   const actionChartData = violationStats?.by_action
     ? Object.entries(violationStats.by_action).map(([name, value]) => ({
@@ -829,8 +846,8 @@ export default function Dashboard() {
       {/* ── Page header ─────────────────────────────────────────── */}
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">Панель управления</h1>
-          <p className="text-muted-foreground mt-1 text-sm md:text-base">Обзор системы Remnawave</p>
+          <h1 className="page-header-title">{t('dashboard.title')}</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">{t('dashboard.subtitle')}</p>
         </div>
         <Button
           variant="secondary"
@@ -839,7 +856,7 @@ export default function Dashboard() {
           className="self-start sm:self-auto"
         >
           <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
-          <span className="hidden sm:inline">Обновить</span>
+          <span className="hidden sm:inline">{t('dashboard.refresh')}</span>
         </Button>
       </div>
 
@@ -849,10 +866,10 @@ export default function Dashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <p className="text-red-400 text-sm">
-                Ошибка загрузки данных. Некоторые показатели могут быть недоступны.
+                {t('dashboard.loadError')}
               </p>
               <Button variant="secondary" size="sm" onClick={handleRefreshAll}>
-                Повторить
+                {t('dashboard.retry')}
               </Button>
             </div>
           </CardContent>
@@ -863,47 +880,47 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {canViewUsers && (
           <StatCard
-            title="Всего пользователей"
+            title={t('dashboard.totalUsers')}
             value={overview?.total_users != null ? overview.total_users.toLocaleString() : '-'}
             icon={Users}
             color="cyan"
-            subtitle={overview ? `${overview.active_users} активных, ${overview.expired_users} истекших` : undefined}
+            subtitle={overview ? t('dashboard.usersSubtitle', { active: overview.active_users, expired: overview.expired_users }) : undefined}
             onClick={() => navigate('/users')}
             loading={overviewLoading && canViewAnalytics}
             index={0}
             delta={deltas?.users_delta}
             deltaType="percent"
-            tooltip="Общее количество зарегистрированных пользователей в системе. Показывает изменение в процентах за последние 24 часа."
+            tooltip={t('dashboard.totalUsersTooltip')}
           />
         )}
         {canViewNodes && (
           <StatCard
-            title="Активные ноды"
+            title={t('dashboard.activeNodes')}
             value={overview ? `${overview.online_nodes}/${overview.total_nodes}` : '-'}
             icon={Server}
             color="green"
-            subtitle={overview ? `${overview.offline_nodes} офлайн, ${overview.disabled_nodes} отключ.${overview.users_online ? `, ${overview.users_online} онлайн` : ''}` : undefined}
+            subtitle={overview ? t('dashboard.nodesSubtitle', { offline: overview.offline_nodes, disabled: overview.disabled_nodes, online: overview.users_online || 0 }) : undefined}
             onClick={() => navigate('/nodes')}
             loading={overviewLoading && canViewAnalytics}
             index={1}
             delta={deltas?.nodes_delta}
             deltaType="absolute"
-            tooltip="Соотношение онлайн нод к общему количеству. Дельта показывает абсолютное изменение за последние 24 часа. Онлайн — количество подключённых пользователей."
+            tooltip={t('dashboard.activeNodesTooltip')}
           />
         )}
         {canViewViolations && (
           <StatCard
-            title="Нарушения"
+            title={t('dashboard.violations')}
             value={overview ? `${overview.violations_today}` : '-'}
             icon={ShieldAlert}
             color={overview && overview.violations_today > 0 ? 'red' : 'yellow'}
-            subtitle={overview ? `Сегодня: ${overview.violations_today}, за неделю: ${overview.violations_week}` : undefined}
+            subtitle={overview ? t('dashboard.violationsSubtitle', { today: overview.violations_today, week: overview.violations_week }) : undefined}
             onClick={() => navigate('/violations')}
             loading={overviewLoading && canViewAnalytics}
             index={2}
             delta={deltas?.violations_delta}
             deltaType="absolute"
-            tooltip="Количество нарушений, обнаруженных анти-абуз системой за сегодня. Дельта — абсолютное изменение за 24 часа. Нарушения включают геолокационные аномалии, подозрительные ASN и профильные отклонения."
+            tooltip={t('dashboard.violationsTooltip')}
           />
         )}
         {canViewAnalytics && (
@@ -915,9 +932,9 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-1">
-                    <p className="text-sm text-muted-foreground">Трафик</p>
+                    <p className="text-sm text-muted-foreground">{t('dashboard.traffic')}</p>
                     <InfoTooltip
-                      text="Общий объём потреблённого трафика всеми пользователями. Показывает изменение в процентах за 24 часа. Детализация: за сегодня, за неделю (7 дней), за месяц (30 дней)."
+                      text={t('dashboard.trafficTooltip')}
                       side="right"
                       iconClassName="w-3.5 h-3.5"
                     />
@@ -950,15 +967,15 @@ export default function Dashboard() {
                   <Separator className="mt-3" />
                   <div className="space-y-1.5 mt-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Сегодня</span>
+                      <span className="text-xs text-muted-foreground">{t('dashboard.today')}</span>
                       <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.today_bytes)}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">За неделю</span>
+                      <span className="text-xs text-muted-foreground">{t('dashboard.thisWeek')}</span>
                       <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.week_bytes)}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">За месяц</span>
+                      <span className="text-xs text-muted-foreground">{t('dashboard.thisMonth')}</span>
                       <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.month_bytes)}</span>
                     </div>
                   </div>
@@ -975,19 +992,16 @@ export default function Dashboard() {
           <CardHeader className="pb-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-base md:text-lg">Трафик</CardTitle>
+                <CardTitle className="text-base md:text-lg">{t('dashboard.traffic')}</CardTitle>
                 <InfoTooltip
-                  text="График потреблённого трафика за выбранный период. При наличии нескольких нод — разбивка по каждой ноде (стековая диаграмма).
-24ч — почасовые данные за сутки
-7д — данные по дням за неделю
-30д — данные по дням за месяц"
+                  text={t('dashboard.trafficChartTooltip')}
                   side="right"
                 />
               </div>
               <PeriodSwitcher
                 value={trafficPeriod}
                 onChange={setTrafficPeriod}
-                options={TRAFFIC_PERIOD_OPTIONS}
+                options={trafficPeriodOptions}
               />
             </div>
           </CardHeader>
@@ -1046,7 +1060,7 @@ export default function Dashboard() {
                     <Line
                       type="monotone"
                       dataKey="value"
-                      name="Трафик"
+                      name={t('dashboard.traffic')}
                       stroke="#06b6d4"
                       strokeWidth={2}
                       dot={false}
@@ -1057,7 +1071,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
             ) : (
               <div className="h-64 flex items-center justify-center">
-                <span className="text-muted-foreground text-sm">Нет данных за выбранный период</span>
+                <span className="text-muted-foreground text-sm">{t('dashboard.noDataForPeriod')}</span>
               </div>
             )}
           </CardContent>
@@ -1072,14 +1086,14 @@ export default function Dashboard() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CardTitle className="text-base md:text-lg">Подключения по нодам</CardTitle>
+                  <CardTitle className="text-base md:text-lg">{t('dashboard.connectionsByNode')}</CardTitle>
                   <InfoTooltip
-                    text="Текущее количество активных подключений пользователей на каждой ноде в реальном времени. Данные обновляются автоматически каждые 30 секунд."
+                    text={t('dashboard.connectionsByNodeTooltip')}
                     side="right"
                   />
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  Всего: {overview?.users_online || 0}
+                  {t('dashboard.total')}: {overview?.users_online || 0}
                 </span>
               </div>
             </CardHeader>
@@ -1111,8 +1125,8 @@ export default function Dashboard() {
                     <Wifi className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
                     <span className="text-muted-foreground text-sm">
                       {overview?.users_online
-                        ? `${overview.users_online} пользователей онлайн`
-                        : 'Нет данных о подключениях'}
+                        ? t('dashboard.usersOnline', { count: overview.users_online })
+                        : t('dashboard.noConnectionData')}
                     </span>
                   </div>
                 </div>
@@ -1127,19 +1141,15 @@ export default function Dashboard() {
             <CardHeader className="pb-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <CardTitle className="text-base md:text-lg">Нарушения по уровню (за 7 дней)</CardTitle>
+                  <CardTitle className="text-base md:text-lg">{t('dashboard.violationsBySeverity')}</CardTitle>
                   <InfoTooltip
-                    text="Распределение нарушений по уровню серьёзности за последние 7 дней.
-Критический (80–100) — требуют немедленного вмешательства
-Высокий (60–79) — рекомендуется проверка
-Средний (40–59) — мониторинг
-Низкий (0–39) — информационные"
+                    text={t('dashboard.violationsBySeverityTooltip')}
                     side="right"
                   />
                 </div>
                 {violationStats && (
                   <span className="text-xs text-muted-foreground">
-                    Всего: {violationStats.total} | Уникальных: {violationStats.unique_users}
+                    {t('dashboard.total')}: {violationStats.total} | {t('dashboard.unique')}: {violationStats.unique_users}
                   </span>
                 )}
               </div>
@@ -1174,13 +1184,9 @@ export default function Dashboard() {
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-base md:text-lg">По рекомендации</CardTitle>
+                <CardTitle className="text-base md:text-lg">{t('dashboard.byRecommendation')}</CardTitle>
                 <InfoTooltip
-                  text="Распределение нарушений по рекомендуемому действию анти-абуз системы.
-Нет действий — ложное срабатывание
-Мониторинг — наблюдение
-Предупреждение — уведомление пользователя
-Мягкая/Врем./Жёсткая блок. — ограничение доступа"
+                  text={t('dashboard.byRecommendationTooltip')}
                   side="right"
                 />
               </div>
@@ -1210,7 +1216,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="h-48 flex items-center justify-center">
-                  <span className="text-muted-foreground text-sm">Нет данных</span>
+                  <span className="text-muted-foreground text-sm">{t('dashboard.noData')}</span>
                 </div>
               )}
               {violationStats && violationStats.max_score > 0 && (
@@ -1218,11 +1224,11 @@ export default function Dashboard() {
                   <Separator className="mt-4" />
                   <div className="space-y-1 mt-4">
                     <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Средний скор</span>
+                      <span>{t('dashboard.avgScore')}</span>
                       <span className="text-white">{violationStats.avg_score.toFixed(1)}</span>
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Максимальный скор</span>
+                      <span>{t('dashboard.maxScore')}</span>
                       <span className="text-white">{violationStats.max_score.toFixed(1)}</span>
                     </div>
                   </div>
@@ -1243,15 +1249,15 @@ export default function Dashboard() {
         ) : (
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base md:text-lg">Быстрые действия</CardTitle>
+              <CardTitle className="text-base md:text-lg">{t('dashboard.quickActions')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { icon: Users, label: 'Пользователи', href: '/users', perm: 'users' },
-                  { icon: Server, label: 'Ноды', href: '/nodes', perm: 'nodes' },
-                  { icon: ShieldAlert, label: 'Нарушения', href: '/violations', perm: 'violations' },
-                  { icon: Settings, label: 'Настройки', href: '/settings', perm: 'settings' },
+                  { icon: Users, label: t('dashboard.users'), href: '/users', perm: 'users' },
+                  { icon: Server, label: t('dashboard.nodes'), href: '/nodes', perm: 'nodes' },
+                  { icon: ShieldAlert, label: t('dashboard.violationsLabel'), href: '/violations', perm: 'violations' },
+                  { icon: Settings, label: t('dashboard.settings'), href: '/settings', perm: 'settings' },
                 ]
                   .filter((item) => hasPermission(item.perm, 'view'))
                   .map((item) => (

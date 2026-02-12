@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Bookmark, X, Plus } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +26,7 @@ export function SavedFiltersDropdown({
   onLoadFilter,
   hasActiveFilters,
 }: SavedFiltersDropdownProps) {
+  const { t } = useTranslation()
   const { savedFilters, saveFilter, deleteFilter } = useFiltersStore()
   const pageFilters = savedFilters.filter((f) => f.page === page)
   const [showNameInput, setShowNameInput] = useState(false)
@@ -33,20 +35,20 @@ export function SavedFiltersDropdown({
   const handleSave = () => {
     if (!filterName.trim()) return
     saveFilter({ name: filterName.trim(), page, filters: currentFilters })
-    toast.success(`Фильтр "${filterName}" сохранён`)
+    toast.success(t('common.savedFilters.filterSaved', { name: filterName }))
     setFilterName('')
     setShowNameInput(false)
   }
 
   const handleLoad = (filter: SavedFilter) => {
     onLoadFilter(filter.filters)
-    toast.info(`Фильтр "${filter.name}" применён`)
+    toast.info(t('common.savedFilters.filterApplied', { name: filter.name }))
   }
 
   const handleDelete = (e: React.MouseEvent, filter: SavedFilter) => {
     e.stopPropagation()
     deleteFilter(filter.id)
-    toast.success(`Фильтр "${filter.name}" удалён`)
+    toast.success(t('common.savedFilters.filterDeleted', { name: filter.name }))
   }
 
   return (
@@ -54,7 +56,7 @@ export function SavedFiltersDropdown({
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5">
           <Bookmark className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Фильтры</span>
+          <span className="hidden sm:inline">{t('common.savedFilters.title')}</span>
           {pageFilters.length > 0 && (
             <span className="ml-1 text-xs text-dark-300">{pageFilters.length}</span>
           )}
@@ -84,7 +86,7 @@ export function SavedFiltersDropdown({
         {hasActiveFilters && !showNameInput && (
           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setShowNameInput(true) }}>
             <Plus className="w-4 h-4 mr-2" />
-            Сохранить текущий
+            {t('common.savedFilters.save')}
           </DropdownMenuItem>
         )}
 
@@ -92,7 +94,7 @@ export function SavedFiltersDropdown({
           <div className="px-2 py-1.5 flex gap-1.5" onClick={(e) => e.stopPropagation()}>
             <Input
               type="text"
-              placeholder="Название..."
+              placeholder={t('common.savedFilters.enterName')}
               value={filterName}
               onChange={(e) => setFilterName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
@@ -107,7 +109,7 @@ export function SavedFiltersDropdown({
 
         {pageFilters.length === 0 && !hasActiveFilters && (
           <div className="px-2 py-3 text-center text-xs text-dark-300">
-            Нет сохранённых фильтров
+            {t('common.savedFilters.noSaved')}
           </div>
         )}
       </DropdownMenuContent>

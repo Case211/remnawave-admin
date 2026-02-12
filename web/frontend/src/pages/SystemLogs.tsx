@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
   Search,
   Pause,
@@ -63,6 +64,8 @@ function formatFileSize(bytes: number): string {
 // ── Component ───────────────────────────────────────────────────
 
 export default function SystemLogs() {
+  const { t } = useTranslation()
+  // useFormatters available for locale-aware formatting
   const [selectedFile, setSelectedFile] = useState('web_info')
   const [levelFilter, setLevelFilter] = useState<string>('all')
   const [searchText, setSearchText] = useState('')
@@ -206,10 +209,10 @@ export default function SystemLogs() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Terminal className="w-6 h-6 text-primary-400" />
-            Системные логи
+            {t('logs.title')}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Просмотр логов сервисов инфраструктуры в реальном времени
+            {t('logs.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -238,7 +241,7 @@ export default function SystemLogs() {
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {isStreaming ? 'Приостановить стриминг' : 'Возобновить стриминг'}
+              {isStreaming ? t('logs.pauseStreaming') : t('logs.resumeStreaming')}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -253,7 +256,7 @@ export default function SystemLogs() {
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {autoScroll ? 'Автопрокрутка включена' : 'Автопрокрутка выключена'}
+              {autoScroll ? t('logs.autoScrollOn') : t('logs.autoScrollOff')}
             </TooltipContent>
           </Tooltip>
           <Button
@@ -263,7 +266,7 @@ export default function SystemLogs() {
             className="border-dark-600"
           >
             <Trash2 className="w-4 h-4 mr-1" />
-            Очистить
+            {t('logs.clear')}
           </Button>
         </div>
       </div>
@@ -294,7 +297,7 @@ export default function SystemLogs() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">
-                      {f.exists ? formatFileSize(f.size_bytes) : 'Не найден'}
+                      {f.exists ? formatFileSize(f.size_bytes) : t('logs.notFound')}
                     </span>
                     {selectedFile === f.key && (
                       <Badge className="bg-primary-400/20 text-primary-400 text-xs">
@@ -316,7 +319,7 @@ export default function SystemLogs() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Поиск по содержимому лога..."
+                placeholder={t('logs.searchPlaceholder')}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -325,10 +328,10 @@ export default function SystemLogs() {
             </div>
             <Select value={levelFilter} onValueChange={(v) => { setLevelFilter(v); setStreamLines([]) }}>
               <SelectTrigger className="w-[140px] bg-dark-900 border-dark-600">
-                <SelectValue placeholder="Уровень" />
+                <SelectValue placeholder={t('logs.level')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все уровни</SelectItem>
+                <SelectItem value="all">{t('logs.allLevels')}</SelectItem>
                 <SelectItem value="INFO">INFO</SelectItem>
                 <SelectItem value="WARNING">WARNING</SelectItem>
                 <SelectItem value="ERROR">ERROR</SelectItem>
@@ -340,7 +343,7 @@ export default function SystemLogs() {
               className="border-dark-600"
             >
               <Search className="w-4 h-4 mr-2" />
-              Найти
+              {t('common.search')}
             </Button>
           </div>
         </CardContent>
@@ -354,7 +357,7 @@ export default function SystemLogs() {
               {selectedLabel?.label || selectedFile}
             </span>
             <span className="text-xs text-muted-foreground">
-              {allLines.length} строк
+              {t('logs.linesCount', { count: allLines.length })}
               {isStreaming && (
                 <span className="ml-2 inline-flex items-center">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-1" />
@@ -371,7 +374,7 @@ export default function SystemLogs() {
               <div className="flex items-center justify-center h-full text-muted-foreground">
                 <div className="text-center">
                   <Terminal className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  <p>{isStreaming ? 'Ожидание новых записей...' : 'Нет записей'}</p>
+                  <p>{isStreaming ? t('logs.waitingForEntries') : t('logs.noEntries')}</p>
                 </div>
               </div>
             ) : (

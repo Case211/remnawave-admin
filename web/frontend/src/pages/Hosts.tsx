@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
+// useFormatters available for locale-aware formatting
 import { useHasPermission } from '@/components/PermissionGate'
 import {
   RefreshCw,
@@ -85,27 +87,6 @@ const fetchHosts = async (): Promise<Host[]> => {
   return data.items || data
 }
 
-function getSecurityLabel(host: Host): string {
-  const sec = host.security_layer || host.security
-  if (!sec) return '-'
-  const labels: Record<string, string> = {
-    'tls': 'TLS',
-    'reality': 'Reality',
-    'none': 'Без шифрования',
-    'xtls': 'XTLS',
-    'default': 'По умолчанию',
-  }
-  return labels[sec] || sec
-}
-
-function getSecurityColor(host: Host): string {
-  const sec = host.security_layer || host.security
-  if (!sec || sec === 'none') return 'text-red-400'
-  if (sec === 'reality') return 'text-green-400'
-  if (sec === 'tls' || sec === 'xtls') return 'text-blue-400'
-  return 'text-dark-200'
-}
-
 interface HostEditFormData {
   remark: string
   address: string
@@ -138,6 +119,7 @@ function HostEditModal({
   isPending: boolean
   error: string
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<HostEditFormData>({
     remark: host.remark || '',
     address: host.address || '',
@@ -198,8 +180,8 @@ function HostEditModal({
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Редактирование хоста</DialogTitle>
-          <DialogDescription>Измените параметры хоста и нажмите сохранить</DialogDescription>
+          <DialogTitle>{t('hosts.editHost.title')}</DialogTitle>
+          <DialogDescription>{t('hosts.editHost.description')}</DialogDescription>
         </DialogHeader>
 
         {error && (
@@ -210,46 +192,46 @@ function HostEditModal({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Название</Label>
+            <Label>{t('hosts.editHost.name')}</Label>
             <Input
               type="text"
               value={form.remark}
               onChange={(e) => setForm({ ...form, remark: e.target.value })}
-              placeholder="Название хоста"
+              placeholder={t('hosts.editHost.namePlaceholder')}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Адрес</Label>
+              <Label>{t('hosts.editHost.address')}</Label>
               <Input
                 type="text"
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="IP или домен"
+                placeholder={t('hosts.editHost.addressPlaceholder')}
               />
             </div>
             <div className="space-y-2">
-              <Label>Порт</Label>
+              <Label>{t('hosts.editHost.port')}</Label>
               <Input
                 type="number"
                 min={1}
                 max={65535}
                 value={form.port}
                 onChange={(e) => setForm({ ...form, port: e.target.value })}
-                placeholder="Порт"
+                placeholder={t('hosts.editHost.port')}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Безопасность</Label>
+            <Label>{t('hosts.security.label')}</Label>
             <Select value={form.security} onValueChange={(value) => setForm({ ...form, security: value })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Без шифрования</SelectItem>
+                <SelectItem value="none">{t('hosts.security.none')}</SelectItem>
                 <SelectItem value="tls">TLS</SelectItem>
                 <SelectItem value="reality">Reality</SelectItem>
                 <SelectItem value="xtls">XTLS</SelectItem>
@@ -309,23 +291,23 @@ function HostEditModal({
           </div>
 
           <div className="space-y-2">
-            <Label>Тег</Label>
+            <Label>{t('hosts.editHost.tag')}</Label>
             <Input
               type="text"
               value={form.tag}
               onChange={(e) => setForm({ ...form, tag: e.target.value })}
-              placeholder="Тег хоста"
+              placeholder={t('hosts.editHost.tagPlaceholder')}
               maxLength={32}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Описание сервера</Label>
+            <Label>{t('hosts.editHost.serverDescription')}</Label>
             <Input
               type="text"
               value={form.server_description}
               onChange={(e) => setForm({ ...form, server_description: e.target.value })}
-              placeholder="Описание сервера"
+              placeholder={t('hosts.editHost.serverDescriptionPlaceholder')}
               maxLength={30}
             />
           </div>
@@ -338,7 +320,7 @@ function HostEditModal({
               onChange={(e) => setForm({ ...form, is_hidden: e.target.checked })}
               className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
             />
-            <Label htmlFor="edit-is-hidden" className="cursor-pointer">Скрытый хост</Label>
+            <Label htmlFor="edit-is-hidden" className="cursor-pointer">{t('hosts.editHost.hiddenHost')}</Label>
           </div>
         </div>
 
@@ -348,13 +330,13 @@ function HostEditModal({
             onClick={onClose}
             disabled={isPending}
           >
-            Отмена
+            {t('hosts.actions.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isPending || !form.address.trim() || !form.port}
           >
-            {isPending ? 'Сохранение...' : 'Сохранить'}
+            {isPending ? t('hosts.actions.saving') : t('hosts.actions.save')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -374,6 +356,7 @@ function HostCreateModal({
   isPending: boolean
   error: string
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<HostEditFormData>({
     remark: '',
     address: '',
@@ -412,8 +395,8 @@ function HostCreateModal({
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Добавление хоста</DialogTitle>
-          <DialogDescription>Заполните параметры нового хоста</DialogDescription>
+          <DialogTitle>{t('hosts.createHost.title')}</DialogTitle>
+          <DialogDescription>{t('hosts.createHost.description')}</DialogDescription>
         </DialogHeader>
 
         {error && (
@@ -424,46 +407,46 @@ function HostCreateModal({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Название</Label>
+            <Label>{t('hosts.editHost.name')}</Label>
             <Input
               type="text"
               value={form.remark}
               onChange={(e) => setForm({ ...form, remark: e.target.value })}
-              placeholder="Название хоста"
+              placeholder={t('hosts.editHost.namePlaceholder')}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Адрес</Label>
+              <Label>{t('hosts.editHost.address')}</Label>
               <Input
                 type="text"
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="IP или домен"
+                placeholder={t('hosts.editHost.addressPlaceholder')}
               />
             </div>
             <div className="space-y-2">
-              <Label>Порт</Label>
+              <Label>{t('hosts.editHost.port')}</Label>
               <Input
                 type="number"
                 min={1}
                 max={65535}
                 value={form.port}
                 onChange={(e) => setForm({ ...form, port: e.target.value })}
-                placeholder="Порт"
+                placeholder={t('hosts.editHost.port')}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Безопасность</Label>
+            <Label>{t('hosts.security.label')}</Label>
             <Select value={form.security} onValueChange={(value) => setForm({ ...form, security: value })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Без шифрования</SelectItem>
+                <SelectItem value="none">{t('hosts.security.none')}</SelectItem>
                 <SelectItem value="tls">TLS</SelectItem>
                 <SelectItem value="reality">Reality</SelectItem>
                 <SelectItem value="xtls">XTLS</SelectItem>
@@ -523,23 +506,23 @@ function HostCreateModal({
           </div>
 
           <div className="space-y-2">
-            <Label>Тег</Label>
+            <Label>{t('hosts.editHost.tag')}</Label>
             <Input
               type="text"
               value={form.tag}
               onChange={(e) => setForm({ ...form, tag: e.target.value })}
-              placeholder="Тег хоста"
+              placeholder={t('hosts.editHost.tagPlaceholder')}
               maxLength={32}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Описание сервера</Label>
+            <Label>{t('hosts.editHost.serverDescription')}</Label>
             <Input
               type="text"
               value={form.server_description}
               onChange={(e) => setForm({ ...form, server_description: e.target.value })}
-              placeholder="Описание сервера"
+              placeholder={t('hosts.editHost.serverDescriptionPlaceholder')}
               maxLength={30}
             />
           </div>
@@ -552,7 +535,7 @@ function HostCreateModal({
               onChange={(e) => setForm({ ...form, is_hidden: e.target.checked })}
               className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
             />
-            <Label htmlFor="create-is-hidden" className="cursor-pointer">Скрытый хост</Label>
+            <Label htmlFor="create-is-hidden" className="cursor-pointer">{t('hosts.editHost.hiddenHost')}</Label>
           </div>
         </div>
 
@@ -562,13 +545,13 @@ function HostCreateModal({
             onClick={onClose}
             disabled={isPending}
           >
-            Отмена
+            {t('hosts.actions.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isPending || !form.address.trim() || !form.port}
           >
-            {isPending ? 'Создание...' : 'Создать'}
+            {isPending ? t('hosts.actions.creating') : t('hosts.actions.create')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -594,6 +577,29 @@ function HostCard({
   canEdit: boolean
   canDelete: boolean
 }) {
+  const { t } = useTranslation()
+
+  const getSecurityLabel = (h: Host): string => {
+    const sec = h.security_layer || h.security
+    if (!sec) return '-'
+    const labels: Record<string, string> = {
+      'tls': 'TLS',
+      'reality': 'Reality',
+      'none': t('hosts.security.none'),
+      'xtls': 'XTLS',
+      'default': t('hosts.security.default'),
+    }
+    return labels[sec] || sec
+  }
+
+  const getSecurityColor = (h: Host): string => {
+    const sec = h.security_layer || h.security
+    if (!sec || sec === 'none') return 'text-red-400'
+    if (sec === 'reality') return 'text-green-400'
+    if (sec === 'tls' || sec === 'xtls') return 'text-blue-400'
+    return 'text-dark-200'
+  }
+
   return (
     <Card className={cn('relative', host.is_disabled && 'opacity-60')}>
       <CardContent className="p-4">
@@ -612,12 +618,12 @@ function HostCard({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h3 className="font-semibold text-white truncate">{host.remark || 'Без имени'}</h3>
+                <h3 className="font-semibold text-white truncate">{host.remark || t('hosts.statusNoName')}</h3>
                 {host.tag && (
                   <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20 flex-shrink-0">{host.tag}</span>
                 )}
                 {host.is_hidden && (
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 flex-shrink-0">Скрыт</span>
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 flex-shrink-0">{t('hosts.statusHidden')}</span>
                 )}
               </div>
               <p className="text-sm text-dark-200 flex items-center gap-1 truncate">
@@ -632,7 +638,7 @@ function HostCard({
 
           <div className="flex items-center gap-2">
             <Badge variant={host.is_disabled ? 'secondary' : 'success'}>
-              {host.is_disabled ? 'Откл.' : 'Активен'}
+              {host.is_disabled ? t('hosts.statusDisabled') : t('hosts.statusActive')}
             </Badge>
 
             {/* Actions menu */}
@@ -647,7 +653,7 @@ function HostCard({
                   {canEdit && (
                     <DropdownMenuItem onSelect={onEdit}>
                       <Pencil className="w-4 h-4 mr-2" />
-                      Редактировать
+                      {t('hosts.actions.edit')}
                     </DropdownMenuItem>
                   )}
                   {canEdit && <DropdownMenuSeparator />}
@@ -658,7 +664,7 @@ function HostCard({
                         className="text-green-400 focus:text-green-400"
                       >
                         <Play className="w-4 h-4 mr-2" />
-                        Включить
+                        {t('hosts.actions.enable')}
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem
@@ -666,7 +672,7 @@ function HostCard({
                         className="text-yellow-400 focus:text-yellow-400"
                       >
                         <Square className="w-4 h-4 mr-2" />
-                        Отключить
+                        {t('hosts.actions.disable')}
                       </DropdownMenuItem>
                     )
                   )}
@@ -676,7 +682,7 @@ function HostCard({
                       className="text-red-400 focus:text-red-400"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
-                      Удалить
+                      {t('hosts.actions.delete')}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -688,7 +694,7 @@ function HostCard({
         {/* Details */}
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="bg-dark-800/50 rounded-lg p-2">
-            <span className="text-dark-200 text-xs">Безопасность</span>
+            <span className="text-dark-200 text-xs">{t('hosts.security.label')}</span>
             <p className={cn('font-medium', getSecurityColor(host))}>
               {(host.security_layer || host.security) === 'reality' && <ShieldCheck className="w-3.5 h-3.5 inline mr-1" />}
               {(host.security_layer || host.security) === 'tls' && <Lock className="w-3.5 h-3.5 inline mr-1" />}
@@ -708,7 +714,7 @@ function HostCard({
           )}
           {host.nodes && host.nodes.length > 0 && (
             <div className="bg-dark-800/50 rounded-lg p-2">
-              <span className="text-dark-200 text-xs">Ноды ({host.nodes.length})</span>
+              <span className="text-dark-200 text-xs">{t('hosts.detail.nodes')} ({host.nodes.length})</span>
               <p className="font-medium text-white truncate text-xs">{host.nodes.map(n => n.name).join(', ')}</p>
             </div>
           )}
@@ -767,6 +773,7 @@ function HostSkeleton() {
 }
 
 export default function Hosts() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('hosts', 'create')
   const canEdit = useHasPermission('hosts', 'edit')
@@ -789,10 +796,10 @@ export default function Hosts() {
     mutationFn: (uuid: string) => client.post(`/hosts/${uuid}/enable`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hosts'] })
-      toast.success('Хост включён')
+      toast.success(t('hosts.toast.enabled'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
+      toast.error(err.response?.data?.detail || err.message || t('hosts.toast.error'))
     },
   })
 
@@ -800,10 +807,10 @@ export default function Hosts() {
     mutationFn: (uuid: string) => client.post(`/hosts/${uuid}/disable`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hosts'] })
-      toast.success('Хост отключён')
+      toast.success(t('hosts.toast.disabled'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
+      toast.error(err.response?.data?.detail || err.message || t('hosts.toast.error'))
     },
   })
 
@@ -811,10 +818,10 @@ export default function Hosts() {
     mutationFn: (uuid: string) => client.delete(`/hosts/${uuid}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hosts'] })
-      toast.success('Хост удалён')
+      toast.success(t('hosts.toast.deleted'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка')
+      toast.error(err.response?.data?.detail || err.message || t('hosts.toast.error'))
     },
   })
 
@@ -825,11 +832,11 @@ export default function Hosts() {
       queryClient.invalidateQueries({ queryKey: ['hosts'] })
       setEditingHost(null)
       setEditError('')
-      toast.success('Хост обновлён')
+      toast.success(t('hosts.toast.updated'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      setEditError(err.response?.data?.detail || err.message || 'Ошибка сохранения')
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка сохранения')
+      setEditError(err.response?.data?.detail || err.message || t('hosts.toast.saveError'))
+      toast.error(err.response?.data?.detail || err.message || t('hosts.toast.saveError'))
     },
   })
 
@@ -839,11 +846,11 @@ export default function Hosts() {
       queryClient.invalidateQueries({ queryKey: ['hosts'] })
       setShowCreateModal(false)
       setCreateError('')
-      toast.success('Хост создан')
+      toast.success(t('hosts.toast.created'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка создания')
+      setCreateError(err.response?.data?.detail || err.message || t('hosts.toast.createError'))
+      toast.error(err.response?.data?.detail || err.message || t('hosts.toast.createError'))
     },
   })
 
@@ -858,8 +865,8 @@ export default function Hosts() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">Хосты</h1>
-          <p className="text-dark-200 mt-1 text-sm md:text-base">Управление хостами подключений</p>
+          <h1 className="page-header-title">{t('hosts.title')}</h1>
+          <p className="text-dark-200 mt-1 text-sm md:text-base">{t('hosts.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {canCreate && (
@@ -868,7 +875,7 @@ export default function Hosts() {
               className="gap-2"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Добавить</span>
+              <span className="hidden sm:inline">{t('hosts.actions.add')}</span>
             </Button>
           )}
           <Button
@@ -878,7 +885,7 @@ export default function Hosts() {
             className="gap-2"
           >
             <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
-            <span className="hidden sm:inline">Обновить</span>
+            <span className="hidden sm:inline">{t('hosts.actions.refresh')}</span>
           </Button>
         </div>
       </div>
@@ -887,7 +894,7 @@ export default function Hosts() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <CardContent className="p-4">
-            <p className="text-xs md:text-sm text-dark-200">Всего</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('hosts.stats.total')}</p>
             <p className="text-xl md:text-2xl font-bold text-white mt-1">
               {isLoading ? '-' : totalHosts}
             </p>
@@ -895,7 +902,7 @@ export default function Hosts() {
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <CardContent className="p-4">
-            <p className="text-xs md:text-sm text-dark-200">Активные</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('hosts.stats.active')}</p>
             <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
               {isLoading ? '-' : activeHosts}
             </p>
@@ -903,7 +910,7 @@ export default function Hosts() {
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <CardContent className="p-4">
-            <p className="text-xs md:text-sm text-dark-200">Отключены</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('hosts.stats.disabled')}</p>
             <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
               {isLoading ? '-' : disabledHosts}
             </p>
@@ -911,7 +918,7 @@ export default function Hosts() {
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <CardContent className="p-4">
-            <p className="text-xs md:text-sm text-dark-200">Скрытые</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('hosts.stats.hidden')}</p>
             <p className="text-xl md:text-2xl font-bold text-yellow-400 mt-1">
               {isLoading ? '-' : hiddenHosts}
             </p>
@@ -927,7 +934,7 @@ export default function Hosts() {
           <Card className="col-span-full">
             <CardContent className="py-12 text-center">
               <Globe className="w-12 h-12 text-dark-300 mx-auto mb-3" />
-              <p className="text-dark-200">Нет хостов</p>
+              <p className="text-dark-200">{t('hosts.statusNoHosts')}</p>
             </CardContent>
           </Card>
         ) : (
@@ -972,9 +979,9 @@ export default function Hosts() {
       <ConfirmDialog
         open={deleteConfirmUuid !== null}
         onOpenChange={(open) => { if (!open) setDeleteConfirmUuid(null) }}
-        title="Удалить хост?"
-        description="Хост будет удалён. Это действие нельзя отменить."
-        confirmLabel="Удалить"
+        title={t('hosts.deleteConfirm.title')}
+        description={t('hosts.deleteConfirm.description')}
+        confirmLabel={t('hosts.deleteConfirm.confirm')}
         variant="destructive"
         onConfirm={() => {
           if (deleteConfirmUuid) {
