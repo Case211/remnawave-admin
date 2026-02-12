@@ -172,6 +172,10 @@ async def lifespan(app: FastAPI):
                 from web.backend.core.rbac import ensure_rbac_tables
                 await ensure_rbac_tables()
 
+                # Initialize dynamic config service (DB settings cache)
+                from src.services.config_service import config_service
+                await config_service.initialize()
+
                 # Start automation engine
                 from web.backend.core.automation_engine import engine as automation_engine
                 await automation_engine.start()
