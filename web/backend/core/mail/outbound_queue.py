@@ -1,6 +1,7 @@
 """Outbound email queue — polls pending emails and delivers via direct MX."""
 import asyncio
 import logging
+import ssl
 import uuid
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
@@ -245,11 +246,23 @@ class OutboundMailQueue:
         to_email: str,
         raw_bytes: bytes,
     ) -> str:
-        """Try delivering to MX hosts in order. Returns SMTP response string."""
+        """Try delivering to MX hosts in order with opportunistic TLS.
+
+        Attempts STARTTLS without certificate verification first (standard for
+        MX delivery — many servers have self-signed or mismatched certs).
+        Falls back to plain SMTP if STARTTLS is not supported.
+        """
         import aiosmtplib
+
+        # Permissive TLS context: encrypt the connection but don't verify the
+        # remote certificate — this is the standard behaviour for MX delivery.
+        tls_ctx = ssl.create_default_context()
+        tls_ctx.check_hostname = False
+        tls_ctx.verify_mode = ssl.CERT_NONE
 
         last_error = None
         for host in mx_hosts[:3]:
+            # 1) Try with opportunistic STARTTLS (no cert verification)
             try:
                 response = await aiosmtplib.send(
                     raw_bytes,
@@ -259,16 +272,31 @@ class OutboundMailQueue:
                     port=25,
                     timeout=30,
                     start_tls=True,
+                    tls_context=tls_ctx,
                 )
-                # response is a tuple of (dict of recipient -> (code, message), message)
-                # or (code, message) depending on version
                 return str(response)
             except aiosmtplib.SMTPResponseException as e:
                 last_error = e
                 logger.warning("SMTP error from %s: %s", host, e)
+                continue
+            except Exception as e:
+                logger.debug("STARTTLS failed for %s: %s — falling back to plain", host, e)
+
+            # 2) Fallback: plain SMTP (no TLS)
+            try:
+                response = await aiosmtplib.send(
+                    raw_bytes,
+                    sender=from_email,
+                    recipients=[to_email],
+                    hostname=host,
+                    port=25,
+                    timeout=30,
+                    start_tls=False,
+                )
+                return str(response)
             except Exception as e:
                 last_error = e
-                logger.warning("Connection error to MX %s: %s", host, e)
+                logger.warning("Plain SMTP also failed for %s: %s", host, e)
 
         raise RuntimeError(f"All MX hosts failed: {last_error}")
 
