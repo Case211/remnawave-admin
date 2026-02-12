@@ -16,6 +16,8 @@ import {
   Terminal,
   BarChart3,
   Zap,
+  BellRing,
+  Mail,
   ShieldCheck,
   ChevronDown,
   ChevronsLeft,
@@ -95,6 +97,8 @@ const navigation: NavigationEntry[] = [
   { name: 'nav.hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
   { name: 'nav.automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
+  { name: 'nav.notifications', href: '/notifications', icon: BellRing, permission: { resource: 'notifications', action: 'view' } },
+  { name: 'nav.mailServer', href: '/mailserver', icon: Mail, permission: { resource: 'mailserver', action: 'view' } },
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   {
     type: 'group',
@@ -167,9 +171,6 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           collapsed && "gap-0"
         )}>
           <RemnawaveLogo className="w-8 h-8 flex-shrink-0" />
-          {!collapsed && (
-            <span className="sidebar-brand-text text-lg font-display font-bold text-white">Remnawave</span>
-          )}
         </Link>
         {/* Mobile close button */}
         <Button

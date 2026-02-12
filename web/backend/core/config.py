@@ -56,8 +56,28 @@ class WebSettings(BaseSettings):
 
     # Notifications (shared with bot)
     notifications_chat_id: Optional[str] = Field(default=None, alias="NOTIFICATIONS_CHAT_ID")
-    notifications_topic_service: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_SERVICE")
     notifications_topic_id: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_ID")
+    # Per-type topics (fallback to notifications_topic_id)
+    notifications_topic_users: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_USERS")
+    notifications_topic_nodes: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_NODES")
+    notifications_topic_service: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_SERVICE")
+    notifications_topic_hwid: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_HWID")
+    notifications_topic_crm: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_CRM")
+    notifications_topic_errors: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_ERRORS")
+    notifications_topic_violations: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_VIOLATIONS")
+
+    def get_topic_for(self, topic_type: str) -> Optional[str]:
+        """Get topic ID for a given notification type, falling back to the general topic."""
+        mapping = {
+            "users": self.notifications_topic_users,
+            "nodes": self.notifications_topic_nodes,
+            "service": self.notifications_topic_service,
+            "hwid": self.notifications_topic_hwid,
+            "crm": self.notifications_topic_crm,
+            "errors": self.notifications_topic_errors,
+            "violations": self.notifications_topic_violations,
+        }
+        return mapping.get(topic_type) or self.notifications_topic_id
 
     @field_validator("jwt_algorithm", mode="before")
     @classmethod

@@ -34,6 +34,8 @@ from web.backend.api.v2 import audit as audit_api
 from web.backend.api.v2 import logs as logs_api
 from web.backend.api.v2 import advanced_analytics
 from web.backend.api.v2 import automations as automations_api
+from web.backend.api.v2 import notifications as notifications_api
+from web.backend.api.v2 import mailserver as mailserver_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -170,9 +172,24 @@ async def lifespan(app: FastAPI):
                 from web.backend.core.rbac import ensure_rbac_tables
                 await ensure_rbac_tables()
 
+                # Initialize dynamic config service (DB settings cache)
+                from src.services.config_service import config_service
+                await config_service.initialize()
+
                 # Start automation engine
                 from web.backend.core.automation_engine import engine as automation_engine
                 await automation_engine.start()
+
+                # Start alert engine
+                from web.backend.core.alert_engine import alert_engine
+                await alert_engine.start()
+
+                # Start mail service
+                try:
+                    from web.backend.core.mail.mail_service import mail_service
+                    await mail_service.start()
+                except Exception as e:
+                    logger.warning("Mail service start failed: %s", e)
             else:
                 logger.warning("Database connection failed")
         except Exception as e:
@@ -194,6 +211,16 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    try:
+        from web.backend.core.mail.mail_service import mail_service
+        await mail_service.stop()
+    except Exception:
+        pass
+    try:
+        from web.backend.core.alert_engine import alert_engine
+        await alert_engine.stop()
+    except Exception:
+        pass
     try:
         from web.backend.core.automation_engine import engine as automation_engine
         await automation_engine.stop()
@@ -312,6 +339,8 @@ def create_app() -> FastAPI:
     app.include_router(logs_api.router, prefix="/api/v2/logs", tags=["logs"])
     app.include_router(advanced_analytics.router, prefix="/api/v2/analytics/advanced", tags=["advanced-analytics"])
     app.include_router(automations_api.router, prefix="/api/v2/automations", tags=["automations"])
+    app.include_router(notifications_api.router, prefix="/api/v2", tags=["notifications"])
+    app.include_router(mailserver_api.router, prefix="/api/v2", tags=["mailserver"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
 
     # Health check endpoint

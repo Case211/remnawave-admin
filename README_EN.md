@@ -38,6 +38,13 @@
 - ⚡ Automatic actions based on scoring thresholds
 - 📡 Integration with [Node Agent](node-agent/README.md) for data collection
 
+### 📧 Built-in Mail Server
+- 📤 Direct MX delivery without external SMTP providers
+- 🔏 DKIM signing (RSA-2048) + automatic SPF/DKIM/DMARC verification
+- 📥 Inbound email receiving (embedded SMTP server)
+- 📊 Outbound queue with retries, rate limiting, and monitoring
+- ✍️ Built-in compose editor + inbox viewer
+
 ### 🔧 Additional
 - ⚙️ Dynamic settings without restart (Telegram and web panel)
 - 🔔 Webhook notifications with topic routing
@@ -187,6 +194,147 @@ NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Violations
 
 ---
 
+### Step 7️⃣ — Built-in Mail Server (optional)
+
+The web panel includes an embedded mail server with DKIM signing, direct MX delivery, and inbound email receiving — no external SMTP providers needed.
+
+#### Enabling
+
+Go to **Settings** in the web panel → **"Mail Server"** section → enable **"Mail Server Enabled"**. Restart the container.
+
+Or via `.env`:
+
+```env
+MAIL_SERVER_ENABLED=true
+MAIL_INBOUND_PORT=2525          # Inbound SMTP port (default 2525)
+MAIL_SERVER_HOSTNAME=0.0.0.0    # SMTP server bind address
+```
+
+> 💡 All settings can be changed from the web UI (Settings page). `.env` values serve as fallback.
+
+#### Adding a domain
+
+1. Go to **Mail Server** → **Domains** tab → **Add Domain**
+2. Enter your domain (e.g. `example.com`)
+3. The system will auto-generate DKIM keys (RSA-2048)
+
+#### DNS configuration
+
+Click **"DNS Records"** on your domain — the system shows 4 records to add at your DNS provider:
+
+| Type | Host | Purpose |
+|------|------|---------|
+| **MX** | `example.com` | Routes incoming mail to your server |
+| **TXT** | `example.com` | SPF — authorizes your IP to send email |
+| **TXT** | `rw._domainkey.example.com` | DKIM — email signature verification |
+| **TXT** | `_dmarc.example.com` | DMARC — policy for unverified emails |
+
+Values can be copied from the interface. After adding, click **"Check DNS"** to verify.
+
+#### Network ports
+
+```
+Port 25   — outbound (for direct MX delivery to recipient servers)
+Port 2525 — inbound (receiving emails, configurable)
+```
+
+Add to `docker-compose.yml`:
+
+```yaml
+ports:
+  - "25:2525"    # inbound email
+```
+
+> ⚠️ Many cloud providers (AWS, GCP, Azure) block port 25 by default. Use a VPS with open port 25 (Hetzner, OVH, DigitalOcean).
+
+#### Behind a reverse proxy (nginx, Caddy, Traefik)
+
+The web panel (HTTP API) goes through reverse proxy as usual — `/api/v2/mailserver/*` endpoints work without extra configuration.
+
+**SMTP is a separate protocol** and **cannot** be proxied through an HTTP reverse proxy. Two options:
+
+**Option 1 — Direct port mapping (recommended):**
+
+```yaml
+# docker-compose.yml — SMTP port bypasses the proxy
+services:
+  remnawave-admin:
+    ports:
+      - "25:2525"    # inbound email directly
+```
+
+**Option 2 — nginx stream proxy (TCP):**
+
+```nginx
+# Separate stream {} block, NOT inside http {}
+stream {
+    server {
+        listen 25;
+        proxy_pass remnawave-admin:2525;
+    }
+}
+```
+
+**Option 3 — Caddy L4 (TCP proxy):**
+
+Caddy requires the [caddy-l4](https://github.com/mholt/caddy-l4) plugin for TCP proxying:
+
+```json
+{
+  "apps": {
+    "layer4": {
+      "servers": {
+        "smtp": {
+          "listen": [":25"],
+          "routes": [{
+            "handle": [{
+              "handler": "proxy",
+              "upstreams": [{"dial": ["remnawave-admin:2525"]}]
+            }]
+          }]
+        }
+      }
+    }
+  }
+}
+```
+
+Or via Caddyfile (with `caddy-l4`):
+
+```caddyfile
+:25 {
+    route {
+        proxy remnawave-admin:2525
+    }
+}
+```
+
+**Connection diagram:**
+
+```
+Internet
+  │
+  ├── :443 (HTTPS) → nginx/Caddy → :8081 (web panel API)
+  │                               → :3000 (web panel frontend)
+  │
+  └── :25  (SMTP)  → directly    → :2525 (built-in SMTP server)
+```
+
+**Important:**
+- MX, SPF, PTR records must point to your server's **public IP**
+- PTR record (reverse DNS) is configured at your hosting provider — improves deliverability
+- If the proxy and app are on the same machine — simply map port 25/2525 in docker-compose, bypassing nginx/Caddy
+
+#### Testing
+
+1. Activate the domain (toggle switch on the domain card)
+2. Go to the **Compose** tab → select domain → enter address → **Send Test**
+3. Check the **Queue** tab — status should become `sent`
+
+> 📬 When an active outbound domain is configured, the notification system automatically uses the built-in mail server (falls back to SMTP relay).
+
+---
+
 ## 💻 Local Development
 
 ```bash
@@ -275,6 +423,16 @@ python -m src.main
 | `WEB_ALLOWED_IPS` | — | — | IP whitelist (CIDR) |
 
 *\* Required only when running with `--profile web`*
+
+### 📧 Mail Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAIL_SERVER_ENABLED` | `false` | Enable the built-in mail server |
+| `MAIL_INBOUND_PORT` | `2525` | Inbound SMTP server port |
+| `MAIL_SERVER_HOSTNAME` | `0.0.0.0` | SMTP server bind address |
+
+> 💡 These variables are fallbacks. Settings can be changed from the web panel (Settings → Mail Server).
 
 ---
 
