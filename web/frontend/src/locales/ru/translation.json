@@ -643,6 +643,14 @@
       "confirmRevoke": "Отозвать токен?",
       "confirmRevokeDesc": "Node Agent потеряет доступ."
     },
+    "stats": {
+      "total": "Всего",
+      "online": "Онлайн",
+      "offline": "Офлайн",
+      "disabled": "Отключены",
+      "users": "Пользователей",
+      "today": "Сегодня"
+    },
     "actions": {
       "restart": "Перезапустить",
       "edit": "Редактировать",
@@ -654,7 +662,9 @@
       "save": "Сохранить",
       "saving": "Сохранение...",
       "create": "Создать",
-      "creating": "Создание..."
+      "creating": "Создание...",
+      "add": "Добавить",
+      "refresh": "Обновить"
     },
     "status": {
       "online": "Онлайн",
@@ -724,6 +734,29 @@
       "uptimeHoursMinutes": "{{hours}}ч {{minutes}}м",
       "uptimeMinutes": "{{minutes}}м"
     },
+    "stats": {
+      "total": "Всего",
+      "online": "Онлайн",
+      "offline": "Офлайн",
+      "avgCpu": "Сред. CPU",
+      "avgRam": "Сред. RAM",
+      "throughput": "Throughput"
+    },
+    "actions": {
+      "refresh": "Обновить",
+      "restart": "Перезапустить",
+      "restartTooltip": "Перезапустить ноду",
+      "enable": "Включить",
+      "enableTooltip": "Включить ноду",
+      "disable": "Отключить",
+      "disableTooltip": "Отключить ноду"
+    },
+    "filter": {
+      "all": "Все",
+      "online": "Онлайн",
+      "offline": "Офлайн",
+      "disabled": "Откл."
+    },
     "toast": {
       "restarted": "Нода перезапущена",
       "enabled": "Нода включена",
@@ -737,6 +770,25 @@
     "activeHosts": "Активные",
     "disabledHosts": "Отключены",
     "hiddenHosts": "Скрытые",
+    "stats": {
+      "total": "Всего",
+      "active": "Активные",
+      "disabled": "Отключены",
+      "hidden": "Скрытые"
+    },
+    "actions": {
+      "add": "Добавить",
+      "refresh": "Обновить",
+      "cancel": "Отмена",
+      "save": "Сохранить",
+      "saving": "Сохранение...",
+      "create": "Создать",
+      "creating": "Создание...",
+      "edit": "Редактировать",
+      "enable": "Включить",
+      "disable": "Отключить",
+      "delete": "Удалить"
+    },
     "noHosts": "Нет хостов",
     "noName": "Без имени",
     "hidden": "Скрыт",
@@ -910,6 +962,8 @@
   "admins": {
     "title": "Администраторы",
     "subtitle": "Управление учётными записями администраторов",
+    "adminsTab": "Администраторы",
+    "rolesTab": "Роли",
     "name": "Имя",
     "admin": "Администратор",
     "role": "Роль",

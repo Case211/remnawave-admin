@@ -643,6 +643,14 @@
       "confirmRevoke": "Revoke token?",
       "confirmRevokeDesc": "Node Agent will lose access."
     },
+    "stats": {
+      "total": "Total",
+      "online": "Online",
+      "offline": "Offline",
+      "disabled": "Disabled",
+      "users": "Users",
+      "today": "Today"
+    },
     "actions": {
       "restart": "Restart",
       "edit": "Edit",
@@ -654,7 +662,9 @@
       "save": "Save",
       "saving": "Saving...",
       "create": "Create",
-      "creating": "Creating..."
+      "creating": "Creating...",
+      "add": "Add",
+      "refresh": "Refresh"
     },
     "status": {
       "online": "Online",
@@ -724,6 +734,29 @@
       "uptimeHoursMinutes": "{{hours}}h {{minutes}}m",
       "uptimeMinutes": "{{minutes}}m"
     },
+    "stats": {
+      "total": "Total",
+      "online": "Online",
+      "offline": "Offline",
+      "avgCpu": "Avg CPU",
+      "avgRam": "Avg RAM",
+      "throughput": "Throughput"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "restart": "Restart",
+      "restartTooltip": "Restart node",
+      "enable": "Enable",
+      "enableTooltip": "Enable node",
+      "disable": "Disable",
+      "disableTooltip": "Disable node"
+    },
+    "filter": {
+      "all": "All",
+      "online": "Online",
+      "offline": "Offline",
+      "disabled": "Disabled"
+    },
     "toast": {
       "restarted": "Node restarted",
       "enabled": "Node enabled",
@@ -737,6 +770,25 @@
     "activeHosts": "Active",
     "disabledHosts": "Disabled",
     "hiddenHosts": "Hidden",
+    "stats": {
+      "total": "Total",
+      "active": "Active",
+      "disabled": "Disabled",
+      "hidden": "Hidden"
+    },
+    "actions": {
+      "add": "Add",
+      "refresh": "Refresh",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "create": "Create",
+      "creating": "Creating...",
+      "edit": "Edit",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete"
+    },
     "noHosts": "No hosts",
     "noName": "No name",
     "hidden": "Hidden",
@@ -910,6 +962,8 @@
   "admins": {
     "title": "Admins",
     "subtitle": "Admin account management",
+    "adminsTab": "Admins",
+    "rolesTab": "Roles",
     "name": "Name",
     "admin": "Admin",
     "role": "Role",
