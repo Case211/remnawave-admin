@@ -88,7 +88,7 @@ export function cronToHuman(expr: string): string {
       // Could be a list: 1,3,5
       if (dayOfWeek.includes(',')) {
         const days = dayOfWeek.split(',').map((d) => dayNamesShort[parseInt(d)] || d)
-        return t('automations.cron.daysRange', { from: days.join(', '), to: '', time }).replace(' –', ',').replace('– ', '')
+        return t('automations.cron.daysComma', { days: days.join(', '), time })
       }
       // Range: 1-5
       if (dayOfWeek.includes('-')) {
@@ -277,7 +277,7 @@ export function describeAction(rule: { action_type: string; action_config: Recor
     return `${base} (${cfg.reason})`
   }
   if (rule.action_type === 'cleanup_expired' && cfg.older_than_days) {
-    return `${base} > ${cfg.older_than_days} ${t('automations.constructor.days')}`
+    return `${base} > ${cfg.older_than_days} ${t('automations.constructor.daysShort')}`
   }
   if (rule.action_type === 'restart_node' && cfg.node_uuid) {
     return `${base} (${t('automations.constructor.specificNode').toLowerCase()})`
