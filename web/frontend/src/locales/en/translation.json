@@ -1962,7 +1962,10 @@
       "min": "min",
       "triggered": "Triggered",
       "lastTriggered": "Last triggered",
-      "escalation": "Escalation delay"
+      "escalation": "Escalation delay",
+      "channelsLabel": "Channels",
+      "channelInApp": "In-app",
+      "channelsHint": "Select which channels to notify when this rule triggers. Channels must be configured in the Channels tab."
     },
     "alertLogs": {
       "status": "Status",
