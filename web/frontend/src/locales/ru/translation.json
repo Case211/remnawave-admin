@@ -1707,7 +1707,8 @@
       "reports": "Отчёты",
       "collector": "Коллектор данных",
       "limits": "Лимиты",
-      "appearance": "Внешний вид"
+      "appearance": "Внешний вид",
+      "mailserver": "Почтовый сервер"
     },
     "subcategories": {
       "topics": "Топики уведомлений",

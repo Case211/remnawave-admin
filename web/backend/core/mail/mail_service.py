@@ -16,22 +16,28 @@ class MailService:
         self.inbound: Optional[InboundMailServer] = None
 
     async def start(self):
-        """Start mail subsystems based on configuration."""
-        try:
-            from web.backend.core.config import get_web_settings
-            settings = get_web_settings()
+        """Start mail subsystems based on configuration.
 
-            mail_enabled = getattr(settings, "mail_server_enabled", False)
+        Reads settings from config_service (DB > .env > default).
+        """
+        try:
+            from src.services.config_service import config_service
+
+            mail_enabled = config_service.get("mailserver_enabled", False)
             if not mail_enabled:
-                logger.info("Mail server disabled (MAIL_SERVER_ENABLED=false)")
+                logger.info("Mail server disabled (mailserver_enabled=false)")
                 return
+
+            # Read queue tuning from config
+            poll_interval = config_service.get("mailserver_queue_poll_interval", 10)
+            self.queue.POLL_INTERVAL = poll_interval
 
             # Always start outbound queue
             await self.queue.start()
 
             # Start inbound server if configured
-            inbound_port = getattr(settings, "mail_inbound_port", 2525)
-            mail_hostname = getattr(settings, "mail_server_hostname", "0.0.0.0")
+            inbound_port = config_service.get("mailserver_inbound_port", 2525)
+            mail_hostname = config_service.get("mailserver_hostname", "0.0.0.0")
             if inbound_port:
                 self.inbound = InboundMailServer(hostname=mail_hostname, port=inbound_port)
                 await self.inbound.start()

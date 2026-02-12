@@ -1707,7 +1707,8 @@
       "reports": "Reports",
       "collector": "Data Collector",
       "limits": "Limits",
-      "appearance": "Appearance"
+      "appearance": "Appearance",
+      "mailserver": "Mail Server"
     },
     "subcategories": {
       "topics": "Notification topics",
