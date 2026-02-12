@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   ChevronLeft,
@@ -37,6 +38,7 @@ const RESULT_ICON_COLOR: Record<string, string> = {
 }
 
 export function LogsTimeline() {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [ruleIdFilter, setRuleIdFilter] = useState('')
   const [resultFilter, setResultFilter] = useState<string>('')
@@ -82,11 +84,11 @@ export function LogsTimeline() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-dark-400" />
-          <span className="text-sm text-dark-400">Фильтры:</span>
+          <span className="text-sm text-dark-400">{t('automations.logsTab.filters')}</span>
         </div>
 
         <Input
-          placeholder="ID правила"
+          placeholder={t('automations.logsTab.ruleId')}
           value={ruleIdFilter}
           onChange={(e) => { setRuleIdFilter(e.target.value); setPage(1) }}
           className="w-28 h-8 text-xs bg-dark-800 border-dark-700"
@@ -98,13 +100,13 @@ export function LogsTimeline() {
           onValueChange={(v) => { setResultFilter(v === 'all' ? '' : v); setPage(1) }}
         >
           <SelectTrigger className="w-32 h-8 text-xs bg-dark-800 border-dark-700">
-            <SelectValue placeholder="Результат" />
+            <SelectValue placeholder={t('automations.logsTab.resultPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все</SelectItem>
-            <SelectItem value="success">Успех</SelectItem>
-            <SelectItem value="error">Ошибка</SelectItem>
-            <SelectItem value="skipped">Пропущено</SelectItem>
+            <SelectItem value="all">{t('automations.logsTab.all')}</SelectItem>
+            <SelectItem value="success">{t('automations.logsTab.success')}</SelectItem>
+            <SelectItem value="error">{t('automations.logsTab.error')}</SelectItem>
+            <SelectItem value="skipped">{t('automations.logsTab.skipped')}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -113,14 +115,14 @@ export function LogsTimeline() {
           value={dateFrom}
           onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
           className="w-36 h-8 text-xs bg-dark-800 border-dark-700"
-          placeholder="С"
+          placeholder={t('automations.logsTab.from')}
         />
         <Input
           type="date"
           value={dateTo}
           onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
           className="w-36 h-8 text-xs bg-dark-800 border-dark-700"
-          placeholder="По"
+          placeholder={t('automations.logsTab.to')}
         />
 
         <div className="ml-auto flex gap-2">
@@ -142,7 +144,7 @@ export function LogsTimeline() {
         </div>
       ) : !data?.items?.length ? (
         <div className="text-center py-12 text-dark-400">
-          Нет записей в логе
+          {t('automations.logsTab.noLogs')}
         </div>
       ) : (
         <div className="space-y-2">
@@ -196,7 +198,7 @@ export function LogsTimeline() {
       {data && data.pages > 1 && (
         <div className="flex items-center justify-between pt-2">
           <span className="text-xs text-dark-400">
-            Стр. {data.page} из {data.pages} ({data.total} записей)
+            {t('automations.logsTab.page', { page: data.page, pages: data.pages, total: data.total })}
           </span>
           <div className="flex gap-1">
             <Button

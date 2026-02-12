@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -30,18 +31,19 @@ interface TemplatesGalleryProps {
 }
 
 export function TemplatesGallery({ canCreate }: TemplatesGalleryProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [activatingId, setActivatingId] = useState<string | null>(null)
 
   const activateMutation = useMutation({
     mutationFn: automationsApi.activateTemplate,
     onSuccess: (rule) => {
-      toast.success(`Шаблон "${rule.name}" активирован`)
+      toast.success(t('automations.templatesGallery.templateActivated', { name: rule.name }))
       queryClient.invalidateQueries({ queryKey: ['automations'] })
       setActivatingId(null)
     },
     onError: () => {
-      toast.error('Не удалось активировать шаблон')
+      toast.error(t('automations.templatesGallery.activateError'))
       setActivatingId(null)
     },
   })
@@ -69,7 +71,7 @@ export function TemplatesGallery({ canCreate }: TemplatesGalleryProps) {
   if (!templates?.length) {
     return (
       <div className="text-center py-12 text-dark-400">
-        Нет доступных шаблонов
+        {t('automations.templatesGallery.noTemplates')}
       </div>
     )
   }
@@ -100,6 +102,7 @@ function TemplateCard({
   onActivate: () => void
   isActivating: boolean
 }) {
+  const { t } = useTranslation()
   const Icon = TEMPLATE_ICONS[template.id] || FileText
 
   return (
@@ -129,11 +132,11 @@ function TemplateCard({
         {/* Trigger -> Action summary */}
         <div className="text-xs text-dark-300 mb-4 space-y-2">
           <div className="flex items-start gap-2">
-            <span className="text-dark-500 flex-shrink-0 mt-px">Когда:</span>
+            <span className="text-dark-500 flex-shrink-0 mt-px">{t('automations.templatesGallery.when')}</span>
             <span>{describeTrigger(template)}</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-dark-500 flex-shrink-0 mt-px">Тогда:</span>
+            <span className="text-dark-500 flex-shrink-0 mt-px">{t('automations.templatesGallery.then')}</span>
             <span className="text-primary-400">{describeAction(template)}</span>
           </div>
         </div>
@@ -146,7 +149,7 @@ function TemplateCard({
             onClick={onActivate}
             disabled={isActivating}
           >
-            {isActivating ? 'Активация...' : 'Включить'}
+            {isActivating ? t('automations.templatesGallery.activating') : t('automations.templatesGallery.activate')}
           </Button>
         )}
       </CardContent>

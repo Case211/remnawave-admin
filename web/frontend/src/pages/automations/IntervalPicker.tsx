@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Timer } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +11,8 @@ interface IntervalPickerProps {
 }
 
 export function IntervalPicker({ value, onChange }: IntervalPickerProps) {
+  const { t } = useTranslation()
+
   const [showCustom, setShowCustom] = useState(
     () => !!value && !INTERVAL_PRESETS.some((p) => p.value.toString() === value)
   )
@@ -18,23 +21,23 @@ export function IntervalPicker({ value, onChange }: IntervalPickerProps) {
 
   const humanInterval = (mins: number): string => {
     if (!mins) return ''
-    if (mins < 60) return `Каждые ${mins} мин.`
-    if (mins === 60) return 'Каждый час'
+    if (mins < 60) return t('automations.intervalPicker.everyNMin', { n: mins })
+    if (mins === 60) return t('automations.intervalPicker.everyHour')
     if (mins % 60 === 0) {
       const h = mins / 60
-      if (h === 24) return 'Каждые 24 часа (раз в сутки)'
-      return `Каждые ${h} ч.`
+      if (h === 24) return t('automations.intervalPicker.every24Hours')
+      return t('automations.intervalPicker.everyNHours', { n: h })
     }
     const h = Math.floor(mins / 60)
     const m = mins % 60
-    return `Каждые ${h} ч. ${m} мин.`
+    return t('automations.intervalPicker.everyNHoursNMin', { h, m })
   }
 
   return (
     <div className="space-y-3">
-      <Label className="text-xs font-medium text-dark-300">Запускать с интервалом</Label>
+      <Label className="text-xs font-medium text-dark-300">{t('automations.intervalPicker.runWithInterval')}</Label>
       <p className="text-[11px] text-dark-500">
-        Правило будет запускаться повторно через выбранный промежуток времени
+        {t('automations.intervalPicker.intervalHint')}
       </p>
 
       {/* Preset buttons */}
@@ -63,14 +66,14 @@ export function IntervalPicker({ value, onChange }: IntervalPickerProps) {
               : 'bg-dark-900 text-dark-300 border-2 border-dark-500 hover:border-dark-400'
           }`}
         >
-          Другой
+          {t('automations.intervalPicker.other')}
         </button>
       </div>
 
       {/* Custom input */}
       {showCustom && (
         <div>
-          <Label className="text-xs font-medium text-dark-300">Интервал в минутах</Label>
+          <Label className="text-xs font-medium text-dark-300">{t('automations.intervalPicker.intervalMinutes')}</Label>
           <Input
             type="number"
             min={1}

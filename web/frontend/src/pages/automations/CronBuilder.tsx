@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Clock, HelpCircle } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -21,32 +22,35 @@ interface CronBuilderProps {
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
-const DAYS_OF_WEEK = [
-  { value: '1', label: 'Понедельник', short: 'Пн' },
-  { value: '2', label: 'Вторник', short: 'Вт' },
-  { value: '3', label: 'Среда', short: 'Ср' },
-  { value: '4', label: 'Четверг', short: 'Чт' },
-  { value: '5', label: 'Пятница', short: 'Пт' },
-  { value: '6', label: 'Суббота', short: 'Сб' },
-  { value: '0', label: 'Воскресенье', short: 'Вс' },
-]
 const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => i + 1)
 
 type VisualFrequency = 'every_n_minutes' | 'hourly' | 'daily' | 'weekly' | 'monthly'
-
-const FREQUENCY_OPTIONS: { value: VisualFrequency; label: string; description: string }[] = [
-  { value: 'every_n_minutes', label: 'Каждые N минут', description: 'Повторяется через равные промежутки' },
-  { value: 'hourly', label: 'Каждый час', description: 'В определённую минуту каждого часа' },
-  { value: 'daily', label: 'Каждый день', description: 'В определённое время каждый день' },
-  { value: 'weekly', label: 'Каждую неделю', description: 'В определённый день и время' },
-  { value: 'monthly', label: 'Каждый месяц', description: 'В определённую дату и время' },
-]
 
 function pad2(n: number): string {
   return n.toString().padStart(2, '0')
 }
 
 export function CronBuilder({ value, onChange }: CronBuilderProps) {
+  const { t } = useTranslation()
+
+  const DAYS_OF_WEEK = [
+    { value: '1', label: t('automations.cronBuilder.daysOfWeek.1.long'), short: t('automations.cronBuilder.daysOfWeek.1.short') },
+    { value: '2', label: t('automations.cronBuilder.daysOfWeek.2.long'), short: t('automations.cronBuilder.daysOfWeek.2.short') },
+    { value: '3', label: t('automations.cronBuilder.daysOfWeek.3.long'), short: t('automations.cronBuilder.daysOfWeek.3.short') },
+    { value: '4', label: t('automations.cronBuilder.daysOfWeek.4.long'), short: t('automations.cronBuilder.daysOfWeek.4.short') },
+    { value: '5', label: t('automations.cronBuilder.daysOfWeek.5.long'), short: t('automations.cronBuilder.daysOfWeek.5.short') },
+    { value: '6', label: t('automations.cronBuilder.daysOfWeek.6.long'), short: t('automations.cronBuilder.daysOfWeek.6.short') },
+    { value: '0', label: t('automations.cronBuilder.daysOfWeek.0.long'), short: t('automations.cronBuilder.daysOfWeek.0.short') },
+  ]
+
+  const FREQUENCY_OPTIONS: { value: VisualFrequency; label: string; description: string }[] = [
+    { value: 'every_n_minutes', label: t('automations.cronBuilder.everyNMinutes'), description: t('automations.cronBuilder.everyNMinutesDesc') },
+    { value: 'hourly', label: t('automations.cronBuilder.everyHour'), description: t('automations.cronBuilder.everyHourDesc') },
+    { value: 'daily', label: t('automations.cronBuilder.everyDay'), description: t('automations.cronBuilder.everyDayDesc') },
+    { value: 'weekly', label: t('automations.cronBuilder.everyWeek'), description: t('automations.cronBuilder.everyWeekDesc') },
+    { value: 'monthly', label: t('automations.cronBuilder.everyMonth'), description: t('automations.cronBuilder.everyMonthDesc') },
+  ]
+
   const [mode, setMode] = useState<ScheduleMode>(() => {
     if (!value) return 'preset'
     if (CRON_PRESETS.some((p) => p.cron === value)) return 'preset'
@@ -132,9 +136,9 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       {/* Mode tabs */}
       <div className="flex gap-1 p-1 rounded-lg bg-dark-800 border-2 border-dark-600">
         {[
-          { key: 'preset' as const, label: 'Готовые' },
-          { key: 'visual' as const, label: 'Настроить' },
-          { key: 'custom' as const, label: 'CRON' },
+          { key: 'preset' as const, label: t('automations.cronBuilder.presets') },
+          { key: 'visual' as const, label: t('automations.cronBuilder.configure') },
+          { key: 'custom' as const, label: t('automations.cronBuilder.cronTab') },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -174,7 +178,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       {mode === 'visual' && (
         <div className="space-y-3">
           <div>
-            <Label className="text-xs font-medium text-dark-300">Частота</Label>
+            <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.frequency')}</Label>
             <Select value={frequency} onValueChange={(v) => setFrequency(v as VisualFrequency)}>
               <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                 <SelectValue />
@@ -193,7 +197,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {/* Every N minutes */}
           {frequency === 'every_n_minutes' && (
             <div>
-              <Label className="text-xs font-medium text-dark-300">Интервал (минуты)</Label>
+              <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.intervalMin')}</Label>
               <div className="flex flex-wrap gap-1.5 mt-1.5">
                 {[1, 5, 10, 15, 20, 30, 45].map((n) => (
                   <button
@@ -215,7 +219,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {/* Hourly: pick minute */}
           {frequency === 'hourly' && (
             <div>
-              <Label className="text-xs font-medium text-dark-300">В минуту</Label>
+              <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.atMinute')}</Label>
               <Select
                 value={minute.toString()}
                 onValueChange={(v) => setMinute(parseInt(v))}
@@ -236,7 +240,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {frequency === 'daily' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs font-medium text-dark-300">Час</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.hour')}</Label>
                 <Select
                   value={hour.toString()}
                   onValueChange={(v) => setHour(parseInt(v))}
@@ -252,7 +256,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs font-medium text-dark-300">Минута</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.minute')}</Label>
                 <Select
                   value={minute.toString()}
                   onValueChange={(v) => setMinute(parseInt(v))}
@@ -274,7 +278,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {frequency === 'weekly' && (
             <div className="space-y-3">
               <div>
-                <Label className="text-xs font-medium text-dark-300">День недели</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.dayOfWeek')}</Label>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {DAYS_OF_WEEK.map((d) => (
                     <button
@@ -293,7 +297,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs font-medium text-dark-300">Час</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.hour')}</Label>
                   <Select
                     value={hour.toString()}
                     onValueChange={(v) => setHour(parseInt(v))}
@@ -309,7 +313,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs font-medium text-dark-300">Минута</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.minute')}</Label>
                   <Select
                     value={minute.toString()}
                     onValueChange={(v) => setMinute(parseInt(v))}
@@ -332,7 +336,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           {frequency === 'monthly' && (
             <div className="space-y-3">
               <div>
-                <Label className="text-xs font-medium text-dark-300">День месяца</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.dayOfMonth')}</Label>
                 <Select
                   value={dayOfMonth.toString()}
                   onValueChange={(v) => setDayOfMonth(parseInt(v))}
@@ -342,14 +346,14 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {DAYS_OF_MONTH.map((d) => (
-                      <SelectItem key={d} value={d.toString()}>{d}-е число</SelectItem>
+                      <SelectItem key={d} value={d.toString()}>{t('automations.cronBuilder.dayOrdinal', { day: d })}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs font-medium text-dark-300">Час</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.hour')}</Label>
                   <Select
                     value={hour.toString()}
                     onValueChange={(v) => setHour(parseInt(v))}
@@ -365,7 +369,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs font-medium text-dark-300">Минута</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.minute')}</Label>
                   <Select
                     value={minute.toString()}
                     onValueChange={(v) => setMinute(parseInt(v))}
@@ -390,7 +394,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       {mode === 'custom' && (
         <div className="space-y-2">
           <div>
-            <Label className="text-xs font-medium text-dark-300">CRON-выражение (5 полей)</Label>
+            <Label className="text-xs font-medium text-dark-300">{t('automations.cronBuilder.cronExpression')}</Label>
             <Input
               value={customCron}
               onChange={(e) => {
@@ -402,17 +406,17 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             />
           </div>
           <div className="flex items-center gap-4 text-[11px] text-dark-400 font-mono px-1">
-            <span>мин</span>
-            <span>час</span>
-            <span>день</span>
-            <span>мес</span>
-            <span>день_нед</span>
+            <span>{t('automations.cronBuilder.cronFieldMin')}</span>
+            <span>{t('automations.cronBuilder.cronFieldHour')}</span>
+            <span>{t('automations.cronBuilder.cronFieldDay')}</span>
+            <span>{t('automations.cronBuilder.cronFieldMonth')}</span>
+            <span>{t('automations.cronBuilder.cronFieldDow')}</span>
           </div>
           <div className="p-2 rounded-md bg-dark-800 border border-dark-600">
             <div className="flex items-start gap-1.5">
               <HelpCircle className="w-3 h-3 text-dark-400 flex-shrink-0 mt-0.5" />
               <p className="text-[11px] text-dark-400">
-                <code className="text-dark-300">*</code> = любое, <code className="text-dark-300">*/N</code> = каждые N, <code className="text-dark-300">1-5</code> = диапазон, <code className="text-dark-300">1,3,5</code> = список
+                {t('automations.cronBuilder.cronHelp')}
               </p>
             </div>
           </div>
@@ -423,7 +427,7 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
       {(value || (mode === 'visual' && visualCron) || (mode === 'custom' && customCron)) && (
         <div className="flex items-center gap-2 p-2.5 rounded-lg bg-dark-900 border-2 border-dark-600">
           <Clock className="w-3.5 h-3.5 text-accent-teal flex-shrink-0" />
-          <span className="text-xs text-dark-200 font-medium">{preview || 'Расписание не задано'}</span>
+          <span className="text-xs text-dark-200 font-medium">{preview || t('automations.cron.scheduleNotSet')}</span>
           {mode !== 'custom' && (
             <Badge variant="outline" className="text-[9px] ml-auto text-dark-400 border-dark-500 font-mono">
               {mode === 'visual' ? visualCron : value}
