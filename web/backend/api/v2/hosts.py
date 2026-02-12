@@ -1,4 +1,5 @@
 """Hosts API endpoints."""
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 
@@ -10,6 +11,8 @@ from web.backend.schemas.host import (
     HostCreate,
     HostUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -61,14 +64,28 @@ def _map_host_detail(h: dict) -> dict:
     return base
 
 
+async def _get_hosts_list() -> List[dict]:
+    """Get hosts from DB first, fall back to API."""
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            hosts = await db_service.get_all_hosts()
+            if hosts:
+                logger.debug("Loaded %d hosts from database", len(hosts))
+                return hosts
+    except Exception as e:
+        logger.debug("DB hosts fetch failed: %s", e)
+
+    from web.backend.core.api_helper import fetch_hosts_from_api
+    return await fetch_hosts_from_api()
+
+
 @router.get("", response_model=HostListResponse)
 async def list_hosts(
     admin: AdminUser = Depends(require_permission("hosts", "view")),
-    api_client=Depends(get_api_client),
 ):
     """Список всех хостов."""
-    data = await api_client.get_hosts()
-    hosts = data.get('response', []) if isinstance(data, dict) else data
+    hosts = await _get_hosts_list()
 
     items = [HostListItem(**_map_host(h)) for h in hosts]
 

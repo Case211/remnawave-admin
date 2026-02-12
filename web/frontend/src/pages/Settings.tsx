@@ -932,17 +932,22 @@ export default function Settings() {
   const matchesSearch = (item: ConfigItem): boolean => {
     if (!search) return true
     const q = search.toLowerCase()
+    const translatedLabel = t(`settings.configItems.${item.key}.label`, { defaultValue: '' }).toLowerCase()
+    const translatedDesc = t(`settings.configItems.${item.key}.description`, { defaultValue: '' }).toLowerCase()
     return (
       (item.display_name?.toLowerCase().includes(q) ?? false) ||
       item.key.toLowerCase().includes(q) ||
       (item.description?.toLowerCase().includes(q) ?? false) ||
-      (item.env_var_name?.toLowerCase().includes(q) ?? false)
+      (item.env_var_name?.toLowerCase().includes(q) ?? false) ||
+      translatedLabel.includes(q) ||
+      translatedDesc.includes(q)
     )
   }
 
   const renderConfigItem = (item: ConfigItem) => {
     const displayValue = getDisplayValue(item)
-    const label = item.display_name || item.key
+    const label = t(`settings.configItems.${item.key}.label`, { defaultValue: item.display_name || item.key })
+    const description = item.description ? t(`settings.configItems.${item.key}.description`, { defaultValue: item.description }) : undefined
     const isEditable = !item.is_readonly && canEdit
     const isSaving = savingKeys.has(item.key)
     const wasSaved = savedKeys.has(item.key)
@@ -968,7 +973,7 @@ export default function Settings() {
               <SourceBadge source={item.source} />
               {statusIcon}
             </div>
-            {item.description && <p className="text-xs text-dark-200 mt-0.5">{item.description}</p>}
+            {description && <p className="text-xs text-dark-200 mt-0.5">{description}</p>}
             {item.is_env_override && item.source !== 'env' && (
               <p className="text-[10px] text-yellow-500/60 mt-0.5">
                 .env: {item.env_var_name} = {item.env_value || '(set)'}
@@ -1026,7 +1031,7 @@ export default function Settings() {
             step={item.value_type === 'float' ? '0.1' : '1'}
           />
           <div className="flex items-center gap-2 mt-1">
-            {item.description && <p className="text-xs text-dark-200 flex-1">{item.description}</p>}
+            {description && <p className="text-xs text-dark-200 flex-1">{description}</p>}
             {item.is_env_override && item.source !== 'env' && (
               <p className="text-[10px] text-yellow-500/60 whitespace-nowrap">
                 .env: {item.env_value}
@@ -1071,7 +1076,7 @@ export default function Settings() {
               ))}
             </SelectContent>
           </Select>
-          {item.description && <p className="text-xs text-dark-200 mt-1">{item.description}</p>}
+          {description && <p className="text-xs text-dark-200 mt-1">{description}</p>}
         </div>
       )
     }
@@ -1090,7 +1095,7 @@ export default function Settings() {
               size="icon"
               onClick={() => handleReset(item.key)}
               className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Сбросить"
+              title={t('settings.reset')}
             >
               <X className="w-3.5 h-3.5" />
             </Button>
@@ -1105,7 +1110,7 @@ export default function Settings() {
           placeholder={item.default_value || ''}
         />
         <div className="flex items-center gap-2 mt-1">
-          {item.description && <p className="text-xs text-dark-200 flex-1">{item.description}</p>}
+          {description && <p className="text-xs text-dark-200 flex-1">{description}</p>}
           {item.is_env_override && item.source !== 'env' && (
             <p className="text-[10px] text-yellow-500/60 whitespace-nowrap">
               .env: {item.env_value}
