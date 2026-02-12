@@ -1,0 +1,150 @@
+# =============================================
+# Dev-окружение — использует образы с тегом :dev
+# Запуск:  docker compose -f docker-compose.dev.yml up -d
+# С веб-панелью: docker compose -f docker-compose.dev.yml --profile web up -d
+# =============================================
+
+services:
+  # ===========================================
+  # Основные сервисы
+  # ===========================================
+
+  bot:
+    image: ghcr.io/case211/remnawave-admin:dev
+    restart: unless-stopped
+    environment:
+      PYTHONPATH: /app
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN is required}
+      API_BASE_URL: ${API_BASE_URL:?API_BASE_URL is required}
+      API_TOKEN: ${API_TOKEN:-}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ru}
+      ADMINS: ${ADMINS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      NOTIFICATIONS_CHAT_ID: ${NOTIFICATIONS_CHAT_ID:-}
+      NOTIFICATIONS_TOPIC_ID: ${NOTIFICATIONS_TOPIC_ID:-}
+      NOTIFICATIONS_TOPIC_USERS: ${NOTIFICATIONS_TOPIC_USERS:-}
+      NOTIFICATIONS_TOPIC_NODES: ${NOTIFICATIONS_TOPIC_NODES:-}
+      NOTIFICATIONS_TOPIC_SERVICE: ${NOTIFICATIONS_TOPIC_SERVICE:-}
+      NOTIFICATIONS_TOPIC_HWID: ${NOTIFICATIONS_TOPIC_HWID:-}
+      NOTIFICATIONS_TOPIC_CRM: ${NOTIFICATIONS_TOPIC_CRM:-}
+      NOTIFICATIONS_TOPIC_ERRORS: ${NOTIFICATIONS_TOPIC_ERRORS:-}
+      NOTIFICATIONS_TOPIC_VIOLATIONS: ${NOTIFICATIONS_TOPIC_VIOLATIONS:-}
+      WEBHOOK_PORT: ${WEBHOOK_PORT:-8080}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+      DB_POOL_MIN_SIZE: ${DB_POOL_MIN_SIZE:-2}
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-10}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-300}
+      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:-}
+      MAXMIND_CITY_DB: ${MAXMIND_CITY_DB:-/app/geoip/GeoLite2-City.mmdb}
+      MAXMIND_ASN_DB: ${MAXMIND_ASN_DB:-/app/geoip/GeoLite2-ASN.mmdb}
+    volumes:
+      - ./logs:/app/logs
+      - geoip_data:/app/geoip
+    ports:
+      - "${WEBHOOK_PORT:-8080}:${WEBHOOK_PORT:-8080}"
+    networks:
+      - remnawave-network
+    depends_on:
+      remnawave-admin-db:
+        condition: service_healthy
+
+  remnawave-admin-db:
+    container_name: remnawave-admin-db
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-remnawave_bot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./logs:/app/logs
+    # Fix /app/logs ownership for postgres user, then start with logging_collector
+    entrypoint:
+      - sh
+      - -c
+      - >
+        mkdir -p /app/logs && chown postgres:postgres /app/logs &&
+        exec docker-entrypoint.sh postgres
+        -c logging_collector=on
+        -c log_directory=/app/logs
+        -c log_filename=postgres.log
+        -c log_file_mode=0644
+        -c log_truncate_on_rotation=off
+        -c log_rotation_size=10240
+        -c log_min_messages=warning
+        -c log_min_duration_statement=1000
+        -c "log_line_prefix=%t [%p] "
+    networks:
+      - remnawave-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB:-remnawave_bot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # Веб-панель (опционально, --profile web)
+  # ===========================================
+
+  web-backend:
+    image: ghcr.io/case211/remnawave-admin-web-backend:dev
+    container_name: remnawave-web-backend
+    restart: unless-stopped
+    environment:
+      - WEB_DEBUG=${WEB_DEBUG:-false}
+      - WEB_SECRET_KEY=${WEB_SECRET_KEY:?WEB_SECRET_KEY is required for web panel}
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=8081
+      - WEB_CORS_ORIGINS=${WEB_CORS_ORIGINS:-}
+      - BOT_TOKEN=${BOT_TOKEN}
+      - DATABASE_URL=${DATABASE_URL}
+      - API_BASE_URL=${API_BASE_URL}
+      - API_TOKEN=${API_TOKEN}
+      - ADMINS=${ADMINS}
+      - MAXMIND_LICENSE_KEY=${MAXMIND_LICENSE_KEY:-}
+      - MAXMIND_CITY_DB=${MAXMIND_CITY_DB:-/app/geoip/GeoLite2-City.mmdb}
+      - MAXMIND_ASN_DB=${MAXMIND_ASN_DB:-/app/geoip/GeoLite2-ASN.mmdb}
+    volumes:
+      - ./logs:/app/logs
+      - geoip_data:/app/geoip
+    ports:
+      - "${WEB_BACKEND_PORT:-8081}:8081"
+    networks:
+      - remnawave-network
+    depends_on:
+      remnawave-admin-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/api/v2/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - web
+
+  web-frontend:
+    image: ghcr.io/case211/remnawave-admin-web-frontend:dev
+    container_name: remnawave-web-frontend
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
+    volumes:
+      - ./logs:/app/logs
+    ports:
+      - "${WEB_FRONTEND_PORT:-3000}:80"
+    networks:
+      - remnawave-network
+    depends_on:
+      - web-backend
+    profiles:
+      - web
+
+volumes:
+  postgres_data:
+  geoip_data:
+
+networks:
+  remnawave-network:
+    external: true
