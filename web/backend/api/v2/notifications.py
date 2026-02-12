@@ -40,14 +40,58 @@ def _get_admin_id(admin: AdminUser) -> Optional[int]:
     return admin.account_id if admin.account_id else None
 
 
-def _require_account_id(admin: AdminUser) -> int:
-    """Return account_id or raise 400 for legacy admins without one."""
-    if not admin.account_id:
-        raise HTTPException(
-            status_code=400,
-            detail="This feature requires an admin account. Legacy admins authenticated via ADMINS env cannot use notification channels.",
-        )
-    return admin.account_id
+async def _require_account_id(admin: AdminUser) -> int:
+    """Return account_id, auto-resolving for legacy admins.
+
+    If the admin was authenticated via ADMINS env / .env password fallback
+    and thus lacks an account_id, attempt to find their admin_accounts row
+    by telegram_id or username.  If none exists, create one automatically
+    so that channel & per-admin features work without manual migration.
+    """
+    if admin.account_id:
+        return admin.account_id
+
+    try:
+        from src.services.database import db_service
+        async with db_service.acquire() as conn:
+            row = None
+            if admin.telegram_id:
+                row = await conn.fetchrow(
+                    "SELECT id FROM admin_accounts WHERE telegram_id = $1",
+                    admin.telegram_id,
+                )
+            if not row and admin.username:
+                row = await conn.fetchrow(
+                    "SELECT id FROM admin_accounts WHERE username = $1",
+                    admin.username,
+                )
+            if row:
+                return row["id"]
+
+            # Auto-create account for legacy admin
+            role_row = await conn.fetchrow(
+                "SELECT id FROM admin_roles WHERE name = 'superadmin'"
+            )
+            role_id = role_row["id"] if role_row else None
+            new_row = await conn.fetchrow(
+                "INSERT INTO admin_accounts (username, telegram_id, role_id, is_active) "
+                "VALUES ($1, $2, $3, true) "
+                "ON CONFLICT (username) DO UPDATE SET updated_at = NOW() "
+                "RETURNING id",
+                admin.username or f"admin_{admin.telegram_id}",
+                admin.telegram_id,
+                role_id,
+            )
+            if new_row:
+                logger.info("Auto-created admin account for legacy admin '%s' (id=%d)", admin.username, new_row["id"])
+                return new_row["id"]
+    except Exception as e:
+        logger.error("Failed to resolve account_id for '%s': %s", admin.username, e)
+
+    raise HTTPException(
+        status_code=400,
+        detail="Could not resolve admin account. Please contact the administrator.",
+    )
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -248,7 +292,7 @@ async def list_channels(
     """Get notification channels for the current admin."""
     from src.services.database import db_service
 
-    aid = _require_account_id(admin)
+    aid = await _require_account_id(admin)
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             "SELECT * FROM notification_channels WHERE admin_id = $1 ORDER BY channel_type",
@@ -272,7 +316,7 @@ async def create_channel(
     """Create or update a notification channel for the current admin."""
     from src.services.database import db_service
 
-    aid = _require_account_id(admin)
+    aid = await _require_account_id(admin)
     config_json = json.dumps(data.config)
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
@@ -299,7 +343,7 @@ async def update_channel(
     """Update a notification channel."""
     from src.services.database import db_service
 
-    aid = _require_account_id(admin)
+    aid = await _require_account_id(admin)
     updates = []
     params = [channel_id, aid]
     idx = 3
@@ -343,7 +387,7 @@ async def delete_channel(
     """Delete a notification channel."""
     from src.services.database import db_service
 
-    aid = _require_account_id(admin)
+    aid = await _require_account_id(admin)
     async with db_service.acquire() as conn:
         deleted = await conn.fetchval(
             "DELETE FROM notification_channels WHERE id = $1 AND admin_id = $2 RETURNING id",

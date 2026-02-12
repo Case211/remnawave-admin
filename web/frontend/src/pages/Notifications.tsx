@@ -465,7 +465,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
       toast.success(isEdit ? t('notifications.alerts.ruleUpdated') : t('notifications.alerts.ruleCreated'))
       onClose()
     },
-    onError: () => toast.error(t('common.error')),
+    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
   })
 
   const metrics = [
@@ -974,7 +974,7 @@ function AddChannelDialog({ open, onClose }: { open: boolean; onClose: () => voi
       toast.success(t('notifications.channels.created'))
       onClose()
     },
-    onError: () => toast.error(t('common.error')),
+    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
   })
 
   return (
@@ -1076,7 +1076,7 @@ function SmtpConfigSection() {
       queryClient.invalidateQueries({ queryKey: ['smtp-config'] })
       toast.success(t('notifications.smtp.saved'))
     },
-    onError: () => toast.error(t('common.error')),
+    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
   })
 
   const testSmtp = useMutation({
