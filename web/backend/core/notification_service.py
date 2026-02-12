@@ -93,7 +93,31 @@ async def send_email(
     severity: str = "info",
     link: Optional[str] = None,
 ) -> bool:
-    """Send email via SMTP. Runs in thread pool to avoid blocking."""
+    """Send email via built-in mail server or SMTP relay.
+
+    Tries the built-in mail server first (if an active outbound domain exists),
+    then falls back to the configured SMTP relay.
+    """
+    # Try built-in mail server first
+    try:
+        from web.backend.core.mail.mail_service import mail_service
+        domain = await mail_service.get_active_outbound_domain()
+        if domain:
+            html = _build_html_email(title, body, severity, link)
+            queue_id = await mail_service.send_email(
+                to_email=to_email,
+                subject=f"[Remnawave] {title}",
+                body_text=body,
+                body_html=html,
+                category="notification",
+            )
+            if queue_id:
+                logger.info("Email queued via built-in mail server: id=%s to=%s", queue_id, to_email)
+                return True
+    except Exception as e:
+        logger.debug("Built-in mail server unavailable, falling back to SMTP relay: %s", e)
+
+    # Fallback to SMTP relay
     config = await _get_smtp_config()
     if not config:
         logger.warning("SMTP not configured or disabled, skipping email to %s", to_email)

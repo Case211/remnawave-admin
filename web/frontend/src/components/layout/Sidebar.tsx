@@ -17,6 +17,7 @@ import {
   BarChart3,
   Zap,
   BellRing,
+  Mail,
   ShieldCheck,
   ChevronDown,
   ChevronsLeft,
@@ -97,6 +98,7 @@ const navigation: NavigationEntry[] = [
   { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
   { name: 'nav.automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
   { name: 'nav.notifications', href: '/notifications', icon: BellRing, permission: { resource: 'notifications', action: 'view' } },
+  { name: 'nav.mailServer', href: '/mailserver', icon: Mail, permission: { resource: 'mailserver', action: 'view' } },
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   {
     type: 'group',

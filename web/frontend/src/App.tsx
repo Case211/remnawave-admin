@@ -24,6 +24,7 @@ import SystemLogs from './pages/SystemLogs'
 import Analytics from './pages/Analytics'
 import Automations from './pages/automations'
 import Notifications from './pages/Notifications'
+import MailServer from './pages/MailServer'
 
 /**
  * Protected route wrapper - redirects to login if not authenticated.
@@ -98,6 +99,7 @@ export default function App() {
                       <Route path="/violations" element={<Violations />} />
                       <Route path="/automations" element={<Automations />} />
                       <Route path="/notifications" element={<Notifications />} />
+                      <Route path="/mailserver" element={<MailServer />} />
                       <Route path="/admins" element={<Admins />} />
                       <Route path="/audit" element={<AuditLog />} />
                       <Route path="/logs" element={<SystemLogs />} />

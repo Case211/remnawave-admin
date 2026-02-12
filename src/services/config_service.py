@@ -29,6 +29,7 @@ class ConfigCategory(str, Enum):
     NOTIFICATIONS = "notifications"
     SYNC = "sync"
     REPORTS = "reports"
+    MAILSERVER = "mailserver"
 
 
 @dataclass
@@ -304,6 +305,65 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "ID топика для отправки отчётов (0 = основной чат)",
         "env_var_name": "NOTIFICATIONS_TOPIC_REPORTS",
         "sort_order": 13,
+    },
+
+    # === MAILSERVER ===
+    {
+        "key": "mailserver_enabled",
+        "value_type": "bool",
+        "category": "mailserver",
+        "display_name": "Почтовый сервер включён",
+        "description": "Включить встроенный почтовый сервер (отправка/приём писем)",
+        "default_value": "false",
+        "env_var_name": "MAIL_SERVER_ENABLED",
+        "sort_order": 1,
+    },
+    {
+        "key": "mailserver_hostname",
+        "value_type": "string",
+        "category": "mailserver",
+        "display_name": "Хост SMTP-сервера",
+        "description": "IP-адрес для входящего SMTP-сервера (0.0.0.0 = все интерфейсы)",
+        "default_value": "0.0.0.0",
+        "env_var_name": "MAIL_SERVER_HOSTNAME",
+        "sort_order": 2,
+    },
+    {
+        "key": "mailserver_inbound_port",
+        "value_type": "int",
+        "category": "mailserver",
+        "display_name": "Порт входящего SMTP",
+        "description": "Порт для приёма входящих писем (по умолчанию 2525, в продакшене 25)",
+        "default_value": "2525",
+        "env_var_name": "MAIL_INBOUND_PORT",
+        "sort_order": 3,
+    },
+    {
+        "key": "mailserver_max_send_per_hour",
+        "value_type": "int",
+        "category": "mailserver",
+        "display_name": "Лимит отправки в час",
+        "description": "Максимальное количество писем с одного домена в час (по умолчанию)",
+        "default_value": "100",
+        "sort_order": 4,
+    },
+    {
+        "key": "mailserver_queue_poll_interval",
+        "value_type": "int",
+        "category": "mailserver",
+        "display_name": "Интервал опроса очереди",
+        "description": "Как часто проверять очередь писем на отправку (секунды)",
+        "default_value": "10",
+        "sort_order": 5,
+    },
+    {
+        "key": "mailserver_max_retries",
+        "value_type": "int",
+        "category": "mailserver",
+        "display_name": "Макс. попыток отправки",
+        "description": "Максимальное количество попыток отправки одного письма",
+        "default_value": "5",
+        "sort_order": 6,
     },
 ]
 
