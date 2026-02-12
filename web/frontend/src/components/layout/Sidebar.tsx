@@ -16,6 +16,7 @@ import {
   Terminal,
   BarChart3,
   Zap,
+  BellRing,
   ShieldCheck,
   ChevronDown,
   ChevronsLeft,
@@ -95,6 +96,7 @@ const navigation: NavigationEntry[] = [
   { name: 'nav.hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
   { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
   { name: 'nav.automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
+  { name: 'nav.notifications', href: '/notifications', icon: BellRing, permission: { resource: 'notifications', action: 'view' } },
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   {
     type: 'group',

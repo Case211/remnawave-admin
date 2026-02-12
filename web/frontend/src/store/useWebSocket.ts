@@ -83,7 +83,7 @@ function formatAuditAction(action: string, resource: string): string {
 }
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000]
-const TOPICS = ['node_status', 'user_update', 'violation', 'connection', 'hwid_update']
+const TOPICS = ['node_status', 'user_update', 'violation', 'connection', 'hwid_update', 'notification']
 
 // Close code 4001 = auth failure from backend
 const AUTH_FAILURE_CODE = 4001
@@ -144,6 +144,26 @@ export function useRealtimeUpdates() {
             queryClient.invalidateQueries({ queryKey: ['timeseries'] })
             queryClient.invalidateQueries({ queryKey: ['deltas'] })
             break
+          case 'notification': {
+            // Refresh notification queries
+            queryClient.invalidateQueries({ queryKey: ['notifications'] })
+            queryClient.invalidateQueries({ queryKey: ['notifications-unread'] })
+            queryClient.invalidateQueries({ queryKey: ['notifications-recent'] })
+
+            // Show toast for new notifications
+            const notifTitle = msg.data?.title as string | undefined
+            const notifSeverity = msg.data?.severity as string | undefined
+            if (notifTitle) {
+              if (notifSeverity === 'critical') {
+                toast.error(notifTitle, { duration: 6000 })
+              } else if (notifSeverity === 'warning') {
+                toast.warning(notifTitle, { duration: 5000 })
+              } else {
+                toast.info(notifTitle, { duration: 4000 })
+              }
+            }
+            break
+          }
           case 'audit': {
             // Refresh audit log queries
             queryClient.invalidateQueries({ queryKey: ['audit-logs'] })
