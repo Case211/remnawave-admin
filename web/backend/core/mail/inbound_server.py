@@ -7,8 +7,7 @@ from datetime import datetime, timezone
 from email.utils import parseaddr, parsedate_to_datetime
 from typing import Optional
 
-from aiosmtpd.controller import Controller
-from aiosmtpd.smtp import SMTP as SMTPServer, Envelope, Session
+from aiosmtpd.smtp import SMTP as SMTPProtocol, Envelope, Session
 
 logger = logging.getLogger(__name__)
 
@@ -151,32 +150,36 @@ class InboundMailHandler:
 
 
 class InboundMailServer:
-    """Manages the aiosmtpd SMTP server lifecycle."""
+    """Manages the aiosmtpd SMTP server lifecycle.
+
+    Runs the SMTP server in the **main** asyncio event loop (not a separate
+    thread) so that asyncpg connections from db_service work correctly.
+    """
 
     def __init__(self, hostname: str = "0.0.0.0", port: int = 2525):
         self.hostname = hostname
         self.port = port
-        self._controller: Optional[Controller] = None
+        self._server: Optional[asyncio.AbstractServer] = None
 
     async def start(self):
-        """Start the inbound SMTP server."""
+        """Start the inbound SMTP server in the current event loop."""
         try:
             handler = InboundMailHandler()
-            self._controller = Controller(
-                handler,
-                hostname=self.hostname,
+            loop = asyncio.get_running_loop()
+            self._server = await loop.create_server(
+                lambda: SMTPProtocol(handler, hostname="remnawave-mail",
+                                     data_size_limit=_MAX_MESSAGE_SIZE),
+                host=self.hostname,
                 port=self.port,
-                server_hostname="remnawave-mail",
-                data_size_limit=_MAX_MESSAGE_SIZE,
             )
-            self._controller.start()
             logger.info("Inbound SMTP server started on %s:%d", self.hostname, self.port)
         except Exception as e:
             logger.error("Failed to start inbound SMTP server: %s", e)
 
     async def stop(self):
         """Stop the inbound SMTP server."""
-        if self._controller:
-            self._controller.stop()
-            self._controller = None
+        if self._server:
+            self._server.close()
+            await self._server.wait_closed()
+            self._server = None
             logger.info("Inbound SMTP server stopped")
