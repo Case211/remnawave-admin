@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   MoreVertical,
   Pencil,
@@ -57,6 +58,7 @@ export function RuleCard({
   onTest,
   toggleLoading,
 }: RuleCardProps) {
+  const { t } = useTranslation()
   const TriggerIcon = TRIGGER_TYPE_ICONS[rule.trigger_type] || Zap
 
   return (
@@ -73,7 +75,7 @@ export function RuleCard({
               <h3 className="text-sm font-medium text-white truncate">{rule.name}</h3>
               {!rule.is_enabled && (
                 <Badge variant="outline" className="text-[9px] text-dark-400 border-dark-600 flex-shrink-0">
-                  выкл.
+                  {t('automations.ruleCard.off')}
                 </Badge>
               )}
             </div>
@@ -100,12 +102,12 @@ export function RuleCard({
                 <DropdownMenuContent align="end">
                   {canEdit && (
                     <DropdownMenuItem onClick={() => onEdit(rule)}>
-                      <Pencil className="w-4 h-4 mr-2" /> Редактировать
+                      <Pencil className="w-4 h-4 mr-2" /> {t('automations.ruleCard.edit')}
                     </DropdownMenuItem>
                   )}
                   {canRun && (
                     <DropdownMenuItem onClick={() => onTest(rule.id)}>
-                      <Play className="w-4 h-4 mr-2" /> Тестировать
+                      <Play className="w-4 h-4 mr-2" /> {t('automations.ruleCard.test')}
                     </DropdownMenuItem>
                   )}
                   {canDelete && (
@@ -113,7 +115,7 @@ export function RuleCard({
                       onClick={() => onDelete(rule)}
                       className="text-red-400 focus:text-red-400"
                     >
-                      <Trash2 className="w-4 h-4 mr-2" /> Удалить
+                      <Trash2 className="w-4 h-4 mr-2" /> {t('automations.ruleCard.delete')}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -152,7 +154,7 @@ export function RuleCard({
         <div className="flex items-center justify-between text-xs text-dark-400 pt-1 border-t border-dark-700/50">
           <div className="flex items-center gap-1">
             <Zap className="w-3 h-3" />
-            <span>{rule.trigger_count} раз</span>
+            <span>{rule.trigger_count} {t('automations.ruleCard.times')}</span>
           </div>
           {rule.last_triggered_at && (
             <div className="flex items-center gap-1">

@@ -1,15 +1,12 @@
 
+import i18n from '../../i18n'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyConfig = Record<string, any>
 
-// ── Category ────────────────────────────────────────────────
+const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, opts)
 
-const CATEGORY_LABELS: Record<string, string> = {
-  users: 'Пользователи',
-  nodes: 'Ноды',
-  violations: 'Нарушения',
-  system: 'Система',
-}
+// ── Category ────────────────────────────────────────────────
 
 const CATEGORY_COLORS: Record<string, string> = {
   users: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -19,7 +16,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 }
 
 export function categoryLabel(cat: string): string {
-  return CATEGORY_LABELS[cat] || cat
+  return t(`automations.categories.${cat}`, { defaultValue: cat })
 }
 
 export function categoryColor(cat: string): string {
@@ -27,13 +24,6 @@ export function categoryColor(cat: string): string {
 }
 
 // ── Cron to human-readable ──────────────────────────────────
-
-const DAY_NAMES = ['воскресенье', 'понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу']
-const DAY_NAMES_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
-const MONTH_NAMES = [
-  '', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-]
 
 function pad2(n: number): string {
   return n.toString().padStart(2, '0')
@@ -47,34 +37,38 @@ export function cronToHuman(expr: string): string {
 
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts
 
+  const dayNames = (i18n.t('automations.dayNames', { returnObjects: true }) || []) as string[]
+  const dayNamesShort = (i18n.t('automations.dayNamesShort', { returnObjects: true }) || []) as string[]
+  const monthNames = (i18n.t('automations.monthNames', { returnObjects: true }) || []) as string[]
+
   try {
     // Every N minutes: */N * * * *
     if (minute.startsWith('*/') && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
       const n = parseInt(minute.slice(2))
-      if (n === 1) return 'Каждую минуту'
-      if (n === 5) return 'Каждые 5 минут'
-      if (n === 10) return 'Каждые 10 минут'
-      if (n === 15) return 'Каждые 15 минут'
-      if (n === 30) return 'Каждые 30 минут'
-      return `Каждые ${n} мин.`
+      if (n === 1) return t('automations.cron.everyMinute')
+      if (n === 5) return t('automations.cron.every5Min')
+      if (n === 10) return t('automations.cron.every10Min')
+      if (n === 15) return t('automations.cron.every15Min')
+      if (n === 30) return t('automations.cron.every30Min')
+      return t('automations.cron.everyNMin', { n })
     }
 
     // Every N hours: 0 */N * * *
     if (minute !== '*' && hour.startsWith('*/') && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
       const n = parseInt(hour.slice(2))
-      const m = parseInt(minute) || 0
-      if (n === 1) return `Каждый час в ${pad2(m)} мин.`
-      return `Каждые ${n} ч. в ${pad2(m)} мин.`
+      const m = pad2(parseInt(minute) || 0)
+      if (n === 1) return t('automations.cron.everyHourAt', { m })
+      return t('automations.cron.everyNHoursAt', { n, m })
     }
 
     // Every minute: * * * * *
     if (minute === '*' && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
-      return 'Каждую минуту'
+      return t('automations.cron.everyMinute')
     }
 
     // Specific minute every hour: N * * * *
     if (/^\d+$/.test(minute) && hour === '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
-      return `Каждый час в :${pad2(parseInt(minute))}`
+      return t('automations.cron.everyHourAtMin', { m: pad2(parseInt(minute)) })
     }
 
     const isFixedMinute = /^\d+$/.test(minute)
@@ -85,7 +79,7 @@ export function cronToHuman(expr: string): string {
 
     // Daily: N N * * *
     if (isFixedMinute && isFixedHour && isAnyDay && isAnyMonth && isAnyDow) {
-      return `Каждый день в ${pad2(parseInt(hour))}:${pad2(parseInt(minute))}`
+      return t('automations.cron.everyDayAt', { time: `${pad2(parseInt(hour))}:${pad2(parseInt(minute))}` })
     }
 
     // Weekly: N N * * D
@@ -93,23 +87,23 @@ export function cronToHuman(expr: string): string {
       const time = `${pad2(parseInt(hour))}:${pad2(parseInt(minute))}`
       // Could be a list: 1,3,5
       if (dayOfWeek.includes(',')) {
-        const days = dayOfWeek.split(',').map((d) => DAY_NAMES_SHORT[parseInt(d)] || d)
-        return `${days.join(', ')} в ${time}`
+        const days = dayOfWeek.split(',').map((d) => dayNamesShort[parseInt(d)] || d)
+        return t('automations.cron.daysRange', { from: days.join(', '), to: '', time }).replace(' –', ',').replace('– ', '')
       }
       // Range: 1-5
       if (dayOfWeek.includes('-')) {
         const [from, to] = dayOfWeek.split('-').map(Number)
-        return `${DAY_NAMES_SHORT[from]}\u2013${DAY_NAMES_SHORT[to]} в ${time}`
+        return t('automations.cron.daysRange', { from: dayNamesShort[from], to: dayNamesShort[to], time })
       }
       const d = parseInt(dayOfWeek)
-      return `Каждый ${DAY_NAMES[d] || dayOfWeek} в ${time}`
+      return t('automations.cron.everyWeekday', { day: dayNames[d] || dayOfWeek, time })
     }
 
     // Monthly: N N D * *
     if (isFixedMinute && isFixedHour && /^\d+$/.test(dayOfMonth) && isAnyMonth && isAnyDow) {
       const time = `${pad2(parseInt(hour))}:${pad2(parseInt(minute))}`
       const d = parseInt(dayOfMonth)
-      return `${d}-го числа каждого месяца в ${time}`
+      return t('automations.cron.monthlyAt', { day: d, time })
     }
 
     // Yearly: N N D M *
@@ -117,7 +111,7 @@ export function cronToHuman(expr: string): string {
       const time = `${pad2(parseInt(hour))}:${pad2(parseInt(minute))}`
       const d = parseInt(dayOfMonth)
       const m = parseInt(month)
-      return `${d} ${MONTH_NAMES[m] || month} в ${time}`
+      return t('automations.cron.yearlyAt', { day: d, month: monthNames[m] || month, time })
     }
   } catch {
     // Fall through to raw expression
@@ -135,57 +129,91 @@ export interface CronPreset {
   cron: string
 }
 
-export const CRON_PRESETS: CronPreset[] = [
-  { id: 'every_5min', label: 'Каждые 5 минут', description: '*/5 * * * *', cron: '*/5 * * * *' },
-  { id: 'every_15min', label: 'Каждые 15 минут', description: '*/15 * * * *', cron: '*/15 * * * *' },
-  { id: 'every_30min', label: 'Каждые 30 минут', description: '*/30 * * * *', cron: '*/30 * * * *' },
-  { id: 'every_hour', label: 'Каждый час', description: '0 * * * *', cron: '0 * * * *' },
-  { id: 'every_3hours', label: 'Каждые 3 часа', description: '0 */3 * * *', cron: '0 */3 * * *' },
-  { id: 'every_6hours', label: 'Каждые 6 часов', description: '0 */6 * * *', cron: '0 */6 * * *' },
-  { id: 'every_12hours', label: 'Каждые 12 часов', description: '0 */12 * * *', cron: '0 */12 * * *' },
-  { id: 'daily_midnight', label: 'Каждый день в 00:00', description: '0 0 * * *', cron: '0 0 * * *' },
-  { id: 'daily_3am', label: 'Каждый день в 03:00', description: '0 3 * * *', cron: '0 3 * * *' },
-  { id: 'daily_9am', label: 'Каждый день в 09:00', description: '0 9 * * *', cron: '0 9 * * *' },
-  { id: 'daily_23pm', label: 'Каждый день в 23:00', description: '0 23 * * *', cron: '0 23 * * *' },
-  { id: 'weekly_monday', label: 'Каждый понедельник в 09:00', description: '0 9 * * 1', cron: '0 9 * * 1' },
-  { id: 'monthly_1st', label: '1-го числа каждого месяца', description: '0 0 1 * *', cron: '0 0 1 * *' },
-]
+export function getCronPresets(): CronPreset[] {
+  const ids = [
+    'every_5min', 'every_15min', 'every_30min', 'every_hour',
+    'every_3hours', 'every_6hours', 'every_12hours',
+    'daily_midnight', 'daily_3am', 'daily_9am', 'daily_23pm',
+    'weekly_monday', 'monthly_1st',
+  ]
+  const crons: Record<string, string> = {
+    every_5min: '*/5 * * * *', every_15min: '*/15 * * * *', every_30min: '*/30 * * * *',
+    every_hour: '0 * * * *', every_3hours: '0 */3 * * *', every_6hours: '0 */6 * * *',
+    every_12hours: '0 */12 * * *', daily_midnight: '0 0 * * *', daily_3am: '0 3 * * *',
+    daily_9am: '0 9 * * *', daily_23pm: '0 23 * * *', weekly_monday: '0 9 * * 1',
+    monthly_1st: '0 0 1 * *',
+  }
+  return ids.map((id) => ({
+    id,
+    label: t(`automations.cronPresets.${id}`, { defaultValue: id }),
+    description: crons[id],
+    cron: crons[id],
+  }))
+}
 
-export const INTERVAL_PRESETS = [
-  { value: 5, label: '5 мин' },
-  { value: 15, label: '15 мин' },
-  { value: 30, label: '30 мин' },
-  { value: 60, label: '1 час' },
-  { value: 120, label: '2 часа' },
-  { value: 360, label: '6 часов' },
-  { value: 720, label: '12 часов' },
-  { value: 1440, label: '24 часа' },
-] as const
+// Keep backward compat – lazy getter
+export const CRON_PRESETS = new Proxy([] as CronPreset[], {
+  get(_target, prop) {
+    const presets = getCronPresets()
+    if (prop === Symbol.iterator) return presets[Symbol.iterator].bind(presets)
+    if (prop === 'length') return presets.length
+    if (prop === 'map') return presets.map.bind(presets)
+    if (prop === 'some') return presets.some.bind(presets)
+    if (prop === 'find') return presets.find.bind(presets)
+    if (prop === 'filter') return presets.filter.bind(presets)
+    if (typeof prop === 'string' && !isNaN(Number(prop))) return presets[Number(prop)]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (presets as any)[prop]
+  },
+})
+
+export function getIntervalPresets() {
+  return [
+    { value: 5, label: t('automations.intervalPresets.5', { defaultValue: '5 мин' }) },
+    { value: 15, label: t('automations.intervalPresets.15', { defaultValue: '15 мин' }) },
+    { value: 30, label: t('automations.intervalPresets.30', { defaultValue: '30 мин' }) },
+    { value: 60, label: t('automations.intervalPresets.60', { defaultValue: '1 час' }) },
+    { value: 120, label: t('automations.intervalPresets.120', { defaultValue: '2 часа' }) },
+    { value: 360, label: t('automations.intervalPresets.360', { defaultValue: '6 часов' }) },
+    { value: 720, label: t('automations.intervalPresets.720', { defaultValue: '12 часов' }) },
+    { value: 1440, label: t('automations.intervalPresets.1440', { defaultValue: '24 часа' }) },
+  ] as const
+}
+
+export const INTERVAL_PRESETS = new Proxy([] as ReturnType<typeof getIntervalPresets>, {
+  get(_target, prop) {
+    const presets = getIntervalPresets()
+    if (prop === Symbol.iterator) return presets[Symbol.iterator].bind(presets)
+    if (prop === 'length') return presets.length
+    if (prop === 'map') return presets.map.bind(presets)
+    if (prop === 'some') return presets.some.bind(presets)
+    if (prop === 'find') return presets.find.bind(presets)
+    if (prop === 'filter') return presets.filter.bind(presets)
+    if (typeof prop === 'string' && !isNaN(Number(prop))) return presets[Number(prop)]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (presets as any)[prop]
+  },
+})
 
 // ── Trigger description ─────────────────────────────────────
 
-const EVENT_LABELS: Record<string, string> = {
-  'violation.detected': 'Обнаружено нарушение',
-  'node.went_offline': 'Нода ушла офлайн',
-  'user.traffic_exceeded': 'Трафик пользователя превышен',
+const OPERATOR_MAP: Record<string, string> = {
+  '==': 'eq', '!=': 'neq', '>': 'gt', '>=': 'gte', '<': 'lt', '<=': 'lte',
+  'contains': 'contains', 'not_contains': 'not_contains',
 }
 
-const METRIC_LABELS: Record<string, string> = {
-  users_online: 'Пользователей онлайн',
-  traffic_today: 'Трафик за сегодня (ГБ)',
-  node_uptime_percent: 'Аптайм ноды (%)',
-  user_traffic_percent: 'Использование трафика (%)',
+function eventLabel(event: string): string {
+  const key = event.replace('.', '_')
+  return t(`automations.events.${key}`, { defaultValue: event })
 }
 
-const OPERATOR_LABELS: Record<string, string> = {
-  '==': 'равно',
-  '!=': 'не равно',
-  '>': 'больше',
-  '>=': 'больше или равно',
-  '<': 'меньше',
-  '<=': 'меньше или равно',
-  'contains': 'содержит',
-  'not_contains': 'не содержит',
+function metricLabel(metric: string): string {
+  return t(`automations.metrics.${metric}`, { defaultValue: metric })
+}
+
+function operatorLabel(op: string): string {
+  const key = OPERATOR_MAP[op] || op
+  return t(`automations.operators.${key}`, { defaultValue: op })
 }
 
 export function describeTrigger(rule: { trigger_type: string; trigger_config: Record<string, unknown> }): string {
@@ -193,38 +221,38 @@ export function describeTrigger(rule: { trigger_type: string; trigger_config: Re
 
   if (rule.trigger_type === 'event') {
     const event = cfg.event || ''
-    const label = EVENT_LABELS[event] || event
+    const label = eventLabel(event)
     const minScore = cfg.min_score
     const offlineMin = cfg.offline_minutes
     let desc = label
-    if (minScore) desc += ` (score \u2265 ${minScore})`
-    if (offlineMin) desc += ` (> ${offlineMin} мин)`
+    if (minScore) desc += ` (score ≥ ${minScore})`
+    if (offlineMin) desc += ` (> ${offlineMin} ${t('automations.cron.min')})`
     return desc
   }
 
   if (rule.trigger_type === 'schedule') {
     if (cfg.cron) {
       const human = cronToHuman(cfg.cron)
-      return human !== cfg.cron ? human : `Расписание: ${cfg.cron}`
+      return human !== cfg.cron ? human : t('automations.cron.schedulePrefix', { cron: cfg.cron })
     }
     if (cfg.interval_minutes) {
       const mins = cfg.interval_minutes
-      if (mins < 60) return `Каждые ${mins} мин.`
-      if (mins === 60) return 'Каждый час'
+      if (mins < 60) return t('automations.cron.everyNMin', { n: mins })
+      if (mins === 60) return t('automations.cron.everyHour')
       if (mins % 60 === 0) {
         const h = mins / 60
-        if (h === 24) return 'Каждые 24 часа'
-        return `Каждые ${h} ч.`
+        if (h === 24) return t('automations.cron.every24Hours')
+        return t('automations.cron.everyNHours', { n: h })
       }
-      return `Каждые ${mins} мин.`
+      return t('automations.cron.everyNMin', { n: mins })
     }
-    return 'По расписанию'
+    return t('automations.cron.bySchedule')
   }
 
   if (rule.trigger_type === 'threshold') {
-    const metric = METRIC_LABELS[cfg.metric] || cfg.metric || ''
+    const metric = metricLabel(cfg.metric || '')
     const op = cfg.operator || '>='
-    const opLabel = OPERATOR_LABELS[op] || op
+    const opLabel = operatorLabel(op)
     return `${metric} ${opLabel} ${cfg.value ?? ''}`
   }
 
@@ -233,64 +261,42 @@ export function describeTrigger(rule: { trigger_type: string; trigger_config: Re
 
 // ── Action description ──────────────────────────────────────
 
-const ACTION_LABELS: Record<string, string> = {
-  disable_user: 'Отключить пользователя',
-  block_user: 'Заблокировать пользователя',
-  notify: 'Отправить уведомление',
-  restart_node: 'Перезапустить ноду',
-  cleanup_expired: 'Очистить истёкших',
-  reset_traffic: 'Сбросить трафик',
-  force_sync: 'Принудительная синхр.',
-}
-
-const ACTION_DESCRIPTIONS: Record<string, string> = {
-  disable_user: 'Автоматически отключает учётную запись пользователя',
-  block_user: 'Блокирует пользователя с указанной причиной',
-  notify: 'Отправляет уведомление в Telegram или Webhook',
-  restart_node: 'Отправляет команду перезапуска на ноду',
-  cleanup_expired: 'Отключает пользователей с истёкшей подпиской',
-  reset_traffic: 'Сбрасывает счётчики трафика пользователей',
-  force_sync: 'Принудительно синхронизирует конфигурацию нод',
+function actionLabel(action: string): string {
+  return t(`automations.actionTypes.${action}`, { defaultValue: action })
 }
 
 export function describeAction(rule: { action_type: string; action_config: Record<string, unknown> }): string {
   const cfg = rule.action_config as AnyConfig
-  const base = ACTION_LABELS[rule.action_type] || rule.action_type
+  const base = actionLabel(rule.action_type)
 
   if (rule.action_type === 'notify') {
     const channel = cfg.channel === 'webhook' ? 'Webhook' : 'Telegram'
-    return `${base} через ${channel}`
+    return `${base} ${t('automations.cron.via')} ${channel}`
   }
   if (rule.action_type === 'block_user' && cfg.reason) {
     return `${base} (${cfg.reason})`
   }
   if (rule.action_type === 'cleanup_expired' && cfg.older_than_days) {
-    return `${base} старше ${cfg.older_than_days} дн.`
+    return `${base} > ${cfg.older_than_days} ${t('automations.constructor.days')}`
   }
   if (rule.action_type === 'restart_node' && cfg.node_uuid) {
-    return `${base} (конкретная)`
+    return `${base} (${t('automations.constructor.specificNode').toLowerCase()})`
   }
   return base
 }
 
 export function actionDescription(action: string): string {
-  return ACTION_DESCRIPTIONS[action] || ''
+  return t(`automations.actionDescs.${action}`, { defaultValue: '' })
 }
 
 export function actionTypeLabel(action: string): string {
-  return ACTION_LABELS[action] || action
+  return actionLabel(action)
 }
 
 // ── Trigger type ────────────────────────────────────────────
 
-const TRIGGER_TYPE_LABELS: Record<string, string> = {
-  event: 'Событие',
-  schedule: 'Расписание',
-  threshold: 'Порог',
-}
-
 export function triggerTypeLabel(type: string): string {
-  return TRIGGER_TYPE_LABELS[type] || type
+  return t(`automations.triggerTypes.${type}`, { defaultValue: type })
 }
 
 // ── Result badge ────────────────────────────────────────────
@@ -309,19 +315,18 @@ export function resultBadgeClass(result: string): string {
 }
 
 export function resultLabel(result: string): string {
-  switch (result) {
-    case 'success': return 'Успех'
-    case 'error': return 'Ошибка'
-    case 'skipped': return 'Пропущено'
-    default: return result
-  }
+  return t(`automations.results.${result}`, { defaultValue: result })
 }
 
 // ── Date formatting ─────────────────────────────────────────
 
+function getLocale(): string {
+  return i18n.language === 'en' ? 'en-US' : 'ru-RU'
+}
+
 export function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '\u2014'
-  return new Date(dateStr).toLocaleDateString('ru-RU', {
+  if (!dateStr) return '—'
+  return new Date(dateStr).toLocaleDateString(getLocale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -329,8 +334,8 @@ export function formatDate(dateStr: string | null): string {
 }
 
 export function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return '\u2014'
-  return new Date(dateStr).toLocaleString('ru-RU', {
+  if (!dateStr) return '—'
+  return new Date(dateStr).toLocaleString(getLocale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -341,58 +346,93 @@ export function formatDateTime(dateStr: string | null): string {
 
 // ── Constants for forms ─────────────────────────────────────
 
-export const TRIGGER_TYPES = [
-  { value: 'event', label: 'Событие', description: 'Реагирует на действия в системе в реальном времени' },
-  { value: 'schedule', label: 'Расписание', description: 'Запускается периодически по CRON или интервалу' },
-  { value: 'threshold', label: 'Порог', description: 'Следит за метрикой и срабатывает при достижении порога' },
-] as const
+export function getTriggerTypes() {
+  return [
+    { value: 'event', label: t('automations.triggerTypes.event'), description: t('automations.triggerTypes.eventDesc') },
+    { value: 'schedule', label: t('automations.triggerTypes.schedule'), description: t('automations.triggerTypes.scheduleDesc') },
+    { value: 'threshold', label: t('automations.triggerTypes.threshold'), description: t('automations.triggerTypes.thresholdDesc') },
+  ] as const
+}
+export const TRIGGER_TYPES = new Proxy([] as ReturnType<typeof getTriggerTypes>, {
+  get(_target, prop) { const d = getTriggerTypes(); if (prop === 'map') return d.map.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
+})
 
-export const EVENT_TYPES = [
-  { value: 'violation.detected', label: 'Обнаружено нарушение', description: 'Сработает при обнаружении нарушения (шеринг, подозрительная активность)' },
-  { value: 'node.went_offline', label: 'Нода ушла офлайн', description: 'Сработает когда узел потеряет связь и станет недоступен для подключений' },
-  { value: 'user.traffic_exceeded', label: 'Трафик превышен', description: 'Сработает когда пользователь исчерпает свой лимит трафика по тарифу' },
-] as const
+export function getEventTypes() {
+  return [
+    { value: 'violation.detected', label: t('automations.events.violation_detected'), description: t('automations.events.violation_detectedDesc') },
+    { value: 'node.went_offline', label: t('automations.events.node_went_offline'), description: t('automations.events.node_went_offlineDesc') },
+    { value: 'user.traffic_exceeded', label: t('automations.events.user_traffic_exceeded'), description: t('automations.events.user_traffic_exceededDesc') },
+  ] as const
+}
+export const EVENT_TYPES = new Proxy([] as ReturnType<typeof getEventTypes>, {
+  get(_target, prop) { const d = getEventTypes(); if (prop === 'map') return d.map.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
+})
 
-export const THRESHOLD_METRICS = [
-  { value: 'users_online', label: 'Пользователей онлайн', description: 'Текущее количество активных подключений ко всем нодам' },
-  { value: 'traffic_today', label: 'Трафик за сегодня (ГБ)', description: 'Суммарный объём трафика за текущие сутки (в гигабайтах)' },
-  { value: 'node_uptime_percent', label: 'Аптайм ноды (%)', description: 'Процент времени доступности узла за последние 24 часа' },
-  { value: 'user_traffic_percent', label: 'Использование трафика (%)', description: 'Процент использованного трафика от лимита по тарифу' },
-] as const
+export function getThresholdMetrics() {
+  return [
+    { value: 'users_online', label: t('automations.metrics.users_online'), description: t('automations.metrics.users_onlineDesc') },
+    { value: 'traffic_today', label: t('automations.metrics.traffic_today'), description: t('automations.metrics.traffic_todayDesc') },
+    { value: 'node_uptime_percent', label: t('automations.metrics.node_uptime_percent'), description: t('automations.metrics.node_uptime_percentDesc') },
+    { value: 'user_traffic_percent', label: t('automations.metrics.user_traffic_percent'), description: t('automations.metrics.user_traffic_percentDesc') },
+  ] as const
+}
+export const THRESHOLD_METRICS = new Proxy([] as ReturnType<typeof getThresholdMetrics>, {
+  get(_target, prop) { const d = getThresholdMetrics(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
+})
 
-export const CONDITION_OPERATORS = [
-  { value: '==', label: 'равно (=)' },
-  { value: '!=', label: 'не равно (\u2260)' },
-  { value: '>', label: 'больше (>)' },
-  { value: '>=', label: 'больше или равно (\u2265)' },
-  { value: '<', label: 'меньше (<)' },
-  { value: '<=', label: 'меньше или равно (\u2264)' },
-  { value: 'contains', label: 'содержит' },
-  { value: 'not_contains', label: 'не содержит' },
-] as const
+export function getConditionOperators() {
+  return [
+    { value: '==', label: t('automations.operators.eq') },
+    { value: '!=', label: t('automations.operators.neq') },
+    { value: '>', label: t('automations.operators.gt') },
+    { value: '>=', label: t('automations.operators.gte') },
+    { value: '<', label: t('automations.operators.lt') },
+    { value: '<=', label: t('automations.operators.lte') },
+    { value: 'contains', label: t('automations.operators.contains') },
+    { value: 'not_contains', label: t('automations.operators.not_contains') },
+  ] as const
+}
+export const CONDITION_OPERATORS = new Proxy([] as ReturnType<typeof getConditionOperators>, {
+  get(_target, prop) { const d = getConditionOperators(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
+})
 
-export const CONDITION_FIELDS = [
-  { value: 'score', label: 'Оценка (score)' },
-  { value: 'percent', label: 'Процент (%)' },
-  { value: 'traffic_gb', label: 'Трафик (ГБ)' },
-  { value: 'uptime', label: 'Аптайм (%)' },
-  { value: 'online_count', label: 'Кол-во онлайн' },
-  { value: 'days_expired', label: 'Дней истекло' },
-] as const
+export function getConditionFields() {
+  return [
+    { value: 'score', label: t('automations.conditionFields.score') },
+    { value: 'percent', label: t('automations.conditionFields.percent') },
+    { value: 'traffic_gb', label: t('automations.conditionFields.traffic_gb') },
+    { value: 'uptime', label: t('automations.conditionFields.uptime') },
+    { value: 'online_count', label: t('automations.conditionFields.online_count') },
+    { value: 'days_expired', label: t('automations.conditionFields.days_expired') },
+  ] as const
+}
+export const CONDITION_FIELDS = new Proxy([] as ReturnType<typeof getConditionFields>, {
+  get(_target, prop) { const d = getConditionFields(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'some') return d.some.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
+})
 
-export const ACTION_TYPES = [
-  { value: 'disable_user', label: 'Отключить пользователя', category: 'users', description: 'Деактивирует аккаунт, подключения будут разорваны' },
-  { value: 'block_user', label: 'Заблокировать пользователя', category: 'users', description: 'Блокирует аккаунт с указанием причины в карточке' },
-  { value: 'notify', label: 'Отправить уведомление', category: 'system', description: 'Отправка сообщения в Telegram или на Webhook URL' },
-  { value: 'restart_node', label: 'Перезапустить ноду', category: 'nodes', description: 'Перезагрузка ноды, временное прерывание соединений' },
-  { value: 'cleanup_expired', label: 'Очистить истёкших', category: 'system', description: 'Отключает пользователей с просроченной подпиской' },
-  { value: 'reset_traffic', label: 'Сбросить трафик', category: 'users', description: 'Обнуляет использованный трафик до нуля' },
-  { value: 'force_sync', label: 'Синхронизация нод', category: 'system', description: 'Принудительно обновляет конфигурацию на всех нодах' },
-] as const
+export function getActionTypes() {
+  return [
+    { value: 'disable_user', label: t('automations.actionTypes.disable_user'), category: 'users', description: t('automations.actionTypes.disable_userDesc') },
+    { value: 'block_user', label: t('automations.actionTypes.block_user'), category: 'users', description: t('automations.actionTypes.block_userDesc') },
+    { value: 'notify', label: t('automations.actionTypes.notify'), category: 'system', description: t('automations.actionTypes.notifyDesc') },
+    { value: 'restart_node', label: t('automations.actionTypes.restart_node'), category: 'nodes', description: t('automations.actionTypes.restart_nodeDesc') },
+    { value: 'cleanup_expired', label: t('automations.actionTypes.cleanup_expired'), category: 'system', description: t('automations.actionTypes.cleanup_expiredDesc') },
+    { value: 'reset_traffic', label: t('automations.actionTypes.reset_traffic'), category: 'users', description: t('automations.actionTypes.reset_trafficDesc') },
+    { value: 'force_sync', label: t('automations.actionTypes.force_sync'), category: 'system', description: t('automations.actionTypes.force_syncDesc') },
+  ] as const
+}
+export const ACTION_TYPES = new Proxy([] as ReturnType<typeof getActionTypes>, {
+  get(_target, prop) { const d = getActionTypes(); if (prop === 'map') return d.map.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
+})
 
-export const CATEGORIES = [
-  { value: 'users', label: 'Пользователи' },
-  { value: 'nodes', label: 'Ноды' },
-  { value: 'violations', label: 'Нарушения' },
-  { value: 'system', label: 'Система' },
-] as const
+export function getCategories() {
+  return [
+    { value: 'users', label: t('automations.categories.users') },
+    { value: 'nodes', label: t('automations.categories.nodes') },
+    { value: 'violations', label: t('automations.categories.violations') },
+    { value: 'system', label: t('automations.categories.system') },
+  ] as const
+}
+export const CATEGORIES = new Proxy([] as ReturnType<typeof getCategories>, {
+  get(_target, prop) { const d = getCategories(); if (prop === 'map') return d.map.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
+})

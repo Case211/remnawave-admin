@@ -6,6 +6,7 @@ GeoIP сервис для получения геолокации IP адрес�
    Настройка: MAXMIND_CITY_DB=/path/to/GeoLite2-City.mmdb
               MAXMIND_ASN_DB=/path/to/GeoLite2-ASN.mmdb  (опционально)
 2. ip-api.com — бесплатный HTTP API (fallback, ~45 req/min).
+3. ipwho.is — бесплатный HTTP API (second fallback, 10k req/month).
 """
 import asyncio
 from dataclasses import dataclass
@@ -128,7 +129,7 @@ class GeoIPService:
         if self._maxmind_city:
             logger.info("GeoIP provider: MaxMind GeoLite2 (local, no rate limits)")
         else:
-            logger.info("GeoIP provider: ip-api.com (HTTP API, rate-limited)")
+            logger.info("GeoIP provider: ip-api.com (HTTP API, rate-limited) + ipwho.is (fallback)")
 
     async def ensure_maxmind_databases(self):
         """Скачивает MaxMind базы если настроен лицензионный ключ и базы отсутствуют/устарели."""
@@ -326,6 +327,72 @@ class GeoIPService:
             logger.error("Error during GeoIP lookup for %s: %s", ip_address, e, exc_info=True)
             return None
 
+    # ── ipwho.is (HTTP fallback) ────────────────────────────────
+
+    async def _lookup_ipwhois(self, ip_address: str) -> Optional[IPMetadata]:
+        """Lookup через ipwho.is HTTP API (бесплатный, без ключа, 10k req/month)."""
+        try:
+            client = await self._get_client()
+            url = f"https://ipwho.is/{ip_address}"
+
+            response = await client.get(url)
+            response.raise_for_status()
+
+            data = response.json()
+
+            if not data.get('success', False):
+                logger.warning("ipwho.is lookup failed for %s: %s", ip_address, data.get('message', 'Unknown'))
+                return None
+
+            asn = None
+            asn_org = None
+            conn = data.get('connection', {})
+            if conn:
+                asn = conn.get('asn')
+                if isinstance(asn, str) and asn.startswith('AS'):
+                    try:
+                        asn = int(asn[2:])
+                    except ValueError:
+                        asn = None
+                elif isinstance(asn, int):
+                    pass
+                else:
+                    asn = None
+                asn_org = conn.get('org') or conn.get('isp') or ''
+
+            country_code = data.get('country_code')
+            is_hosting = bool(conn.get('type', '') in ('hosting', 'datacenter'))
+
+            connection_type, is_mobile_carrier, is_datacenter, is_vpn, asn_region, asn_city = await self._classify_asn(
+                asn, asn_org, False, is_hosting, country_code
+            )
+
+            return IPMetadata(
+                ip=ip_address,
+                country_code=country_code,
+                country_name=data.get('country'),
+                region=asn_region or data.get('region'),
+                city=asn_city or data.get('city'),
+                latitude=data.get('latitude'),
+                longitude=data.get('longitude'),
+                timezone=data.get('timezone', {}).get('id') if isinstance(data.get('timezone'), dict) else data.get('timezone'),
+                asn=asn,
+                asn_org=asn_org,
+                connection_type=connection_type,
+                is_proxy=data.get('security', {}).get('proxy', False) if isinstance(data.get('security'), dict) else False,
+                is_vpn=is_vpn or (data.get('security', {}).get('vpn', False) if isinstance(data.get('security'), dict) else False),
+                is_tor=data.get('security', {}).get('tor', False) if isinstance(data.get('security'), dict) else False,
+                is_hosting=is_hosting or is_datacenter,
+                is_mobile=is_mobile_carrier
+            )
+
+        except httpx.HTTPError as e:
+            logger.error("HTTP error during ipwho.is lookup for %s: %s", ip_address, e)
+            return None
+        except Exception as e:
+            logger.error("Error during ipwho.is lookup for %s: %s", ip_address, e, exc_info=True)
+            return None
+
     # ── ASN classification ───────────────────────────────────────
 
     async def _classify_asn(self, asn: Optional[int], asn_org: Optional[str], is_mobile: bool, is_hosting: bool, country_code: Optional[str] = None) -> tuple[str, bool, bool, bool, Optional[str], Optional[str]]:
@@ -505,6 +572,15 @@ class GeoIPService:
             self._cache[ip_address] = (metadata, datetime.utcnow())
             await self._save_metadata_to_db(metadata)
             logger.debug("GeoIP API lookup for %s: %s, %s", ip_address, metadata.country_code, metadata.city)
+            return metadata
+
+        # Уровень 5: ipwho.is (бесплатный fallback без rate limit delay)
+        logger.debug("ip-api.com failed for %s, trying ipwho.is", ip_address)
+        metadata = await self._lookup_ipwhois(ip_address)
+        if metadata:
+            self._cache[ip_address] = (metadata, datetime.utcnow())
+            await self._save_metadata_to_db(metadata)
+            logger.debug("GeoIP ipwho.is lookup for %s: %s, %s", ip_address, metadata.country_code, metadata.city)
 
         return metadata
 
@@ -565,7 +641,7 @@ class GeoIPService:
         # Уровень 3 + 4: MaxMind / ip-api.com
         if ips_to_fetch_api:
             in_memory_hits = len(results) - db_hits
-            provider = "MaxMind" if self.has_maxmind else "ip-api.com"
+            provider = "MaxMind" if self.has_maxmind else "ip-api.com/ipwho.is"
             logger.info(
                 "GeoIP batch: %d cached (mem: %d, DB: %d), %d to fetch via %s",
                 len(results), in_memory_hits, db_hits, len(ips_to_fetch_api), provider,

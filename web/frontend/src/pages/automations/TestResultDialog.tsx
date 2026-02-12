@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, AlertTriangle, Info, Zap, Clock } from 'lucide-react'
@@ -42,6 +43,7 @@ const DETAIL_ICONS = {
 }
 
 export function TestResultDialog({ open, onOpenChange, result }: TestResultDialogProps) {
+  const { t } = useTranslation()
   if (!result) return null
 
   const detailParts = parseDetails(result.details)
@@ -50,7 +52,7 @@ export function TestResultDialog({ open, onOpenChange, result }: TestResultDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Результат тестирования</DialogTitle>
+          <DialogTitle>{t('automations.testResult.title')}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
@@ -69,12 +71,12 @@ export function TestResultDialog({ open, onOpenChange, result }: TestResultDialo
             )}
             <div>
               <p className="text-sm font-medium text-white">
-                {result.would_trigger ? 'Правило сработало бы' : 'Правило не сработало бы'}
+                {result.would_trigger ? t('automations.testResult.wouldTrigger') : t('automations.testResult.wouldNotTrigger')}
               </p>
               <p className="text-xs text-dark-300 mt-1">
                 {result.would_trigger
-                  ? 'При текущих условиях правило было бы активировано'
-                  : 'Текущие условия не соответствуют настройкам триггера'}
+                  ? t('automations.testResult.wouldTriggerDesc')
+                  : t('automations.testResult.wouldNotTriggerDesc')}
               </p>
             </div>
           </div>
@@ -82,7 +84,7 @@ export function TestResultDialog({ open, onOpenChange, result }: TestResultDialo
           {/* Parsed detail parts */}
           {detailParts.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-dark-400 uppercase tracking-wider">Детали</p>
+              <p className="text-xs font-medium text-dark-400 uppercase tracking-wider">{t('automations.testResult.details')}</p>
               <div className="space-y-1.5">
                 {detailParts.map((part, i) => {
                   const Icon = DETAIL_ICONS[part.icon]
@@ -103,13 +105,13 @@ export function TestResultDialog({ open, onOpenChange, result }: TestResultDialo
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-lg bg-dark-800 border-2 border-dark-600">
-              <p className="text-xs text-dark-400">Подходящих целей</p>
+              <p className="text-xs text-dark-400">{t('automations.testResult.matchingTargets')}</p>
               <p className="text-lg font-semibold text-white mt-1">
                 {result.matching_targets.length}
               </p>
             </div>
             <div className="p-3 rounded-lg bg-dark-800 border-2 border-dark-600">
-              <p className="text-xs text-dark-400">Ожидаемых действий</p>
+              <p className="text-xs text-dark-400">{t('automations.testResult.expectedActions')}</p>
               <p className="text-lg font-semibold text-white mt-1">
                 {result.estimated_actions}
               </p>
@@ -120,7 +122,7 @@ export function TestResultDialog({ open, onOpenChange, result }: TestResultDialo
           {result.matching_targets.length > 0 && (
             <div>
               <p className="text-xs font-medium text-dark-400 uppercase tracking-wider mb-2">
-                Подходящие цели (макс. 50)
+                {t('automations.testResult.matchingTargetsMax')}
               </p>
               <div className="max-h-48 overflow-y-auto space-y-1.5">
                 {result.matching_targets.map((target, i) => (

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
   ChevronLeft,
@@ -66,14 +67,6 @@ interface RuleConstructorProps {
   editRule: AutomationRule | null
 }
 
-const STEP_LABELS = ['Триггер', 'Условия', 'Действие', 'Обзор']
-const STEP_DESCRIPTIONS = [
-  'Выберите, что запускает правило',
-  'Добавьте фильтры (необязательно)',
-  'Настройте действие при срабатывании',
-  'Проверьте и сохраните правило',
-]
-
 const TRIGGER_ICONS: Record<string, React.ElementType> = {
   event: Zap,
   schedule: Clock,
@@ -93,6 +86,21 @@ const ACTION_CATEGORY_MAP: Record<string, string> = {
 
 export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructorProps) {
   const queryClient = useQueryClient()
+  const { t } = useTranslation()
+
+  const STEP_LABELS = [
+    t('automations.constructor.steps.trigger'),
+    t('automations.constructor.steps.conditions'),
+    t('automations.constructor.steps.action'),
+    t('automations.constructor.steps.review'),
+  ]
+  const STEP_DESCRIPTIONS = [
+    t('automations.constructor.stepDescs.trigger'),
+    t('automations.constructor.stepDescs.conditions'),
+    t('automations.constructor.stepDescs.action'),
+    t('automations.constructor.stepDescs.review'),
+  ]
+
   const [step, setStep] = useState(1)
 
   // Schedule sub-mode: 'cron' or 'interval'
@@ -281,22 +289,22 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const createMutation = useMutation({
     mutationFn: (data: AutomationRuleCreate) => automationsApi.create(data),
     onSuccess: () => {
-      toast.success('Правило создано')
+      toast.success(t('automations.constructor.ruleCreated'))
       queryClient.invalidateQueries({ queryKey: ['automations'] })
       onOpenChange(false)
     },
-    onError: () => toast.error('Не удалось создать правило'),
+    onError: () => toast.error(t('automations.constructor.createFailed')),
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: AutomationRuleUpdate }) =>
       automationsApi.update(id, data),
     onSuccess: () => {
-      toast.success('Правило обновлено')
+      toast.success(t('automations.constructor.ruleUpdated'))
       queryClient.invalidateQueries({ queryKey: ['automations'] })
       onOpenChange(false)
     },
-    onError: () => toast.error('Не удалось обновить правило'),
+    onError: () => toast.error(t('automations.constructor.updateFailed')),
   })
 
   const handleSave = () => {
@@ -373,20 +381,20 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const getValidationHint = (): string | null => {
     if (step === 1) {
       if (triggerType === 'schedule') {
-        if (scheduleMode === 'cron' && !cronExpr.trim()) return 'Выберите расписание или введите CRON-выражение'
-        if (scheduleMode === 'interval' && !intervalMinutes) return 'Выберите интервал запуска'
+        if (scheduleMode === 'cron' && !cronExpr.trim()) return t('automations.constructor.validationCron')
+        if (scheduleMode === 'interval' && !intervalMinutes) return t('automations.constructor.validationInterval')
       }
-      if (triggerType === 'threshold' && !thresholdValue) return 'Укажите пороговое значение'
+      if (triggerType === 'threshold' && !thresholdValue) return t('automations.constructor.validationThreshold')
     }
     if (step === 2) {
       const hasPartial = conditions.some((c) => (c.field && !c.value) || (!c.field && c.value))
-      if (hasPartial) return 'Заполните все поля в условиях или удалите незаполненные'
+      if (hasPartial) return t('automations.constructor.validationConditions')
     }
     if (step === 3) {
-      if (actionType === 'notify' && !notifyMessage.trim()) return 'Введите текст сообщения'
-      if (actionType === 'notify' && notifyChannel === 'webhook' && !webhookUrl.trim()) return 'Укажите URL для Webhook'
+      if (actionType === 'notify' && !notifyMessage.trim()) return t('automations.constructor.validationMessage')
+      if (actionType === 'notify' && notifyChannel === 'webhook' && !webhookUrl.trim()) return t('automations.constructor.validationWebhook')
     }
-    if (step === 4 && !name.trim()) return 'Введите название правила'
+    if (step === 4 && !name.trim()) return t('automations.constructor.validationName')
     return null
   }
 
@@ -399,12 +407,12 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {editRule ? 'Редактирование правила' : 'Новое правило автоматизации'}
+            {editRule ? t('automations.constructor.editTitle') : t('automations.constructor.newTitle')}
           </DialogTitle>
           <p className="text-xs text-dark-400 mt-1">
             {editRule
-              ? 'Измените параметры правила автоматизации'
-              : 'Создайте правило, которое будет автоматически выполнять действия при наступлении определённых событий'}
+              ? t('automations.constructor.editSubtitle')
+              : t('automations.constructor.newSubtitle')}
           </p>
         </DialogHeader>
 
@@ -447,26 +455,26 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
           <div className="space-y-4">
             {/* Trigger type selection */}
             <div>
-              <Label className="text-sm font-medium text-white">Когда запускать правило?</Label>
+              <Label className="text-sm font-medium text-white">{t('automations.constructor.triggerQuestion')}</Label>
               <p className="text-xs text-dark-400 mt-1">
-                Определите условие запуска. Правило сработает автоматически при наступлении выбранного события.
+                {t('automations.constructor.triggerHint')}
               </p>
               <div className="grid grid-cols-3 gap-2 mt-3">
-                {TRIGGER_TYPES.map((t) => {
-                  const Icon = TRIGGER_ICONS[t.value] || Zap
+                {TRIGGER_TYPES.map((tt) => {
+                  const Icon = TRIGGER_ICONS[tt.value] || Zap
                   return (
                     <button
-                      key={t.value}
-                      onClick={() => setTriggerType(t.value)}
+                      key={tt.value}
+                      onClick={() => setTriggerType(tt.value)}
                       className={`p-3 rounded-lg border-2 text-left transition-all ${
-                        triggerType === t.value
+                        triggerType === tt.value
                           ? 'border-accent-teal bg-accent-teal/10 shadow-sm shadow-accent-teal/10'
                           : 'border-dark-600 bg-dark-800 hover:border-dark-500 hover:bg-dark-750'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 mb-1.5 ${triggerType === t.value ? 'text-accent-teal' : 'text-dark-300'}`} />
-                      <p className="text-sm font-medium text-white">{t.label}</p>
-                      <p className="text-[11px] text-dark-400 mt-1 leading-snug">{t.description}</p>
+                      <Icon className={`w-4 h-4 mb-1.5 ${triggerType === tt.value ? 'text-accent-teal' : 'text-dark-300'}`} />
+                      <p className="text-sm font-medium text-white">{tt.label}</p>
+                      <p className="text-[11px] text-dark-400 mt-1 leading-snug">{tt.description}</p>
                     </button>
                   )
                 })}
@@ -480,14 +488,13 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   <div className="flex items-start gap-2">
                     <HelpCircle className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-blue-300/80">
-                      Событийный триггер реагирует на конкретные действия в системе в реальном времени.
-                      Правило сработает сразу после возникновения события.
+                      {t('automations.constructor.eventHint')}
                     </p>
                   </div>
                 </div>
 
                 <div>
-                  <Label className="text-xs font-medium text-dark-300">Какое событие отслеживать?</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.eventQuestion')}</Label>
                   <div className="grid gap-2 mt-2">
                     {EVENT_TYPES.map((e) => (
                       <button
@@ -512,41 +519,39 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 </div>
                 {eventType === 'violation.detected' && (
                   <div className="p-3 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-                    <Label className="text-xs font-medium text-dark-300">Минимальная оценка нарушения</Label>
+                    <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.minScore')}</Label>
                     <p className="text-xs text-dark-400">
-                      Фильтр по серьёзности. Правило сработает только если score нарушения не ниже указанного.
-                      Оставьте пустым, чтобы реагировать на любые нарушения.
+                      {t('automations.constructor.minScoreHint')}
                     </p>
                     <Input
                       type="number"
                       value={minScore}
                       onChange={(e) => setMinScore(e.target.value)}
                       className="bg-dark-900 border-dark-500 text-white w-32"
-                      placeholder="например 80"
+                      placeholder={t('automations.constructor.minScorePlaceholder')}
                     />
-                    <p className="text-[11px] text-dark-500 italic">Необязательное поле</p>
+                    <p className="text-[11px] text-dark-500 italic">{t('automations.constructor.optionalField')}</p>
                   </div>
                 )}
                 {eventType === 'node.went_offline' && (
                   <div className="p-3 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-                    <Label className="text-xs font-medium text-dark-300">Минимальное время офлайн (минуты)</Label>
+                    <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.minOffline')}</Label>
                     <p className="text-xs text-dark-400">
-                      Задержка перед срабатыванием. Правило сработает только если нода недоступна дольше указанного времени.
-                      Это помогает избежать ложных срабатываний при кратковременных перебоях.
+                      {t('automations.constructor.minOfflineHint')}
                     </p>
                     <Input
                       type="number"
                       value={offlineMinutes}
                       onChange={(e) => setOfflineMinutes(e.target.value)}
                       className="bg-dark-900 border-dark-500 text-white w-32"
-                      placeholder="например 5"
+                      placeholder={t('automations.constructor.minOfflinePlaceholder')}
                     />
                     {offlineMinutes && (
                       <p className="text-xs text-accent-teal">
-                        Сработает после {offlineMinutes} мин. офлайн
+                        {t('automations.constructor.firesAfterOffline', { minutes: offlineMinutes })}
                       </p>
                     )}
-                    <p className="text-[11px] text-dark-500 italic">Необязательное поле</p>
+                    <p className="text-[11px] text-dark-500 italic">{t('automations.constructor.optionalField')}</p>
                   </div>
                 )}
               </div>
@@ -559,8 +564,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   <div className="flex items-start gap-2">
                     <HelpCircle className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-blue-300/80">
-                      Правило будет запускаться периодически по расписанию. Используйте CRON для точного расписания
-                      или простой интервал для повторяющихся задач.
+                      {t('automations.constructor.scheduleHint')}
                     </p>
                   </div>
                 </div>
@@ -576,7 +580,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     }`}
                   >
                     <Clock className="w-3.5 h-3.5 inline mr-1.5" />
-                    По расписанию (CRON)
+                    {t('automations.constructor.cronMode')}
                   </button>
                   <button
                     onClick={() => setScheduleMode('interval')}
@@ -587,7 +591,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     }`}
                   >
                     <Activity className="w-3.5 h-3.5 inline mr-1.5" />
-                    Через интервал
+                    {t('automations.constructor.intervalMode')}
                   </button>
                 </div>
 
@@ -608,14 +612,13 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   <div className="flex items-start gap-2">
                     <HelpCircle className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-blue-300/80">
-                      Пороговый триггер следит за числовой метрикой и срабатывает, когда значение
-                      достигает заданного порога. Проверка происходит периодически.
+                      {t('automations.constructor.thresholdHint')}
                     </p>
                   </div>
                 </div>
 
                 <div>
-                  <Label className="text-xs font-medium text-dark-300">Какую метрику отслеживать?</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.metricQuestion')}</Label>
                   <div className="grid gap-2 mt-2">
                     {THRESHOLD_METRICS.map((m) => (
                       <button
@@ -640,13 +643,13 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 </div>
 
                 <div className="p-3 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-3">
-                  <Label className="text-xs font-medium text-dark-300">Условие срабатывания</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.triggerCondition')}</Label>
                   <p className="text-xs text-dark-400">
-                    Правило сработает когда метрика «{selectedMetric?.label || thresholdMetric}» будет соответствовать заданному условию
+                    {t('automations.constructor.metricConditionHint', { metric: selectedMetric?.label || thresholdMetric })}
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-[11px] text-dark-400">Сравнение</Label>
+                      <Label className="text-[11px] text-dark-400">{t('automations.constructor.comparison')}</Label>
                       <Select value={thresholdOperator} onValueChange={setThresholdOperator}>
                         <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
                           <SelectValue />
@@ -659,7 +662,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       </Select>
                     </div>
                     <div>
-                      <Label className="text-[11px] text-dark-400">Пороговое значение <span className="text-red-400">*</span></Label>
+                      <Label className="text-[11px] text-dark-400">{t('automations.constructor.thresholdValue')} <span className="text-red-400">*</span></Label>
                       <Input
                         type="number"
                         value={thresholdValue}
@@ -673,9 +676,11 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     <div className="flex items-center gap-2 p-2.5 rounded-md bg-yellow-500/5 border border-yellow-500/20">
                       <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
                       <span className="text-xs text-yellow-200/80">
-                        Сработает когда {selectedMetric?.label || thresholdMetric}{' '}
-                        {CONDITION_OPERATORS.find((o) => o.value === thresholdOperator)?.label || thresholdOperator}{' '}
-                        {thresholdValue}
+                        {t('automations.constructor.firesWhen', {
+                          metric: selectedMetric?.label || thresholdMetric,
+                          operator: CONDITION_OPERATORS.find((o) => o.value === thresholdOperator)?.label || thresholdOperator,
+                          value: thresholdValue,
+                        })}
                       </span>
                     </div>
                   )}
@@ -685,10 +690,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
 
             {/* Category */}
             <div className="p-3 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-              <Label className="text-xs font-medium text-dark-300">Категория правила</Label>
+              <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.categoryLabel')}</Label>
               <p className="text-xs text-dark-400">
-                Категория помогает группировать правила для удобного поиска и фильтрации.
-                {!editRule && ' Подбирается автоматически, но вы можете изменить.'}
+                {t('automations.constructor.categoryHint')}{!editRule && ' ' + t('automations.constructor.categoryAutoHint')}
               </p>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger className="bg-dark-900 border-dark-500 text-white">
@@ -711,11 +715,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               <div className="flex items-start gap-2">
                 <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-blue-300/90">Дополнительные условия</p>
+                  <p className="text-sm font-medium text-blue-300/90">{t('automations.constructor.conditionsTitle')}</p>
                   <p className="text-xs text-blue-300/60 mt-1 leading-relaxed">
-                    Необязательный шаг. Добавьте условия для более точной фильтрации.
-                    Правило сработает только если <strong>все</strong> указанные условия выполняются одновременно (логика «И»).
-                    Если условий нет, правило сработает при каждом событии триггера.
+                    {t('automations.constructor.conditionsHint')}
                   </p>
                 </div>
               </div>
@@ -724,7 +726,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {conditions.map((cond, idx) => (
               <div key={idx} className="p-3 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-dark-300 font-medium">Условие {idx + 1}</span>
+                  <span className="text-xs text-dark-300 font-medium">{t('automations.constructor.conditionN', { n: idx + 1 })}</span>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -736,19 +738,19 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 </div>
                 <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
                   <div>
-                    <Label className="text-[11px] text-dark-400">Поле</Label>
+                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.field')}</Label>
                     <Select
                       value={cond.field || '_custom'}
                       onValueChange={(v) => updateCondition(idx, 'field', v === '_custom' ? '' : v)}
                     >
                       <SelectTrigger className="mt-1 bg-dark-900 border-dark-500 text-white">
-                        <SelectValue placeholder="Выберите поле" />
+                        <SelectValue placeholder={t('automations.constructor.selectField')} />
                       </SelectTrigger>
                       <SelectContent>
                         {CONDITION_FIELDS.map((f) => (
                           <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
                         ))}
-                        <SelectItem value="_custom">Другое...</SelectItem>
+                        <SelectItem value="_custom">{t('automations.constructor.otherField')}</SelectItem>
                       </SelectContent>
                     </Select>
                     {/* Show custom input if field is not from preset */}
@@ -757,12 +759,12 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                         value={cond.field}
                         onChange={(e) => updateCondition(idx, 'field', e.target.value)}
                         className="mt-1.5 bg-dark-900 border-dark-500 text-white"
-                        placeholder="Название поля"
+                        placeholder={t('automations.constructor.fieldName')}
                       />
                     )}
                   </div>
                   <div className="w-36">
-                    <Label className="text-[11px] text-dark-400">Сравнение</Label>
+                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.comparisonLabel')}</Label>
                     <Select
                       value={cond.operator}
                       onValueChange={(v) => updateCondition(idx, 'operator', v)}
@@ -778,7 +780,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     </Select>
                   </div>
                   <div className="w-24">
-                    <Label className="text-[11px] text-dark-400">Значение</Label>
+                    <Label className="text-[11px] text-dark-400">{t('automations.constructor.valueLabel')}</Label>
                     <Input
                       value={cond.value}
                       onChange={(e) => updateCondition(idx, 'value', e.target.value)}
@@ -796,17 +798,17 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               onClick={addCondition}
               className="text-xs border-dark-600 hover:border-dark-500"
             >
-              <Plus className="w-3.5 h-3.5 mr-1" /> Добавить условие
+              <Plus className="w-3.5 h-3.5 mr-1" /> {t('automations.constructor.addCondition')}
             </Button>
 
             {conditions.length === 0 && (
               <div className="text-center py-6 rounded-lg border border-dashed border-dark-600 bg-dark-800/30">
                 <Shield className="w-8 h-8 text-dark-500 mx-auto mb-2" />
                 <p className="text-xs text-dark-400">
-                  Нет дополнительных условий
+                  {t('automations.constructor.noConditions')}
                 </p>
                 <p className="text-[11px] text-dark-500 mt-1">
-                  Нажмите «Добавить условие» для точной настройки или «Далее» для продолжения без фильтров
+                  {t('automations.constructor.noConditionsHint')}
                 </p>
               </div>
             )}
@@ -817,9 +819,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         {step === 3 && (
           <div className="space-y-4">
             <div>
-              <Label className="text-sm font-medium text-white">Что сделать при срабатывании?</Label>
+              <Label className="text-sm font-medium text-white">{t('automations.constructor.actionQuestion')}</Label>
               <p className="text-xs text-dark-400 mt-1">
-                Выберите действие, которое система выполнит автоматически при срабатывании триггера и условий.
+                {t('automations.constructor.actionHint')}
               </p>
               <div className="grid gap-2 mt-3">
                 {ACTION_TYPES.map((a) => (
@@ -851,13 +853,13 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {actionType === 'notify' && (
               <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-3">
                 <div>
-                  <Label className="text-xs font-medium text-dark-300">Настройка уведомления</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.notifyConfig')}</Label>
                   <p className="text-xs text-dark-400 mt-0.5">
-                    Укажите, куда и какое сообщение отправить при срабатывании правила
+                    {t('automations.constructor.notifyHint')}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-[11px] text-dark-400">Канал доставки</Label>
+                  <Label className="text-[11px] text-dark-400">{t('automations.constructor.deliveryChannel')}</Label>
                   <div className="flex gap-2 mt-1.5">
                     <button
                       onClick={() => setNotifyChannel('telegram')}
@@ -883,17 +885,17 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 </div>
                 <div>
                   <Label className="text-[11px] text-dark-400">
-                    Текст сообщения <span className="text-red-400">*</span>
+                    {t('automations.constructor.messageText')} <span className="text-red-400">*</span>
                   </Label>
                   <Input
                     value={notifyMessage}
                     onChange={(e) => setNotifyMessage(e.target.value)}
                     className="mt-1 bg-dark-900 border-dark-500 text-white"
-                    placeholder="Например: Сработала автоматизация для {user}"
+                    placeholder={t('automations.constructor.messagePlaceholder')}
                   />
                   <div className="mt-1.5 p-2 rounded-md bg-dark-900/50 border border-dark-600">
                     <p className="text-[11px] text-dark-400">
-                      Доступные переменные:{' '}
+                      {t('automations.constructor.availableVars')}{' '}
                       <code className="text-accent-teal">{'{user}'}</code>,{' '}
                       <code className="text-accent-teal">{'{node}'}</code>,{' '}
                       <code className="text-accent-teal">{'{rule_name}'}</code>,{' '}
@@ -904,7 +906,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 {notifyChannel === 'webhook' && (
                   <div>
                     <Label className="text-[11px] text-dark-400">
-                      URL для Webhook <span className="text-red-400">*</span>
+                      {t('automations.constructor.webhookUrl')} <span className="text-red-400">*</span>
                     </Label>
                     <Input
                       value={webhookUrl}
@@ -913,7 +915,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       placeholder="https://example.com/webhook"
                     />
                     <p className="text-[11px] text-dark-500 mt-1">
-                      Данные будут отправлены POST-запросом в формате JSON
+                      {t('automations.constructor.webhookHint')}
                     </p>
                   </div>
                 )}
@@ -923,36 +925,35 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {/* Block user config */}
             {actionType === 'block_user' && (
               <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-                <Label className="text-xs font-medium text-dark-300">Причина блокировки</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.blockReason')}</Label>
                 <p className="text-xs text-dark-400">
-                  Эта причина будет записана в карточку пользователя и видна администраторам.
-                  Если не указана, будет использована причина по умолчанию.
+                  {t('automations.constructor.blockReasonHint')}
                 </p>
                 <Input
                   value={blockReason}
                   onChange={(e) => setBlockReason(e.target.value)}
                   className="bg-dark-900 border-dark-500 text-white"
-                  placeholder="Например: Обнаружен шеринг аккаунта"
+                  placeholder={t('automations.constructor.blockReasonPlaceholder')}
                 />
                 {triggerType === 'event' || triggerType === 'threshold' ? (
                   <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/5 border border-blue-500/20">
                     <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
                     <span className="text-[11px] text-blue-300/80">
-                      Целевой пользователь определяется автоматически из триггера
+                      {t('automations.constructor.targetAutomatic')}
                     </span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/5 border border-yellow-500/20">
                     <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
                     <span className="text-[11px] text-yellow-300/80">
-                      Блокировка по расписанию требует событийного или порогового триггера для определения пользователя
+                      {t('automations.constructor.blockScheduleWarn')}
                     </span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 p-2 rounded-md bg-red-500/5 border border-red-500/20">
                   <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
                   <span className="text-[11px] text-red-300/80">
-                    Внимание: заблокированный пользователь потеряет доступ к сервису
+                    {t('automations.constructor.blockWarning')}
                   </span>
                 </div>
               </div>
@@ -961,23 +962,22 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {/* Disable user warning */}
             {actionType === 'disable_user' && (
               <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-                <Label className="text-xs font-medium text-dark-300">Отключение пользователя</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.disableUserTitle')}</Label>
                 <p className="text-xs text-dark-400">
-                  Аккаунт пользователя будет деактивирован. Пользователь не сможет подключаться,
-                  но его данные сохранятся. Аккаунт можно будет включить обратно вручную.
+                  {t('automations.constructor.disableUserHint')}
                 </p>
                 {triggerType === 'event' || triggerType === 'threshold' ? (
                   <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/5 border border-blue-500/20">
                     <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
                     <span className="text-[11px] text-blue-300/80">
-                      Целевой пользователь определяется автоматически из триггера
+                      {t('automations.constructor.targetAutomatic')}
                     </span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/5 border border-yellow-500/20">
                     <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
                     <span className="text-[11px] text-yellow-300/80">
-                      Для расписания рекомендуется использовать «Очистить истёкших» — отключение конкретного пользователя требует событийного или порогового триггера
+                      {t('automations.constructor.disableScheduleWarn')}
                     </span>
                   </div>
                 )}
@@ -987,13 +987,12 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {/* Cleanup config */}
             {actionType === 'cleanup_expired' && (
               <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-                <Label className="text-xs font-medium text-dark-300">Порог для очистки</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.cleanupTitle')}</Label>
                 <p className="text-xs text-dark-400">
-                  Будут отключены пользователи, у которых подписка истекла более указанного количества дней назад.
-                  Это помогает автоматически освобождать ресурсы.
+                  {t('automations.constructor.cleanupHint')}
                 </p>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-dark-300">Истекших более</span>
+                  <span className="text-xs text-dark-300">{t('automations.constructor.expiredOlderThan')}</span>
                   <Input
                     type="number"
                     value={cleanupDays}
@@ -1001,7 +1000,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     className="bg-dark-900 border-dark-500 text-white w-20"
                     placeholder="30"
                   />
-                  <span className="text-xs text-dark-300">дней</span>
+                  <span className="text-xs text-dark-300">{t('automations.constructor.days')}</span>
                 </div>
               </div>
             )}
@@ -1010,18 +1009,18 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {actionType === 'restart_node' && (
               <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-3">
                 <div>
-                  <Label className="text-xs font-medium text-dark-300">Перезапуск ноды</Label>
+                  <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.restartNodeTitle')}</Label>
                   <p className="text-xs text-dark-400 mt-0.5">
-                    Будет отправлена команда перезапуска. Активные подключения будут временно прерваны.
+                    {t('automations.constructor.restartNodeHint')}
                   </p>
                 </div>
 
                 {/* Target node selection */}
                 <div className="space-y-2">
                   <Label className="text-[11px] text-dark-400">
-                    Какую ноду перезапускать?
+                    {t('automations.constructor.whichNode')}
                     {triggerType === 'event' && (
-                      <span className="text-dark-500 ml-1">(для событийных триггеров обычно определяется автоматически)</span>
+                      <span className="text-dark-500 ml-1">{t('automations.constructor.eventNodeHint')}</span>
                     )}
                   </Label>
 
@@ -1035,7 +1034,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                           : 'text-dark-300 hover:text-dark-200 border border-transparent'
                       }`}
                     >
-                      {triggerType === 'event' ? 'Из триггера / все' : 'Все ноды'}
+                      {triggerType === 'event' ? t('automations.constructor.fromTriggerOrAll') : t('automations.constructor.allNodes')}
                     </button>
                     <button
                       onClick={() => setTargetNodeUuid('_select')}
@@ -1045,7 +1044,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                           : 'text-dark-300 hover:text-dark-200 border border-transparent'
                       }`}
                     >
-                      Конкретная нода
+                      {t('automations.constructor.specificNode')}
                     </button>
                   </div>
 
@@ -1055,7 +1054,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                       {nodesLoading ? (
                         <div className="flex items-center gap-2 py-3 justify-center text-dark-400">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span className="text-xs">Загрузка нод...</span>
+                          <span className="text-xs">{t('automations.constructor.loadingNodes')}</span>
                         </div>
                       ) : nodesList && nodesList.length > 0 ? (
                         <Select
@@ -1063,7 +1062,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                           onValueChange={setTargetNodeUuid}
                         >
                           <SelectTrigger className="bg-dark-900 border-dark-500 text-white">
-                            <SelectValue placeholder="Выберите ноду" />
+                            <SelectValue placeholder={t('automations.constructor.selectNode')} />
                           </SelectTrigger>
                           <SelectContent>
                             {nodesList.map((node) => (
@@ -1083,7 +1082,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                           </SelectContent>
                         </Select>
                       ) : (
-                        <p className="text-xs text-dark-500 py-2">Ноды не найдены</p>
+                        <p className="text-xs text-dark-500 py-2">{t('automations.constructor.noNodesFound')}</p>
                       )}
                     </div>
                   )}
@@ -1093,8 +1092,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
                   <span className="text-[11px] text-yellow-300/80">
                     {targetNodeUuid && targetNodeUuid !== '_select'
-                      ? 'Кратковременное прерывание соединений на выбранной ноде'
-                      : 'Кратковременное прерывание соединений у всех пользователей'}
+                      ? t('automations.constructor.restartSelectedWarn')
+                      : t('automations.constructor.restartAllWarn')}
                   </span>
                 </div>
               </div>
@@ -1103,23 +1102,22 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {/* Reset traffic info */}
             {actionType === 'reset_traffic' && (
               <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-                <Label className="text-xs font-medium text-dark-300">Сброс трафика</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.resetTrafficTitle')}</Label>
                 <p className="text-xs text-dark-400">
-                  Счётчики использованного трафика будут обнулены. Это вернёт пользователям полный
-                  объём трафика по их тарифу.
+                  {t('automations.constructor.resetTrafficHint')}
                 </p>
                 {triggerType === 'event' || triggerType === 'threshold' ? (
                   <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/5 border border-blue-500/20">
                     <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
                     <span className="text-[11px] text-blue-300/80">
-                      Целевой пользователь определяется автоматически из триггера
+                      {t('automations.constructor.targetAutomatic')}
                     </span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 p-2 rounded-md bg-yellow-500/5 border border-yellow-500/20">
                     <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
                     <span className="text-[11px] text-yellow-300/80">
-                      Сброс трафика по расписанию требует событийного или порогового триггера для определения пользователя
+                      {t('automations.constructor.resetTrafficScheduleWarn')}
                     </span>
                   </div>
                 )}
@@ -1129,10 +1127,9 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             {/* Force sync info */}
             {actionType === 'force_sync' && (
               <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-2">
-                <Label className="text-xs font-medium text-dark-300">Принудительная синхронизация</Label>
+                <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.forceSyncTitle')}</Label>
                 <p className="text-xs text-dark-400">
-                  Конфигурация всех нод будет принудительно обновлена. Полезно после массовых
-                  изменений настроек, чтобы гарантировать актуальность конфигурации на всех серверах.
+                  {t('automations.constructor.forceSyncHint')}
                 </p>
               </div>
             )}
@@ -1145,36 +1142,36 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
             <div className="p-4 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-3">
               <div>
                 <Label className="text-sm font-medium text-white">
-                  Название правила <span className="text-red-400">*</span>
+                  {t('automations.constructor.ruleNameLabel')} <span className="text-red-400">*</span>
                 </Label>
                 <p className="text-xs text-dark-400 mt-0.5">
-                  Краткое название для идентификации правила в списке
+                  {t('automations.constructor.ruleNameHint')}
                 </p>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="mt-2 bg-dark-900 border-dark-500 text-white"
-                  placeholder="Например: Блокировка при шеринге"
+                  placeholder={t('automations.constructor.ruleNamePlaceholder')}
                 />
               </div>
               <div>
-                <Label className="text-xs text-dark-400">Описание</Label>
+                <Label className="text-xs text-dark-400">{t('automations.constructor.descriptionLabel')}</Label>
                 <p className="text-[11px] text-dark-500 mt-0.5">
-                  Подробное описание, чтобы другие администраторы понимали назначение правила
+                  {t('automations.constructor.descriptionHint')}
                 </p>
                 <Input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="mt-1 bg-dark-900 border-dark-500 text-white"
-                  placeholder="Кратко опишите назначение этого правила"
+                  placeholder={t('automations.constructor.descriptionPlaceholder')}
                 />
-                <p className="text-[11px] text-dark-500 mt-0.5 italic">Необязательное поле</p>
+                <p className="text-[11px] text-dark-500 mt-0.5 italic">{t('automations.constructor.optionalField')}</p>
               </div>
             </div>
 
             {/* Summary */}
             <div className="rounded-lg border-2 border-dark-600 bg-dark-800 p-4 space-y-4">
-              <p className="text-xs font-semibold text-dark-300 uppercase tracking-wider">Сводка правила</p>
+              <p className="text-xs font-semibold text-dark-300 uppercase tracking-wider">{t('automations.constructor.summary')}</p>
 
               {/* Category & type badges */}
               <div className="flex items-center gap-2">
@@ -1188,7 +1185,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
 
               {/* Trigger description */}
               <div className="p-3 rounded-lg bg-dark-900 border border-dark-600 space-y-1.5">
-                <p className="text-[10px] text-dark-400 font-semibold uppercase tracking-wider">Когда</p>
+                <p className="text-[10px] text-dark-400 font-semibold uppercase tracking-wider">{t('automations.constructor.whenLabel')}</p>
                 <div className="flex items-center gap-2">
                   <Zap className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
                   <span className="text-sm text-dark-200">
@@ -1203,7 +1200,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               {/* Conditions */}
               {conditions.filter((c) => c.field && c.value).length > 0 && (
                 <div className="p-3 rounded-lg bg-dark-900 border border-dark-600 space-y-1.5">
-                  <p className="text-[10px] text-dark-400 font-semibold uppercase tracking-wider">При условиях (все должны выполняться)</p>
+                  <p className="text-[10px] text-dark-400 font-semibold uppercase tracking-wider">{t('automations.constructor.conditionsAllLabel')}</p>
                   {conditions.filter((c) => c.field && c.value).map((c, i) => {
                     const fieldLabel = CONDITION_FIELDS.find((f) => f.value === c.field)?.label || c.field
                     const opLabel = CONDITION_OPERATORS.find((o) => o.value === c.operator)?.label || c.operator
@@ -1221,7 +1218,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
 
               {/* Action description */}
               <div className="p-3 rounded-lg bg-dark-900 border border-dark-600 space-y-1.5">
-                <p className="text-[10px] text-dark-400 font-semibold uppercase tracking-wider">Тогда</p>
+                <p className="text-[10px] text-dark-400 font-semibold uppercase tracking-wider">{t('automations.constructor.thenLabel')}</p>
                 <div className="flex items-center gap-2">
                   <ArrowRight className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
                   <span className="text-sm text-primary-400">
@@ -1237,10 +1234,10 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     <Server className="w-3 h-3 text-dark-400 flex-shrink-0" />
                     <span className="text-xs text-dark-300">
                       {targetNodeUuid && targetNodeUuid !== '_select'
-                        ? `Нода: ${nodesList?.find((n) => n.uuid === targetNodeUuid)?.name || targetNodeUuid}`
+                        ? t('automations.constructor.nodeTarget', { name: nodesList?.find((n) => n.uuid === targetNodeUuid)?.name || targetNodeUuid })
                         : triggerType === 'event'
-                          ? 'Цель: из триггера или все ноды'
-                          : 'Цель: все подключённые ноды'}
+                          ? t('automations.constructor.targetFromTrigger')
+                          : t('automations.constructor.targetAllNodes')}
                     </span>
                   </div>
                 )}
@@ -1249,8 +1246,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     <Info className="w-3 h-3 text-dark-400 flex-shrink-0" />
                     <span className="text-xs text-dark-300">
                       {triggerType === 'event' || triggerType === 'threshold'
-                        ? 'Цель: из триггера (автоматически)'
-                        : 'Цель: не определена (требуется событийный триггер)'}
+                        ? t('automations.constructor.targetAutoFromTrigger')
+                        : t('automations.constructor.targetUndefined')}
                     </span>
                   </div>
                 )}
@@ -1264,7 +1261,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
           <div>
             {step > 1 && (
               <Button variant="outline" size="sm" onClick={() => setStep((s) => s - 1)} className="border-dark-600">
-                <ChevronLeft className="w-4 h-4 mr-1" /> Назад
+                <ChevronLeft className="w-4 h-4 mr-1" /> {t('automations.constructor.back')}
               </Button>
             )}
           </div>
@@ -1275,7 +1272,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               </span>
             )}
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-              Отмена
+              {t('automations.constructor.cancel')}
             </Button>
             {step < 4 ? (
               <Button
@@ -1284,7 +1281,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 disabled={!canProceed()}
                 className="bg-accent-teal text-white hover:bg-accent-teal/90 disabled:opacity-40"
               >
-                Далее <ChevronRight className="w-4 h-4 ml-1" />
+                {t('automations.constructor.next')} <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             ) : (
               <Button
@@ -1294,10 +1291,10 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                 className="bg-accent-teal text-white hover:bg-accent-teal/90 disabled:opacity-40"
               >
                 {isSaving
-                  ? 'Сохранение...'
+                  ? t('automations.constructor.saving')
                   : editRule
-                    ? 'Сохранить'
-                    : 'Создать правило'}
+                    ? t('automations.constructor.save')
+                    : t('automations.constructor.createRuleBtn')}
               </Button>
             )}
           </div>
