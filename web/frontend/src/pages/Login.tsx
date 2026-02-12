@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../store/authStore'
 import { authApi, TelegramUser } from '../api/auth'
 import {
@@ -93,14 +94,15 @@ function getPasswordStrength(password: string): PasswordStrength {
   score = Math.min(100, score)
 
   if (password.length === 0) return { score: 0, level: 'none', label: '', color: '', checks }
-  if (score < 30) return { score, level: 'weak', label: 'Слабый', color: '#ef4444', checks }
-  if (score < 60) return { score, level: 'fair', label: 'Средний', color: '#f59e0b', checks }
-  if (score < 80) return { score, level: 'good', label: 'Хороший', color: '#22c55e', checks }
-  return { score, level: 'strong', label: 'Надёжный', color: '#10b981', checks }
+  if (score < 30) return { score, level: 'weak', label: 'login.passwordStrength.weak', color: '#ef4444', checks }
+  if (score < 60) return { score, level: 'fair', label: 'login.passwordStrength.fair', color: '#f59e0b', checks }
+  if (score < 80) return { score, level: 'good', label: 'login.passwordStrength.good', color: '#22c55e', checks }
+  return { score, level: 'strong', label: 'login.passwordStrength.strong', color: '#10b981', checks }
 }
 
 // Password strength bar component
 function PasswordStrengthBar({ password }: { password: string }) {
+  const { t } = useTranslation()
   const strength = useMemo(() => getPasswordStrength(password), [password])
 
   if (password.length === 0) return null
@@ -123,18 +125,18 @@ function PasswordStrengthBar({ password }: { password: string }) {
           className="text-[11px] font-medium min-w-[60px] text-right transition-colors duration-300"
           style={{ color: strength.color }}
         >
-          {strength.label}
+          {strength.label ? t(strength.label) : ''}
         </span>
       </div>
 
       {/* Requirement checks */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
         {[
-          { ok: strength.checks.length, text: '8+ символов' },
-          { ok: strength.checks.lower, text: 'Строчная (a-z)' },
-          { ok: strength.checks.upper, text: 'Заглавная (A-Z)' },
-          { ok: strength.checks.digit, text: 'Цифра (0-9)' },
-          { ok: strength.checks.special, text: 'Спецсимвол' },
+          { ok: strength.checks.length, text: t('login.passwordChecks.length') },
+          { ok: strength.checks.lower, text: t('login.passwordChecks.lower') },
+          { ok: strength.checks.upper, text: t('login.passwordChecks.upper') },
+          { ok: strength.checks.digit, text: t('login.passwordChecks.digit') },
+          { ok: strength.checks.special, text: t('login.passwordChecks.special') },
         ].map((c) => (
           <div
             key={c.text}
@@ -199,6 +201,7 @@ function PasswordInput({
 }
 
 export default function Login() {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { login, loginWithPassword, register, isAuthenticated, isLoading, error, clearError } =
@@ -414,7 +417,7 @@ export default function Login() {
                   Remnawave
                 </h1>
                 <p className="text-sm text-dark-200 mt-1">
-                  {needsSetup ? 'Первоначальная настройка' : 'Панель администратора'}
+                  {needsSetup ? t('login.initialSetup') : t('login.subtitle')}
                 </p>
               </div>
             </div>
@@ -426,10 +429,10 @@ export default function Login() {
               <div className="flex-1 h-px bg-dark-400/20" />
               <span className="text-xs text-dark-300 font-medium uppercase tracking-wider">
                 {needsSetup
-                  ? 'Создание администратора'
+                  ? t('login.createAdmin')
                   : showPasswordForm
-                    ? 'Вход по паролю'
-                    : 'Авторизация'}
+                    ? t('login.passwordLogin')
+                    : t('login.authorization')}
               </span>
               <div className="flex-1 h-px bg-dark-400/20" />
             </div>
@@ -472,7 +475,7 @@ export default function Login() {
                   <Loader2 className="h-8 w-8 animate-spin text-teal-500 relative" />
                 </div>
                 <p className="mt-3 text-sm text-dark-200">
-                  {needsSetup ? 'Создание аккаунта...' : 'Авторизация...'}
+                  {needsSetup ? t('login.creatingAccount') : t('login.loggingIn')}
                 </p>
               </div>
             )}
@@ -490,15 +493,14 @@ export default function Login() {
                       }}
                     >
                       <p className="text-xs text-teal-300/80 leading-relaxed">
-                        Добро пожаловать! Для начала работы создайте учётную запись администратора.
-                        Сохраните пароль в надёжном месте.
+                        {t('login.setupWelcome')}
                       </p>
                     </div>
 
                     {/* Username */}
                     <div className="space-y-2">
                       <Label htmlFor="reg-username" className="text-dark-100 text-sm font-medium">
-                        Логин
+                        {t('login.username')}
                       </Label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
@@ -516,7 +518,7 @@ export default function Login() {
                         />
                       </div>
                       {regUsername.length > 0 && regUsername.trim().length < 3 && (
-                        <p className="text-[11px] text-red-400">Минимум 3 символа</p>
+                        <p className="text-[11px] text-red-400">{t('login.minChars', { count: 3 })}</p>
                       )}
                     </div>
 
@@ -527,7 +529,7 @@ export default function Login() {
                           htmlFor="reg-password"
                           className="text-dark-100 text-sm font-medium"
                         >
-                          Пароль
+                          {t('login.passwordLabel')}
                         </Label>
                         <div className="flex items-center gap-1">
                           {regPassword && (
@@ -537,7 +539,7 @@ export default function Login() {
                               size="sm"
                               onClick={handleCopyPassword}
                               className="h-6 px-1.5 text-dark-300 hover:text-teal-400"
-                              title="Скопировать пароль"
+                              title={t('login.copyPassword')}
                             >
                               {copiedPassword ? (
                                 <Check className="h-3.5 w-3.5 text-green-400" />
@@ -552,10 +554,10 @@ export default function Login() {
                             size="sm"
                             onClick={handleGeneratePassword}
                             className="h-6 px-1.5 text-dark-300 hover:text-teal-400 gap-1"
-                            title="Сгенерировать пароль"
+                            title={t('login.generatePassword')}
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
-                            <span className="text-[11px]">Генератор</span>
+                            <span className="text-[11px]">{t('login.generator')}</span>
                           </Button>
                         </div>
                       </div>
@@ -574,21 +576,21 @@ export default function Login() {
                         htmlFor="reg-confirm-password"
                         className="text-dark-100 text-sm font-medium"
                       >
-                        Подтвердите пароль
+                        {t('login.confirmPassword')}
                       </Label>
                       <PasswordInput
                         id="reg-confirm-password"
                         value={regConfirmPassword}
                         onChange={setRegConfirmPassword}
                         autoComplete="new-password"
-                        placeholder="Повторите пароль"
+                        placeholder={t('login.repeatPassword')}
                       />
                       {regConfirmPassword.length > 0 && !regPasswordsMatch && (
-                        <p className="text-[11px] text-red-400">Пароли не совпадают</p>
+                        <p className="text-[11px] text-red-400">{t('login.passwordsDoNotMatch')}</p>
                       )}
                       {regPasswordsMatch && (
                         <p className="text-[11px] text-green-400 flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Пароли совпадают
+                          <Check className="w-3 h-3" /> {t('login.passwordsMatch')}
                         </p>
                       )}
                     </div>
@@ -605,7 +607,7 @@ export default function Login() {
                       disabled={!canRegister}
                     >
                       <UserPlus className="w-4 h-4 mr-2" />
-                      Создать аккаунт
+                      {t('login.createAccount')}
                     </Button>
                   </form>
                 ) : (
@@ -618,7 +620,7 @@ export default function Login() {
                             htmlFor="username"
                             className="text-dark-100 text-sm font-medium"
                           >
-                            Логин
+                            {t('login.username')}
                           </Label>
                           <div className="relative">
                             <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-300" />
@@ -639,7 +641,7 @@ export default function Login() {
                             htmlFor="password"
                             className="text-dark-100 text-sm font-medium"
                           >
-                            Пароль
+                            {t('login.passwordLabel')}
                           </Label>
                           <PasswordInput
                             id="password"
@@ -660,7 +662,7 @@ export default function Login() {
                           disabled={!username.trim() || !password.trim()}
                         >
                           <KeyRound className="w-4 h-4 mr-2" />
-                          Войти
+                          {t('login.loginButton')}
                         </Button>
                       </form>
                     ) : (
@@ -682,11 +684,11 @@ export default function Login() {
                         )}
                       >
                         {showPasswordForm ? (
-                          <>Войти через Telegram</>
+                          <>{t('login.telegram')}</>
                         ) : (
                           <>
                             <Lock className="h-3 w-3" />
-                            Войти по логину и паролю
+                            {t('login.password')}
                           </>
                         )}
                       </button>
@@ -700,8 +702,8 @@ export default function Login() {
             <div className="mt-8 pt-5 border-t border-dark-400/10">
               <p className="text-center text-[11px] text-dark-300/80 leading-relaxed">
                 {needsSetup
-                  ? 'Пароль должен содержать минимум 8 символов, заглавные и строчные буквы, цифру и спецсимвол'
-                  : 'Доступ только для авторизованных администраторов'}
+                  ? t('login.passwordRequirements')
+                  : t('login.authorizedOnly')}
               </p>
             </div>
           </CardContent>

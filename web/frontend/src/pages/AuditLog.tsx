@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { format, formatDistanceToNow, subDays } from 'date-fns'
-import { ru } from 'date-fns/locale'
+import { useTranslation } from 'react-i18next'
+import { format, subDays } from 'date-fns'
 import {
   Search,
   Filter,
@@ -49,6 +49,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { exportCSV, exportJSON } from '@/lib/export'
 import { auditApi, type AuditLogEntry, type AuditLogParams } from '@/api/audit'
+import { useFormatters } from '@/lib/useFormatters'
+import type { TFunction } from 'i18next'
 
 // ── Constants ───────────────────────────────────────────────────
 
@@ -79,171 +81,24 @@ const RESOURCE_COLORS: Record<string, string> = {
   automation: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
 }
 
-const RESOURCE_LABELS: Record<string, string> = {
-  users: 'Пользователи',
-  nodes: 'Ноды',
-  hosts: 'Хосты',
-  violations: 'Нарушения',
-  settings: 'Настройки',
-  admins: 'Админы',
-  roles: 'Роли',
-  auth: 'Авторизация',
-  fleet: 'Флот',
-  automation: 'Автоматизация',
-}
-
-const ACTION_LABELS: Record<string, string> = {
-  create: 'Создание',
-  update: 'Изменение',
-  delete: 'Удаление',
-  enable: 'Включение',
-  disable: 'Отключение',
-  restart: 'Перезапуск',
-  login: 'Вход',
-  logout: 'Выход',
-  login_telegram: 'Вход (Telegram)',
-  change_password: 'Смена пароля',
-  resolve: 'Разрешение',
-  reset_traffic: 'Сброс трафика',
-  revoke: 'Отзыв подписки',
-  sync_hwid: 'Синхр. HWID',
-  bulk_enable: 'Массовое включение',
-  bulk_disable: 'Массовое отключение',
-  bulk_delete: 'Массовое удаление',
-  'bulk_reset-traffic': 'Массовый сброс трафика',
-  generate_token: 'Генерация токена',
-  revoke_token: 'Отзыв токена',
-  trigger_sync: 'Запуск синхронизации',
-  update_ip_whitelist: 'Обн. IP-списка',
-  reset: 'Сброс настройки',
-  toggle: 'Переключение',
-  template_activate: 'Активация шаблона',
-}
-
-// Human-readable descriptions: resource -> action -> (details) => string
-const DESCRIPTIONS: Record<string, Record<string, (target: string, details: Record<string, unknown> | null) => string>> = {
-  users: {
-    create: (t) => `Создал пользователя ${t}`,
-    update: (t) => `Изменил пользователя ${t}`,
-    delete: (t) => `Удалил пользователя ${t}`,
-    enable: (t) => `Включил пользователя ${t}`,
-    disable: (t) => `Отключил пользователя ${t}`,
-    reset_traffic: (t) => `Сбросил трафик пользователя ${t}`,
-    revoke: (t) => `Отозвал подписку пользователя ${t}`,
-    sync_hwid: (t) => `Синхронизировал HWID пользователя ${t}`,
-    bulk_enable: () => 'Массово включил пользователей',
-    bulk_disable: () => 'Массово отключил пользователей',
-    bulk_delete: () => 'Массово удалил пользователей',
-    'bulk_reset-traffic': () => 'Массово сбросил трафик',
-  },
-  nodes: {
-    create: (t) => `Создал ноду ${t}`,
-    update: (t) => `Изменил ноду ${t}`,
-    delete: (t) => `Удалил ноду ${t}`,
-    enable: (t) => `Включил ноду ${t}`,
-    disable: (t) => `Отключил ноду ${t}`,
-    restart: (t) => `Перезапустил ноду ${t}`,
-    generate_token: (t) => `Сгенерировал токен для ноды ${t}`,
-    revoke_token: (t) => `Отозвал токен ноды ${t}`,
-  },
-  hosts: {
-    create: (t) => `Создал хост ${t}`,
-    update: (t) => `Изменил хост ${t}`,
-    delete: (t) => `Удалил хост ${t}`,
-    enable: (t) => `Включил хост ${t}`,
-    disable: (t) => `Отключил хост ${t}`,
-  },
-  settings: {
-    update: (_t, d) => `Изменил настройку ${d?.setting || _t}`,
-    reset: (_t, d) => `Сбросил настройку ${d?.setting || _t}`,
-    trigger_sync: () => 'Запустил синхронизацию',
-    update_ip_whitelist: () => 'Обновил IP-список',
-  },
-  admins: {
-    create: (_t, d) => `Создал админа ${d?.username || _t}`,
-    update: (_t, d) => `Изменил админа ${d?.username || _t}`,
-    delete: (_t, d) => `Удалил админа ${d?.deleted_username || _t}`,
-  },
-  roles: {
-    create: (_t, d) => `Создал роль ${d?.name || _t}`,
-    update: (t) => `Изменил роль ${t}`,
-    delete: (_t, d) => `Удалил роль ${d?.deleted_role || _t}`,
-  },
-  violations: {
-    resolve: (t) => `Разрешил нарушение ${t}`,
-  },
-  auth: {
-    login: () => 'Вошёл в систему',
-    logout: () => 'Вышел из системы',
-    login_telegram: () => 'Вошёл через Telegram',
-    change_password: () => 'Сменил пароль',
-  },
-  automation: {
-    create: (_t, d) => `Создал правило ${d?.name || _t}`,
-    update: (t) => `Изменил правило ${t}`,
-    delete: (_t, d) => `Удалил правило ${d?.name || _t}`,
-    toggle: (_t, d) => `${d?.new_state === 'enabled' ? 'Включил' : 'Отключил'} правило ${d?.name || _t}`,
-    template_activate: (_t, d) => `Активировал шаблон ${d?.name || _t}`,
-  },
-}
-
-// Labels for detail fields (for human-readable key-value display)
-const DETAIL_LABELS: Record<string, string> = {
-  username: 'Пользователь',
-  name: 'Название',
-  remark: 'Примечание',
-  data_limit: 'Лимит трафика',
-  expire_date: 'Срок действия',
-  status: 'Статус',
-  note: 'Заметка',
-  data_limit_reset_strategy: 'Стратегия сброса',
-  on_hold_expire_duration: 'Длительность удержания',
-  on_hold_timeout: 'Таймаут удержания',
-  address: 'Адрес',
-  port: 'Порт',
-  sni: 'SNI',
-  host: 'Хост',
-  alpn: 'ALPN',
-  fingerprint: 'Отпечаток',
-  is_disabled: 'Отключён',
-  role_id: 'Роль (ID)',
-  value: 'Значение',
-  setting: 'Настройка',
-  deleted_username: 'Удалённый пользователь',
-  deleted_role: 'Удалённая роль',
-  template_id: 'Шаблон',
-  action_type: 'Тип действия',
-  new_state: 'Новое состояние',
-  updated_fields: 'Изменённые поля',
-  inbound_tags: 'Входящие теги',
-  telegram_id: 'Telegram ID',
-  max_users: 'Макс. пользователей',
-  max_traffic_gb: 'Макс. трафик (ГБ)',
-  max_nodes: 'Макс. нод',
-  max_hosts: 'Макс. хостов',
-  is_active: 'Активен',
-  is_generated_password: 'Сгенерированный пароль',
-  display_name: 'Отображаемое имя',
-  description: 'Описание',
-}
-
-const PERIOD_OPTIONS = [
-  { value: 'all', label: 'Все время' },
-  { value: '24h', label: 'Последние 24ч' },
-  { value: '7d', label: 'Последние 7 дней' },
-  { value: '30d', label: 'Последние 30 дней' },
-]
-
 // ── Helpers ──────────────────────────────────────────────────────
+
+function getResourceLabel(t: TFunction, resource: string): string {
+  return t(`audit.resources.${resource}`, { defaultValue: resource })
+}
+
+function getActionLabelT(t: TFunction, action: string): string {
+  return t(`audit.actions.${action}`, { defaultValue: action })
+}
+
+function getDetailLabel(t: TFunction, key: string): string {
+  return t(`audit.details.${key}`, { defaultValue: key })
+}
 
 function parseAction(fullAction: string): { resource: string; action: string } {
   const dot = fullAction.indexOf('.')
   if (dot === -1) return { resource: '', action: fullAction }
   return { resource: fullAction.slice(0, dot), action: fullAction.slice(dot + 1) }
-}
-
-function getActionLabel(action: string): string {
-  return ACTION_LABELS[action] || action
 }
 
 function getActionColor(action: string): string {
@@ -268,33 +123,34 @@ function tryParseJSON(str: string | null): Record<string, unknown> | null {
   }
 }
 
-function formatBytes(bytes: unknown): string {
+function formatBytesRaw(bytes: unknown): string {
   const num = Number(bytes)
   if (isNaN(num) || num === 0) return '0'
-  if (num >= 1099511627776) return `${(num / 1099511627776).toFixed(1)} ТБ`
-  if (num >= 1073741824) return `${(num / 1073741824).toFixed(1)} ГБ`
-  if (num >= 1048576) return `${(num / 1048576).toFixed(1)} МБ`
-  return `${(num / 1024).toFixed(0)} КБ`
+  if (num >= 1099511627776) return `${(num / 1099511627776).toFixed(1)} TB`
+  if (num >= 1073741824) return `${(num / 1073741824).toFixed(1)} GB`
+  if (num >= 1048576) return `${(num / 1048576).toFixed(1)} MB`
+  return `${(num / 1024).toFixed(0)} KB`
 }
 
-function formatDetailValue(key: string, value: unknown): string {
-  if (value === null || value === undefined) return '—'
-  if (typeof value === 'boolean') return value ? 'Да' : 'Нет'
-  if (key === 'data_limit' && typeof value === 'number') return formatBytes(value)
+function formatDetailValue(t: TFunction, key: string, value: unknown): string {
+  if (value === null || value === undefined) return '\u2014'
+  if (typeof value === 'boolean') return value ? t('common.yes') : t('common.no')
+  if (key === 'data_limit' && typeof value === 'number') return formatBytesRaw(value)
   if (key === 'expire_date' && typeof value === 'string') {
     try {
       return format(new Date(value), 'dd.MM.yyyy HH:mm')
     } catch { return String(value) }
   }
-  if (key === 'new_state') return value === 'enabled' ? 'Включено' : 'Отключено'
-  if (key === 'is_disabled') return value ? 'Да' : 'Нет'
-  if (key === 'is_active') return value ? 'Да' : 'Нет'
+  if (key === 'new_state') return value === 'enabled' ? t('common.enabled') : t('common.disabled')
+  if (key === 'is_disabled') return value ? t('common.yes') : t('common.no')
+  if (key === 'is_active') return value ? t('common.yes') : t('common.no')
   if (Array.isArray(value)) return value.join(', ')
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
 }
 
 function getDescription(
+  t: TFunction,
   resource: string,
   action: string,
   resourceId: string | null,
@@ -307,22 +163,27 @@ function getDescription(
     || resourceId
     || ''
 
-  const resourceDescs = DESCRIPTIONS[resource]
-  if (resourceDescs) {
-    const descFn = resourceDescs[action]
-    if (descFn) return descFn(target, details)
+  // Special case for automation toggle
+  if (resource === 'automation' && action === 'toggle') {
+    const name = (details?.name as string) || target
+    return details?.new_state === 'enabled'
+      ? t('audit.descriptions.automation.toggle_on', { target: name })
+      : t('audit.descriptions.automation.toggle_off', { target: name })
   }
 
+  const key = `audit.descriptions.${resource}.${action}`
+  const result = t(key, { target })
+  if (result && result !== key) return result
+
   // Fallback: generate a generic description
-  const actionLabel = getActionLabel(action).toLowerCase()
-  const resourceLabel = (RESOURCE_LABELS[resource] || resource).toLowerCase()
+  const actionLabel = getActionLabelT(t, action).toLowerCase()
+  const resourceLabel = getResourceLabel(t, resource).toLowerCase()
   return `${actionLabel} ${resourceLabel}${target ? ` ${target}` : ''}`
 }
 
 /** Get top N detail entries, excluding keys already used in description */
 function getVisibleDetails(details: Record<string, unknown> | null): [string, unknown][] {
   if (!details) return []
-  // Keys that are already shown in description text or not useful
   const skipKeys = new Set(['setting'])
   return Object.entries(details).filter(([k]) => !skipKeys.has(k))
 }
@@ -330,6 +191,7 @@ function getVisibleDetails(details: Record<string, unknown> | null): [string, un
 // ── Component ───────────────────────────────────────────────────
 
 export default function AuditLog() {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [resourceFilter, setResourceFilter] = useState<string>('all')
@@ -337,6 +199,13 @@ export default function AuditLog() {
   const [periodFilter, setPeriodFilter] = useState<string>('all')
   const [searchInput, setSearchInput] = useState('')
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+
+  const PERIOD_OPTIONS = useMemo(() => [
+    { value: 'all', label: t('audit.period.all') },
+    { value: '24h', label: t('audit.period.24h') },
+    { value: '7d', label: t('audit.period.7d') },
+    { value: '30d', label: t('audit.period.30d') },
+  ], [t])
 
   // Build query params
   const params = useMemo<AuditLogParams>(() => {
@@ -425,14 +294,14 @@ export default function AuditLog() {
           date: item.created_at ? format(new Date(item.created_at), 'yyyy-MM-dd HH:mm:ss') : '',
           admin: item.admin_username,
           resource,
-          action: getActionLabel(action),
-          description: getDescription(resource, action, item.resource_id, details),
+          action: getActionLabelT(t, action),
+          description: getDescription(t, resource, action, item.resource_id, details),
           resource_id: item.resource_id || '',
           details: item.details || '',
           ip: item.ip_address || '',
         }
       }),
-    [items],
+    [items, t],
   )
 
   return (
@@ -440,9 +309,9 @@ export default function AuditLog() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Журнал аудита</h1>
+          <h1 className="text-2xl font-bold text-white">{t('audit.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Все действия администраторов в системе
+            {t('audit.subtitle')}
           </p>
         </div>
         <ExportDropdown
@@ -461,8 +330,8 @@ export default function AuditLog() {
                 <FileText className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Всего записей</p>
-                <p className="text-lg font-bold text-white">{stats?.total?.toLocaleString() ?? '—'}</p>
+                <p className="text-xs text-muted-foreground">{t('audit.stats.totalRecords')}</p>
+                <p className="text-lg font-bold text-white">{stats?.total?.toLocaleString() ?? '\u2014'}</p>
               </div>
             </div>
           </CardContent>
@@ -474,8 +343,8 @@ export default function AuditLog() {
                 <Clock className="w-4 h-4 text-emerald-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Сегодня</p>
-                <p className="text-lg font-bold text-white">{stats?.today ?? '—'}</p>
+                <p className="text-xs text-muted-foreground">{t('audit.stats.today')}</p>
+                <p className="text-lg font-bold text-white">{stats?.today ?? '\u2014'}</p>
               </div>
             </div>
           </CardContent>
@@ -487,8 +356,8 @@ export default function AuditLog() {
                 <Users className="w-4 h-4 text-blue-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Активных админов</p>
-                <p className="text-lg font-bold text-white">{stats?.by_admin?.length ?? '—'}</p>
+                <p className="text-xs text-muted-foreground">{t('audit.stats.activeAdmins')}</p>
+                <p className="text-lg font-bold text-white">{stats?.by_admin?.length ?? '\u2014'}</p>
               </div>
             </div>
           </CardContent>
@@ -500,9 +369,9 @@ export default function AuditLog() {
                 <Activity className="w-4 h-4 text-purple-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Типов ресурсов</p>
+                <p className="text-xs text-muted-foreground">{t('audit.stats.resourceTypes')}</p>
                 <p className="text-lg font-bold text-white">
-                  {stats?.by_resource ? Object.keys(stats.by_resource).length : '—'}
+                  {stats?.by_resource ? Object.keys(stats.by_resource).length : '\u2014'}
                 </p>
               </div>
             </div>
@@ -517,7 +386,7 @@ export default function AuditLog() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Поиск по админу, действию, ресурсу..."
+                placeholder={t('audit.searchPlaceholder')}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -527,13 +396,13 @@ export default function AuditLog() {
             <Select value={resourceFilter} onValueChange={(v) => { setResourceFilter(v); setPage(1) }}>
               <SelectTrigger className="w-[160px] bg-dark-900 border-dark-600">
                 <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Ресурс" />
+                <SelectValue placeholder={t('audit.resource')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все ресурсы</SelectItem>
+                <SelectItem value="all">{t('audit.allResources')}</SelectItem>
                 {resources.map((r) => (
                   <SelectItem key={r} value={r}>
-                    {RESOURCE_LABELS[r] || r}
+                    {getResourceLabel(t, r)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -541,13 +410,13 @@ export default function AuditLog() {
             <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(1) }}>
               <SelectTrigger className="w-[180px] bg-dark-900 border-dark-600">
                 <Activity className="w-4 h-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Действие" />
+                <SelectValue placeholder={t('audit.action')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все действия</SelectItem>
+                <SelectItem value="all">{t('audit.allActions')}</SelectItem>
                 {actionTypes.map((a) => (
                   <SelectItem key={a} value={a}>
-                    {getActionLabel(a)}
+                    {getActionLabelT(t, a)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -571,7 +440,7 @@ export default function AuditLog() {
               className="border-dark-600"
             >
               <Search className="w-4 h-4 mr-2" />
-              Найти
+              {t('common.search')}
             </Button>
           </div>
         </CardContent>
@@ -589,7 +458,7 @@ export default function AuditLog() {
           ) : items.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">
               <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>Записей не найдено</p>
+              <p>{t('audit.noRecords')}</p>
             </div>
           ) : (
             <>
@@ -598,10 +467,10 @@ export default function AuditLog() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-dark-700 hover:bg-transparent">
-                      <TableHead className="text-dark-200 w-[160px]">Дата</TableHead>
-                      <TableHead className="text-dark-200 w-[120px]">Админ</TableHead>
-                      <TableHead className="text-dark-200">Действие</TableHead>
-                      <TableHead className="text-dark-200">Детали</TableHead>
+                      <TableHead className="text-dark-200 w-[160px]">{t('audit.table.date')}</TableHead>
+                      <TableHead className="text-dark-200 w-[120px]">{t('audit.table.admin')}</TableHead>
+                      <TableHead className="text-dark-200">{t('audit.table.action')}</TableHead>
+                      <TableHead className="text-dark-200">{t('audit.table.details')}</TableHead>
                       <TableHead className="text-dark-200 w-[120px]">IP</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -628,7 +497,7 @@ export default function AuditLog() {
               {/* Pagination */}
               <div className="flex items-center justify-between p-4 border-t border-dark-700">
                 <p className="text-sm text-muted-foreground">
-                  {total} {total === 1 ? 'запись' : total < 5 ? 'записи' : 'записей'}
+                  {t('audit.totalEntries', { count: total })}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -673,12 +542,14 @@ function AuditRow({
   expanded: boolean
   onToggle: () => void
 }) {
+  const { t } = useTranslation()
+  const { formatTimeAgo, formatDate } = useFormatters()
   const parsed = parseAction(item.action)
   const ResourceIcon = RESOURCE_ICONS[parsed.resource] || FileText
   const resourceColor = RESOURCE_COLORS[parsed.resource] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
   const actionColor = getActionColor(parsed.action)
   const details = tryParseJSON(item.details)
-  const description = getDescription(parsed.resource, parsed.action, item.resource_id, details)
+  const description = getDescription(t, parsed.resource, parsed.action, item.resource_id, details)
   const visibleDetails = getVisibleDetails(details)
   const hasDetails = visibleDetails.length > 0
 
@@ -694,16 +565,13 @@ function AuditRow({
             <TooltipTrigger>
               <span className="text-sm">
                 {item.created_at
-                  ? formatDistanceToNow(new Date(item.created_at), {
-                      addSuffix: true,
-                      locale: ru,
-                    })
-                  : '—'}
+                  ? formatTimeAgo(item.created_at)
+                  : '\u2014'}
               </span>
             </TooltipTrigger>
             <TooltipContent>
               {item.created_at
-                ? format(new Date(item.created_at), 'dd.MM.yyyy HH:mm:ss')
+                ? formatDate(item.created_at)
                 : ''}
             </TooltipContent>
           </Tooltip>
@@ -726,14 +594,14 @@ function AuditRow({
                   className={`${resourceColor} border text-xs gap-1`}
                 >
                   <ResourceIcon className="w-3 h-3" />
-                  {RESOURCE_LABELS[parsed.resource] || parsed.resource}
+                  {getResourceLabel(t, parsed.resource)}
                 </Badge>
               )}
               <Badge
                 variant="outline"
                 className={`${actionColor} border text-xs`}
               >
-                {getActionLabel(parsed.action)}
+                {getActionLabelT(t, parsed.action)}
               </Badge>
             </div>
             <p className="text-sm text-dark-100">{description}</p>
@@ -747,13 +615,13 @@ function AuditRow({
               <div className="space-y-0.5 flex-1 min-w-0">
                 {visibleDetails.slice(0, 2).map(([key, value]) => (
                   <div key={key} className="text-xs text-dark-300 truncate">
-                    <span className="text-dark-400">{DETAIL_LABELS[key] || key}:</span>{' '}
-                    <span className="text-dark-200">{formatDetailValue(key, value)}</span>
+                    <span className="text-dark-400">{getDetailLabel(t, key)}:</span>{' '}
+                    <span className="text-dark-200">{formatDetailValue(t, key, value)}</span>
                   </div>
                 ))}
                 {visibleDetails.length > 2 && (
                   <span className="text-xs text-dark-500">
-                    + ещё {visibleDetails.length - 2}
+                    {t('audit.moreDetails', { count: visibleDetails.length - 2 })}
                   </span>
                 )}
               </div>
@@ -764,13 +632,13 @@ function AuditRow({
               />
             </div>
           ) : (
-            <span className="text-xs text-dark-500">—</span>
+            <span className="text-xs text-dark-500">\u2014</span>
           )}
         </TableCell>
 
         {/* IP */}
         <TableCell className="text-dark-300 font-mono text-xs align-top">
-          {item.ip_address || '—'}
+          {item.ip_address || '\u2014'}
         </TableCell>
       </TableRow>
 
@@ -781,14 +649,14 @@ function AuditRow({
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
               {visibleDetails.map(([key, value]) => (
                 <div key={key} className="min-w-0">
-                  <p className="text-xs text-dark-400 mb-0.5">{DETAIL_LABELS[key] || key}</p>
-                  <p className="text-sm text-dark-100 break-words">{formatDetailValue(key, value)}</p>
+                  <p className="text-xs text-dark-400 mb-0.5">{getDetailLabel(t, key)}</p>
+                  <p className="text-sm text-dark-100 break-words">{formatDetailValue(t, key, value)}</p>
                 </div>
               ))}
             </div>
             {item.resource_id && (
               <div className="mt-3 pt-2 border-t border-dark-700">
-                <span className="text-xs text-dark-400">ID ресурса: </span>
+                <span className="text-xs text-dark-400">{t('audit.resourceId')}: </span>
                 <span className="text-xs text-dark-200 font-mono">{item.resource_id}</span>
               </div>
             )}
@@ -802,12 +670,14 @@ function AuditRow({
 // ── Mobile Card Component ────────────────────────────────────────
 
 function MobileAuditCard({ item }: { item: AuditLogEntry }) {
+  const { t } = useTranslation()
+  const { formatTimeAgo } = useFormatters()
   const parsed = parseAction(item.action)
   const ResourceIcon = RESOURCE_ICONS[parsed.resource] || FileText
   const resourceColor = RESOURCE_COLORS[parsed.resource] || 'bg-gray-500/20 text-gray-400'
   const actionColor = getActionColor(parsed.action)
   const details = tryParseJSON(item.details)
-  const description = getDescription(parsed.resource, parsed.action, item.resource_id, details)
+  const description = getDescription(t, parsed.resource, parsed.action, item.resource_id, details)
   const visibleDetails = getVisibleDetails(details)
   const [expanded, setExpanded] = useState(false)
 
@@ -823,10 +693,7 @@ function MobileAuditCard({ item }: { item: AuditLogEntry }) {
         </span>
         <span className="text-xs text-muted-foreground">
           {item.created_at
-            ? formatDistanceToNow(new Date(item.created_at), {
-                addSuffix: true,
-                locale: ru,
-              })
+            ? formatTimeAgo(item.created_at)
             : ''}
         </span>
       </div>
@@ -839,14 +706,14 @@ function MobileAuditCard({ item }: { item: AuditLogEntry }) {
             className={`${resourceColor} border text-xs gap-1`}
           >
             <ResourceIcon className="w-3 h-3" />
-            {RESOURCE_LABELS[parsed.resource] || parsed.resource}
+            {getResourceLabel(t, parsed.resource)}
           </Badge>
         )}
         <Badge
           variant="outline"
           className={`${actionColor} border text-xs`}
         >
-          {getActionLabel(parsed.action)}
+          {getActionLabelT(t, parsed.action)}
         </Badge>
       </div>
 
@@ -858,13 +725,13 @@ function MobileAuditCard({ item }: { item: AuditLogEntry }) {
         <div className="space-y-1">
           {(expanded ? visibleDetails : visibleDetails.slice(0, 2)).map(([key, value]) => (
             <div key={key} className="text-xs text-dark-300">
-              <span className="text-dark-400">{DETAIL_LABELS[key] || key}:</span>{' '}
-              <span className="text-dark-200">{formatDetailValue(key, value)}</span>
+              <span className="text-dark-400">{getDetailLabel(t, key)}:</span>{' '}
+              <span className="text-dark-200">{formatDetailValue(t, key, value)}</span>
             </div>
           ))}
           {!expanded && visibleDetails.length > 2 && (
             <span className="text-xs text-dark-500">
-              + ещё {visibleDetails.length - 2}...
+              {t('audit.moreDetails', { count: visibleDetails.length - 2 })}...
             </span>
           )}
         </div>

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { useFormatters } from '@/lib/useFormatters'
 import {
   Search,
   RefreshCw,
@@ -92,42 +94,6 @@ const fetchUsers = async (params: {
   return data
 }
 
-// Utility functions
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 Б'
-  const k = 1024
-  const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 Б'
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—'
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
-
-function formatRelativeDate(dateStr: string | null): string {
-  if (!dateStr) return '—'
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMin < 1) return 'Только что'
-  if (diffMin < 60) return `${diffMin} мин назад`
-  if (diffHours < 24) return `${diffHours} ч назад`
-  if (diffDays < 7) return `${diffDays} дн назад`
-  return formatDate(dateStr)
-}
-
 function getTrafficPercent(used: number, limit: number | null): number {
   if (!limit) return 0
   return Math.min(100, Math.round((used / limit) * 100))
@@ -135,21 +101,23 @@ function getTrafficPercent(used: number, limit: number | null): number {
 
 // Status badge component
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation()
   const normalizedStatus = status.toLowerCase()
-  const statusConfig: Record<string, { label: string; variant: 'success' | 'destructive' | 'warning' | 'secondary' }> = {
-    active: { label: 'Активен', variant: 'success' },
-    disabled: { label: 'Отключён', variant: 'destructive' },
-    limited: { label: 'Ограничен', variant: 'warning' },
-    expired: { label: 'Истёк', variant: 'secondary' },
+  const statusConfig: Record<string, { labelKey: string; variant: 'success' | 'destructive' | 'warning' | 'secondary' }> = {
+    active: { labelKey: 'users.statuses.active', variant: 'success' },
+    disabled: { labelKey: 'users.statuses.disabled', variant: 'destructive' },
+    limited: { labelKey: 'users.statuses.limited', variant: 'warning' },
+    expired: { labelKey: 'users.statuses.expired', variant: 'secondary' },
   }
 
-  const config = statusConfig[normalizedStatus] || { label: status, variant: 'secondary' as const }
+  const config = statusConfig[normalizedStatus] || { labelKey: '', variant: 'secondary' as const }
 
-  return <Badge variant={config.variant}>{config.label}</Badge>
+  return <Badge variant={config.variant}>{config.labelKey ? t(config.labelKey) : status}</Badge>
 }
 
 // Traffic bar component
 function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
+  const { formatBytes } = useFormatters()
   const percent = getTrafficPercent(used, limit)
   const isUnlimited = !limit
 
@@ -182,7 +150,7 @@ function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
       )}
       <div className="absolute inset-0 flex items-center justify-center">
         <span className={`text-[11px] font-medium ${textClass}`}>
-          {formatBytes(used)} / {isUnlimited ? '∞' : formatBytes(limit)}
+          {formatBytes(used)} / {isUnlimited ? '\u221E' : formatBytes(limit)}
         </span>
       </div>
     </div>
@@ -191,7 +159,9 @@ function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
 
 // Online indicator
 function OnlineIndicator({ onlineAt }: { onlineAt: string | null }) {
-  if (!onlineAt) return <span className="text-dark-300 text-xs">Нет данных</span>
+  const { t } = useTranslation()
+  const { formatTimeAgo } = useFormatters()
+  if (!onlineAt) return <span className="text-dark-300 text-xs">{t('users.noData')}</span>
 
   const date = new Date(onlineAt)
   const now = new Date()
@@ -206,7 +176,7 @@ function OnlineIndicator({ onlineAt }: { onlineAt: string | null }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className={`w-1.5 h-1.5 rounded-full ${dotColor} flex-shrink-0`} />
-      <span className="text-dark-200 text-xs">{formatRelativeDate(onlineAt)}</span>
+      <span className="text-dark-200 text-xs">{formatTimeAgo(onlineAt)}</span>
     </div>
   )
 }
@@ -223,6 +193,7 @@ function UserActions({
   onDisable: () => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const canEdit = useHasPermission('users', 'edit')
   const canDelete = useHasPermission('users', 'delete')
@@ -236,22 +207,22 @@ function UserActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}`)}>
-          <Eye className="w-4 h-4 mr-2" /> Просмотр
+          <Eye className="w-4 h-4 mr-2" /> {t('users.actions.view')}
         </DropdownMenuItem>
         {canEdit && (
           <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}?edit=1`)}>
-            <Pencil className="w-4 h-4 mr-2" /> Редактировать
+            <Pencil className="w-4 h-4 mr-2" /> {t('users.actions.edit')}
           </DropdownMenuItem>
         )}
         {(canEdit || canDelete) && <DropdownMenuSeparator />}
         {canEdit && (
           user.status === 'disabled' ? (
             <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
-              <Check className="w-4 h-4 mr-2" /> Включить
+              <Check className="w-4 h-4 mr-2" /> {t('users.actions.enable')}
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
-              <Ban className="w-4 h-4 mr-2" /> Отключить
+              <Ban className="w-4 h-4 mr-2" /> {t('users.actions.disable')}
             </DropdownMenuItem>
           )
         )}
@@ -260,7 +231,7 @@ function UserActions({
             onClick={onDelete}
             className="text-red-400 focus:text-red-400"
           >
-            <Trash2 className="w-4 h-4 mr-2" /> Удалить
+            <Trash2 className="w-4 h-4 mr-2" /> {t('users.actions.delete')}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
@@ -313,6 +284,8 @@ function MobileUserCard({
   onDisable: () => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
+  const { formatDateShort } = useFormatters()
   return (
     <Card
       className="cursor-pointer active:bg-dark-700/50"
@@ -347,8 +320,8 @@ function MobileUserCard({
         <div className="flex items-center justify-between text-xs text-dark-200">
           <OnlineIndicator onlineAt={user.online_at} />
           <div className="flex items-center gap-3">
-            <span title="HWID устройства">{user.hwid_device_count} / {user.hwid_device_limit || '∞'}</span>
-            <span>Истекает: {formatDate(user.expire_at)}</span>
+            <span title={t('users.hwidDevices')}>{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
+            <span>{t('users.expires')}: {user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</span>
           </div>
         </div>
       </CardContent>
@@ -392,6 +365,7 @@ function CreateUserModal({
   isPending: boolean
   error: string
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<CreateUserFormData>({
     username: '',
     email: '',
@@ -484,9 +458,9 @@ function CreateUserModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="w-5 h-5 text-primary-400" />
-            Создание пользователя
+            {t('users.createModal.title')}
           </DialogTitle>
-          <DialogDescription>Заполните данные для нового пользователя</DialogDescription>
+          <DialogDescription>{t('users.createModal.description')}</DialogDescription>
         </DialogHeader>
 
         {error && (
@@ -501,12 +475,12 @@ function CreateUserModal({
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-medium text-dark-300 uppercase tracking-wider">
               <User className="w-3.5 h-3.5" />
-              Основная информация
+              {t('users.createModal.basicInfo')}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-dark-200">Имя пользователя</Label>
+                <Label className="text-xs text-dark-200">{t('users.createModal.username')}</Label>
                 <Input
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -515,7 +489,7 @@ function CreateUserModal({
                 />
               </div>
               <div>
-                <Label className="text-xs text-dark-200">Telegram ID</Label>
+                <Label className="text-xs text-dark-200">{t('users.createModal.telegramId')}</Label>
                 <Input
                   type="number"
                   value={form.telegram_id}
@@ -528,7 +502,7 @@ function CreateUserModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-dark-200">Email</Label>
+                <Label className="text-xs text-dark-200">{t('users.createModal.email')}</Label>
                 <Input
                   type="email"
                   value={form.email}
@@ -538,7 +512,7 @@ function CreateUserModal({
                 />
               </div>
               <div>
-                <Label className="text-xs text-dark-200">Тег</Label>
+                <Label className="text-xs text-dark-200">{t('users.createModal.tag')}</Label>
                 <Input
                   value={form.tag}
                   onChange={(e) => setForm({ ...form, tag: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })}
@@ -546,16 +520,16 @@ function CreateUserModal({
                   maxLength={16}
                   className="mt-1 font-mono"
                 />
-                <p className="text-[10px] text-dark-300 mt-0.5">A-Z, 0-9, _ (макс. 16)</p>
+                <p className="text-[10px] text-dark-300 mt-0.5">{t('users.createModal.tagHint')}</p>
               </div>
             </div>
 
             <div>
-              <Label className="text-xs text-dark-200">Описание</Label>
+              <Label className="text-xs text-dark-200">{t('users.createModal.descriptionLabel')}</Label>
               <Input
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Заметки о пользователе..."
+                placeholder={t('users.createModal.descriptionPlaceholder')}
                 className="mt-1"
               />
             </div>
@@ -567,13 +541,13 @@ function CreateUserModal({
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-medium text-dark-300 uppercase tracking-wider">
               <Wifi className="w-3.5 h-3.5" />
-              Трафик и лимиты
+              {t('users.createModal.trafficAndLimits')}
             </div>
 
             <div className="flex items-center justify-between">
               <Label className="text-sm text-dark-100 flex items-center gap-2">
                 <Infinity className="w-4 h-4 text-dark-300" />
-                Безлимитный трафик
+                {t('users.createModal.unlimitedTraffic')}
               </Label>
               <Switch
                 checked={form.is_unlimited}
@@ -588,7 +562,7 @@ function CreateUserModal({
             {!form.is_unlimited && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
                 <div>
-                  <Label className="text-xs text-dark-200">Лимит трафика</Label>
+                  <Label className="text-xs text-dark-200">{t('users.createModal.trafficLimit')}</Label>
                   <div className="relative mt-1">
                     <Input
                       type="number"
@@ -599,11 +573,11 @@ function CreateUserModal({
                       placeholder="0.0"
                       className="pr-12"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dark-300 font-medium">ГБ</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dark-300 font-medium">{t('users.createModal.gb')}</span>
                   </div>
                 </div>
                 <div>
-                  <Label className="text-xs text-dark-200">Стратегия сброса</Label>
+                  <Label className="text-xs text-dark-200">{t('users.createModal.resetStrategy')}</Label>
                   <Select
                     value={form.traffic_limit_strategy}
                     onValueChange={(value) => setForm({ ...form, traffic_limit_strategy: value })}
@@ -612,10 +586,10 @@ function CreateUserModal({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="MONTH">Ежемесячный</SelectItem>
-                      <SelectItem value="WEEK">Еженедельный</SelectItem>
-                      <SelectItem value="DAY">Ежедневный</SelectItem>
-                      <SelectItem value="NO_RESET">Без сброса</SelectItem>
+                      <SelectItem value="MONTH">{t('users.strategies.monthly')}</SelectItem>
+                      <SelectItem value="WEEK">{t('users.strategies.weekly')}</SelectItem>
+                      <SelectItem value="DAY">{t('users.strategies.daily')}</SelectItem>
+                      <SelectItem value="NO_RESET">{t('users.strategies.noReset')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -624,17 +598,17 @@ function CreateUserModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs text-dark-200">Дата истечения</Label>
+                <Label className="text-xs text-dark-200">{t('users.createModal.expireDate')}</Label>
                 <Input
                   type="datetime-local"
                   value={form.expire_at}
                   onChange={(e) => setForm({ ...form, expire_at: e.target.value })}
                   className="mt-1"
                 />
-                <p className="text-[10px] text-dark-300 mt-0.5">Пусто = бессрочно</p>
+                <p className="text-[10px] text-dark-300 mt-0.5">{t('users.createModal.expireHint')}</p>
               </div>
               <div>
-                <Label className="text-xs text-dark-200">Лимит устройств (HWID)</Label>
+                <Label className="text-xs text-dark-200">{t('users.createModal.hwidLimit')}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -642,7 +616,7 @@ function CreateUserModal({
                   onChange={(e) => setForm({ ...form, hwid_device_limit: e.target.value })}
                   className="mt-1"
                 />
-                <p className="text-[10px] text-dark-300 mt-0.5">0 = без ограничений</p>
+                <p className="text-[10px] text-dark-300 mt-0.5">{t('users.createModal.hwidHint')}</p>
               </div>
             </div>
           </div>
@@ -654,21 +628,21 @@ function CreateUserModal({
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-xs font-medium text-dark-300 uppercase tracking-wider">
                   <UsersIcon className="w-3.5 h-3.5" />
-                  Сквады
+                  {t('users.createModal.squads')}
                 </div>
 
                 {externalSquads.length > 0 && (
                   <div>
-                    <Label className="text-xs text-dark-200">Внешний сквад</Label>
+                    <Label className="text-xs text-dark-200">{t('users.createModal.externalSquad')}</Label>
                     <Select
                       value={form.external_squad_uuid || '_none'}
                       onValueChange={(value) => setForm({ ...form, external_squad_uuid: value === '_none' ? '' : value })}
                     >
                       <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Не выбран" />
+                        <SelectValue placeholder={t('users.createModal.notSelected')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="_none">Не выбран</SelectItem>
+                        <SelectItem value="_none">{t('users.createModal.notSelected')}</SelectItem>
                         {externalSquads.map((sq: Squad) => (
                           <SelectItem key={sq.uuid} value={sq.uuid}>
                             {sq.squadName || sq.name || sq.squadTag || sq.tag || sq.uuid}
@@ -681,7 +655,7 @@ function CreateUserModal({
 
                 {internalSquads.length > 0 && (
                   <div>
-                    <Label className="text-xs text-dark-200">Внутренние сквады</Label>
+                    <Label className="text-xs text-dark-200">{t('users.createModal.internalSquads')}</Label>
                     <div className="mt-1.5 space-y-1 max-h-32 overflow-y-auto rounded-md border border-dark-400/20 p-2">
                       {internalSquads.map((sq: Squad) => (
                         <label
@@ -707,18 +681,18 @@ function CreateUserModal({
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={onClose} disabled={isPending}>
-            Отмена
+            {t('users.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={isPending}>
             {isPending ? (
               <>
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                Создание...
+                {t('users.creating')}
               </>
             ) : (
               <>
                 <Plus className="w-4 h-4 mr-2" />
-                Создать
+                {t('users.create')}
               </>
             )}
           </Button>
@@ -729,6 +703,8 @@ function CreateUserModal({
 }
 
 export default function Users() {
+  const { t } = useTranslation()
+  const { formatDateShort, formatNumber } = useFormatters()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('users', 'create')
@@ -763,9 +739,8 @@ export default function Users() {
       username: u.username || '',
       status: u.status,
       email: u.email || '',
-      telegram_id: u.telegram_id || '',
       traffic_used: formatBytesForExport(u.used_traffic_bytes),
-      traffic_limit: u.traffic_limit_bytes ? formatBytesForExport(u.traffic_limit_bytes) : 'Безлимит',
+      traffic_limit: u.traffic_limit_bytes ? formatBytesForExport(u.traffic_limit_bytes) : t('users.unlimited'),
       hwid_count: u.hwid_device_count ?? 0,
       hwid_limit: u.hwid_device_limit ?? 0,
       online_at: u.online_at || '',
@@ -773,13 +748,13 @@ export default function Users() {
       created_at: u.created_at || '',
     }))
     exportCSV(exportData, `users-${new Date().toISOString().slice(0, 10)}`)
-    toast.success('Экспорт CSV завершён')
+    toast.success(t('users.toasts.csvExported'))
   }
   const handleExportJSON = () => {
     const items = data?.items
     if (!items?.length) return
     exportJSON(items, `users-${new Date().toISOString().slice(0, 10)}`)
-    toast.success('Экспорт JSON завершён')
+    toast.success(t('users.toasts.jsonExported'))
   }
 
   // Saved filters
@@ -834,10 +809,10 @@ export default function Users() {
     mutationFn: (uuid: string) => client.post(`/users/${uuid}/enable`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('Пользователь включён')
+      toast.success(t('users.toasts.userEnabled'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка включения')
+      toast.error(err.response?.data?.detail || err.message || t('users.toasts.enableError'))
     },
   })
 
@@ -845,10 +820,10 @@ export default function Users() {
     mutationFn: (uuid: string) => client.post(`/users/${uuid}/disable`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('Пользователь отключён')
+      toast.success(t('users.toasts.userDisabled'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка отключения')
+      toast.error(err.response?.data?.detail || err.message || t('users.toasts.disableError'))
     },
   })
 
@@ -856,10 +831,10 @@ export default function Users() {
     mutationFn: (uuid: string) => client.delete(`/users/${uuid}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('Пользователь удалён')
+      toast.success(t('users.toasts.userDeleted'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка удаления')
+      toast.error(err.response?.data?.detail || err.message || t('users.toasts.deleteError'))
     },
   })
 
@@ -869,11 +844,11 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setShowCreateModal(false)
       setCreateError('')
-      toast.success('Пользователь создан')
+      toast.success(t('users.toasts.userCreated'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка создания')
+      setCreateError(err.response?.data?.detail || err.message || t('users.toasts.createError'))
+      toast.error(err.response?.data?.detail || err.message || t('users.toasts.createError'))
     },
   })
 
@@ -931,31 +906,31 @@ export default function Users() {
     mutationFn: (uuids: string[]) => client.post('/users/bulk/enable', { uuids }),
     onSuccess: (res) => {
       const d = res.data
-      toast.success(`Включено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      toast.success(t('users.toasts.bulkEnabled', { success: d.success, failed: d.failed || 0 }))
       queryClient.invalidateQueries({ queryKey: ['users'] })
       clearSelection()
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('users.toasts.error')) },
   })
   const bulkDisable = useMutation({
     mutationFn: (uuids: string[]) => client.post('/users/bulk/disable', { uuids }),
     onSuccess: (res) => {
       const d = res.data
-      toast.success(`Отключено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      toast.success(t('users.toasts.bulkDisabled', { success: d.success, failed: d.failed || 0 }))
       queryClient.invalidateQueries({ queryKey: ['users'] })
       clearSelection()
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('users.toasts.error')) },
   })
   const bulkDelete = useMutation({
     mutationFn: (uuids: string[]) => client.post('/users/bulk/delete', { uuids }),
     onSuccess: (res) => {
       const d = res.data
-      toast.success(`Удалено: ${d.success}${d.failed ? `, ошибок: ${d.failed}` : ''}`)
+      toast.success(t('users.toasts.bulkDeleted', { success: d.success, failed: d.failed || 0 }))
       queryClient.invalidateQueries({ queryKey: ['users'] })
       clearSelection()
     },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('users.toasts.error')) },
   })
 
   const hasAnyFilter = activeFilterCount > 0 || debouncedSearch
@@ -969,9 +944,9 @@ export default function Users() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">Пользователи</h1>
+          <h1 className="page-header-title">{t('users.title')}</h1>
           <p className="text-muted-foreground mt-1 text-sm md:text-base">
-            Управление пользователями и подписками
+            {t('users.subtitle')}
           </p>
         </div>
         {canCreate && (
@@ -980,8 +955,8 @@ export default function Users() {
             className="self-start sm:self-auto"
           >
             <Plus className="w-4 h-4 mr-2" />
-            <span className="hidden sm:inline">Создать пользователя</span>
-            <span className="sm:hidden">Создать</span>
+            <span className="hidden sm:inline">{t('users.createUser')}</span>
+            <span className="sm:hidden">{t('users.create')}</span>
           </Button>
         )}
       </div>
@@ -996,7 +971,7 @@ export default function Users() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск по имени, email, UUID, Telegram ID..."
+                placeholder={t('users.searchPlaceholder')}
                 className="pl-10"
               />
             </div>
@@ -1012,7 +987,7 @@ export default function Users() {
                 )}
               >
                 <Filter className="w-4 h-4 mr-2" />
-                Фильтры
+                {t('users.filters.title')}
                 {activeFilterCount > 0 && (
                   <span className="bg-primary-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center ml-2">
                     {activeFilterCount}
@@ -1028,7 +1003,7 @@ export default function Users() {
                   variant="secondary"
                   size="icon"
                   onClick={() => { setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); setPage(1) }}
-                  title={sortOrder === 'desc' ? 'По убыванию' : 'По возрастанию'}
+                  title={sortOrder === 'desc' ? t('users.sort.descending') : t('users.sort.ascending')}
                 >
                   {sortOrder === 'desc' ? (
                     <ArrowDown className="w-5 h-5 text-primary-400" />
@@ -1043,15 +1018,15 @@ export default function Users() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="created_at">Дата создания</SelectItem>
-                      <SelectItem value="used_traffic_bytes">Трафик (текущий)</SelectItem>
-                      <SelectItem value="lifetime_used_traffic_bytes">Трафик (за всё время)</SelectItem>
-                      <SelectItem value="hwid_device_limit">Устройства (HWID)</SelectItem>
-                      <SelectItem value="online_at">Последняя активность</SelectItem>
-                      <SelectItem value="expire_at">Дата истечения</SelectItem>
-                      <SelectItem value="traffic_limit_bytes">Лимит трафика</SelectItem>
-                      <SelectItem value="username">Имя</SelectItem>
-                      <SelectItem value="status">Статус</SelectItem>
+                      <SelectItem value="created_at">{t('users.sort.createdAt')}</SelectItem>
+                      <SelectItem value="used_traffic_bytes">{t('users.sort.trafficCurrent')}</SelectItem>
+                      <SelectItem value="lifetime_used_traffic_bytes">{t('users.sort.trafficLifetime')}</SelectItem>
+                      <SelectItem value="hwid_device_limit">{t('users.sort.hwidDevices')}</SelectItem>
+                      <SelectItem value="online_at">{t('users.sort.lastActivity')}</SelectItem>
+                      <SelectItem value="expire_at">{t('users.sort.expireDate')}</SelectItem>
+                      <SelectItem value="traffic_limit_bytes">{t('users.sort.trafficLimit')}</SelectItem>
+                      <SelectItem value="username">{t('users.sort.name')}</SelectItem>
+                      <SelectItem value="status">{t('users.sort.status')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1062,7 +1037,7 @@ export default function Users() {
                 size="icon"
                 onClick={() => refetch()}
                 disabled={isLoading}
-                title="Обновить"
+                title={t('users.refresh')}
               >
                 <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
               </Button>
@@ -1085,85 +1060,85 @@ export default function Users() {
               <div className="pt-3 border-t border-dark-400/20 space-y-3 animate-fade-in">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div>
-                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Статус</Label>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.status')}</Label>
                     <Select value={status || '_all'} onValueChange={(v) => { setStatus(v === '_all' ? '' : v); setPage(1) }}>
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="_all">Все статусы</SelectItem>
-                        <SelectItem value="active">Активные</SelectItem>
-                        <SelectItem value="disabled">Отключённые</SelectItem>
-                        <SelectItem value="limited">Ограниченные</SelectItem>
-                        <SelectItem value="expired">Истёкшие</SelectItem>
+                        <SelectItem value="_all">{t('users.filters.allStatuses')}</SelectItem>
+                        <SelectItem value="active">{t('users.filters.statusActive')}</SelectItem>
+                        <SelectItem value="disabled">{t('users.filters.statusDisabled')}</SelectItem>
+                        <SelectItem value="limited">{t('users.filters.statusLimited')}</SelectItem>
+                        <SelectItem value="expired">{t('users.filters.statusExpired')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Тип трафика</Label>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.trafficType')}</Label>
                     <Select value={trafficType || '_all'} onValueChange={(v) => { setTrafficType(v === '_all' ? '' : v); setPage(1) }}>
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="_all">Любой</SelectItem>
-                        <SelectItem value="unlimited">Безлимитные</SelectItem>
-                        <SelectItem value="limited">С лимитом</SelectItem>
+                        <SelectItem value="_all">{t('users.filters.any')}</SelectItem>
+                        <SelectItem value="unlimited">{t('users.filters.unlimited')}</SelectItem>
+                        <SelectItem value="limited">{t('users.filters.withLimit')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Расход трафика</Label>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.trafficUsage')}</Label>
                     <Select value={trafficUsage || '_all'} onValueChange={(v) => { setTrafficUsage(v === '_all' ? '' : v); setPage(1) }}>
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="_all">Любой расход</SelectItem>
-                        <SelectItem value="above_90">Более 90% лимита</SelectItem>
-                        <SelectItem value="above_70">Более 70% лимита</SelectItem>
-                        <SelectItem value="above_50">Более 50% лимита</SelectItem>
-                        <SelectItem value="zero">Без трафика (0)</SelectItem>
+                        <SelectItem value="_all">{t('users.filters.anyUsage')}</SelectItem>
+                        <SelectItem value="above_90">{t('users.filters.above90')}</SelectItem>
+                        <SelectItem value="above_70">{t('users.filters.above70')}</SelectItem>
+                        <SelectItem value="above_50">{t('users.filters.above50')}</SelectItem>
+                        <SelectItem value="zero">{t('users.filters.zeroTraffic')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Срок действия</Label>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.expiry')}</Label>
                     <Select value={expireFilter || '_all'} onValueChange={(v) => { setExpireFilter(v === '_all' ? '' : v); setPage(1) }}>
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="_all">Любой срок</SelectItem>
-                        <SelectItem value="expiring_7d">Истекает за 7 дней</SelectItem>
-                        <SelectItem value="expiring_30d">Истекает за 30 дней</SelectItem>
-                        <SelectItem value="expired">Уже истёк</SelectItem>
-                        <SelectItem value="no_expiry">Бессрочные</SelectItem>
+                        <SelectItem value="_all">{t('users.filters.anyExpiry')}</SelectItem>
+                        <SelectItem value="expiring_7d">{t('users.filters.expiring7d')}</SelectItem>
+                        <SelectItem value="expiring_30d">{t('users.filters.expiring30d')}</SelectItem>
+                        <SelectItem value="expired">{t('users.filters.alreadyExpired')}</SelectItem>
+                        <SelectItem value="no_expiry">{t('users.filters.noExpiry')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">Активность</Label>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.activity')}</Label>
                     <Select value={onlineFilter || '_all'} onValueChange={(v) => { setOnlineFilter(v === '_all' ? '' : v); setPage(1) }}>
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="_all">Любая активность</SelectItem>
-                        <SelectItem value="online_24h">Были онлайн за 24ч</SelectItem>
-                        <SelectItem value="online_7d">Были онлайн за 7 дней</SelectItem>
-                        <SelectItem value="online_30d">Были онлайн за 30 дней</SelectItem>
-                        <SelectItem value="never">Никогда не подключались</SelectItem>
+                        <SelectItem value="_all">{t('users.filters.anyActivity')}</SelectItem>
+                        <SelectItem value="online_24h">{t('users.filters.online24h')}</SelectItem>
+                        <SelectItem value="online_7d">{t('users.filters.online7d')}</SelectItem>
+                        <SelectItem value="online_30d">{t('users.filters.online30d')}</SelectItem>
+                        <SelectItem value="never">{t('users.filters.neverConnected')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">На странице</Label>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.perPage')}</Label>
                     <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1) }}>
                       <SelectTrigger className="mt-1">
                         <SelectValue />
@@ -1181,14 +1156,14 @@ export default function Users() {
                 {hasAnyFilter && (
                   <div className="flex items-center justify-between pt-2">
                     <p className="text-xs text-dark-300">
-                      Найдено: <span className="text-white font-medium">{total.toLocaleString()}</span> пользователей
+                      {t('users.found')}: <span className="text-white font-medium">{formatNumber(total)}</span> {t('users.usersCount')}
                     </p>
                     <button
                       onClick={resetFilters}
                       className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
                     >
                       <X className="w-3 h-3" />
-                      Сбросить все фильтры
+                      {t('users.resetAllFilters')}
                     </button>
                   </div>
                 )}
@@ -1200,36 +1175,36 @@ export default function Users() {
               <div className="flex items-center gap-2 flex-wrap">
                 {status && (
                   <FilterChip
-                    label={`Статус: ${({ active: 'Активные', disabled: 'Отключённые', limited: 'Ограниченные', expired: 'Истёкшие' } as Record<string, string>)[status] || status}`}
+                    label={`${t('users.filters.status')}: ${({ active: t('users.filters.statusActive'), disabled: t('users.filters.statusDisabled'), limited: t('users.filters.statusLimited'), expired: t('users.filters.statusExpired') } as Record<string, string>)[status] || status}`}
                     onRemove={() => { setStatus(''); setPage(1) }}
                   />
                 )}
                 {trafficType && (
                   <FilterChip
-                    label={`Трафик: ${trafficType === 'unlimited' ? 'Безлимит' : 'С лимитом'}`}
+                    label={`${t('users.filters.trafficType')}: ${trafficType === 'unlimited' ? t('users.unlimited') : t('users.filters.withLimit')}`}
                     onRemove={() => { setTrafficType(''); setPage(1) }}
                   />
                 )}
                 {trafficUsage && (
                   <FilterChip
-                    label={`Расход: ${({ above_90: '>90%', above_70: '>70%', above_50: '>50%', zero: '0' } as Record<string, string>)[trafficUsage] || trafficUsage}`}
+                    label={`${t('users.filters.trafficUsage')}: ${({ above_90: '>90%', above_70: '>70%', above_50: '>50%', zero: '0' } as Record<string, string>)[trafficUsage] || trafficUsage}`}
                     onRemove={() => { setTrafficUsage(''); setPage(1) }}
                   />
                 )}
                 {expireFilter && (
                   <FilterChip
-                    label={`Срок: ${({ expiring_7d: '7 дней', expiring_30d: '30 дней', expired: 'Истёк', no_expiry: 'Бессрочные' } as Record<string, string>)[expireFilter] || expireFilter}`}
+                    label={`${t('users.filters.expiry')}: ${({ expiring_7d: t('users.filters.expiring7d'), expiring_30d: t('users.filters.expiring30d'), expired: t('users.filters.alreadyExpired'), no_expiry: t('users.filters.noExpiry') } as Record<string, string>)[expireFilter] || expireFilter}`}
                     onRemove={() => { setExpireFilter(''); setPage(1) }}
                   />
                 )}
                 {onlineFilter && (
                   <FilterChip
-                    label={`Онлайн: ${({ online_24h: '24ч', online_7d: '7д', online_30d: '30д', never: 'Никогда' } as Record<string, string>)[onlineFilter] || onlineFilter}`}
+                    label={`${t('users.filters.activity')}: ${({ online_24h: t('users.filters.online24h'), online_7d: t('users.filters.online7d'), online_30d: t('users.filters.online30d'), never: t('users.filters.neverConnected') } as Record<string, string>)[onlineFilter] || onlineFilter}`}
                     onRemove={() => { setOnlineFilter(''); setPage(1) }}
                   />
                 )}
                 <button onClick={resetFilters} className="text-[11px] text-dark-300 hover:text-primary-400 ml-1">
-                  Сбросить все
+                  {t('users.resetAll')}
                 </button>
               </div>
             )}
@@ -1243,10 +1218,10 @@ export default function Users() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <p className="text-red-400 text-sm">
-                Ошибка загрузки пользователей: {(error as Error)?.message || 'Неизвестная ошибка'}
+                {t('users.loadError')}: {(error as Error)?.message || t('users.unknownError')}
               </p>
               <Button variant="secondary" size="sm" onClick={() => refetch()}>
-                Повторить
+                {t('users.retry')}
               </Button>
             </div>
           </CardContent>
@@ -1274,7 +1249,7 @@ export default function Users() {
         ) : users.length === 0 ? (
           <Card>
             <CardContent className="p-4 text-center py-8 text-muted-foreground">
-              {hasAnyFilter ? 'Пользователи не найдены' : 'Нет пользователей'}
+              {hasAnyFilter ? t('users.usersNotFound') : t('users.noUsers')}
             </CardContent>
           </Card>
         ) : (
@@ -1297,11 +1272,11 @@ export default function Users() {
         <div className="sticky bottom-4 z-30 mx-auto max-w-3xl animate-fade-in-up">
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-dark-400/20 bg-dark-700/95 backdrop-blur-xl shadow-deep">
             <span className="text-sm text-white font-medium">
-              Выбрано: {selectedUuids.size}
+              {t('users.bulkSelected', { count: selectedUuids.size })}
               {(() => {
                 const visibleCount = users.filter((u) => selectedUuids.has(u.uuid)).length
                 if (visibleCount < selectedUuids.size) {
-                  return <span className="text-dark-300 text-xs ml-1.5">(на странице: {visibleCount})</span>
+                  return <span className="text-dark-300 text-xs ml-1.5">({t('users.bulkOnPage', { count: visibleCount })})</span>
                 }
                 return null
               })()}
@@ -1315,7 +1290,7 @@ export default function Users() {
               className="text-green-400 border-green-500/30 hover:bg-green-500/10 gap-1.5"
             >
               <Check className="w-3.5 h-3.5" />
-              Включить
+              {t('users.bulkEnable')}
             </Button>
             <Button
               size="sm"
@@ -1325,7 +1300,7 @@ export default function Users() {
               className="text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10 gap-1.5"
             >
               <Ban className="w-3.5 h-3.5" />
-              Отключить
+              {t('users.bulkDisable')}
             </Button>
             <Button
               size="sm"
@@ -1335,7 +1310,7 @@ export default function Users() {
               className="text-red-400 border-red-500/30 hover:bg-red-500/10 gap-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Удалить
+              {t('users.bulkDelete')}
             </Button>
             <Button
               size="sm"
@@ -1344,7 +1319,7 @@ export default function Users() {
               className="text-dark-300 gap-1.5"
             >
               <X className="w-3.5 h-3.5" />
-              Отмена
+              {t('users.cancel')}
             </Button>
           </div>
         </div>
@@ -1364,13 +1339,13 @@ export default function Users() {
                     />
                   </th>
                 )}
-                <th><SortHeader label="Пользователь" field="username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label="Статус" field="status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label="Трафик" field="used_traffic_bytes" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label="HWID" field="hwid_device_limit" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label="Активность" field="online_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label="Истекает" field="expire_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label="Создан" field="created_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label={t('users.table.user')} field="username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label={t('users.table.status')} field="status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label={t('users.table.traffic')} field="used_traffic_bytes" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label={t('users.table.hwid')} field="hwid_device_limit" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label={t('users.table.activity')} field="online_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label={t('users.table.expires')} field="expire_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                <th><SortHeader label={t('users.table.created')} field="created_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
                 <th className="w-10"></th>
               </tr>
             </thead>
@@ -1391,7 +1366,7 @@ export default function Users() {
               ) : users.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-8 text-muted-foreground">
-                    {hasAnyFilter ? 'Пользователи не найдены' : 'Нет пользователей'}
+                    {hasAnyFilter ? t('users.usersNotFound') : t('users.noUsers')}
                   </td>
                 </tr>
               ) : (
@@ -1428,11 +1403,11 @@ export default function Users() {
                       <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
                     </td>
                     <td className="text-center">
-                      <span className="text-dark-100 text-sm">{user.hwid_device_count} / {user.hwid_device_limit || '∞'}</span>
+                      <span className="text-dark-100 text-sm">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
                     </td>
                     <td><OnlineIndicator onlineAt={user.online_at} /></td>
-                    <td className="text-dark-200 text-sm">{formatDate(user.expire_at)}</td>
-                    <td className="text-dark-200 text-sm">{formatDate(user.created_at)}</td>
+                    <td className="text-dark-200 text-sm">{user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</td>
+                    <td className="text-dark-200 text-sm">{user.created_at ? formatDateShort(user.created_at) : '\u2014'}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <UserActions
                         user={user}
@@ -1453,9 +1428,9 @@ export default function Users() {
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in" style={{ animationDelay: '0.15s' }}>
         <p className="text-sm text-muted-foreground order-2 sm:order-1">
           {total > 0 ? (
-            <>Показано {(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} из {total.toLocaleString()}</>
+            <>{t('users.showing', { from: (page - 1) * perPage + 1, to: Math.min(page * perPage, total), total: formatNumber(total) })}</>
           ) : (
-            'Нет данных'
+            t('users.noData')
           )}
         </p>
         <div className="flex items-center gap-2 order-1 sm:order-2">
@@ -1481,9 +1456,9 @@ export default function Users() {
       <ConfirmDialog
         open={deleteConfirmUuid !== null}
         onOpenChange={(open) => { if (!open) setDeleteConfirmUuid(null) }}
-        title="Удалить пользователя?"
-        description="Это действие нельзя отменить. Пользователь и все его данные будут удалены."
-        confirmLabel="Удалить"
+        title={t('users.deleteConfirm.title')}
+        description={t('users.deleteConfirm.description')}
+        confirmLabel={t('users.deleteConfirm.confirm')}
         variant="destructive"
         onConfirm={() => {
           if (deleteConfirmUuid) {

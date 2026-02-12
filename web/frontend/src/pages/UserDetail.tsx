@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { ru } from 'date-fns/locale'
+import { useTranslation } from 'react-i18next'
+import { useFormatters } from '@/lib/useFormatters'
 import {
   ArrowLeft,
   RefreshCw,
@@ -113,22 +113,13 @@ interface EditFormData {
   telegram_id: string
 }
 
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 B'
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
-}
-
-function getStatusBadge(status: string): { label: string; variant: 'default' | 'success' | 'warning' | 'destructive' | 'secondary'; dotColor: string } {
+function getStatusBadge(status: string, t: (key: string) => string): { label: string; variant: 'default' | 'success' | 'warning' | 'destructive' | 'secondary'; dotColor: string } {
   const s = status.toLowerCase()
   switch (s) {
-    case 'active': return { label: 'Активен', variant: 'success', dotColor: 'bg-green-400' }
-    case 'disabled': return { label: 'Отключён', variant: 'destructive', dotColor: 'bg-red-400' }
-    case 'expired': return { label: 'Истёк', variant: 'warning', dotColor: 'bg-yellow-400' }
-    case 'limited': return { label: 'Ограничен', variant: 'warning', dotColor: 'bg-orange-400' }
+    case 'active': return { label: t('userDetail.statuses.active'), variant: 'success', dotColor: 'bg-green-400' }
+    case 'disabled': return { label: t('userDetail.statuses.disabled'), variant: 'destructive', dotColor: 'bg-red-400' }
+    case 'expired': return { label: t('userDetail.statuses.expired'), variant: 'warning', dotColor: 'bg-yellow-400' }
+    case 'limited': return { label: t('userDetail.statuses.limited'), variant: 'warning', dotColor: 'bg-orange-400' }
     default: return { label: status, variant: 'secondary', dotColor: 'bg-gray-400' }
   }
 }
@@ -142,14 +133,14 @@ function getSeverityBadge(severity: string): { variant: 'destructive' | 'warning
   }
 }
 
-function getPlatformIcon(platform: string | null): { icon: typeof Smartphone; label: string } {
+function getPlatformIcon(platform: string | null, t: (key: string) => string): { icon: typeof Smartphone; label: string } {
   const p = (platform || '').toLowerCase()
   if (p.includes('windows') || p === 'win') return { icon: Monitor, label: 'Windows' }
   if (p.includes('android')) return { icon: Smartphone, label: 'Android' }
   if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return { icon: Smartphone, label: 'iOS' }
   if (p.includes('macos') || p.includes('mac') || p.includes('darwin')) return { icon: Laptop, label: 'macOS' }
   if (p.includes('linux')) return { icon: Monitor, label: 'Linux' }
-  return { icon: Smartphone, label: platform || 'Неизвестно' }
+  return { icon: Smartphone, label: platform || t('userDetail.unknown') }
 }
 
 function bytesToGb(bytes: number | null): string {
@@ -186,24 +177,35 @@ interface TrafficStats {
 
 type TrafficPeriod = 'current' | 'lifetime' | 'today' | 'week' | 'month' | '3month' | '6month' | 'year' | 'nodes'
 
-const TRAFFIC_PERIODS: { key: TrafficPeriod; label: string }[] = [
-  { key: 'current', label: 'Текущий' },
-  { key: 'lifetime', label: 'Всё время' },
-  { key: 'today', label: 'Сутки' },
-  { key: 'week', label: 'Неделя' },
-  { key: 'month', label: 'Месяц' },
-  { key: '3month', label: '3 месяца' },
-  { key: '6month', label: '6 месяцев' },
-  { key: 'year', label: 'Год' },
-  { key: 'nodes', label: 'По нодам' },
-]
-
 // API period keys (sent to backend)
 const API_PERIODS: TrafficPeriod[] = ['today', 'week', 'month', '3month', '6month', 'year']
 
 function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficPercent: number }) {
+  const { t } = useTranslation()
+  const { formatBytes } = useFormatters()
   const [period, setPeriod] = useState<TrafficPeriod>('current')
   const [nodePeriod, setNodePeriod] = useState<string>('today')
+
+  const TRAFFIC_PERIODS: { key: TrafficPeriod; label: string }[] = [
+    { key: 'current', label: t('userDetail.traffic.periods.current') },
+    { key: 'lifetime', label: t('userDetail.traffic.periods.lifetime') },
+    { key: 'today', label: t('userDetail.traffic.periods.today') },
+    { key: 'week', label: t('userDetail.traffic.periods.week') },
+    { key: 'month', label: t('userDetail.traffic.periods.month') },
+    { key: '3month', label: t('userDetail.traffic.periods.3month') },
+    { key: '6month', label: t('userDetail.traffic.periods.6month') },
+    { key: 'year', label: t('userDetail.traffic.periods.year') },
+    { key: 'nodes', label: t('userDetail.traffic.periods.byNodes') },
+  ]
+
+  const NODE_PERIOD_OPTIONS = [
+    { key: 'today', label: t('userDetail.traffic.periods.today') },
+    { key: 'week', label: t('userDetail.traffic.periods.week') },
+    { key: 'month', label: t('userDetail.traffic.periods.month') },
+    { key: '3month', label: t('userDetail.traffic.periods.3monthShort') },
+    { key: '6month', label: t('userDetail.traffic.periods.6monthShort') },
+    { key: 'year', label: t('userDetail.traffic.periods.year') },
+  ]
 
   // Fetch per-user traffic stats from Remnawave API for period-based views
   const apiPeriod = period === 'nodes' ? nodePeriod : (API_PERIODS.includes(period) ? period : null)
@@ -226,9 +228,9 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
   const getDisplay = (): { value: number; label: string } => {
     switch (period) {
       case 'current':
-        return { value: user.used_traffic_bytes, label: 'Текущий период' }
+        return { value: user.used_traffic_bytes, label: t('userDetail.traffic.currentPeriod') }
       case 'lifetime':
-        return { value: user.lifetime_used_traffic_bytes || user.used_traffic_bytes, label: 'За всё время' }
+        return { value: user.lifetime_used_traffic_bytes || user.used_traffic_bytes, label: t('userDetail.traffic.allTime') }
       default:
         if (trafficStats && API_PERIODS.includes(period)) {
           return {
@@ -236,28 +238,19 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
             label: TRAFFIC_PERIODS.find(p => p.key === period)?.label || '',
           }
         }
-        return { value: user.used_traffic_bytes, label: 'Использовано' }
+        return { value: user.used_traffic_bytes, label: t('userDetail.traffic.used') }
     }
   }
 
   const displayed = getDisplay()
   const showLoadingOverlay = isFetching && period !== 'current'
 
-  const NODE_PERIOD_OPTIONS = [
-    { key: 'today', label: 'Сутки' },
-    { key: 'week', label: 'Неделя' },
-    { key: 'month', label: 'Месяц' },
-    { key: '3month', label: '3 мес.' },
-    { key: '6month', label: '6 мес.' },
-    { key: 'year', label: 'Год' },
-  ]
-
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-primary-400" />
-          Трафик
+          {t('userDetail.traffic.title')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -327,7 +320,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
                   ))}
                   {/* Total */}
                   <div className="flex items-center justify-between p-2.5 bg-dark-600/30 rounded-lg border border-primary-500/20">
-                    <span className="text-sm text-primary-400 font-medium">Итого</span>
+                    <span className="text-sm text-primary-400 font-medium">{t('userDetail.traffic.total')}</span>
                     <span className="text-sm text-white font-bold">
                       {formatBytes(trafficStats.nodes_traffic.reduce((sum, n) => sum + n.total_bytes, 0))}
                     </span>
@@ -335,7 +328,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
                 </>
               ) : (
                 <div className="text-center py-6 text-dark-300 text-sm">
-                  {isFetching ? 'Загрузка...' : 'Нет данных о трафике по нодам за этот период'}
+                  {isFetching ? t('userDetail.traffic.loading') : t('userDetail.traffic.noNodeData')}
                 </div>
               )}
             </div>
@@ -353,7 +346,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
                 <>
                   <div className="flex justify-between text-sm mb-2">
                     <span className="text-dark-200">{displayed.label}</span>
-                    <Badge variant="default" className="text-xs">Безлимит</Badge>
+                    <Badge variant="default" className="text-xs">{t('userDetail.trafficUnlimited')}</Badge>
                   </div>
                   <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -383,7 +376,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
                         />
                       </div>
                       <p className="text-xs text-dark-300 mt-1">
-                        {trafficPercent.toFixed(1)}% использовано
+                        {t('userDetail.traffic.percentUsed', { percent: trafficPercent.toFixed(1) })}
                       </p>
                     </>
                   ) : (
@@ -404,19 +397,19 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-dark-700/50 rounded-lg p-3 text-center">
                 <p className="text-base font-bold text-white">{formatBytes(user.used_traffic_bytes)}</p>
-                <p className="text-[11px] text-dark-200">Текущий период</p>
+                <p className="text-[11px] text-dark-200">{t('userDetail.traffic.currentPeriod')}</p>
               </div>
               <div className="bg-dark-700/50 rounded-lg p-3 text-center">
                 <p className="text-base font-bold text-white">
                   {user.traffic_limit_bytes ? formatBytes(user.traffic_limit_bytes) : '\u221E'}
                 </p>
-                <p className="text-[11px] text-dark-200">Лимит</p>
+                <p className="text-[11px] text-dark-200">{t('userDetail.traffic.limit')}</p>
               </div>
               <div className="bg-dark-700/50 rounded-lg p-3 text-center">
                 <p className="text-base font-bold text-white">
                   {formatBytes(user.lifetime_used_traffic_bytes || user.used_traffic_bytes)}
                 </p>
-                <p className="text-[11px] text-dark-200">Всё время</p>
+                <p className="text-[11px] text-dark-200">{t('userDetail.traffic.allTime')}</p>
               </div>
             </div>
 
@@ -425,7 +418,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
               <>
                 <Separator />
                 <div>
-                  <p className="text-xs text-dark-300 mb-2">Разбивка по нодам</p>
+                  <p className="text-xs text-dark-300 mb-2">{t('userDetail.traffic.nodeBreakdown')}</p>
                   <div className="space-y-1.5">
                     {trafficStats.nodes_traffic.map((node) => (
                       <div
@@ -450,6 +443,8 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
 const DEVICES_PER_PAGE = 3
 
 function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
   const [devicePage, setDevicePage] = useState(1)
   const totalDevicePages = Math.ceil(devices.length / DEVICES_PER_PAGE)
   const startIdx = (devicePage - 1) * DEVICES_PER_PAGE
@@ -460,7 +455,7 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {visibleDevices.map((device, localIdx) => {
           const globalIdx = startIdx + localIdx
-          const pi = getPlatformIcon(device.platform)
+          const pi = getPlatformIcon(device.platform, t)
           const PlatformIcon = pi.icon
           return (
             <div
@@ -479,33 +474,33 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
               <div className="space-y-1.5 text-xs">
                 {device.os_version && (
                   <div className="flex justify-between">
-                    <span className="text-dark-300">Версия ОС</span>
+                    <span className="text-dark-300">{t('userDetail.devices.osVersion')}</span>
                     <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.os_version}</span>
                   </div>
                 )}
                 {device.device_model && (
                   <div className="flex justify-between">
-                    <span className="text-dark-300">Модель</span>
+                    <span className="text-dark-300">{t('userDetail.devices.model')}</span>
                     <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.device_model}</span>
                   </div>
                 )}
                 {device.app_version && (
                   <div className="flex justify-between">
-                    <span className="text-dark-300">Приложение</span>
+                    <span className="text-dark-300">{t('userDetail.devices.app')}</span>
                     <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.app_version}</span>
                   </div>
                 )}
                 {device.user_agent && (
                   <div className="flex justify-between">
-                    <span className="text-dark-300">User-Agent</span>
+                    <span className="text-dark-300">{t('userDetail.devices.userAgent')}</span>
                     <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]" title={device.user_agent}>{device.user_agent}</span>
                   </div>
                 )}
                 {device.created_at && (
                   <div className="flex justify-between">
-                    <span className="text-dark-300">Добавлено</span>
+                    <span className="text-dark-300">{t('userDetail.devices.added')}</span>
                     <span className="text-dark-100">
-                      {format(new Date(device.created_at), 'dd.MM.yyyy HH:mm')}
+                      {formatDate(device.created_at)}
                     </span>
                   </div>
                 )}
@@ -562,6 +557,8 @@ interface AuditItem {
 }
 
 function UserHistory({ uuid }: { uuid: string }) {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
   const { data, isLoading } = useQuery<{ items: AuditItem[] }>({
     queryKey: ['user-history', uuid],
     queryFn: async () => {
@@ -577,7 +574,7 @@ function UserHistory({ uuid }: { uuid: string }) {
   if (isLoading) {
     return (
       <Card className="bg-dark-800 border-dark-700">
-        <CardHeader><CardTitle className="text-white text-base">История изменений</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-white text-base">{t('userDetail.history.title')}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
         </CardContent>
@@ -592,7 +589,7 @@ function UserHistory({ uuid }: { uuid: string }) {
       <CardHeader>
         <CardTitle className="text-white text-base flex items-center gap-2">
           <Clock className="w-4 h-4 text-primary-400" />
-          История изменений
+          {t('userDetail.history.title')}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -612,7 +609,7 @@ function UserHistory({ uuid }: { uuid: string }) {
                     {action}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    {item.created_at ? format(new Date(item.created_at), 'dd.MM.yyyy HH:mm') : ''}
+                    {item.created_at ? formatDate(item.created_at) : ''}
                   </span>
                 </div>
                 {item.details && (
@@ -629,6 +626,8 @@ function UserHistory({ uuid }: { uuid: string }) {
 
 
 export default function UserDetail() {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
   const { uuid } = useParams<{ uuid: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -689,10 +688,10 @@ export default function UserDetail() {
     mutationFn: async () => { await client.post(`/users/${uuid}/sync-hwid-devices`) },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
-      toast.success('HWID устройства синхронизированы')
+      toast.success(t('userDetail.toasts.hwidSynced'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка синхронизации')
+      toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.syncError'))
     },
   })
 
@@ -718,23 +717,23 @@ export default function UserDetail() {
   // Mutations
   const enableMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/enable`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Пользователь включён') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.toasts.userEnabled')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
   })
   const disableMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/disable`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Пользователь отключён') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.toasts.userDisabled')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
   })
   const resetTrafficMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/reset-traffic`) },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success('Трафик сброшен') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка') },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.toasts.trafficReset')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
   })
   const deleteMutation = useMutation({
     mutationFn: async () => { await client.delete(`/users/${uuid}`) },
-    onSuccess: () => { toast.success('Пользователь удалён'); navigate('/users') },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || 'Ошибка удаления') },
+    onSuccess: () => { toast.success(t('userDetail.toasts.userDeleted')); navigate('/users') },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.deleteError')) },
   })
 
   const updateUserMutation = useMutation({
@@ -745,7 +744,7 @@ export default function UserDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user', uuid] })
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('Пользователь обновлён')
+      toast.success(t('userDetail.toasts.userUpdated'))
       setEditSuccess(true)
       setEditError('')
       setTimeout(() => setEditSuccess(false), 3000)
@@ -753,7 +752,7 @@ export default function UserDetail() {
       setSearchParams({})
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      setEditError(err.response?.data?.detail || err.message || 'Ошибка сохранения')
+      setEditError(err.response?.data?.detail || err.message || t('userDetail.toasts.saveError'))
     },
   })
 
@@ -888,11 +887,11 @@ export default function UserDetail() {
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
             <AlertTriangle className="h-5 w-5 text-red-400" />
-            <p className="text-red-400 font-medium">Пользователь не найден</p>
+            <p className="text-red-400 font-medium">{t('userDetail.notFound')}</p>
           </div>
           <Button variant="link" onClick={() => navigate('/users')} className="px-0">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Вернуться к списку
+            {t('userDetail.backToList')}
           </Button>
         </CardContent>
       </Card>
@@ -903,7 +902,7 @@ export default function UserDetail() {
     ? Math.min((user.used_traffic_bytes / user.traffic_limit_bytes) * 100, 100)
     : 0
 
-  const statusBadge = getStatusBadge(user.status)
+  const statusBadge = getStatusBadge(user.status, t)
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
@@ -944,7 +943,7 @@ export default function UserDetail() {
                 className="bg-green-600 hover:bg-green-500 text-white"
               >
                 <Save className="h-4 w-4 mr-1.5" />
-                {updateUserMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+                {updateUserMutation.isPending ? t('userDetail.actions.saving') : t('userDetail.actions.save')}
               </Button>
               <Button
                 variant="outline"
@@ -953,7 +952,7 @@ export default function UserDetail() {
                 disabled={updateUserMutation.isPending}
               >
                 <X className="h-4 w-4 mr-1.5" />
-                Отмена
+                {t('userDetail.actions.cancel')}
               </Button>
             </>
           ) : (
@@ -961,7 +960,7 @@ export default function UserDetail() {
               {canEdit && (
                 <Button size="sm" onClick={handleStartEdit}>
                   <Pencil className="h-4 w-4 mr-1.5" />
-                  Редактировать
+                  {t('userDetail.actions.edit')}
                 </Button>
               )}
               {canEdit && (
@@ -973,7 +972,7 @@ export default function UserDetail() {
                     disabled={disableMutation.isPending}
                   >
                     <X className="h-4 w-4 mr-1.5" />
-                    Отключить
+                    {t('userDetail.actions.disable')}
                   </Button>
                 ) : (
                   <Button
@@ -983,7 +982,7 @@ export default function UserDetail() {
                     className="bg-green-600 hover:bg-green-500 text-white"
                   >
                     <Check className="h-4 w-4 mr-1.5" />
-                    Включить
+                    {t('userDetail.actions.enable')}
                   </Button>
                 )
               )}
@@ -996,7 +995,7 @@ export default function UserDetail() {
                   className="text-primary-400"
                 >
                   <RefreshCw className={cn('h-4 w-4 mr-1.5', resetTrafficMutation.isPending && 'animate-spin')} />
-                  Сбросить трафик
+                  {t('userDetail.actions.resetTraffic')}
                 </Button>
               )}
               {canDelete && (
@@ -1008,7 +1007,7 @@ export default function UserDetail() {
                   className="text-red-400 hover:text-red-300"
                 >
                   <Trash2 className="h-4 w-4 mr-1.5" />
-                  Удалить
+                  {t('userDetail.actions.delete')}
                 </Button>
               )}
             </>
@@ -1021,7 +1020,7 @@ export default function UserDetail() {
         <Card className="border-green-500/30 bg-green-500/10">
           <CardContent className="py-3 px-4 flex items-center gap-2">
             <Check className="h-4 w-4 text-green-400" />
-            <p className="text-green-400 text-sm">Изменения сохранены</p>
+            <p className="text-green-400 text-sm">{t('userDetail.changesSaved')}</p>
           </CardContent>
         </Card>
       )}
@@ -1045,12 +1044,12 @@ export default function UserDetail() {
                 {isEditing ? (
                   <>
                     <Pencil className="h-5 w-5 text-primary-400" />
-                    Редактирование
+                    {t('userDetail.editing')}
                   </>
                 ) : (
                   <>
                     <Eye className="h-5 w-5 text-primary-400" />
-                    Общая информация
+                    {t('userDetail.generalInfo')}
                   </>
                 )}
               </CardTitle>
@@ -1061,36 +1060,36 @@ export default function UserDetail() {
                 <div className="space-y-5">
                   {/* Status */}
                   <div className="space-y-2">
-                    <Label>Статус</Label>
+                    <Label>{t('userDetail.fields.status')}</Label>
                     <Select
                       value={editForm.status}
                       onValueChange={(value) => setEditForm({ ...editForm, status: value })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Выберите статус" />
+                        <SelectValue placeholder={t('userDetail.fields.selectStatus')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="active">Активен</SelectItem>
-                        <SelectItem value="disabled">Отключён</SelectItem>
-                        <SelectItem value="limited">Ограничен</SelectItem>
-                        <SelectItem value="expired">Истёк</SelectItem>
+                        <SelectItem value="active">{t('userDetail.statuses.active')}</SelectItem>
+                        <SelectItem value="disabled">{t('userDetail.statuses.disabled')}</SelectItem>
+                        <SelectItem value="limited">{t('userDetail.statuses.limited')}</SelectItem>
+                        <SelectItem value="expired">{t('userDetail.statuses.expired')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   {/* Description */}
                   <div className="space-y-2">
-                    <Label>Описание</Label>
+                    <Label>{t('userDetail.fields.description')}</Label>
                     <Input
                       value={editForm.description}
                       onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                      placeholder="Заметки о пользователе..."
+                      placeholder={t('userDetail.fields.descriptionPlaceholder')}
                     />
                   </div>
 
                   {/* Tag */}
                   <div className="space-y-2">
-                    <Label>Тег</Label>
+                    <Label>{t('userDetail.fields.tag')}</Label>
                     <Input
                       value={editForm.tag}
                       onChange={(e) => setEditForm({ ...editForm, tag: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })}
@@ -1098,12 +1097,12 @@ export default function UserDetail() {
                       maxLength={16}
                       className="font-mono"
                     />
-                    <p className="text-xs text-dark-300">A-Z, 0-9, _ (макс. 16 символов)</p>
+                    <p className="text-xs text-dark-300">{t('userDetail.fields.tagHint')}</p>
                   </div>
 
                   {/* Email */}
                   <div className="space-y-2">
-                    <Label>Email</Label>
+                    <Label>{t('userDetail.fields.email')}</Label>
                     <Input
                       type="email"
                       value={editForm.email}
@@ -1114,7 +1113,7 @@ export default function UserDetail() {
 
                   {/* Telegram ID */}
                   <div className="space-y-2">
-                    <Label>Telegram ID</Label>
+                    <Label>{t('userDetail.fields.telegramId')}</Label>
                     <Input
                       type="number"
                       value={editForm.telegram_id}
@@ -1125,7 +1124,7 @@ export default function UserDetail() {
 
                   {/* Traffic limit */}
                   <div className="space-y-2">
-                    <Label>Лимит трафика</Label>
+                    <Label>{t('userDetail.fields.trafficLimit')}</Label>
                     <div className="flex items-center gap-3 mb-2">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -1138,7 +1137,7 @@ export default function UserDetail() {
                           })}
                           className="w-4 h-4 rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/50"
                         />
-                        <span className="text-sm text-dark-100">Безлимитный</span>
+                        <span className="text-sm text-dark-100">{t('userDetail.trafficUnlimited')}</span>
                       </label>
                     </div>
                     {!editForm.is_unlimited && (
@@ -1149,17 +1148,17 @@ export default function UserDetail() {
                           min="0"
                           value={editForm.traffic_limit_gb}
                           onChange={(e) => setEditForm({ ...editForm, traffic_limit_gb: e.target.value })}
-                          placeholder="Введите лимит"
+                          placeholder={t('userDetail.fields.enterLimit')}
                           className="pr-12"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">ГБ</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dark-200">{t('userDetail.fields.gb')}</span>
                       </div>
                     )}
                   </div>
 
                   {/* Traffic reset strategy */}
                   <div className="space-y-2">
-                    <Label>Сброс трафика</Label>
+                    <Label>{t('userDetail.fields.trafficReset')}</Label>
                     <Select
                       value={editForm.traffic_limit_strategy}
                       onValueChange={(value) => setEditForm({ ...editForm, traffic_limit_strategy: value })}
@@ -1168,17 +1167,17 @@ export default function UserDetail() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="NO_RESET">Без сброса</SelectItem>
-                        <SelectItem value="DAY">Ежедневно</SelectItem>
-                        <SelectItem value="WEEK">Еженедельно</SelectItem>
-                        <SelectItem value="MONTH">Ежемесячно</SelectItem>
+                        <SelectItem value="NO_RESET">{t('userDetail.strategies.noReset')}</SelectItem>
+                        <SelectItem value="DAY">{t('userDetail.strategies.daily')}</SelectItem>
+                        <SelectItem value="WEEK">{t('userDetail.strategies.weekly')}</SelectItem>
+                        <SelectItem value="MONTH">{t('userDetail.strategies.monthly')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   {/* Expire date */}
                   <div className="space-y-2">
-                    <Label>Дата истечения</Label>
+                    <Label>{t('userDetail.fields.expireDate')}</Label>
                     <Input
                       type="datetime-local"
                       value={editForm.expire_at}
@@ -1191,14 +1190,14 @@ export default function UserDetail() {
                         onClick={() => setEditForm({ ...editForm, expire_at: '' })}
                         className="px-0 h-auto text-xs text-dark-200 hover:text-primary-400"
                       >
-                        Убрать дату (бессрочно)
+                        {t('userDetail.fields.removeDate')}
                       </Button>
                     )}
                   </div>
 
                   {/* HWID limit */}
                   <div className="space-y-2">
-                    <Label>Лимит устройств (HWID)</Label>
+                    <Label>{t('userDetail.fields.hwidLimit')}</Label>
                     <Input
                       type="number"
                       min="0"
@@ -1210,7 +1209,7 @@ export default function UserDetail() {
                   {/* Read-only fields */}
                   <Separator />
                   <div>
-                    <p className="text-xs text-dark-300 mb-3">Информация (только чтение)</p>
+                    <p className="text-xs text-dark-300 mb-3">{t('userDetail.fields.readOnly')}</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <p className="text-xs text-dark-200">Username</p>
@@ -1232,11 +1231,11 @@ export default function UserDetail() {
                       <p className="text-white">{user.username || '\u2014'}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-dark-200">Email</p>
+                      <p className="text-sm text-dark-200">{t('userDetail.fields.email')}</p>
                       <p className="text-white truncate">{user.email || '\u2014'}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-dark-200">Telegram ID</p>
+                      <p className="text-sm text-dark-200">{t('userDetail.fields.telegramId')}</p>
                       <p className="text-white">{user.telegram_id || '\u2014'}</p>
                     </div>
                     <div>
@@ -1245,68 +1244,68 @@ export default function UserDetail() {
                     </div>
                     {user.tag && (
                       <div>
-                        <p className="text-sm text-dark-200">Тег</p>
+                        <p className="text-sm text-dark-200">{t('userDetail.fields.tag')}</p>
                         <span className="text-xs font-mono px-2 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
                       </div>
                     )}
                     {user.description && (
                       <div className="sm:col-span-2">
-                        <p className="text-sm text-dark-200">Описание</p>
+                        <p className="text-sm text-dark-200">{t('userDetail.fields.description')}</p>
                         <p className="text-white text-sm">{user.description}</p>
                       </div>
                     )}
                     <div>
-                      <p className="text-sm text-dark-200">Сброс трафика</p>
+                      <p className="text-sm text-dark-200">{t('userDetail.fields.trafficReset')}</p>
                       <p className="text-white">
-                        {{ NO_RESET: 'Без сброса', DAY: 'Ежедневно', WEEK: 'Еженедельно', MONTH: 'Ежемесячно' }[user.traffic_limit_strategy || 'NO_RESET'] || user.traffic_limit_strategy || '\u2014'}
+                        {{ NO_RESET: t('userDetail.strategies.noReset'), DAY: t('userDetail.strategies.daily'), WEEK: t('userDetail.strategies.weekly'), MONTH: t('userDetail.strategies.monthly') }[user.traffic_limit_strategy || 'NO_RESET'] || user.traffic_limit_strategy || '\u2014'}
                       </p>
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <Clock className="h-3.5 w-3.5 text-dark-300" />
-                        <p className="text-sm text-dark-200">Создан</p>
+                        <p className="text-sm text-dark-200">{t('userDetail.fields.created')}</p>
                       </div>
                       <p className="text-white">
                         {user.created_at
-                          ? format(new Date(user.created_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                          ? formatDate(user.created_at)
                           : '\u2014'}
                       </p>
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <Clock className="h-3.5 w-3.5 text-dark-300" />
-                        <p className="text-sm text-dark-200">Истекает</p>
+                        <p className="text-sm text-dark-200">{t('userDetail.fields.expires')}</p>
                       </div>
                       <p className="text-white">
                         {user.expire_at
-                          ? format(new Date(user.expire_at), 'dd MMM yyyy, HH:mm', { locale: ru })
-                          : 'Бессрочно'}
+                          ? formatDate(user.expire_at)
+                          : t('userDetail.indefinite')}
                       </p>
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <Activity className="h-3.5 w-3.5 text-dark-300" />
-                        <p className="text-sm text-dark-200">Последняя активность</p>
+                        <p className="text-sm text-dark-200">{t('userDetail.fields.lastActivity')}</p>
                       </div>
                       <p className="text-white">
                         {user.online_at
-                          ? format(new Date(user.online_at), 'dd MMM yyyy, HH:mm', { locale: ru })
+                          ? formatDate(user.online_at)
                           : '\u2014'}
                       </p>
                     </div>
                     {user.last_traffic_reset_at && (
                       <div>
-                        <p className="text-sm text-dark-200">Последний сброс трафика</p>
+                        <p className="text-sm text-dark-200">{t('userDetail.fields.lastTrafficReset')}</p>
                         <p className="text-white">
-                          {format(new Date(user.last_traffic_reset_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
+                          {formatDate(user.last_traffic_reset_at)}
                         </p>
                       </div>
                     )}
                     {user.first_connected_at && (
                       <div>
-                        <p className="text-sm text-dark-200">Первое подключение</p>
+                        <p className="text-sm text-dark-200">{t('userDetail.fields.firstConnection')}</p>
                         <p className="text-white">
-                          {format(new Date(user.first_connected_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
+                          {formatDate(user.first_connected_at)}
                         </p>
                       </div>
                     )}
@@ -1317,7 +1316,7 @@ export default function UserDetail() {
                     <>
                       <Separator />
                       <div>
-                        <p className="text-sm text-dark-200 mb-2">Внутренние отряды</p>
+                        <p className="text-sm text-dark-200 mb-2">{t('userDetail.internalSquads')}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {user.active_internal_squads.map((sq) => (
                             <Badge key={sq.uuid} variant="outline" className="text-xs">{sq.name}</Badge>
@@ -1332,7 +1331,7 @@ export default function UserDetail() {
                     <>
                       <Separator />
                       <div>
-                        <p className="text-sm text-dark-200 mb-2">Протоколы</p>
+                        <p className="text-sm text-dark-200 mb-2">{t('userDetail.protocols')}</p>
                         <div className="grid grid-cols-1 gap-2">
                           {user.vless_uuid && (
                             <div className="bg-dark-700/40 rounded-lg p-2.5">
@@ -1370,7 +1369,7 @@ export default function UserDetail() {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Smartphone className="h-5 w-5 text-primary-400" />
-                  Устройства
+                  {t('userDetail.devices.title')}
                   {hwidDevices && hwidDevices.length > 0 && (
                     <span className="ml-1 text-sm font-normal text-dark-200">
                       {hwidDevices.length} / {user.hwid_device_limit || '\u221E'}
@@ -1384,12 +1383,12 @@ export default function UserDetail() {
                     onClick={() => syncHwidMutation.mutate()}
                     disabled={syncHwidMutation.isPending || hwidFetching}
                     className="h-8 w-8 p-0"
-                    title="Синхронизировать устройства"
+                    title={t('userDetail.devices.sync')}
                   >
                     <RefreshCw className={cn('h-4 w-4', syncHwidMutation.isPending && 'animate-spin')} />
                   </Button>
                   <Badge variant="outline" className="text-xs">
-                    Лимит: {user.hwid_device_limit || '\u221E'}
+                    {t('userDetail.devices.limitLabel')}: {user.hwid_device_limit || '\u221E'}
                   </Badge>
                 </div>
               </div>
@@ -1400,7 +1399,7 @@ export default function UserDetail() {
                 <PaginatedDeviceList devices={hwidDevices} />
               ) : (
                 <div className="text-center py-6 text-dark-300 text-sm">
-                  Нет зарегистрированных устройств
+                  {t('userDetail.devices.noDevices')}
                 </div>
               )}
             </CardContent>
@@ -1412,7 +1411,7 @@ export default function UserDetail() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-yellow-400" />
-                  Нарушения
+                  {t('userDetail.violations.title')}
                   <Badge variant="warning" className="ml-1">{violations.length}</Badge>
                 </CardTitle>
               </CardHeader>
@@ -1433,7 +1432,7 @@ export default function UserDetail() {
                           <span className="text-dark-200 text-sm">{v.recommended_action}</span>
                         </div>
                         <span className="text-dark-200 text-xs sm:text-sm flex-shrink-0">
-                          {format(new Date(v.detected_at), 'dd.MM.yyyy HH:mm')}
+                          {formatDate(v.detected_at)}
                         </span>
                       </div>
                     )
@@ -1452,14 +1451,14 @@ export default function UserDetail() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Globe className="h-5 w-5 text-primary-400" />
-                Подписка
+                {t('userDetail.subscription.title')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {user.subscription_url ? (
                   <div>
-                    <p className="text-xs text-dark-200 mb-1">Ссылка подписки</p>
+                    <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.link')}</p>
                     <div className="flex items-center gap-2">
                       <Input
                         readOnly
@@ -1483,7 +1482,7 @@ export default function UserDetail() {
                         ) : (
                           <>
                             <Copy className="h-3.5 w-3.5 mr-1" />
-                            Копировать
+                            {t('userDetail.subscription.copy')}
                           </>
                         )}
                       </Button>
@@ -1491,37 +1490,37 @@ export default function UserDetail() {
                   </div>
                 ) : user.subscription_uuid ? (
                   <div>
-                    <p className="text-xs text-dark-200 mb-1">UUID подписки</p>
+                    <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.uuid')}</p>
                     <p className="text-white text-sm font-mono break-all">{user.subscription_uuid}</p>
                   </div>
                 ) : (
-                  <p className="text-dark-200 text-sm">Нет активной подписки</p>
+                  <p className="text-dark-200 text-sm">{t('userDetail.subscription.noActive')}</p>
                 )}
                 {user.subscription_url && user.subscription_uuid && (
                   <div>
-                    <p className="text-xs text-dark-200 mb-1">UUID подписки</p>
+                    <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.uuid')}</p>
                     <p className="text-dark-100 text-xs font-mono break-all">{user.subscription_uuid}</p>
                   </div>
                 )}
                 {user.sub_last_opened_at && (
                   <div>
-                    <p className="text-xs text-dark-200 mb-1">Последнее открытие</p>
+                    <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.lastOpened')}</p>
                     <p className="text-dark-100 text-xs">
-                      {format(new Date(user.sub_last_opened_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
+                      {formatDate(user.sub_last_opened_at)}
                     </p>
                   </div>
                 )}
                 {user.sub_revoked_at && (
                   <div>
-                    <p className="text-xs text-dark-200 mb-1">Отозвана</p>
+                    <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.revoked')}</p>
                     <p className="text-red-400 text-xs">
-                      {format(new Date(user.sub_revoked_at), 'dd MMM yyyy, HH:mm', { locale: ru })}
+                      {formatDate(user.sub_revoked_at)}
                     </p>
                   </div>
                 )}
                 {user.sub_last_user_agent && (
                   <div>
-                    <p className="text-xs text-dark-200 mb-1">User-Agent</p>
+                    <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.userAgent')}</p>
                     <p className="text-dark-100 text-xs truncate" title={user.sub_last_user_agent}>{user.sub_last_user_agent}</p>
                   </div>
                 )}
@@ -1541,7 +1540,7 @@ export default function UserDetail() {
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm text-dark-200">Trust Score</p>
+                    <p className="text-sm text-dark-200">{t('userDetail.antiAbuse.trustScore')}</p>
                     <Badge
                       variant={
                         (user.trust_score ?? 100) >= 70 ? 'success'
@@ -1570,14 +1569,14 @@ export default function UserDetail() {
                       <AlertTriangle className="h-4 w-4 text-dark-300" />
                     </div>
                     <p className="text-xl md:text-2xl font-bold text-white">{user.violation_count_30d}</p>
-                    <p className="text-xs text-dark-200">Нарушений (30д)</p>
+                    <p className="text-xs text-dark-200">{t('userDetail.antiAbuse.violations30d')}</p>
                   </div>
                   <div className="bg-dark-600 rounded-lg p-3 text-center">
                     <div className="flex justify-center mb-1">
                       <Users className="h-4 w-4 text-dark-300" />
                     </div>
                     <p className="text-xl md:text-2xl font-bold text-white">{user.active_connections}</p>
-                    <p className="text-xs text-dark-200">Подключений</p>
+                    <p className="text-xs text-dark-200">{t('userDetail.antiAbuse.connections')}</p>
                   </div>
                 </div>
                 <div className="bg-dark-600 rounded-lg p-3 text-center">
@@ -1585,7 +1584,7 @@ export default function UserDetail() {
                     <Globe className="h-4 w-4 text-dark-300" />
                   </div>
                   <p className="text-xl md:text-2xl font-bold text-white">{user.unique_ips_24h}</p>
-                  <p className="text-xs text-dark-200">Уникальных IP (24ч)</p>
+                  <p className="text-xs text-dark-200">{t('userDetail.antiAbuse.uniqueIps24h')}</p>
                 </div>
               </div>
             </CardContent>
@@ -1599,9 +1598,9 @@ export default function UserDetail() {
       <ConfirmDialog
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
-        title="Удалить пользователя?"
-        description="Пользователь и все его данные будут удалены. Это действие нельзя отменить."
-        confirmLabel="Удалить"
+        title={t('userDetail.deleteConfirm.title')}
+        description={t('userDetail.deleteConfirm.description')}
+        confirmLabel={t('userDetail.deleteConfirm.confirm')}
         variant="destructive"
         onConfirm={() => { deleteMutation.mutate(); setShowDeleteConfirm(false) }}
       />

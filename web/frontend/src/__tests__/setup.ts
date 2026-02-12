@@ -4,7 +4,7 @@ import { vi } from 'vitest'
 // ── Mock window.__ENV ────────────────────────────────────────
 declare global {
   interface Window {
-    __ENV?: { API_URL?: string }
+    __ENV?: { API_URL?: string; TELEGRAM_BOT_USERNAME?: string }
   }
 }
 

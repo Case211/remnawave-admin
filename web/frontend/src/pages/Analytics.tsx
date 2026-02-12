@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
   Globe,
   Users,
@@ -38,6 +39,7 @@ import {
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
 import { useChartTheme } from '@/lib/useChartTheme'
+import { useFormatters } from '@/lib/useFormatters'
 
 // ── Period Switcher ─────────────────────────────────────────────
 
@@ -72,27 +74,11 @@ function PeriodSwitcher({
 
 // ── Utilities ───────────────────────────────────────────────────
 
-function formatBytes(bytes: number | null | undefined): string {
-  if (!bytes || bytes <= 0) return '0 Б'
-  const k = 1024
-  const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 Б'
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
 function formatDate(dateStr: string): string {
   if (!dateStr) return ''
   const parts = dateStr.split('-')
   if (parts.length === 3) return `${parts[2]}.${parts[1]}`
   return dateStr
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  ACTIVE: 'Активен',
-  DISABLED: 'Отключен',
-  EXPIRED: 'Истёк',
-  LIMITED: 'Лимит',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -113,6 +99,7 @@ interface TrendTooltipProps {
 
 function TrendTooltip({ active, payload, label, metric }: TrendTooltipProps) {
   const chart = useChartTheme()
+  const { formatBytes } = useFormatters()
   if (!active || !payload?.length) return null
   const val = payload[0].value
   return (
@@ -128,6 +115,7 @@ function TrendTooltip({ active, payload, label, metric }: TrendTooltipProps) {
 // ── Geo Map Card ────────────────────────────────────────────────
 
 function GeoMapCard() {
+  const { t } = useTranslation()
   const [geoPeriod, setGeoPeriod] = useState('7d')
   const chart = useChartTheme()
 
@@ -162,12 +150,9 @@ function GeoMapCard() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Globe className="w-5 h-5 text-cyan-400" />
-            <CardTitle className="text-base">География подключений</CardTitle>
+            <CardTitle className="text-base">{t('analytics.geo.title')}</CardTitle>
             <InfoTooltip
-              text="Карта географического распределения подключений пользователей по IP-адресам. Размер точки пропорционален количеству подключений из города.
-24ч — за последние сутки
-7д — за последнюю неделю
-30д — за последний месяц"
+              text={t('analytics.geo.tooltip')}
               side="right"
             />
           </div>
@@ -175,9 +160,9 @@ function GeoMapCard() {
             value={geoPeriod}
             onChange={setGeoPeriod}
             options={[
-              { value: '24h', label: '24ч' },
-              { value: '7d', label: '7д' },
-              { value: '30d', label: '30д' },
+              { value: '24h', label: t('analytics.periods.24h') },
+              { value: '7d', label: t('analytics.periods.7d') },
+              { value: '30d', label: t('analytics.periods.30d') },
             ]}
           />
         </div>
@@ -189,8 +174,8 @@ function GeoMapCard() {
           <div className="h-[400px] flex items-center justify-center text-muted-foreground">
             <div className="text-center">
               <MapPin className="w-12 h-12 mx-auto mb-2 opacity-30" />
-              <p>Нет данных о географии</p>
-              <p className="text-xs mt-1">Данные появятся после обработки IP-адресов</p>
+              <p>{t('analytics.geo.noData')}</p>
+              <p className="text-xs mt-1">{t('analytics.geo.noDataHint')}</p>
             </div>
           </div>
         ) : (
@@ -224,7 +209,7 @@ function GeoMapCard() {
                       <Popup>
                         <div className="text-xs">
                           <p className="font-medium">{city.city}, {city.country}</p>
-                          <p>{city.count} подключений</p>
+                          <p>{t('analytics.geo.connections', { count: city.count })}</p>
                         </div>
                       </Popup>
                     </CircleMarker>
@@ -278,6 +263,8 @@ function countryFlag(code: string): string {
 // ── Top Users Card ──────────────────────────────────────────────
 
 function TopUsersCard() {
+  const { t } = useTranslation()
+  const { formatBytes } = useFormatters()
   const navigate = useNavigate()
   const [limit, setLimit] = useState(20)
 
@@ -295,9 +282,9 @@ function TopUsersCard() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-violet-400" />
-            <CardTitle className="text-base">Топ по трафику</CardTitle>
+            <CardTitle className="text-base">{t('analytics.topUsers.title')}</CardTitle>
             <InfoTooltip
-              text="Пользователи, отсортированные по объёму потреблённого трафика за всё время. Показывает статус, использованный трафик, лимит и процент использования. Зелёный индикатор Wi-Fi — пользователь онлайн (был активен в последние 5 мин)."
+              text={t('analytics.topUsers.tooltip')}
               side="right"
             />
           </div>
@@ -305,9 +292,9 @@ function TopUsersCard() {
             value={String(limit)}
             onChange={(v) => setLimit(Number(v))}
             options={[
-              { value: '10', label: 'Топ 10' },
-              { value: '20', label: 'Топ 20' },
-              { value: '50', label: 'Топ 50' },
+              { value: '10', label: t('analytics.topUsers.top10') },
+              { value: '20', label: t('analytics.topUsers.top20') },
+              { value: '50', label: t('analytics.topUsers.top50') },
             ]}
           />
         </div>
@@ -323,7 +310,7 @@ function TopUsersCard() {
           <div className="h-48 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
               <Users className="w-12 h-12 mx-auto mb-2 opacity-30" />
-              <p>Нет данных о трафике</p>
+              <p>{t('analytics.topUsers.noData')}</p>
             </div>
           </div>
         ) : (
@@ -332,11 +319,11 @@ function TopUsersCard() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">#</TableHead>
-                  <TableHead>Пользователь</TableHead>
-                  <TableHead className="hidden sm:table-cell">Статус</TableHead>
-                  <TableHead className="text-right">Трафик</TableHead>
-                  <TableHead className="text-right hidden md:table-cell">Лимит</TableHead>
-                  <TableHead className="text-right hidden lg:table-cell">Использовано</TableHead>
+                  <TableHead>{t('analytics.topUsers.user')}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{t('analytics.topUsers.status')}</TableHead>
+                  <TableHead className="text-right">{t('analytics.topUsers.traffic')}</TableHead>
+                  <TableHead className="text-right hidden md:table-cell">{t('analytics.topUsers.limit')}</TableHead>
+                  <TableHead className="text-right hidden lg:table-cell">{t('analytics.topUsers.usage')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -362,7 +349,7 @@ function TopUsersCard() {
                         variant="secondary"
                         className={cn('text-xs', STATUS_COLORS[user.status] || '')}
                       >
-                        {STATUS_LABELS[user.status] || user.status}
+                        {t(`analytics.status.${user.status}`, { defaultValue: user.status })}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
@@ -425,6 +412,8 @@ function UsageBar({ percent }: { percent: number }) {
 // ── Trends Card ─────────────────────────────────────────────────
 
 function TrendsCard() {
+  const { t } = useTranslation()
+  const { formatBytes } = useFormatters()
   const [metric, setMetric] = useState('users')
   const [period, setPeriod] = useState('30d')
   const chart = useChartTheme()
@@ -438,16 +427,25 @@ function TrendsCard() {
   const series = data?.series || []
   const growth = data?.total_growth || 0
 
-  const metricLabel: Record<string, string> = {
-    users: 'Новые пользователи',
-    violations: 'Нарушения',
-    traffic: 'Трафик',
-  }
-
   const chartData = series.map((p) => ({
     date: formatDate(p.date),
     value: p.value,
   }))
+
+  const formatBytesShort = (bytes: number): string => {
+    if (bytes <= 0) return '0'
+    const k = 1024
+    const sizes = ['B', 'K', 'M', 'G', 'T']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    if (i < 0 || i >= sizes.length) return '0'
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i]
+  }
+
+  const periodLabel = period === '7d'
+    ? t('analytics.trends.last7d')
+    : period === '30d'
+      ? t('analytics.trends.last30d')
+      : t('analytics.trends.last90d')
 
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
@@ -455,13 +453,9 @@ function TrendsCard() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-green-400" />
-            <CardTitle className="text-base">Тенденции</CardTitle>
+            <CardTitle className="text-base">{t('analytics.trends.title')}</CardTitle>
             <InfoTooltip
-              text="Динамика метрик по дням за выбранный период.
-Пользователи — количество новых регистраций.
-Нарушения — обнаруженные нарушения.
-Трафик — объём потреблённого трафика.
-7д/30д/90д — временное окно анализа."
+              text={t('analytics.trends.tooltip')}
               side="right"
             />
           </div>
@@ -470,18 +464,18 @@ function TrendsCard() {
               value={metric}
               onChange={setMetric}
               options={[
-                { value: 'users', label: 'Пользователи' },
-                { value: 'violations', label: 'Нарушения' },
-                { value: 'traffic', label: 'Трафик' },
+                { value: 'users', label: t('analytics.trends.users') },
+                { value: 'violations', label: t('analytics.trends.violations') },
+                { value: 'traffic', label: t('analytics.trends.traffic') },
               ]}
             />
             <PeriodSwitcher
               value={period}
               onChange={setPeriod}
               options={[
-                { value: '7d', label: '7д' },
-                { value: '30d', label: '30д' },
-                { value: '90d', label: '90д' },
+                { value: '7d', label: t('analytics.periods.7d') },
+                { value: '30d', label: t('analytics.periods.30d') },
+                { value: '90d', label: t('analytics.periods.90d') },
               ]}
             />
           </div>
@@ -493,11 +487,11 @@ function TrendsCard() {
           <ArrowUpRight className={cn('w-5 h-5 shrink-0', growth >= 0 ? 'text-green-400' : 'text-red-400 rotate-90')} />
           <div>
             <p className="text-sm font-medium text-white">
-              {metricLabel[metric] || metric}: {growth >= 0 ? '+' : ''}
+              {t(`analytics.trends.metric.${metric}`)}: {growth >= 0 ? '+' : ''}
               {metric === 'traffic' ? formatBytes(Math.abs(growth)) : growth.toLocaleString()}
             </p>
             <p className="text-xs text-muted-foreground">
-              за {period === '7d' ? '7 дней' : period === '30d' ? '30 дней' : '90 дней'}
+              {periodLabel}
             </p>
           </div>
         </div>
@@ -506,7 +500,7 @@ function TrendsCard() {
           <Skeleton className="h-64 w-full" />
         ) : chartData.length === 0 ? (
           <div className="h-64 flex items-center justify-center text-muted-foreground">
-            Нет данных за выбранный период
+            {t('analytics.trends.noData')}
           </div>
         ) : (
           <div className="h-64">
@@ -560,25 +554,18 @@ function TrendsCard() {
   )
 }
 
-function formatBytesShort(bytes: number): string {
-  if (bytes <= 0) return '0'
-  const k = 1024
-  const sizes = ['Б', 'К', 'М', 'Г', 'Т']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0'
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i]
-}
-
 // ── Main Page ───────────────────────────────────────────────────
 
 export default function Analytics() {
+  const { t } = useTranslation()
+
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Расширенная аналитика</h1>
+        <h1 className="text-2xl font-bold text-white">{t('analytics.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Географическое распределение, топ пользователей и тенденции роста
+          {t('analytics.subtitle')}
         </p>
       </div>
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
   Plus,
@@ -27,9 +28,12 @@ import { RuleConstructor } from './RuleConstructor'
 import { TemplatesGallery } from './TemplatesGallery'
 import { LogsTimeline } from './LogsTimeline'
 import { TestResultDialog } from './TestResultDialog'
-import { CATEGORIES, formatDateTime } from './helpers'
+import { CATEGORIES } from './helpers'
+import { useFormatters } from '@/lib/useFormatters'
 
 export default function Automations() {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('automation', 'create')
   const canEdit = useHasPermission('automation', 'edit')
@@ -68,21 +72,21 @@ export default function Automations() {
   const toggleMutation = useMutation({
     mutationFn: automationsApi.toggle,
     onSuccess: (rule) => {
-      toast.success(`"${rule.name}" ${rule.is_enabled ? 'включено' : 'выключено'}`)
+      toast.success(`"${rule.name}" ${rule.is_enabled ? t('automations.enabled') : t('automations.disabled')}`)
       queryClient.invalidateQueries({ queryKey: ['automations'] })
     },
-    onError: () => toast.error('Не удалось переключить правило'),
+    onError: () => toast.error(t('automations.toggleError')),
   })
 
   const deleteMutation = useMutation({
     mutationFn: automationsApi.delete,
     onSuccess: () => {
-      toast.success('Правило удалено')
+      toast.success(t('automations.ruleDeleted'))
       queryClient.invalidateQueries({ queryKey: ['automations'] })
       setDeleteDialogOpen(false)
       setDeleteTarget(null)
     },
-    onError: () => toast.error('Не удалось удалить правило'),
+    onError: () => toast.error(t('automations.deleteError')),
   })
 
   const testMutation = useMutation({
@@ -91,7 +95,7 @@ export default function Automations() {
       setTestResult(result)
       setTestResultOpen(true)
     },
-    onError: () => toast.error('Не удалось выполнить тест'),
+    onError: () => toast.error(t('automations.testError')),
   })
 
   // Handlers
@@ -129,9 +133,9 @@ export default function Automations() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-white">Автоматизация</h1>
+          <h1 className="text-2xl font-display font-bold text-white">{t('automations.title')}</h1>
           <p className="text-sm text-dark-400 mt-1">
-            Правила автоматизации для управления инфраструктурой
+            {t('automations.subtitle')}
           </p>
         </div>
         <PermissionGate resource="automation" action="create">
@@ -139,23 +143,23 @@ export default function Automations() {
             onClick={handleCreate}
             className="bg-accent-teal text-white hover:bg-accent-teal/90"
           >
-            <Plus className="w-4 h-4 mr-2" /> Новое правило
+            <Plus className="w-4 h-4 mr-2" /> {t('automations.newRule')}
           </Button>
         </PermissionGate>
       </div>
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Всего правил" value={totalRules} icon={Zap} />
-        <StatCard label="Активных" value={activeRules} icon={Activity} />
+        <StatCard label={t('automations.stats.totalRules')} value={totalRules} icon={Zap} />
+        <StatCard label={t('automations.stats.active')} value={activeRules} icon={Activity} />
         <StatCard
-          label="Всего триггеров"
+          label={t('automations.stats.totalTriggers')}
           value={totalTriggers}
           icon={Zap}
         />
         <StatCard
-          label="Последний триггер"
-          value={lastTriggered ? formatDateTime(lastTriggered) : '\u2014'}
+          label={t('automations.stats.lastTrigger')}
+          value={lastTriggered ? formatDate(lastTriggered) : '\u2014'}
           icon={Clock}
           isText
         />
@@ -164,9 +168,9 @@ export default function Automations() {
       {/* Tabs */}
       <Tabs defaultValue="rules" className="space-y-4">
         <TabsList className="bg-dark-800/50 border border-dark-700">
-          <TabsTrigger value="rules">Правила</TabsTrigger>
-          <TabsTrigger value="templates">Шаблоны</TabsTrigger>
-          <TabsTrigger value="logs">Логи</TabsTrigger>
+          <TabsTrigger value="rules">{t('automations.tabs.rules')}</TabsTrigger>
+          <TabsTrigger value="templates">{t('automations.tabs.templates')}</TabsTrigger>
+          <TabsTrigger value="logs">{t('automations.tabs.logs')}</TabsTrigger>
         </TabsList>
 
         {/* Rules tab */}
@@ -178,10 +182,10 @@ export default function Automations() {
               onValueChange={(v) => { setCategoryFilter(v === 'all' ? '' : v); setPage(1) }}
             >
               <SelectTrigger className="w-40 h-8 text-xs bg-dark-800 border-dark-600">
-                <SelectValue placeholder="Категория" />
+                <SelectValue placeholder={t('automations.filters.category')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все категории</SelectItem>
+                <SelectItem value="all">{t('automations.filters.allCategories')}</SelectItem>
                 {CATEGORIES.map((c) => (
                   <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                 ))}
@@ -193,13 +197,13 @@ export default function Automations() {
               onValueChange={(v) => { setTriggerFilter(v === 'all' ? '' : v); setPage(1) }}
             >
               <SelectTrigger className="w-36 h-8 text-xs bg-dark-800 border-dark-600">
-                <SelectValue placeholder="Триггер" />
+                <SelectValue placeholder={t('automations.filters.trigger')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все триггеры</SelectItem>
-                <SelectItem value="event">Событие</SelectItem>
-                <SelectItem value="schedule">Расписание</SelectItem>
-                <SelectItem value="threshold">Порог</SelectItem>
+                <SelectItem value="all">{t('automations.filters.allTriggers')}</SelectItem>
+                <SelectItem value="event">{t('automations.filters.event')}</SelectItem>
+                <SelectItem value="schedule">{t('automations.filters.schedule')}</SelectItem>
+                <SelectItem value="threshold">{t('automations.filters.threshold')}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -208,12 +212,12 @@ export default function Automations() {
               onValueChange={(v) => { setEnabledFilter(v === 'all' ? '' : v); setPage(1) }}
             >
               <SelectTrigger className="w-32 h-8 text-xs bg-dark-800 border-dark-600">
-                <SelectValue placeholder="Статус" />
+                <SelectValue placeholder={t('automations.filters.status')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Все</SelectItem>
-                <SelectItem value="true">Активные</SelectItem>
-                <SelectItem value="false">Выключенные</SelectItem>
+                <SelectItem value="all">{t('automations.filters.all')}</SelectItem>
+                <SelectItem value="true">{t('automations.filters.active')}</SelectItem>
+                <SelectItem value="false">{t('automations.filters.disabled')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -228,14 +232,14 @@ export default function Automations() {
           ) : !data?.items?.length ? (
             <div className="text-center py-16">
               <Zap className="w-12 h-12 text-dark-600 mx-auto mb-4" />
-              <p className="text-dark-400">Нет правил автоматизации</p>
+              <p className="text-dark-400">{t('automations.noRules')}</p>
               {canCreate && (
                 <Button
                   variant="outline"
                   className="mt-4"
                   onClick={handleCreate}
                 >
-                  <Plus className="w-4 h-4 mr-2" /> Создать первое правило
+                  <Plus className="w-4 h-4 mr-2" /> {t('automations.createFirstRule')}
                 </Button>
               )}
             </div>
@@ -262,7 +266,7 @@ export default function Automations() {
               {data.pages > 1 && (
                 <div className="flex items-center justify-between pt-2">
                   <span className="text-xs text-dark-400">
-                    Стр. {data.page} из {data.pages} ({data.total} правил)
+                    {t('automations.pagination', { page: data.page, pages: data.pages, total: data.total })}
                   </span>
                   <div className="flex gap-1">
                     <Button
@@ -317,9 +321,9 @@ export default function Automations() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="Удалить правило?"
-        description={`Правило "${deleteTarget?.name}" и все его логи будут удалены.`}
-        confirmLabel="Удалить"
+        title={t('automations.deleteRuleTitle')}
+        description={t('automations.deleteRuleDescription', { name: deleteTarget?.name })}
+        confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleDeleteConfirm}
       />

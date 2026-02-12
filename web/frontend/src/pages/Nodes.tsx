@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
+import { useFormatters } from '@/lib/useFormatters'
 import { useHasPermission } from '@/components/PermissionGate'
 import {
   RefreshCw,
@@ -77,32 +79,6 @@ const fetchNodes = async (): Promise<Node[]> => {
   return data.items || data
 }
 
-// Utility functions
-function formatBytes(bytes: number | null | undefined): string {
-  if (!bytes || bytes <= 0) return '0 Б'
-  const k = 1024
-  const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 Б'
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-function formatTimeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Никогда'
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHour = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHour / 24)
-
-  if (diffSec < 60) return 'Только что'
-  if (diffMin < 60) return `${diffMin} мин назад`
-  if (diffHour < 24) return `${diffHour} ч назад`
-  return `${diffDay} дн назад`
-}
-
 // Node edit modal
 function NodeEditModal({
   node,
@@ -119,6 +95,7 @@ function NodeEditModal({
   isPending: boolean
   error: string
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<NodeEditFormData>({
     name: node.name,
     address: node.address,
@@ -150,9 +127,9 @@ function NodeEditModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Редактирование ноды</DialogTitle>
+          <DialogTitle>{t('nodes.editNode.title')}</DialogTitle>
           <DialogDescription className="sr-only">
-            Форма редактирования параметров ноды
+            {t('nodes.editNode.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -164,32 +141,32 @@ function NodeEditModal({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Название</Label>
+            <Label>{t('nodes.editNode.name')}</Label>
             <Input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Название ноды"
+              placeholder={t('nodes.editNode.namePlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <Label>Адрес</Label>
+            <Label>{t('nodes.editNode.address')}</Label>
             <Input
               type="text"
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
-              placeholder="IP или домен"
+              placeholder={t('nodes.editNode.addressPlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <Label>Порт</Label>
+            <Label>{t('nodes.editNode.port')}</Label>
             <Input
               type="number"
               min={1}
               max={65535}
               value={form.port}
               onChange={(e) => setForm({ ...form, port: e.target.value })}
-              placeholder="Порт"
+              placeholder={t('nodes.editNode.port')}
             />
           </div>
         </div>
@@ -200,13 +177,13 @@ function NodeEditModal({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            Отмена
+            {t('nodes.actions.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isPending || !form.name.trim() || !form.address.trim() || !form.port}
           >
-            {isPending ? 'Сохранение...' : 'Сохранить'}
+            {isPending ? t('nodes.actions.saving') : t('nodes.actions.save')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -228,6 +205,7 @@ function NodeCreateModal({
   isPending: boolean
   error: string
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<NodeEditFormData>({
     name: '',
     address: '',
@@ -248,9 +226,9 @@ function NodeCreateModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Добавление ноды</DialogTitle>
+          <DialogTitle>{t('nodes.createNode.title')}</DialogTitle>
           <DialogDescription className="sr-only">
-            Форма создания новой ноды
+            {t('nodes.createNode.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -262,32 +240,32 @@ function NodeCreateModal({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Название</Label>
+            <Label>{t('nodes.editNode.name')}</Label>
             <Input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Название ноды"
+              placeholder={t('nodes.editNode.namePlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <Label>Адрес</Label>
+            <Label>{t('nodes.editNode.address')}</Label>
             <Input
               type="text"
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
-              placeholder="IP или домен"
+              placeholder={t('nodes.editNode.addressPlaceholder')}
             />
           </div>
           <div className="space-y-2">
-            <Label>Порт</Label>
+            <Label>{t('nodes.editNode.port')}</Label>
             <Input
               type="number"
               min={1}
               max={65535}
               value={form.port}
               onChange={(e) => setForm({ ...form, port: e.target.value })}
-              placeholder="Порт"
+              placeholder={t('nodes.editNode.port')}
             />
           </div>
         </div>
@@ -298,13 +276,13 @@ function NodeCreateModal({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            Отмена
+            {t('nodes.actions.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isPending || !form.name.trim() || !form.address.trim() || !form.port}
           >
-            {isPending ? 'Создание...' : 'Создать'}
+            {isPending ? t('nodes.actions.creating') : t('nodes.actions.create')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -322,6 +300,7 @@ function AgentTokenModal({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [generatedToken, setGeneratedToken] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -343,10 +322,10 @@ function AgentTokenModal({
     onSuccess: (data) => {
       setGeneratedToken(data.token)
       queryClient.invalidateQueries({ queryKey: ['node-agent-token', node.uuid] })
-      toast.success('Токен сгенерирован')
+      toast.success(t('nodes.toast.tokenGenerated'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -357,10 +336,10 @@ function AgentTokenModal({
     onSuccess: () => {
       setGeneratedToken(null)
       queryClient.invalidateQueries({ queryKey: ['node-agent-token', node.uuid] })
-      toast.success('Токен отозван')
+      toast.success(t('nodes.toast.tokenRevoked'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -381,10 +360,10 @@ function AgentTokenModal({
         <DialogHeader>
           <div className="flex items-center gap-2">
             <Key className="w-5 h-5 text-primary-400" />
-            <DialogTitle>Токен Node Agent</DialogTitle>
+            <DialogTitle>{t('nodes.agentToken.title')}</DialogTitle>
           </div>
           <DialogDescription>
-            Нода: <span className="text-white font-medium">{node.name}</span>
+            {t('nodes.agentToken.node')}: <span className="text-white font-medium">{node.name}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -397,16 +376,16 @@ function AgentTokenModal({
             {/* Token status */}
             <div className="p-3 bg-dark-800/50 rounded-lg">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-dark-200">Статус</span>
+                <span className="text-sm text-dark-200">{t('nodes.agentToken.status')}</span>
                 {tokenStatus?.has_token ? (
                   <span className="flex items-center gap-1.5 text-sm text-green-400">
                     <ShieldCheck className="w-4 h-4" />
-                    Установлен
+                    {t('nodes.agentToken.installed')}
                   </span>
                 ) : (
                   <span className="flex items-center gap-1.5 text-sm text-yellow-400">
                     <AlertTriangle className="w-4 h-4" />
-                    Не установлен
+                    {t('nodes.agentToken.notInstalled')}
                   </span>
                 )}
               </div>
@@ -420,7 +399,7 @@ function AgentTokenModal({
               <div className="p-3 bg-primary-500/5 border border-primary-500/20 rounded-lg space-y-3">
                 <div className="flex items-center gap-1.5 text-xs text-yellow-400">
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  Сохраните токен! Он больше не будет показан.
+                  {t('nodes.agentToken.saveWarning')}
                 </div>
                 <div className="relative">
                   <pre className="text-xs text-primary-300 font-mono bg-dark-900/50 p-2.5 rounded overflow-x-auto whitespace-pre-wrap break-all">{generatedToken}</pre>
@@ -429,7 +408,7 @@ function AgentTokenModal({
                     size="icon"
                     className="absolute top-1.5 right-1.5 h-7 w-7 text-dark-300 hover:text-white"
                     onClick={() => copyToClipboard(generatedToken)}
-                    title="Копировать токен"
+                    title={t('nodes.agentToken.copyToken')}
                   >
                     <Copy className="w-4 h-4" />
                   </Button>
@@ -438,7 +417,7 @@ function AgentTokenModal({
                 {/* Env config hint */}
                 {envConfig && (
                   <div>
-                    <p className="text-xs text-dark-300 mb-1.5">Для .env файла агента:</p>
+                    <p className="text-xs text-dark-300 mb-1.5">{t('nodes.agentToken.envHint')}:</p>
                     <div className="relative">
                       <pre className="text-[11px] text-dark-200 font-mono bg-dark-900/50 p-2.5 rounded overflow-x-auto whitespace-pre-wrap break-all">{envConfig}</pre>
                       <Button
@@ -446,7 +425,7 @@ function AgentTokenModal({
                         size="icon"
                         className="absolute top-1.5 right-1.5 h-7 w-7 text-dark-300 hover:text-white"
                         onClick={() => copyToClipboard(envConfig)}
-                        title="Копировать конфиг"
+                        title={t('nodes.agentToken.copyConfig')}
                       >
                         <Copy className="w-4 h-4" />
                       </Button>
@@ -455,7 +434,7 @@ function AgentTokenModal({
                 )}
 
                 {copied && (
-                  <p className="text-xs text-green-400">Скопировано!</p>
+                  <p className="text-xs text-green-400">{t('nodes.agentToken.copied')}</p>
                 )}
               </div>
             )}
@@ -473,7 +452,7 @@ function AgentTokenModal({
                 disabled={generateMutation.isPending}
               >
                 <Key className="w-4 h-4 mr-2" />
-                {generateMutation.isPending ? 'Генерация...' : tokenStatus?.has_token ? 'Перегенерировать' : 'Сгенерировать'}
+                {generateMutation.isPending ? t('nodes.agentToken.generating') : tokenStatus?.has_token ? t('nodes.agentToken.regenerate') : t('nodes.agentToken.generate')}
               </Button>
 
               {tokenStatus?.has_token && (
@@ -485,7 +464,7 @@ function AgentTokenModal({
                   }}
                   disabled={revokeMutation.isPending}
                 >
-                  {revokeMutation.isPending ? 'Отзыв...' : 'Отозвать'}
+                  {revokeMutation.isPending ? t('nodes.agentToken.revoking') : t('nodes.agentToken.revoke')}
                 </Button>
               )}
             </div>
@@ -496,9 +475,9 @@ function AgentTokenModal({
     <ConfirmDialog
       open={tokenConfirmAction !== null}
       onOpenChange={(open) => { if (!open) setTokenConfirmAction(null) }}
-      title={tokenConfirmAction === 'generate' ? 'Сгенерировать новый токен?' : 'Отозвать токен?'}
-      description={tokenConfirmAction === 'generate' ? 'Старый токен перестанет работать.' : 'Node Agent потеряет доступ.'}
-      confirmLabel={tokenConfirmAction === 'generate' ? 'Сгенерировать' : 'Отозвать'}
+      title={tokenConfirmAction === 'generate' ? t('nodes.agentToken.confirmGenerate') : t('nodes.agentToken.confirmRevoke')}
+      description={tokenConfirmAction === 'generate' ? t('nodes.agentToken.confirmGenerateDesc') : t('nodes.agentToken.confirmRevokeDesc')}
+      confirmLabel={tokenConfirmAction === 'generate' ? t('nodes.agentToken.generate') : t('nodes.agentToken.revoke')}
       variant={tokenConfirmAction === 'revoke' ? 'destructive' : 'default'}
       onConfirm={() => {
         if (tokenConfirmAction === 'generate') generateMutation.mutate()
@@ -532,6 +511,8 @@ function NodeCard({
   canEdit: boolean
   canDelete: boolean
 }) {
+  const { t } = useTranslation()
+  const { formatBytes, formatTimeAgo } = useFormatters()
   const isOnline = node.is_connected && !node.is_disabled
 
   const statusVariant = node.is_disabled
@@ -540,10 +521,10 @@ function NodeCard({
       ? 'success'
       : 'destructive'
   const statusText = node.is_disabled
-    ? 'Отключён'
+    ? t('nodes.status.disabled')
     : node.is_connected
-      ? 'Онлайн'
-      : 'Офлайн'
+      ? t('nodes.status.online')
+      : t('nodes.status.offline')
 
   return (
     <Card className={cn('relative', node.is_disabled && 'opacity-60')}>
@@ -595,19 +576,19 @@ function NodeCard({
                   {canEdit && (
                     <DropdownMenuItem onClick={onRestart}>
                       <RefreshCw className="w-4 h-4 mr-2" />
-                      Перезапустить
+                      {t('nodes.actions.restart')}
                     </DropdownMenuItem>
                   )}
                   {canEdit && (
                     <DropdownMenuItem onClick={onEdit}>
                       <Pencil className="w-4 h-4 mr-2" />
-                      Редактировать
+                      {t('nodes.actions.edit')}
                     </DropdownMenuItem>
                   )}
                   {canEdit && (
                     <DropdownMenuItem onClick={onTokenManage}>
                       <Key className="w-4 h-4 mr-2" />
-                      Токен агента
+                      {t('nodes.actions.agentToken')}
                     </DropdownMenuItem>
                   )}
                   {(canEdit || canDelete) && <DropdownMenuSeparator />}
@@ -615,12 +596,12 @@ function NodeCard({
                     node.is_disabled ? (
                       <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
                         <Play className="w-4 h-4 mr-2" />
-                        Включить
+                        {t('nodes.actions.enable')}
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem onClick={onDisable} className="text-yellow-400 focus:text-yellow-400">
                         <Square className="w-4 h-4 mr-2" />
-                        Отключить
+                        {t('nodes.actions.disable')}
                       </DropdownMenuItem>
                     )
                   )}
@@ -630,7 +611,7 @@ function NodeCard({
                       className="text-red-400 focus:text-red-400"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
-                      Удалить
+                      {t('nodes.actions.delete')}
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
@@ -646,14 +627,14 @@ function NodeCard({
           <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
             <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
               <Users className="w-3.5 h-3.5" />
-              <span className="text-[10px] md:text-xs">Онлайн</span>
+              <span className="text-[10px] md:text-xs">{t('nodes.stats.online')}</span>
             </div>
             <p className="text-base md:text-lg font-semibold text-white">{node.users_online}</p>
           </div>
           <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
             <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
               <BarChart3 className="w-3.5 h-3.5" />
-              <span className="text-[10px] md:text-xs">Сегодня</span>
+              <span className="text-[10px] md:text-xs">{t('nodes.stats.today')}</span>
             </div>
             <p className="text-sm md:text-lg font-semibold text-white">
               {formatBytes(node.traffic_today_bytes)}
@@ -662,7 +643,7 @@ function NodeCard({
           <div className="text-center p-2 md:p-3 bg-dark-800/50 rounded-lg">
             <div className="flex items-center justify-center gap-1 text-dark-200 mb-1">
               <BarChart3 className="w-3.5 h-3.5" />
-              <span className="text-[10px] md:text-xs">Всего</span>
+              <span className="text-[10px] md:text-xs">{t('nodes.stats.total')}</span>
             </div>
             <p className="text-sm md:text-lg font-semibold text-white">
               {formatBytes(node.traffic_total_bytes)}
@@ -675,7 +656,7 @@ function NodeCard({
         <div className="flex items-center justify-between text-xs text-dark-200">
           <div className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
-            {formatTimeAgo(node.last_seen_at)}
+            {node.last_seen_at ? formatTimeAgo(node.last_seen_at) : t('nodes.status.never')}
           </div>
           {node.xray_version && (
             <span className="flex items-center gap-1 text-dark-300">
@@ -728,6 +709,7 @@ function NodeSkeleton() {
 }
 
 export default function Nodes() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('nodes', 'create')
   const canEdit = useHasPermission('nodes', 'edit')
@@ -751,10 +733,10 @@ export default function Nodes() {
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/restart`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success('Нода перезапущена')
+      toast.success(t('nodes.toast.restarted'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -762,10 +744,10 @@ export default function Nodes() {
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/enable`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success('Нода включена')
+      toast.success(t('nodes.toast.enabled'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -773,10 +755,10 @@ export default function Nodes() {
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/disable`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success('Нода отключена')
+      toast.success(t('nodes.toast.disabled'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -784,10 +766,10 @@ export default function Nodes() {
     mutationFn: (uuid: string) => client.delete(`/nodes/${uuid}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success('Нода удалена')
+      toast.success(t('nodes.toast.deleted'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -798,11 +780,11 @@ export default function Nodes() {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       setEditingNode(null)
       setEditError('')
-      toast.success('Нода обновлена')
+      toast.success(t('nodes.toast.updated'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      setEditError(err.response?.data?.detail || err.message || 'Ошибка сохранения')
-      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
+      setEditError(err.response?.data?.detail || err.message || t('nodes.toast.saveError'))
+      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -812,11 +794,11 @@ export default function Nodes() {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
       setShowCreateModal(false)
       setCreateError('')
-      toast.success('Нода создана')
+      toast.success(t('nodes.toast.created'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      setCreateError(err.response?.data?.detail || err.message || 'Ошибка создания')
-      toast.error('Ошибка: ' + (err.response?.data?.detail || err.message))
+      setCreateError(err.response?.data?.detail || err.message || t('nodes.toast.createError'))
+      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
     },
   })
 
@@ -844,8 +826,8 @@ export default function Nodes() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">Ноды</h1>
-          <p className="text-dark-200 mt-1 text-sm md:text-base">Управление серверами</p>
+          <h1 className="page-header-title">{t('nodes.title')}</h1>
+          <p className="text-dark-200 mt-1 text-sm md:text-base">{t('nodes.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {canCreate && (
@@ -853,7 +835,7 @@ export default function Nodes() {
               onClick={() => { setShowCreateModal(true); setCreateError('') }}
             >
               <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Добавить</span>
+              <span className="hidden sm:inline">{t('nodes.actions.add')}</span>
             </Button>
           )}
           <Button
@@ -862,7 +844,7 @@ export default function Nodes() {
             disabled={isLoading}
           >
             <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
-            <span className="hidden sm:inline">Обновить</span>
+            <span className="hidden sm:inline">{t('nodes.actions.refresh')}</span>
           </Button>
         </div>
       </div>
@@ -871,7 +853,7 @@ export default function Nodes() {
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <CardContent className="p-4 md:p-6">
-            <p className="text-xs md:text-sm text-dark-200">Всего</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.total')}</p>
             <p className="text-xl md:text-2xl font-bold text-white mt-1">
               {isLoading ? '-' : totalNodes}
             </p>
@@ -879,7 +861,7 @@ export default function Nodes() {
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <CardContent className="p-4 md:p-6">
-            <p className="text-xs md:text-sm text-dark-200">Онлайн</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.online')}</p>
             <p className="text-xl md:text-2xl font-bold text-green-400 mt-1">
               {isLoading ? '-' : onlineNodes}
             </p>
@@ -887,7 +869,7 @@ export default function Nodes() {
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <CardContent className="p-4 md:p-6">
-            <p className="text-xs md:text-sm text-dark-200">Офлайн</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.offline')}</p>
             <p className="text-xl md:text-2xl font-bold text-red-400 mt-1">
               {isLoading ? '-' : offlineNodes}
             </p>
@@ -895,7 +877,7 @@ export default function Nodes() {
         </Card>
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <CardContent className="p-4 md:p-6">
-            <p className="text-xs md:text-sm text-dark-200">Отключены</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.disabled')}</p>
             <p className="text-xl md:text-2xl font-bold text-dark-200 mt-1">
               {isLoading ? '-' : disabledNodes}
             </p>
@@ -903,7 +885,7 @@ export default function Nodes() {
         </Card>
         <Card className="text-center col-span-2 sm:col-span-1 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
           <CardContent className="p-4 md:p-6">
-            <p className="text-xs md:text-sm text-dark-200">Пользователей</p>
+            <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.users')}</p>
             <p className="text-xl md:text-2xl font-bold text-primary-400 mt-1">
               {isLoading ? '-' : totalUsersOnline}
             </p>
@@ -921,7 +903,7 @@ export default function Nodes() {
             <Card className="text-center py-12">
               <CardContent>
                 <WifiOff className="w-12 h-12 text-dark-300 mx-auto mb-3" />
-                <p className="text-dark-200">Нет добавленных нод</p>
+                <p className="text-dark-200">{t('nodes.status.noNodes')}</p>
               </CardContent>
             </Card>
           </div>
@@ -979,13 +961,13 @@ export default function Nodes() {
         open={confirmAction !== null}
         onOpenChange={(open) => { if (!open) setConfirmAction(null) }}
         title={
-          confirmAction?.type === 'delete' ? 'Удалить ноду?' : ''
+          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.title') : ''
         }
         description={
-          confirmAction?.type === 'delete' ? 'Нода будет удалена. Это действие нельзя отменить.' : ''
+          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.description') : ''
         }
         confirmLabel={
-          confirmAction?.type === 'delete' ? 'Удалить' : 'Подтвердить'
+          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.confirm') : t('nodes.actions.confirm')
         }
         variant={confirmAction?.type === 'delete' ? 'destructive' : 'default'}
         onConfirm={() => {

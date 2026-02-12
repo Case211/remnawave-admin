@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
   Check,
   AlertTriangle,
@@ -22,6 +23,7 @@ import client from '../api/client'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
 import { useHasPermission } from '@/components/PermissionGate'
+import { useFormatters } from '@/lib/useFormatters'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -85,35 +87,6 @@ const resetSetting = async (key: string): Promise<void> => {
   await client.delete(`/settings/${key}`)
 }
 
-// Category labels in Russian
-const categoryLabels: Record<string, string> = {
-  'general': 'Общие',
-  'notifications': 'Уведомления',
-  'sync': 'Синхронизация',
-  'violations': 'Обнаружение нарушений',
-  'reports': 'Отчёты',
-  'collector': 'Коллектор данных',
-  'limits': 'Лимиты',
-  'appearance': 'Внешний вид',
-}
-
-
-const subcategoryLabels: Record<string, string> = {
-  'topics': 'Топики уведомлений',
-  'weights': 'Веса компонентов скора',
-}
-
-const SYNC_ENTITY_LABELS: Record<string, string> = {
-  users: 'Пользователи',
-  nodes: 'Ноды',
-  hosts: 'Хосты',
-  config_profiles: 'Профили',
-  templates: 'Шаблоны',
-  snippets: 'Сниппеты',
-  squads: 'Сквады',
-  hwid_devices: 'HWID устройства',
-  asn: 'ASN база',
-}
 
 // Entity keys that can be synced manually (maps display key -> API trigger key)
 const SYNCABLE_ENTITIES: Record<string, string> = {
@@ -134,6 +107,8 @@ function SyncStatusBlock({
   queryClient: ReturnType<typeof useQueryClient>
   canEdit: boolean
 }) {
+  const { t } = useTranslation()
+  const { formatTimeAgo } = useFormatters()
   const [isOpen, setIsOpen] = useState(false)
   const [syncingEntity, setSyncingEntity] = useState<string | null>(null)
 
@@ -145,11 +120,11 @@ function SyncStatusBlock({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['syncStatus'] })
       setSyncingEntity(null)
-      toast.success('Синхронизация завершена')
+      toast.success(t('settings.sync.syncComplete'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setSyncingEntity(null)
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка синхронизации')
+      toast.error(err.response?.data?.detail || err.message || t('settings.sync.syncError'))
     },
   })
 
@@ -162,11 +137,11 @@ function SyncStatusBlock({
       queryClient.invalidateQueries({ queryKey: ['syncStatus'] })
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       setSyncingEntity(null)
-      toast.success('Полная синхронизация завершена')
+      toast.success(t('settings.sync.fullSyncComplete'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setSyncingEntity(null)
-      toast.error(err.response?.data?.detail || err.message || 'Ошибка синхронизации')
+      toast.error(err.response?.data?.detail || err.message || t('settings.sync.syncError'))
     },
   })
 
@@ -199,13 +174,13 @@ function SyncStatusBlock({
           ) : (
             <ChevronRight className="w-5 h-5 text-dark-200 transition-transform duration-200" />
           )}
-          <h2 className="text-base font-semibold text-white">Синхронизация</h2>
+          <h2 className="text-base font-semibold text-white">{t('settings.sync.title')}</h2>
           <span className="text-xs text-dark-300">{visibleItems.length}</span>
         </div>
         <div className="flex items-center gap-2">
           {errorCount > 0 && (
             <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5">
-              {errorCount} ошибок
+              {t('settings.sync.errors', { count: errorCount })}
             </Badge>
           )}
           {successCount > 0 && (
@@ -228,7 +203,7 @@ function SyncStatusBlock({
               className="flex items-center gap-1.5 text-xs font-medium text-primary-400 bg-primary-500/10 hover:bg-primary-500/20 border-primary-500/20"
             >
               <RefreshCw className={cn('w-3.5 h-3.5', syncingEntity === 'all' && 'animate-spin')} />
-              Синхронизировать всё
+              {t('settings.sync.syncAll')}
             </Button>
           </div>
 
@@ -240,7 +215,7 @@ function SyncStatusBlock({
                 <div key={item.key} className="bg-dark-800/50 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium text-white">
-                      {SYNC_ENTITY_LABELS[item.key] || item.key}
+                      {t(`settings.sync.entities.${item.key}`, { defaultValue: item.key })}
                     </span>
                     <div className="flex items-center gap-1.5">
                       {entityKey && (
@@ -250,7 +225,7 @@ function SyncStatusBlock({
                           onClick={() => syncMutation.mutate(entityKey)}
                           disabled={syncingEntity !== null || !canEdit}
                           className="h-6 w-6 text-dark-400 hover:text-primary-400"
-                          title="Синхронизировать"
+                          title={t('settings.sync.syncEntity')}
                         >
                           <RefreshCw className={cn('w-3.5 h-3.5', isSyncing && 'animate-spin')} />
                         </Button>
@@ -265,11 +240,11 @@ function SyncStatusBlock({
                   </div>
                   <div className="text-xs text-dark-200 flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {item.last_sync_at ? formatTimeAgo(item.last_sync_at) : 'Никогда'}
+                    {item.last_sync_at ? formatTimeAgo(item.last_sync_at) : t('settings.sync.never')}
                   </div>
                   {item.records_synced > 0 && (
                     <div className="text-xs text-dark-200 mt-0.5">
-                      {item.records_synced} записей
+                      {t('settings.sync.recordsSynced', { count: item.records_synced })}
                     </div>
                   )}
                   {item.error_message && (
@@ -287,35 +262,19 @@ function SyncStatusBlock({
   )
 }
 
-function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHour = Math.floor(diffMin / 60)
-
-  if (diffSec < 60) return 'Только что'
-  if (diffMin < 60) return `${diffMin} мин назад`
-  if (diffHour < 24) return `${diffHour} ч назад`
-  return date.toLocaleDateString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
 function SourceBadge({ source }: { source: string }) {
+  const { t } = useTranslation()
   if (source === 'db') {
     return (
-      <Badge className="gap-1 text-[10px] px-1.5 py-0.5" title="Значение из БД (наивысший приоритет)">
+      <Badge className="gap-1 text-[10px] px-1.5 py-0.5" title={t('settings.source.dbTitle')}>
         <Database className="w-2.5 h-2.5" />
-        БД
+        {t('settings.source.db')}
       </Badge>
     )
   }
   if (source === 'env') {
     return (
-      <Badge variant="warning" className="gap-1 text-[10px] px-1.5 py-0.5" title="Значение из .env файла (fallback)">
+      <Badge variant="warning" className="gap-1 text-[10px] px-1.5 py-0.5" title={t('settings.source.envTitle')}>
         <Zap className="w-2.5 h-2.5" />
         .env
       </Badge>
@@ -323,8 +282,8 @@ function SourceBadge({ source }: { source: string }) {
   }
   if (source === 'default') {
     return (
-      <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0.5" title="Значение по умолчанию">
-        По умолч.
+      <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0.5" title={t('settings.source.defaultTitle')}>
+        {t('settings.source.default')}
       </Badge>
     )
   }
@@ -414,14 +373,15 @@ function getPasswordStrength(password: string): PasswordStrengthResult {
   if (password.length >= 16) score += 10
   score = Math.min(100, score)
 
-  if (password.length === 0) return { score: 0, level: 'none', label: '', color: '', checks }
-  if (score < 30) return { score, level: 'weak', label: 'Слабый', color: '#ef4444', checks }
-  if (score < 60) return { score, level: 'fair', label: 'Средний', color: '#f59e0b', checks }
-  if (score < 80) return { score, level: 'good', label: 'Хороший', color: '#22c55e', checks }
-  return { score, level: 'strong', label: 'Надёжный', color: '#10b981', checks }
+  if (password.length === 0) return { score: 0, level: 'none', label: 'none', color: '', checks }
+  if (score < 30) return { score, level: 'weak', label: 'weak', color: '#ef4444', checks }
+  if (score < 60) return { score, level: 'fair', label: 'fair', color: '#f59e0b', checks }
+  if (score < 80) return { score, level: 'good', label: 'good', color: '#22c55e', checks }
+  return { score, level: 'strong', label: 'strong', color: '#10b981', checks }
 }
 
 function SettingsPasswordStrengthBar({ password }: { password: string }) {
+  const { t } = useTranslation()
   const strength = useMemo(() => getPasswordStrength(password), [password])
 
   if (password.length === 0) return null
@@ -443,19 +403,19 @@ function SettingsPasswordStrengthBar({ password }: { password: string }) {
           className="text-[11px] font-medium min-w-[60px] text-right transition-colors duration-300"
           style={{ color: strength.color }}
         >
-          {strength.label}
+          {strength.label !== 'none' ? t(`settings.password.strength.${strength.label}`) : ''}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
         {[
-          { ok: strength.checks.length, text: '8+ символов' },
-          { ok: strength.checks.lower, text: 'Строчная (a-z)' },
-          { ok: strength.checks.upper, text: 'Заглавная (A-Z)' },
-          { ok: strength.checks.digit, text: 'Цифра (0-9)' },
-          { ok: strength.checks.special, text: 'Спецсимвол' },
+          { ok: strength.checks.length, key: 'length', text: t('settings.password.checks.length') },
+          { ok: strength.checks.lower, key: 'lower', text: t('settings.password.checks.lower') },
+          { ok: strength.checks.upper, key: 'upper', text: t('settings.password.checks.upper') },
+          { ok: strength.checks.digit, key: 'digit', text: t('settings.password.checks.digit') },
+          { ok: strength.checks.special, key: 'special', text: t('settings.password.checks.special') },
         ].map((c) => (
           <div
-            key={c.text}
+            key={c.key}
             className={cn(
               'text-[11px] flex items-center gap-1 transition-colors duration-200',
               c.ok ? 'text-green-400' : 'text-dark-300'
@@ -510,6 +470,7 @@ function SettingsPasswordInput({
 }
 
 function ChangePasswordBlock() {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -559,12 +520,12 @@ function ChangePasswordBlock() {
         current_password: currentPassword,
         new_password: newPassword,
       })
-      setSuccess('Пароль успешно изменён')
+      setSuccess(t('settings.password.success'))
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Ошибка при смене пароля')
+      setError(e instanceof Error ? e.message : t('settings.password.error'))
     } finally {
       setSaving(false)
     }
@@ -584,10 +545,10 @@ function ChangePasswordBlock() {
           ) : (
             <ChevronRight className="w-5 h-5 text-dark-200" />
           )}
-          <h2 className="text-base font-semibold text-white">Смена пароля</h2>
+          <h2 className="text-base font-semibold text-white">{t('settings.password.title')}</h2>
           {isGenerated && (
             <Badge variant="warning" className="text-[10px] px-1.5 py-0.5">
-              Требуется смена
+              {t('settings.password.changeRequired')}
             </Badge>
           )}
         </div>
@@ -598,7 +559,7 @@ function ChangePasswordBlock() {
         <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50 animate-fade-in-down space-y-4">
           {isGenerated && (
             <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2.5">
-              Вы используете автоматически сгенерированный пароль. Рекомендуется сменить его на свой.
+              {t('settings.password.generatedWarning')}
             </div>
           )}
 
@@ -623,11 +584,11 @@ function ChangePasswordBlock() {
           )}
 
           <div>
-            <Label className="block text-xs font-medium text-dark-300 mb-1.5">Текущий пароль</Label>
+            <Label className="block text-xs font-medium text-dark-300 mb-1.5">{t('settings.password.currentPassword')}</Label>
             <SettingsPasswordInput
               value={currentPassword}
               onChange={setCurrentPassword}
-              placeholder="Введите текущий пароль"
+              placeholder={t('settings.password.enterCurrentPassword')}
               autoComplete="current-password"
               disabled={saving}
             />
@@ -637,7 +598,7 @@ function ChangePasswordBlock() {
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <Label className="text-xs font-medium text-dark-300">Новый пароль</Label>
+              <Label className="text-xs font-medium text-dark-300">{t('settings.password.newPassword')}</Label>
               <div className="flex items-center gap-1">
                 {newPassword && (
                   <Button
@@ -647,7 +608,7 @@ function ChangePasswordBlock() {
                     className="h-6 px-2 text-[11px] text-dark-400 hover:text-dark-200"
                   >
                     {copied ? <Check className="w-3 h-3 mr-1 text-green-400" /> : <Copy className="w-3 h-3 mr-1" />}
-                    {copied ? 'Скопировано' : 'Копировать'}
+                    {copied ? t('common.copied') : t('common.copy')}
                   </Button>
                 )}
                 <Button
@@ -658,14 +619,14 @@ function ChangePasswordBlock() {
                   className="h-6 px-2 text-[11px] text-accent-teal hover:text-accent-teal/80 hover:bg-accent-teal/10"
                 >
                   <KeyRound className="w-3 h-3 mr-1" />
-                  Генератор
+                  {t('settings.password.generator')}
                 </Button>
               </div>
             </div>
             <SettingsPasswordInput
               value={newPassword}
               onChange={setNewPassword}
-              placeholder="Введите новый пароль"
+              placeholder={t('settings.password.enterNewPassword')}
               autoComplete="new-password"
               disabled={saving}
             />
@@ -673,20 +634,20 @@ function ChangePasswordBlock() {
           </div>
 
           <div>
-            <Label className="block text-xs font-medium text-dark-300 mb-1.5">Подтвердите новый пароль</Label>
+            <Label className="block text-xs font-medium text-dark-300 mb-1.5">{t('settings.password.confirmNewPassword')}</Label>
             <SettingsPasswordInput
               value={confirmPassword}
               onChange={setConfirmPassword}
-              placeholder="Повторите новый пароль"
+              placeholder={t('settings.password.repeatNewPassword')}
               autoComplete="new-password"
               disabled={saving}
             />
             {confirmPassword.length > 0 && !passwordsMatch && (
-              <p className="text-[11px] text-red-400 mt-1">Пароли не совпадают</p>
+              <p className="text-[11px] text-red-400 mt-1">{t('settings.password.passwordsDoNotMatch')}</p>
             )}
             {confirmPassword.length > 0 && passwordsMatch && (
               <p className="text-[11px] text-green-400 mt-1 flex items-center gap-1">
-                <Check className="w-3 h-3" /> Пароли совпадают
+                <Check className="w-3 h-3" /> {t('settings.password.passwordsMatch')}
               </p>
             )}
           </div>
@@ -696,7 +657,7 @@ function ChangePasswordBlock() {
             disabled={!canSubmit}
             className="w-full text-sm bg-accent-teal text-white hover:bg-accent-teal/90 disabled:opacity-40"
           >
-            {saving ? 'Сохранение...' : 'Сменить пароль'}
+            {saving ? t('common.saving') : t('settings.password.changePassword')}
           </Button>
         </div>
       )}
@@ -705,6 +666,7 @@ function ChangePasswordBlock() {
 }
 
 function IpWhitelistBlock() {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const [newIp, setNewIp] = useState('')
   const [saving, setSaving] = useState(false)
@@ -782,8 +744,7 @@ function IpWhitelistBlock() {
       {isOpen && (
         <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-dark-700/50 animate-fade-in-down space-y-3">
           <p className="text-xs text-dark-200">
-            Если список пуст — доступ разрешён с любого IP. При добавлении IP доступ будет ограничен только указанными адресами.
-            Поддерживаются CIDR (например, 10.0.0.0/8).
+            {t('settings.ipWhitelist.description')}
           </p>
 
           {error && (
@@ -862,6 +823,7 @@ function IpWhitelistBlock() {
 
 
 export default function Settings() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const canEdit = useHasPermission('settings', 'edit')
   const [search, setSearch] = useState('')
@@ -1002,7 +964,7 @@ export default function Settings() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm text-white">{label}</p>
-              {item.is_readonly && <span title="Только для чтения"><Lock className="w-3 h-3 text-dark-300" /></span>}
+              {item.is_readonly && <span title={t('settings.readOnly')}><Lock className="w-3 h-3 text-dark-300" /></span>}
               <SourceBadge source={item.source} />
               {statusIcon}
             </div>
@@ -1020,7 +982,7 @@ export default function Settings() {
                 size="icon"
                 onClick={() => handleReset(item.key)}
                 className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Сбросить (использовать .env или значение по умолчанию)"
+                title={t('settings.resetToFallback')}
               >
                 <X className="w-3.5 h-3.5" />
               </Button>
@@ -1049,7 +1011,7 @@ export default function Settings() {
                 size="icon"
                 onClick={() => handleReset(item.key)}
                 className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Сбросить"
+                title={t('settings.reset')}
               >
                 <X className="w-3.5 h-3.5" />
               </Button>
@@ -1089,7 +1051,7 @@ export default function Settings() {
                 size="icon"
                 onClick={() => handleReset(item.key)}
                 className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Сбросить"
+                title={t('settings.reset')}
               >
                 <X className="w-3.5 h-3.5" />
               </Button>
@@ -1179,7 +1141,7 @@ export default function Settings() {
         {Object.entries(subcategories).map(([sub, subItems]) => (
           <div key={sub} className="mt-3">
             <div className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-1 px-1">
-              {subcategoryLabels[sub] || sub}
+              {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
             </div>
             <div className="bg-dark-800/30 rounded-lg px-3 divide-y divide-dark-700/30">
               {subItems.map((item) => renderConfigItem(item))}
@@ -1211,9 +1173,9 @@ export default function Settings() {
       {/* Page header */}
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">Настройки</h1>
+          <h1 className="page-header-title">{t('settings.title')}</h1>
           <p className="text-dark-200 mt-1 text-sm md:text-base">
-            Конфигурация бота и панели. Приоритет: БД {'>'} .env {'>'} по умолчанию
+            {t('settings.subtitle')}
           </p>
         </div>
         <Button
@@ -1222,7 +1184,7 @@ export default function Settings() {
           className="flex items-center gap-1"
         >
           <RefreshCw className="w-4 h-4" />
-          <span className="hidden sm:inline">Обновить</span>
+          <span className="hidden sm:inline">{t('common.refresh')}</span>
         </Button>
       </div>
 
@@ -1231,7 +1193,7 @@ export default function Settings() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
         <Input
           type="text"
-          placeholder="Поиск настроек..."
+          placeholder={t('settings.searchPlaceholder')}
           className="w-full pl-10 pr-10"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -1248,7 +1210,7 @@ export default function Settings() {
         )}
         {search && (
           <p className="text-xs text-dark-200 mt-1 ml-1">
-            Найдено: {totalFiltered} настроек
+            {t('settings.foundSettings', { count: totalFiltered })}
           </p>
         )}
       </div>
@@ -1296,7 +1258,7 @@ export default function Settings() {
                       <ChevronRight className="w-5 h-5 text-dark-200 transition-transform duration-200" />
                     )}
                     <h2 className="text-base font-semibold text-white">
-                      {categoryLabels[category] || category}
+                      {t(`settings.categories.${category}`, { defaultValue: category })}
                     </h2>
                     <span className="text-xs text-dark-300">
                       {search ? `${filteredCount}/${items.length}` : items.length}
@@ -1305,7 +1267,7 @@ export default function Settings() {
                   <div className="flex items-center gap-2">
                     {dbCount > 0 && (
                       <Badge className="text-[10px] px-1.5 py-0.5">
-                        {dbCount} в БД
+                        {t('settings.inDb', { count: dbCount })}
                       </Badge>
                     )}
                   </div>
@@ -1323,9 +1285,9 @@ export default function Settings() {
         <Card className="text-center py-12">
           <CardContent className="pt-6">
             <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-            <p className="text-dark-200">Настройки не найдены</p>
+            <p className="text-dark-200">{t('settings.noSettings')}</p>
             <p className="text-sm text-dark-200 mt-1">
-              Убедитесь, что база данных подключена и бот хотя бы раз запускался
+              {t('settings.noSettingsHint')}
             </p>
             <Button
               variant="secondary"
@@ -1333,7 +1295,7 @@ export default function Settings() {
               className="mt-4 inline-flex items-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
-              Повторить
+              {t('common.retry')}
             </Button>
           </CardContent>
         </Card>
@@ -1343,32 +1305,32 @@ export default function Settings() {
       {!settingsLoading && Object.keys(categories).length > 0 && !search && (
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
           <CardContent className="pt-4 md:pt-6">
-            <h3 className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-2">Приоритет значений</h3>
+            <h3 className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-2">{t('settings.legend.title')}</h3>
             <div className="flex flex-wrap items-center gap-3 text-xs text-dark-200">
               <div className="flex items-center gap-1.5">
                 <SourceBadge source="db" />
-                <span>-- установлено в БД (главный)</span>
+                <span>-- {t('settings.legend.db')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <SourceBadge source="env" />
-                <span>-- из .env файла (fallback)</span>
+                <span>-- {t('settings.legend.env')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <SourceBadge source="default" />
-                <span>-- значение по умолчанию</span>
+                <span>-- {t('settings.legend.default')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Lock className="w-3 h-3 text-dark-400" />
-                <span>-- только чтение</span>
+                <span>-- {t('settings.legend.readOnly')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <X className="w-3 h-3 text-dark-400" />
-                <span>-- сбросить к fallback</span>
+                <span>-- {t('settings.legend.resetToFallback')}</span>
               </div>
             </div>
             <Separator className="my-2" />
             <p className="text-[11px] text-dark-300">
-              Настройки применяются мгновенно после изменения. Для сброса наведите на настройку и нажмите X.
+              {t('settings.legend.hint')}
             </p>
           </CardContent>
         </Card>

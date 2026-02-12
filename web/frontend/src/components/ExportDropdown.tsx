@@ -1,4 +1,5 @@
 import { Download } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,20 +15,21 @@ interface ExportDropdownProps {
 }
 
 export function ExportDropdown({ onExportCSV, onExportJSON, disabled }: ExportDropdownProps) {
+  const { t } = useTranslation()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" disabled={disabled} className="gap-1.5">
           <Download className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Экспорт</span>
+          <span className="hidden sm:inline">{t('common.export.export')}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={onExportCSV}>
-          Экспорт CSV
+          {t('common.export.csv')}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onExportJSON}>
-          Экспорт JSON
+          {t('common.export.json')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

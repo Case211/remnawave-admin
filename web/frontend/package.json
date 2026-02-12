@@ -44,12 +44,15 @@
     "cmdk": "^1.1.1",
     "date-fns": "^3.2.0",
     "html-to-image": "^1.11.13",
+    "i18next": "^25.8.5",
+    "i18next-browser-languagedetector": "^8.2.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.563.0",
     "papaparse": "^5.5.3",
     "postcss": "^8.4.33",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-i18next": "^16.5.4",
     "react-icons": "^5.0.1",
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.21.2",
@@ -62,6 +65,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.50.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -75,7 +79,6 @@
     "eslint-plugin-react-refresh": "^0.4.5",
     "jsdom": "^28.0.0",
     "typescript": "^5.3.3",
-    "@playwright/test": "^1.50.0",
     "vitest": "^4.0.18"
   }
 }
