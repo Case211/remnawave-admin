@@ -449,7 +449,11 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
     channels: rule?.channels || ['in_app'],
     is_enabled: rule?.is_enabled ?? true,
     escalation_minutes: rule?.escalation_minutes ?? 0,
+    title_template: rule?.title_template || 'Alert: {rule_name}',
+    body_template: rule?.body_template || '{metric}: {value} ({operator} {threshold})',
   })
+
+  const [showTemplates, setShowTemplates] = useState(false)
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -607,6 +611,91 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
               })}
             </div>
             <p className="text-[10px] text-dark-400 mt-1">{t('notifications.alerts.channelsHint')}</p>
+          </div>
+
+          {/* Message template editor */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowTemplates(!showTemplates)}
+              className="flex items-center gap-1.5 text-sm text-dark-300 hover:text-dark-100 transition-colors"
+            >
+              {showTemplates ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              {t('notifications.alerts.templateSection')}
+            </button>
+
+            {showTemplates && (
+              <div className="mt-3 space-y-3 p-3 rounded-lg border border-dark-400/20 bg-dark-800/50">
+                <div>
+                  <Label className="text-xs">{t('notifications.alerts.titleTemplate')}</Label>
+                  <Input
+                    value={form.title_template}
+                    onChange={(e) => setForm({ ...form, title_template: e.target.value })}
+                    placeholder="Alert: {rule_name}"
+                    className="mt-1 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">{t('notifications.alerts.bodyTemplate')}</Label>
+                  <textarea
+                    value={form.body_template}
+                    onChange={(e) => setForm({ ...form, body_template: e.target.value })}
+                    placeholder="{metric}: {value} ({operator} {threshold})"
+                    rows={3}
+                    className="mt-1 w-full rounded-md border border-dark-400/30 bg-dark-900 px-3 py-2 text-xs font-mono text-dark-100 placeholder:text-dark-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 resize-none"
+                  />
+                </div>
+
+                {/* Live preview */}
+                <div className="rounded-md border border-dark-400/15 bg-dark-900/60 p-2.5">
+                  <p className="text-[10px] text-dark-500 mb-1">{t('notifications.alerts.templatePreview')}</p>
+                  <p className="text-xs font-medium text-dark-100">
+                    {form.title_template
+                      .replace('{rule_name}', form.name || 'Rule')
+                      .replace('{metric}', form.metric)
+                      .replace('{severity}', form.severity)
+                    }
+                  </p>
+                  <p className="text-[11px] text-dark-300 mt-0.5">
+                    {form.body_template
+                      .replace('{rule_name}', form.name || 'Rule')
+                      .replace('{metric}', form.metric)
+                      .replace('{value}', '87.3')
+                      .replace('{threshold}', String(form.threshold))
+                      .replace('{operator}', ({ gt: '>', gte: '>=', lt: '<', lte: '<=', eq: '=' } as Record<string, string>)[form.operator] || '>')
+                      .replace('{severity}', form.severity)
+                      .replace('{node_names}', 'node-01, node-02')
+                      .replace('{timestamp}', new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC')
+                    }
+                  </p>
+                </div>
+
+                {/* Available variables */}
+                <div>
+                  <p className="text-[10px] text-dark-500 mb-1">{t('notifications.alerts.templateVars')}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { key: '{rule_name}', hint: t('notifications.alerts.varRuleName') },
+                      { key: '{metric}', hint: t('notifications.alerts.varMetric') },
+                      { key: '{value}', hint: t('notifications.alerts.varValue') },
+                      { key: '{threshold}', hint: t('notifications.alerts.varThreshold') },
+                      { key: '{operator}', hint: t('notifications.alerts.varOperator') },
+                      { key: '{severity}', hint: t('notifications.alerts.varSeverity') },
+                      { key: '{node_names}', hint: t('notifications.alerts.varNodeNames') },
+                      { key: '{timestamp}', hint: t('notifications.alerts.varTimestamp') },
+                    ].map(({ key, hint }) => (
+                      <span
+                        key={key}
+                        title={hint}
+                        className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono bg-dark-700/60 text-cyan-400/80 border border-dark-400/15 cursor-help"
+                      >
+                        {key}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

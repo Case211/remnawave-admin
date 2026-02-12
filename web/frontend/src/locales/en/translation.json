@@ -1965,7 +1965,20 @@
       "escalation": "Escalation delay",
       "channelsLabel": "Channels",
       "channelInApp": "In-app",
-      "channelsHint": "Select which channels to notify when this rule triggers. Channels must be configured in the Channels tab."
+      "channelsHint": "Select which channels to notify when this rule triggers. Channels must be configured in the Channels tab.",
+      "templateSection": "Message template",
+      "titleTemplate": "Title template",
+      "bodyTemplate": "Body template",
+      "templatePreview": "Preview:",
+      "templateVars": "Available variables:",
+      "varRuleName": "Alert rule name",
+      "varMetric": "Metric identifier",
+      "varValue": "Current metric value",
+      "varThreshold": "Threshold value",
+      "varOperator": "Comparison operator (>, >=, <, etc.)",
+      "varSeverity": "Severity level (info, warning, critical)",
+      "varNodeNames": "Names of affected/offline nodes",
+      "varTimestamp": "Current UTC timestamp"
     },
     "alertLogs": {
       "status": "Status",
