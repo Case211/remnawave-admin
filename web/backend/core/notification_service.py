@@ -14,14 +14,19 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-def _get_global_telegram_config() -> tuple:
-    """Return (bot_token, chat_id, topic_id) from global settings or (None, None, None)."""
+def _get_global_telegram_config(topic_type: str = "service") -> tuple:
+    """Return (bot_token, chat_id, topic_id) from global settings.
+
+    ``topic_type`` selects the Telegram topic: "nodes", "service",
+    "users", "errors", "violations", etc.  Falls back to the general
+    NOTIFICATIONS_TOPIC_ID when a per-type topic is not configured.
+    """
     try:
         from web.backend.core.config import get_web_settings
         settings = get_web_settings()
         bot_token = settings.telegram_bot_token or None
         chat_id = settings.notifications_chat_id or None
-        topic_id = settings.notifications_topic_service or settings.notifications_topic_id or None
+        topic_id = settings.get_topic_for(topic_type)
         return bot_token, chat_id, topic_id
     except Exception:
         return None, None, None
@@ -259,10 +264,13 @@ async def create_notification(
     source_id: Optional[str] = None,
     group_key: Optional[str] = None,
     channels: Optional[List[str]] = None,
+    topic_type: str = "service",
 ) -> Optional[int]:
     """Create in-app notification and dispatch to configured channels.
 
     If admin_id is None, creates notification for all admins.
+    ``topic_type`` controls which Telegram topic the global fallback
+    message is sent to ("nodes", "service", "users", "errors", …).
     Returns the notification ID.
     """
     channels = channels or ["in_app"]
@@ -347,10 +355,12 @@ async def create_notification(
 
         # Global channel fallback: send to NOTIFICATIONS_CHAT_ID for Telegram
         # This ensures alerts reach the configured Telegram chat even if
-        # no per-admin Telegram channel is set up
+        # no per-admin Telegram channel is set up.
+        # topic_type routes the message to the correct Telegram topic
+        # (e.g. "nodes" → NOTIFICATIONS_TOPIC_NODES)
         if "telegram" in channels or "all" in channels:
             asyncio.create_task(
-                _send_to_global_telegram(title, body, severity)
+                _send_to_global_telegram(title, body, severity, topic_type)
             )
 
     except Exception as e:
@@ -359,10 +369,13 @@ async def create_notification(
     return notification_id
 
 
-async def _send_to_global_telegram(title: str, body: str, severity: str):
-    """Send notification to the global NOTIFICATIONS_CHAT_ID as a fallback."""
+async def _send_to_global_telegram(title: str, body: str, severity: str, topic_type: str = "service"):
+    """Send notification to the global NOTIFICATIONS_CHAT_ID.
+
+    ``topic_type`` selects the Telegram topic ("nodes", "service", etc.).
+    """
     try:
-        bot_token, chat_id, topic_id = _get_global_telegram_config()
+        bot_token, chat_id, topic_id = _get_global_telegram_config(topic_type)
         if not chat_id or not bot_token:
             logger.debug("No global NOTIFICATIONS_CHAT_ID configured, skipping global Telegram dispatch")
             return

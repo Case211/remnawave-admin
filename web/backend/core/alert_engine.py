@@ -223,6 +223,17 @@ class AlertEngine:
         if isinstance(channels, str):
             channels = json.loads(channels)
 
+        # Map metric → Telegram topic so the alert goes to the right thread
+        METRIC_TOPIC_MAP = {
+            "cpu_usage_percent": "nodes",
+            "ram_usage_percent": "nodes",
+            "disk_usage_percent": "nodes",
+            "node_offline_minutes": "nodes",
+            "traffic_today_gb": "nodes",
+            "users_online": "service",
+        }
+        topic_type = METRIC_TOPIC_MAP.get(metric, "service")
+
         title = f"Alert: {rule_name}"
         body = (
             f"{metric}: {current_value:.1f} "
@@ -267,6 +278,7 @@ class AlertEngine:
                 source_id=str(rule_id),
                 group_key=rule.get("group_key") or f"alert_{rule_id}",
                 channels=channels,
+                topic_type=topic_type,
             )
 
             # Escalation check
