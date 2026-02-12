@@ -81,7 +81,7 @@ export default function Notifications() {
   const [tab, setTab] = useState('notifications')
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in min-w-0 overflow-x-hidden">
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold text-white">{t('notifications.title')}</h1>
@@ -89,23 +89,23 @@ export default function Notifications() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="bg-dark-700/50 p-1">
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="w-4 h-4" />
-            {t('notifications.tabs.notifications')}
+      <Tabs value={tab} onValueChange={setTab} className="w-full min-w-0">
+        <TabsList className="bg-dark-700/50 p-1 w-full flex overflow-x-auto no-scrollbar">
+          <TabsTrigger value="notifications" className="gap-1.5 sm:gap-2 flex-1 min-w-0 px-2 sm:px-3">
+            <Bell className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline truncate">{t('notifications.tabs.notifications')}</span>
           </TabsTrigger>
-          <TabsTrigger value="alertRules" className="gap-2">
-            <Shield className="w-4 h-4" />
-            {t('notifications.tabs.alertRules')}
+          <TabsTrigger value="alertRules" className="gap-1.5 sm:gap-2 flex-1 min-w-0 px-2 sm:px-3">
+            <Shield className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline truncate">{t('notifications.tabs.alertRules')}</span>
           </TabsTrigger>
-          <TabsTrigger value="alertLogs" className="gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            {t('notifications.tabs.alertLogs')}
+          <TabsTrigger value="alertLogs" className="gap-1.5 sm:gap-2 flex-1 min-w-0 px-2 sm:px-3">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline truncate">{t('notifications.tabs.alertLogs')}</span>
           </TabsTrigger>
-          <TabsTrigger value="channels" className="gap-2">
-            <Settings2 className="w-4 h-4" />
-            {t('notifications.tabs.channels')}
+          <TabsTrigger value="channels" className="gap-1.5 sm:gap-2 flex-1 min-w-0 px-2 sm:px-3">
+            <Settings2 className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline truncate">{t('notifications.tabs.channels')}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -182,8 +182,8 @@ function NotificationsTab() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-end">
-            <div className="flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+            <div className="flex-1 min-w-0">
               <Label className="text-xs text-dark-300 mb-1 block">{t('notifications.filters.readStatus')}</Label>
               <Select value={filterRead} onValueChange={setFilterRead}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -194,7 +194,7 @@ function NotificationsTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <Label className="text-xs text-dark-300 mb-1 block">{t('notifications.filters.severity')}</Label>
               <Select value={filterSeverity} onValueChange={setFilterSeverity}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -206,14 +206,14 @@ function NotificationsTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => markAllRead.mutate()}>
+            <div className="flex gap-2 flex-shrink-0">
+              <Button variant="outline" size="sm" onClick={() => markAllRead.mutate()} className="flex-1 sm:flex-none">
                 <Check className="w-4 h-4 mr-1" />
-                {t('notifications.markAllRead')}
+                <span className="truncate">{t('notifications.markAllRead')}</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => deleteOld.mutate()} className="text-red-400">
+              <Button variant="outline" size="sm" onClick={() => deleteOld.mutate()} className="text-red-400 flex-1 sm:flex-none">
                 <Trash2 className="w-4 h-4 mr-1" />
-                {t('notifications.deleteOld')}
+                <span className="truncate">{t('notifications.deleteOld')}</span>
               </Button>
             </div>
           </div>
@@ -238,19 +238,19 @@ function NotificationsTab() {
                 <div
                   key={n.id}
                   className={cn(
-                    'flex items-start gap-3 px-4 py-3 border-l-2 hover:bg-dark-600/30 transition-colors',
+                    'flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-l-2 hover:bg-dark-600/30 transition-colors',
                     n.is_read ? 'border-l-transparent opacity-60' : `border-l-2 ${n.severity === 'critical' ? 'border-l-red-500' : n.severity === 'warning' ? 'border-l-yellow-500' : 'border-l-cyan-500'}`,
                   )}
                 >
                   <div className={cn('w-2 h-2 rounded-full mt-2 flex-shrink-0', SEVERITY_DOT[n.severity] || 'bg-cyan-400')} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className={cn('text-sm', n.is_read ? 'text-dark-200' : 'text-white font-medium')}>{n.title}</p>
-                      <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', SEVERITY_BADGE[n.severity])}>
+                      <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 flex-shrink-0', SEVERITY_BADGE[n.severity])}>
                         {n.severity}
                       </Badge>
                       {n.type !== 'info' && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{n.type}</Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex-shrink-0">{n.type}</Badge>
                       )}
                     </div>
                     {n.body && <p className="text-xs text-dark-300 mt-0.5">{n.body}</p>}
@@ -322,8 +322,8 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Badge variant="outline">{rules.length} {t('notifications.alerts.rules')}</Badge>
           <Badge variant="outline" className="text-green-400 border-green-500/30">
             {rules.filter(r => r.is_enabled).length} {t('notifications.alerts.active')}
@@ -353,10 +353,10 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
           {rules.map((rule) => (
             <Card key={rule.id} className={cn(!rule.is_enabled && 'opacity-50')}>
               <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="text-sm font-medium text-white">{rule.name}</h4>
+                <div className="flex items-start justify-between gap-2 sm:gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <h4 className="text-sm font-medium text-white truncate">{rule.name}</h4>
                       <Badge variant="outline" className={cn('text-[10px] px-1.5', SEVERITY_BADGE[rule.severity])}>
                         {rule.severity}
                       </Badge>
@@ -511,7 +511,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label>{t('notifications.alerts.metric')}</Label>
               <Select value={form.metric} onValueChange={(v) => setForm({ ...form, metric: v })}>
@@ -544,7 +544,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>{t('notifications.alerts.severityLabel')}</Label>
               <Select value={form.severity} onValueChange={(v) => setForm({ ...form, severity: v })}>
@@ -578,7 +578,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
           {/* Channel selection */}
           <div>
             <Label className="mb-2 block">{t('notifications.alerts.channelsLabel')}</Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {[
                 { key: 'in_app', label: t('notifications.alerts.channelInApp'), Icon: MonitorSmartphone },
                 { key: 'telegram', label: 'Telegram', Icon: MessageSquare },
@@ -758,8 +758,8 @@ function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-end">
-            <div className="flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+            <div className="flex-1 min-w-0">
               <Label className="text-xs text-dark-300 mb-1 block">{t('notifications.alertLogs.status')}</Label>
               <Select value={filterAcknowledged} onValueChange={setFilterAcknowledged}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -794,18 +794,18 @@ function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
           ) : (
             <div className="divide-y divide-dark-400/10">
               {items.map((log) => (
-                <div key={log.id} className="flex items-start gap-3 px-4 py-3">
+                <div key={log.id} className="flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3">
                   <div className={cn('w-2 h-2 rounded-full mt-2 flex-shrink-0', SEVERITY_DOT[log.severity || 'info'])} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm text-white font-medium">{log.rule_name || `Rule #${log.rule_id}`}</p>
                       {log.severity && (
-                        <Badge variant="outline" className={cn('text-[10px] px-1.5', SEVERITY_BADGE[log.severity])}>
+                        <Badge variant="outline" className={cn('text-[10px] px-1.5 flex-shrink-0', SEVERITY_BADGE[log.severity])}>
                           {log.severity}
                         </Badge>
                       )}
                       {log.acknowledged && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 text-green-400 border-green-500/30">
+                        <Badge variant="outline" className="text-[10px] px-1.5 text-green-400 border-green-500/30 flex-shrink-0">
                           <Check className="w-3 h-3 mr-0.5" />
                           {t('notifications.alertLogs.acked')}
                         </Badge>
@@ -912,7 +912,7 @@ function ChannelsTab() {
               const Icon = channelIcons[ch.channel_type] || Bell
               return (
                 <Card key={ch.id}>
-                  <CardContent className="p-4 flex items-center gap-4">
+                  <CardContent className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
                     <div className="w-10 h-10 rounded-lg bg-dark-600 flex items-center justify-center flex-shrink-0">
                       <Icon className="w-5 h-5 text-cyan-400" />
                     </div>
@@ -1116,7 +1116,7 @@ function SmtpConfigSection() {
 
       <Card>
         <CardContent className="p-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>{t('notifications.smtp.host')}</Label>
               <Input
@@ -1135,7 +1135,7 @@ function SmtpConfigSection() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>{t('notifications.smtp.username')}</Label>
               <Input
@@ -1155,7 +1155,7 @@ function SmtpConfigSection() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>{t('notifications.smtp.fromEmail')}</Label>
               <Input
@@ -1174,7 +1174,7 @@ function SmtpConfigSection() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
             <div className="flex items-center gap-2">
               <Switch
                 checked={form.use_tls ?? true}
@@ -1198,17 +1198,18 @@ function SmtpConfigSection() {
             </div>
           </div>
 
-          <div className="flex gap-3">
-            <Button onClick={() => updateSmtp.mutate()} disabled={updateSmtp.isPending}>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button onClick={() => updateSmtp.mutate()} disabled={updateSmtp.isPending} className="w-full sm:w-auto">
               {updateSmtp.isPending ? t('common.saving') : t('common.save')}
             </Button>
-            <div className="flex-1 flex gap-2">
+            <div className="flex-1 flex gap-2 min-w-0">
               <Input
                 placeholder={t('notifications.smtp.testEmailPlaceholder')}
                 value={testEmail}
                 onChange={(e) => setTestEmail(e.target.value)}
+                className="min-w-0"
               />
-              <Button variant="outline" onClick={() => testSmtp.mutate()} disabled={!testEmail || testSmtp.isPending}>
+              <Button variant="outline" onClick={() => testSmtp.mutate()} disabled={!testEmail || testSmtp.isPending} className="flex-shrink-0">
                 <Send className="w-4 h-4 mr-1" />
                 {t('notifications.smtp.test')}
               </Button>
