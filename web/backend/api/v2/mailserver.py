@@ -420,6 +420,8 @@ async def create_smtp_credential(
                 payload.username, password_hash, payload.description,
                 payload.allowed_from_domains, payload.max_send_per_hour,
             )
+        from web.backend.core.mail.mail_service import mail_service
+        await mail_service.refresh_smtp_credentials()
         return dict(row)
     except Exception as e:
         logger.error("SMTP credential creation failed: %s", e)
@@ -496,6 +498,8 @@ async def update_smtp_credential(
         row = await conn.fetchrow(query, *values)
     if not row:
         raise HTTPException(status_code=404, detail="SMTP credential not found")
+    from web.backend.core.mail.mail_service import mail_service
+    await mail_service.refresh_smtp_credentials()
     return dict(row)
 
 
@@ -508,4 +512,6 @@ async def delete_smtp_credential(
     from src.services.database import db_service
     async with db_service.acquire() as conn:
         await conn.execute("DELETE FROM smtp_credentials WHERE id = $1", cred_id)
+    from web.backend.core.mail.mail_service import mail_service
+    await mail_service.refresh_smtp_credentials()
     return {"ok": True}

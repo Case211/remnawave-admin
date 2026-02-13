@@ -4,7 +4,6 @@ Listens on port 587 (configurable) and requires SMTP AUTH (PLAIN / LOGIN)
 before accepting messages for relay through the outbound queue.
 """
 import asyncio
-import base64
 import hashlib
 import hmac
 import logging
@@ -43,71 +42,119 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 class SubmissionAuthenticator:
-    """aiosmtpd Authenticator that checks credentials against smtp_credentials table."""
+    """aiosmtpd Authenticator — SYNCHRONOUS callback with in-memory credential cache.
 
-    async def __call__(self, server, session, envelope, mechanism, auth_data):
-        """Authenticate SMTP client.
+    aiosmtpd < 2.0 calls the authenticator from a synchronous ``_authenticate``
+    method and never awaits the result.  An ``async def __call__`` therefore
+    produces a coroutine that is silently discarded, which breaks AUTH entirely.
 
-        aiosmtpd calls this with mechanism='LOGIN' or 'PLAIN' and
-        auth_data as a LoginPassword namedtuple.
-        """
+    This implementation keeps an in-memory dict of active credentials that is
+    refreshed from the database on startup and periodically (or on demand when
+    credentials are changed via the API).  The ``__call__`` is a plain ``def``
+    so that aiosmtpd gets an ``AuthResult`` immediately.
+    """
+
+    REFRESH_INTERVAL = 60  # seconds between automatic credential reloads
+
+    def __init__(self):
+        self._credentials: dict = {}  # username -> row dict
+        self._refresh_task: Optional[asyncio.Task] = None
+
+    # ── cache management ─────────────────────────────────────────
+
+    async def refresh_credentials(self):
+        """(Re)load active SMTP credentials from the database into memory."""
+        try:
+            from src.services.database import db_service
+            async with db_service.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT id, username, password_hash, is_active, "
+                    "max_send_per_hour, allowed_from_domains "
+                    "FROM smtp_credentials WHERE is_active = true"
+                )
+            self._credentials = {row["username"]: dict(row) for row in rows}
+            logger.debug("SMTP credential cache refreshed: %d active credential(s)", len(self._credentials))
+        except Exception as e:
+            logger.error("Failed to refresh SMTP credential cache: %s", e)
+
+    async def _periodic_refresh(self):
+        """Background task that refreshes credentials every REFRESH_INTERVAL seconds."""
+        while True:
+            await asyncio.sleep(self.REFRESH_INTERVAL)
+            await self.refresh_credentials()
+
+    def start_refresh_task(self):
+        """Start the periodic credential-refresh background task."""
+        if self._refresh_task is None or self._refresh_task.done():
+            self._refresh_task = asyncio.get_event_loop().create_task(self._periodic_refresh())
+
+    def stop_refresh_task(self):
+        """Cancel the periodic refresh task."""
+        if self._refresh_task and not self._refresh_task.done():
+            self._refresh_task.cancel()
+            self._refresh_task = None
+
+    # ── aiosmtpd authenticator callback (SYNC) ───────────────────
+
+    def __call__(self, server, session, envelope, mechanism, auth_data):
+        """Authenticate SMTP client — called synchronously by aiosmtpd."""
         if not isinstance(auth_data, LoginPassword):
+            logger.warning("SMTP AUTH: unexpected auth_data type: %s", type(auth_data))
             return AuthResult(success=False, handled=False)
 
         username = auth_data.login.decode() if isinstance(auth_data.login, bytes) else auth_data.login
         password = auth_data.password.decode() if isinstance(auth_data.password, bytes) else auth_data.password
 
+        cred = self._credentials.get(username)
+        if not cred:
+            logger.warning("SMTP AUTH failed: unknown user '%s'", username)
+            return AuthResult(success=False, handled=False)
+
+        if not verify_password(password, cred["password_hash"]):
+            logger.warning("SMTP AUTH failed: bad password for '%s'", username)
+            return AuthResult(success=False, handled=False)
+
+        # Rate limiting
+        now = datetime.now(timezone.utc)
+        entry = _CRED_COUNTER[cred["id"]]
+        if now >= entry["reset_at"]:
+            entry["count"] = 0
+            entry["reset_at"] = now + timedelta(hours=1)
+        if entry["count"] >= cred["max_send_per_hour"]:
+            logger.warning("SMTP AUTH rate limit exceeded for '%s'", username)
+            return AuthResult(success=False, handled=False)
+
+        # Store credential info on session for use in handler
+        session.smtp_credential_id = cred["id"]
+        session.smtp_username = username
+        session.smtp_max_per_hour = cred["max_send_per_hour"]
+        session.smtp_allowed_domains = cred.get("allowed_from_domains") or []
+
+        peer = session.peer
+        remote_ip = peer[0] if peer else "unknown"
+        logger.info("SMTP AUTH success: user='%s' from=%s", username, remote_ip)
+
+        # Fire-and-forget: update last_login_at in DB
+        try:
+            loop = asyncio.get_event_loop()
+            loop.create_task(self._update_last_login(cred["id"], remote_ip))
+        except Exception:
+            pass
+
+        return AuthResult(success=True)
+
+    @staticmethod
+    async def _update_last_login(cred_id: int, remote_ip: str):
+        """Update last_login_at / last_login_ip in the background."""
         try:
             from src.services.database import db_service
             async with db_service.acquire() as conn:
-                row = await conn.fetchrow(
-                    "SELECT id, password_hash, is_active, max_send_per_hour, allowed_from_domains "
-                    "FROM smtp_credentials WHERE username = $1",
-                    username,
-                )
-
-                if not row:
-                    logger.warning("SMTP AUTH failed: unknown user '%s'", username)
-                    return AuthResult(success=False, handled=False)
-
-                if not row["is_active"]:
-                    logger.warning("SMTP AUTH failed: disabled user '%s'", username)
-                    return AuthResult(success=False, handled=False)
-
-                if not verify_password(password, row["password_hash"]):
-                    logger.warning("SMTP AUTH failed: bad password for '%s'", username)
-                    return AuthResult(success=False, handled=False)
-
-                # Rate limiting
-                now = datetime.now(timezone.utc)
-                entry = _CRED_COUNTER[row["id"]]
-                if now >= entry["reset_at"]:
-                    entry["count"] = 0
-                    entry["reset_at"] = now + timedelta(hours=1)
-                if entry["count"] >= row["max_send_per_hour"]:
-                    logger.warning("SMTP AUTH rate limit exceeded for '%s'", username)
-                    return AuthResult(success=False, handled=False)
-
-                # Update last login
-                peer = session.peer
-                remote_ip = peer[0] if peer else "unknown"
                 await conn.execute(
                     "UPDATE smtp_credentials SET last_login_at = NOW(), last_login_ip = $1 WHERE id = $2",
-                    remote_ip, row["id"],
+                    remote_ip, cred_id,
                 )
-
-                # Store credential info on session for use in handler
-                session.smtp_credential_id = row["id"]
-                session.smtp_username = username
-                session.smtp_max_per_hour = row["max_send_per_hour"]
-                session.smtp_allowed_domains = row["allowed_from_domains"] or []
-
-                logger.info("SMTP AUTH success: user='%s' from=%s", username, remote_ip)
-                return AuthResult(success=True)
-
         except Exception as e:
-            logger.error("SMTP AUTH error: %s", e)
-            return AuthResult(success=False, handled=False)
+            logger.debug("Failed to update last login for credential %d: %s", cred_id, e)
 
 
 class SubmissionHandler:
@@ -223,13 +270,20 @@ class SubmissionServer:
         self.hostname = hostname
         self.port = port
         self._server: Optional[asyncio.AbstractServer] = None
+        self.authenticator: Optional[SubmissionAuthenticator] = None
 
     async def start(self):
         """Start the SMTP submission server."""
         try:
             handler = SubmissionHandler()
-            authenticator = SubmissionAuthenticator()
+            self.authenticator = SubmissionAuthenticator()
+
+            # Load credentials into memory before accepting connections
+            await self.authenticator.refresh_credentials()
+            self.authenticator.start_refresh_task()
+
             loop = asyncio.get_running_loop()
+            authenticator = self.authenticator  # local ref for lambda
             self._server = await loop.create_server(
                 lambda: SMTPProtocol(
                     handler,
@@ -248,6 +302,8 @@ class SubmissionServer:
 
     async def stop(self):
         """Stop the submission server."""
+        if self.authenticator:
+            self.authenticator.stop_refresh_task()
         if self._server:
             self._server.close()
             await self._server.wait_closed()
