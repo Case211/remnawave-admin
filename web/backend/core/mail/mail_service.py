@@ -186,6 +186,11 @@ class MailService:
         except Exception:
             return None
 
+    async def refresh_smtp_credentials(self):
+        """Trigger an immediate refresh of the SMTP credential cache."""
+        if self.submission and self.submission.authenticator:
+            await self.submission.authenticator.refresh_credentials()
+
     async def get_domain_dns_records(self, domain_id: int) -> List[Dict[str, Any]]:
         """Get the required DNS records for a domain."""
         from web.backend.core.mail.dns_checker import get_required_dns_records
