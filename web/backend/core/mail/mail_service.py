@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from web.backend.core.mail.outbound_queue import OutboundMailQueue, outbound_queue
 from web.backend.core.mail.inbound_server import InboundMailServer
+from web.backend.core.mail.submission_server import SubmissionServer
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class MailService:
     def __init__(self):
         self.queue: OutboundMailQueue = outbound_queue
         self.inbound: Optional[InboundMailServer] = None
+        self.submission: Optional[SubmissionServer] = None
 
     async def start(self):
         """Start mail subsystems based on configuration.
@@ -42,6 +44,13 @@ class MailService:
                 self.inbound = InboundMailServer(hostname=mail_hostname, port=inbound_port)
                 await self.inbound.start()
 
+            # Start submission (relay) server if configured
+            submission_enabled = config_service.get("mailserver_submission_enabled", False)
+            if submission_enabled:
+                submission_port = config_service.get("mailserver_submission_port", 587)
+                self.submission = SubmissionServer(hostname=mail_hostname, port=submission_port)
+                await self.submission.start()
+
             logger.info("Mail service started")
         except Exception as e:
             logger.error("Mail service start error: %s", e)
@@ -55,6 +64,11 @@ class MailService:
         try:
             if self.inbound:
                 await self.inbound.stop()
+        except Exception:
+            pass
+        try:
+            if self.submission:
+                await self.submission.stop()
         except Exception:
             pass
         logger.info("Mail service stopped")
@@ -171,6 +185,11 @@ class MailService:
                 return dict(row) if row else None
         except Exception:
             return None
+
+    async def refresh_smtp_credentials(self):
+        """Trigger an immediate refresh of the SMTP credential cache."""
+        if self.submission and self.submission.authenticator:
+            await self.submission.authenticator.refresh_credentials()
 
     async def get_domain_dns_records(self, domain_id: int) -> List[Dict[str, Any]]:
         """Get the required DNS records for a domain."""

@@ -19,6 +19,9 @@ from web.backend.schemas.mailserver import (
     InboxItem,
     InboxMarkRead,
     QueueStats,
+    SmtpCredentialCreate,
+    SmtpCredentialRead,
+    SmtpCredentialUpdate,
 )
 
 logger = logging.getLogger(__name__)
@@ -394,3 +397,121 @@ async def send_test_email(
     if queue_id is None:
         raise HTTPException(status_code=400, detail="No active outbound domain configured")
     return {"ok": True, "queue_id": queue_id}
+
+
+# ── SMTP Credentials endpoints ────────────────────────────────────
+
+@router.post("/smtp-credentials", response_model=SmtpCredentialRead)
+async def create_smtp_credential(
+    payload: SmtpCredentialCreate,
+    admin: AdminUser = Depends(require_permission("mailserver", "create")),
+):
+    """Create SMTP credentials for external services to relay mail."""
+    from web.backend.core.mail.submission_server import hash_password_for_storage
+    from src.services.database import db_service
+
+    password_hash = hash_password_for_storage(payload.password)
+    try:
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow(
+                "INSERT INTO smtp_credentials (username, password_hash, description, "
+                "allowed_from_domains, max_send_per_hour) "
+                "VALUES ($1, $2, $3, $4, $5) RETURNING *",
+                payload.username, password_hash, payload.description,
+                payload.allowed_from_domains, payload.max_send_per_hour,
+            )
+        from web.backend.core.mail.mail_service import mail_service
+        await mail_service.refresh_smtp_credentials()
+        return dict(row)
+    except Exception as e:
+        logger.error("SMTP credential creation failed: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/smtp-credentials", response_model=List[SmtpCredentialRead])
+async def list_smtp_credentials(
+    admin: AdminUser = Depends(require_permission("mailserver", "view")),
+):
+    """List all SMTP credentials."""
+    from src.services.database import db_service
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, username, description, is_active, allowed_from_domains, "
+            "max_send_per_hour, last_login_at, last_login_ip, created_at, updated_at "
+            "FROM smtp_credentials ORDER BY id"
+        )
+    return [dict(r) for r in rows]
+
+
+@router.get("/smtp-credentials/{cred_id}", response_model=SmtpCredentialRead)
+async def get_smtp_credential(
+    cred_id: int,
+    admin: AdminUser = Depends(require_permission("mailserver", "view")),
+):
+    """Get SMTP credential details."""
+    from src.services.database import db_service
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, username, description, is_active, allowed_from_domains, "
+            "max_send_per_hour, last_login_at, last_login_ip, created_at, updated_at "
+            "FROM smtp_credentials WHERE id = $1", cred_id,
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="SMTP credential not found")
+    return dict(row)
+
+
+@router.put("/smtp-credentials/{cred_id}", response_model=SmtpCredentialRead)
+async def update_smtp_credential(
+    cred_id: int,
+    payload: SmtpCredentialUpdate,
+    admin: AdminUser = Depends(require_permission("mailserver", "edit")),
+):
+    """Update SMTP credential settings."""
+    from src.services.database import db_service
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Hash password if provided
+    if "password" in updates:
+        from web.backend.core.mail.submission_server import hash_password_for_storage
+        updates["password_hash"] = hash_password_for_storage(updates.pop("password"))
+
+    set_clauses = []
+    values = []
+    idx = 1
+    for key, val in updates.items():
+        set_clauses.append(f"{key} = ${idx}")
+        values.append(val)
+        idx += 1
+    set_clauses.append("updated_at = NOW()")
+    values.append(cred_id)
+
+    query = (
+        f"UPDATE smtp_credentials SET {', '.join(set_clauses)} WHERE id = ${idx} "
+        "RETURNING id, username, description, is_active, allowed_from_domains, "
+        "max_send_per_hour, last_login_at, last_login_ip, created_at, updated_at"
+    )
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(query, *values)
+    if not row:
+        raise HTTPException(status_code=404, detail="SMTP credential not found")
+    from web.backend.core.mail.mail_service import mail_service
+    await mail_service.refresh_smtp_credentials()
+    return dict(row)
+
+
+@router.delete("/smtp-credentials/{cred_id}")
+async def delete_smtp_credential(
+    cred_id: int,
+    admin: AdminUser = Depends(require_permission("mailserver", "delete")),
+):
+    """Delete an SMTP credential."""
+    from src.services.database import db_service
+    async with db_service.acquire() as conn:
+        await conn.execute("DELETE FROM smtp_credentials WHERE id = $1", cred_id)
+    from web.backend.core.mail.mail_service import mail_service
+    await mail_service.refresh_smtp_credentials()
+    return {"ok": True}

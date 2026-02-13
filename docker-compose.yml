@@ -105,6 +105,8 @@ services:
       - geoip_data:/app/geoip
     ports:
       - "${WEB_BACKEND_PORT:-8081}:8081"
+      - "${MAIL_INBOUND_PORT:-2525}:${MAIL_INBOUND_PORT:-2525}"
+      - "${MAIL_SUBMISSION_PORT:-587}:${MAIL_SUBMISSION_PORT:-587}"
     networks:
       - remnawave-network
     depends_on:

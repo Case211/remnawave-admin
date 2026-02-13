@@ -135,6 +135,39 @@ class InboxMarkRead(BaseModel):
     ids: List[int] = Field(default_factory=list)
 
 
+# ── SMTP Credentials ─────────────────────────────────────────────
+
+class SmtpCredentialCreate(BaseModel):
+    username: str
+    password: str
+    description: Optional[str] = None
+    allowed_from_domains: List[str] = Field(default_factory=list)
+    max_send_per_hour: int = 100
+
+
+class SmtpCredentialRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    description: Optional[str] = None
+    is_active: bool = True
+    allowed_from_domains: List[str] = Field(default_factory=list)
+    max_send_per_hour: int = 100
+    last_login_at: Optional[datetime] = None
+    last_login_ip: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class SmtpCredentialUpdate(BaseModel):
+    password: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    allowed_from_domains: Optional[List[str]] = None
+    max_send_per_hour: Optional[int] = None
+
+
 # ── Compose ──────────────────────────────────────────────────────
 
 class ComposeEmail(BaseModel):

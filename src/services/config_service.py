@@ -365,6 +365,26 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "default_value": "5",
         "sort_order": 6,
     },
+    {
+        "key": "mailserver_submission_enabled",
+        "value_type": "bool",
+        "category": "mailserver",
+        "display_name": "SMTP Submission включён",
+        "description": "Включить SMTP Submission сервер (порт 587) для отправки писем через логин/пароль",
+        "default_value": "false",
+        "env_var_name": "MAIL_SUBMISSION_ENABLED",
+        "sort_order": 7,
+    },
+    {
+        "key": "mailserver_submission_port",
+        "value_type": "int",
+        "category": "mailserver",
+        "display_name": "Порт SMTP Submission",
+        "description": "Порт для SMTP Submission сервера (стандарт — 587)",
+        "default_value": "587",
+        "env_var_name": "MAIL_SUBMISSION_PORT",
+        "sort_order": 8,
+    },
 ]
 
 

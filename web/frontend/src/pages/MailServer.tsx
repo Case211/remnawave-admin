@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import {
   Globe, Send, Inbox, ListOrdered, Plus, Trash2, RefreshCw,
   CheckCircle2, XCircle, Copy, Mail, Eye, MailOpen, X, Ban,
-  RotateCcw, Search,
+  RotateCcw, Search, KeyRound, Pencil,
 } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -36,6 +36,7 @@ import {
   type QueueStats,
   type InboxItem,
   type InboxDetail,
+  type SmtpCredential,
 } from '@/api/mailserver'
 import { cn } from '@/lib/utils'
 
@@ -90,12 +91,17 @@ export default function MailServer() {
             <Send className="w-4 h-4" />
             <span className="hidden sm:inline">{t('mailServer.tabs.compose')}</span>
           </TabsTrigger>
+          <TabsTrigger value="credentials" className="gap-1.5">
+            <KeyRound className="w-4 h-4" />
+            <span className="hidden sm:inline">{t('mailServer.tabs.credentials')}</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="domains"><DomainsTab canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} /></TabsContent>
         <TabsContent value="queue"><QueueTab canEdit={canEdit} canDelete={canDelete} /></TabsContent>
         <TabsContent value="inbox"><InboxTab canEdit={canEdit} canDelete={canDelete} /></TabsContent>
         <TabsContent value="compose"><ComposeTab /></TabsContent>
+        <TabsContent value="credentials"><CredentialsTab canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} /></TabsContent>
       </Tabs>
     </div>
   )
@@ -899,5 +905,359 @@ function ComposeTab() {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// ── Credentials Tab ──────────────────────────────────────────
+
+function CredentialsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; canEdit: boolean; canDelete: boolean }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [showAdd, setShowAdd] = useState(false)
+  const [editCred, setEditCred] = useState<SmtpCredential | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+
+  // Form state
+  const [formUsername, setFormUsername] = useState('')
+  const [formPassword, setFormPassword] = useState('')
+  const [formDescription, setFormDescription] = useState('')
+  const [formDomains, setFormDomains] = useState('')
+  const [formMaxPerHour, setFormMaxPerHour] = useState(100)
+
+  const { data: credentials, isLoading } = useQuery({
+    queryKey: ['mailserver-smtp-credentials'],
+    queryFn: mailserverApi.listSmtpCredentials,
+  })
+
+  const resetForm = () => {
+    setFormUsername('')
+    setFormPassword('')
+    setFormDescription('')
+    setFormDomains('')
+    setFormMaxPerHour(100)
+  }
+
+  const openAdd = () => {
+    resetForm()
+    setShowAdd(true)
+  }
+
+  const openEdit = (cred: SmtpCredential) => {
+    setFormUsername(cred.username)
+    setFormPassword('')
+    setFormDescription(cred.description || '')
+    setFormDomains((cred.allowed_from_domains || []).join(', '))
+    setFormMaxPerHour(cred.max_send_per_hour)
+    setEditCred(cred)
+  }
+
+  const parseDomains = (raw: string): string[] =>
+    raw.split(',').map(s => s.trim()).filter(Boolean)
+
+  const createMut = useMutation({
+    mutationFn: () => mailserverApi.createSmtpCredential({
+      username: formUsername,
+      password: formPassword,
+      description: formDescription || undefined,
+      allowed_from_domains: parseDomains(formDomains),
+      max_send_per_hour: formMaxPerHour,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mailserver-smtp-credentials'] })
+      toast.success(t('mailServer.credentials.created'))
+      setShowAdd(false)
+      resetForm()
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: () => mailserverApi.updateSmtpCredential(editCred!.id, {
+      ...(formPassword ? { password: formPassword } : {}),
+      description: formDescription || undefined,
+      allowed_from_domains: parseDomains(formDomains),
+      max_send_per_hour: formMaxPerHour,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mailserver-smtp-credentials'] })
+      toast.success(t('mailServer.credentials.updated'))
+      setEditCred(null)
+      resetForm()
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+  })
+
+  const toggleMut = useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
+      mailserverApi.updateSmtpCredential(id, { is_active }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mailserver-smtp-credentials'] }),
+    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => mailserverApi.deleteSmtpCredential(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mailserver-smtp-credentials'] })
+      toast.success(t('mailServer.credentials.deleted'))
+      setDeleteId(null)
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+  })
+
+  if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
+
+  return (
+    <div className="space-y-4">
+      {/* Header + add button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-white">{t('mailServer.credentials.title')}</h2>
+          <p className="text-xs text-muted-foreground">{t('mailServer.credentials.subtitle')}</p>
+        </div>
+        {canCreate && (
+          <Button size="sm" onClick={openAdd} className="gap-1.5">
+            <Plus className="w-4 h-4" /> {t('mailServer.credentials.add')}
+          </Button>
+        )}
+      </div>
+
+      {/* Connection info banner */}
+      <Card className="bg-dark-700/30 border-dark-400/10">
+        <CardContent className="p-3">
+          <p className="text-xs text-muted-foreground mb-1.5">{t('mailServer.credentials.connectionInfo')}</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+            <span><span className="text-muted-foreground">{t('mailServer.credentials.port')}:</span> <span className="text-white font-mono">587</span></span>
+            <span><span className="text-muted-foreground">{t('mailServer.credentials.auth')}:</span> <span className="text-white">PLAIN / LOGIN</span></span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Credentials list */}
+      {!credentials?.length ? (
+        <Card className="bg-dark-700/50 border-dark-400/20">
+          <CardContent className="py-12 text-center">
+            <KeyRound className="w-12 h-12 mx-auto text-dark-300 mb-3" />
+            <p className="text-muted-foreground">{t('mailServer.credentials.noCredentials')}</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {credentials.map((cred) => (
+            <Card key={cred.id} className="bg-dark-700/50 border-dark-400/20">
+              <CardContent className="p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={cn(
+                      "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
+                      cred.is_active ? "bg-green-500/20" : "bg-dark-600"
+                    )}>
+                      <KeyRound className={cn("w-4 h-4", cred.is_active ? "text-green-400" : "text-dark-300")} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-semibold font-mono text-sm">{cred.username}</span>
+                        <Badge variant="outline" className={cn("text-xs",
+                          cred.is_active
+                            ? "bg-green-500/20 text-green-400 border-green-500/30"
+                            : "bg-red-500/20 text-red-400 border-red-500/30"
+                        )}>
+                          {cred.is_active ? t('mailServer.credentials.active') : t('mailServer.credentials.inactive')}
+                        </Badge>
+                      </div>
+                      {cred.description && (
+                        <p className="text-xs text-muted-foreground truncate">{cred.description}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Stats */}
+                    <div className="text-xs text-muted-foreground text-right mr-2 hidden sm:block">
+                      <div>{t('mailServer.credentials.maxPerHour')}: <span className="text-dark-100">{cred.max_send_per_hour}</span></div>
+                      <div>
+                        {t('mailServer.credentials.lastLogin')}:{' '}
+                        <span className="text-dark-100">
+                          {cred.last_login_at ? formatDate(cred.last_login_at) : t('mailServer.credentials.never')}
+                        </span>
+                      </div>
+                    </div>
+                    {canEdit && (
+                      <Switch
+                        checked={cred.is_active}
+                        onCheckedChange={(checked) => toggleMut.mutate({ id: cred.id, is_active: checked })}
+                      />
+                    )}
+                    {canEdit && (
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(cred)} title={t('mailServer.credentials.edit')}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => setDeleteId(cred.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Allowed domains chips */}
+                {cred.allowed_from_domains && cred.allowed_from_domains.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    <span className="text-xs text-muted-foreground">{t('mailServer.credentials.allowedDomains')}:</span>
+                    {cred.allowed_from_domains.map((d) => (
+                      <Badge key={d} variant="outline" className="text-xs font-mono">{d}</Badge>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Add dialog */}
+      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('mailServer.credentials.add')}</DialogTitle>
+          </DialogHeader>
+          <CredentialForm
+            username={formUsername}
+            onUsernameChange={setFormUsername}
+            password={formPassword}
+            onPasswordChange={setFormPassword}
+            description={formDescription}
+            onDescriptionChange={setFormDescription}
+            domains={formDomains}
+            onDomainsChange={setFormDomains}
+            maxPerHour={formMaxPerHour}
+            onMaxPerHourChange={setFormMaxPerHour}
+            isNew
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAdd(false)}>{t('common.cancel')}</Button>
+            <Button onClick={() => createMut.mutate()} disabled={!formUsername || !formPassword || createMut.isPending}>
+              {createMut.isPending ? t('common.saving') : t('common.create')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={editCred !== null} onOpenChange={() => setEditCred(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('mailServer.credentials.edit')}: {editCred?.username}</DialogTitle>
+          </DialogHeader>
+          <CredentialForm
+            username={formUsername}
+            onUsernameChange={setFormUsername}
+            password={formPassword}
+            onPasswordChange={setFormPassword}
+            description={formDescription}
+            onDescriptionChange={setFormDescription}
+            domains={formDomains}
+            onDomainsChange={setFormDomains}
+            maxPerHour={formMaxPerHour}
+            onMaxPerHourChange={setFormMaxPerHour}
+            isNew={false}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditCred(null)}>{t('common.cancel')}</Button>
+            <Button onClick={() => updateMut.mutate()} disabled={updateMut.isPending}>
+              {updateMut.isPending ? t('common.saving') : t('common.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
+      <ConfirmDialog
+        open={deleteId !== null}
+        onOpenChange={() => setDeleteId(null)}
+        title={t('mailServer.credentials.deleteTitle')}
+        description={t('mailServer.credentials.deleteConfirm')}
+        onConfirm={() => deleteId && deleteMut.mutate(deleteId)}
+        variant="destructive"
+      />
+    </div>
+  )
+}
+
+// ── Credential Form (shared between add/edit) ───────────────
+
+function CredentialForm({
+  username, onUsernameChange,
+  password, onPasswordChange,
+  description, onDescriptionChange,
+  domains, onDomainsChange,
+  maxPerHour, onMaxPerHourChange,
+  isNew,
+}: {
+  username: string; onUsernameChange: (v: string) => void
+  password: string; onPasswordChange: (v: string) => void
+  description: string; onDescriptionChange: (v: string) => void
+  domains: string; onDomainsChange: (v: string) => void
+  maxPerHour: number; onMaxPerHourChange: (v: number) => void
+  isNew: boolean
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label>{t('mailServer.credentials.username')}</Label>
+        <Input
+          placeholder={t('mailServer.credentials.usernamePlaceholder')}
+          value={username}
+          onChange={(e) => onUsernameChange(e.target.value)}
+          className="mt-1 font-mono"
+          disabled={!isNew}
+        />
+      </div>
+      <div>
+        <Label>{isNew ? t('mailServer.credentials.password') : t('mailServer.credentials.newPassword')}</Label>
+        <Input
+          type="password"
+          placeholder={t('mailServer.credentials.passwordPlaceholder')}
+          value={password}
+          onChange={(e) => onPasswordChange(e.target.value)}
+          className="mt-1"
+        />
+        {!isNew && (
+          <p className="text-xs text-muted-foreground mt-1">{t('mailServer.credentials.newPasswordHint')}</p>
+        )}
+      </div>
+      <div>
+        <Label>{t('mailServer.credentials.description')}</Label>
+        <Input
+          placeholder={t('mailServer.credentials.descriptionPlaceholder')}
+          value={description}
+          onChange={(e) => onDescriptionChange(e.target.value)}
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <Label>{t('mailServer.credentials.allowedDomains')}</Label>
+        <Input
+          placeholder={t('mailServer.credentials.allowedDomainsPlaceholder')}
+          value={domains}
+          onChange={(e) => onDomainsChange(e.target.value)}
+          className="mt-1 font-mono"
+        />
+        <p className="text-xs text-muted-foreground mt-1">{t('mailServer.credentials.allowedDomainsHint')}</p>
+      </div>
+      <div>
+        <Label>{t('mailServer.credentials.maxPerHour')}</Label>
+        <Input
+          type="number"
+          min={1}
+          max={10000}
+          value={maxPerHour}
+          onChange={(e) => onMaxPerHourChange(Number(e.target.value))}
+          className="mt-1 w-32"
+        />
+      </div>
+    </div>
   )
 }
