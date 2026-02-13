@@ -90,6 +90,19 @@ export interface InboxDetail extends InboxItem {
   spam_score: number
 }
 
+export interface SmtpCredential {
+  id: number
+  username: string
+  description: string | null
+  is_active: boolean
+  allowed_from_domains: string[]
+  max_send_per_hour: number
+  last_login_at: string | null
+  last_login_ip: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 // ── API ──────────────────────────────────────────────────────────
 
 export const mailserverApi = {
@@ -208,5 +221,37 @@ export const mailserverApi = {
   }): Promise<{ ok: boolean; queue_id: number }> => {
     const { data } = await client.post('/mailserver/send/test', payload)
     return data
+  },
+
+  // ── SMTP Credentials ──────────────────────────────────────────
+  listSmtpCredentials: async (): Promise<SmtpCredential[]> => {
+    const { data } = await client.get('/mailserver/smtp-credentials')
+    return data
+  },
+
+  createSmtpCredential: async (payload: {
+    username: string
+    password: string
+    description?: string
+    allowed_from_domains?: string[]
+    max_send_per_hour?: number
+  }): Promise<SmtpCredential> => {
+    const { data } = await client.post('/mailserver/smtp-credentials', payload)
+    return data
+  },
+
+  updateSmtpCredential: async (id: number, payload: {
+    password?: string
+    description?: string
+    is_active?: boolean
+    allowed_from_domains?: string[]
+    max_send_per_hour?: number
+  }): Promise<SmtpCredential> => {
+    const { data } = await client.put(`/mailserver/smtp-credentials/${id}`, payload)
+    return data
+  },
+
+  deleteSmtpCredential: async (id: number): Promise<void> => {
+    await client.delete(`/mailserver/smtp-credentials/${id}`)
   },
 }
