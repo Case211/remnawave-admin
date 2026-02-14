@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import client from '@/api/client'
 import {
   LayoutDashboard,
   Users,
@@ -22,6 +24,9 @@ import {
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
+  Github,
+  MessageCircle,
+  Heart,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -128,6 +133,17 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const toggleSidebar = useAppearanceStore((s) => s.toggleSidebar)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
+  const { data: panelNameData } = useQuery({
+    queryKey: ['panel-name'],
+    queryFn: async () => {
+      const { data } = await client.get('/settings/panel-name')
+      return data as { panel_name: string }
+    },
+    staleTime: 60_000,
+    retry: 1,
+  })
+  const panelName = panelNameData?.panel_name || ''
+
   const handleNavClick = () => {
     if (onClose) onClose()
   }
@@ -171,6 +187,11 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           collapsed && "gap-0"
         )}>
           <RemnawaveLogo className="w-8 h-8 flex-shrink-0" />
+          {!collapsed && panelName && (
+            <span className="text-sm font-semibold text-white truncate max-w-[140px]">
+              {panelName}
+            </span>
+          )}
         </Link>
         {/* Mobile close button */}
         <Button
@@ -352,6 +373,84 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             {collapsed ? t('sidebar.expand') : t('sidebar.collapse')}
           </TooltipContent>
         </Tooltip>
+      </div>
+
+      {/* Project links */}
+      <Separator className="bg-sidebar-border" />
+      <div className={cn("px-4 py-2 space-y-0.5", collapsed && "px-2")}>
+        {collapsed ? (
+          <>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <a
+                  href="https://github.com/case211/remnawave-admin"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center py-1.5 text-dark-300 hover:text-white transition-colors"
+                >
+                  <Github className="w-4 h-4" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="right">GitHub</TooltipContent>
+            </Tooltip>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <a
+                  href="https://t.me/remnawave_admin"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center py-1.5 text-dark-300 hover:text-white transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="right">Telegram</TooltipContent>
+            </Tooltip>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <a
+                  href="https://github.com/case211/remnawave-admin#-поддержка"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center py-1.5 text-dark-300 hover:text-pink-400 transition-colors"
+                >
+                  <Heart className="w-4 h-4" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="right">{t('sidebar.support')}</TooltipContent>
+            </Tooltip>
+          </>
+        ) : (
+          <>
+            <a
+              href="https://github.com/case211/remnawave-admin"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-2 py-1.5 text-xs text-dark-300 hover:text-white transition-colors rounded-md hover:bg-dark-600/30"
+            >
+              <Github className="w-3.5 h-3.5 shrink-0" />
+              <span>GitHub</span>
+            </a>
+            <a
+              href="https://t.me/remnawave_admin"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-2 py-1.5 text-xs text-dark-300 hover:text-white transition-colors rounded-md hover:bg-dark-600/30"
+            >
+              <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{t('sidebar.telegramChat')}</span>
+            </a>
+            <a
+              href="https://github.com/case211/remnawave-admin#-поддержка"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-2 py-1.5 text-xs text-dark-300 hover:text-pink-400 transition-colors rounded-md hover:bg-dark-600/30"
+            >
+              <Heart className="w-3.5 h-3.5 shrink-0" />
+              <span>{t('sidebar.support')}</span>
+            </a>
+          </>
+        )}
       </div>
 
       {/* User info */}

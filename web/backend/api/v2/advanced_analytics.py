@@ -82,23 +82,23 @@ async def get_geo_connections(
                         """
                         SELECT DISTINCT u.username, u.uuid::text as uuid
                         FROM user_connections uc
-                        JOIN ip_metadata im ON uc.ip_address = im.ip_address
                         JOIN users u ON uc.user_uuid = u.uuid
-                        WHERE im.city = $1 AND im.country_name = $2
-                          AND uc.connected_at >= $3
+                        WHERE uc.ip_address IN (
+                            SELECT ip_address FROM ip_metadata
+                            WHERE city = $1 AND country_name = $2
+                        )
                         ORDER BY u.username
                         LIMIT 15
                         """,
                         r["city"],
                         r["country_name"],
-                        since,
                     )
                     city_entry["users"] = [
                         {"username": ur["username"], "uuid": ur["uuid"]}
                         for ur in user_rows
                     ]
-                except Exception:
-                    pass  # If join fails (e.g. missing table), skip user info
+                except Exception as exc:
+                    logger.warning("Failed to fetch users for city %s: %s", r["city"], exc)
 
                 cities.append(city_entry)
 

@@ -587,7 +587,7 @@ MIT License — см. [LICENSE](LICENSE).
 Поддержать автора:
 - TON: `UQDDe-jyFTbQsPHqyojdFeO1_m7uPF-q1w0g_MfbSOd3l1sC`
 - USDT TRC20: `TGyHJj2PsYSUwkBbWdc7BFfsAxsE6SGGJP`
-- BTC: `bc1qusrj5rxd3kv6eepzpdn0muy6zsl3c24xunz2xn`
+- BTC: `1J6Zz7XcrpFkchwFmuU5WTFYTxziBdSwRz`
 
 ---
 
