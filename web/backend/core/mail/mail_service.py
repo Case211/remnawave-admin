@@ -138,7 +138,7 @@ class MailService:
         """Run DNS checks for a domain and update status in DB."""
         from web.backend.core.mail.dns_checker import (
             check_mx_records, check_spf_record, check_dkim_record,
-            check_dmarc_record, get_server_ip,
+            check_dmarc_record, check_ptr_record, get_server_ip,
         )
         from src.services.database import db_service
 
@@ -155,13 +155,14 @@ class MailService:
             spf_ok, _ = check_spf_record(domain, server_ip)
             dkim_ok, _ = check_dkim_record(domain, selector)
             dmarc_ok, _ = check_dmarc_record(domain)
+            ptr_ok, _ = check_ptr_record(server_ip, domain)
 
             await conn.execute(
                 "UPDATE domain_config SET "
                 "dns_mx_ok = $1, dns_spf_ok = $2, dns_dkim_ok = $3, dns_dmarc_ok = $4, "
-                "dns_checked_at = NOW(), updated_at = NOW() "
-                "WHERE id = $5",
-                mx_ok, spf_ok, dkim_ok, dmarc_ok, domain_id,
+                "dns_ptr_ok = $5, dns_checked_at = NOW(), updated_at = NOW() "
+                "WHERE id = $6",
+                mx_ok, spf_ok, dkim_ok, dmarc_ok, ptr_ok, domain_id,
             )
 
         return {
@@ -170,6 +171,7 @@ class MailService:
             "spf_ok": spf_ok,
             "dkim_ok": dkim_ok,
             "dmarc_ok": dmarc_ok,
+            "ptr_ok": ptr_ok,
         }
 
     async def get_active_outbound_domain(self) -> Optional[Dict[str, Any]]:

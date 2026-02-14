@@ -283,7 +283,7 @@ function DomainCard({
   const queryClient = useQueryClient()
   const [editingFromName, setEditingFromName] = useState(false)
   const [fromNameValue, setFromNameValue] = useState(domain.from_name || '')
-  const dnsCount = [domain.dns_mx_ok, domain.dns_spf_ok, domain.dns_dkim_ok, domain.dns_dmarc_ok].filter(Boolean).length
+  const dnsCount = [domain.dns_mx_ok, domain.dns_spf_ok, domain.dns_dkim_ok, domain.dns_dmarc_ok, domain.dns_ptr_ok].filter(Boolean).length
 
   const updateFromNameMut = useMutation({
     mutationFn: () => mailserverApi.updateDomain(domain.id, { from_name: fromNameValue || null } as any),
@@ -309,7 +309,7 @@ function DomainCard({
             <div>
               <h3 className="text-white font-semibold">{domain.domain}</h3>
               <p className="text-xs text-muted-foreground">
-                DNS: {dnsCount}/4 &middot;
+                DNS: {dnsCount}/5 &middot;
                 {domain.outbound_enabled && ` ${t('mailServer.outbound')}`}
                 {domain.inbound_enabled && ` ${t('mailServer.inbound')}`}
               </p>
@@ -370,8 +370,8 @@ function DomainCard({
         </div>
 
         {/* DNS status badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
-          {(['mx', 'spf', 'dkim', 'dmarc'] as const).map((rec) => {
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-4">
+          {(['mx', 'spf', 'dkim', 'dmarc', 'ptr'] as const).map((rec) => {
             const ok = domain[`dns_${rec}_ok` as keyof MailDomain] as boolean
             return (
               <div key={rec} className={cn(
@@ -461,6 +461,9 @@ function DnsRecordsDialog({ domainId, onClose }: { domainId: number; onClose: ()
                       <span className="text-muted-foreground shrink-0">{t('mailServer.current')}:</span>
                       <code className="text-dark-200 break-all">{rec.current_value}</code>
                     </div>
+                  )}
+                  {rec.purpose === 'PTR' && (
+                    <p className="text-amber-400/80 mt-1.5">{t('mailServer.ptrHint')}</p>
                   )}
                 </div>
               </div>
