@@ -99,51 +99,8 @@ async def get_geo_connections(
                     len(user_city_rows),
                     len(city_users_map),
                 )
-                # Debug: if no matches found, log sample IPs from both tables
-                if len(user_city_rows) == 0:
-                    uc_samples = await conn.fetch(
-                        "SELECT ip_address::text as ip FROM user_connections LIMIT 5"
-                    )
-                    im_samples = await conn.fetch(
-                        "SELECT ip_address::text as ip FROM ip_metadata WHERE city IS NOT NULL LIMIT 5"
-                    )
-                    uc_count = await conn.fetchval("SELECT COUNT(*) FROM user_connections")
-                    im_count = await conn.fetchval(
-                        "SELECT COUNT(*) FROM ip_metadata WHERE city IS NOT NULL"
-                    )
-                    logger.warning(
-                        "Geo debug: 0 matches. user_connections(%d) sample IPs: %s | "
-                        "ip_metadata(%d) sample IPs: %s",
-                        uc_count,
-                        [r["ip"] for r in uc_samples],
-                        im_count,
-                        [r["ip"] for r in im_samples],
-                    )
             except Exception as exc:
-                logger.warning("Failed to fetch users by city: %s", exc, exc_info=True)
-                # Debug info to help diagnose
-                try:
-                    uc_count = await conn.fetchval("SELECT COUNT(*) FROM user_connections")
-                    im_count = await conn.fetchval(
-                        "SELECT COUNT(*) FROM ip_metadata WHERE city IS NOT NULL"
-                    )
-                    # Check if any IPs match at all
-                    match_count = await conn.fetchval(
-                        """
-                        SELECT COUNT(*) FROM user_connections uc
-                        WHERE EXISTS (
-                            SELECT 1 FROM ip_metadata im
-                            WHERE REPLACE(TRIM(uc.ip_address::text), '::ffff:', '')
-                                = REPLACE(TRIM(im.ip_address::text), '::ffff:', '')
-                        )
-                        """
-                    )
-                    logger.warning(
-                        "Geo debug: user_connections=%d, ip_metadata_with_city=%d, matching_ips=%d",
-                        uc_count, im_count, match_count,
-                    )
-                except Exception:
-                    pass
+                logger.warning("Failed to fetch users by city: %s", exc)
 
             for r in city_rows:
                 if r["latitude"] is None or r["longitude"] is None:
