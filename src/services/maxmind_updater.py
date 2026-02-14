@@ -24,7 +24,7 @@ from src.utils.logger import logger
 MAXMIND_DOWNLOAD_URL = "https://download.maxmind.com/app/geoip_download"
 
 # GitHub mirror — ltsdev/maxmind (no key required)
-GITHUB_BASE_URL = "https://github.com/ltsdev/maxmind/raw/main"
+GITHUB_BASE_URL = "https://github.com/ltsdev/maxmind/raw/master"
 GITHUB_FILES = {
     "city": "GeoLite2-City.tar.gz",
     "asn": "GeoLite2-ASN.tar.gz",
