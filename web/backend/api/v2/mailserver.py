@@ -381,14 +381,21 @@ async def send_test_email(
 ):
     """Send a test email to verify mail server setup."""
     from web.backend.core.mail.mail_service import mail_service
+    from web.backend.core.notification_service import _build_html_email
 
     subject = payload.subject or "Mail Server Test"
     body_text = payload.body_text or "This is a test email from your mail server. If you received this, your setup is working correctly!"
+    body_html = payload.body_html or _build_html_email(
+        title=subject,
+        body=body_text,
+        severity="success",
+    )
 
     queue_id = await mail_service.send_email(
         to_email=payload.to_email,
         subject=subject,
         body_text=body_text,
+        body_html=body_html,
         from_email=payload.from_email,
         from_name=payload.from_name,
         category="test",

@@ -170,7 +170,10 @@ class OutboundMailQueue:
             if not mx_hosts:
                 raise RuntimeError(f"No MX records found for {rcpt_domain}")
 
-            smtp_response = await self._deliver_smtp(mx_hosts, from_email, to_email, raw_bytes)
+            smtp_response = await self._deliver_smtp(
+                mx_hosts, from_email, to_email, raw_bytes,
+                sender_domain=row.get("domain"),
+            )
 
             # Success
             async with db_service.acquire() as conn:
@@ -209,13 +212,20 @@ class OutboundMailQueue:
         msg = EmailMessage()
         msg["Subject"] = row["subject"]
         from_name = row.get("from_name")
+        from_email = row["from_email"]
         if from_name:
-            msg["From"] = formataddr((from_name, row["from_email"]))
+            msg["From"] = formataddr((from_name, from_email))
         else:
-            msg["From"] = row["from_email"]
+            msg["From"] = from_email
         msg["To"] = row["to_email"]
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain=row.get("domain") or "localhost")
+
+        # List-Unsubscribe header (recommended by spam filters)
+        domain = row.get("domain")
+        if domain:
+            msg["List-Unsubscribe"] = f"<mailto:unsubscribe@{domain}>"
+            msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
         body_text = row.get("body_text") or ""
         body_html = row.get("body_html")
@@ -245,6 +255,7 @@ class OutboundMailQueue:
         from_email: str,
         to_email: str,
         raw_bytes: bytes,
+        sender_domain: Optional[str] = None,
     ) -> str:
         """Try delivering to MX hosts in order with opportunistic TLS.
 
@@ -260,6 +271,10 @@ class OutboundMailQueue:
         tls_ctx.check_hostname = False
         tls_ctx.verify_mode = ssl.CERT_NONE
 
+        # Use sender domain as EHLO/HELO hostname instead of the system hostname
+        # (which inside Docker is the container ID, e.g. "cfe04705b6d4").
+        source_hostname = sender_domain or from_email.split("@")[-1]
+
         last_error = None
         for host in mx_hosts[:3]:
             # 1) Try with opportunistic STARTTLS (no cert verification)
@@ -273,6 +288,7 @@ class OutboundMailQueue:
                     timeout=30,
                     start_tls=True,
                     tls_context=tls_ctx,
+                    source_hostname=source_hostname,
                 )
                 return str(response)
             except aiosmtplib.SMTPResponseException as e:
@@ -292,6 +308,7 @@ class OutboundMailQueue:
                     port=25,
                     timeout=30,
                     start_tls=False,
+                    source_hostname=source_hostname,
                 )
                 return str(response)
             except Exception as e:

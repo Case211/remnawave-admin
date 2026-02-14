@@ -31,6 +31,7 @@ class DomainRead(BaseModel):
     dns_spf_ok: bool = False
     dns_dkim_ok: bool = False
     dns_dmarc_ok: bool = False
+    dns_ptr_ok: bool = False
     dns_checked_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -62,6 +63,7 @@ class DnsCheckResult(BaseModel):
     spf_ok: bool = False
     dkim_ok: bool = False
     dmarc_ok: bool = False
+    ptr_ok: bool = False
 
 
 # ── Email Queue ──────────────────────────────────────────────────
