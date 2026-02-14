@@ -24,7 +24,7 @@ import {
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
-import type { GeoCity, TopUser } from '@/api/advancedAnalytics'
+import type { GeoCity, GeoCityUser, TopUser } from '@/api/advancedAnalytics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -210,28 +210,47 @@ function GeoMapCard() {
                       }}
                     >
                       <Popup>
-                        <div className="text-xs min-w-[160px]">
-                          <p className="font-semibold text-sm">{city.city}, {city.country}</p>
-                          <p className="text-muted-foreground">{t('analytics.geo.connections', { count: city.count })}</p>
+                        <div className="text-xs min-w-[200px]">
+                          <p className="font-semibold text-sm mb-1">{city.city}, {city.country}</p>
+                          <p className="text-muted-foreground mb-2">
+                            {t('analytics.geo.connections', { count: city.count })}
+                            {city.unique_users > 0 && (
+                              <> · {t('analytics.geo.uniqueUsers', { count: city.unique_users })}</>
+                            )}
+                          </p>
                           {users.length > 0 && (
-                            <div className="mt-1.5 pt-1.5 border-t border-dark-500/50">
-                              <p className="font-medium mb-1 text-white">{t('analytics.geo.users')} ({users.length}):</p>
-                              <div className="max-h-[200px] overflow-y-auto space-y-0.5">
-                                {users.map((u) => (
-                                  <a
-                                    key={u.uuid}
-                                    href={`/users/${u.uuid}`}
-                                    className="flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-dark-600/50 text-primary-400 hover:text-primary-300 transition-colors truncate max-w-[200px]"
-                                    onClick={(e) => {
-                                      e.preventDefault()
-                                      navigate(`/users/${u.uuid}`)
-                                    }}
-                                  >
-                                    <Users className="w-3 h-3 shrink-0" />
-                                    <span className="truncate">{u.username}</span>
-                                  </a>
-                                ))}
-                              </div>
+                            <div className="border-t border-border/50 pt-1.5 space-y-1">
+                              {users.map((u: GeoCityUser) => (
+                                <div
+                                  key={u.uuid}
+                                  className="flex items-center justify-between gap-2 px-1 py-0.5 rounded hover:bg-accent/50 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    navigate(`/users/${u.uuid}`)
+                                  }}
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <Users className="w-3 h-3 shrink-0 text-muted-foreground" />
+                                    <span className="truncate max-w-[120px] text-primary hover:underline">
+                                      {u.username || u.uuid.slice(0, 8)}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <Badge
+                                      variant="secondary"
+                                      className={cn('text-[10px] px-1 py-0', STATUS_COLORS[u.status] || '')}
+                                    >
+                                      {t(`analytics.status.${u.status}`, { defaultValue: u.status })}
+                                    </Badge>
+                                    <ArrowUpRight className="w-3 h-3 text-muted-foreground" />
+                                  </div>
+                                </div>
+                              ))}
+                              {city.unique_users > users.length && (
+                                <p className="text-[10px] text-muted-foreground text-center pt-0.5">
+                                  {t('analytics.geo.andMore', { count: city.unique_users - users.length })}
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>
@@ -265,6 +284,73 @@ function GeoMapCard() {
                     </div>
                   )
                 })}
+              </div>
+            )}
+
+            {/* Users by city table */}
+            {cities.some((c: GeoCity) => c.users && c.users.length > 0) && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <MapPin className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-medium text-white">
+                    {t('analytics.geo.usersByCity')}
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('analytics.geo.cityColumn')}</TableHead>
+                        <TableHead>{t('analytics.geo.userColumn')}</TableHead>
+                        <TableHead className="hidden sm:table-cell">{t('analytics.topUsers.status')}</TableHead>
+                        <TableHead className="text-right">{t('analytics.geo.connectionsColumn')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cities.flatMap((city: GeoCity) =>
+                        (city.users || []).map((user: GeoCityUser, uidx: number) => (
+                          <TableRow
+                            key={`${city.city}-${user.uuid}`}
+                            className="cursor-pointer hover:bg-dark-600/30"
+                            onClick={() => navigate(`/users/${user.uuid}`)}
+                          >
+                            <TableCell>
+                              {uidx === 0 ? (
+                                <div className="flex items-center gap-1.5">
+                                  <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                  <span className="text-sm text-white">
+                                    {city.city}, {city.country}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground pl-5">{'\u21B3'}</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-sm text-white truncate max-w-[200px]">
+                                  {user.username || user.uuid.slice(0, 8)}
+                                </span>
+                                <ArrowUpRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell">
+                              <Badge
+                                variant="secondary"
+                                className={cn('text-xs', STATUS_COLORS[user.status] || '')}
+                              >
+                                {t(`analytics.status.${user.status}`, { defaultValue: user.status })}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {user.connections.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             )}
           </div>

@@ -1263,7 +1263,13 @@
       "noDataHint": "Данные появятся после первых подключений",
       "connections": "{{count}} подключений",
       "users": "Пользователи",
-      "more": "ещё"
+      "more": "ещё",
+      "uniqueUsers": "{{count}} польз.",
+      "andMore": "+{{count}} ещё",
+      "usersByCity": "Пользователи по городам",
+      "cityColumn": "Город",
+      "userColumn": "Пользователь",
+      "connectionsColumn": "Подключения"
     },
     "topUsers": {
       "title": "Топ пользователей по трафику",
