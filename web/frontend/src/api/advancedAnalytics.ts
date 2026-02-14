@@ -9,6 +9,8 @@ export interface GeoCountry {
 export interface GeoCityUser {
   username: string
   uuid: string
+  status: string
+  connections: number
 }
 
 export interface GeoCity {
@@ -17,7 +19,8 @@ export interface GeoCity {
   lat: number
   lon: number
   count: number
-  users?: GeoCityUser[]
+  unique_users: number
+  users: GeoCityUser[]
 }
 
 export interface GeoData {

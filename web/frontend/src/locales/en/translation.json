@@ -1263,7 +1263,13 @@
       "noDataHint": "Data will appear after first connections",
       "connections": "{{count}} connections",
       "users": "Users",
-      "more": "more"
+      "more": "more",
+      "uniqueUsers": "{{count}} users",
+      "andMore": "+{{count}} more",
+      "usersByCity": "Users by city",
+      "cityColumn": "City",
+      "userColumn": "User",
+      "connectionsColumn": "Connections"
     },
     "topUsers": {
       "title": "Top users by traffic",

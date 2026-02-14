@@ -73,30 +73,39 @@ async def get_geo_connections(
                     "lat": float(r["latitude"]),
                     "lon": float(r["longitude"]),
                     "count": r["count"],
+                    "unique_users": 0,
                     "users": [],
                 }
 
-                # Fetch users connected from this city (via user_connections + ip_metadata)
+                # Fetch users connected from this city with status and connection count
                 try:
                     user_rows = await conn.fetch(
                         """
-                        SELECT DISTINCT u.username, u.uuid::text as uuid
+                        SELECT u.username, u.uuid::text as uuid, u.status,
+                               COUNT(uc.id) as connections
                         FROM user_connections uc
                         JOIN users u ON uc.user_uuid = u.uuid
                         WHERE uc.ip_address::text IN (
                             SELECT ip_address::text FROM ip_metadata
                             WHERE city = $1 AND country_name = $2
                         )
-                        ORDER BY u.username
+                        GROUP BY u.uuid, u.username, u.status
+                        ORDER BY connections DESC
                         LIMIT 15
                         """,
                         r["city"],
                         r["country_name"],
                     )
                     city_entry["users"] = [
-                        {"username": ur["username"], "uuid": ur["uuid"]}
+                        {
+                            "username": ur["username"],
+                            "uuid": ur["uuid"],
+                            "status": ur["status"],
+                            "connections": ur["connections"],
+                        }
                         for ur in user_rows
                     ]
+                    city_entry["unique_users"] = len(user_rows)
                 except Exception as exc:
                     logger.warning("Failed to fetch users for city %s: %s", r["city"], exc)
 
