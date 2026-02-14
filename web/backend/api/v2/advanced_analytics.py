@@ -68,7 +68,7 @@ async def get_geo_connections(
             # Fetch all users grouped by city in a single query (avoids N+1)
             city_users_map: dict = {}
             try:
-                # Normalize IPs: strip whitespace, remove ::ffff: prefix (IPv6-mapped IPv4)
+                # Cast INET→text first, then normalize (strip whitespace, ::ffff: prefix)
                 user_city_rows = await conn.fetch(
                     """
                     SELECT im.city, im.country_name,
@@ -76,8 +76,8 @@ async def get_geo_connections(
                            COUNT(uc.id) as connections
                     FROM user_connections uc
                     JOIN ip_metadata im
-                        ON REPLACE(TRIM(uc.ip_address), '::ffff:', '')
-                         = REPLACE(TRIM(im.ip_address), '::ffff:', '')
+                        ON REPLACE(TRIM(uc.ip_address::text), '::ffff:', '')
+                         = REPLACE(TRIM(im.ip_address::text), '::ffff:', '')
                     JOIN users u ON uc.user_uuid = u.uuid
                     WHERE im.city IS NOT NULL AND im.country_name IS NOT NULL
                     GROUP BY im.city, im.country_name, u.uuid, u.username, u.status
@@ -114,8 +114,8 @@ async def get_geo_connections(
                         SELECT COUNT(*) FROM user_connections uc
                         WHERE EXISTS (
                             SELECT 1 FROM ip_metadata im
-                            WHERE REPLACE(TRIM(uc.ip_address), '::ffff:', '')
-                                = REPLACE(TRIM(im.ip_address), '::ffff:', '')
+                            WHERE REPLACE(TRIM(uc.ip_address::text), '::ffff:', '')
+                                = REPLACE(TRIM(im.ip_address::text), '::ffff:', '')
                         )
                         """
                     )
