@@ -1269,7 +1269,8 @@
       "usersByCity": "Users by city",
       "cityColumn": "City",
       "userColumn": "User",
-      "connectionsColumn": "Connections"
+      "connectionsColumn": "Connections",
+      "uniqueUsersColumn": "Users"
     },
     "topUsers": {
       "title": "Top users by traffic",

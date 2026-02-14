@@ -1269,7 +1269,8 @@
       "usersByCity": "Пользователи по городам",
       "cityColumn": "Город",
       "userColumn": "Пользователь",
-      "connectionsColumn": "Подключения"
+      "connectionsColumn": "Подключения",
+      "uniqueUsersColumn": "Пользователи"
     },
     "topUsers": {
       "title": "Топ пользователей по трафику",

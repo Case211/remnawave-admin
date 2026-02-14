@@ -910,3 +910,38 @@
 [data-theme="light"] ::-webkit-scrollbar-track {
   background: var(--surface-body);
 }
+
+/* ====== Leaflet Map Popup ====== */
+
+/* Dark theme (default): dark popup background */
+.leaflet-popup-content-wrapper {
+  background: var(--surface-card) !important;
+  color: var(--text-body) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--surface-card) !important;
+}
+
+.leaflet-popup-close-button {
+  color: var(--text-body) !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: hsl(var(--primary)) !important;
+}
+
+/* Light theme popup overrides */
+[data-theme="light"] .leaflet-popup-content-wrapper {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid rgba(148, 163, 184, 0.3) !important;
+}
+
+[data-theme="light"] .leaflet-popup-tip {
+  background: #ffffff !important;
+}

@@ -288,7 +288,7 @@ function GeoMapCard() {
             )}
 
             {/* Users by city table */}
-            {cities.some((c: GeoCity) => c.users && c.users.length > 0) && (
+            {cities.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <MapPin className="w-4 h-4 text-cyan-400" />
@@ -297,59 +297,91 @@ function GeoMapCard() {
                   </h3>
                 </div>
                 <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t('analytics.geo.cityColumn')}</TableHead>
-                        <TableHead>{t('analytics.geo.userColumn')}</TableHead>
-                        <TableHead className="hidden sm:table-cell">{t('analytics.topUsers.status')}</TableHead>
-                        <TableHead className="text-right">{t('analytics.geo.connectionsColumn')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {cities.flatMap((city: GeoCity) =>
-                        (city.users || []).map((user: GeoCityUser, uidx: number) => (
-                          <TableRow
-                            key={`${city.city}-${user.uuid}`}
-                            className="cursor-pointer hover:bg-dark-600/30"
-                            onClick={() => navigate(`/users/${user.uuid}`)}
-                          >
-                            <TableCell>
-                              {uidx === 0 ? (
+                  {cities.some((c: GeoCity) => c.users && c.users.length > 0) ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{t('analytics.geo.cityColumn')}</TableHead>
+                          <TableHead>{t('analytics.geo.userColumn')}</TableHead>
+                          <TableHead className="hidden sm:table-cell">{t('analytics.topUsers.status')}</TableHead>
+                          <TableHead className="text-right">{t('analytics.geo.connectionsColumn')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cities.flatMap((city: GeoCity) =>
+                          (city.users || []).map((user: GeoCityUser, uidx: number) => (
+                            <TableRow
+                              key={`${city.city}-${user.uuid}`}
+                              className="cursor-pointer hover:bg-dark-600/30"
+                              onClick={() => navigate(`/users/${user.uuid}`)}
+                            >
+                              <TableCell>
+                                {uidx === 0 ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                    <span className="text-sm text-white">
+                                      {city.city}, {city.country}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground pl-5">{'\u21B3'}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
                                 <div className="flex items-center gap-1.5">
-                                  <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                                  <span className="text-sm text-white">
-                                    {city.city}, {city.country}
+                                  <span className="font-medium text-sm text-white truncate max-w-[200px]">
+                                    {user.username || user.uuid.slice(0, 8)}
                                   </span>
+                                  <ArrowUpRight className="w-3 h-3 text-muted-foreground shrink-0" />
                                 </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground pl-5">{'\u21B3'}</span>
-                              )}
-                            </TableCell>
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell">
+                                <Badge
+                                  variant="secondary"
+                                  className={cn('text-xs', STATUS_COLORS[user.status] || '')}
+                                >
+                                  {t(`analytics.status.${user.status}`, { defaultValue: user.status })}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                {user.connections.toLocaleString()}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{t('analytics.geo.cityColumn')}</TableHead>
+                          <TableHead className="text-right">{t('analytics.geo.connectionsColumn')}</TableHead>
+                          <TableHead className="text-right">{t('analytics.geo.uniqueUsersColumn')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cities.map((city: GeoCity) => (
+                          <TableRow key={`${city.city}-${city.country}`}>
                             <TableCell>
                               <div className="flex items-center gap-1.5">
-                                <span className="font-medium text-sm text-white truncate max-w-[200px]">
-                                  {user.username || user.uuid.slice(0, 8)}
+                                <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                <span className="text-sm text-white">
+                                  {city.city}, {city.country}
                                 </span>
-                                <ArrowUpRight className="w-3 h-3 text-muted-foreground shrink-0" />
                               </div>
                             </TableCell>
-                            <TableCell className="hidden sm:table-cell">
-                              <Badge
-                                variant="secondary"
-                                className={cn('text-xs', STATUS_COLORS[user.status] || '')}
-                              >
-                                {t(`analytics.status.${user.status}`, { defaultValue: user.status })}
-                              </Badge>
+                            <TableCell className="text-right font-mono text-sm">
+                              {city.count.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-mono text-sm">
-                              {user.connections.toLocaleString()}
+                              {city.unique_users.toLocaleString()}
                             </TableCell>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
                 </div>
               </div>
             )}
