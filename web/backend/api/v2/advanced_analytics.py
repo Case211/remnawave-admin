@@ -64,52 +64,82 @@ async def get_geo_connections(
             )
 
             cities = []
+
+            # Fetch all users grouped by city in a single query (avoids N+1)
+            city_users_map: dict = {}
+            try:
+                # Normalize IPs: strip whitespace, remove ::ffff: prefix (IPv6-mapped IPv4)
+                user_city_rows = await conn.fetch(
+                    """
+                    SELECT im.city, im.country_name,
+                           u.username, u.uuid::text as uuid, u.status,
+                           COUNT(uc.id) as connections
+                    FROM user_connections uc
+                    JOIN ip_metadata im
+                        ON REPLACE(TRIM(uc.ip_address), '::ffff:', '')
+                         = REPLACE(TRIM(im.ip_address), '::ffff:', '')
+                    JOIN users u ON uc.user_uuid = u.uuid
+                    WHERE im.city IS NOT NULL AND im.country_name IS NOT NULL
+                    GROUP BY im.city, im.country_name, u.uuid, u.username, u.status
+                    ORDER BY im.city, connections DESC
+                    """,
+                )
+                for ur in user_city_rows:
+                    key = (ur["city"], ur["country_name"])
+                    if key not in city_users_map:
+                        city_users_map[key] = []
+                    if len(city_users_map[key]) < 15:
+                        city_users_map[key].append({
+                            "username": ur["username"],
+                            "uuid": ur["uuid"],
+                            "status": ur["status"],
+                            "connections": ur["connections"],
+                        })
+                logger.info(
+                    "Geo users: found %d user-city pairs across %d cities",
+                    len(user_city_rows),
+                    len(city_users_map),
+                )
+            except Exception as exc:
+                logger.warning("Failed to fetch users by city: %s", exc, exc_info=True)
+                # Debug info to help diagnose
+                try:
+                    uc_count = await conn.fetchval("SELECT COUNT(*) FROM user_connections")
+                    im_count = await conn.fetchval(
+                        "SELECT COUNT(*) FROM ip_metadata WHERE city IS NOT NULL"
+                    )
+                    # Check if any IPs match at all
+                    match_count = await conn.fetchval(
+                        """
+                        SELECT COUNT(*) FROM user_connections uc
+                        WHERE EXISTS (
+                            SELECT 1 FROM ip_metadata im
+                            WHERE REPLACE(TRIM(uc.ip_address), '::ffff:', '')
+                                = REPLACE(TRIM(im.ip_address), '::ffff:', '')
+                        )
+                        """
+                    )
+                    logger.warning(
+                        "Geo debug: user_connections=%d, ip_metadata_with_city=%d, matching_ips=%d",
+                        uc_count, im_count, match_count,
+                    )
+                except Exception:
+                    pass
+
             for r in city_rows:
                 if r["latitude"] is None or r["longitude"] is None:
                     continue
-                city_entry = {
+                key = (r["city"], r["country_name"])
+                users = city_users_map.get(key, [])
+                cities.append({
                     "city": r["city"],
                     "country": r["country_name"],
                     "lat": float(r["latitude"]),
                     "lon": float(r["longitude"]),
                     "count": r["count"],
-                    "unique_users": 0,
-                    "users": [],
-                }
-
-                # Fetch users connected from this city with status and connection count
-                try:
-                    user_rows = await conn.fetch(
-                        """
-                        SELECT u.username, u.uuid::text as uuid, u.status,
-                               COUNT(uc.id) as connections
-                        FROM user_connections uc
-                        JOIN users u ON uc.user_uuid = u.uuid
-                        WHERE uc.ip_address::text IN (
-                            SELECT ip_address::text FROM ip_metadata
-                            WHERE city = $1 AND country_name = $2
-                        )
-                        GROUP BY u.uuid, u.username, u.status
-                        ORDER BY connections DESC
-                        LIMIT 15
-                        """,
-                        r["city"],
-                        r["country_name"],
-                    )
-                    city_entry["users"] = [
-                        {
-                            "username": ur["username"],
-                            "uuid": ur["uuid"],
-                            "status": ur["status"],
-                            "connections": ur["connections"],
-                        }
-                        for ur in user_rows
-                    ]
-                    city_entry["unique_users"] = len(user_rows)
-                except Exception as exc:
-                    logger.warning("Failed to fetch users for city %s: %s", r["city"], exc)
-
-                cities.append(city_entry)
+                    "unique_users": len(users),
+                    "users": users,
+                })
 
             return {"countries": countries, "cities": cities}
 
