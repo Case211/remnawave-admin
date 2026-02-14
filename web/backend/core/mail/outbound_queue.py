@@ -285,7 +285,7 @@ class OutboundMailQueue:
                     timeout=30,
                     start_tls=True,
                     tls_context=tls_ctx,
-                    source_hostname=source_hostname,
+                    local_hostname=source_hostname,
                 )
                 async with smtp:
                     response = await smtp.sendmail(from_email, [to_email], raw_bytes)
@@ -304,7 +304,7 @@ class OutboundMailQueue:
                     port=25,
                     timeout=30,
                     start_tls=False,
-                    source_hostname=source_hostname,
+                    local_hostname=source_hostname,
                 )
                 async with smtp:
                     response = await smtp.sendmail(from_email, [to_email], raw_bytes)
