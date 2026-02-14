@@ -81,7 +81,7 @@ async def get_panel_name(
     """Get panel name for sidebar display. Requires only authentication."""
     try:
         from src.services.config_service import config_service
-        val = await config_service.get("panel_name")
+        val = config_service.get("panel_name")
         return {"panel_name": val or ""}
     except Exception:
         return {"panel_name": ""}
