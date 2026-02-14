@@ -462,6 +462,9 @@ function DnsRecordsDialog({ domainId, onClose }: { domainId: number; onClose: ()
                       <code className="text-dark-200 break-all">{rec.current_value}</code>
                     </div>
                   )}
+                  {rec.purpose === 'PTR' && (
+                    <p className="text-amber-400/80 mt-1.5">{t('mailServer.ptrHint')}</p>
+                  )}
                 </div>
               </div>
             ))}

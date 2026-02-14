@@ -279,10 +279,7 @@ class OutboundMailQueue:
         for host in mx_hosts[:3]:
             # 1) Try with opportunistic STARTTLS (no cert verification)
             try:
-                response = await aiosmtplib.send(
-                    raw_bytes,
-                    sender=from_email,
-                    recipients=[to_email],
+                smtp = aiosmtplib.SMTP(
                     hostname=host,
                     port=25,
                     timeout=30,
@@ -290,6 +287,8 @@ class OutboundMailQueue:
                     tls_context=tls_ctx,
                     source_hostname=source_hostname,
                 )
+                async with smtp:
+                    response = await smtp.sendmail(from_email, [to_email], raw_bytes)
                 return str(response)
             except aiosmtplib.SMTPResponseException as e:
                 last_error = e
@@ -300,16 +299,15 @@ class OutboundMailQueue:
 
             # 2) Fallback: plain SMTP (no TLS)
             try:
-                response = await aiosmtplib.send(
-                    raw_bytes,
-                    sender=from_email,
-                    recipients=[to_email],
+                smtp = aiosmtplib.SMTP(
                     hostname=host,
                     port=25,
                     timeout=30,
                     start_tls=False,
                     source_hostname=source_hostname,
                 )
+                async with smtp:
+                    response = await smtp.sendmail(from_email, [to_email], raw_bytes)
                 return str(response)
             except Exception as e:
                 last_error = e
