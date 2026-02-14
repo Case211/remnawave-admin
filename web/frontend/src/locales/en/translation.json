@@ -2044,6 +2044,7 @@
     "host": "Host",
     "value": "Value",
     "current": "Current",
+    "ptrHint": "PTR record must be configured at your VPS/hosting provider, not in the domain DNS panel",
     "outbound": "Outbound",
     "inbound": "Inbound",
     "pending": "Pending",
