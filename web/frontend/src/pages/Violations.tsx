@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, memo, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -300,7 +300,7 @@ function getConnectionTypeBadge(info: IPInfo, t: (key: string) => string): { lab
 
 // ── Score bar component ──────────────────────────────────────────
 
-function ScoreBar({ label, score, icon }: { label: string; score: number; icon: React.ReactNode }) {
+const ScoreBar = memo(function ScoreBar({ label, score, icon }: { label: string; score: number; icon: React.ReactNode }) {
   const barColor =
     score >= 60 ? 'bg-red-500' : score >= 40 ? 'bg-yellow-500' : score >= 20 ? 'bg-blue-500' : 'bg-green-500'
   return (
@@ -320,11 +320,11 @@ function ScoreBar({ label, score, icon }: { label: string; score: number; icon: 
       </span>
     </div>
   )
-}
+})
 
 // ── Score circle component ───────────────────────────────────────
 
-function ScoreCircle({ score, size = 'md' }: { score: number; size?: 'sm' | 'md' | 'lg' }) {
+const ScoreCircle = memo(function ScoreCircle({ score, size = 'md' }: { score: number; size?: 'sm' | 'md' | 'lg' }) {
   const sizeMap = { sm: 'w-10 h-10', md: 'w-14 h-14', lg: 'w-20 h-20' }
   const textMap = { sm: 'text-sm', md: 'text-xl', lg: 'text-3xl' }
   return (
@@ -334,11 +334,11 @@ function ScoreCircle({ score, size = 'md' }: { score: number; size?: 'sm' | 'md'
       <span className={`font-bold ${getScoreColor(score)} ${textMap[size]}`}>{Math.round(score)}</span>
     </div>
   )
-}
+})
 
 // ── Violation card ───────────────────────────────────────────────
 
-function ViolationCard({
+const ViolationCard = memo(function ViolationCard({
   violation,
   canResolve,
   onBlock,
@@ -452,21 +452,21 @@ function ViolationCard({
       </CardContent>
     </Card>
   )
-}
+})
 
 // ── Badges ───────────────────────────────────────────────────────
 
-function SeverityBadge({ severity }: { severity: string }) {
+const SeverityBadge = memo(function SeverityBadge({ severity }: { severity: string }) {
   const { t } = useTranslation()
   const config = getSeverityConfig(severity)
   return <Badge variant={config.variant}>{t(config.labelKey)}</Badge>
-}
+})
 
-function ActionBadge({ action }: { action: string | null }) {
+const ActionBadge = memo(function ActionBadge({ action }: { action: string | null }) {
   const { t } = useTranslation()
   const config = getActionConfig(action)
   return <Badge variant={config.variant}>{t(config.labelKey)}</Badge>
-}
+})
 
 // ── Detail panel ─────────────────────────────────────────────────
 

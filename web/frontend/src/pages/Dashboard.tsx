@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -230,7 +230,7 @@ interface StatCardProps {
   tooltip?: string
 }
 
-function StatCard({
+const StatCard = memo(function StatCard({
   title, value, icon: Icon, color, subtitle, onClick, loading, index = 0,
   delta, deltaType = 'percent', tooltip,
 }: StatCardProps) {
@@ -316,11 +316,11 @@ function StatCard({
       </CardContent>
     </Card>
   )
-}
+})
 
 // ── DeltaIndicator ───────────────────────────────────────────────
 
-function DeltaIndicator({ value, type = 'percent' }: { value: number; type?: 'percent' | 'absolute' }) {
+const DeltaIndicator = memo(function DeltaIndicator({ value, type = 'percent' }: { value: number; type?: 'percent' | 'absolute' }) {
   const isPositive = value > 0
   const isNeutral = value === 0
 
@@ -346,7 +346,7 @@ function DeltaIndicator({ value, type = 'percent' }: { value: number; type?: 'pe
       {text}
     </span>
   )
-}
+})
 
 // ── ChartSkeleton ────────────────────────────────────────────────
 

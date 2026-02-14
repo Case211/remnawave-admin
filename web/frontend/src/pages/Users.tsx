@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { useFormatters } from '@/lib/useFormatters'
 import {
@@ -100,7 +101,7 @@ function getTrafficPercent(used: number, limit: number | null): number {
 }
 
 // Status badge component
-function StatusBadge({ status }: { status: string }) {
+const StatusBadge = memo(function StatusBadge({ status }: { status: string }) {
   const { t } = useTranslation()
   const normalizedStatus = status.toLowerCase()
   const statusConfig: Record<string, { labelKey: string; variant: 'success' | 'destructive' | 'warning' | 'secondary' }> = {
@@ -113,10 +114,10 @@ function StatusBadge({ status }: { status: string }) {
   const config = statusConfig[normalizedStatus] || { labelKey: '', variant: 'secondary' as const }
 
   return <Badge variant={config.variant}>{config.labelKey ? t(config.labelKey) : status}</Badge>
-}
+})
 
 // Traffic bar component
-function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
+const TrafficBar = memo(function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
   const { formatBytes } = useFormatters()
   const percent = getTrafficPercent(used, limit)
   const isUnlimited = !limit
@@ -155,10 +156,10 @@ function TrafficBar({ used, limit }: { used: number; limit: number | null }) {
       </div>
     </div>
   )
-}
+})
 
 // Online indicator
-function OnlineIndicator({ onlineAt }: { onlineAt: string | null }) {
+const OnlineIndicator = memo(function OnlineIndicator({ onlineAt }: { onlineAt: string | null }) {
   const { t } = useTranslation()
   const { formatTimeAgo } = useFormatters()
   if (!onlineAt) return <span className="text-dark-300 text-xs">{t('users.noData')}</span>
@@ -179,7 +180,7 @@ function OnlineIndicator({ onlineAt }: { onlineAt: string | null }) {
       <span className="text-dark-200 text-xs">{formatTimeAgo(onlineAt)}</span>
     </div>
   )
-}
+})
 
 // Action dropdown
 function UserActions({
@@ -240,7 +241,7 @@ function UserActions({
 }
 
 // Sortable header
-function SortHeader({
+const SortHeader = memo(function SortHeader({
   label,
   field,
   currentSort,
@@ -268,10 +269,10 @@ function SortHeader({
       {isActive && <Icon className="w-4 h-4" />}
     </button>
   )
-}
+})
 
 // Mobile user card
-function MobileUserCard({
+const MobileUserCard = memo(function MobileUserCard({
   user,
   onNavigate,
   onEnable,
@@ -327,7 +328,7 @@ function MobileUserCard({
       </CardContent>
     </Card>
   )
-}
+})
 
 interface Squad {
   uuid: string
@@ -729,7 +730,10 @@ export default function Users() {
   const [sortOrder, setSortOrder] = useState('desc')
   const [showFilters, setShowFilters] = useState(false)
 
-  const activeFilterCount = [status, trafficType, expireFilter, onlineFilter, trafficUsage].filter(Boolean).length
+  const activeFilterCount = useMemo(
+    () => [status, trafficType, expireFilter, onlineFilter, trafficUsage].filter(Boolean).length,
+    [status, trafficType, expireFilter, onlineFilter, trafficUsage],
+  )
 
   // Export handlers
   const handleExportCSV = () => {
@@ -758,15 +762,15 @@ export default function Users() {
   }
 
   // Saved filters
-  const currentFilters: Record<string, unknown> = {
+  const currentFilters = useMemo<Record<string, unknown>>(() => ({
     ...(status && { status }),
     ...(trafficType && { trafficType }),
     ...(expireFilter && { expireFilter }),
     ...(onlineFilter && { onlineFilter }),
     ...(trafficUsage && { trafficUsage }),
-  }
+  }), [status, trafficType, expireFilter, onlineFilter, trafficUsage])
   const hasActiveFilters = activeFilterCount > 0
-  const handleLoadFilter = (filters: Record<string, unknown>) => {
+  const handleLoadFilter = useCallback((filters: Record<string, unknown>) => {
     setStatus((filters.status as string) || '')
     setTrafficType((filters.trafficType as string) || '')
     setExpireFilter((filters.expireFilter as string) || '')
@@ -774,7 +778,7 @@ export default function Users() {
     setTrafficUsage((filters.trafficUsage as string) || '')
     setShowFilters(true)
     setPage(1)
-  }
+  }, [])
 
   // Debounced search
   useEffect(() => {
@@ -852,17 +856,19 @@ export default function Users() {
     },
   })
 
-  const handleSort = (field: string) => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortBy(field)
+  const handleSort = useCallback((field: string) => {
+    setSortBy((prev) => {
+      if (prev === field) {
+        setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))
+        return prev
+      }
       setSortOrder('desc')
-    }
+      return field
+    })
     setPage(1)
-  }
+  }, [])
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setSearch('')
     setStatus('')
     setTrafficType('')
@@ -870,36 +876,33 @@ export default function Users() {
     setOnlineFilter('')
     setTrafficUsage('')
     setPage(1)
-  }
+  }, [])
 
   // Selection helpers
-  const toggleSelect = (uuid: string) => {
+  const toggleSelect = useCallback((uuid: string) => {
     setSelectedUuids(prev => {
       const next = new Set(prev)
       if (next.has(uuid)) next.delete(uuid)
       else next.add(uuid)
       return next
     })
-  }
-  const toggleSelectAll = () => {
-    if (!users) return
-    const pageUuids = users.map((u) => u.uuid)
-    const allSelected = pageUuids.every((id: string) => selectedUuids.has(id))
-    if (allSelected) {
-      setSelectedUuids(prev => {
-        const next = new Set(prev)
+  }, [])
+  const toggleSelectAll = useCallback(() => {
+    const items = data?.items
+    if (!items) return
+    const pageUuids = items.map((u) => u.uuid)
+    setSelectedUuids(prev => {
+      const allSelected = pageUuids.every((id: string) => prev.has(id))
+      const next = new Set(prev)
+      if (allSelected) {
         pageUuids.forEach((id: string) => next.delete(id))
-        return next
-      })
-    } else {
-      setSelectedUuids(prev => {
-        const next = new Set(prev)
+      } else {
         pageUuids.forEach((id: string) => next.add(id))
-        return next
-      })
-    }
-  }
-  const clearSelection = () => setSelectedUuids(new Set())
+      }
+      return next
+    })
+  }, [data?.items])
+  const clearSelection = useCallback(() => setSelectedUuids(new Set()), [])
 
   // Bulk mutations
   const bulkEnable = useMutation({
@@ -938,6 +941,16 @@ export default function Users() {
   const users = data?.items ?? []
   const total = data?.total ?? 0
   const pages = data?.pages ?? 1
+
+  // Virtual scrolling for large page sizes (50+ rows)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+  const useVirtual = users.length > 30
+  const rowVirtualizer = useVirtualizer({
+    count: users.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 56,
+    overscan: 10,
+  })
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -1325,11 +1338,15 @@ export default function Users() {
         </div>
       )}
 
-      {/* Desktop: Users table */}
+      {/* Desktop: Users table with virtual scrolling for large page sizes */}
       <Card className="p-0 overflow-hidden hidden md:block animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-        <div className="overflow-x-auto">
+        <div
+          ref={tableContainerRef}
+          className="overflow-auto"
+          style={useVirtual && !isLoading ? { maxHeight: '70vh' } : undefined}
+        >
           <table className="table">
-            <thead>
+            <thead className={useVirtual ? 'sticky top-0 z-10 bg-dark-800' : undefined}>
               <tr>
                 {canBulk && (
                   <th className="w-10 px-3">
@@ -1369,6 +1386,73 @@ export default function Users() {
                     {hasAnyFilter ? t('users.usersNotFound') : t('users.noUsers')}
                   </td>
                 </tr>
+              ) : useVirtual ? (
+                <>
+                  {/* Virtual spacer top */}
+                  {rowVirtualizer.getVirtualItems()[0]?.start > 0 && (
+                    <tr><td colSpan={9} style={{ height: rowVirtualizer.getVirtualItems()[0].start, padding: 0 }} /></tr>
+                  )}
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const user = users[virtualRow.index]
+                    return (
+                      <tr
+                        key={user.uuid}
+                        data-index={virtualRow.index}
+                        ref={rowVirtualizer.measureElement}
+                        className="cursor-pointer hover:bg-dark-600/50"
+                        onClick={() => navigate(`/users/${user.uuid}`)}
+                      >
+                        {canBulk && (
+                          <td className="px-3" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedUuids.has(user.uuid)}
+                              onCheckedChange={() => toggleSelect(user.uuid)}
+                            />
+                          </td>
+                        )}
+                        <td>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-white">{user.username || user.short_uuid}</span>
+                              {user.tag && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
+                              )}
+                            </div>
+                            {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
+                            {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
+                          </div>
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <StatusBadge status={user.status} />
+                        </td>
+                        <td className="min-w-[140px]">
+                          <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
+                        </td>
+                        <td className="text-center">
+                          <span className="text-dark-100 text-sm">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
+                        </td>
+                        <td><OnlineIndicator onlineAt={user.online_at} /></td>
+                        <td className="text-dark-200 text-sm">{user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</td>
+                        <td className="text-dark-200 text-sm">{user.created_at ? formatDateShort(user.created_at) : '\u2014'}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <UserActions
+                            user={user}
+                            onEnable={() => enableUser.mutate(user.uuid)}
+                            onDisable={() => disableUser.mutate(user.uuid)}
+                            onDelete={() => setDeleteConfirmUuid(user.uuid)}
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {/* Virtual spacer bottom */}
+                  {(() => {
+                    const items = rowVirtualizer.getVirtualItems()
+                    const lastItem = items[items.length - 1]
+                    const bottomPad = lastItem ? rowVirtualizer.getTotalSize() - lastItem.end : 0
+                    return bottomPad > 0 ? <tr><td colSpan={9} style={{ height: bottomPad, padding: 0 }} /></tr> : null
+                  })()}
+                </>
               ) : (
                 users.map((user) => (
                   <tr
@@ -1472,7 +1556,7 @@ export default function Users() {
 }
 
 // Filter chip component
-function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+const FilterChip = memo(function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary-500/10 border border-primary-500/20 text-[11px] text-primary-300">
       {label}
@@ -1481,4 +1565,4 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
       </button>
     </span>
   )
-}
+})
