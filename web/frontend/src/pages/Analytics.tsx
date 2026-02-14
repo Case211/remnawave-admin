@@ -21,7 +21,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
 import type { GeoCity, TopUser } from '@/api/advancedAnalytics'
@@ -194,6 +194,7 @@ function GeoMapCard() {
                 />
                 {cities.map((city: GeoCity, idx: number) => {
                   const radius = Math.max(5, Math.min(25, (city.count / maxCount) * 25))
+                  const users = city.users || []
                   return (
                     <CircleMarker
                       key={`${city.city}-${city.country}-${idx}`}
@@ -206,10 +207,43 @@ function GeoMapCard() {
                         weight: 1,
                       }}
                     >
+                      <LeafletTooltip direction="top" opacity={0.95}>
+                        <div className="text-xs min-w-[120px]">
+                          <p className="font-semibold">{city.city}, {city.country}</p>
+                          <p className="text-muted-foreground">{t('analytics.geo.connections', { count: city.count })}</p>
+                          {users.length > 0 && (
+                            <div className="mt-1 pt-1 border-t border-gray-200 dark:border-gray-600">
+                              <p className="font-medium mb-0.5">{t('analytics.geo.users')}:</p>
+                              {users.slice(0, 10).map((u) => (
+                                <p key={u.uuid} className="text-muted-foreground truncate max-w-[160px]">
+                                  {u.username}
+                                </p>
+                              ))}
+                              {users.length > 10 && (
+                                <p className="text-muted-foreground italic">
+                                  +{users.length - 10} {t('analytics.geo.more')}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </LeafletTooltip>
                       <Popup>
-                        <div className="text-xs">
-                          <p className="font-medium">{city.city}, {city.country}</p>
-                          <p>{t('analytics.geo.connections', { count: city.count })}</p>
+                        <div className="text-xs min-w-[150px]">
+                          <p className="font-semibold text-sm">{city.city}, {city.country}</p>
+                          <p className="text-muted-foreground mb-1">{t('analytics.geo.connections', { count: city.count })}</p>
+                          {users.length > 0 && (
+                            <div className="mt-1 pt-1 border-t border-gray-200 dark:border-gray-600">
+                              <p className="font-medium mb-1">{t('analytics.geo.users')} ({users.length}):</p>
+                              <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                                {users.map((u) => (
+                                  <p key={u.uuid} className="text-muted-foreground truncate max-w-[180px]">
+                                    {u.username}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </Popup>
                     </CircleMarker>

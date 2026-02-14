@@ -63,17 +63,44 @@ async def get_geo_connections(
                 since,
             )
 
-            cities = [
-                {
+            cities = []
+            for r in city_rows:
+                if r["latitude"] is None or r["longitude"] is None:
+                    continue
+                city_entry = {
                     "city": r["city"],
                     "country": r["country_name"],
-                    "lat": float(r["latitude"]) if r["latitude"] else None,
-                    "lon": float(r["longitude"]) if r["longitude"] else None,
+                    "lat": float(r["latitude"]),
+                    "lon": float(r["longitude"]),
                     "count": r["count"],
+                    "users": [],
                 }
-                for r in city_rows
-                if r["latitude"] is not None and r["longitude"] is not None
-            ]
+
+                # Fetch users connected from this city (via user_connections + ip_metadata)
+                try:
+                    user_rows = await conn.fetch(
+                        """
+                        SELECT DISTINCT u.username, u.uuid::text as uuid
+                        FROM user_connections uc
+                        JOIN ip_metadata im ON uc.ip_address = im.ip_address
+                        JOIN users u ON uc.user_uuid = u.uuid
+                        WHERE im.city = $1 AND im.country_name = $2
+                          AND uc.connected_at >= $3
+                        ORDER BY u.username
+                        LIMIT 15
+                        """,
+                        r["city"],
+                        r["country_name"],
+                        since,
+                    )
+                    city_entry["users"] = [
+                        {"username": ur["username"], "uuid": ur["uuid"]}
+                        for ur in user_rows
+                    ]
+                except Exception:
+                    pass  # If join fails (e.g. missing table), skip user info
+
+                cities.append(city_entry)
 
             return {"countries": countries, "cities": cities}
 

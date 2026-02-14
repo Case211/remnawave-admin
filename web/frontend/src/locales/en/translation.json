@@ -1250,7 +1250,9 @@
       "tooltip": "Geographic distribution of user connections by city",
       "noData": "No geolocation data",
       "noDataHint": "Data will appear after first connections",
-      "connections": "{{count}} connections"
+      "connections": "{{count}} connections",
+      "users": "Users",
+      "more": "more"
     },
     "topUsers": {
       "title": "Top users by traffic",
