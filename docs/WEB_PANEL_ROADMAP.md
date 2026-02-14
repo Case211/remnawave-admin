@@ -387,7 +387,7 @@ One-click настройка свежего VPS как VPN-ноды. Бэкен�
 | 13.1.1 | Code splitting | React.lazy + Suspense для каждой страницы (16 чанков). Manual chunks для vendor-библиотек | ✅ |
 | 13.1.2 | Виртуализация таблиц | @tanstack/react-virtual для Users (30+ строк): sticky header, виртуальные spacers | ✅ |
 | 13.1.3 | Оптимизация re-renders | React.memo для StatusBadge, TrafficBar, OnlineIndicator, MobileUserCard, ViolationCard, ScoreBar, StatCard и др. useMemo/useCallback для хэндлеров | ✅ |
-| 13.1.4 | Оптимизация Leaflet | Lazy-load через React.lazy (LazyGeoMap), react-leaflet-cluster для кластеризации маркеров | ✅ |
+| 13.1.4 | Оптимизация Leaflet | Lazy-load через React.lazy (LazyGeoMap) — карта + leaflet CSS загружаются только на вкладке Geography | ✅ |
 | 13.1.5 | Service Worker | vite-plugin-pwa: precache 48 записей, runtime cache (Google Fonts, map tiles), offline-индикатор | ✅ |
 
 ### 13.2 Backend

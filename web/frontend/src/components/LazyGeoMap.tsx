@@ -2,7 +2,6 @@ import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
-import MarkerClusterGroup from 'react-leaflet-cluster'
 import { Users, ArrowUpRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -59,13 +58,7 @@ const LazyGeoMap = memo(function LazyGeoMap({
       attributionControl={false}
     >
       <TileLayer url={mapTileUrl} />
-      <MarkerClusterGroup
-        chunkedLoading
-        maxClusterRadius={40}
-        spiderfyOnMaxZoom
-        showCoverageOnHover={false}
-      >
-        {cities.map((city: GeoCity, idx: number) => {
+      {cities.map((city: GeoCity, idx: number) => {
           const radius = Math.max(5, Math.min(25, (city.count / maxCount) * 25))
           const users = city.users || []
           return (
@@ -129,7 +122,6 @@ const LazyGeoMap = memo(function LazyGeoMap({
             </CircleMarker>
           )
         })}
-      </MarkerClusterGroup>
     </MapContainer>
   )
 })

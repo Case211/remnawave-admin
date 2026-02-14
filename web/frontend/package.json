@@ -56,7 +56,6 @@
     "react-i18next": "^16.5.4",
     "react-icons": "^5.0.1",
     "react-leaflet": "^4.2.1",
-    "react-leaflet-cluster": "^4.0.0",
     "react-router-dom": "^6.21.2",
     "recharts": "^2.10.3",
     "sonner": "^2.0.7",
