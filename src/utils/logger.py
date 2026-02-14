@@ -96,6 +96,28 @@ class CleanFormatter(logging.Formatter):
         return result
 
 
+class ViolationLogFilter(logging.Filter):
+    """Фильтр для выделения записей, связанных с нарушениями, в отдельный лог-файл."""
+
+    _SOURCE_MODULES = (
+        "violation_detector", "connection_monitor", "collector", "geoip",
+        "violation_reports", "maxmind",
+    )
+    _KEYWORDS = (
+        "violation", "score=", "detected", "ip_metadata", "geoip",
+        "temporal", "geo_score", "asn_score", "impossible_travel",
+        "agent token", "ip lookup",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        name_lower = record.name.lower()
+        for mod in self._SOURCE_MODULES:
+            if mod in name_lower:
+                return True
+        msg_lower = str(record.getMessage()).lower()
+        return any(kw in msg_lower for kw in self._KEYWORDS)
+
+
 def _ensure_log_dir() -> Path:
     """Создаёт директорию для логов если не существует."""
     log_dir = _LOG_DIR
@@ -160,6 +182,19 @@ def setup_logger() -> logging.Logger:
         warn_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
         root.addHandler(warn_handler)
 
+        # Violations файл (фильтрует записи о нарушениях из всех источников)
+        violations_path = log_dir / "violations.log"
+        violations_handler = CompressedRotatingFileHandler(
+            filename=str(violations_path),
+            maxBytes=_MAX_BYTES,
+            backupCount=_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        violations_handler.setLevel(logging.DEBUG)
+        violations_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
+        violations_handler.addFilter(ViolationLogFilter())
+        root.addHandler(violations_handler)
+
         # Проверяем, что файлы действительно созданы и доступны для записи
         _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
         print(
@@ -192,6 +227,49 @@ def setup_logger() -> logging.Logger:
 
 
 logger = setup_logger()
+
+
+def set_log_level(level_name: str) -> None:
+    """Динамически изменяет уровень логирования для всех хэндлеров без перезапуска.
+
+    Args:
+        level_name: Уровень логирования (DEBUG, INFO, WARNING, ERROR)
+    """
+    level = getattr(logging, level_name.upper(), logging.INFO)
+    root = logging.getLogger()
+
+    for handler in root.handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, RotatingFileHandler):
+            # Console handler: при DEBUG показываем всё, иначе WARNING+
+            handler.setLevel(logging.DEBUG if level <= logging.DEBUG else logging.WARNING)
+        elif isinstance(handler, RotatingFileHandler):
+            # Файловые хэндлеры: DEBUG файл = DEBUG, остальные оставляем как есть
+            base = os.path.basename(handler.baseFilename)
+            if "DEBUG" in base:
+                handler.setLevel(logging.DEBUG)
+
+    # Подавляем/открываем шумные логгеры
+    http_level = logging.DEBUG if level <= logging.DEBUG else logging.WARNING
+    logging.getLogger("httpx").setLevel(http_level)
+    logging.getLogger("httpcore").setLevel(http_level)
+    logging.getLogger("aiogram").setLevel(level)
+
+    logger.info("Log level changed to %s", level_name.upper())
+
+
+def set_rotation_params(max_bytes: int, backup_count: int) -> None:
+    """Динамически обновляет параметры ротации для всех файловых хэндлеров.
+
+    Args:
+        max_bytes: Максимальный размер файла в байтах
+        backup_count: Количество бэкап-файлов
+    """
+    root = logging.getLogger()
+    for handler in root.handlers:
+        if isinstance(handler, RotatingFileHandler):
+            handler.maxBytes = max_bytes
+            handler.backupCount = backup_count
+    logger.info("Log rotation updated: max_bytes=%d, backup_count=%d", max_bytes, backup_count)
 
 
 def log_user_action(

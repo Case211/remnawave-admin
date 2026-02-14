@@ -21,11 +21,12 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
 import type { GeoCity, TopUser } from '@/api/advancedAnalytics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -207,34 +208,13 @@ function GeoMapCard() {
                         weight: 1,
                       }}
                     >
-                      <LeafletTooltip direction="top" opacity={0.95}>
-                        <div className="text-xs min-w-[120px]">
-                          <p className="font-semibold">{city.city}, {city.country}</p>
+                      <Popup>
+                        <div className="text-xs min-w-[140px]">
+                          <p className="font-semibold text-sm">{city.city}, {city.country}</p>
                           <p className="text-muted-foreground">{t('analytics.geo.connections', { count: city.count })}</p>
                           {users.length > 0 && (
                             <div className="mt-1 pt-1 border-t border-gray-200 dark:border-gray-600">
-                              <p className="font-medium mb-0.5">{t('analytics.geo.users')}:</p>
-                              {users.slice(0, 10).map((u) => (
-                                <p key={u.uuid} className="text-muted-foreground truncate max-w-[160px]">
-                                  {u.username}
-                                </p>
-                              ))}
-                              {users.length > 10 && (
-                                <p className="text-muted-foreground italic">
-                                  +{users.length - 10} {t('analytics.geo.more')}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </LeafletTooltip>
-                      <Popup>
-                        <div className="text-xs min-w-[150px]">
-                          <p className="font-semibold text-sm">{city.city}, {city.country}</p>
-                          <p className="text-muted-foreground mb-1">{t('analytics.geo.connections', { count: city.count })}</p>
-                          {users.length > 0 && (
-                            <div className="mt-1 pt-1 border-t border-gray-200 dark:border-gray-600">
-                              <p className="font-medium mb-1">{t('analytics.geo.users')} ({users.length}):</p>
+                              <p className="font-medium mb-0.5">{t('analytics.geo.users')} ({users.length}):</p>
                               <div className="max-h-[200px] overflow-y-auto space-y-0.5">
                                 {users.map((u) => (
                                   <p key={u.uuid} className="text-muted-foreground truncate max-w-[180px]">
@@ -603,14 +583,34 @@ export default function Analytics() {
         </p>
       </div>
 
-      {/* Geo Map */}
-      <GeoMapCard />
+      <Tabs defaultValue="geography" className="w-full">
+        <TabsList>
+          <TabsTrigger value="geography" className="gap-1.5">
+            <Globe className="w-4 h-4" />
+            {t('analytics.tabs.geography')}
+          </TabsTrigger>
+          <TabsTrigger value="users" className="gap-1.5">
+            <BarChart3 className="w-4 h-4" />
+            {t('analytics.tabs.topUsers')}
+          </TabsTrigger>
+          <TabsTrigger value="trends" className="gap-1.5">
+            <TrendingUp className="w-4 h-4" />
+            {t('analytics.tabs.trends')}
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Two-column layout for top users and trends */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <TopUsersCard />
-        <TrendsCard />
-      </div>
+        <TabsContent value="geography" className="space-y-6">
+          <GeoMapCard />
+        </TabsContent>
+
+        <TabsContent value="users">
+          <TopUsersCard />
+        </TabsContent>
+
+        <TabsContent value="trends">
+          <TrendsCard />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
