@@ -19,6 +19,7 @@ export interface MailDomain {
   dns_spf_ok: boolean
   dns_dkim_ok: boolean
   dns_dmarc_ok: boolean
+  dns_ptr_ok: boolean
   dns_checked_at: string | null
   created_at: string | null
   updated_at: string | null

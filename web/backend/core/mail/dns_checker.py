@@ -66,6 +66,24 @@ def check_dmarc_record(domain: str) -> Tuple[bool, Optional[str]]:
     return (False, None)
 
 
+def check_ptr_record(server_ip: str, expected_domain: str) -> Tuple[bool, Optional[str]]:
+    """Check if the server IP has a PTR record pointing to the expected domain."""
+    try:
+        import dns.resolver
+        import dns.reversename
+        rev_name = dns.reversename.from_address(server_ip)
+        answers = dns.resolver.resolve(rev_name, "PTR")
+        ptr_values = [str(rdata).rstrip(".") for rdata in answers]
+        # Check if any PTR record matches or is a subdomain of the expected domain
+        for ptr in ptr_values:
+            if ptr == expected_domain or ptr.endswith(f".{expected_domain}"):
+                return (True, ptr)
+        # PTR exists but doesn't match the domain
+        return (False, ", ".join(ptr_values))
+    except Exception:
+        return (False, None)
+
+
 def get_server_ip() -> str:
     """Detect the server's public IP address."""
     try:
@@ -136,6 +154,17 @@ def get_required_dns_records(
         purpose="DMARC",
         is_configured=dmarc_ok,
         current_value=dmarc_val,
+    ))
+
+    # PTR (reverse DNS) record
+    ptr_ok, ptr_val = check_ptr_record(server_ip, domain)
+    records.append(DnsRecord(
+        record_type="PTR",
+        host=server_ip,
+        value=f"mail.{domain}",
+        purpose="PTR",
+        is_configured=ptr_ok,
+        current_value=ptr_val,
     ))
 
     return records
