@@ -123,6 +123,31 @@ def _setup_web_logging():
         warn_h.setFormatter(file_fmt)
         root.addHandler(warn_h)
 
+        # Violations log — web backend side (collector, violations API)
+        violations_path = _LOG_DIR / "violations.log"
+        violations_h = _CompressedRotatingFileHandler(
+            str(violations_path),
+            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
+        )
+        violations_h.setLevel(logging.DEBUG)
+        violations_h.setFormatter(file_fmt)
+
+        class _ViolationFilter(logging.Filter):
+            _SRC = ("violation", "collector", "geoip", "connection_monitor", "maxmind")
+            _KW = ("violation", "score=", "detected", "ip_metadata",
+                    "geoip", "temporal", "geo_score", "asn_score",
+                    "impossible_travel", "agent token", "ip lookup")
+
+            def filter(self, record):
+                nl = record.name.lower()
+                if any(s in nl for s in self._SRC):
+                    return True
+                ml = str(record.getMessage()).lower()
+                return any(k in ml for k in self._KW)
+
+        violations_h.addFilter(_ViolationFilter())
+        root.addHandler(violations_h)
+
         _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
         print(
             f"[LOGGING] File logging active: {_LOG_DIR} "
@@ -197,16 +222,22 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("No DATABASE_URL, running without database")
 
-    # Ensure MaxMind GeoLite2 databases are downloaded if license key is set
-    maxmind_key = os.environ.get("MAXMIND_LICENSE_KEY")
-    if maxmind_key:
-        try:
-            from src.services.maxmind_updater import ensure_databases
-            city_path = os.environ.get("MAXMIND_CITY_DB", "/app/geoip/GeoLite2-City.mmdb")
-            asn_path = os.environ.get("MAXMIND_ASN_DB", "/app/geoip/GeoLite2-ASN.mmdb")
-            await ensure_databases(maxmind_key, city_path, asn_path)
-        except Exception as e:
-            logger.warning("MaxMind DB download failed: %s", e)
+    # Ensure MaxMind GeoLite2 databases are downloaded
+    # Supports: license key (official), GitHub mirror (ltsdev/maxmind), or auto
+    try:
+        from src.services.maxmind_updater import ensure_databases
+        maxmind_key = os.environ.get("MAXMIND_LICENSE_KEY")
+        maxmind_source = os.environ.get("MAXMIND_SOURCE", "auto")
+        city_path = os.environ.get("MAXMIND_CITY_DB", "/app/geoip/GeoLite2-City.mmdb")
+        asn_path = os.environ.get("MAXMIND_ASN_DB", "/app/geoip/GeoLite2-ASN.mmdb")
+        await ensure_databases(
+            license_key=maxmind_key,
+            city_path=city_path,
+            asn_path=asn_path,
+            source=maxmind_source,
+        )
+    except Exception as e:
+        logger.warning("MaxMind DB download failed: %s", e)
 
     yield
 

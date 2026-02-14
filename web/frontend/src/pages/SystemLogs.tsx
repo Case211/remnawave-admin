@@ -8,9 +8,9 @@ import {
   ArrowDown,
   Trash2,
   Terminal,
-  Globe,
   Database,
   Bot,
+  ShieldAlert,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -39,8 +39,7 @@ const LOG_FILE_LABELS: Record<string, { label: string; icon: typeof Terminal }> 
   web_warning: { label: 'Web Backend (WARNING+)', icon: Terminal },
   bot_info: { label: 'Telegram Bot (INFO)', icon: Bot },
   bot_warning: { label: 'Telegram Bot (WARNING+)', icon: Bot },
-  nginx_access: { label: 'Nginx (Access)', icon: Globe },
-  nginx_error: { label: 'Nginx (Error)', icon: Globe },
+  violations: { label: 'Violations', icon: ShieldAlert },
   postgres: { label: 'PostgreSQL', icon: Database },
 }
 
