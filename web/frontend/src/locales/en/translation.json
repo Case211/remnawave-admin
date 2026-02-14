@@ -25,6 +25,7 @@
     "total": "Total",
     "online": "Online",
     "offline": "Offline",
+    "noConnection": "No internet connection",
     "disabled": "Disabled",
     "active": "Active",
     "enabled": "Enabled",
