@@ -83,8 +83,8 @@ async def get_geo_connections(
                         SELECT DISTINCT u.username, u.uuid::text as uuid
                         FROM user_connections uc
                         JOIN users u ON uc.user_uuid = u.uuid
-                        WHERE uc.ip_address IN (
-                            SELECT ip_address FROM ip_metadata
+                        WHERE uc.ip_address::text IN (
+                            SELECT ip_address::text FROM ip_metadata
                             WHERE city = $1 AND country_name = $2
                         )
                         ORDER BY u.username
