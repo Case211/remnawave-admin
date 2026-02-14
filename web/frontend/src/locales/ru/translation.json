@@ -1270,7 +1270,10 @@
       "cityColumn": "Город",
       "userColumn": "Пользователь",
       "connectionsColumn": "Подключения",
-      "uniqueUsersColumn": "Пользователи"
+      "uniqueUsersColumn": "Пользователи",
+      "searchPlaceholder": "Поиск по городу или пользователю...",
+      "citiesCount": "{{count}} городов",
+      "totalConnections": "{{count}} подкл."
     },
     "topUsers": {
       "title": "Топ пользователей по трафику",
