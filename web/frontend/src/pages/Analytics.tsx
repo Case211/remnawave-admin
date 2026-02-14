@@ -117,6 +117,7 @@ function TrendTooltip({ active, payload, label, metric }: TrendTooltipProps) {
 
 function GeoMapCard() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [geoPeriod, setGeoPeriod] = useState('7d')
   const chart = useChartTheme()
 
@@ -209,17 +210,26 @@ function GeoMapCard() {
                       }}
                     >
                       <Popup>
-                        <div className="text-xs min-w-[140px]">
+                        <div className="text-xs min-w-[160px]">
                           <p className="font-semibold text-sm">{city.city}, {city.country}</p>
                           <p className="text-muted-foreground">{t('analytics.geo.connections', { count: city.count })}</p>
                           {users.length > 0 && (
-                            <div className="mt-1 pt-1 border-t border-gray-200 dark:border-gray-600">
-                              <p className="font-medium mb-0.5">{t('analytics.geo.users')} ({users.length}):</p>
+                            <div className="mt-1.5 pt-1.5 border-t border-dark-500/50">
+                              <p className="font-medium mb-1 text-white">{t('analytics.geo.users')} ({users.length}):</p>
                               <div className="max-h-[200px] overflow-y-auto space-y-0.5">
                                 {users.map((u) => (
-                                  <p key={u.uuid} className="text-muted-foreground truncate max-w-[180px]">
-                                    {u.username}
-                                  </p>
+                                  <a
+                                    key={u.uuid}
+                                    href={`/users/${u.uuid}`}
+                                    className="flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-dark-600/50 text-primary-400 hover:text-primary-300 transition-colors truncate max-w-[200px]"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      navigate(`/users/${u.uuid}`)
+                                    }}
+                                  >
+                                    <Users className="w-3 h-3 shrink-0" />
+                                    <span className="truncate">{u.username}</span>
+                                  </a>
                                 ))}
                               </div>
                             </div>
