@@ -115,7 +115,9 @@
   },
   "sidebar": {
     "expand": "Expand",
-    "collapse": "Collapse"
+    "collapse": "Collapse",
+    "telegramChat": "Telegram Chat",
+    "support": "Support the author"
   },
   "commandPalette": {
     "placeholder": "Search pages, users, actions...",
@@ -179,7 +181,11 @@
       "upper": "Uppercase (A-Z)",
       "digit": "Digit (0-9)",
       "special": "Special character"
-    }
+    },
+    "authorizedOnly": "For authorized administrators only",
+    "passwordRequirements": "Create an admin account to get started",
+    "donationNote": "This is an open-source project. The author would be grateful for any support, as a lot of time, effort and resources were invested in its development.",
+    "donationTitle": "Support the project"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1895,6 +1901,10 @@
       "reports_topic_id": {
         "label": "Reports topic",
         "description": "Topic ID for sending reports (0 = main chat)"
+      },
+      "panel_name": {
+        "label": "Panel name",
+        "description": "Project name displayed in the sidebar (next to the logo)"
       }
     },
     "inDb": "In DB",

@@ -74,6 +74,19 @@ def _effective_value(db_value: Optional[str], env_var_name: Optional[str], defau
     return default_value
 
 
+@router.get("/panel-name")
+async def get_panel_name(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Get panel name for sidebar display. Requires only authentication."""
+    try:
+        from src.services.config_service import config_service
+        val = await config_service.get("panel_name")
+        return {"panel_name": val or ""}
+    except Exception:
+        return {"panel_name": ""}
+
+
 @router.get("", response_model=ConfigByCategoryResponse)
 async def get_all_settings(
     admin: AdminUser = Depends(require_permission("settings", "view")),

@@ -123,6 +123,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 4,
     },
 
+    {
+        "key": "panel_name",
+        "value_type": "string",
+        "category": "general",
+        "display_name": "Название панели",
+        "description": "Отображаемое название проекта в боковом меню (рядом с логотипом)",
+        "default_value": "",
+        "sort_order": 6,
+    },
+
     # === GEOIP ===
     {
         "key": "maxmind_source",

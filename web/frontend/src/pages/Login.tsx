@@ -17,6 +17,7 @@ import {
   Copy,
   Check,
   UserPlus,
+  Heart,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -705,6 +706,33 @@ export default function Login() {
                   ? t('login.passwordRequirements')
                   : t('login.authorizedOnly')}
               </p>
+            </div>
+
+            {/* Donation */}
+            <div className="mt-4 pt-4 border-t border-dark-400/10">
+              <div className="flex items-center justify-center gap-1.5 mb-2">
+                <Heart className="w-3 h-3 text-pink-400" />
+                <span className="text-[11px] font-medium text-dark-200">
+                  {t('login.donationTitle')}
+                </span>
+              </div>
+              <p className="text-center text-[10px] text-dark-300/70 leading-relaxed mb-2.5">
+                {t('login.donationNote')}
+              </p>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-dark-700/40 border border-dark-400/10">
+                  <span className="text-[10px] font-medium text-dark-200 shrink-0">TON</span>
+                  <span className="text-[9px] text-dark-300 truncate font-mono flex-1">UQDDe-jyFTbQsPHqyojdFeO1_m7uPF-q1w0g_MfbSOd3l1sC</span>
+                </div>
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-dark-700/40 border border-dark-400/10">
+                  <span className="text-[10px] font-medium text-dark-200 shrink-0">USDT</span>
+                  <span className="text-[9px] text-dark-300 truncate font-mono flex-1">TGyHJj2PsYSUwkBbWdc7BFfsAxsE6SGGJP</span>
+                </div>
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-dark-700/40 border border-dark-400/10">
+                  <span className="text-[10px] font-medium text-dark-200 shrink-0">BTC</span>
+                  <span className="text-[9px] text-dark-300 truncate font-mono flex-1">1J6Zz7XcrpFkchwFmuU5WTFYTxziBdSwRz</span>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
