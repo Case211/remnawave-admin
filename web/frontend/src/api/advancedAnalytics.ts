@@ -6,12 +6,18 @@ export interface GeoCountry {
   count: number
 }
 
+export interface GeoCityUser {
+  username: string
+  uuid: string
+}
+
 export interface GeoCity {
   city: string
   country: string
   lat: number
   lon: number
   count: number
+  users?: GeoCityUser[]
 }
 
 export interface GeoData {

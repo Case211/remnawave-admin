@@ -24,7 +24,7 @@ _ALLOWED_TRIGGER_KEYS: dict[str, set[str]] = {
 _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
     "disable_user": {"reason"},
     "block_user": {"reason"},
-    "notify": {"channel", "webhook_url", "message_template"},
+    "notify": {"channel", "webhook_url", "message"},
     "restart_node": {"node_uuid"},
     "cleanup_expired": {"older_than_days"},
     "reset_traffic": {"target_status"},

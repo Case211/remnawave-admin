@@ -90,29 +90,54 @@ async def _find_user_uuid_by_identifier(identifier: str) -> Optional[str]:
     return user_uuid
 
 
-async def verify_agent_token(authorization: str = Header(..., alias="Authorization")) -> str:
+async def verify_agent_token(
+    request: Request,
+    authorization: str = Header(..., alias="Authorization"),
+) -> str:
     """
     Проверяет токен агента из заголовка Authorization: Bearer {token}.
     Возвращает node_uuid если токен валиден.
     """
-    logger.debug("Verifying agent token (length: %d)", len(authorization) if authorization else 0)
-    
+    # Определяем IP источника для логирования
+    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (
+        request.client.host if request.client else "unknown"
+    )
+
+    logger.debug("Verifying agent token (length: %d) from %s", len(authorization) if authorization else 0, client_ip)
+
     if not authorization.startswith("Bearer "):
-        logger.warning("Invalid authorization header format")
+        logger.warning("Invalid authorization header format from %s", client_ip)
         raise HTTPException(status_code=401, detail="Invalid authorization header format")
-    
+
     token = authorization[7:].strip()  # Убираем "Bearer "
     if not token:
-        logger.warning("Token is empty")
+        logger.warning("Token is empty, from %s", client_ip)
         raise HTTPException(status_code=401, detail="Token is required")
-    
+
     # Проверяем токен в БД
     node_uuid = await get_node_by_token(db_service, token)
     if not node_uuid:
-        logger.warning("Invalid agent token attempted: %s", token[:8] + "...")
+        # Пытаемся найти имя ноды по IP для удобства отладки
+        node_name_hint = ""
+        try:
+            async with db_service.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT name, address FROM nodes WHERE address LIKE $1 LIMIT 1",
+                    f"%{client_ip}%",
+                )
+                if row:
+                    node_name_hint = f" (possible node: {row['name']} / {row['address']})"
+        except Exception:
+            pass
+        logger.warning(
+            "Invalid agent token attempted: %s from %s%s",
+            token[:8] + "...",
+            client_ip,
+            node_name_hint,
+        )
         raise HTTPException(status_code=403, detail="Invalid or expired token")
-    
-    logger.debug("Agent token verified for node: %s", node_uuid)
+
+    logger.debug("Agent token verified for node: %s from %s", node_uuid, client_ip)
     return node_uuid
 
 

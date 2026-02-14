@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
   Search,
@@ -65,6 +65,7 @@ function formatFileSize(bytes: number): string {
 
 export default function SystemLogs() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   // useFormatters available for locale-aware formatting
   const [selectedFile, setSelectedFile] = useState('web_info')
   const [levelFilter, setLevelFilter] = useState<string>('all')
@@ -193,6 +194,9 @@ export default function SystemLogs() {
 
   const handleClear = () => {
     setStreamLines([])
+    queryClient.setQueryData(['logs-tail', selectedFile, levelFilter, searchText], (old: unknown) =>
+      old ? { ...(old as Record<string, unknown>), items: [] } : old,
+    )
   }
 
   // Combine initial data with streamed lines
