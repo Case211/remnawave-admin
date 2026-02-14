@@ -8,23 +8,44 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 // Layout (always loaded — shell of the app)
 import Layout from './components/layout/Layout'
 
+// Critical pages — direct import (first thing users see, must load instantly)
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+
+// Helper: retry dynamic import on failure (handles stale SW cache / network hiccups)
+function lazyRetry<T extends { default: React.ComponentType }>(
+  factory: () => Promise<T>,
+): React.LazyExoticComponent<T['default']> {
+  return lazy(() =>
+    factory().catch(() =>
+      // First failure — retry once after a short delay
+      new Promise<T>((resolve) => setTimeout(resolve, 1500)).then(() =>
+        factory().catch(() => {
+          // Second failure — force reload to get fresh assets
+          window.location.reload()
+          // Return a never-resolving promise so we don't render stale content
+          return new Promise<T>(() => {})
+        }),
+      ),
+    ),
+  )
+}
+
 // Lazy-loaded pages — each becomes a separate chunk
-const Login = lazy(() => import('./pages/Login'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Users = lazy(() => import('./pages/Users'))
-const UserDetail = lazy(() => import('./pages/UserDetail'))
-const Nodes = lazy(() => import('./pages/Nodes'))
-const Fleet = lazy(() => import('./pages/Fleet'))
-const Hosts = lazy(() => import('./pages/Hosts'))
-const Violations = lazy(() => import('./pages/Violations'))
-const Settings = lazy(() => import('./pages/Settings'))
-const Admins = lazy(() => import('./pages/Admins'))
-const AuditLog = lazy(() => import('./pages/AuditLog'))
-const SystemLogs = lazy(() => import('./pages/SystemLogs'))
-const Analytics = lazy(() => import('./pages/Analytics'))
-const Automations = lazy(() => import('./pages/automations'))
-const Notifications = lazy(() => import('./pages/Notifications'))
-const MailServer = lazy(() => import('./pages/MailServer'))
+const Users = lazyRetry(() => import('./pages/Users'))
+const UserDetail = lazyRetry(() => import('./pages/UserDetail'))
+const Nodes = lazyRetry(() => import('./pages/Nodes'))
+const Fleet = lazyRetry(() => import('./pages/Fleet'))
+const Hosts = lazyRetry(() => import('./pages/Hosts'))
+const Violations = lazyRetry(() => import('./pages/Violations'))
+const Settings = lazyRetry(() => import('./pages/Settings'))
+const Admins = lazyRetry(() => import('./pages/Admins'))
+const AuditLog = lazyRetry(() => import('./pages/AuditLog'))
+const SystemLogs = lazyRetry(() => import('./pages/SystemLogs'))
+const Analytics = lazyRetry(() => import('./pages/Analytics'))
+const Automations = lazyRetry(() => import('./pages/automations'))
+const Notifications = lazyRetry(() => import('./pages/Notifications'))
+const MailServer = lazyRetry(() => import('./pages/MailServer'))
 
 /** Lightweight loading skeleton shown while a page chunk is loading */
 function PageLoader() {
@@ -69,9 +90,14 @@ export default function App() {
   const clearPermissions = usePermissionStore((s) => s.clearPermissions)
   const [isValidating, setIsValidating] = useState(true)
 
-  // Validate persisted session on app startup
+  // Validate persisted session on app startup (with safety timeout)
   useEffect(() => {
-    validateSession().finally(() => setIsValidating(false))
+    const timeout = setTimeout(() => setIsValidating(false), 5000)
+    validateSession().finally(() => {
+      clearTimeout(timeout)
+      setIsValidating(false)
+    })
+    return () => clearTimeout(timeout)
   }, [validateSession])
 
   // Clear permissions on logout
@@ -90,43 +116,41 @@ export default function App() {
     <ErrorBoundary>
       <AppearanceProvider>
         <BrowserRouter>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<Login />} />
+          <Routes>
+            {/* Public routes — Login is direct import, loads instantly */}
+            <Route path="/login" element={<Login />} />
 
-              {/* Protected routes */}
-              <Route
-                path="/*"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Suspense fallback={<PageLoader />}>
-                        <Routes>
-                          <Route path="/" element={<Dashboard />} />
-                          <Route path="/users" element={<Users />} />
-                          <Route path="/users/:uuid" element={<UserDetail />} />
-                          <Route path="/nodes" element={<Nodes />} />
-                          <Route path="/fleet" element={<Fleet />} />
-                          <Route path="/hosts" element={<Hosts />} />
-                          <Route path="/violations" element={<Violations />} />
-                          <Route path="/automations" element={<Automations />} />
-                          <Route path="/notifications" element={<Notifications />} />
-                          <Route path="/mailserver" element={<MailServer />} />
-                          <Route path="/admins" element={<Admins />} />
-                          <Route path="/audit" element={<AuditLog />} />
-                          <Route path="/logs" element={<SystemLogs />} />
-                          <Route path="/analytics" element={<Analytics />} />
-                          <Route path="/settings" element={<Settings />} />
-                          <Route path="*" element={<Navigate to="/" replace />} />
-                        </Routes>
-                      </Suspense>
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </Suspense>
+            {/* Protected routes */}
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Suspense fallback={<PageLoader />}>
+                      <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/users" element={<Users />} />
+                        <Route path="/users/:uuid" element={<UserDetail />} />
+                        <Route path="/nodes" element={<Nodes />} />
+                        <Route path="/fleet" element={<Fleet />} />
+                        <Route path="/hosts" element={<Hosts />} />
+                        <Route path="/violations" element={<Violations />} />
+                        <Route path="/automations" element={<Automations />} />
+                        <Route path="/notifications" element={<Notifications />} />
+                        <Route path="/mailserver" element={<MailServer />} />
+                        <Route path="/admins" element={<Admins />} />
+                        <Route path="/audit" element={<AuditLog />} />
+                        <Route path="/logs" element={<SystemLogs />} />
+                        <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                      </Routes>
+                    </Suspense>
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
         </BrowserRouter>
       </AppearanceProvider>
     </ErrorBoundary>
