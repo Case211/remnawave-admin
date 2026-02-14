@@ -139,11 +139,16 @@ async def send_email(
         msg.attach(MIMEText(html, "html", "utf-8"))
 
         try:
+            # Use from_email domain as EHLO hostname to avoid sending
+            # the Docker container ID (e.g. "cfe04705b6d4") in HELO.
+            from_domain = config["from_email"].split("@")[-1] if "@" in config.get("from_email", "") else None
             if config.get("use_ssl"):
                 ctx = ssl.create_default_context()
-                server = smtplib.SMTP_SSL(config["host"], config["port"], context=ctx, timeout=15)
+                server = smtplib.SMTP_SSL(config["host"], config["port"], context=ctx, timeout=15,
+                                          local_hostname=from_domain)
             else:
-                server = smtplib.SMTP(config["host"], config["port"], timeout=15)
+                server = smtplib.SMTP(config["host"], config["port"], timeout=15,
+                                      local_hostname=from_domain)
                 if config.get("use_tls"):
                     ctx = ssl.create_default_context()
                     server.starttls(context=ctx)
