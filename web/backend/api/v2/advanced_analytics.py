@@ -100,6 +100,26 @@ async def get_geo_connections(
                     len(user_city_rows),
                     len(city_users_map),
                 )
+                # Debug: if no matches found, log sample IPs from both tables
+                if len(user_city_rows) == 0:
+                    uc_samples = await conn.fetch(
+                        "SELECT ip_address::text as ip FROM user_connections LIMIT 5"
+                    )
+                    im_samples = await conn.fetch(
+                        "SELECT ip_address::text as ip FROM ip_metadata WHERE city IS NOT NULL LIMIT 5"
+                    )
+                    uc_count = await conn.fetchval("SELECT COUNT(*) FROM user_connections")
+                    im_count = await conn.fetchval(
+                        "SELECT COUNT(*) FROM ip_metadata WHERE city IS NOT NULL"
+                    )
+                    logger.warning(
+                        "Geo debug: 0 matches. user_connections(%d) sample IPs: %s | "
+                        "ip_metadata(%d) sample IPs: %s",
+                        uc_count,
+                        [r["ip"] for r in uc_samples],
+                        im_count,
+                        [r["ip"] for r in im_samples],
+                    )
             except Exception as exc:
                 logger.warning("Failed to fetch users by city: %s", exc, exc_info=True)
                 # Debug info to help diagnose
