@@ -1235,6 +1235,11 @@
     "topUsersByTraffic": "Top users by traffic",
     "trafficByNode": "Traffic by node",
     "userGrowth": "User growth",
+    "tabs": {
+      "geography": "Geography",
+      "topUsers": "Top Users",
+      "trends": "Trends"
+    },
     "periods": {
       "day": "Day",
       "week": "Week",
