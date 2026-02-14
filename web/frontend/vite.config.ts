@@ -82,38 +82,57 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+
           // Core React runtime — cached long-term
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          // Data layer
-          'vendor-data': ['@tanstack/react-query', 'axios', 'zustand'],
-          // UI primitives (Radix)
-          'vendor-radix': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-select',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-tooltip',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-checkbox',
-            '@radix-ui/react-switch',
-            '@radix-ui/react-toggle',
-            '@radix-ui/react-toggle-group',
-            '@radix-ui/react-label',
-            '@radix-ui/react-separator',
-            '@radix-ui/react-alert-dialog',
-            '@radix-ui/react-avatar',
-            '@radix-ui/react-scroll-area',
-            '@radix-ui/react-slot',
-          ],
-          // Charts
-          'vendor-charts': ['recharts'],
-          // Maps (heavy — loaded only with Analytics page)
-          'vendor-maps': ['leaflet', 'react-leaflet'],
+          if (
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('/react-router') ||
+            id.includes('/use-sync-external-store/') ||
+            id.includes('/scheduler/')
+          ) {
+            return 'vendor-react'
+          }
+
+          // Data layer (state, HTTP, queries)
+          if (
+            id.includes('/zustand/') ||
+            id.includes('/axios/') ||
+            id.includes('/@tanstack/react-query/')
+          ) {
+            return 'vendor-data'
+          }
+
           // i18n
-          'vendor-i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          if (
+            id.includes('/i18next/') ||
+            id.includes('/react-i18next/') ||
+            id.includes('/i18next-browser-languagedetector/')
+          ) {
+            return 'vendor-i18n'
+          }
+
+          // UI primitives (Radix)
+          if (id.includes('/@radix-ui/')) {
+            return 'vendor-radix'
+          }
+
+          // Charts
+          if (id.includes('/recharts/') || id.includes('/d3-')) {
+            return 'vendor-charts'
+          }
+
+          // Maps (heavy — loaded only with Analytics page)
+          if (id.includes('/leaflet/') || id.includes('/react-leaflet/')) {
+            return 'vendor-maps'
+          }
+
           // Icons
-          'vendor-icons': ['lucide-react'],
+          if (id.includes('/lucide-react/')) {
+            return 'vendor-icons'
+          }
         },
       },
     },
