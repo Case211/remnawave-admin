@@ -3121,8 +3121,9 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
     
     # Metric columns stored separately by node-agent (not in raw_data)
     _METRIC_FIELDS = (
-        'cpu_usage', 'memory_usage', 'memory_total_bytes', 'memory_used_bytes',
+        'cpu_usage', 'cpu_cores', 'memory_usage', 'memory_total_bytes', 'memory_used_bytes',
         'disk_usage', 'disk_total_bytes', 'disk_used_bytes',
+        'disk_read_speed_bps', 'disk_write_speed_bps',
         'uptime_seconds', 'metrics_updated_at',
     )
 
