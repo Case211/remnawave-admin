@@ -88,6 +88,17 @@ class PTYSession:
                 except OSError:
                     pass
 
+            # Explicitly acquire controlling terminal.
+            # pty.fork() internally calls setsid() + tries ttyname()+open()
+            # to set the controlling terminal, but this silently fails in
+            # Docker containers where /dev/pts isn't fully mounted.
+            # TIOCSCTTY is the reliable way to acquire it after setsid().
+            _TIOCSCTTY = getattr(termios, "TIOCSCTTY", 0x540E)
+            try:
+                fcntl.ioctl(0, _TIOCSCTTY, 0)
+            except OSError:
+                pass
+
             # Set terminal size
             winsize = struct.pack("HHHH", rows, cols, 0, 0)
             try:
@@ -99,10 +110,13 @@ class PTYSession:
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
             env["SHELL"] = "/bin/bash"
+            # Remove vars that can interfere with bash initialization
+            for var in ("BASH_ENV", "ENV", "PROMPT_COMMAND", "CDPATH"):
+                env.pop(var, None)
 
             # Execute bash — on success this never returns
             try:
-                os.execve("/bin/bash", ["/bin/bash", "--login"], env)
+                os.execve("/bin/bash", ["bash", "--login"], env)
             except Exception:
                 os._exit(1)
 
@@ -111,10 +125,6 @@ class PTYSession:
             self._master_fd = master_fd
             self._pid = child_pid
             self._running = True
-
-            # Set master fd to non-blocking
-            flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
-            fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
             # Set initial terminal size on the master side
             winsize = struct.pack("HHHH", rows, cols, 0, 0)
@@ -220,7 +230,13 @@ class PTYSession:
             await self.close()
 
     def _blocking_read(self) -> Optional[bytes]:
-        """Blocking read from master fd (run in executor)."""
+        """Blocking read from master fd (run in executor).
+
+        Returns:
+            bytes: Data read from the PTY.
+            b"": No data available yet (select timeout), process still alive.
+            None: EOF or fatal error — process exited.
+        """
         if self._master_fd is None:
             return None
 
@@ -228,8 +244,11 @@ class PTYSession:
         try:
             readable, _, _ = select.select([self._master_fd], [], [], 0.1)
             if readable:
-                return os.read(self._master_fd, 4096)
-            return b""  # No data yet but still alive
+                data = os.read(self._master_fd, 4096)
+                if not data:
+                    return None  # EOF — child process exited
+                return data
+            return b""  # Select timeout — no data yet but still alive
         except OSError:
             return None
 
