@@ -28,9 +28,12 @@
 - 📊 Dashboard with system overview and violation charts
 - 👥 User, node, and host management
 - 🛡 Violation viewer with IP Lookup (provider, city, connection type)
+- 🗺 Interactive geo map with user details and city breakdown
 - ⚙️ Settings with auto-save (priority: DB > .env > defaults)
 - 🔐 Telegram Login Widget + JWT authentication
-- 🎨 Dark theme, responsive design
+- 🎨 6 dark themes + 1 light theme, responsive design
+- 🌍 Full internationalization (Russian / English)
+- 🔔 Notifications and alerts system with customizable templates
 
 ### 🛡 Anti-Abuse System
 - 🔍 Multi-factor connection analysis (temporal, geographic, ASN, profile, device)
@@ -46,10 +49,13 @@
 - ✍️ Built-in compose editor + inbox viewer
 
 ### 🔧 Additional
+- 🏗 ARM64 (aarch64) support — Docker images for `linux/amd64` and `linux/arm64`
 - ⚙️ Dynamic settings without restart (Telegram and web panel)
 - 🔔 Webhook notifications with topic routing
+- 📝 Dynamic logging: runtime level switching, rotation, configurable file sizes
 - 🌍 Russian and English language support
 - 🗄 PostgreSQL with graceful degradation (works without DB too)
+- 🧪 Testing infrastructure: Playwright E2E, CI/CD workflows
 
 ---
 
