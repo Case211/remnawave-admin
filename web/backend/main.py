@@ -127,30 +127,11 @@ def _setup_web_logging():
         warn_h.setFormatter(file_fmt)
         root.addHandler(warn_h)
 
-        # Violations log — web backend side (collector, violations API)
-        violations_path = _LOG_DIR / "violations.log"
-        violations_h = _CompressedRotatingFileHandler(
-            str(violations_path),
-            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
-        )
-        violations_h.setLevel(logging.DEBUG)
-        violations_h.setFormatter(file_fmt)
-
-        class _ViolationFilter(logging.Filter):
-            _SRC = ("violation", "collector", "geoip", "connection_monitor", "maxmind")
-            _KW = ("violation", "score=", "detected", "ip_metadata",
-                    "geoip", "temporal", "geo_score", "asn_score",
-                    "impossible_travel", "agent token", "ip lookup")
-
-            def filter(self, record):
-                nl = record.name.lower()
-                if any(s in nl for s in self._SRC):
-                    return True
-                ml = str(record.getMessage()).lower()
-                return any(k in ml for k in self._KW)
-
-        violations_h.addFilter(_ViolationFilter())
-        root.addHandler(violations_h)
+        # NOTE: violations.log is written by the bot process (src/utils/logger.py)
+        # which has the proper ViolationLogFilter. The web backend must NOT add its
+        # own handler for the same file — two processes sharing a RotatingFileHandler
+        # causes data loss on rotation and the broad keyword filter ("violation")
+        # matches WebSocket subscription debug messages, flooding the log with noise.
 
         _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
         print(
