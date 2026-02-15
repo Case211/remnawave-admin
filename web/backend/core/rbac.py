@@ -514,8 +514,16 @@ async def get_audit_logs(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     search: Optional[str] = None,
+    cursor: Optional[int] = None,
 ) -> Tuple[List[dict], int]:
-    """Fetch audit logs with optional filters. Returns (logs, total_count)."""
+    """Fetch audit logs with optional filters.
+
+    Supports two pagination modes:
+    - offset-based (legacy): limit + offset
+    - cursor-based (efficient): cursor = last seen id, returns next `limit` rows
+
+    Returns (logs, total_count).
+    """
     try:
         from src.services.database import db_service
         if not db_service.is_connected:
@@ -524,6 +532,13 @@ async def get_audit_logs(
         where_parts = []
         params = []
         idx = 1
+
+        # Cursor-based pagination: fetch rows with id < cursor
+        if cursor is not None:
+            where_parts.append(f"id < ${idx}")
+            params.append(cursor)
+            idx += 1
+
         if admin_id is not None:
             where_parts.append(f"admin_id = ${idx}")
             params.append(admin_id)
@@ -561,22 +576,53 @@ async def get_audit_logs(
             where_clause = "WHERE " + " AND ".join(where_parts)
 
         async with db_service.acquire() as conn:
+            # Count query (without cursor filter for accurate total)
+            count_where_parts = [p for p in where_parts]
+            count_params = list(params)
+            if cursor is not None:
+                # Remove cursor condition from count query
+                count_where_parts = count_where_parts[1:]
+                count_params = count_params[1:]
+            count_where = ""
+            if count_where_parts:
+                # Re-number parameters for count query
+                count_where = "WHERE " + " AND ".join(count_where_parts)
+                # Fix parameter indices
+                renumbered = []
+                for i, part in enumerate(count_where_parts):
+                    renumbered.append(part)
+                count_where = "WHERE " + " AND ".join(renumbered)
+
             count_row = await conn.fetchrow(
-                f"SELECT COUNT(*) FROM admin_audit_log {where_clause}", *params
+                f"SELECT COUNT(*) FROM admin_audit_log {count_where}", *count_params
             )
             total = count_row[0] if count_row else 0
 
-            params.append(limit)
-            params.append(offset)
-            rows = await conn.fetch(
-                f"""
-                SELECT * FROM admin_audit_log
-                {where_clause}
-                ORDER BY created_at DESC
-                LIMIT ${idx} OFFSET ${idx + 1}
-                """,
-                *params,
-            )
+            if cursor is not None:
+                # Cursor-based: no OFFSET needed, just LIMIT
+                params.append(limit)
+                rows = await conn.fetch(
+                    f"""
+                    SELECT * FROM admin_audit_log
+                    {where_clause}
+                    ORDER BY id DESC
+                    LIMIT ${idx}
+                    """,
+                    *params,
+                )
+            else:
+                # Legacy offset-based
+                params.append(limit)
+                params.append(offset)
+                rows = await conn.fetch(
+                    f"""
+                    SELECT * FROM admin_audit_log
+                    {where_clause}
+                    ORDER BY id DESC
+                    LIMIT ${idx} OFFSET ${idx + 1}
+                    """,
+                    *params,
+                )
             return [dict(r) for r in rows], total
     except Exception as e:
         logger.error("get_audit_logs failed: %s", e)

@@ -24,6 +24,9 @@ websockets>=12.0
 # Rate limiting
 slowapi>=0.1.9
 
+# Caching
+redis[hiredis]>=5.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 python-multipart>=0.0.6

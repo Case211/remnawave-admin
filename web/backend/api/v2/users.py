@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
@@ -15,6 +15,7 @@ from web.backend.core.api_helper import fetch_users_from_api
 from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate, HwidDevice
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 from web.backend.schemas.bulk import BulkUserRequest, BulkOperationResult, BulkOperationError
+from web.backend.core.rate_limit import limiter, RATE_BULK
 
 logger = logging.getLogger(__name__)
 
@@ -850,7 +851,9 @@ async def get_user_hwid_devices(
 
 
 @router.post("/bulk/enable", response_model=BulkOperationResult)
+@limiter.limit(RATE_BULK)
 async def bulk_enable_users(
+    request: Request,
     body: BulkUserRequest,
     admin: AdminUser = Depends(require_permission("users", "bulk_operations")),
 ):
@@ -872,7 +875,9 @@ async def bulk_enable_users(
 
 
 @router.post("/bulk/disable", response_model=BulkOperationResult)
+@limiter.limit(RATE_BULK)
 async def bulk_disable_users(
+    request: Request,
     body: BulkUserRequest,
     admin: AdminUser = Depends(require_permission("users", "bulk_operations")),
 ):
@@ -894,7 +899,9 @@ async def bulk_disable_users(
 
 
 @router.post("/bulk/delete", response_model=BulkOperationResult)
+@limiter.limit(RATE_BULK)
 async def bulk_delete_users(
+    request: Request,
     body: BulkUserRequest,
     admin: AdminUser = Depends(require_permission("users", "bulk_operations")),
 ):
@@ -922,7 +929,9 @@ async def bulk_delete_users(
 
 
 @router.post("/bulk/reset-traffic", response_model=BulkOperationResult)
+@limiter.limit(RATE_BULK)
 async def bulk_reset_traffic(
+    request: Request,
     body: BulkUserRequest,
     admin: AdminUser = Depends(require_permission("users", "bulk_operations")),
 ):

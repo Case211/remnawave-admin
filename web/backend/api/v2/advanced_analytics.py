@@ -3,20 +3,30 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from web.backend.api.deps import require_permission, AdminUser
+from web.backend.core.cache import cached, CACHE_TTL_LONG
+from web.backend.core.rate_limit import limiter, RATE_ANALYTICS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/geo")
+@limiter.limit(RATE_ANALYTICS)
 async def get_geo_connections(
+    request: Request,
     period: str = Query("7d", description="Period: 24h, 7d, 30d"),
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get geographical distribution of user connections from violations/IP metadata."""
+    return await _compute_geo(period=period)
+
+
+@cached("analytics:geo", ttl=CACHE_TTL_LONG, key_args=("period",))
+async def _compute_geo(period: str = "7d"):
+    """Compute geo connections (cacheable)."""
     try:
         from src.services.database import db_service
         if not db_service.is_connected:
@@ -125,11 +135,19 @@ async def get_geo_connections(
 
 
 @router.get("/top-users")
+@limiter.limit(RATE_ANALYTICS)
 async def get_top_users_by_traffic(
+    request: Request,
     limit: int = Query(20, ge=5, le=100),
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get top users by traffic consumption."""
+    return await _compute_top_users(limit=limit)
+
+
+@cached("analytics:top-users", ttl=CACHE_TTL_LONG, key_args=("limit",))
+async def _compute_top_users(limit: int = 20):
+    """Compute top users by traffic (cacheable)."""
     try:
         from src.services.database import db_service
         if not db_service.is_connected:
@@ -180,12 +198,20 @@ async def get_top_users_by_traffic(
 
 
 @router.get("/trends")
+@limiter.limit(RATE_ANALYTICS)
 async def get_trends(
+    request: Request,
     metric: str = Query("users", description="Metric: users, traffic, violations"),
     period: str = Query("30d", description="Period: 7d, 30d, 90d"),
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get trend data — growth of users, traffic, violations over time."""
+    return await _compute_trends(metric=metric, period=period)
+
+
+@cached("analytics:trends", ttl=CACHE_TTL_LONG, key_args=("metric", "period"))
+async def _compute_trends(metric: str = "users", period: str = "30d"):
+    """Compute trends (cacheable)."""
     try:
         from src.services.database import db_service
         if not db_service.is_connected:

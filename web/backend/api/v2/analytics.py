@@ -3,9 +3,11 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission
+from web.backend.core.cache import cached, CACHE_TTL_SHORT, CACHE_TTL_MEDIUM, CACHE_TTL_LONG
+from web.backend.core.rate_limit import limiter, RATE_ANALYTICS
 from web.backend.core.update_checker import get_latest_version
 from web.backend.core.api_helper import (
     fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api,
@@ -265,16 +267,65 @@ def _get_users_online(node: Dict[str, Any]) -> int:
         return 0
 
 
+@cached("analytics:overview", ttl=CACHE_TTL_SHORT)
+async def _compute_overview() -> OverviewStats:
+    """Compute overview stats (cacheable)."""
+    users = await _get_users_data()
+    nodes = await _get_nodes_data()
+    hosts = await _get_hosts_data()
+    violations = await _get_violation_counts()
+
+    total_users = len(users)
+    active_users = sum(1 for u in users if _get_user_status(u) == 'active')
+    disabled_users = sum(1 for u in users if _get_user_status(u) == 'disabled')
+    expired_users = sum(1 for u in users if _get_user_status(u) == 'expired')
+
+    total_nodes = len(nodes)
+    disabled_nodes = sum(1 for n in nodes if _is_node_disabled(n))
+    online_nodes = sum(1 for n in nodes if _is_node_connected(n) and not _is_node_disabled(n))
+    offline_nodes = total_nodes - online_nodes - disabled_nodes
+    total_hosts = len(hosts)
+
+    total_traffic_bytes = 0
+    bw_stats = await fetch_bandwidth_stats()
+    if bw_stats:
+        current_year = bw_stats.get('bandwidthCurrentYear', {})
+        try:
+            total_traffic_bytes = int(current_year.get('current') or 0)
+        except (ValueError, TypeError):
+            pass
+    if not total_traffic_bytes:
+        user_traffic = sum(_get_traffic_bytes(u) for u in users)
+        node_traffic = sum(_get_node_traffic(n) for n in nodes)
+        total_traffic_bytes = max(user_traffic, node_traffic)
+    users_online = sum(_get_users_online(n) for n in nodes)
+
+    return OverviewStats(
+        total_users=total_users,
+        active_users=active_users,
+        disabled_users=disabled_users,
+        expired_users=expired_users,
+        total_nodes=total_nodes,
+        online_nodes=online_nodes,
+        offline_nodes=offline_nodes,
+        disabled_nodes=disabled_nodes,
+        total_hosts=total_hosts,
+        violations_today=violations['today'],
+        violations_week=violations['week'],
+        total_traffic_bytes=total_traffic_bytes,
+        users_online=users_online,
+    )
+
+
 @router.get("/overview", response_model=OverviewStats)
+@limiter.limit(RATE_ANALYTICS)
 async def get_overview(
+    request: Request,
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get overview statistics for dashboard."""
     try:
-        users = await _get_users_data()
-        nodes = await _get_nodes_data()
-        hosts = await _get_hosts_data()
-        violations = await _get_violation_counts()
+        return await _compute_overview()
 
         # Calculate user stats (case-insensitive status comparison)
         total_users = len(users)
@@ -307,22 +358,6 @@ async def get_overview(
             total_traffic_bytes = max(user_traffic, node_traffic)
         users_online = sum(_get_users_online(n) for n in nodes)
 
-        return OverviewStats(
-            total_users=total_users,
-            active_users=active_users,
-            disabled_users=disabled_users,
-            expired_users=expired_users,
-            total_nodes=total_nodes,
-            online_nodes=online_nodes,
-            offline_nodes=offline_nodes,
-            disabled_nodes=disabled_nodes,
-            total_hosts=total_hosts,
-            violations_today=violations['today'],
-            violations_week=violations['week'],
-            total_traffic_bytes=total_traffic_bytes,
-            users_online=users_online,
-        )
-
     except Exception as e:
         logger.error("Error getting overview stats: %s", e)
         return OverviewStats()
@@ -352,123 +387,99 @@ def _sum_top_nodes_total(response: Dict[str, Any]) -> int:
     return total
 
 
+@cached("analytics:traffic", ttl=CACHE_TTL_MEDIUM)
+async def _compute_traffic() -> TrafficStats:
+    """Compute traffic stats (cacheable)."""
+    now = datetime.utcnow()
+    today_bytes = 0
+    week_bytes = 0
+    month_bytes = 0
+    total_bytes = 0
+
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = now - timedelta(days=7)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end_date = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+
+    try:
+        resp = await fetch_nodes_usage_by_range(start=today_start.strftime('%Y-%m-%d'), end=end_date)
+        if resp:
+            today_bytes = _sum_top_nodes_total(resp)
+    except Exception as e:
+        logger.debug("Failed to fetch today's traffic by range: %s", e)
+
+    try:
+        resp = await fetch_nodes_usage_by_range(start=week_start.strftime('%Y-%m-%d'), end=end_date)
+        if resp:
+            week_bytes = _sum_top_nodes_total(resp)
+    except Exception as e:
+        logger.debug("Failed to fetch weekly traffic by range: %s", e)
+
+    try:
+        resp = await fetch_nodes_usage_by_range(start=month_start.strftime('%Y-%m-%d'), end=end_date)
+        if resp:
+            month_bytes = _sum_top_nodes_total(resp)
+    except Exception as e:
+        logger.debug("Failed to fetch monthly traffic by range: %s", e)
+
+    bw_stats = await fetch_bandwidth_stats()
+    if bw_stats:
+        current_year = bw_stats.get('bandwidthCurrentYear', {})
+        total_bytes = _parse_bandwidth_bytes(current_year.get('current'))
+
+        if not week_bytes:
+            last_seven = bw_stats.get('bandwidthLastSevenDays', {})
+            week_bytes = _parse_bandwidth_bytes(last_seven.get('current'))
+
+        if not month_bytes:
+            calendar_month = bw_stats.get('bandwidthCalendarMonth', {})
+            month_bytes = _parse_bandwidth_bytes(calendar_month.get('current'))
+            if not month_bytes:
+                last_30 = bw_stats.get('bandwidthLast30Days', {})
+                month_bytes = _parse_bandwidth_bytes(last_30.get('current'))
+
+        if not today_bytes:
+            last_two_days = bw_stats.get('bandwidthLastTwoDays', {})
+            today_bytes = _parse_bandwidth_bytes(last_two_days.get('current'))
+
+    if not today_bytes:
+        realtime = await fetch_nodes_realtime_usage()
+        if realtime:
+            realtime_total = sum(_parse_bandwidth_bytes(r.get('totalBytes')) for r in realtime)
+            if realtime_total > 0:
+                today_bytes = realtime_total
+
+    if not total_bytes:
+        users = await _get_users_data()
+        nodes = await _get_nodes_data()
+        user_traffic = sum(_get_traffic_bytes(u) for u in users)
+        node_traffic = sum(_get_node_traffic(n) for n in nodes)
+        total_bytes = max(user_traffic, node_traffic)
+
+    return TrafficStats(
+        total_bytes=total_bytes, today_bytes=today_bytes,
+        week_bytes=week_bytes, month_bytes=month_bytes,
+    )
+
+
 @router.get("/traffic", response_model=TrafficStats)
+@limiter.limit(RATE_ANALYTICS)
 async def get_traffic_stats(
+    request: Request,
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
-    """Get traffic statistics with time breakdowns.
-
-    Primary source for period traffic (today/week/month):
-        /api/bandwidth-stats/nodes with date ranges — queries persistent DB data,
-        survives service restarts.
-    Fallback for period traffic:
-        /api/system/stats/bandwidth — in-memory counters that reset on restart.
-    Total traffic:
-        /api/system/stats/bandwidth → bandwidthCurrentYear (persistent).
-    """
+    """Get traffic statistics with time breakdowns."""
     try:
-        now = datetime.utcnow()
-        today_bytes = 0
-        week_bytes = 0
-        month_bytes = 0
-        total_bytes = 0
-
-        # --- Period traffic from date-range queries (primary, persistent) ---
-        # API expects date format YYYY-MM-DD (not full ISO datetime)
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_start = now - timedelta(days=7)
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_date = (now + timedelta(days=1)).strftime('%Y-%m-%d')
-
-        try:
-            resp = await fetch_nodes_usage_by_range(
-                start=today_start.strftime('%Y-%m-%d'),
-                end=end_date,
-            )
-            if resp:
-                today_bytes = _sum_top_nodes_total(resp)
-        except Exception as e:
-            logger.debug("Failed to fetch today's traffic by range: %s", e)
-
-        try:
-            resp = await fetch_nodes_usage_by_range(
-                start=week_start.strftime('%Y-%m-%d'),
-                end=end_date,
-            )
-            if resp:
-                week_bytes = _sum_top_nodes_total(resp)
-        except Exception as e:
-            logger.debug("Failed to fetch weekly traffic by range: %s", e)
-
-        try:
-            resp = await fetch_nodes_usage_by_range(
-                start=month_start.strftime('%Y-%m-%d'),
-                end=end_date,
-            )
-            if resp:
-                month_bytes = _sum_top_nodes_total(resp)
-        except Exception as e:
-            logger.debug("Failed to fetch monthly traffic by range: %s", e)
-
-        # --- Total traffic + fallback for periods from bandwidth stats ---
-        bw_stats = await fetch_bandwidth_stats()
-        if bw_stats:
-            logger.debug(
-                "Bandwidth stats response keys: %s",
-                list(bw_stats.keys()) if isinstance(bw_stats, dict) else type(bw_stats),
-            )
-
-            current_year = bw_stats.get('bandwidthCurrentYear', {})
-            total_bytes = _parse_bandwidth_bytes(current_year.get('current'))
-
-            # Use bandwidth stats as fallback if date-range queries returned 0
-            if not week_bytes:
-                last_seven = bw_stats.get('bandwidthLastSevenDays', {})
-                week_bytes = _parse_bandwidth_bytes(last_seven.get('current'))
-
-            if not month_bytes:
-                calendar_month = bw_stats.get('bandwidthCalendarMonth', {})
-                month_bytes = _parse_bandwidth_bytes(calendar_month.get('current'))
-                if not month_bytes:
-                    last_30 = bw_stats.get('bandwidthLast30Days', {})
-                    month_bytes = _parse_bandwidth_bytes(last_30.get('current'))
-
-            if not today_bytes:
-                last_two_days = bw_stats.get('bandwidthLastTwoDays', {})
-                today_bytes = _parse_bandwidth_bytes(last_two_days.get('current'))
-
-        # Fallback for today: realtime node stats (only if still 0)
-        if not today_bytes:
-            realtime = await fetch_nodes_realtime_usage()
-            if realtime:
-                realtime_total = 0
-                for node_rt in realtime:
-                    realtime_total += _parse_bandwidth_bytes(node_rt.get('totalBytes'))
-                if realtime_total > 0:
-                    today_bytes = realtime_total
-
-        # Fallback for total: sum user/node traffic
-        if not total_bytes:
-            users = await _get_users_data()
-            nodes = await _get_nodes_data()
-            user_traffic = sum(_get_traffic_bytes(u) for u in users)
-            node_traffic = sum(_get_node_traffic(n) for n in nodes)
-            total_bytes = max(user_traffic, node_traffic)
-
-        return TrafficStats(
-            total_bytes=total_bytes,
-            today_bytes=today_bytes,
-            week_bytes=week_bytes,
-            month_bytes=month_bytes,
-        )
-
+        return await _compute_traffic()
     except Exception as e:
         logger.error("Error getting traffic stats: %s", e)
         return TrafficStats()
 
 
 @router.get("/timeseries", response_model=TimeseriesResponse)
+@limiter.limit(RATE_ANALYTICS)
 async def get_timeseries(
+    request: Request,
     period: str = Query("24h", regex="^(24h|7d|30d)$"),
     metric: str = Query("traffic", regex="^(traffic|connections)$"),
     admin: AdminUser = Depends(require_permission("analytics", "view")),
@@ -683,67 +694,71 @@ def _generate_synthetic_traffic_points(period: str, now: datetime) -> List[Times
     return points
 
 
+@cached("analytics:deltas", ttl=CACHE_TTL_MEDIUM)
+async def _compute_deltas() -> DeltaStats:
+    """Compute delta stats (cacheable)."""
+    now = datetime.utcnow()
+    result = DeltaStats()
+
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = today_start - timedelta(days=1)
+    end_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+
+    try:
+        today_resp = await fetch_nodes_usage_by_range(
+            start=today_start.strftime('%Y-%m-%d'), end=end_str,
+        )
+        yesterday_resp = await fetch_nodes_usage_by_range(
+            start=yesterday_start.strftime('%Y-%m-%d'),
+            end=today_start.strftime('%Y-%m-%d'),
+        )
+        today_traffic = _sum_top_nodes_total(today_resp) if today_resp else 0
+        yesterday_traffic = _sum_top_nodes_total(yesterday_resp) if yesterday_resp else 0
+        if yesterday_traffic > 0:
+            result.traffic_delta = round(
+                ((today_traffic - yesterday_traffic) / yesterday_traffic) * 100, 1
+            )
+        elif today_traffic > 0:
+            result.traffic_delta = 100.0
+    except Exception as e:
+        logger.debug("Failed to compute traffic delta: %s", e)
+
+    try:
+        from src.services.database import db_service
+        if db_service.is_connected:
+            today_stats = await db_service.get_violations_stats_for_period(
+                start_date=today_start, end_date=now,
+            )
+            yesterday_stats = await db_service.get_violations_stats_for_period(
+                start_date=yesterday_start, end_date=today_start,
+            )
+            today_v = today_stats.get('total', 0)
+            yesterday_v = yesterday_stats.get('total', 0)
+            result.violations_delta = today_v - yesterday_v
+    except Exception as e:
+        logger.debug("Failed to compute violations delta: %s", e)
+
+    return result
+
+
 @router.get("/deltas", response_model=DeltaStats)
+@limiter.limit(RATE_ANALYTICS)
 async def get_delta_stats(
+    request: Request,
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
-    """Get delta indicators for dashboard stat cards.
-
-    Compares today vs yesterday for traffic and violations.
-    """
+    """Get delta indicators for dashboard stat cards."""
     try:
-        now = datetime.utcnow()
-        result = DeltaStats()
-
-        # Traffic delta: today vs yesterday
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        yesterday_start = today_start - timedelta(days=1)
-        end_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
-
-        try:
-            today_resp = await fetch_nodes_usage_by_range(
-                start=today_start.strftime('%Y-%m-%d'), end=end_str,
-            )
-            yesterday_resp = await fetch_nodes_usage_by_range(
-                start=yesterday_start.strftime('%Y-%m-%d'),
-                end=today_start.strftime('%Y-%m-%d'),
-            )
-            today_traffic = _sum_top_nodes_total(today_resp) if today_resp else 0
-            yesterday_traffic = _sum_top_nodes_total(yesterday_resp) if yesterday_resp else 0
-            if yesterday_traffic > 0:
-                result.traffic_delta = round(
-                    ((today_traffic - yesterday_traffic) / yesterday_traffic) * 100, 1
-                )
-            elif today_traffic > 0:
-                result.traffic_delta = 100.0
-        except Exception as e:
-            logger.debug("Failed to compute traffic delta: %s", e)
-
-        # Violations delta: today vs yesterday
-        try:
-            from src.services.database import db_service
-            if db_service.is_connected:
-                today_stats = await db_service.get_violations_stats_for_period(
-                    start_date=today_start, end_date=now,
-                )
-                yesterday_stats = await db_service.get_violations_stats_for_period(
-                    start_date=yesterday_start, end_date=today_start,
-                )
-                today_v = today_stats.get('total', 0)
-                yesterday_v = yesterday_stats.get('total', 0)
-                result.violations_delta = today_v - yesterday_v
-        except Exception as e:
-            logger.debug("Failed to compute violations delta: %s", e)
-
-        return result
-
+        return await _compute_deltas()
     except Exception as e:
         logger.error("Error getting delta stats: %s", e)
         return DeltaStats()
 
 
 @router.get("/node-fleet", response_model=NodeFleetResponse)
+@limiter.limit(RATE_ANALYTICS)
 async def get_node_fleet(
+    request: Request,
     admin: AdminUser = Depends(require_permission("fleet", "view")),
 ):
     """Get compact node fleet data for dashboard cards.
@@ -913,7 +928,9 @@ async def get_node_fleet(
 
 
 @router.get("/system/components", response_model=SystemComponentsResponse)
+@limiter.limit(RATE_ANALYTICS)
 async def get_system_components(
+    request: Request,
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get status of all system components for dashboard."""

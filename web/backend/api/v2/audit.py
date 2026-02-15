@@ -14,6 +14,7 @@ router = APIRouter()
 async def get_audit_logs(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    cursor: Optional[int] = Query(None, description="Cursor (last seen ID) for efficient pagination"),
     admin_id: Optional[int] = Query(None),
     action: Optional[str] = Query(None, description="Filter by action (partial match)"),
     resource: Optional[str] = Query(None, description="Filter by resource type"),
@@ -23,7 +24,13 @@ async def get_audit_logs(
     search: Optional[str] = Query(None, description="Free text search"),
     admin: AdminUser = Depends(require_permission("audit", "view")),
 ):
-    """Get audit log entries with rich filtering."""
+    """Get audit log entries with rich filtering.
+
+    Supports two pagination modes:
+    - offset-based (legacy): ?limit=50&offset=100
+    - cursor-based (efficient): ?limit=50&cursor=12345
+      Returns next_cursor for fetching the next page.
+    """
     from web.backend.core.rbac import get_audit_logs as _get_logs
 
     items, total = await _get_logs(
@@ -36,6 +43,7 @@ async def get_audit_logs(
         date_from=date_from,
         date_to=date_to,
         search=search,
+        cursor=cursor,
     )
 
     # Serialize datetime objects
@@ -43,7 +51,14 @@ async def get_audit_logs(
         if item.get("created_at"):
             item["created_at"] = str(item["created_at"])
 
-    return {"items": items, "total": total}
+    # Compute next_cursor from the last item's id
+    next_cursor = None
+    if items and len(items) == limit:
+        last_id = items[-1].get("id")
+        if last_id is not None:
+            next_cursor = last_id
+
+    return {"items": items, "total": total, "next_cursor": next_cursor}
 
 
 @router.get("/actions")

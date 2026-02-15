@@ -222,6 +222,21 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("No DATABASE_URL, running without database")
 
+    # Connect to Redis cache (optional, falls back to in-memory)
+    redis_url = os.environ.get("REDIS_URL") or getattr(settings, "redis_url", None)
+    try:
+        from web.backend.core.cache import cache
+        await cache.connect(redis_url)
+    except Exception as e:
+        logger.warning("Cache setup failed: %s", e)
+
+    # Upgrade rate limiter to Redis backend (optional)
+    try:
+        from web.backend.core.rate_limit import configure_limiter
+        configure_limiter(redis_url)
+    except Exception as e:
+        logger.debug("Rate limiter Redis upgrade skipped: %s", e)
+
     # Ensure MaxMind GeoLite2 databases are downloaded
     # Supports: license key (official), GitHub mirror (ltsdev/maxmind), or auto
     try:
@@ -242,6 +257,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    try:
+        from web.backend.core.cache import cache
+        await cache.close()
+    except Exception:
+        pass
     try:
         from web.backend.core.mail.mail_service import mail_service
         await mail_service.stop()
@@ -412,4 +432,7 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
+        # Enable per-message deflate compression for WebSocket connections
+        ws="websockets",
+        ws_per_message_deflate=True,
     )

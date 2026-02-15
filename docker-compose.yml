@@ -100,6 +100,8 @@ services:
       - MAXMIND_LICENSE_KEY=${MAXMIND_LICENSE_KEY:-}
       - MAXMIND_CITY_DB=${MAXMIND_CITY_DB:-/app/geoip/GeoLite2-City.mmdb}
       - MAXMIND_ASN_DB=${MAXMIND_ASN_DB:-/app/geoip/GeoLite2-ASN.mmdb}
+      # Redis (опционально, нужен при >1 инстансе для общего кеша и rate limiting)
+      # - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./logs:/app/logs
       - geoip_data:/app/geoip
@@ -137,9 +139,31 @@ services:
     profiles:
       - web
 
+  # ===========================================
+  # Redis (опционально, раскомментировать при >1 инстансе web-backend
+  # для общего кеша аналитики и distributed rate limiting)
+  # ===========================================
+
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: remnawave-redis
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - remnawave-network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+  #   profiles:
+  #     - web
+
 volumes:
   postgres_data:
   geoip_data:
+  # redis_data:
 
 networks:
   remnawave-network:

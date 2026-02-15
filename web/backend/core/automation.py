@@ -355,14 +355,24 @@ async def get_automation_logs(
     result: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    cursor: Optional[int] = None,
 ) -> Tuple[List[dict], int]:
-    """Get automation log entries with pagination and filters."""
+    """Get automation log entries with pagination and filters.
+
+    Supports cursor-based pagination: pass cursor (last seen log id)
+    to efficiently fetch the next page without OFFSET.
+    """
     try:
         from src.services.database import db_service
         async with db_service.acquire() as conn:
             where_parts = []
             params: list = []
             idx = 1
+
+            if cursor is not None:
+                where_parts.append(f"l.id < ${idx}")
+                params.append(cursor)
+                idx += 1
 
             if rule_id is not None:
                 where_parts.append(f"l.rule_id = ${idx}")
@@ -383,23 +393,45 @@ async def get_automation_logs(
 
             where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
+            # Count without cursor filter for accurate total
+            count_where_parts = [p for p in where_parts]
+            count_params = list(params)
+            if cursor is not None:
+                count_where_parts = count_where_parts[1:]
+                count_params = count_params[1:]
+            count_where = (" WHERE " + " AND ".join(count_where_parts)) if count_where_parts else ""
+
             total = await conn.fetchval(
-                f"SELECT COUNT(*) FROM automation_log l{where_clause}",
-                *params,
+                f"SELECT COUNT(*) FROM automation_log l{count_where}",
+                *count_params,
             )
 
-            offset = (page - 1) * per_page
-            rows = await conn.fetch(
-                f"""
-                SELECT l.*, r.name AS rule_name
-                FROM automation_log l
-                LEFT JOIN automation_rules r ON r.id = l.rule_id
-                {where_clause}
-                ORDER BY l.triggered_at DESC
-                LIMIT ${idx} OFFSET ${idx + 1}
-                """,
-                *params, per_page, offset,
-            )
+            if cursor is not None:
+                params.append(per_page)
+                rows = await conn.fetch(
+                    f"""
+                    SELECT l.*, r.name AS rule_name
+                    FROM automation_log l
+                    LEFT JOIN automation_rules r ON r.id = l.rule_id
+                    {where_clause}
+                    ORDER BY l.id DESC
+                    LIMIT ${idx}
+                    """,
+                    *params,
+                )
+            else:
+                offset = (page - 1) * per_page
+                rows = await conn.fetch(
+                    f"""
+                    SELECT l.*, r.name AS rule_name
+                    FROM automation_log l
+                    LEFT JOIN automation_rules r ON r.id = l.rule_id
+                    {where_clause}
+                    ORDER BY l.triggered_at DESC
+                    LIMIT ${idx} OFFSET ${idx + 1}
+                    """,
+                    *params, per_page, offset,
+                )
 
             return [dict(r) for r in rows], total or 0
     except Exception as e:
