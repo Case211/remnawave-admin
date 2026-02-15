@@ -766,6 +766,15 @@
       "offline": "Offline",
       "disabled": "Disabled"
     },
+    "card": {
+      "core": "Core",
+      "cores": "Cores",
+      "network": "Network",
+      "disk": "Disk"
+    },
+    "sort": {
+      "label": "Sort"
+    },
     "toast": {
       "restarted": "Node restarted",
       "enabled": "Node enabled",

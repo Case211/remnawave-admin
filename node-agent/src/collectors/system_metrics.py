@@ -17,6 +17,8 @@ class SystemMetricsCollector:
 
     def __init__(self):
         self._prev_cpu_times: tuple[int, int] | None = None  # (idle, total)
+        self._prev_disk_io: tuple[int, int] | None = None  # (read_bytes, write_bytes)
+        self._prev_disk_io_time: float | None = None  # timestamp
 
     async def collect(self) -> SystemMetrics:
         """Собрать текущие метрики системы."""
@@ -26,6 +28,11 @@ class SystemMetricsCollector:
             metrics.cpu_percent = self._read_cpu()
         except Exception as e:
             logger.debug("Failed to read CPU: %s", e)
+
+        try:
+            metrics.cpu_cores = self._read_cpu_cores()
+        except Exception as e:
+            logger.debug("Failed to read CPU cores: %s", e)
 
         try:
             mem = self._read_memory()
@@ -44,6 +51,13 @@ class SystemMetricsCollector:
                 metrics.disk_percent = round(disk[1] / disk[0] * 100, 1)
         except Exception as e:
             logger.debug("Failed to read disk: %s", e)
+
+        try:
+            read_bps, write_bps = self._read_disk_io()
+            metrics.disk_read_speed_bps = read_bps
+            metrics.disk_write_speed_bps = write_bps
+        except Exception as e:
+            logger.debug("Failed to read disk I/O: %s", e)
 
         try:
             metrics.uptime_seconds = self._read_uptime()
@@ -115,6 +129,70 @@ class SystemMetricsCollector:
         free = st.f_bfree * st.f_frsize
         used = total - free
         return (total, used)
+
+    def _read_cpu_cores(self) -> int:
+        """Прочитать количество ядер CPU через os.cpu_count()."""
+        cores = os.cpu_count()
+        return cores if cores else 0
+
+    def _read_disk_io(self) -> tuple[int, int]:
+        """Прочитать скорость чтения/записи диска из /proc/diskstats.
+
+        Считает дельту между вызовами (аналогично CPU).
+        Возвращает (read_bytes_per_sec, write_bytes_per_sec).
+        """
+        import time
+
+        diskstats_path = Path("/proc/diskstats")
+        if not diskstats_path.exists():
+            return (0, 0)
+
+        # Суммируем по всем блочным устройствам (sd*, vd*, nvme*)
+        total_read_sectors = 0
+        total_write_sectors = 0
+        for line in diskstats_path.read_text().strip().split("\n"):
+            parts = line.split()
+            if len(parts) < 14:
+                continue
+            dev_name = parts[2]
+            # Фильтруем только основные диски (не партиции)
+            if not any(dev_name.startswith(p) for p in ("sd", "vd", "nvme", "xvd")):
+                continue
+            # Пропускаем партиции (sda1, vda1) — берём только целые диски
+            if dev_name[-1].isdigit() and not dev_name.startswith("nvme"):
+                continue
+            # Для nvme пропускаем партиции (nvme0n1p1)
+            if dev_name.startswith("nvme") and "p" in dev_name.split("n", 1)[-1]:
+                continue
+            try:
+                total_read_sectors += int(parts[5])   # sectors read
+                total_write_sectors += int(parts[9])   # sectors written
+            except (ValueError, IndexError):
+                continue
+
+        SECTOR_SIZE = 512  # стандартный размер сектора в Linux
+        current_read_bytes = total_read_sectors * SECTOR_SIZE
+        current_write_bytes = total_write_sectors * SECTOR_SIZE
+        now = time.monotonic()
+
+        if self._prev_disk_io is None or self._prev_disk_io_time is None:
+            self._prev_disk_io = (current_read_bytes, current_write_bytes)
+            self._prev_disk_io_time = now
+            return (0, 0)
+
+        prev_read, prev_write = self._prev_disk_io
+        elapsed = now - self._prev_disk_io_time
+
+        self._prev_disk_io = (current_read_bytes, current_write_bytes)
+        self._prev_disk_io_time = now
+
+        if elapsed <= 0:
+            return (0, 0)
+
+        read_bps = max(0, int((current_read_bytes - prev_read) / elapsed))
+        write_bps = max(0, int((current_write_bytes - prev_write) / elapsed))
+
+        return (read_bps, write_bps)
 
     def _read_uptime(self) -> int:
         """Прочитать uptime из /proc/uptime."""

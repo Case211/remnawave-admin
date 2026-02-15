@@ -32,10 +32,13 @@ class NodeListItem(NodeBase):
     last_seen_at: Optional[datetime] = None
     # Extended metrics
     cpu_usage: Optional[float] = None
+    cpu_cores: Optional[int] = None
     memory_usage: Optional[float] = None
     uptime_seconds: Optional[int] = None
     download_speed_bps: int = 0
     upload_speed_bps: int = 0
+    disk_read_speed_bps: int = 0
+    disk_write_speed_bps: int = 0
 
     class Config:
         from_attributes = True
