@@ -131,16 +131,34 @@ async def run_agent() -> None:
     last_send_time = time.monotonic()
     total_sent = 0  # общий счётчик отправленных подключений
 
+    # ── Agent v2: WebSocket command channel ──
+    ws_task = None
+    if settings.command_enabled and (settings.ws_url or settings.collector_url):
+        from .ws_client import AgentWSClient
+        from .command_runner import CommandRunner
+
+        ws_client = AgentWSClient(settings)
+        cmd_runner = CommandRunner(settings, ws_client.send)
+        ws_client._command_handler = cmd_runner.handle
+        logger.info("Agent v2 command channel enabled")
+    else:
+        ws_client = None
+        logger.info("Agent v2 command channel disabled (AGENT_COMMAND_ENABLED=false)")
+
     # Graceful shutdown
     shutdown_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
-    def _signal_handler() -> None:
-        logger.info("Shutdown signal received")
+    def _signal_handler(sig_name: str) -> None:
+        logger.info("Shutdown signal received: %s", sig_name)
         shutdown_event.set()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, _signal_handler)
+        loop.add_signal_handler(sig, _signal_handler, sig.name)
+
+    # Start WS client as a concurrent task
+    if ws_client:
+        ws_task = asyncio.create_task(ws_client.run(shutdown_event))
 
     try:
         while not shutdown_event.is_set():
@@ -223,6 +241,16 @@ async def run_agent() -> None:
                 total_sent += len(accumulated_connections)
 
     finally:
+        # Stop WS client
+        if ws_client:
+            ws_client.stop()
+        if ws_task and not ws_task.done():
+            ws_task.cancel()
+            try:
+                await ws_task
+            except asyncio.CancelledError:
+                pass
+
         await sender.close()
         uptime = time.monotonic() - start_time
         logger.info("Node Agent stopped (uptime %.1fh, total sent %d)", uptime / 3600, total_sent)

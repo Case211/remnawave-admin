@@ -96,9 +96,9 @@ class RemnawaveApiClient:
             follow_redirects=True,
         )
 
-    def _ensure_client(self) -> httpx.AsyncClient:
+    async def _ensure_client(self) -> httpx.AsyncClient:
         """Return the current client, recreating it if closed."""
-        if self._client.is_closed:
+        if self._client is None or self._client.is_closed:
             logger.warning("HTTPX client was closed, recreating")
             self._client = self._create_client()
         return self._client
@@ -129,7 +129,7 @@ class RemnawaveApiClient:
 
         for attempt in range(max_retries):
             try:
-                response = await self._ensure_client().get(url, params=params)
+                response = await (await self._ensure_client()).get(url, params=params)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("GET", url, status_code=response.status_code, duration_ms=duration_ms)
@@ -158,6 +158,10 @@ class RemnawaveApiClient:
             except (httpx.RemoteProtocolError, httpx.ConnectError, RuntimeError) as exc:
                 last_exc = exc
                 if isinstance(exc, RuntimeError):
+                    try:
+                        await self._client.aclose()
+                    except Exception:
+                        pass
                     self._client = self._create_client()
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
@@ -181,7 +185,7 @@ class RemnawaveApiClient:
 
         for attempt in range(max_retries):
             try:
-                response = await self._ensure_client().post(url, json=json)
+                response = await (await self._ensure_client()).post(url, json=json)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("POST", url, status_code=response.status_code, duration_ms=duration_ms)
@@ -226,6 +230,10 @@ class RemnawaveApiClient:
                     raise NetworkError(f"Connection failed to {url}") from exc
             except RuntimeError as exc:
                 last_exc = exc
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
                 self._client = self._create_client()
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
@@ -248,7 +256,7 @@ class RemnawaveApiClient:
 
         for attempt in range(max_retries):
             try:
-                response = await self._ensure_client().patch(url, json=json)
+                response = await (await self._ensure_client()).patch(url, json=json)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("PATCH", url, status_code=response.status_code, duration_ms=duration_ms)
@@ -293,6 +301,10 @@ class RemnawaveApiClient:
                     raise NetworkError(f"Connection failed to {url}") from exc
             except RuntimeError as exc:
                 last_exc = exc
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
                 self._client = self._create_client()
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
@@ -318,7 +330,7 @@ class RemnawaveApiClient:
                 kwargs: dict = {}
                 if json is not None:
                     kwargs["json"] = json
-                response = await self._ensure_client().delete(url, **kwargs)
+                response = await (await self._ensure_client()).delete(url, **kwargs)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("DELETE", url, status_code=response.status_code, duration_ms=duration_ms)
@@ -355,6 +367,10 @@ class RemnawaveApiClient:
                     raise NetworkError(f"Connection failed to {url}") from exc
             except RuntimeError as exc:
                 last_exc = exc
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
                 self._client = self._create_client()
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
@@ -462,7 +478,7 @@ class RemnawaveApiClient:
 
         for attempt in range(max_retries):
             try:
-                client = self._ensure_client()
+                client = await self._ensure_client()
                 response = await client.get(url, timeout=custom_timeout)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
@@ -500,6 +516,10 @@ class RemnawaveApiClient:
                     raise NetworkError(f"Connection failed to {url}") from exc
             except RuntimeError as exc:
                 last_exc = exc
+                try:
+                    await self._client.aclose()
+                except Exception:
+                    pass
                 self._client = self._create_client()
                 if attempt < max_retries - 1:
                     delay = 0.5 * (2 ** attempt)
@@ -1650,7 +1670,7 @@ class RemnawaveApiClient:
         return cache.get_stats()
 
     async def close(self) -> None:
-        if not self._client.is_closed:
+        if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
 
 

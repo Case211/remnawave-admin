@@ -766,6 +766,64 @@
       "offline": "Offline",
       "disabled": "Disabled"
     },
+    "card": {
+      "core": "Core",
+      "cores": "Cores",
+      "network": "Network",
+      "disk": "Disk"
+    },
+    "sort": {
+      "label": "Sort"
+    },
+    "scripts": {
+      "catalog": "Script Catalog",
+      "builtin": "Built-in",
+      "custom": "Custom",
+      "run": "Run Script",
+      "running": "Running",
+      "executing": "Script executing...",
+      "output": "Output",
+      "exitCode": "Exit code",
+      "selectNode": "Select node",
+      "scriptContent": "Script content",
+      "searchPlaceholder": "Search scripts...",
+      "allCategories": "All",
+      "noScripts": "No scripts found",
+      "noHistory": "No command history",
+      "waitingOutput": "Waiting for output...",
+      "historyType": "Type",
+      "historyAdmin": "Admin",
+      "historyStatus": "Status",
+      "historyDuration": "Duration",
+      "historyDate": "Date",
+      "categories": {
+        "security": "Security",
+        "network": "Network",
+        "system": "System",
+        "monitoring": "Monitoring",
+        "custom": "Custom"
+      }
+    },
+    "terminal": {
+      "title": "Terminal",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "connecting": "Connecting",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "sessionTimeout": "Session timed out",
+      "fullscreen": "Fullscreen",
+      "agentNotConnected": "Agent not connected",
+      "permissionDenied": "Permission denied",
+      "closeConfirm": "Close terminal session?"
+    },
+    "tabs": {
+      "monitoring": "Monitoring",
+      "terminal": "Terminal",
+      "terminalDesc": "Select a node to open a terminal session",
+      "scripts": "Scripts",
+      "history": "History"
+    },
     "toast": {
       "restarted": "Node restarted",
       "enabled": "Node enabled",

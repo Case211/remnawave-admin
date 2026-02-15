@@ -104,7 +104,9 @@ class ViolationLogFilter(logging.Filter):
         "violation_reports", "maxmind",
     )
     _KEYWORDS = (
-        "violation", "score=", "detected", "ip_metadata", "geoip",
+        "violation detected", "violation for user", "violation saved",
+        "violation score", "violation_score", "save_violation",
+        "score=", "ip_metadata", "geoip",
         "temporal", "geo_score", "asn_score", "impossible_travel",
         "agent token", "ip lookup",
     )

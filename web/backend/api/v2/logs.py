@@ -199,7 +199,8 @@ async def stream_logs(
     """
     try:
         admin = await get_current_admin_ws(websocket, token)
-    except Exception:
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
         return
 
     file_info = LOG_FILES.get(file)

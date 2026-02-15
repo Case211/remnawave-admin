@@ -36,6 +36,10 @@ from web.backend.api.v2 import advanced_analytics
 from web.backend.api.v2 import automations as automations_api
 from web.backend.api.v2 import notifications as notifications_api
 from web.backend.api.v2 import mailserver as mailserver_api
+from web.backend.api.v2 import agent_ws as agent_ws_api
+from web.backend.api.v2 import fleet as fleet_api
+from web.backend.api.v2 import terminal as terminal_api
+from web.backend.api.v2 import scripts as scripts_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -123,30 +127,11 @@ def _setup_web_logging():
         warn_h.setFormatter(file_fmt)
         root.addHandler(warn_h)
 
-        # Violations log — web backend side (collector, violations API)
-        violations_path = _LOG_DIR / "violations.log"
-        violations_h = _CompressedRotatingFileHandler(
-            str(violations_path),
-            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
-        )
-        violations_h.setLevel(logging.DEBUG)
-        violations_h.setFormatter(file_fmt)
-
-        class _ViolationFilter(logging.Filter):
-            _SRC = ("violation", "collector", "geoip", "connection_monitor", "maxmind")
-            _KW = ("violation", "score=", "detected", "ip_metadata",
-                    "geoip", "temporal", "geo_score", "asn_score",
-                    "impossible_travel", "agent token", "ip lookup")
-
-            def filter(self, record):
-                nl = record.name.lower()
-                if any(s in nl for s in self._SRC):
-                    return True
-                ml = str(record.getMessage()).lower()
-                return any(k in ml for k in self._KW)
-
-        violations_h.addFilter(_ViolationFilter())
-        root.addHandler(violations_h)
+        # NOTE: violations.log is written by the bot process (src/utils/logger.py)
+        # which has the proper ViolationLogFilter. The web backend must NOT add its
+        # own handler for the same file — two processes sharing a RotatingFileHandler
+        # causes data loss on rotation and the broad keyword filter ("violation")
+        # matches WebSocket subscription debug messages, flooding the log with noise.
 
         _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
         print(
@@ -222,6 +207,21 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("No DATABASE_URL, running without database")
 
+    # Connect to Redis cache (optional, falls back to in-memory)
+    redis_url = os.environ.get("REDIS_URL") or getattr(settings, "redis_url", None)
+    try:
+        from web.backend.core.cache import cache
+        await cache.connect(redis_url)
+    except Exception as e:
+        logger.warning("Cache setup failed: %s", e)
+
+    # Upgrade rate limiter to Redis backend (optional)
+    try:
+        from web.backend.core.rate_limit import configure_limiter
+        configure_limiter(redis_url)
+    except Exception as e:
+        logger.debug("Rate limiter Redis upgrade skipped: %s", e)
+
     # Ensure MaxMind GeoLite2 databases are downloaded
     # Supports: license key (official), GitHub mirror (ltsdev/maxmind), or auto
     try:
@@ -242,6 +242,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    try:
+        from web.backend.core.cache import cache
+        await cache.close()
+    except Exception:
+        pass
     try:
         from web.backend.core.mail.mail_service import mail_service
         await mail_service.stop()
@@ -373,6 +378,10 @@ def create_app() -> FastAPI:
     app.include_router(notifications_api.router, prefix="/api/v2", tags=["notifications"])
     app.include_router(mailserver_api.router, prefix="/api/v2", tags=["mailserver"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
+    app.include_router(agent_ws_api.router, prefix="/api/v2", tags=["agent-ws"])
+    app.include_router(fleet_api.router, prefix="/api/v2/fleet", tags=["fleet"])
+    app.include_router(terminal_api.router, prefix="/api/v2", tags=["terminal"])
+    app.include_router(scripts_api.router, prefix="/api/v2/fleet", tags=["scripts"])
 
     # Health check endpoint
     @app.get("/api/v2/health", tags=["health"])
@@ -412,4 +421,7 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
+        # Enable per-message deflate compression for WebSocket connections
+        ws="websockets",
+        ws_per_message_deflate=True,
     )

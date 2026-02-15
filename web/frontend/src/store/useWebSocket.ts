@@ -137,6 +137,10 @@ export function useRealtimeUpdates() {
             queryClient.invalidateQueries({ queryKey: ['nodes'] })
             queryClient.invalidateQueries({ queryKey: ['fleet'] })
             break
+          case 'agent_v2_status':
+            queryClient.invalidateQueries({ queryKey: ['fleet'] })
+            queryClient.invalidateQueries({ queryKey: ['fleet-agents'] })
+            break
           case 'activity':
             // Refresh dashboard-related queries
             queryClient.invalidateQueries({ queryKey: ['analytics'] })
