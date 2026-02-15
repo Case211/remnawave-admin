@@ -100,6 +100,9 @@ class NodeFleetItem(BaseModel):
     disk_usage: Optional[float] = None
     disk_total_bytes: Optional[int] = None
     disk_used_bytes: Optional[int] = None
+    disk_read_speed_bps: int = 0
+    disk_write_speed_bps: int = 0
+    cpu_cores: Optional[int] = None
     last_seen_at: Optional[str] = None
     download_speed_bps: int = 0
     upload_speed_bps: int = 0
@@ -808,6 +811,12 @@ async def get_node_fleet(
                             n['disk_used_bytes'] = db_node['disk_used_bytes']
                         if db_node.get('uptime_seconds') is not None:
                             n['uptime_seconds'] = db_node['uptime_seconds']
+                        if db_node.get('cpu_cores') is not None:
+                            n['cpu_cores'] = db_node['cpu_cores']
+                        if db_node.get('disk_read_speed_bps') is not None:
+                            n['disk_read_speed_bps'] = db_node['disk_read_speed_bps']
+                        if db_node.get('disk_write_speed_bps') is not None:
+                            n['disk_write_speed_bps'] = db_node['disk_write_speed_bps']
                         if db_node.get('metrics_updated_at') is not None:
                             mua = db_node['metrics_updated_at']
                             n['metrics_updated_at'] = mua.isoformat() if hasattr(mua, 'isoformat') else str(mua)
@@ -866,6 +875,9 @@ async def get_node_fleet(
                 disk_total_bytes=n.get('disk_total_bytes'),
                 disk_used_bytes=n.get('disk_used_bytes'),
                 last_seen_at=last_seen,
+                disk_read_speed_bps=int(n.get('disk_read_speed_bps') or 0),
+                disk_write_speed_bps=int(n.get('disk_write_speed_bps') or 0),
+                cpu_cores=n.get('cpu_cores'),
                 download_speed_bps=int(n.get('download_speed_bps') or 0),
                 upload_speed_bps=int(n.get('upload_speed_bps') or 0),
                 metrics_updated_at=metrics_updated,

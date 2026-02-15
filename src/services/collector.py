@@ -41,12 +41,15 @@ class ConnectionReport(BaseModel):
 class SystemMetricsReport(BaseModel):
     """Системные метрики ноды."""
     cpu_percent: float = 0.0
+    cpu_cores: int = 0
     memory_percent: float = 0.0
     memory_total_bytes: int = 0
     memory_used_bytes: int = 0
     disk_percent: float = 0.0
     disk_total_bytes: int = 0
     disk_used_bytes: int = 0
+    disk_read_speed_bps: int = 0
+    disk_write_speed_bps: int = 0
     uptime_seconds: int = 0
 
 
@@ -180,12 +183,15 @@ async def receive_connections(
             await db_service.update_node_metrics(
                 node_uuid=node_uuid,
                 cpu_usage=report.system_metrics.cpu_percent,
+                cpu_cores=report.system_metrics.cpu_cores,
                 memory_usage=report.system_metrics.memory_percent,
                 memory_total_bytes=report.system_metrics.memory_total_bytes,
                 memory_used_bytes=report.system_metrics.memory_used_bytes,
                 disk_usage=report.system_metrics.disk_percent,
                 disk_total_bytes=report.system_metrics.disk_total_bytes,
                 disk_used_bytes=report.system_metrics.disk_used_bytes,
+                disk_read_speed_bps=report.system_metrics.disk_read_speed_bps,
+                disk_write_speed_bps=report.system_metrics.disk_write_speed_bps,
                 uptime_seconds=report.system_metrics.uptime_seconds,
             )
             logger.debug("System metrics updated for node %s", node_uuid)

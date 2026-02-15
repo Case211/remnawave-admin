@@ -29,12 +29,15 @@ class SystemMetrics(BaseModel):
     """Системные метрики ноды (CPU, RAM, диск, uptime)."""
 
     cpu_percent: float = 0.0
+    cpu_cores: int = 0
     memory_percent: float = 0.0
     memory_total_bytes: int = 0
     memory_used_bytes: int = 0
     disk_percent: float = 0.0
     disk_total_bytes: int = 0
     disk_used_bytes: int = 0
+    disk_read_speed_bps: int = 0
+    disk_write_speed_bps: int = 0
     uptime_seconds: int = 0
 
 

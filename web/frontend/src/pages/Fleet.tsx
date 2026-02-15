@@ -6,14 +6,6 @@ import { useFormatters } from '@/lib/useFormatters'
 import {
   Activity,
   RefreshCw,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  ChevronDown,
-  ChevronRight,
-  Users,
-  Cpu,
-  MemoryStick,
   ArrowDownRight,
   ArrowUpRight,
   Clock,
@@ -30,56 +22,33 @@ import {
   ShieldAlert,
   Search,
   HardDrive,
+  Cpu,
+  MemoryStick,
+  Users,
+  ArrowUpDown,
 } from 'lucide-react'
 import client from '../api/client'
 import { usePermissionStore } from '../store/permissionStore'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from '@/components/ui/table'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import NodeCard, { type FleetNode, getNodeStatus } from '@/components/fleet/NodeCard'
 
 // ── Types ────────────────────────────────────────────────────────
-
-interface FleetNode {
-  uuid: string
-  name: string
-  address: string
-  port: number
-  is_connected: boolean
-  is_disabled: boolean
-  is_xray_running: boolean
-  xray_version: string | null
-  users_online: number
-  traffic_today_bytes: number
-  traffic_total_bytes: number
-  uptime_seconds: number | null
-  cpu_usage: number | null
-  memory_usage: number | null
-  memory_total_bytes: number | null
-  memory_used_bytes: number | null
-  disk_usage: number | null
-  disk_total_bytes: number | null
-  disk_used_bytes: number | null
-  last_seen_at: string | null
-  download_speed_bps: number
-  upload_speed_bps: number
-  metrics_updated_at: string | null
-}
 
 interface FleetResponse {
   nodes: FleetNode[]
@@ -116,43 +85,19 @@ function getRamColor(ram: number | null): string {
   return 'text-white'
 }
 
-function getNodeStatus(node: FleetNode): 'online' | 'offline' | 'disabled' {
-  if (node.is_disabled) return 'disabled'
-  if (node.is_connected) return 'online'
-  return 'offline'
-}
+// ── Sort field labels ────────────────────────────────────────────
 
-// ── Sort Header ──────────────────────────────────────────────────
-
-function SortableHead({
-  label,
-  field,
-  currentField,
-  currentDir,
-  onSort,
-  className,
-}: {
-  label: string
-  field: SortField
-  currentField: SortField
-  currentDir: SortDir
-  onSort: (field: SortField) => void
-  className?: string
-}) {
-  const isActive = currentField === field
-  return (
-    <TableHead className={cn('cursor-pointer select-none hover:text-white transition-colors', className)} onClick={() => onSort(field)}>
-      <div className="flex items-center gap-1">
-        {label}
-        {isActive ? (
-          currentDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-        ) : (
-          <ArrowUpDown className="w-3 h-3 opacity-30" />
-        )}
-      </div>
-    </TableHead>
-  )
-}
+const SORT_FIELDS: { value: SortField; labelKey: string }[] = [
+  { value: 'status', labelKey: 'fleet.table.status' },
+  { value: 'name', labelKey: 'fleet.table.node' },
+  { value: 'cpu', labelKey: 'fleet.table.cpu' },
+  { value: 'ram', labelKey: 'fleet.table.ram' },
+  { value: 'disk', labelKey: 'fleet.table.disk' },
+  { value: 'speed', labelKey: 'fleet.table.speed' },
+  { value: 'users', labelKey: 'fleet.table.users' },
+  { value: 'traffic', labelKey: 'fleet.table.traffic' },
+  { value: 'uptime', labelKey: 'fleet.table.uptime' },
+]
 
 // ── Node Detail Panel ────────────────────────────────────────────
 
@@ -186,207 +131,194 @@ function NodeDetailPanel({
   }
 
   return (
-    <div className="px-4 pb-4 pt-1 animate-fade-in">
-      <div className="bg-dark-800/40 rounded-lg p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Column 1: Connection info */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.info')}</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <Globe className="w-3.5 h-3.5 text-dark-300" />
-                <span className="text-dark-200">{t('fleet.detail.address')}</span>
-                <span className="text-white ml-auto font-mono text-xs">{node.address}:{node.port}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                <span className="text-dark-200">Xray</span>
-                <span className="text-white ml-auto font-mono text-xs">{node.xray_version || '-'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Activity className="w-3.5 h-3.5 text-dark-300" />
-                <span className="text-dark-200">{t('fleet.detail.xrayRunning')}</span>
-                <span className="ml-auto">
-                  {node.is_xray_running ? (
-                    <ShieldCheck className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <ShieldAlert className="w-4 h-4 text-red-400" />
-                  )}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-dark-300" />
-                <span className="text-dark-200">{t('fleet.detail.lastSeen')}</span>
-                <span className="text-white ml-auto text-xs">{node.last_seen_at ? formatTimeAgo(node.last_seen_at) : t('fleet.statusNever')}</span>
-              </div>
+    <div className="animate-fade-in">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Column 1: Connection info */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.info')}</h4>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <Globe className="w-3.5 h-3.5 text-dark-300" />
+              <span className="text-dark-200">{t('fleet.detail.address')}</span>
+              <span className="text-white ml-auto font-mono text-xs">{node.address}:{node.port}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Zap className="w-3.5 h-3.5 text-yellow-400" />
+              <span className="text-dark-200">Xray</span>
+              <span className="text-white ml-auto font-mono text-xs">{node.xray_version || '-'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Activity className="w-3.5 h-3.5 text-dark-300" />
+              <span className="text-dark-200">{t('fleet.detail.xrayRunning')}</span>
+              <span className="ml-auto">
+                {node.is_xray_running ? (
+                  <ShieldCheck className="w-4 h-4 text-green-400" />
+                ) : (
+                  <ShieldAlert className="w-4 h-4 text-red-400" />
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-dark-300" />
+              <span className="text-dark-200">{t('fleet.detail.lastSeen')}</span>
+              <span className="text-white ml-auto text-xs">{node.last_seen_at ? formatTimeAgo(node.last_seen_at) : t('fleet.statusNever')}</span>
             </div>
           </div>
+        </div>
 
-          {/* Column 2: Detailed metrics */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.metrics')}</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-3.5 h-3.5 text-orange-400" />
-                <span className="text-dark-200">CPU</span>
-                <span className={cn('ml-auto font-mono', getCpuColor(node.cpu_usage))}>
-                  {node.cpu_usage != null ? `${node.cpu_usage.toFixed(1)}%` : '-'}
-                </span>
-              </div>
-              {node.cpu_usage != null && (
-                <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all duration-500',
-                      node.cpu_usage >= 95 ? 'bg-red-500' : node.cpu_usage >= 80 ? 'bg-yellow-500' : 'bg-green-500',
-                    )}
-                    style={{ width: `${Math.min(node.cpu_usage, 100)}%` }}
-                  />
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <MemoryStick className="w-3.5 h-3.5 text-pink-400" />
-                <span className="text-dark-200">RAM</span>
-                <span className={cn('ml-auto font-mono', getRamColor(node.memory_usage))}>
-                  {node.memory_usage != null ? `${node.memory_usage.toFixed(1)}%` : '-'}
-                </span>
-              </div>
-              {node.memory_usage != null && (
-                <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all duration-500',
-                      node.memory_usage >= 95 ? 'bg-red-500' : node.memory_usage >= 80 ? 'bg-yellow-500' : 'bg-cyan-500',
-                    )}
-                    style={{ width: `${Math.min(node.memory_usage, 100)}%` }}
-                  />
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <HardDrive className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-dark-200">{t('fleet.detail.disk')}</span>
-                <span className={cn('ml-auto font-mono', node.disk_usage != null && node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage != null && node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
-                  {node.disk_usage != null ? `${node.disk_usage.toFixed(1)}%` : '-'}
-                  {node.disk_total_bytes != null && <span className="text-dark-400 text-[10px] ml-1">({formatBytes(node.disk_used_bytes ?? 0)} / {formatBytes(node.disk_total_bytes)})</span>}
-                </span>
-              </div>
-              {node.disk_usage != null && (
-                <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all duration-500',
-                      node.disk_usage >= 95 ? 'bg-red-500' : node.disk_usage >= 80 ? 'bg-yellow-500' : 'bg-violet-500',
-                    )}
-                    style={{ width: `${Math.min(node.disk_usage, 100)}%` }}
-                  />
-                </div>
-              )}
-              {node.memory_total_bytes != null && (
-                <div className="flex items-center gap-2">
-                  <MemoryStick className="w-3.5 h-3.5 text-dark-400" />
-                  <span className="text-dark-300 text-[10px]">
-                    {formatBytes(node.memory_used_bytes ?? 0)} / {formatBytes(node.memory_total_bytes)}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <ArrowDownRight className="w-3.5 h-3.5 text-blue-400" />
-                <span className="text-dark-200">Download</span>
-                <span className="text-white ml-auto font-mono text-xs">{formatSpeed(node.download_speed_bps)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-dark-200">Upload</span>
-                <span className="text-white ml-auto font-mono text-xs">{formatSpeed(node.upload_speed_bps)}</span>
-              </div>
+        {/* Column 2: Detailed metrics */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.metrics')}</h4>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-3.5 h-3.5 text-orange-400" />
+              <span className="text-dark-200">CPU</span>
+              <span className={cn('ml-auto font-mono', getCpuColor(node.cpu_usage))}>
+                {node.cpu_usage != null ? `${node.cpu_usage.toFixed(1)}%` : '-'}
+              </span>
             </div>
-          </div>
-
-          {/* Column 3: Actions + Traffic */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.trafficAndActions')}</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-dark-200">{t('fleet.detail.today')}</span>
-                <span className="text-white ml-auto font-mono text-xs">{formatBytes(node.traffic_today_bytes)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-3.5 h-3.5 text-dark-300" />
-                <span className="text-dark-200">{t('fleet.detail.total')}</span>
-                <span className="text-white ml-auto font-mono text-xs">{formatBytes(node.traffic_total_bytes)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Users className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-dark-200">{t('fleet.detail.users')}</span>
-                <span className="text-white ml-auto font-mono">{node.users_online}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-green-400" />
-                <span className="text-dark-200">Uptime</span>
-                <span className="text-white ml-auto font-mono text-xs">{formatUptime(node.uptime_seconds)}</span>
-              </div>
-            </div>
-
-            {/* Quick actions */}
-            {canEdit && (
-              <>
-                <Separator />
-                <div className="flex items-center gap-2 pt-1">
-                  {status === 'online' && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 gap-1.5"
-                          disabled={isPending}
-                          onClick={onRestart}
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          {t('fleet.actions.restart')}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{t('fleet.actions.restartTooltip')}</TooltipContent>
-                    </Tooltip>
+            {node.cpu_usage != null && (
+              <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-500',
+                    node.cpu_usage >= 95 ? 'bg-red-500' : node.cpu_usage >= 80 ? 'bg-yellow-500' : 'bg-green-500',
                   )}
-                  {node.is_disabled ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 gap-1.5 text-green-400 hover:text-green-300"
-                          disabled={isPending}
-                          onClick={onEnable}
-                        >
-                          <Play className="w-3.5 h-3.5" />
-                          {t('fleet.actions.enable')}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{t('fleet.actions.enableTooltip')}</TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 gap-1.5 text-red-400 hover:text-red-300"
-                          disabled={isPending}
-                          onClick={onDisable}
-                        >
-                          <Square className="w-3.5 h-3.5" />
-                          {t('fleet.actions.disable')}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{t('fleet.actions.disableTooltip')}</TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-              </>
+                  style={{ width: `${Math.min(node.cpu_usage, 100)}%` }}
+                />
+              </div>
             )}
+            <div className="flex items-center gap-2">
+              <MemoryStick className="w-3.5 h-3.5 text-pink-400" />
+              <span className="text-dark-200">RAM</span>
+              <span className={cn('ml-auto font-mono', getRamColor(node.memory_usage))}>
+                {node.memory_usage != null ? `${node.memory_usage.toFixed(1)}%` : '-'}
+              </span>
+            </div>
+            {node.memory_usage != null && (
+              <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-500',
+                    node.memory_usage >= 95 ? 'bg-red-500' : node.memory_usage >= 80 ? 'bg-yellow-500' : 'bg-cyan-500',
+                  )}
+                  style={{ width: `${Math.min(node.memory_usage, 100)}%` }}
+                />
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <HardDrive className="w-3.5 h-3.5 text-violet-400" />
+              <span className="text-dark-200">{t('fleet.detail.disk')}</span>
+              <span className={cn('ml-auto font-mono', node.disk_usage != null && node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage != null && node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
+                {node.disk_usage != null ? `${node.disk_usage.toFixed(1)}%` : '-'}
+                {node.disk_total_bytes != null && <span className="text-dark-400 text-[10px] ml-1">({formatBytes(node.disk_used_bytes ?? 0)} / {formatBytes(node.disk_total_bytes)})</span>}
+              </span>
+            </div>
+            {node.memory_total_bytes != null && (
+              <div className="flex items-center gap-2">
+                <MemoryStick className="w-3.5 h-3.5 text-dark-400" />
+                <span className="text-dark-300 text-[10px]">
+                  {formatBytes(node.memory_used_bytes ?? 0)} / {formatBytes(node.memory_total_bytes)}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <ArrowDownRight className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-dark-200">Download</span>
+              <span className="text-white ml-auto font-mono text-xs">{formatSpeed(node.download_speed_bps)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-dark-200">Upload</span>
+              <span className="text-white ml-auto font-mono text-xs">{formatSpeed(node.upload_speed_bps)}</span>
+            </div>
           </div>
+        </div>
+
+        {/* Column 3: Actions + Traffic */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.trafficAndActions')}</h4>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-3.5 h-3.5 text-violet-400" />
+              <span className="text-dark-200">{t('fleet.detail.today')}</span>
+              <span className="text-white ml-auto font-mono text-xs">{formatBytes(node.traffic_today_bytes)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-3.5 h-3.5 text-dark-300" />
+              <span className="text-dark-200">{t('fleet.detail.total')}</span>
+              <span className="text-white ml-auto font-mono text-xs">{formatBytes(node.traffic_total_bytes)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-dark-200">{t('fleet.detail.users')}</span>
+              <span className="text-white ml-auto font-mono">{node.users_online}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-green-400" />
+              <span className="text-dark-200">Uptime</span>
+              <span className="text-white ml-auto font-mono text-xs">{formatUptime(node.uptime_seconds)}</span>
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          {canEdit && (
+            <>
+              <Separator />
+              <div className="flex items-center gap-2 pt-1">
+                {status === 'online' && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 gap-1.5"
+                        disabled={isPending}
+                        onClick={onRestart}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {t('fleet.actions.restart')}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('fleet.actions.restartTooltip')}</TooltipContent>
+                  </Tooltip>
+                )}
+                {node.is_disabled ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 gap-1.5 text-green-400 hover:text-green-300"
+                        disabled={isPending}
+                        onClick={onEnable}
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        {t('fleet.actions.enable')}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('fleet.actions.enableTooltip')}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 gap-1.5 text-red-400 hover:text-red-300"
+                        disabled={isPending}
+                        onClick={onDisable}
+                      >
+                        <Square className="w-3.5 h-3.5" />
+                        {t('fleet.actions.disable')}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('fleet.actions.disableTooltip')}</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -397,7 +329,7 @@ function NodeDetailPanel({
 
 export default function Fleet() {
   const { t } = useTranslation()
-  const { formatBytes, formatSpeed } = useFormatters()
+  const { formatSpeed } = useFormatters()
   const queryClient = useQueryClient()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
   const canEditNodes = hasPermission('fleet', 'edit')
@@ -440,23 +372,13 @@ export default function Fleet() {
 
   // ── Sorting ───────────────────────────────────────────────────
 
-  const handleSort = (field: SortField) => {
+  const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
     } else {
       setSortField(field)
       setSortDir('asc')
     }
-  }
-
-  const formatUptime = (seconds: number | null | undefined): string => {
-    if (!seconds || seconds <= 0) return '-'
-    const d = Math.floor(seconds / 86400)
-    const h = Math.floor((seconds % 86400) / 3600)
-    const m = Math.floor((seconds % 3600) / 60)
-    if (d > 0) return t('fleet.detail.uptimeDaysHours', { days: d, hours: h })
-    if (h > 0) return t('fleet.detail.uptimeHoursMinutes', { hours: h, minutes: m })
-    return t('fleet.detail.uptimeMinutes', { minutes: m })
   }
 
   const sortedNodes = useMemo(() => {
@@ -542,19 +464,6 @@ export default function Fleet() {
 
     return { avgCpu, avgRam, totalDl, totalUl, totalUsers }
   }, [fleet?.nodes])
-
-  // ── Status badge helper ────────────────────────────────────────
-
-  const getStatusBadge = (status: 'online' | 'offline' | 'disabled') => {
-    switch (status) {
-      case 'online':
-        return <Badge variant="success" className="text-[10px] gap-1"><Wifi className="w-3 h-3" />{t('fleet.statusOnline')}</Badge>
-      case 'offline':
-        return <Badge variant="destructive" className="text-[10px] gap-1"><WifiOff className="w-3 h-3" />{t('fleet.statusOffline')}</Badge>
-      case 'disabled':
-        return <Badge variant="secondary" className="text-[10px] gap-1">{t('fleet.statusDisabled')}</Badge>
-    }
-  }
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -648,7 +557,7 @@ export default function Fleet() {
         </Card>
       </div>
 
-      {/* Search + filter toolbar */}
+      {/* Search + filter + sort toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300" />
@@ -685,284 +594,74 @@ export default function Fleet() {
             </Button>
           ))}
         </div>
+        {/* Sort dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" size="sm" className="h-8 gap-1.5 ml-auto">
+              <ArrowUpDown className="w-3.5 h-3.5" />
+              <span className="text-xs">{t('fleet.sort.label')}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup
+              value={`${sortField}-${sortDir}`}
+              onValueChange={(v) => {
+                const [field, dir] = v.split('-') as [SortField, SortDir]
+                setSortField(field)
+                setSortDir(dir)
+              }}
+            >
+              {SORT_FIELDS.map(({ value, labelKey }) => (
+                <DropdownMenuRadioItem key={`${value}-asc`} value={`${value}-${sortField === value && sortDir === 'asc' ? 'desc' : 'asc'}`} onClick={() => toggleSort(value)}>
+                  {t(labelKey)} {sortField === value ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {/* Desktop: Node table */}
-      <Card className="hidden md:block animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10" />
-                <SortableHead label={t('fleet.table.status')} field="status" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-28" />
-                <SortableHead label={t('fleet.table.node')} field="name" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
-                <SortableHead label="CPU" field="cpu" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
-                <SortableHead label="RAM" field="ram" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
-                <SortableHead label={t('fleet.table.disk')} field="disk" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
-                <SortableHead label={t('fleet.table.speed')} field="speed" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-44" />
-                <SortableHead label={t('fleet.table.users')} field="users" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-20" />
-                <SortableHead label={t('fleet.table.traffic')} field="traffic" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-28" />
-                <SortableHead label="Uptime" field="uptime" currentField={sortField} currentDir={sortDir} onSort={handleSort} className="w-24" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell colSpan={10}>
-                      <div className="h-10 bg-dark-700/30 rounded animate-pulse" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : sortedNodes.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center py-12">
-                    <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
-                    <p className="text-dark-200">
-                      {searchQuery || statusFilter !== 'all' ? t('fleet.statusNothingFound') : t('fleet.statusNoNodes')}
-                    </p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                sortedNodes.flatMap((node) => {
-                  const status = getNodeStatus(node)
-                  const isExpanded = expandedUuid === node.uuid
-                  const totalSpeed = node.download_speed_bps + node.upload_speed_bps
-
-                  const rows = [
-                    <TableRow
-                      key={node.uuid}
-                      className={cn(
-                        'cursor-pointer',
-                        isExpanded && 'bg-dark-600/30 border-b-0',
-                        status === 'offline' && 'bg-red-500/5',
-                        node.is_disabled && 'opacity-50',
-                      )}
-                      onClick={() => setExpandedUuid(isExpanded ? null : node.uuid)}
-                    >
-                      <TableCell className="w-10 pr-0">
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-dark-200" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-dark-300" />
-                        )}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(status)}</TableCell>
-                      <TableCell>
-                        <div>
-                          <span className="text-white font-medium">{node.name}</span>
-                          <span className="text-dark-300 text-xs ml-2 hidden lg:inline">{node.address}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {node.cpu_usage != null ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-12 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full',
-                                  node.cpu_usage >= 95 ? 'bg-red-500' : node.cpu_usage >= 80 ? 'bg-yellow-500' : 'bg-green-500',
-                                )}
-                                style={{ width: `${Math.min(node.cpu_usage, 100)}%` }}
-                              />
-                            </div>
-                            <span className={cn('text-xs font-mono', getCpuColor(node.cpu_usage))}>
-                              {node.cpu_usage.toFixed(0)}%
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-dark-400 text-xs">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {node.memory_usage != null ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-12 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full',
-                                  node.memory_usage >= 95 ? 'bg-red-500' : node.memory_usage >= 80 ? 'bg-yellow-500' : 'bg-cyan-500',
-                                )}
-                                style={{ width: `${Math.min(node.memory_usage, 100)}%` }}
-                              />
-                            </div>
-                            <span className={cn('text-xs font-mono', getRamColor(node.memory_usage))}>
-                              {node.memory_usage.toFixed(0)}%
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-dark-400 text-xs">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {node.disk_usage != null ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-12 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full',
-                                  node.disk_usage >= 95 ? 'bg-red-500' : node.disk_usage >= 80 ? 'bg-yellow-500' : 'bg-violet-500',
-                                )}
-                                style={{ width: `${Math.min(node.disk_usage, 100)}%` }}
-                              />
-                            </div>
-                            <span className={cn('text-xs font-mono', node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
-                              {node.disk_usage.toFixed(0)}%
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-dark-400 text-xs">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {totalSpeed > 0 ? (
-                          <div className="flex items-center gap-2 text-xs font-mono">
-                            <ArrowDownRight className="w-3 h-3 text-blue-400 shrink-0" />
-                            <span className="text-white">{formatSpeed(node.download_speed_bps)}</span>
-                            <ArrowUpRight className="w-3 h-3 text-emerald-400 shrink-0" />
-                            <span className="text-white">{formatSpeed(node.upload_speed_bps)}</span>
-                          </div>
-                        ) : (
-                          <span className="text-dark-400 text-xs">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-white font-mono">{node.users_online}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-white font-mono text-xs">{formatBytes(node.traffic_today_bytes)}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-white font-mono text-xs">{formatUptime(node.uptime_seconds)}</span>
-                      </TableCell>
-                    </TableRow>,
-                  ]
-
-                  // Inline detail panel right after the row
-                  if (isExpanded) {
-                    rows.push(
-                      <tr key={`${node.uuid}-detail`} className="bg-dark-600/20">
-                        <td colSpan={10} className="p-0">
-                          <NodeDetailPanel
-                            node={node}
-                            canEdit={canEditNodes}
-                            onRestart={() => restartNode.mutate(node.uuid)}
-                            onEnable={() => enableNode.mutate(node.uuid)}
-                            onDisable={() => disableNode.mutate(node.uuid)}
-                            isPending={mutationPending}
-                          />
-                        </td>
-                      </tr>,
-                    )
-                  }
-
-                  return rows
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
-
-      {/* Mobile: Node cards */}
-      <div className="md:hidden space-y-3 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+      {/* Node card grid */}
+      <div className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
         {isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <div className="h-16 bg-dark-700/30 rounded animate-pulse" />
-              </CardContent>
-            </Card>
-          ))
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <div className="h-[180px] bg-dark-700/30 rounded animate-pulse" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : sortedNodes.length === 0 ? (
           <Card>
-            <CardContent className="p-8 text-center">
+            <CardContent className="p-12 text-center">
               <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
               <p className="text-dark-200">
-                {searchQuery || statusFilter !== 'all' ? t('fleet.statusNothingFound') : t('fleet.statusNoNodes')}
+                {searchQuery || statusFilter !== 'all' ? t('fleet.nothingFound') : t('fleet.noNodes')}
               </p>
             </CardContent>
           </Card>
         ) : (
-          sortedNodes.map((node) => {
-            const status = getNodeStatus(node)
-            const isExpanded = expandedUuid === node.uuid
-            const totalSpeed = node.download_speed_bps + node.upload_speed_bps
-
-            return (
-              <Card
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {sortedNodes.map((node) => (
+              <NodeCard
                 key={node.uuid}
-                className={cn(
-                  'cursor-pointer transition-colors',
-                  status === 'offline' && 'border-red-500/30',
-                  node.is_disabled && 'opacity-50',
-                )}
-                onClick={() => setExpandedUuid(isExpanded ? null : node.uuid)}
+                node={node}
+                isExpanded={expandedUuid === node.uuid}
+                onToggle={() => setExpandedUuid(expandedUuid === node.uuid ? null : node.uuid)}
               >
-                <CardContent className="p-4">
-                  {/* Card header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-dark-200 shrink-0" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-dark-300 shrink-0" />
-                      )}
-                      <span className="text-white font-medium truncate">{node.name}</span>
-                    </div>
-                    {getStatusBadge(status)}
-                  </div>
-
-                  {/* Card metrics grid */}
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div className="p-2 bg-dark-800/50 rounded-lg">
-                      <p className="text-[10px] text-dark-300 mb-0.5">CPU</p>
-                      <p className={cn('text-sm font-mono font-semibold', getCpuColor(node.cpu_usage))}>
-                        {node.cpu_usage != null ? `${node.cpu_usage.toFixed(0)}%` : '-'}
-                      </p>
-                    </div>
-                    <div className="p-2 bg-dark-800/50 rounded-lg">
-                      <p className="text-[10px] text-dark-300 mb-0.5">RAM</p>
-                      <p className={cn('text-sm font-mono font-semibold', getRamColor(node.memory_usage))}>
-                        {node.memory_usage != null ? `${node.memory_usage.toFixed(0)}%` : '-'}
-                      </p>
-                    </div>
-                    <div className="p-2 bg-dark-800/50 rounded-lg">
-                      <p className="text-[10px] text-dark-300 mb-0.5">{t('fleet.detail.disk')}</p>
-                      <p className={cn('text-sm font-mono font-semibold', node.disk_usage != null && node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage != null && node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
-                        {node.disk_usage != null ? `${node.disk_usage.toFixed(0)}%` : '-'}
-                      </p>
-                    </div>
-                    <div className="p-2 bg-dark-800/50 rounded-lg">
-                      <p className="text-[10px] text-dark-300 mb-0.5">{t('fleet.table.users')}</p>
-                      <p className="text-sm font-mono font-semibold text-white">{node.users_online}</p>
-                    </div>
-                  </div>
-
-                  {/* Speed + traffic row */}
-                  <div className="flex items-center justify-between mt-2 text-xs text-dark-200">
-                    <span>{totalSpeed > 0 ? `DL ${formatSpeed(node.download_speed_bps)} / UL ${formatSpeed(node.upload_speed_bps)}` : '-'}</span>
-                    <span>{formatBytes(node.traffic_today_bytes)}</span>
-                  </div>
-
-                  {/* Expanded detail */}
-                  {isExpanded && (
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <Separator className="my-3" />
-                      <NodeDetailPanel
-                        node={node}
-                        canEdit={canEditNodes}
-                        onRestart={() => restartNode.mutate(node.uuid)}
-                        onEnable={() => enableNode.mutate(node.uuid)}
-                        onDisable={() => disableNode.mutate(node.uuid)}
-                        isPending={mutationPending}
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })
+                <NodeDetailPanel
+                  node={node}
+                  canEdit={canEditNodes}
+                  onRestart={() => restartNode.mutate(node.uuid)}
+                  onEnable={() => enableNode.mutate(node.uuid)}
+                  onDisable={() => disableNode.mutate(node.uuid)}
+                  isPending={mutationPending}
+                />
+              </NodeCard>
+            ))}
+          </div>
         )}
       </div>
     </div>
