@@ -85,6 +85,10 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return
 
+          // Let Vite handle CSS association with its importing chunk naturally;
+          // forcing CSS into a manualChunk breaks lazy-load CSS code-splitting.
+          if (id.endsWith('.css')) return
+
           // Core React runtime — cached long-term
           if (
             id.includes('/react/') ||
