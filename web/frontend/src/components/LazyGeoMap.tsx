@@ -1,11 +1,23 @@
-import { memo } from 'react'
+import { memo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
 import { Users, ArrowUpRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import 'leaflet/dist/leaflet.css'
+
+/** Forces the map to recalculate its size after the lazy chunk loads. */
+function MapReady() {
+  const map = useMap()
+  useEffect(() => {
+    // Leaflet may miscalculate container size when loaded lazily;
+    // invalidateSize forces a re-measure after the DOM settles.
+    const id = setTimeout(() => map.invalidateSize(), 100)
+    return () => clearTimeout(id)
+  }, [map])
+  return null
+}
 
 interface GeoCityUser {
   uuid: string
@@ -57,6 +69,7 @@ const LazyGeoMap = memo(function LazyGeoMap({
       style={{ background: mapBackground }}
       attributionControl={false}
     >
+      <MapReady />
       <TileLayer url={mapTileUrl} />
       {cities.map((city: GeoCity, idx: number) => {
           const radius = Math.max(5, Math.min(25, (city.count / maxCount) * 25))

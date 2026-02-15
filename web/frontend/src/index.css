@@ -945,3 +945,14 @@
 [data-theme="light"] .leaflet-popup-tip {
   background: #ffffff !important;
 }
+
+/* Leaflet + Tailwind compatibility: prevent Tailwind preflight from
+   breaking tile images and zoom controls */
+.leaflet-container img {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.leaflet-control-zoom a {
+  text-decoration: none !important;
+}

@@ -46,43 +46,42 @@ class PTYSession:
         if self._running:
             return
 
-        pid, master_fd = pty.openpty()
-
-        # The pty.openpty() returns (master, slave) fd pair
-        # We need pty.fork() to get a proper child process
-        child_pid = os.fork()
+        # pty.fork() correctly handles the master/slave PTY setup:
+        #   - child gets slave as stdin/stdout/stderr with proper controlling terminal
+        #   - parent gets the master fd for reading/writing
+        child_pid, master_fd = pty.fork()
 
         if child_pid == 0:
-            # Child process
-            os.close(master_fd)
-            os.setsid()
-
-            # Open slave PTY
-            slave_fd = pid  # pid from openpty is actually the slave fd
-
-            # Set up stdin/stdout/stderr
-            os.dup2(slave_fd, 0)
-            os.dup2(slave_fd, 1)
-            os.dup2(slave_fd, 2)
-
-            if slave_fd > 2:
-                os.close(slave_fd)
+            # ── Child process ─────────────────────────────────
+            # Reset signal handlers to defaults so the parent's asyncio
+            # handlers don't interfere with the child / bash process.
+            for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP,
+                        signal.SIGCHLD, signal.SIGQUIT, signal.SIGTSTP):
+                try:
+                    signal.signal(sig, signal.SIG_DFL)
+                except OSError:
+                    pass
 
             # Set terminal size
             winsize = struct.pack("HHHH", rows, cols, 0, 0)
-            fcntl.ioctl(0, termios.TIOCSWINSZ, winsize)
+            try:
+                fcntl.ioctl(0, termios.TIOCSWINSZ, winsize)
+            except OSError:
+                pass
 
             # Set environment
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
             env["SHELL"] = "/bin/bash"
 
-            # Execute bash
-            os.execve("/bin/bash", ["/bin/bash", "--login"], env)
+            # Execute bash — on success this never returns
+            try:
+                os.execve("/bin/bash", ["/bin/bash", "--login"], env)
+            except Exception:
+                os._exit(1)
 
         else:
-            # Parent process
-            os.close(pid)  # Close slave fd in parent
+            # ── Parent process ────────────────────────────────
             self._master_fd = master_fd
             self._pid = child_pid
             self._running = True
@@ -91,7 +90,7 @@ class PTYSession:
             flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
             fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
-            # Set initial terminal size
+            # Set initial terminal size on the master side
             winsize = struct.pack("HHHH", rows, cols, 0, 0)
             fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
 

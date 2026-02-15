@@ -5,7 +5,7 @@
  * Connects to WS /api/v2/fleet/{nodeUuid}/terminal?token=JWT.
  * All data is base64-encoded over WebSocket.
  */
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -48,7 +48,13 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
   const wsRef = useRef<WebSocket | null>(null)
   const [state, setState] = useState<ConnectionState>('connecting')
 
-  const connect = useCallback(() => {
+  // Store callbacks in refs so the effect doesn't re-run when they change
+  const onDisconnectRef = useRef(onDisconnect)
+  const onReadyRef = useRef(onReady)
+  onDisconnectRef.current = onDisconnect
+  onReadyRef.current = onReady
+
+  useEffect(() => {
     const token = useAuthStore.getState().accessToken
     if (!token || !containerRef.current) return
 
@@ -115,7 +121,7 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
           if (msg.type === 'ready') {
             setState('connected')
             term.writeln('\x1b[1;32mConnected.\x1b[0m\r\n')
-            onReady?.()
+            onReadyRef.current?.()
             return
           }
           if (msg.type === 'error') {
@@ -146,7 +152,7 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
     ws.onclose = () => {
       setState('disconnected')
       term.writeln('\r\n\x1b[1;33mDisconnected.\x1b[0m')
-      onDisconnect?.()
+      onDisconnectRef.current?.()
     }
 
     ws.onerror = () => {
@@ -185,12 +191,9 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
       ws.close()
       term.dispose()
     }
-  }, [nodeUuid, nodeName, onDisconnect, onReady])
-
-  useEffect(() => {
-    const cleanup = connect()
-    return () => cleanup?.()
-  }, [connect])
+  // Only reconnect when the target node changes, not on callback changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeUuid, nodeName])
 
   return (
     <div className="relative w-full h-full min-h-[300px]">
