@@ -58,6 +58,9 @@ AGENT_XRAY_LOG_PATH=/var/log/remnanode/access.log
 | `AGENT_SEND_MAX_RETRIES` | Количество попыток отправки батча | `3` |
 | `AGENT_SEND_RETRY_DELAY_SECONDS` | Задержка между попытками (секунды) | `5.0` |
 | `AGENT_LOG_LEVEL` | Уровень логов: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
+| `AGENT_COMMAND_ENABLED` | Включить WebSocket-канал команд от веб-панели | `false` |
+| `AGENT_WS_URL` | WebSocket URL (по умолчанию = `AGENT_COLLECTOR_URL`) | — |
+| `AGENT_WS_SECRET_KEY` | Ключ для проверки HMAC-подписи команд (= `WEB_SECRET_KEY`) | — |
 
 ### Шаг 3: Запуск
 
@@ -357,6 +360,55 @@ cp .env.backup .env
 ```bash
 docker compose pull && docker compose up -d
 ```
+
+---
+
+## Agent v2: Command Channel
+
+По умолчанию агент работает только в режиме **сбора метрик** — читает логи и отправляет данные о подключениях в Collector API.
+
+Для управления нодой через веб-панель (терминал, запуск скриптов, провижининг) необходимо включить **Command Channel** — постоянное WebSocket-соединение между агентом и бэкендом.
+
+### Что даёт Command Channel
+
+- **Веб-терминал** — SSH-подобный доступ к ноде прямо из браузера (xterm.js + PTY)
+- **Запуск скриптов** — выполнение предустановленных скриптов на ноде (fail2ban, UFW, BBR, обновление Xray и т.д.)
+- **Провижининг** — автоматическая настройка нового VPS как VPN-ноды в один клик
+
+### Как включить
+
+1. Добавьте в `.env` агента:
+
+```env
+AGENT_COMMAND_ENABLED=true
+AGENT_WS_SECRET_KEY=тот_же_ключ_что_WEB_SECRET_KEY_на_бэкенде
+```
+
+2. `AGENT_WS_SECRET_KEY` **должен совпадать** с `WEB_SECRET_KEY` из `.env` основного проекта. Этот ключ используется для HMAC-подписи: бэкенд подписывает каждую команду, агент проверяет подпись перед выполнением.
+
+3. Перезапустите агент:
+
+```bash
+docker compose restart
+```
+
+4. В логах должно появиться:
+
+```
+INFO: Agent v2 command channel enabled
+```
+
+Если канал выключен, в логах будет:
+
+```
+INFO: Agent v2 command channel disabled (AGENT_COMMAND_ENABLED=false)
+```
+
+### Безопасность
+
+- Все команды подписываются HMAC-SHA256 с использованием `WEB_SECRET_KEY`
+- Агент отклоняет команды с невалидной подписью
+- Защита от replay-атак: команды содержат timestamp, агент принимает команды только в окне 60 секунд
 
 ---
 
