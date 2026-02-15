@@ -817,6 +817,13 @@
       "permissionDenied": "Permission denied",
       "closeConfirm": "Close terminal session?"
     },
+    "tabs": {
+      "monitoring": "Monitoring",
+      "terminal": "Terminal",
+      "terminalDesc": "Select a node to open a terminal session",
+      "scripts": "Scripts",
+      "history": "History"
+    },
     "toast": {
       "restarted": "Node restarted",
       "enabled": "Node enabled",

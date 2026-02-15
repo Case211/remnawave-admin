@@ -817,6 +817,13 @@
       "permissionDenied": "Нет доступа",
       "closeConfirm": "Закрыть сессию терминала?"
     },
+    "tabs": {
+      "monitoring": "Мониторинг",
+      "terminal": "Терминал",
+      "terminalDesc": "Выберите ноду для подключения к терминалу",
+      "scripts": "Скрипты",
+      "history": "История"
+    },
     "toast": {
       "restarted": "Нода перезапущена",
       "enabled": "Нода включена",

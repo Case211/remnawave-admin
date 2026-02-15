@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, lazy, Suspense } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -26,6 +26,9 @@ import {
   MemoryStick,
   Users,
   ArrowUpDown,
+  Terminal,
+  FileCode,
+  History,
 } from 'lucide-react'
 import client from '../api/client'
 import { usePermissionStore } from '../store/permissionStore'
@@ -45,8 +48,14 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import NodeCard, { type FleetNode, getNodeStatus } from '@/components/fleet/NodeCard'
+import TerminalDialog from '@/components/fleet/TerminalDialog'
+
+const ScriptCatalog = lazy(() => import('@/components/fleet/ScriptCatalog'))
+const RunScriptDialog = lazy(() => import('@/components/fleet/RunScriptDialog'))
+const CommandHistory = lazy(() => import('@/components/fleet/CommandHistory'))
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -333,12 +342,21 @@ export default function Fleet() {
   const queryClient = useQueryClient()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
   const canEditNodes = hasPermission('fleet', 'edit')
+  const canTerminal = hasPermission('fleet', 'terminal')
+  const canScripts = hasPermission('fleet', 'scripts')
 
+  const [activeTab, setActiveTab] = useState('monitoring')
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [expandedUuid, setExpandedUuid] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+
+  // Terminal state
+  const [terminalNode, setTerminalNode] = useState<{ uuid: string; name: string } | null>(null)
+
+  // Script state
+  const [runScript, setRunScript] = useState<any>(null)
 
   // ── Data ──────────────────────────────────────────────────────
 
@@ -557,113 +575,218 @@ export default function Fleet() {
         </Card>
       </div>
 
-      {/* Search + filter + sort toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300" />
-          <Input
-            placeholder={t('fleet.searchPlaceholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <div className="flex items-center gap-1.5">
-          {([
-            { value: 'all', label: t('fleet.filter.all'), count: fleet?.total },
-            { value: 'online', label: t('fleet.filter.online'), count: fleet?.online },
-            { value: 'offline', label: t('fleet.filter.offline'), count: fleet?.offline },
-            { value: 'disabled', label: t('fleet.filter.disabled'), count: fleet?.disabled },
-          ] as const).map(({ value, label, count }) => (
-            <Button
-              key={value}
-              variant={statusFilter === value ? 'default' : 'secondary'}
-              size="sm"
-              className="h-8 text-xs gap-1"
-              onClick={() => setStatusFilter(value)}
-            >
-              {label}
-              {count != null && count > 0 && (
-                <span className={cn(
-                  'text-[10px] font-mono',
-                  statusFilter === value ? 'text-white/80' : 'text-dark-300',
-                )}>
-                  {count}
-                </span>
-              )}
-            </Button>
-          ))}
-        </div>
-        {/* Sort dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="secondary" size="sm" className="h-8 gap-1.5 ml-auto">
-              <ArrowUpDown className="w-3.5 h-3.5" />
-              <span className="text-xs">{t('fleet.sort.label')}</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuRadioGroup
-              value={`${sortField}-${sortDir}`}
-              onValueChange={(v) => {
-                const [field, dir] = v.split('-') as [SortField, SortDir]
-                setSortField(field)
-                setSortDir(dir)
-              }}
-            >
-              {SORT_FIELDS.map(({ value, labelKey }) => (
-                <DropdownMenuRadioItem key={`${value}-asc`} value={`${value}-${sortField === value && sortDir === 'asc' ? 'desc' : 'asc'}`} onClick={() => toggleSort(value)}>
-                  {t(labelKey)} {sortField === value ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+        <TabsList className="h-9">
+          <TabsTrigger value="monitoring" className="text-xs gap-1.5">
+            <Activity className="w-3.5 h-3.5" />
+            {t('fleet.tabs.monitoring')}
+          </TabsTrigger>
+          {canTerminal && (
+            <TabsTrigger value="terminal" className="text-xs gap-1.5">
+              <Terminal className="w-3.5 h-3.5" />
+              {t('fleet.tabs.terminal')}
+            </TabsTrigger>
+          )}
+          {canScripts && (
+            <TabsTrigger value="scripts" className="text-xs gap-1.5">
+              <FileCode className="w-3.5 h-3.5" />
+              {t('fleet.tabs.scripts')}
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="history" className="text-xs gap-1.5">
+            <History className="w-3.5 h-3.5" />
+            {t('fleet.tabs.history')}
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Node card grid */}
-      <div className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-        {isLoading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="p-4">
-                  <div className="h-[180px] bg-dark-700/30 rounded animate-pulse" />
-                </CardContent>
-              </Card>
-            ))}
+        {/* ── Monitoring Tab ──────────────────────────────────────── */}
+        <TabsContent value="monitoring" className="space-y-4 mt-4">
+          {/* Search + filter + sort toolbar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300" />
+              <Input
+                placeholder={t('fleet.searchPlaceholder')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              {([
+                { value: 'all', label: t('fleet.filter.all'), count: fleet?.total },
+                { value: 'online', label: t('fleet.filter.online'), count: fleet?.online },
+                { value: 'offline', label: t('fleet.filter.offline'), count: fleet?.offline },
+                { value: 'disabled', label: t('fleet.filter.disabled'), count: fleet?.disabled },
+              ] as const).map(({ value, label, count }) => (
+                <Button
+                  key={value}
+                  variant={statusFilter === value ? 'default' : 'secondary'}
+                  size="sm"
+                  className="h-8 text-xs gap-1"
+                  onClick={() => setStatusFilter(value)}
+                >
+                  {label}
+                  {count != null && count > 0 && (
+                    <span className={cn(
+                      'text-[10px] font-mono',
+                      statusFilter === value ? 'text-white/80' : 'text-dark-300',
+                    )}>
+                      {count}
+                    </span>
+                  )}
+                </Button>
+              ))}
+            </div>
+            {/* Sort dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm" className="h-8 gap-1.5 ml-auto">
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  <span className="text-xs">{t('fleet.sort.label')}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuRadioGroup
+                  value={`${sortField}-${sortDir}`}
+                  onValueChange={(v) => {
+                    const [field, dir] = v.split('-') as [SortField, SortDir]
+                    setSortField(field)
+                    setSortDir(dir)
+                  }}
+                >
+                  {SORT_FIELDS.map(({ value, labelKey }) => (
+                    <DropdownMenuRadioItem key={`${value}-asc`} value={`${value}-${sortField === value && sortDir === 'asc' ? 'desc' : 'asc'}`} onClick={() => toggleSort(value)}>
+                      {t(labelKey)} {sortField === value ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        ) : sortedNodes.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
-              <p className="text-dark-200">
-                {searchQuery || statusFilter !== 'all' ? t('fleet.nothingFound') : t('fleet.noNodes')}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {sortedNodes.map((node) => (
-              <NodeCard
-                key={node.uuid}
-                node={node}
-                isExpanded={expandedUuid === node.uuid}
-                onToggle={() => setExpandedUuid(expandedUuid === node.uuid ? null : node.uuid)}
-              >
-                <NodeDetailPanel
+
+          {/* Node card grid */}
+          {isLoading ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i}>
+                  <CardContent className="p-4">
+                    <div className="h-[180px] bg-dark-700/30 rounded animate-pulse" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : sortedNodes.length === 0 ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <Server className="w-10 h-10 text-dark-300 mx-auto mb-2 opacity-40" />
+                <p className="text-dark-200">
+                  {searchQuery || statusFilter !== 'all' ? t('fleet.nothingFound') : t('fleet.noNodes')}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              {sortedNodes.map((node) => (
+                <NodeCard
+                  key={node.uuid}
                   node={node}
-                  canEdit={canEditNodes}
-                  onRestart={() => restartNode.mutate(node.uuid)}
-                  onEnable={() => enableNode.mutate(node.uuid)}
-                  onDisable={() => disableNode.mutate(node.uuid)}
-                  isPending={mutationPending}
-                />
-              </NodeCard>
-            ))}
-          </div>
+                  isExpanded={expandedUuid === node.uuid}
+                  onToggle={() => setExpandedUuid(expandedUuid === node.uuid ? null : node.uuid)}
+                >
+                  <NodeDetailPanel
+                    node={node}
+                    canEdit={canEditNodes}
+                    onRestart={() => restartNode.mutate(node.uuid)}
+                    onEnable={() => enableNode.mutate(node.uuid)}
+                    onDisable={() => disableNode.mutate(node.uuid)}
+                    isPending={mutationPending}
+                  />
+                </NodeCard>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Terminal Tab ─────────────────────────────────────────── */}
+        {canTerminal && (
+          <TabsContent value="terminal" className="mt-4">
+            <div className="space-y-4">
+              <p className="text-sm text-dark-200">{t('fleet.tabs.terminalDesc')}</p>
+              {fleet?.nodes && fleet.nodes.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {fleet.nodes
+                    .filter((n) => n.is_connected && !n.is_disabled)
+                    .map((node) => (
+                      <Card key={node.uuid} className="hover:border-dark-200/40 transition-colors">
+                        <CardContent className="p-4 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-white">{node.name}</p>
+                            <p className="text-xs text-dark-300 font-mono">{node.address}</p>
+                          </div>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => setTerminalNode({ uuid: node.uuid, name: node.name })}
+                          >
+                            <Terminal className="w-3.5 h-3.5" />
+                            {t('fleet.terminal.connect')}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Terminal className="w-8 h-8 text-dark-300 mx-auto mb-2 opacity-40" />
+                    <p className="text-dark-300 text-sm">{t('fleet.terminal.agentNotConnected')}</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
         )}
-      </div>
+
+        {/* ── Scripts Tab ──────────────────────────────────────────── */}
+        {canScripts && (
+          <TabsContent value="scripts" className="mt-4">
+            <Suspense fallback={<div className="h-40 bg-dark-700/30 rounded animate-pulse" />}>
+              <ScriptCatalog onRunScript={(script) => setRunScript(script)} />
+            </Suspense>
+          </TabsContent>
+        )}
+
+        {/* ── History Tab ──────────────────────────────────────────── */}
+        <TabsContent value="history" className="mt-4">
+          <Suspense fallback={<div className="h-40 bg-dark-700/30 rounded animate-pulse" />}>
+            <CommandHistory />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
+
+      {/* Terminal Dialog */}
+      {terminalNode && (
+        <TerminalDialog
+          open={!!terminalNode}
+          onOpenChange={(open) => { if (!open) setTerminalNode(null) }}
+          nodeUuid={terminalNode.uuid}
+          nodeName={terminalNode.name}
+        />
+      )}
+
+      {/* Run Script Dialog */}
+      <Suspense fallback={null}>
+        {runScript && (
+          <RunScriptDialog
+            open={!!runScript}
+            onOpenChange={(open) => { if (!open) setRunScript(null) }}
+            script={runScript}
+          />
+        )}
+      </Suspense>
     </div>
   )
 }
