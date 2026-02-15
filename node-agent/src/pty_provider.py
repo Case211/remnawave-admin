@@ -201,11 +201,12 @@ class PTYSession:
                 data = await loop.run_in_executor(
                     None, self._blocking_read,
                 )
+                if data is None:
+                    # EOF or fatal error — process exited
+                    break
                 if data:
                     await self._on_output(self._session_id, data)
-                else:
-                    # EOF — process exited
-                    break
+                # else: b"" — select timed out, no data yet, keep waiting
             except asyncio.CancelledError:
                 break
             except OSError:
