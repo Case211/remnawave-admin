@@ -12,9 +12,35 @@ import pty
 import signal
 import struct
 import termios
+import time
 from typing import Callable, Awaitable, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _install_sigchld_handler() -> None:
+    """Install a SIGCHLD handler that reaps zombie children.
+
+    Without this, children forked via pty.fork() become zombies until
+    explicitly waited.  The default asyncio child-watcher only tracks
+    children started through asyncio.create_subprocess_*, so manually
+    forked children would accumulate as zombies and may interfere with
+    the event loop's signal handling on rapid fork/kill cycles.
+    """
+    def _reap_children(signum, frame):  # noqa: ARG001
+        while True:
+            try:
+                pid, _ = os.waitpid(-1, os.WNOHANG)
+                if pid == 0:
+                    break
+            except ChildProcessError:
+                break
+
+    signal.signal(signal.SIGCHLD, _reap_children)
+
+
+# Install once at import time
+_install_sigchld_handler()
 
 
 class PTYSession:
@@ -149,13 +175,17 @@ class PTYSession:
         if self._pid is not None:
             try:
                 os.kill(self._pid, signal.SIGTERM)
-                # Wait briefly, then force kill
-                await asyncio.sleep(0.5)
+                # Brief non-blocking wait, then force kill
+                await asyncio.sleep(0.3)
                 try:
                     os.kill(self._pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-                os.waitpid(self._pid, os.WNOHANG)
+                # SIGCHLD handler will reap; also try here for completeness
+                try:
+                    os.waitpid(self._pid, os.WNOHANG)
+                except ChildProcessError:
+                    pass  # Already reaped by SIGCHLD handler
             except (ProcessLookupError, ChildProcessError):
                 pass
             self._pid = None
@@ -203,11 +233,17 @@ class PTYSession:
             return None
 
 
+# Minimum seconds between PTY forks to avoid signal storms
+_MIN_FORK_INTERVAL = 1.0
+
+
 class PTYManager:
     """Manages multiple PTY sessions."""
 
     def __init__(self):
         self._sessions: dict[str, PTYSession] = {}
+        self._last_fork_time: float = 0.0
+        self._lock = asyncio.Lock()
 
     async def create_session(
         self,
@@ -217,14 +253,23 @@ class PTYManager:
         rows: int = 24,
     ) -> PTYSession:
         """Create and start a new PTY session."""
-        # Close existing session with same ID
-        if session_id in self._sessions:
-            await self._sessions[session_id].close()
+        async with self._lock:
+            # Close existing session with same ID
+            if session_id in self._sessions:
+                await self._sessions[session_id].close()
 
-        session = PTYSession(session_id, on_output)
-        await session.start(cols, rows)
-        self._sessions[session_id] = session
-        return session
+            # Rate-limit forks to prevent signal storms from rapid open/close
+            now = time.monotonic()
+            wait = self._last_fork_time + _MIN_FORK_INTERVAL - now
+            if wait > 0:
+                logger.debug("PTY rate-limit: waiting %.2fs before fork", wait)
+                await asyncio.sleep(wait)
+
+            session = PTYSession(session_id, on_output)
+            await session.start(cols, rows)
+            self._last_fork_time = time.monotonic()
+            self._sessions[session_id] = session
+            return session
 
     async def close_session(self, session_id: str) -> None:
         """Close a PTY session."""

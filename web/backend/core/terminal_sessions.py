@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 IDLE_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 MAX_SESSIONS_PER_NODE = 1
+SESSION_COOLDOWN_SECONDS = 2  # Min seconds between sessions for same node
 
 
 @dataclass
@@ -50,6 +51,7 @@ class TerminalSessionManager:
     def __init__(self):
         self._sessions: Dict[str, TerminalSession] = {}  # session_id → session
         self._node_sessions: Dict[str, str] = {}  # node_uuid → session_id
+        self._node_last_close: Dict[str, float] = {}  # node_uuid → close timestamp
         self._lock = asyncio.Lock()
         self._cleanup_task: Optional[asyncio.Task] = None
 
@@ -106,6 +108,16 @@ class TerminalSessionManager:
                 del self._sessions[existing_sid]
                 del self._node_sessions[node_uuid]
 
+            # Cooldown: prevent rapid session re-creation (e.g. from
+            # React StrictMode double-mount or browser reconnect loops)
+            last_close = self._node_last_close.get(node_uuid, 0.0)
+            if time.time() - last_close < SESSION_COOLDOWN_SECONDS:
+                logger.debug(
+                    "Session cooldown active for node %s (%.1fs remaining)",
+                    node_uuid, SESSION_COOLDOWN_SECONDS - (time.time() - last_close),
+                )
+                return None
+
             session_id = str(uuid.uuid4())
             session = TerminalSession(
                 session_id=session_id,
@@ -136,6 +148,7 @@ class TerminalSessionManager:
             session = self._sessions.pop(session_id, None)
             if session:
                 self._node_sessions.pop(session.node_uuid, None)
+                self._node_last_close[session.node_uuid] = time.time()
 
         if not session:
             return

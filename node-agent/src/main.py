@@ -149,12 +149,12 @@ async def run_agent() -> None:
     shutdown_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
-    def _signal_handler() -> None:
-        logger.info("Shutdown signal received")
+    def _signal_handler(sig_name: str) -> None:
+        logger.info("Shutdown signal received: %s", sig_name)
         shutdown_event.set()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, _signal_handler)
+        loop.add_signal_handler(sig, _signal_handler, sig.name)
 
     # Start WS client as a concurrent task
     if ws_client:
