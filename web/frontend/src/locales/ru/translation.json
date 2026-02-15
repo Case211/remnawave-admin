@@ -775,6 +775,35 @@
     "sort": {
       "label": "Сортировка"
     },
+    "scripts": {
+      "catalog": "Каталог скриптов",
+      "builtin": "Встроенный",
+      "custom": "Пользовательский",
+      "run": "Запустить скрипт",
+      "running": "Выполняется",
+      "executing": "Скрипт запущен...",
+      "output": "Вывод",
+      "exitCode": "Код выхода",
+      "selectNode": "Выберите ноду",
+      "scriptContent": "Содержимое скрипта",
+      "searchPlaceholder": "Поиск скриптов...",
+      "allCategories": "Все",
+      "noScripts": "Скрипты не найдены",
+      "noHistory": "История команд пуста",
+      "waitingOutput": "Ожидание вывода...",
+      "historyType": "Тип",
+      "historyAdmin": "Админ",
+      "historyStatus": "Статус",
+      "historyDuration": "Длительность",
+      "historyDate": "Дата",
+      "categories": {
+        "security": "Безопасность",
+        "network": "Сеть",
+        "system": "Система",
+        "monitoring": "Мониторинг",
+        "custom": "Пользовательские"
+      }
+    },
     "terminal": {
       "title": "Терминал",
       "connect": "Подключить",

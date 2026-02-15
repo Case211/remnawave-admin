@@ -1,0 +1,353 @@
+"""Script catalog API endpoints.
+
+CRUD for scripts + execution on nodes via Agent v2 WebSocket.
+"""
+import logging
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
+
+from web.backend.api.deps import AdminUser, require_permission
+from web.backend.core.agent_manager import agent_manager
+from web.backend.core.agent_hmac import sign_command_with_ts
+from web.backend.core.rate_limit import limiter, RATE_ANALYTICS
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+# ── Schemas ──────────────────────────────────────────────────────
+
+class ScriptListItem(BaseModel):
+    id: int
+    name: str
+    display_name: str
+    description: Optional[str] = None
+    category: str
+    timeout_seconds: int = 60
+    requires_root: bool = False
+    is_builtin: bool = False
+
+
+class ScriptDetail(BaseModel):
+    id: int
+    name: str
+    display_name: str
+    description: Optional[str] = None
+    category: str
+    script_content: str
+    timeout_seconds: int = 60
+    requires_root: bool = False
+    is_builtin: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ScriptCreate(BaseModel):
+    name: str
+    display_name: str
+    description: Optional[str] = None
+    category: str = 'custom'
+    script_content: str
+    timeout_seconds: int = 60
+    requires_root: bool = False
+
+
+class ScriptUpdate(BaseModel):
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    script_content: Optional[str] = None
+    timeout_seconds: Optional[int] = None
+    requires_root: Optional[bool] = None
+
+
+class ExecScriptRequest(BaseModel):
+    script_id: int
+    node_uuid: str
+
+
+class ExecScriptResponse(BaseModel):
+    exec_id: int
+    status: str = 'pending'
+
+
+class ExecStatusResponse(BaseModel):
+    id: int
+    node_uuid: str
+    status: str
+    output: Optional[str] = None
+    exit_code: Optional[int] = None
+    started_at: str
+    finished_at: Optional[str] = None
+    duration_ms: Optional[int] = None
+
+
+# ── Script CRUD ──────────────────────────────────────────────────
+
+@router.get("/scripts", response_model=List[ScriptListItem])
+@limiter.limit(RATE_ANALYTICS)
+async def list_scripts(
+    request: Request,
+    category: Optional[str] = Query(None),
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """List all scripts, optionally filtered by category."""
+    try:
+        from src.services.database import db_service
+        if not db_service.is_connected:
+            return []
+
+        async with db_service.acquire() as conn:
+            if category:
+                rows = await conn.fetch(
+                    "SELECT id, name, display_name, description, category, timeout_seconds, requires_root, is_builtin "
+                    "FROM node_scripts WHERE category = $1 ORDER BY is_builtin DESC, display_name",
+                    category,
+                )
+            else:
+                rows = await conn.fetch(
+                    "SELECT id, name, display_name, description, category, timeout_seconds, requires_root, is_builtin "
+                    "FROM node_scripts ORDER BY category, is_builtin DESC, display_name",
+                )
+
+        return [ScriptListItem(**dict(r)) for r in rows]
+    except Exception as e:
+        logger.error("Error listing scripts: %s", e)
+        return []
+
+
+@router.get("/scripts/{script_id}", response_model=ScriptDetail)
+@limiter.limit(RATE_ANALYTICS)
+async def get_script(
+    request: Request,
+    script_id: int,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Get full script details including content."""
+    from src.services.database import db_service
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM node_scripts WHERE id = $1", script_id,
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="Script not found")
+
+    r = dict(row)
+    for dt_field in ('created_at', 'updated_at'):
+        if r.get(dt_field):
+            r[dt_field] = r[dt_field].isoformat()
+    return ScriptDetail(**r)
+
+
+@router.post("/scripts", response_model=ScriptDetail, status_code=201)
+async def create_script(
+    body: ScriptCreate,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Create a custom script."""
+    from src.services.database import db_service
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    admin_id = admin.id if hasattr(admin, 'id') else None
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO node_scripts (name, display_name, description, category,
+                                      script_content, timeout_seconds, requires_root,
+                                      is_builtin, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8)
+            RETURNING *
+            """,
+            body.name, body.display_name, body.description, body.category,
+            body.script_content, body.timeout_seconds, body.requires_root,
+            admin_id,
+        )
+
+    r = dict(row)
+    for dt_field in ('created_at', 'updated_at'):
+        if r.get(dt_field):
+            r[dt_field] = r[dt_field].isoformat()
+    return ScriptDetail(**r)
+
+
+@router.patch("/scripts/{script_id}", response_model=ScriptDetail)
+async def update_script(
+    script_id: int,
+    body: ScriptUpdate,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Update a script. Cannot modify built-in scripts."""
+    from src.services.database import db_service
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    async with db_service.acquire() as conn:
+        existing = await conn.fetchrow(
+            "SELECT is_builtin FROM node_scripts WHERE id = $1", script_id,
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Script not found")
+        if existing["is_builtin"]:
+            raise HTTPException(status_code=403, detail="Cannot modify built-in scripts")
+
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        set_clauses = []
+        params = []
+        idx = 1
+        for key, val in updates.items():
+            set_clauses.append(f"{key} = ${idx}")
+            params.append(val)
+            idx += 1
+        params.append(script_id)
+
+        row = await conn.fetchrow(
+            f"UPDATE node_scripts SET {', '.join(set_clauses)}, updated_at = NOW() "
+            f"WHERE id = ${idx} RETURNING *",
+            *params,
+        )
+
+    r = dict(row)
+    for dt_field in ('created_at', 'updated_at'):
+        if r.get(dt_field):
+            r[dt_field] = r[dt_field].isoformat()
+    return ScriptDetail(**r)
+
+
+@router.delete("/scripts/{script_id}", status_code=204)
+async def delete_script(
+    script_id: int,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Delete a custom script. Cannot delete built-in scripts."""
+    from src.services.database import db_service
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    async with db_service.acquire() as conn:
+        existing = await conn.fetchrow(
+            "SELECT is_builtin FROM node_scripts WHERE id = $1", script_id,
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Script not found")
+        if existing["is_builtin"]:
+            raise HTTPException(status_code=403, detail="Cannot delete built-in scripts")
+
+        await conn.execute("DELETE FROM node_scripts WHERE id = $1", script_id)
+
+
+# ── Script Execution ─────────────────────────────────────────────
+
+@router.post("/exec-script", response_model=ExecScriptResponse)
+async def exec_script(
+    body: ExecScriptRequest,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Execute a script on a node via Agent v2 WebSocket."""
+    from src.services.database import db_service
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    # Check agent connected
+    if not agent_manager.is_connected(body.node_uuid):
+        raise HTTPException(status_code=400, detail="Agent not connected")
+
+    # Get script
+    async with db_service.acquire() as conn:
+        script = await conn.fetchrow(
+            "SELECT * FROM node_scripts WHERE id = $1", body.script_id,
+        )
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+
+    # Get agent token
+    agent_token = None
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT agent_token FROM nodes WHERE uuid = $1", body.node_uuid,
+        )
+        if row:
+            agent_token = row["agent_token"]
+    if not agent_token:
+        raise HTTPException(status_code=400, detail="Agent token not found")
+
+    admin_id = admin.id if hasattr(admin, 'id') else None
+    admin_username = admin.username or str(admin.telegram_id)
+
+    # Create command log entry
+    async with db_service.acquire() as conn:
+        cmd_row = await conn.fetchrow(
+            """
+            INSERT INTO node_command_log
+                (node_uuid, admin_id, admin_username, command_type, command_data, status)
+            VALUES ($1, $2, $3, 'exec_script', $4, 'running')
+            RETURNING id
+            """,
+            body.node_uuid, admin_id, admin_username,
+            f"script={script['name']}",
+        )
+        exec_id = cmd_row["id"]
+
+    # Send command to agent
+    cmd_payload = {
+        "type": "exec_script",
+        "command_id": exec_id,
+        "script_content": script["script_content"],
+        "timeout": script["timeout_seconds"],
+    }
+    payload_with_ts, sig = sign_command_with_ts(cmd_payload, agent_token)
+    payload_with_ts["_sig"] = sig
+
+    sent = await agent_manager.send_command(body.node_uuid, payload_with_ts)
+    if not sent:
+        # Update log to error
+        async with db_service.acquire() as conn:
+            await conn.execute(
+                "UPDATE node_command_log SET status = 'error', output = 'Failed to send to agent' "
+                "WHERE id = $1", exec_id,
+            )
+        raise HTTPException(status_code=500, detail="Failed to send command to agent")
+
+    return ExecScriptResponse(exec_id=exec_id, status="running")
+
+
+@router.get("/exec/{exec_id}", response_model=ExecStatusResponse)
+@limiter.limit(RATE_ANALYTICS)
+async def get_exec_status(
+    request: Request,
+    exec_id: int,
+    admin: AdminUser = Depends(require_permission("fleet", "view")),
+):
+    """Get execution status and output."""
+    from src.services.database import db_service
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, node_uuid, status, output, exit_code,
+                   started_at, finished_at, duration_ms
+            FROM node_command_log WHERE id = $1
+            """,
+            exec_id,
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    r = dict(row)
+    for dt_field in ('started_at', 'finished_at'):
+        if r.get(dt_field):
+            r[dt_field] = r[dt_field].isoformat()
+        elif dt_field == 'started_at':
+            r[dt_field] = ''
+    return ExecStatusResponse(**r)
