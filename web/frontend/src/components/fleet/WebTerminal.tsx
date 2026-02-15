@@ -58,138 +58,164 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
     const token = useAuthStore.getState().accessToken
     if (!token || !containerRef.current) return
 
-    // Create terminal
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-      theme: {
-        background: '#0a0a0f',
-        foreground: '#e4e4e7',
-        cursor: '#a78bfa',
-        selectionBackground: '#a78bfa40',
-        black: '#18181b',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#eab308',
-        blue: '#3b82f6',
-        magenta: '#a855f7',
-        cyan: '#06b6d4',
-        white: '#e4e4e7',
-        brightBlack: '#52525b',
-        brightRed: '#f87171',
-        brightGreen: '#4ade80',
-        brightYellow: '#facc15',
-        brightBlue: '#60a5fa',
-        brightMagenta: '#c084fc',
-        brightCyan: '#22d3ee',
-        brightWhite: '#fafafa',
-      },
-      allowProposedApi: true,
-    })
+    // Cancelled flag — set by cleanup to prevent the deferred connect
+    // from running after React.StrictMode's synchronous unmount.
+    let cancelled = false
+    let ws: WebSocket | null = null
+    let term: Terminal | null = null
+    let resizeObserver: ResizeObserver | null = null
 
-    const fitAddon = new FitAddon()
-    const webLinksAddon = new WebLinksAddon()
+    // Defer the actual WebSocket connection by a tick.  In React 18
+    // StrictMode (dev), effects run mount → cleanup → mount.  The first
+    // mount's cleanup fires synchronously, setting cancelled = true
+    // before the timeout fires, so only the *second* mount actually
+    // opens the WebSocket — preventing the phantom first session.
+    const connectTimer = setTimeout(() => {
+      if (cancelled || !containerRef.current) return
 
-    term.loadAddon(fitAddon)
-    term.loadAddon(webLinksAddon)
+      // Create terminal
+      term = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+        theme: {
+          background: '#0a0a0f',
+          foreground: '#e4e4e7',
+          cursor: '#a78bfa',
+          selectionBackground: '#a78bfa40',
+          black: '#18181b',
+          red: '#ef4444',
+          green: '#22c55e',
+          yellow: '#eab308',
+          blue: '#3b82f6',
+          magenta: '#a855f7',
+          cyan: '#06b6d4',
+          white: '#e4e4e7',
+          brightBlack: '#52525b',
+          brightRed: '#f87171',
+          brightGreen: '#4ade80',
+          brightYellow: '#facc15',
+          brightBlue: '#60a5fa',
+          brightMagenta: '#c084fc',
+          brightCyan: '#22d3ee',
+          brightWhite: '#fafafa',
+        },
+        allowProposedApi: true,
+      })
 
-    term.open(containerRef.current)
-    fitAddon.fit()
+      const fitAddon = new FitAddon()
+      const webLinksAddon = new WebLinksAddon()
 
-    termRef.current = term
-    fitRef.current = fitAddon
+      term.loadAddon(fitAddon)
+      term.loadAddon(webLinksAddon)
 
-    term.writeln(`\x1b[1;35mConnecting to ${nodeName}...\x1b[0m\r\n`)
+      term.open(containerRef.current!)
+      fitAddon.fit()
 
-    // Connect WebSocket
-    const url = getWsUrl(nodeUuid, token)
-    const ws = new WebSocket(url)
-    wsRef.current = ws
+      termRef.current = term
+      fitRef.current = fitAddon
 
-    ws.onopen = () => {
-      setState('connecting')
-    }
+      term.writeln(`\x1b[1;35mConnecting to ${nodeName}...\x1b[0m\r\n`)
 
-    ws.onmessage = (event) => {
-      const data = event.data
+      // Connect WebSocket
+      const url = getWsUrl(nodeUuid, token)
+      ws = new WebSocket(url)
+      wsRef.current = ws
 
-      // Try JSON messages
-      if (data.startsWith('{')) {
+      ws.onopen = () => {
+        setState('connecting')
+      }
+
+      ws.onmessage = (event) => {
+        const data = event.data
+
+        // Try JSON messages
+        if (data.startsWith('{')) {
+          try {
+            const msg = JSON.parse(data)
+            if (msg.type === 'ready') {
+              setState('connected')
+              term!.writeln('\x1b[1;32mConnected.\x1b[0m\r\n')
+              onReadyRef.current?.()
+              return
+            }
+            if (msg.type === 'error') {
+              term!.writeln(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
+              setState('error')
+              return
+            }
+            if (msg.type === 'ping') {
+              ws!.send(JSON.stringify({ type: 'pong' }))
+              return
+            }
+            return
+          } catch {
+            // Not JSON, treat as terminal data
+          }
+        }
+
+        // Base64-encoded terminal output
         try {
-          const msg = JSON.parse(data)
-          if (msg.type === 'ready') {
-            setState('connected')
-            term.writeln('\x1b[1;32mConnected.\x1b[0m\r\n')
-            onReadyRef.current?.()
-            return
-          }
-          if (msg.type === 'error') {
-            term.writeln(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
-            setState('error')
-            return
-          }
-          if (msg.type === 'ping') {
-            ws.send(JSON.stringify({ type: 'pong' }))
-            return
-          }
-          return
+          const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0))
+          term!.write(bytes)
         } catch {
-          // Not JSON, treat as terminal data
+          // Plain text fallback
+          term!.write(data)
         }
       }
 
-      // Base64-encoded terminal output
-      try {
-        const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0))
-        term.write(bytes)
-      } catch {
-        // Plain text fallback
-        term.write(data)
+      ws.onclose = () => {
+        if (cancelled) return
+        setState('disconnected')
+        term?.writeln('\r\n\x1b[1;33mDisconnected.\x1b[0m')
+        onDisconnectRef.current?.()
       }
-    }
 
-    ws.onclose = () => {
-      setState('disconnected')
-      term.writeln('\r\n\x1b[1;33mDisconnected.\x1b[0m')
-      onDisconnectRef.current?.()
-    }
-
-    ws.onerror = () => {
-      setState('error')
-    }
-
-    // Forward keyboard input
-    term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(btoa(data))
+      ws.onerror = () => {
+        if (cancelled) return
+        setState('error')
       }
-    })
 
-    // Handle resize
-    const resizeObserver = new ResizeObserver(() => {
-      try {
-        fitAddon.fit()
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'resize',
-            cols: term.cols,
-            rows: term.rows,
-          }))
+      // Forward keyboard input
+      term.onData((data) => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(btoa(data))
         }
-      } catch {
-        // Ignore resize errors during cleanup
-      }
-    })
+      })
 
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current)
-    }
+      // Handle resize
+      resizeObserver = new ResizeObserver(() => {
+        try {
+          fitAddon.fit()
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'resize',
+              cols: term!.cols,
+              rows: term!.rows,
+            }))
+          }
+        } catch {
+          // Ignore resize errors during cleanup
+        }
+      })
+
+      if (containerRef.current) {
+        resizeObserver.observe(containerRef.current)
+      }
+    }, 0)
 
     return () => {
-      resizeObserver.disconnect()
-      ws.close()
-      term.dispose()
+      cancelled = true
+      clearTimeout(connectTimer)
+      resizeObserver?.disconnect()
+      if (ws) {
+        ws.onclose = null  // prevent onDisconnect callback during cleanup
+        ws.close()
+      }
+      term?.dispose()
+      termRef.current = null
+      fitRef.current = null
+      wsRef.current = null
     }
   // Only reconnect when the target node changes, not on callback changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
