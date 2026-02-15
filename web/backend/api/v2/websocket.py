@@ -232,6 +232,18 @@ async def broadcast_activity(activity_type: str, message: str, details: Dict[str
     })
 
 
+async def broadcast_agent_v2_status(node_uuid: str, is_connected: bool):
+    """Broadcast agent v2 connection status change."""
+    await manager.broadcast({
+        "type": "agent_v2_status",
+        "data": {
+            "node_uuid": node_uuid,
+            "connected": is_connected,
+        },
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+
+
 async def broadcast_audit_event(
     admin_username: str,
     action: str,
