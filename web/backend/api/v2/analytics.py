@@ -326,38 +326,6 @@ async def get_overview(
     """Get overview statistics for dashboard."""
     try:
         return await _compute_overview()
-
-        # Calculate user stats (case-insensitive status comparison)
-        total_users = len(users)
-        active_users = sum(1 for u in users if _get_user_status(u) == 'active')
-        disabled_users = sum(1 for u in users if _get_user_status(u) == 'disabled')
-        expired_users = sum(1 for u in users if _get_user_status(u) == 'expired')
-
-        # Calculate node stats
-        total_nodes = len(nodes)
-        disabled_nodes = sum(1 for n in nodes if _is_node_disabled(n))
-        online_nodes = sum(1 for n in nodes if _is_node_connected(n) and not _is_node_disabled(n))
-        offline_nodes = total_nodes - online_nodes - disabled_nodes
-
-        # Calculate host stats
-        total_hosts = len(hosts)
-
-        # Get total traffic from Remnawave bandwidth stats API
-        total_traffic_bytes = 0
-        bw_stats = await fetch_bandwidth_stats()
-        if bw_stats:
-            current_year = bw_stats.get('bandwidthCurrentYear', {})
-            try:
-                total_traffic_bytes = int(current_year.get('current') or 0)
-            except (ValueError, TypeError):
-                pass
-        # Fallback to user/node traffic sums if bandwidth API unavailable
-        if not total_traffic_bytes:
-            user_traffic = sum(_get_traffic_bytes(u) for u in users)
-            node_traffic = sum(_get_node_traffic(n) for n in nodes)
-            total_traffic_bytes = max(user_traffic, node_traffic)
-        users_online = sum(_get_users_online(n) for n in nodes)
-
     except Exception as e:
         logger.error("Error getting overview stats: %s", e)
         return OverviewStats()
