@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from pydantic import AnyHttpUrl, Field, field_validator
+from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -115,6 +115,16 @@ class Settings(BaseSettings):
             except ValueError:
                 return None
         return None
+
+    @model_validator(mode='after')
+    def _validate_config(self):
+        import logging
+        _logger = logging.getLogger(__name__)
+        if not self.bot_token:
+            _logger.warning("BOT_TOKEN is not set")
+        if not self.api_token:
+            _logger.warning("API_TOKEN is not set — API calls will fail")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

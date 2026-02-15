@@ -1,16 +1,18 @@
 """Nodes API endpoints."""
+import json
 import logging
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota
+from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota, get_client_ip
+from web.backend.core.rbac import write_audit_log
 from web.backend.core.api_helper import (
     fetch_nodes_from_api, fetch_nodes_realtime_usage,
     fetch_nodes_usage_by_range, _normalize,
@@ -187,8 +189,8 @@ async def get_node(
             from src.services.database import db_service
             if db_service.is_connected:
                 node_data = await db_service.get_node_by_uuid(node_uuid)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
 
         if not node_data:
             from src.services.api_client import api_client
@@ -209,6 +211,7 @@ async def get_node(
 @router.post("", response_model=NodeDetail)
 async def create_node(
     data: NodeCreate,
+    request: Request,
     admin: AdminUser = Depends(require_permission("nodes", "create")),
     _quota: None = Depends(require_quota("nodes")),
 ):
@@ -230,6 +233,16 @@ async def create_node(
             from web.backend.core.rbac import increment_usage_counter
             await increment_usage_counter(admin.account_id, "nodes_created")
 
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="node.create",
+            resource="nodes",
+            resource_id=node.get('uuid', '') if isinstance(node, dict) else '',
+            details=json.dumps({"name": data.name, "address": data.address, "port": data.port}),
+            ip_address=get_client_ip(request),
+        )
+
         return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:
@@ -242,6 +255,7 @@ async def create_node(
 async def update_node(
     node_uuid: str,
     data: NodeUpdate,
+    request: Request,
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Update node fields."""
@@ -253,6 +267,17 @@ async def update_node(
 
         # Upstream API wraps data in 'response' key
         node = result.get('response', result) if isinstance(result, dict) else result
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="node.update",
+            resource="nodes",
+            resource_id=node_uuid,
+            details=json.dumps({"fields": list(update_data.keys())}),
+            ip_address=get_client_ip(request),
+        )
+
         return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:
@@ -264,6 +289,7 @@ async def update_node(
 @router.delete("/{node_uuid}", response_model=SuccessResponse)
 async def delete_node(
     node_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("nodes", "delete")),
 ):
     """Delete a node."""
@@ -277,8 +303,18 @@ async def delete_node(
             from src.services.database import db_service
             if db_service.is_connected:
                 await db_service.delete_node(node_uuid)
-        except Exception:
-            pass  # non-critical, sync will reconcile
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="node.delete",
+            resource="nodes",
+            resource_id=node_uuid,
+            details=json.dumps({"node_uuid": node_uuid}),
+            ip_address=get_client_ip(request),
+        )
 
         return SuccessResponse(message="Node deleted")
 
@@ -291,6 +327,7 @@ async def delete_node(
 @router.post("/{node_uuid}/restart", response_model=SuccessResponse)
 async def restart_node(
     node_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Restart a node."""
@@ -298,6 +335,17 @@ async def restart_node(
         from src.services.api_client import api_client
 
         await api_client.restart_node(node_uuid)
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="node.restart",
+            resource="nodes",
+            resource_id=node_uuid,
+            details=json.dumps({"node_uuid": node_uuid}),
+            ip_address=get_client_ip(request),
+        )
+
         return SuccessResponse(message="Node restart initiated")
 
     except ImportError:
@@ -309,6 +357,7 @@ async def restart_node(
 @router.post("/{node_uuid}/enable", response_model=SuccessResponse)
 async def enable_node(
     node_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Enable a disabled node."""
@@ -316,6 +365,17 @@ async def enable_node(
         from src.services.api_client import api_client
 
         await api_client.enable_node(node_uuid)
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="node.enable",
+            resource="nodes",
+            resource_id=node_uuid,
+            details=json.dumps({"node_uuid": node_uuid}),
+            ip_address=get_client_ip(request),
+        )
+
         return SuccessResponse(message="Node enabled")
 
     except ImportError:
@@ -350,6 +410,7 @@ async def get_agent_token_status(
 @router.post("/{node_uuid}/agent-token/generate")
 async def generate_agent_token(
     node_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Generate a new agent token for a node."""
@@ -359,6 +420,15 @@ async def generate_agent_token(
 
         token = await set_node_agent_token(db_service, node_uuid)
         if token:
+            await write_audit_log(
+                admin_id=admin.account_id,
+                admin_username=admin.username,
+                action="node.generate_agent_token",
+                resource="nodes",
+                resource_id=node_uuid,
+                details=json.dumps({"node_uuid": node_uuid}),
+                ip_address=get_client_ip(request),
+            )
             return {"success": True, "token": token}
         raise HTTPException(status_code=500, detail="Failed to generate token")
     except HTTPException:
@@ -371,6 +441,7 @@ async def generate_agent_token(
 @router.post("/{node_uuid}/agent-token/revoke")
 async def revoke_agent_token(
     node_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Revoke agent token for a node."""
@@ -380,6 +451,15 @@ async def revoke_agent_token(
 
         success = await revoke_node_agent_token(db_service, node_uuid)
         if success:
+            await write_audit_log(
+                admin_id=admin.account_id,
+                admin_username=admin.username,
+                action="node.revoke_agent_token",
+                resource="nodes",
+                resource_id=node_uuid,
+                details=json.dumps({"node_uuid": node_uuid}),
+                ip_address=get_client_ip(request),
+            )
             return {"success": True}
         raise HTTPException(status_code=500, detail="Failed to revoke token")
     except HTTPException:
@@ -392,6 +472,7 @@ async def revoke_agent_token(
 @router.post("/{node_uuid}/disable", response_model=SuccessResponse)
 async def disable_node(
     node_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Disable a node."""
@@ -399,6 +480,17 @@ async def disable_node(
         from src.services.api_client import api_client
 
         await api_client.disable_node(node_uuid)
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="node.disable",
+            resource="nodes",
+            resource_id=node_uuid,
+            details=json.dumps({"node_uuid": node_uuid}),
+            ip_address=get_client_ip(request),
+        )
+
         return SuccessResponse(message="Node disabled")
 
     except ImportError:

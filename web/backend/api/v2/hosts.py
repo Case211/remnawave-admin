@@ -1,9 +1,11 @@
 """Hosts API endpoints."""
+import json
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import List
 
-from web.backend.api.deps import get_current_admin, get_api_client, AdminUser, require_permission, require_quota
+from web.backend.api.deps import get_current_admin, get_api_client, AdminUser, require_permission, require_quota, get_client_ip
+from web.backend.core.rbac import write_audit_log
 from web.backend.schemas.host import (
     HostListItem,
     HostListResponse,
@@ -115,6 +117,7 @@ async def get_host(
 @router.post("", response_model=HostDetail)
 async def create_host(
     data: HostCreate,
+    request: Request,
     admin: AdminUser = Depends(require_permission("hosts", "create")),
     _quota: None = Depends(require_quota("hosts")),
     api_client=Depends(get_api_client),
@@ -193,6 +196,16 @@ async def create_host(
         from web.backend.core.rbac import increment_usage_counter
         await increment_usage_counter(admin.account_id, "hosts_created")
 
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="host.create",
+        resource="hosts",
+        resource_id=h.get('uuid', ''),
+        details=json.dumps({"remark": data.remark}),
+        ip_address=get_client_ip(request),
+    )
+
     return HostDetail(**_map_host_detail(h))
 
 
@@ -200,6 +213,7 @@ async def create_host(
 async def update_host(
     host_uuid: str,
     data: HostUpdate,
+    request: Request,
     admin: AdminUser = Depends(require_permission("hosts", "edit")),
     api_client=Depends(get_api_client),
 ):
@@ -268,12 +282,23 @@ async def update_host(
 
     h = result.get('response', result) if isinstance(result, dict) else result
 
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="host.update",
+        resource="hosts",
+        resource_id=host_uuid,
+        details=json.dumps({"remark": data.remark}),
+        ip_address=get_client_ip(request),
+    )
+
     return HostDetail(**_map_host_detail(h))
 
 
 @router.delete("/{host_uuid}")
 async def delete_host(
     host_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("hosts", "delete")),
     api_client=Depends(get_api_client),
 ):
@@ -283,12 +308,23 @@ async def delete_host(
     if not result:
         raise HTTPException(status_code=404, detail="Host not found or delete failed")
 
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="host.delete",
+        resource="hosts",
+        resource_id=host_uuid,
+        details=json.dumps({"host_uuid": host_uuid}),
+        ip_address=get_client_ip(request),
+    )
+
     return {"status": "ok"}
 
 
 @router.post("/{host_uuid}/enable")
 async def enable_host(
     host_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("hosts", "edit")),
     api_client=Depends(get_api_client),
 ):
@@ -298,12 +334,23 @@ async def enable_host(
     if not result:
         raise HTTPException(status_code=400, detail="Failed to enable host")
 
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="host.enable",
+        resource="hosts",
+        resource_id=host_uuid,
+        details=json.dumps({"host_uuid": host_uuid}),
+        ip_address=get_client_ip(request),
+    )
+
     return {"status": "ok"}
 
 
 @router.post("/{host_uuid}/disable")
 async def disable_host(
     host_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("hosts", "edit")),
     api_client=Depends(get_api_client),
 ):
@@ -312,5 +359,15 @@ async def disable_host(
 
     if not result:
         raise HTTPException(status_code=400, detail="Failed to disable host")
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="host.disable",
+        resource="hosts",
+        resource_id=host_uuid,
+        details=json.dumps({"host_uuid": host_uuid}),
+        ip_address=get_client_ip(request),
+    )
 
     return {"status": "ok"}

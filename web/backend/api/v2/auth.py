@@ -60,16 +60,16 @@ async def get_setup_status(request: Request):
     try:
         from web.backend.core.admin_credentials import admin_exists
         has_db_auth = await admin_exists()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
 
     # Also check RBAC admin_accounts table
     has_rbac_accounts = False
     try:
         from web.backend.core.rbac import admin_account_exists
         has_rbac_accounts = await admin_account_exists()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
 
     needs_setup = not has_env_auth and not has_db_auth and not has_rbac_accounts
     return SetupStatusResponse(needs_setup=needs_setup)
@@ -92,15 +92,15 @@ async def register_admin(request: Request, data: RegisterRequest):
     try:
         from web.backend.core.admin_credentials import admin_exists
         has_db_auth = await admin_exists()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
 
     has_rbac_accounts = False
     try:
         from web.backend.core.rbac import admin_account_exists
         has_rbac_accounts = await admin_account_exists()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
 
     if has_env_auth or has_db_auth or has_rbac_accounts:
         raise HTTPException(
@@ -246,8 +246,8 @@ async def password_login(request: Request, data: LoginRequest):
     try:
         from web.backend.core.rbac import admin_account_exists
         has_db_auth = await admin_account_exists()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
 
     if not has_env_auth and not has_db_auth:
         raise HTTPException(
@@ -327,8 +327,8 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
                 is_valid = True
         except HTTPException:
             raise
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
         # Fallback to .env only when no DB account was found
         if not is_valid:
             if not settings.admin_login or username.lower() != settings.admin_login.lower():
@@ -367,8 +367,8 @@ async def get_current_user(admin: AdminUser = Depends(get_current_admin)):
             account = await get_admin_account_by_id(admin.account_id)
             if account and account.get("is_generated_password"):
                 password_is_generated = True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
 
     # Build permissions list
     permissions = [

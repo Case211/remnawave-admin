@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -305,6 +305,13 @@ function AgentTokenModal({
   const [generatedToken, setGeneratedToken] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [tokenConfirmAction, setTokenConfirmAction] = useState<'generate' | 'revoke' | null>(null)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>()
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    }
+  }, [])
 
   const { data: tokenStatus, isLoading } = useQuery<{ has_token: boolean; masked_token: string | null }>({
     queryKey: ['node-agent-token', node.uuid],
@@ -346,7 +353,8 @@ function AgentTokenModal({
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    copyTimerRef.current = setTimeout(() => setCopied(false), 2000)
   }
 
   const envConfig = generatedToken

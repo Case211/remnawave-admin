@@ -51,6 +51,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import NodeCard, { type FleetNode, getNodeStatus } from '@/components/fleet/NodeCard'
 import TerminalDialog from '@/components/fleet/TerminalDialog'
+import type { Script } from '@/components/fleet/ScriptCatalog'
 
 const ScriptCatalog = lazy(() => import('@/components/fleet/ScriptCatalog'))
 const RunScriptDialog = lazy(() => import('@/components/fleet/RunScriptDialog'))
@@ -355,7 +356,7 @@ export default function Fleet() {
   const [terminalNode, setTerminalNode] = useState<{ uuid: string; name: string } | null>(null)
 
   // Script state
-  const [runScript, setRunScript] = useState<any>(null)
+  const [runScript, setRunScript] = useState<Script | null>(null)
 
   // ── Data ──────────────────────────────────────────────────────
 

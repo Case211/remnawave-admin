@@ -3,9 +3,10 @@ import json
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from web.backend.api.deps import AdminUser, require_permission
+from web.backend.api.deps import AdminUser, get_client_ip, require_permission
+from web.backend.core.rbac import write_audit_log
 from web.backend.schemas.mailserver import (
     ComposeEmail,
     DnsCheckResult,
@@ -34,6 +35,7 @@ router = APIRouter(prefix="/mailserver", tags=["mailserver"])
 @router.post("/domains", response_model=DomainRead)
 async def create_domain(
     payload: DomainCreate,
+    request: Request,
     admin: AdminUser = Depends(require_permission("mailserver", "create")),
 ):
     """Create a new mail domain with auto-generated DKIM keys."""
@@ -51,6 +53,13 @@ async def create_domain(
                 payload.max_send_per_hour, payload.from_name, row["id"],
             )
             updated = await conn.fetchrow("SELECT * FROM domain_config WHERE id = $1", row["id"])
+        await write_audit_log(
+            admin_id=admin.account_id, admin_username=admin.username,
+            action="mailserver.create_domain", resource="mailserver",
+            resource_id=str(row["id"]),
+            details=json.dumps({"domain": payload.domain}),
+            ip_address=get_client_ip(request),
+        )
         return dict(updated)
     except Exception as e:
         logger.error("Domain creation failed: %s", e)
@@ -86,6 +95,7 @@ async def get_domain(
 async def update_domain(
     domain_id: int,
     payload: DomainUpdate,
+    request: Request,
     admin: AdminUser = Depends(require_permission("mailserver", "edit")),
 ):
     """Update domain settings."""
@@ -110,18 +120,33 @@ async def update_domain(
         row = await conn.fetchrow(query, *values)
     if not row:
         raise HTTPException(status_code=404, detail="Domain not found")
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="mailserver.update_domain", resource="mailserver",
+        resource_id=str(domain_id),
+        details=json.dumps({"updated_fields": list(updates.keys())}),
+        ip_address=get_client_ip(request),
+    )
     return dict(row)
 
 
 @router.delete("/domains/{domain_id}")
 async def delete_domain(
     domain_id: int,
+    request: Request,
     admin: AdminUser = Depends(require_permission("mailserver", "delete")),
 ):
     """Delete a domain and its DKIM keys."""
     from src.services.database import db_service
     async with db_service.acquire() as conn:
         deleted = await conn.execute("DELETE FROM domain_config WHERE id = $1", domain_id)
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="mailserver.delete_domain", resource="mailserver",
+        resource_id=str(domain_id),
+        details=json.dumps({"domain_id": domain_id}),
+        ip_address=get_client_ip(request),
+    )
     return {"ok": True}
 
 
@@ -411,6 +436,7 @@ async def send_test_email(
 @router.post("/smtp-credentials", response_model=SmtpCredentialRead)
 async def create_smtp_credential(
     payload: SmtpCredentialCreate,
+    request: Request,
     admin: AdminUser = Depends(require_permission("mailserver", "create")),
 ):
     """Create SMTP credentials for external services to relay mail."""
@@ -429,6 +455,13 @@ async def create_smtp_credential(
             )
         from web.backend.core.mail.mail_service import mail_service
         await mail_service.refresh_smtp_credentials()
+        await write_audit_log(
+            admin_id=admin.account_id, admin_username=admin.username,
+            action="mailserver.create_smtp_credential", resource="mailserver",
+            resource_id=str(row["id"]),
+            details=json.dumps({"username": payload.username}),
+            ip_address=get_client_ip(request),
+        )
         return dict(row)
     except Exception as e:
         logger.error("SMTP credential creation failed: %s", e)
@@ -472,6 +505,7 @@ async def get_smtp_credential(
 async def update_smtp_credential(
     cred_id: int,
     payload: SmtpCredentialUpdate,
+    request: Request,
     admin: AdminUser = Depends(require_permission("mailserver", "edit")),
 ):
     """Update SMTP credential settings."""
@@ -507,12 +541,20 @@ async def update_smtp_credential(
         raise HTTPException(status_code=404, detail="SMTP credential not found")
     from web.backend.core.mail.mail_service import mail_service
     await mail_service.refresh_smtp_credentials()
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="mailserver.update_smtp_credential", resource="mailserver",
+        resource_id=str(cred_id),
+        details=json.dumps({"updated_fields": list(updates.keys())}),
+        ip_address=get_client_ip(request),
+    )
     return dict(row)
 
 
 @router.delete("/smtp-credentials/{cred_id}")
 async def delete_smtp_credential(
     cred_id: int,
+    request: Request,
     admin: AdminUser = Depends(require_permission("mailserver", "delete")),
 ):
     """Delete an SMTP credential."""
@@ -521,4 +563,11 @@ async def delete_smtp_credential(
         await conn.execute("DELETE FROM smtp_credentials WHERE id = $1", cred_id)
     from web.backend.core.mail.mail_service import mail_service
     await mail_service.refresh_smtp_credentials()
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="mailserver.delete_smtp_credential", resource="mailserver",
+        resource_id=str(cred_id),
+        details=json.dumps({"credential_id": cred_id}),
+        ip_address=get_client_ip(request),
+    )
     return {"ok": True}

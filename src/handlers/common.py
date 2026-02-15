@@ -4,7 +4,7 @@ import asyncio
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 
-from src.handlers.state import ADMIN_COMMAND_DELETE_DELAY, LAST_BOT_MESSAGES
+from src.handlers.state import ADMIN_COMMAND_DELETE_DELAY, BACKGROUND_TASKS, LAST_BOT_MESSAGES, LAST_BOT_MESSAGES_LOCK
 from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError
 from src.utils.auth import is_admin
 from src.utils.logger import logger
@@ -27,10 +27,18 @@ async def _cleanup_message(message: Message, delay: float = 0.0) -> None:
         )
 
 
+def track_task(coro) -> asyncio.Task:
+    """Create a tracked asyncio task that auto-removes from BACKGROUND_TASKS on completion."""
+    task = asyncio.create_task(coro)
+    BACKGROUND_TASKS.add(task)
+    task.add_done_callback(BACKGROUND_TASKS.discard)
+    return task
+
+
 def _schedule_message_cleanup(message: Message, delay: float = 0.5) -> None:
     """Планирует удаление сообщения пользователя после обработки."""
     if isinstance(message, Message):
-        asyncio.create_task(_cleanup_message(message, delay=delay))
+        track_task(_cleanup_message(message, delay=delay))
 
 
 async def _send_clean_message(
@@ -44,22 +52,23 @@ async def _send_clean_message(
     bot = msg.bot
     chat_id = msg.chat.id
 
-    prev_id = LAST_BOT_MESSAGES.get(chat_id)
-    if prev_id:
-        try:
-            edited = await bot.edit_message_text(
-                chat_id=chat_id, message_id=prev_id, text=text, reply_markup=reply_markup, parse_mode=parse_mode
-            )
-            return edited
-        except Exception:
+    async with LAST_BOT_MESSAGES_LOCK:
+        prev_id = LAST_BOT_MESSAGES.get(chat_id)
+        if prev_id:
             try:
-                await bot.delete_message(chat_id=chat_id, message_id=prev_id)
+                edited = await bot.edit_message_text(
+                    chat_id=chat_id, message_id=prev_id, text=text, reply_markup=reply_markup, parse_mode=parse_mode
+                )
+                return edited
             except Exception:
-                pass
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=prev_id)
+                except Exception:
+                    pass
 
-    sent = await msg.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
-    LAST_BOT_MESSAGES[chat_id] = sent.message_id
-    return sent
+        sent = await msg.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
+        LAST_BOT_MESSAGES[chat_id] = sent.message_id
+        return sent
 
 
 async def _not_admin(message: Message | CallbackQuery) -> bool:
@@ -81,7 +90,7 @@ async def _not_admin(message: Message | CallbackQuery) -> bool:
         is_pending_input = user_id in PENDING_INPUT
         if is_command:
             delay = ADMIN_COMMAND_DELETE_DELAY
-            asyncio.create_task(_cleanup_message(message, delay=delay))
+            track_task(_cleanup_message(message, delay=delay))
         elif not is_pending_input:
             # Для обычных текстовых сообщений (не команды и не ожидаемый ввод) удаляем сразу
             # НО: если это может быть ожидаемый ввод (например, после промпта поиска),

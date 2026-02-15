@@ -46,7 +46,7 @@ class ConnectionManager:
         disconnected = set()
         for connection in self.active_connections.copy():
             try:
-                await connection.send_text(data)
+                await asyncio.wait_for(connection.send_text(data), timeout=5.0)
             except Exception as e:
                 logger.debug(f"Failed to send to client: {e}")
                 disconnected.add(connection)
@@ -119,14 +119,15 @@ async def websocket_endpoint(
                     try:
                         msg = json.loads(data)
                         await handle_client_message(websocket, admin, msg)
-                    except json.JSONDecodeError:
-                        pass
+                    except json.JSONDecodeError as e:
+                        logger.debug("Non-critical: %s", e)
 
             except asyncio.TimeoutError:
                 # Отправляем ping для проверки соединения
                 try:
                     await websocket.send_text("ping")
-                except:
+                except Exception as e:
+                    logger.debug("Non-critical: %s", e)
                     break
 
     except WebSocketDisconnect:
@@ -171,8 +172,8 @@ async def broadcast_violation(violation_data: Dict[str, Any]):
     try:
         from web.backend.core.automation_engine import engine as automation_engine
         asyncio.create_task(automation_engine.handle_event("violation.detected", violation_data))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
 
 
 async def broadcast_connection(connection_data: Dict[str, Any]):
@@ -197,8 +198,8 @@ async def broadcast_node_status(node_data: Dict[str, Any]):
         is_connected = node_data.get("is_connected", node_data.get("isConnected", True))
         if not is_connected:
             asyncio.create_task(automation_engine.handle_event("node.went_offline", node_data))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
 
 
 async def broadcast_user_update(user_data: Dict[str, Any]):
@@ -215,8 +216,8 @@ async def broadcast_user_update(user_data: Dict[str, Any]):
         used = user_data.get("used_traffic_bytes", user_data.get("usedTrafficBytes", 0))
         if limit and used and used > limit:
             asyncio.create_task(automation_engine.handle_event("user.traffic_exceeded", user_data))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
 
 
 async def broadcast_activity(activity_type: str, message: str, details: Dict[str, Any] = None):
