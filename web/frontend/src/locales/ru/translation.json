@@ -775,6 +775,19 @@
     "sort": {
       "label": "Сортировка"
     },
+    "terminal": {
+      "title": "Терминал",
+      "connect": "Подключить",
+      "disconnect": "Отключить",
+      "connecting": "Подключение",
+      "connected": "Подключено",
+      "disconnected": "Отключено",
+      "sessionTimeout": "Сессия завершена по таймауту",
+      "fullscreen": "Полный экран",
+      "agentNotConnected": "Агент не подключён",
+      "permissionDenied": "Нет доступа",
+      "closeConfirm": "Закрыть сессию терминала?"
+    },
     "toast": {
       "restarted": "Нода перезапущена",
       "enabled": "Нода включена",

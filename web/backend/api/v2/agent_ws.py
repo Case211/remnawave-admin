@@ -199,6 +199,22 @@ async def _handle_script_output(node_uuid: str, msg: dict) -> None:
 
 
 async def _handle_pty_output(node_uuid: str, msg: dict) -> None:
-    """Forward PTY output to the frontend terminal WebSocket (placeholder)."""
-    # Will be implemented in Iteration 3 (Web Terminal)
-    pass
+    """Forward PTY output to the frontend terminal WebSocket."""
+    try:
+        from web.backend.core.terminal_sessions import terminal_manager
+
+        session_id = msg.get("session_id")
+        data_b64 = msg.get("data", "")
+
+        if not session_id or not data_b64:
+            return
+
+        session = terminal_manager.get_session(session_id)
+        if not session or not session.browser_ws:
+            return
+
+        session.touch()
+        # Forward base64-encoded output directly to browser
+        await session.browser_ws.send_text(data_b64)
+    except Exception as e:
+        logger.debug("Failed to forward pty output: %s", e)

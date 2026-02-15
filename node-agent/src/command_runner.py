@@ -195,22 +195,85 @@ class CommandRunner:
             })
 
     async def _shell_session(self, msg: dict) -> None:
-        """Start a shell session (placeholder for Iteration 3)."""
-        await self._send({
-            "type": "command_result",
-            "command_id": msg.get("command_id"),
-            "status": "error",
-            "output": "Shell sessions not yet implemented",
-            "exit_code": -1,
-        })
+        """Start or close a shell session."""
+        from .pty_provider import pty_manager
+
+        session_id = msg.get("session_id", "")
+        action = msg.get("action", "open")
+        command_id = msg.get("command_id")
+
+        if action == "close":
+            await pty_manager.close_session(session_id)
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "completed",
+                "output": "Session closed",
+                "exit_code": 0,
+            })
+            return
+
+        # Open new PTY session
+        cols = msg.get("cols", 80)
+        rows = msg.get("rows", 24)
+
+        async def on_pty_output(sid: str, data: bytes) -> None:
+            """Forward PTY output to backend via WS."""
+            import base64
+            await self._send({
+                "type": "pty_output",
+                "session_id": sid,
+                "data": base64.b64encode(data).decode("ascii"),
+            })
+
+        try:
+            await pty_manager.create_session(session_id, on_pty_output, cols, rows)
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "completed",
+                "output": "Session opened",
+                "exit_code": 0,
+            })
+        except Exception as e:
+            logger.exception("Failed to start PTY session: %s", e)
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "error",
+                "output": str(e),
+                "exit_code": -1,
+            })
 
     async def _pty_input(self, msg: dict) -> None:
-        """Handle PTY input (placeholder for Iteration 3)."""
-        pass
+        """Forward keyboard input to PTY."""
+        import base64
+        from .pty_provider import pty_manager
+
+        session_id = msg.get("session_id", "")
+        data_b64 = msg.get("data", "")
+
+        session = pty_manager.get_session(session_id)
+        if not session:
+            return
+
+        try:
+            data = base64.b64decode(data_b64)
+            await session.write(data)
+        except Exception as e:
+            logger.debug("PTY input error: %s", e)
 
     async def _pty_resize(self, msg: dict) -> None:
-        """Handle PTY resize (placeholder for Iteration 3)."""
-        pass
+        """Resize terminal."""
+        from .pty_provider import pty_manager
+
+        session_id = msg.get("session_id", "")
+        cols = msg.get("cols", 80)
+        rows = msg.get("rows", 24)
+
+        session = pty_manager.get_session(session_id)
+        if session:
+            session.resize(cols, rows)
 
     async def _service_status(self, msg: dict) -> None:
         """Get service status information."""

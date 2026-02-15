@@ -38,6 +38,7 @@ from web.backend.api.v2 import notifications as notifications_api
 from web.backend.api.v2 import mailserver as mailserver_api
 from web.backend.api.v2 import agent_ws as agent_ws_api
 from web.backend.api.v2 import fleet as fleet_api
+from web.backend.api.v2 import terminal as terminal_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -397,6 +398,7 @@ def create_app() -> FastAPI:
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
     app.include_router(agent_ws_api.router, prefix="/api/v2", tags=["agent-ws"])
     app.include_router(fleet_api.router, prefix="/api/v2/fleet", tags=["fleet"])
+    app.include_router(terminal_api.router, prefix="/api/v2", tags=["terminal"])
 
     # Health check endpoint
     @app.get("/api/v2/health", tags=["health"])

@@ -775,6 +775,19 @@
     "sort": {
       "label": "Sort"
     },
+    "terminal": {
+      "title": "Terminal",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "connecting": "Connecting",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "sessionTimeout": "Session timed out",
+      "fullscreen": "Fullscreen",
+      "agentNotConnected": "Agent not connected",
+      "permissionDenied": "Permission denied",
+      "closeConfirm": "Close terminal session?"
+    },
     "toast": {
       "restarted": "Node restarted",
       "enabled": "Node enabled",
