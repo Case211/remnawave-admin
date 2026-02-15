@@ -16,9 +16,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 config = context.config
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# existing_loggers=False prevents fileConfig from disabling loggers
+# created by the application (e.g. the bot logger) — otherwise migration
+# errors would be silently swallowed.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Get database URL from environment
 database_url = os.getenv("DATABASE_URL")
@@ -64,22 +66,32 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
+    If the caller passed a connection via config.attributes['connection'],
+    reuse it (single-connection mode used by main.py).  Otherwise create
+    our own engine — this path is used by `alembic upgrade head` from CLI.
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connection = config.attributes.get("connection")
 
-    with connectable.connect() as connection:
+    if connection is not None:
+        # Reuse the connection provided by main.py — no extra engine needed.
         context.configure(
             connection=connection, target_metadata=target_metadata
         )
-
         with context.begin_transaction():
             context.run_migrations()
+    else:
+        # CLI / standalone: create our own engine.
+        connectable = engine_from_config(
+            config.get_section(config.config_ini_section, {}),
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
+        )
+        with connectable.connect() as conn:
+            context.configure(
+                connection=conn, target_metadata=target_metadata
+            )
+            with context.begin_transaction():
+                context.run_migrations()
 
 
 if context.is_offline_mode():

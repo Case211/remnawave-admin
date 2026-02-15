@@ -25,6 +25,8 @@ async def run_migrations() -> bool:
     Запускает миграции Alembic автоматически при старте.
     Возвращает True если миграции успешны или не требуются.
     """
+    import traceback as _tb
+
     try:
         from alembic.config import Config
         from alembic import command
@@ -32,76 +34,93 @@ async def run_migrations() -> bool:
         from alembic.script import ScriptDirectory
         from sqlalchemy import create_engine
         import asyncio
-        
+
         settings = get_settings()
         if not settings.database_url:
             return True
-        
-        db_url = str(settings.database_url).replace("postgresql://", "postgresql+psycopg2://")
-        
+
+        # Normalise URL to sync psycopg2 driver
+        raw_url = str(settings.database_url)
+        if raw_url.startswith("postgresql+asyncpg://"):
+            db_url = raw_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+        elif raw_url.startswith("postgresql://"):
+            db_url = raw_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        else:
+            db_url = raw_url
+
         def _run_migrations_sync():
             """Синхронная функция для запуска в executor."""
             engine = None
             try:
-                # Создаём engine с явным управлением пулом соединений
                 engine = create_engine(
                     db_url,
-                    pool_pre_ping=True,  # Проверка соединений перед использованием
-                    pool_recycle=3600,    # Переиспользование соединений каждый час
+                    pool_pre_ping=True,
+                    pool_recycle=3600,
                 )
-                
+
                 # Проверяем текущую версию
                 with engine.connect() as conn:
-                    context = MigrationContext.configure(conn)
-                    current_rev = context.get_current_revision()
-                
+                    ctx = MigrationContext.configure(conn)
+                    current_rev = ctx.get_current_revision()
+
                 # Настраиваем Alembic
                 alembic_cfg = Config("alembic.ini")
                 alembic_cfg.set_main_option("sqlalchemy.url", db_url)
-                
+
                 # Получаем head revision
                 script = ScriptDirectory.from_config(alembic_cfg)
                 head_rev = script.get_current_head()
-                
+
                 logger.info("📊 DB revision: current=%s, head=%s", current_rev or "None", head_rev)
 
                 if current_rev == head_rev:
                     logger.info("✅ Database up to date")
                     return True
 
-                logger.info("🔄 Running migrations...")
-                # Используем наш engine для миграций, чтобы контролировать соединения
+                # Показываем список миграций, которые будут применены
+                pending = []
+                for rev in script.iterate_revisions(head_rev, current_rev):
+                    if rev.revision != current_rev:
+                        pending.append(rev.revision)
+                pending.reverse()
+                logger.info(
+                    "🔄 Running %d migration(s): %s",
+                    len(pending),
+                    " → ".join(pending),
+                )
+
+                # Одно соединение — используем его и в main.py, и в env.py
+                # (env.py проверяет config.attributes['connection'])
                 connection = engine.connect()
                 try:
                     alembic_cfg.attributes['connection'] = connection
                     command.upgrade(alembic_cfg, "head")
                     connection.commit()
-                except Exception as e:
+                except Exception:
                     connection.rollback()
                     raise
                 finally:
                     connection.close()
-                
+
                 # Проверяем новую версию
                 with engine.connect() as conn:
-                    context = MigrationContext.configure(conn)
-                    new_rev = context.get_current_revision()
+                    ctx = MigrationContext.configure(conn)
+                    new_rev = ctx.get_current_revision()
                     logger.info("✅ Migrated: %s → %s", current_rev or "None", new_rev)
-                
+
                 return True
-                
+
             finally:
-                # Явно закрываем все соединения и освобождаем ресурсы
                 if engine:
-                    engine.dispose(close=True)  # close=True закрывает все соединения в пуле
-        
-        # Запускаем в thread pool чтобы не блокировать event loop
+                    engine.dispose(close=True)
+
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, _run_migrations_sync)
         return result
 
     except Exception as e:
         logger.error("❌ Migration failed: %s", e)
+        logger.error("❌ Migration traceback:\n%s", _tb.format_exc())
         return False
 
 
@@ -196,7 +215,13 @@ async def main() -> None:
     db_connected = False
     if settings.database_enabled:
         logger.info("🗄️ Connecting to PostgreSQL...")
-        await run_migrations()
+        migrations_ok = await run_migrations()
+        if not migrations_ok:
+            logger.warning(
+                "⚠️ Database migrations failed — the application will start "
+                "but features requiring newer schema may not work. "
+                "Check the migration traceback above for details."
+            )
         db_connected = await db_service.connect()
         if db_connected:
             logger.info("✅ Database connected")
