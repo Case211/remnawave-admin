@@ -51,6 +51,9 @@ class WebSettings(BaseSettings):
     api_base_url: str = Field(..., alias="API_BASE_URL")
     api_token: Optional[str] = Field(default=None, alias="API_TOKEN")
 
+    # Redis (optional, for distributed caching and rate limiting)
+    redis_url: Optional[str] = Field(default=None, alias="REDIS_URL")
+
     # Admins list (shared with bot)
     admins_raw: str = Field(default="", alias="ADMINS")
 

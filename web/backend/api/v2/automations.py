@@ -212,13 +212,17 @@ async def activate_template(
 async def get_logs(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
+    cursor: Optional[int] = Query(None, description="Cursor (last seen log ID) for efficient pagination"),
     rule_id: Optional[int] = None,
     result: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     admin: AdminUser = Depends(require_permission("automation", "view")),
 ):
-    """Get automation trigger log with filtering."""
+    """Get automation trigger log with filtering.
+
+    Supports cursor-based pagination: ?cursor=123&per_page=50
+    """
     items, total = await get_automation_logs(
         page=page,
         per_page=per_page,
@@ -226,15 +230,28 @@ async def get_logs(
         result=result,
         date_from=date_from,
         date_to=date_to,
+        cursor=cursor,
     )
     pages = max(1, math.ceil(total / per_page))
-    return AutomationLogResponse(
+
+    # Compute next_cursor
+    next_cursor = None
+    if items and len(items) == per_page:
+        last_id = items[-1].get("id")
+        if last_id is not None:
+            next_cursor = last_id
+
+    resp = AutomationLogResponse(
         items=[_log_to_entry(r) for r in items],
         total=total,
         page=page,
         per_page=per_page,
         pages=pages,
     )
+    # Attach next_cursor to response dict (extend model response)
+    result_dict = resp.model_dump()
+    result_dict["next_cursor"] = next_cursor
+    return result_dict
 
 
 # ── Get single rule ──────────────────────────────────────────
