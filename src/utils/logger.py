@@ -136,9 +136,11 @@ def setup_logger() -> logging.Logger:
     root.setLevel(logging.DEBUG)  # root ловит всё, фильтрация на хэндлерах
 
     # === Console handler ===
-    # При DEBUG уровне показываем всё в консоли, иначе только WARNING+
+    # Console always shows messages at the configured level (INFO by default).
+    # In Docker the console IS the primary log output, so suppressing INFO
+    # makes migrations, API checks, and startup logs invisible.
     console = logging.StreamHandler()
-    console.setLevel(logging.DEBUG if level <= logging.DEBUG else logging.WARNING)
+    console.setLevel(level)
     console.setFormatter(CleanFormatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT))
     root.addHandler(console)
 
@@ -242,8 +244,8 @@ def set_log_level(level_name: str) -> None:
 
     for handler in root.handlers:
         if isinstance(handler, logging.StreamHandler) and not isinstance(handler, RotatingFileHandler):
-            # Console handler: при DEBUG показываем всё, иначе WARNING+
-            handler.setLevel(logging.DEBUG if level <= logging.DEBUG else logging.WARNING)
+            # Console handler: always matches the configured level
+            handler.setLevel(level)
         elif isinstance(handler, RotatingFileHandler):
             # Файловые хэндлеры: DEBUG файл = DEBUG, остальные оставляем как есть
             base = os.path.basename(handler.baseFilename)

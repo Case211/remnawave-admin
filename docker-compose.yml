@@ -135,7 +135,8 @@ services:
     networks:
       - remnawave-network
     depends_on:
-      - web-backend
+      web-backend:
+        condition: service_healthy
     profiles:
       - web
 

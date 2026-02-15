@@ -186,7 +186,22 @@
     "authorizedOnly": "For authorized administrators only",
     "passwordRequirements": "Create an admin account to get started",
     "donationNote": "This is an open-source project. The author would be grateful for any support, as a lot of time, effort and resources were invested in its development.",
-    "donationTitle": "Support the project"
+    "donationTitle": "Support the project",
+    "passwordLogin": "Password login",
+    "authorization": "Authorization",
+    "initialSetup": "Initial setup",
+    "createAdmin": "Create administrator",
+    "setupWelcome": "Welcome! Create the first administrator account to start using the panel.",
+    "creatingAccount": "Creating account...",
+    "createAccount": "Create account",
+    "confirmPassword": "Confirm password",
+    "repeatPassword": "Repeat password",
+    "passwordsDoNotMatch": "Passwords do not match",
+    "passwordsMatch": "Passwords match",
+    "generatePassword": "Generate password",
+    "generator": "Generate",
+    "copyPassword": "Copy password",
+    "minChars": "At least {{count}} characters"
   },
   "dashboard": {
     "title": "Dashboard",

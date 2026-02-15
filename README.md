@@ -1,4 +1,4 @@
-# 🤖 Remnawave Admin Bot
+# 🤖 Remnawave Admin Web + Bot
 
 <div align="center">
 
