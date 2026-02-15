@@ -58,3 +58,16 @@ class Settings(BaseSettings):
     # Автоматический перезапуск: максимальное время работы (часы).
     # 0 = без ограничения. Docker restart: unless-stopped перезапустит контейнер.
     max_uptime_hours: float = 6.0
+
+    # ── Agent v2: Command channel ─────────────────────────────
+    # Включить WebSocket канал для приёма команд от бэкенда
+    command_enabled: bool = False  # AGENT_COMMAND_ENABLED
+
+    # WebSocket URL для подключения к бэкенду (если отличается от collector_url)
+    # Пример: wss://admin.example.com
+    # По умолчанию берётся из collector_url
+    ws_url: str = ""  # AGENT_WS_URL
+
+    # Секретный ключ для проверки HMAC подписи команд
+    # Должен совпадать с WEB_SECRET_KEY на бэкенде
+    ws_secret_key: str = ""  # AGENT_WS_SECRET_KEY

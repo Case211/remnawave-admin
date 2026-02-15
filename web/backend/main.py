@@ -36,6 +36,10 @@ from web.backend.api.v2 import advanced_analytics
 from web.backend.api.v2 import automations as automations_api
 from web.backend.api.v2 import notifications as notifications_api
 from web.backend.api.v2 import mailserver as mailserver_api
+from web.backend.api.v2 import agent_ws as agent_ws_api
+from web.backend.api.v2 import fleet as fleet_api
+from web.backend.api.v2 import terminal as terminal_api
+from web.backend.api.v2 import scripts as scripts_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -393,6 +397,10 @@ def create_app() -> FastAPI:
     app.include_router(notifications_api.router, prefix="/api/v2", tags=["notifications"])
     app.include_router(mailserver_api.router, prefix="/api/v2", tags=["mailserver"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
+    app.include_router(agent_ws_api.router, prefix="/api/v2", tags=["agent-ws"])
+    app.include_router(fleet_api.router, prefix="/api/v2/fleet", tags=["fleet"])
+    app.include_router(terminal_api.router, prefix="/api/v2", tags=["terminal"])
+    app.include_router(scripts_api.router, prefix="/api/v2/fleet", tags=["scripts"])
 
     # Health check endpoint
     @app.get("/api/v2/health", tags=["health"])
