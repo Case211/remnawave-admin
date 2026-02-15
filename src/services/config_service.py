@@ -98,11 +98,52 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "value_type": "string",
         "category": "general",
         "display_name": "Уровень логирования",
-        "description": "Уровень детализации логов (требует перезапуск)",
+        "description": "Уровень детализации логов (применяется мгновенно)",
         "default_value": "INFO",
         "env_var_name": "LOG_LEVEL",
         "options": ["DEBUG", "INFO", "WARNING", "ERROR"],
         "sort_order": 2,
+    },
+    {
+        "key": "log_max_size_mb",
+        "value_type": "int",
+        "category": "general",
+        "display_name": "Макс. размер лог-файла (MB)",
+        "description": "Максимальный размер одного лог-файла перед ротацией",
+        "default_value": "10",
+        "sort_order": 3,
+    },
+    {
+        "key": "log_backup_count",
+        "value_type": "int",
+        "category": "general",
+        "display_name": "Кол-во бэкапов логов",
+        "description": "Количество сжатых бэкап-файлов при ротации",
+        "default_value": "5",
+        "sort_order": 4,
+    },
+
+    {
+        "key": "panel_name",
+        "value_type": "string",
+        "category": "general",
+        "display_name": "Название панели",
+        "description": "Отображаемое название проекта в боковом меню (рядом с логотипом)",
+        "default_value": "",
+        "sort_order": 6,
+    },
+
+    # === GEOIP ===
+    {
+        "key": "maxmind_source",
+        "value_type": "string",
+        "category": "general",
+        "display_name": "Источник MaxMind GeoIP",
+        "description": "auto — GitHub (ltsdev/maxmind) затем MaxMind; github — только GitHub (без ключа); maxmind — только официальный (нужен ключ)",
+        "default_value": "auto",
+        "env_var_name": "MAXMIND_SOURCE",
+        "options": ["auto", "github", "maxmind"],
+        "sort_order": 5,
     },
 
     # === NOTIFICATIONS ===

@@ -25,6 +25,7 @@
     "total": "Total",
     "online": "Online",
     "offline": "Offline",
+    "noConnection": "No internet connection",
     "disabled": "Disabled",
     "active": "Active",
     "enabled": "Enabled",
@@ -115,7 +116,9 @@
   },
   "sidebar": {
     "expand": "Expand",
-    "collapse": "Collapse"
+    "collapse": "Collapse",
+    "telegramChat": "Telegram Chat",
+    "support": "Support the author"
   },
   "commandPalette": {
     "placeholder": "Search pages, users, actions...",
@@ -179,7 +182,11 @@
       "upper": "Uppercase (A-Z)",
       "digit": "Digit (0-9)",
       "special": "Special character"
-    }
+    },
+    "authorizedOnly": "For authorized administrators only",
+    "passwordRequirements": "Create an admin account to get started",
+    "donationNote": "This is an open-source project. The author would be grateful for any support, as a lot of time, effort and resources were invested in its development.",
+    "donationTitle": "Support the project"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1235,6 +1242,11 @@
     "topUsersByTraffic": "Top users by traffic",
     "trafficByNode": "Traffic by node",
     "userGrowth": "User growth",
+    "tabs": {
+      "geography": "Geography",
+      "topUsers": "Top Users",
+      "trends": "Trends"
+    },
     "periods": {
       "day": "Day",
       "week": "Week",
@@ -1250,7 +1262,19 @@
       "tooltip": "Geographic distribution of user connections by city",
       "noData": "No geolocation data",
       "noDataHint": "Data will appear after first connections",
-      "connections": "{{count}} connections"
+      "connections": "{{count}} connections",
+      "users": "Users",
+      "more": "more",
+      "uniqueUsers": "{{count}} users",
+      "andMore": "+{{count}} more",
+      "usersByCity": "Users by city",
+      "cityColumn": "City",
+      "userColumn": "User",
+      "connectionsColumn": "Connections",
+      "uniqueUsersColumn": "Users",
+      "searchPlaceholder": "Search by city or user...",
+      "citiesCount": "{{count}} cities",
+      "totalConnections": "{{count}} conn."
     },
     "topUsers": {
       "title": "Top users by traffic",
@@ -1888,6 +1912,10 @@
       "reports_topic_id": {
         "label": "Reports topic",
         "description": "Topic ID for sending reports (0 = main chat)"
+      },
+      "panel_name": {
+        "label": "Panel name",
+        "description": "Project name displayed in the sidebar (next to the logo)"
       }
     },
     "inDb": "In DB",

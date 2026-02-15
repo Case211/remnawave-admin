@@ -63,17 +63,59 @@ async def get_geo_connections(
                 since,
             )
 
-            cities = [
-                {
+            cities = []
+
+            # Fetch all users grouped by city in a single query (avoids N+1)
+            city_users_map: dict = {}
+            try:
+                # host() extracts IP without CIDR mask (/32) from INET columns
+                user_city_rows = await conn.fetch(
+                    """
+                    SELECT im.city, im.country_name,
+                           u.username, u.uuid::text as uuid, u.status,
+                           COUNT(uc.id) as connections
+                    FROM user_connections uc
+                    JOIN ip_metadata im
+                        ON host(uc.ip_address) = TRIM(im.ip_address::text)
+                    JOIN users u ON uc.user_uuid = u.uuid
+                    WHERE im.city IS NOT NULL AND im.country_name IS NOT NULL
+                    GROUP BY im.city, im.country_name, u.uuid, u.username, u.status
+                    ORDER BY im.city, connections DESC
+                    """,
+                )
+                for ur in user_city_rows:
+                    key = (ur["city"], ur["country_name"])
+                    if key not in city_users_map:
+                        city_users_map[key] = []
+                    if len(city_users_map[key]) < 15:
+                        city_users_map[key].append({
+                            "username": ur["username"],
+                            "uuid": ur["uuid"],
+                            "status": ur["status"],
+                            "connections": ur["connections"],
+                        })
+                logger.info(
+                    "Geo users: found %d user-city pairs across %d cities",
+                    len(user_city_rows),
+                    len(city_users_map),
+                )
+            except Exception as exc:
+                logger.warning("Failed to fetch users by city: %s", exc)
+
+            for r in city_rows:
+                if r["latitude"] is None or r["longitude"] is None:
+                    continue
+                key = (r["city"], r["country_name"])
+                users = city_users_map.get(key, [])
+                cities.append({
                     "city": r["city"],
                     "country": r["country_name"],
-                    "lat": float(r["latitude"]) if r["latitude"] else None,
-                    "lon": float(r["longitude"]) if r["longitude"] else None,
+                    "lat": float(r["latitude"]),
+                    "lon": float(r["longitude"]),
                     "count": r["count"],
-                }
-                for r in city_rows
-                if r["latitude"] is not None and r["longitude"] is not None
-            ]
+                    "unique_users": len(users),
+                    "users": users,
+                })
 
             return {"countries": countries, "cities": cities}
 

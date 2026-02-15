@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
   Search,
@@ -8,9 +8,9 @@ import {
   ArrowDown,
   Trash2,
   Terminal,
-  Globe,
   Database,
   Bot,
+  ShieldAlert,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -39,8 +39,7 @@ const LOG_FILE_LABELS: Record<string, { label: string; icon: typeof Terminal }> 
   web_warning: { label: 'Web Backend (WARNING+)', icon: Terminal },
   bot_info: { label: 'Telegram Bot (INFO)', icon: Bot },
   bot_warning: { label: 'Telegram Bot (WARNING+)', icon: Bot },
-  nginx_access: { label: 'Nginx (Access)', icon: Globe },
-  nginx_error: { label: 'Nginx (Error)', icon: Globe },
+  violations: { label: 'Violations', icon: ShieldAlert },
   postgres: { label: 'PostgreSQL', icon: Database },
 }
 
@@ -65,6 +64,7 @@ function formatFileSize(bytes: number): string {
 
 export default function SystemLogs() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   // useFormatters available for locale-aware formatting
   const [selectedFile, setSelectedFile] = useState('web_info')
   const [levelFilter, setLevelFilter] = useState<string>('all')
@@ -193,6 +193,9 @@ export default function SystemLogs() {
 
   const handleClear = () => {
     setStreamLines([])
+    queryClient.setQueryData(['logs-tail', selectedFile, levelFilter, searchText], (old: unknown) =>
+      old ? { ...(old as Record<string, unknown>), items: [] } : old,
+    )
   }
 
   // Combine initial data with streamed lines

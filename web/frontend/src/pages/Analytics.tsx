@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, memo, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -11,6 +11,8 @@ import {
   BarChart3,
   Wifi,
   WifiOff,
+  ChevronDown,
+  Search,
 } from 'lucide-react'
 import {
   AreaChart,
@@ -21,11 +23,13 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
-import type { GeoCity, TopUser } from '@/api/advancedAnalytics'
+import type { GeoCity, GeoCityUser, TopUser } from '@/api/advancedAnalytics'
+
+// Lazy-load the map component (leaflet + react-leaflet + clustering)
+const LazyGeoMap = lazy(() => import('@/components/LazyGeoMap'))
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -36,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Input } from '@/components/ui/input'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
 import { useChartTheme } from '@/lib/useChartTheme'
@@ -116,6 +121,7 @@ function TrendTooltip({ active, payload, label, metric }: TrendTooltipProps) {
 
 function GeoMapCard() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [geoPeriod, setGeoPeriod] = useState('7d')
   const chart = useChartTheme()
 
@@ -180,42 +186,21 @@ function GeoMapCard() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Map */}
+            {/* Map — lazy-loaded with clustering */}
             <div className="h-[400px] rounded-lg overflow-hidden border border-dark-500/50">
-              <MapContainer
-                center={center}
-                zoom={3}
-                className="h-full w-full"
-                style={{ background: chart.mapBackground }}
-                attributionControl={false}
-              >
-                <TileLayer
-                  url={chart.mapTileUrl}
+              <Suspense fallback={
+                <div className="h-full flex items-center justify-center bg-dark-700/50">
+                  <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+                </div>
+              }>
+                <LazyGeoMap
+                  cities={cities}
+                  maxCount={maxCount}
+                  center={center}
+                  mapBackground={chart.mapBackground}
+                  mapTileUrl={chart.mapTileUrl}
                 />
-                {cities.map((city: GeoCity, idx: number) => {
-                  const radius = Math.max(5, Math.min(25, (city.count / maxCount) * 25))
-                  return (
-                    <CircleMarker
-                      key={`${city.city}-${city.country}-${idx}`}
-                      center={[city.lat, city.lon]}
-                      radius={radius}
-                      pathOptions={{
-                        color: '#06b6d4',
-                        fillColor: '#22d3ee',
-                        fillOpacity: 0.4,
-                        weight: 1,
-                      }}
-                    >
-                      <Popup>
-                        <div className="text-xs">
-                          <p className="font-medium">{city.city}, {city.country}</p>
-                          <p>{t('analytics.geo.connections', { count: city.count })}</p>
-                        </div>
-                      </Popup>
-                    </CircleMarker>
-                  )
-                })}
-              </MapContainer>
+              </Suspense>
             </div>
 
             {/* Top countries */}
@@ -243,10 +228,182 @@ function GeoMapCard() {
                 })}
               </div>
             )}
+
+            {/* Users by city — collapsible list */}
+            {cities.length > 0 && (
+              <CityUsersList cities={cities} navigate={navigate} />
+            )}
           </div>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+// ── City Users List (collapsible) ────────────────────────────────
+
+function CityUsersList({
+  cities,
+  navigate,
+}: {
+  cities: GeoCity[]
+  navigate: (path: string) => void
+}) {
+  const { t } = useTranslation()
+  const [search, setSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggle = useCallback((key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return cities
+    const q = search.toLowerCase()
+    return cities.filter((c) => {
+      if (c.city.toLowerCase().includes(q)) return true
+      if (c.country.toLowerCase().includes(q)) return true
+      return (c.users || []).some(
+        (u) => (u.username || '').toLowerCase().includes(q),
+      )
+    })
+  }, [cities, search])
+
+  return (
+    <div>
+      {/* Header + search */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2">
+          <MapPin className="w-4 h-4 text-cyan-400" />
+          <h3 className="text-sm font-medium text-white">
+            {t('analytics.geo.usersByCity')}
+          </h3>
+          <span className="text-xs text-muted-foreground">
+            {t('analytics.geo.citiesCount', { count: filtered.length })}
+          </span>
+        </div>
+        <div className="relative w-full max-w-[240px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('analytics.geo.searchPlaceholder')}
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
+      </div>
+
+      {/* City list */}
+      <div className="space-y-1">
+        {filtered.map((city) => {
+          const key = `${city.city}-${city.country}`
+          const isOpen = expanded.has(key)
+          const users = city.users || []
+          const hasUsers = users.length > 0
+
+          return (
+            <div
+              key={key}
+              className="rounded-lg border border-dark-500/30 overflow-hidden"
+            >
+              {/* City header row */}
+              <button
+                onClick={() => hasUsers && toggle(key)}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors',
+                  hasUsers
+                    ? 'hover:bg-dark-600/30 cursor-pointer'
+                    : 'cursor-default',
+                  isOpen && 'bg-dark-600/20',
+                )}
+              >
+                <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="text-sm font-medium text-white flex-1 truncate">
+                  {city.city}, {city.country}
+                </span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-muted-foreground">
+                    {t('analytics.geo.totalConnections', { count: city.count.toLocaleString() })}
+                  </span>
+                  {city.unique_users > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {city.unique_users} {t('analytics.geo.users').toLowerCase()}
+                    </Badge>
+                  )}
+                  {hasUsers && (
+                    <ChevronDown
+                      className={cn(
+                        'w-4 h-4 text-muted-foreground transition-transform duration-200',
+                        isOpen && 'rotate-180',
+                      )}
+                    />
+                  )}
+                </div>
+              </button>
+
+              {/* Expanded user rows */}
+              {isOpen && hasUsers && (
+                <div className="border-t border-dark-500/30">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">{t('analytics.geo.userColumn')}</TableHead>
+                        <TableHead className="text-xs hidden sm:table-cell">{t('analytics.topUsers.status')}</TableHead>
+                        <TableHead className="text-xs text-right">{t('analytics.geo.connectionsColumn')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((user: GeoCityUser) => (
+                        <TableRow
+                          key={user.uuid}
+                          className="cursor-pointer hover:bg-dark-600/30"
+                          onClick={() => navigate(`/users/${user.uuid}`)}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-1.5">
+                              <Users className="w-3 h-3 shrink-0 text-muted-foreground" />
+                              <span className="font-medium text-sm text-white truncate max-w-[200px]">
+                                {user.username || user.uuid.slice(0, 8)}
+                              </span>
+                              <ArrowUpRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            <Badge
+                              variant="secondary"
+                              className={cn('text-xs', STATUS_COLORS[user.status] || '')}
+                            >
+                              {t(`analytics.status.${user.status}`, { defaultValue: user.status })}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {user.connections.toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {city.unique_users > users.length && (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center">
+                            <span className="text-[11px] text-muted-foreground">
+                              {t('analytics.geo.andMore', { count: city.unique_users - users.length })}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -391,7 +548,7 @@ function OnlineIndicator({ onlineAt }: { onlineAt: string | null }) {
   return <WifiOff className="w-3.5 h-3.5 text-dark-300 shrink-0" />
 }
 
-function UsageBar({ percent }: { percent: number }) {
+const UsageBar = memo(function UsageBar({ percent }: { percent: number }) {
   const color =
     percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-yellow-500' : 'bg-cyan-500'
   return (
@@ -407,7 +564,7 @@ function UsageBar({ percent }: { percent: number }) {
       </span>
     </div>
   )
-}
+})
 
 // ── Trends Card ─────────────────────────────────────────────────
 
@@ -569,14 +726,34 @@ export default function Analytics() {
         </p>
       </div>
 
-      {/* Geo Map */}
-      <GeoMapCard />
+      <Tabs defaultValue="geography" className="w-full">
+        <TabsList>
+          <TabsTrigger value="geography" className="gap-1.5">
+            <Globe className="w-4 h-4" />
+            {t('analytics.tabs.geography')}
+          </TabsTrigger>
+          <TabsTrigger value="users" className="gap-1.5">
+            <BarChart3 className="w-4 h-4" />
+            {t('analytics.tabs.topUsers')}
+          </TabsTrigger>
+          <TabsTrigger value="trends" className="gap-1.5">
+            <TrendingUp className="w-4 h-4" />
+            {t('analytics.tabs.trends')}
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Two-column layout for top users and trends */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <TopUsersCard />
-        <TrendsCard />
-      </div>
+        <TabsContent value="geography" className="space-y-6">
+          <GeoMapCard />
+        </TabsContent>
+
+        <TabsContent value="users">
+          <TopUsersCard />
+        </TabsContent>
+
+        <TabsContent value="trends">
+          <TrendsCard />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

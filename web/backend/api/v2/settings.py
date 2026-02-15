@@ -74,6 +74,19 @@ def _effective_value(db_value: Optional[str], env_var_name: Optional[str], defau
     return default_value
 
 
+@router.get("/panel-name")
+async def get_panel_name(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Get panel name for sidebar display. Requires only authentication."""
+    try:
+        from src.services.config_service import config_service
+        val = config_service.get("panel_name")
+        return {"panel_name": val or ""}
+    except Exception:
+        return {"panel_name": ""}
+
+
 @router.get("", response_model=ConfigByCategoryResponse)
 async def get_all_settings(
     admin: AdminUser = Depends(require_permission("settings", "view")),
@@ -170,6 +183,35 @@ async def get_all_settings(
         return ConfigByCategoryResponse(categories={})
 
 
+def _apply_dynamic_setting(key: str, value: str) -> None:
+    """Apply setting changes that take effect immediately (no restart)."""
+    try:
+        if key == "log_level":
+            from src.utils.logger import set_log_level
+            set_log_level(value)
+
+        elif key == "log_max_size_mb":
+            from src.utils.logger import set_rotation_params
+            try:
+                from src.services.config_service import config_service
+                backup = int(config_service.get("log_backup_count", "5"))
+            except Exception:
+                backup = 5
+            set_rotation_params(int(value) * 1024 * 1024, backup)
+
+        elif key == "log_backup_count":
+            from src.utils.logger import set_rotation_params
+            try:
+                from src.services.config_service import config_service
+                max_mb = int(config_service.get("log_max_size_mb", "10"))
+            except Exception:
+                max_mb = 10
+            set_rotation_params(max_mb * 1024 * 1024, int(value))
+
+    except Exception as e:
+        logger.warning("Failed to apply dynamic setting %s=%s: %s", key, value, e)
+
+
 @router.put("/{key}")
 async def update_setting(
     key: str,
@@ -210,6 +252,9 @@ async def update_setting(
                 config_service._cache[key].updated_at = datetime.utcnow()
         except Exception:
             pass
+
+        # Apply dynamic settings immediately (no restart needed)
+        _apply_dynamic_setting(key, data.value)
 
         return {"status": "ok", "key": key}
 
@@ -405,3 +450,76 @@ async def trigger_sync(
     except Exception as e:
         logger.error("Error triggering sync for %s: %s", entity, e)
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
+# ── MaxMind GeoIP management ─────────────────────────────────────
+
+@router.get("/maxmind/status")
+async def get_maxmind_status(
+    admin: AdminUser = Depends(require_permission("settings", "view")),
+):
+    """Get MaxMind GeoIP database status."""
+    try:
+        from src.services.maxmind_updater import get_db_status
+
+        city_path = os.environ.get("MAXMIND_CITY_DB", "/app/geoip/GeoLite2-City.mmdb")
+        asn_path = os.environ.get("MAXMIND_ASN_DB", "/app/geoip/GeoLite2-ASN.mmdb")
+        source = os.environ.get("MAXMIND_SOURCE", "auto")
+        has_key = bool(os.environ.get("MAXMIND_LICENSE_KEY"))
+
+        # Check if GeoIP service has MaxMind loaded
+        maxmind_active = False
+        try:
+            from src.services.geoip import get_geoip_service
+            geoip = get_geoip_service()
+            maxmind_active = geoip.has_maxmind
+        except Exception:
+            pass
+
+        return {
+            "source": source,
+            "has_license_key": has_key,
+            "maxmind_active": maxmind_active,
+            "city": get_db_status(city_path),
+            "asn": get_db_status(asn_path),
+        }
+    except Exception as e:
+        logger.error("Error getting MaxMind status: %s", e)
+        return {"error": str(e)}
+
+
+@router.post("/maxmind/update")
+async def trigger_maxmind_update(
+    admin: AdminUser = Depends(require_permission("settings", "edit")),
+):
+    """Force update MaxMind GeoIP databases."""
+    try:
+        from src.services.maxmind_updater import ensure_databases
+
+        maxmind_key = os.environ.get("MAXMIND_LICENSE_KEY")
+        source = os.environ.get("MAXMIND_SOURCE", "auto")
+        city_path = os.environ.get("MAXMIND_CITY_DB", "/app/geoip/GeoLite2-City.mmdb")
+        asn_path = os.environ.get("MAXMIND_ASN_DB", "/app/geoip/GeoLite2-ASN.mmdb")
+
+        results = await ensure_databases(
+            license_key=maxmind_key,
+            city_path=city_path,
+            asn_path=asn_path,
+            force=True,
+            source=source,
+        )
+
+        # Reinitialize GeoIP service with new databases
+        try:
+            from src.services.geoip import get_geoip_service
+            geoip = get_geoip_service()
+            geoip._close_maxmind()
+            geoip._init_maxmind()
+        except Exception as e:
+            logger.warning("Failed to reinitialize GeoIP after update: %s", e)
+
+        return {"success": True, "results": results}
+
+    except Exception as e:
+        logger.error("Error updating MaxMind databases: %s", e)
+        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")

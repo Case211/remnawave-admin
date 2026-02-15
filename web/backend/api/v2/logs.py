@@ -21,8 +21,7 @@ LOG_DIR = Path("/app/logs")
 
 # ── Available log files ──────────────────────────────────────────
 # key -> (filename, format)
-# format: "admin" = standard admin log, "nginx_error" = nginx error log,
-#          "postgres" = PostgreSQL log, "raw" = plain text lines
+# format: "admin" = standard admin log, "postgres" = PostgreSQL log
 
 LOG_FILES = {
     # Web Backend
@@ -31,9 +30,8 @@ LOG_FILES = {
     # Telegram Bot
     "bot_info": ("bot_INFO.log", "admin"),
     "bot_warning": ("bot_WARNING.log", "admin"),
-    # Nginx
-    "nginx_access": ("nginx_access.log", "admin"),
-    "nginx_error": ("nginx_error.log", "nginx_error"),
+    # Violations (IP analysis, scoring, detection)
+    "violations": ("violations.log", "admin"),
     # PostgreSQL
     "postgres": ("postgres.log", "postgres"),
 }
@@ -41,14 +39,9 @@ LOG_FILES = {
 # ── Log line parsers ─────────────────────────────────────────────
 
 # Admin format: 2026-02-10 14:30:00 | INFO    | web        | Message
-# Also handles ISO timestamps from nginx: 2026-02-10T14:30:00+03:00 | ...
+# Also handles ISO timestamps: 2026-02-10T14:30:00+03:00 | ...
 ADMIN_PATTERN = re.compile(
     r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})(?:[+\-]\d{2}:\d{2})?\s*\|\s*(\w+)\s*\|\s*([\w\.-]+)\s*\|\s*(.*)$"
-)
-
-# Nginx error format: 2026/02/10 14:30:00 [error] 1234#0: *1 message
-NGINX_ERROR_PATTERN = re.compile(
-    r"^(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})\s+\[(\w+)\]\s+\d+#\d+:\s*(?:\*\d+\s+)?(.*)$"
 )
 
 # PostgreSQL format: 2026-02-10 14:30:00.123 UTC [1] LOG:  message
@@ -66,24 +59,6 @@ def _parse_admin_line(line: str) -> Optional[dict]:
             "level": m.group(2).strip(),
             "source": m.group(3).strip(),
             "message": m.group(4).strip(),
-        }
-    return None
-
-
-def _parse_nginx_error_line(line: str) -> Optional[dict]:
-    m = NGINX_ERROR_PATTERN.match(line)
-    if m:
-        ts = m.group(1).replace("/", "-")
-        level = m.group(2).upper()
-        if level == "WARN":
-            level = "WARNING"
-        elif level == "EMERG" or level == "ALERT" or level == "CRIT":
-            level = "ERROR"
-        return {
-            "timestamp": ts,
-            "level": level,
-            "source": "nginx",
-            "message": m.group(3).strip(),
         }
     return None
 
@@ -116,8 +91,6 @@ def _parse_log_line(line: str, fmt: str = "admin") -> Optional[dict]:
     parsed = None
     if fmt == "admin":
         parsed = _parse_admin_line(line)
-    elif fmt == "nginx_error":
-        parsed = _parse_nginx_error_line(line)
     elif fmt == "postgres":
         parsed = _parse_pg_line(line)
 
