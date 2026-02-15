@@ -44,10 +44,10 @@ class AdminAccountBase(BaseModel):
     username: str = Field(..., min_length=1, max_length=100)
     telegram_id: Optional[int] = None
     role_id: int
-    max_users: Optional[int] = None
-    max_traffic_gb: Optional[int] = None
-    max_nodes: Optional[int] = None
-    max_hosts: Optional[int] = None
+    max_users: Optional[int] = Field(None, ge=0)
+    max_traffic_gb: Optional[int] = Field(None, ge=0)
+    max_nodes: Optional[int] = Field(None, ge=0)
+    max_hosts: Optional[int] = Field(None, ge=0)
 
 
 class AdminAccountCreate(AdminAccountBase):
@@ -58,10 +58,10 @@ class AdminAccountUpdate(BaseModel):
     username: Optional[str] = Field(None, min_length=1, max_length=100)
     telegram_id: Optional[int] = None
     role_id: Optional[int] = None
-    max_users: Optional[int] = None
-    max_traffic_gb: Optional[int] = None
-    max_nodes: Optional[int] = None
-    max_hosts: Optional[int] = None
+    max_users: Optional[int] = Field(None, ge=0)
+    max_traffic_gb: Optional[int] = Field(None, ge=0)
+    max_nodes: Optional[int] = Field(None, ge=0)
+    max_hosts: Optional[int] = Field(None, ge=0)
     is_active: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=8, max_length=200)
 

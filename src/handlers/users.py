@@ -324,7 +324,7 @@ async def _handle_user_search_input(message: Message, ctx: dict) -> None:
     # Удаляем из PENDING_INPUT только после начала обработки
     # Это гарантирует, что сообщение не будет удалено до обработки
     if user_id in PENDING_INPUT:
-        PENDING_INPUT.pop(user_id)
+        PENDING_INPUT.pop(user_id, None)
     
     if not query:
         await _send_clean_message(message, _("user.search_prompt"), reply_markup=nav_keyboard(NavTarget.USERS_MENU))

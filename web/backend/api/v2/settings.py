@@ -7,13 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, AdminUser, require_permission
+from web.backend.api.deps import get_current_admin, AdminUser, require_permission, get_client_ip
+from web.backend.core.rbac import write_audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,8 @@ async def get_panel_name(
         from src.services.config_service import config_service
         val = config_service.get("panel_name")
         return {"panel_name": val or ""}
-    except Exception:
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
         return {"panel_name": ""}
 
 
@@ -125,8 +127,8 @@ async def get_all_settings(
             if row_dict.get('options_json'):
                 try:
                     options = json.loads(row_dict['options_json'])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Non-critical: %s", e)
 
             db_value = row_dict.get('value')
             env_var_name = row_dict.get('env_var_name')
@@ -195,7 +197,8 @@ def _apply_dynamic_setting(key: str, value: str) -> None:
             try:
                 from src.services.config_service import config_service
                 backup = int(config_service.get("log_backup_count", "5"))
-            except Exception:
+            except Exception as e:
+                logger.debug("Non-critical: %s", e)
                 backup = 5
             set_rotation_params(int(value) * 1024 * 1024, backup)
 
@@ -204,7 +207,8 @@ def _apply_dynamic_setting(key: str, value: str) -> None:
             try:
                 from src.services.config_service import config_service
                 max_mb = int(config_service.get("log_max_size_mb", "10"))
-            except Exception:
+            except Exception as e:
+                logger.debug("Non-critical: %s", e)
                 max_mb = 10
             set_rotation_params(max_mb * 1024 * 1024, int(value))
 
@@ -216,6 +220,7 @@ def _apply_dynamic_setting(key: str, value: str) -> None:
 async def update_setting(
     key: str,
     data: ConfigUpdateRequest,
+    request: Request,
     admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Update a single setting value. DB takes priority over .env."""
@@ -250,11 +255,21 @@ async def update_setting(
             if key in config_service._cache:
                 config_service._cache[key].value = data.value
                 config_service._cache[key].updated_at = datetime.utcnow()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
 
         # Apply dynamic settings immediately (no restart needed)
         _apply_dynamic_setting(key, data.value)
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="setting.update",
+            resource="settings",
+            resource_id=key,
+            details=json.dumps({"key": key, "value": data.value if not row['is_secret'] else "***"}),
+            ip_address=get_client_ip(request),
+        )
 
         return {"status": "ok", "key": key}
 
@@ -268,6 +283,7 @@ async def update_setting(
 @router.delete("/{key}")
 async def reset_setting(
     key: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Reset a setting to default (remove DB value, fallback to .env or default)."""
@@ -301,8 +317,18 @@ async def reset_setting(
             if key in config_service._cache:
                 config_service._cache[key].value = None
                 config_service._cache[key].updated_at = datetime.utcnow()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="setting.reset",
+            resource="settings",
+            resource_id=key,
+            details=json.dumps({"key": key}),
+            ip_address=get_client_ip(request),
+        )
 
         return {"status": "ok", "key": key, "reset": True}
 
@@ -333,6 +359,7 @@ async def get_ip_whitelist(
 @router.put("/ip-whitelist")
 async def update_ip_whitelist(
     data: ConfigUpdateRequest,
+    request: Request,
     admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Update IP whitelist. Value is a comma-separated list of IPs/CIDRs.
@@ -365,6 +392,16 @@ async def update_ip_whitelist(
     object.__setattr__(settings, "allowed_ips", new_value)
 
     logger.info("IP whitelist updated by %s: %s", admin.username, new_value or "(disabled)")
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="setting.ip_whitelist_update",
+        resource="settings",
+        resource_id="ip_whitelist",
+        details=json.dumps({"ips": entries, "enabled": len(entries) > 0}),
+        ip_address=get_client_ip(request),
+    )
 
     return {"status": "ok", "ips": entries, "enabled": len(entries) > 0}
 
@@ -405,6 +442,7 @@ async def get_sync_status(
 @router.post("/sync/{entity}")
 async def trigger_sync(
     entity: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Trigger manual sync for a specific entity type."""
@@ -443,6 +481,17 @@ async def trigger_sync(
             if not method:
                 raise HTTPException(status_code=400, detail=f"Unknown entity: {entity}")
             result = await method()
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="setting.sync_trigger",
+            resource="settings",
+            resource_id=entity,
+            details=json.dumps({"entity": entity}),
+            ip_address=get_client_ip(request),
+        )
+
         return {"success": True, "entity": entity, "result": result}
 
     except HTTPException:
@@ -473,8 +522,8 @@ async def get_maxmind_status(
             from src.services.geoip import get_geoip_service
             geoip = get_geoip_service()
             maxmind_active = geoip.has_maxmind
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Non-critical: %s", e)
 
         return {
             "source": source,
@@ -490,6 +539,7 @@ async def get_maxmind_status(
 
 @router.post("/maxmind/update")
 async def trigger_maxmind_update(
+    request: Request,
     admin: AdminUser = Depends(require_permission("settings", "edit")),
 ):
     """Force update MaxMind GeoIP databases."""
@@ -517,6 +567,16 @@ async def trigger_maxmind_update(
             geoip._init_maxmind()
         except Exception as e:
             logger.warning("Failed to reinitialize GeoIP after update: %s", e)
+
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="setting.maxmind_update",
+            resource="settings",
+            resource_id="maxmind",
+            details=json.dumps({"source": source}),
+            ip_address=get_client_ip(request),
+        )
 
         return {"success": True, "results": results}
 

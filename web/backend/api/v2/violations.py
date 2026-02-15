@@ -1,10 +1,12 @@
 """Violations API endpoints."""
+import json
 import logging
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from typing import Optional
 from datetime import datetime, timedelta
 
-from web.backend.api.deps import get_current_admin, get_db, AdminUser, require_permission
+from web.backend.api.deps import get_current_admin, get_db, AdminUser, require_permission, get_client_ip
+from web.backend.core.rbac import write_audit_log
 from web.backend.schemas.violation import (
     ViolationListItem,
     ViolationListResponse,
@@ -401,6 +403,7 @@ async def get_violation(
 async def resolve_violation(
     violation_id: int,
     data: ResolveViolationRequest,
+    request: Request,
     admin: AdminUser = Depends(require_permission("violations", "resolve")),
     db: DatabaseService = Depends(get_db),
 ):
@@ -420,6 +423,16 @@ async def resolve_violation(
 
     if not success:
         raise HTTPException(status_code=404, detail="Violation not found or update failed")
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violation.resolve",
+        resource="violations",
+        resource_id=str(violation_id),
+        details=json.dumps({"action": data.action}),
+        ip_address=get_client_ip(request),
+    )
 
     return {"status": "ok", "action": data.action}
 

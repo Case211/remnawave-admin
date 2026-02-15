@@ -30,6 +30,14 @@ app = FastAPI(title="Remnawave Admin Webhook")
 # Подключаем Collector API роутер
 app.include_router(collector_router)
 
+# One-time warning about missing webhook secret
+_settings = get_settings()
+if not _settings.webhook_secret:
+    logger.warning(
+        "WEBHOOK_SECRET is not set. Webhook will only accept requests from localhost (127.0.0.1, ::1). "
+        "Set WEBHOOK_SECRET for production use."
+    )
+
 
 @app.middleware("http")
 async def catch_invalid_requests(request: Request, call_next):
@@ -96,9 +104,16 @@ def verify_webhook_secret(request: Request, body: bytes) -> bool:
     """
     settings = get_settings()
     if not settings.webhook_secret:
-        # Если секрет не настроен, разрешаем все запросы (для разработки)
-        logger.warning("WEBHOOK_SECRET not set, allowing all requests")
-        return True
+        # Если секрет не настроен, разрешаем только запросы с localhost
+        client_host = request.client.host if request.client else None
+        if client_host in ("127.0.0.1", "::1", "localhost"):
+            logger.debug("WEBHOOK_SECRET not set, accepting request from localhost (%s)", client_host)
+            return True
+        logger.warning(
+            "WEBHOOK_SECRET not set and request is from non-localhost address (%s), rejecting",
+            client_host,
+        )
+        return False
     
     # Официальный заголовок от панели Remnawave
     # Проверяем разные варианты имени заголовка (FastAPI нормализует к нижнему регистру)
@@ -142,15 +157,10 @@ def verify_webhook_secret(request: Request, body: bytes) -> bool:
             return True
         else:
             logger.error(
-                "Webhook signature mismatch! "
-                "Ожидаемая длина: %d, Полученная длина: %d. "
-                "Первые 10 символов полученного ключа: '%s'. "
-                "Первые 10 символов ожидаемого HMAC: '%s'. "
+                "Webhook signature mismatch (lengths: received=%d, expected=%d). "
                 "Убедитесь, что WEBHOOK_SECRET в боте совпадает с WEBHOOK_SECRET_HEADER в панели Remnawave.",
-                len(expected_signature) if expected_signature else 0,
                 len(signature) if signature else 0,
-                signature[:10] if signature else "None",
-                expected_signature[:10] if expected_signature else "None"
+                len(expected_signature) if expected_signature else 0,
             )
             return False
     except Exception as exc:

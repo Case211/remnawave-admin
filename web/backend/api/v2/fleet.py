@@ -3,15 +3,17 @@
 Provides endpoints for listing agent v2 connection status
 and querying the command execution log.
 """
+import json
 import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
-from web.backend.api.deps import AdminUser, require_permission
+from web.backend.api.deps import AdminUser, get_client_ip, require_permission
 from web.backend.core.agent_manager import agent_manager
 from web.backend.core.rate_limit import limiter, RATE_ANALYTICS
+from web.backend.core.rbac import write_audit_log
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

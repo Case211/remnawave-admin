@@ -77,8 +77,8 @@ async def _resolve_password_admin(username: str, settings) -> AdminUser:
             )
     except HTTPException:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("RBAC lookup failed: %s", e)
 
     # 2. Fallback: .env
     if settings.admin_login and username.lower() == settings.admin_login.lower():
@@ -133,8 +133,8 @@ async def _resolve_telegram_admin(subject: str, payload: dict, settings) -> Admi
             )
     except HTTPException:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("RBAC lookup failed: %s", e)
 
     # 2. Fallback: ADMINS env var (legacy — treat as superadmin)
     if telegram_id in settings.admins:
@@ -233,6 +233,10 @@ def require_permission(resource: str, action: str):
         # Legacy fallback: admins without account_id (from ADMINS env or .env creds)
         # are treated as superadmin with full access
         if admin.account_id is None:
+            logger.warning(
+                "Legacy admin bypass for '%s' — consider migrating to RBAC account",
+                admin.username,
+            )
             return admin
 
         # Superadmin role bypasses all checks
@@ -258,6 +262,10 @@ def require_superadmin():
     async def _check(admin: AdminUser = Depends(get_current_admin)) -> AdminUser:
         if admin.account_id is None:
             # Legacy admin from ADMINS env — treated as superadmin
+            logger.warning(
+                "Legacy admin bypass for '%s' — consider migrating to RBAC account",
+                admin.username,
+            )
             return admin
         if admin.role != "superadmin":
             raise HTTPException(

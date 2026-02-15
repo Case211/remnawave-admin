@@ -1,4 +1,5 @@
 """Users API endpoints."""
+import json
 import logging
 import sys
 from datetime import datetime, timedelta, timezone
@@ -10,8 +11,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Request
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, require_permission, require_quota, AdminUser
+from web.backend.api.deps import get_current_admin, require_permission, require_quota, AdminUser, get_client_ip
 from web.backend.core.api_helper import fetch_users_from_api
+from web.backend.core.rbac import write_audit_log
 from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate, HwidDevice
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 from web.backend.schemas.bulk import BulkUserRequest, BulkOperationResult, BulkOperationError
@@ -450,6 +452,7 @@ async def get_user(
 
 @router.post("", response_model=UserDetail)
 async def create_user(
+    request: Request,
     data: UserCreate,
     admin: AdminUser = Depends(require_permission("users", "create")),
     _quota: None = Depends(require_quota("users")),
@@ -494,6 +497,18 @@ async def create_user(
             from web.backend.core.rbac import increment_usage_counter
             await increment_usage_counter(admin.account_id, "users_created")
 
+        # Audit
+        user_uuid = user.get('uuid', '') if isinstance(user, dict) else ''
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="user.create",
+            resource="users",
+            resource_id=str(user_uuid),
+            details=json.dumps({"username": data.username}),
+            ip_address=get_client_ip(request),
+        )
+
         return UserDetail(**_ensure_snake_case(user))
 
     except ImportError:
@@ -505,6 +520,7 @@ async def create_user(
 @router.patch("/{user_uuid}", response_model=UserDetail)
 async def update_user(
     user_uuid: str,
+    request: Request,
     data: UserUpdate,
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
@@ -529,6 +545,17 @@ async def update_user(
         resp = await api_client.update_user(user_uuid, **camel_data)
         user = resp.get('response', resp) if isinstance(resp, dict) else resp
 
+        # Audit
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="user.update",
+            resource="users",
+            resource_id=user_uuid,
+            details=json.dumps({k: str(v) for k, v in update_data.items()}),
+            ip_address=get_client_ip(request),
+        )
+
         return UserDetail(**_ensure_snake_case(user))
 
     except ImportError:
@@ -540,6 +567,7 @@ async def update_user(
 @router.delete("/{user_uuid}", response_model=SuccessResponse)
 async def delete_user(
     user_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("users", "delete")),
 ):
     """Delete a user."""
@@ -553,8 +581,19 @@ async def delete_user(
             from src.services.database import db_service
             if db_service.is_connected:
                 await db_service.delete_user(user_uuid)
-        except Exception:
-            pass  # non-critical, sync will reconcile
+        except Exception as e:
+            logger.debug("Non-critical: failed to delete user from local DB: %s", e)
+
+        # Audit
+        await write_audit_log(
+            admin_id=admin.account_id,
+            admin_username=admin.username,
+            action="user.delete",
+            resource="users",
+            resource_id=user_uuid,
+            details=json.dumps({"user_uuid": user_uuid}),
+            ip_address=get_client_ip(request),
+        )
 
         return SuccessResponse(message="User deleted")
 
@@ -567,6 +606,7 @@ async def delete_user(
 @router.post("/{user_uuid}/enable", response_model=SuccessResponse)
 async def enable_user(
     user_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Enable a disabled user."""
@@ -574,6 +614,13 @@ async def enable_user(
         from src.services.api_client import api_client
 
         await api_client.enable_user(user_uuid)
+
+        await write_audit_log(
+            admin_id=admin.account_id, admin_username=admin.username,
+            action="user.enable", resource="users", resource_id=user_uuid,
+            details=json.dumps({"user_uuid": user_uuid}),
+            ip_address=get_client_ip(request),
+        )
         return SuccessResponse(message="User enabled")
 
     except ImportError:
@@ -585,6 +632,7 @@ async def enable_user(
 @router.post("/{user_uuid}/disable", response_model=SuccessResponse)
 async def disable_user(
     user_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Disable a user."""
@@ -592,6 +640,13 @@ async def disable_user(
         from src.services.api_client import api_client
 
         await api_client.disable_user(user_uuid)
+
+        await write_audit_log(
+            admin_id=admin.account_id, admin_username=admin.username,
+            action="user.disable", resource="users", resource_id=user_uuid,
+            details=json.dumps({"user_uuid": user_uuid}),
+            ip_address=get_client_ip(request),
+        )
         return SuccessResponse(message="User disabled")
 
     except ImportError:
@@ -603,6 +658,7 @@ async def disable_user(
 @router.post("/{user_uuid}/reset-traffic", response_model=SuccessResponse)
 async def reset_user_traffic(
     user_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Reset user's traffic usage."""
@@ -610,6 +666,13 @@ async def reset_user_traffic(
         from src.services.api_client import api_client
 
         await api_client.reset_user_traffic(user_uuid)
+
+        await write_audit_log(
+            admin_id=admin.account_id, admin_username=admin.username,
+            action="user.reset_traffic", resource="users", resource_id=user_uuid,
+            details=json.dumps({"user_uuid": user_uuid}),
+            ip_address=get_client_ip(request),
+        )
         return SuccessResponse(message="Traffic reset")
 
     except ImportError:
@@ -621,6 +684,7 @@ async def reset_user_traffic(
 @router.post("/{user_uuid}/revoke", response_model=SuccessResponse)
 async def revoke_user_subscription(
     user_uuid: str,
+    request: Request,
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Revoke user's subscription (regenerate subscription UUID)."""
@@ -628,6 +692,13 @@ async def revoke_user_subscription(
         from src.services.api_client import api_client
 
         await api_client.revoke_user_subscription(user_uuid)
+
+        await write_audit_log(
+            admin_id=admin.account_id, admin_username=admin.username,
+            action="user.revoke", resource="users", resource_id=user_uuid,
+            details=json.dumps({"user_uuid": user_uuid}),
+            ip_address=get_client_ip(request),
+        )
         return SuccessResponse(message="Subscription revoked")
 
     except ImportError:
@@ -871,6 +942,13 @@ async def bulk_enable_users(
         except Exception as e:
             failed += 1
             errors.append(BulkOperationError(uuid=uuid, error=str(e)))
+
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="user.bulk_enable", resource="users", resource_id="bulk",
+        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+        ip_address=get_client_ip(request),
+    )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
 
 
@@ -895,6 +973,13 @@ async def bulk_disable_users(
         except Exception as e:
             failed += 1
             errors.append(BulkOperationError(uuid=uuid, error=str(e)))
+
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="user.bulk_disable", resource="users", resource_id="bulk",
+        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+        ip_address=get_client_ip(request),
+    )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
 
 
@@ -919,12 +1004,19 @@ async def bulk_delete_users(
                 from src.services.database import db_service
                 if db_service.is_connected:
                     await db_service.delete_user(uuid)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Non-critical: failed to delete user from local DB: %s", e)
             success += 1
         except Exception as e:
             failed += 1
             errors.append(BulkOperationError(uuid=uuid, error=str(e)))
+
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="user.bulk_delete", resource="users", resource_id="bulk",
+        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+        ip_address=get_client_ip(request),
+    )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
 
 
@@ -949,6 +1041,13 @@ async def bulk_reset_traffic(
         except Exception as e:
             failed += 1
             errors.append(BulkOperationError(uuid=uuid, error=str(e)))
+
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="user.bulk_reset_traffic", resource="users", resource_id="bulk",
+        details=json.dumps({"count": len(body.uuids), "success": success, "failed": failed}),
+        ip_address=get_client_ip(request),
+    )
     return BulkOperationResult(success=success, failed=failed, errors=errors)
 
 

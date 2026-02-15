@@ -627,7 +627,7 @@ async def _handle_subs_search_input(message: Message, ctx: dict) -> None:
     
     # Удаляем из PENDING_INPUT только после начала обработки
     if user_id in PENDING_INPUT:
-        PENDING_INPUT.pop(user_id)
+        PENDING_INPUT.pop(user_id, None)
     
     if not query:
         await _send_clean_message(message, _("sub.search_prompt"), reply_markup=nav_keyboard(NavTarget.SUBS_LIST))

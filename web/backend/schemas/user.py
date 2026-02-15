@@ -2,7 +2,7 @@
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class UserBase(BaseModel):
@@ -88,7 +88,7 @@ class UserCreate(BaseModel):
     """Create user request."""
     model_config = ConfigDict(extra='ignore')
 
-    username: str
+    username: str = Field(..., min_length=1, max_length=100)
     expire_at: Optional[datetime] = None
     status: Optional[str] = None
     short_uuid: Optional[str] = None

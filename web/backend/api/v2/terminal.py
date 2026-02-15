@@ -33,7 +33,8 @@ async def _get_agent_token(node_uuid: str) -> str | None:
                 node_uuid,
             )
             return row["agent_token"] if row and row["agent_token"] else None
-    except Exception:
+    except Exception as e:
+        logger.debug("Non-critical: %s", e)
         return None
 
 
@@ -134,7 +135,8 @@ async def terminal_websocket(
                 # Send ping to keep alive
                 try:
                     await websocket.send_json({"type": "ping"})
-                except Exception:
+                except Exception as e:
+                    logger.debug("Non-critical: %s", e)
                     break
                 continue
 
@@ -169,8 +171,8 @@ async def terminal_websocket(
                         continue
 
                     continue
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as e:
+                    logger.debug("Non-critical: %s", e)
 
             # Otherwise, treat as base64-encoded keyboard input
             input_payload = {

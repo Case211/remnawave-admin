@@ -724,6 +724,7 @@ export default function Dashboard() {
     queryKey: ['overview'],
     queryFn: fetchOverview,
     refetchInterval: 30000,
+    staleTime: 15_000,
     enabled: canViewAnalytics,
   })
 
@@ -731,6 +732,7 @@ export default function Dashboard() {
     queryKey: ['violationStats'],
     queryFn: fetchViolationStats,
     refetchInterval: 30000,
+    staleTime: 15_000,
     enabled: canViewViolations,
   })
 
@@ -738,6 +740,7 @@ export default function Dashboard() {
     queryKey: ['trafficStats'],
     queryFn: fetchTrafficStats,
     refetchInterval: 60000,
+    staleTime: 30_000,
     enabled: canViewAnalytics,
   })
 
@@ -745,20 +748,23 @@ export default function Dashboard() {
     queryKey: ['timeseries', trafficPeriod, 'traffic'],
     queryFn: () => fetchTimeseries(trafficPeriod, 'traffic'),
     refetchInterval: 60000,
+    staleTime: 30_000,
     enabled: canViewAnalytics,
   })
 
-  const { data: connectionsSeries } = useQuery({
+  const { data: connectionsSeries, isLoading: connectionsLoading } = useQuery({
     queryKey: ['timeseries', '24h', 'connections'],
     queryFn: () => fetchTimeseries('24h', 'connections'),
     refetchInterval: 30000,
+    staleTime: 15_000,
     enabled: canViewAnalytics,
   })
 
-  const { data: deltas } = useQuery({
+  const { data: deltas, isLoading: deltasLoading } = useQuery({
     queryKey: ['deltas'],
     queryFn: fetchDeltas,
     refetchInterval: 120000,
+    staleTime: 60_000,
     enabled: canViewAnalytics,
   })
 
@@ -766,6 +772,7 @@ export default function Dashboard() {
     queryKey: ['systemComponents'],
     queryFn: fetchSystemComponents,
     refetchInterval: 60000,
+    staleTime: 30_000,
     enabled: canViewAnalytics,
   })
 
@@ -839,7 +846,7 @@ export default function Dashboard() {
       }))
     : []
 
-  const isLoading = overviewLoading || violationsLoading || trafficLoading
+  const isLoading = overviewLoading || violationsLoading || trafficLoading || timeseriesLoading || connectionsLoading || deltasLoading || componentsLoading
 
   return (
     <div className="space-y-6">
