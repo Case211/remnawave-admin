@@ -72,7 +72,7 @@ _INDEXES = [
 def upgrade() -> None:
     for idx_name, table, columns in _INDEXES:
         op.execute(
-            f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {idx_name} "
+            f"CREATE INDEX IF NOT EXISTS {idx_name} "
             f"ON {table} ({columns})"
         )
 
