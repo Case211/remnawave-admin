@@ -9,9 +9,12 @@ import {
   ArrowDown,
   Wifi,
   WifiOff,
+  Terminal,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import CircularGauge from './CircularGauge'
@@ -131,10 +134,11 @@ interface NodeCardProps {
   node: FleetNode
   isExpanded: boolean
   onToggle: () => void
+  onTerminalConnect?: () => void
   children?: React.ReactNode
 }
 
-export default function NodeCard({ node, isExpanded, onToggle, children }: NodeCardProps) {
+export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect, children }: NodeCardProps) {
   const { t } = useTranslation()
   const { formatBytes } = useFormatters()
   const status = getNodeStatus(node)
@@ -157,13 +161,30 @@ export default function NodeCard({ node, isExpanded, onToggle, children }: NodeC
       onClick={onToggle}
     >
       <CardContent className="p-4">
-        {/* Row 1: Name + Status */}
+        {/* Row 1: Name + Status + Terminal */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-white font-semibold truncate text-sm">{node.name}</span>
             <span className="text-dark-400 text-xs font-mono hidden sm:inline">{node.address}</span>
           </div>
-          <StatusBadge status={status} />
+          <div className="flex items-center gap-2">
+            {onTerminalConnect && status === 'online' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-dark-200 hover:text-green-400"
+                    onClick={(e) => { e.stopPropagation(); onTerminalConnect() }}
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('fleet.terminal.connect')}</TooltipContent>
+              </Tooltip>
+            )}
+            <StatusBadge status={status} />
+          </div>
         </div>
 
         {/* Row 2: System specs */}

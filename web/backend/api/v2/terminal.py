@@ -59,12 +59,11 @@ async def terminal_websocket(
         return
 
     # Check permission: fleet.terminal
-    has_perm = False
-    if admin.permissions:
-        for p in admin.permissions:
-            if p.get("resource") == "fleet" and p.get("action") == "terminal":
-                has_perm = True
-                break
+    has_perm = (
+        admin.account_id is None  # legacy env admin = superadmin
+        or admin.role == "superadmin"
+        or admin.has_permission("fleet", "terminal")
+    )
     if not has_perm:
         await websocket.accept()
         await websocket.send_json({"type": "error", "message": "Permission denied: fleet.terminal required"})

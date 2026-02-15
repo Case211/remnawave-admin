@@ -26,7 +26,6 @@ import {
   MemoryStick,
   Users,
   ArrowUpDown,
-  Terminal,
   FileCode,
   History,
 } from 'lucide-react'
@@ -582,12 +581,6 @@ export default function Fleet() {
             <Activity className="w-3.5 h-3.5" />
             {t('fleet.tabs.monitoring')}
           </TabsTrigger>
-          {canTerminal && (
-            <TabsTrigger value="terminal" className="text-xs gap-1.5">
-              <Terminal className="w-3.5 h-3.5" />
-              {t('fleet.tabs.terminal')}
-            </TabsTrigger>
-          )}
           {canScripts && (
             <TabsTrigger value="scripts" className="text-xs gap-1.5">
               <FileCode className="w-3.5 h-3.5" />
@@ -694,6 +687,7 @@ export default function Fleet() {
                   node={node}
                   isExpanded={expandedUuid === node.uuid}
                   onToggle={() => setExpandedUuid(expandedUuid === node.uuid ? null : node.uuid)}
+                  onTerminalConnect={canTerminal ? () => setTerminalNode({ uuid: node.uuid, name: node.name }) : undefined}
                 >
                   <NodeDetailPanel
                     node={node}
@@ -708,47 +702,6 @@ export default function Fleet() {
             </div>
           )}
         </TabsContent>
-
-        {/* ── Terminal Tab ─────────────────────────────────────────── */}
-        {canTerminal && (
-          <TabsContent value="terminal" className="mt-4">
-            <div className="space-y-4">
-              <p className="text-sm text-dark-200">{t('fleet.tabs.terminalDesc')}</p>
-              {fleet?.nodes && fleet.nodes.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {fleet.nodes
-                    .filter((n) => n.is_connected && !n.is_disabled)
-                    .map((node) => (
-                      <Card key={node.uuid} className="hover:border-dark-200/40 transition-colors">
-                        <CardContent className="p-4 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-white">{node.name}</p>
-                            <p className="text-xs text-dark-300 font-mono">{node.address}</p>
-                          </div>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="gap-1.5"
-                            onClick={() => setTerminalNode({ uuid: node.uuid, name: node.name })}
-                          >
-                            <Terminal className="w-3.5 h-3.5" />
-                            {t('fleet.terminal.connect')}
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ))}
-                </div>
-              ) : (
-                <Card>
-                  <CardContent className="p-8 text-center">
-                    <Terminal className="w-8 h-8 text-dark-300 mx-auto mb-2 opacity-40" />
-                    <p className="text-dark-300 text-sm">{t('fleet.terminal.agentNotConnected')}</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-        )}
 
         {/* ── Scripts Tab ──────────────────────────────────────────── */}
         {canScripts && (
