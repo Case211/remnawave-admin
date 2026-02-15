@@ -138,25 +138,28 @@ class AgentWSClient:
 
     async def _listen_loop(self, ws: WebSocketClientProtocol, shutdown_event: asyncio.Event) -> None:
         """Listen for messages from backend."""
-        async for raw in ws:
-            if shutdown_event.is_set():
-                return
+        try:
+            async for raw in ws:
+                if shutdown_event.is_set():
+                    return
 
-            try:
-                msg = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
-                continue
-
-            msg_type = msg.get("type")
-
-            if msg_type == "pong":
-                continue  # Keepalive response
-
-            if self._command_handler:
                 try:
-                    await self._command_handler(msg)
-                except Exception as e:
-                    logger.exception("Command handler error: %s", e)
+                    msg = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+                msg_type = msg.get("type")
+
+                if msg_type == "pong":
+                    continue  # Keepalive response
+
+                if self._command_handler:
+                    try:
+                        await self._command_handler(msg)
+                    except Exception as e:
+                        logger.exception("Command handler error: %s", e)
+        except Exception as e:
+            logger.warning("WS listen loop ended: %s", e)
 
     async def send(self, message: dict) -> bool:
         """Send a message to the backend."""
