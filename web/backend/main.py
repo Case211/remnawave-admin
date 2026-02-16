@@ -223,9 +223,17 @@ def _setup_web_logging():
         backend_h.setFormatter(json_formatter)
         root.addHandler(backend_h)
 
-        # NOTE: violations.log is written by the bot process (shared/logger.py)
-        # which has the proper ViolationLogFilter. The web backend must NOT add its
-        # own handler for the same file.
+        # Violations log (фильтрует записи о нарушениях из collector, violation_detector и т.д.)
+        from shared.logger import ViolationLogFilter
+        violations_path = _LOG_DIR / "violations.log"
+        violations_h = _CompressedRotatingFileHandler(
+            str(violations_path),
+            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
+        )
+        violations_h.setLevel(logging.DEBUG)
+        violations_h.setFormatter(json_formatter)
+        violations_h.addFilter(ViolationLogFilter())
+        root.addHandler(violations_h)
 
         _verify_ok = backend_path.exists() and os.access(backend_path, os.W_OK)
         print(
