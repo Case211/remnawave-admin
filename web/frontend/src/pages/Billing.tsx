@@ -180,8 +180,8 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
   }
 
   // Calculate total stats
-  const totalAmount = history.reduce((sum, record) => sum + record.amount, 0)
-  const totalRecords = history.length
+  const totalAmount = Array.isArray(history) ? history.reduce((sum, record) => sum + record.amount, 0) : 0
+  const totalRecords = Array.isArray(history) ? history.length : 0
 
   // ── Billing Nodes ───────────────────────────────────────────────
   const [nodeDialogOpen, setNodeDialogOpen] = useState(false)

@@ -38,7 +38,7 @@ export interface BillingNodesResponse {
 export const billingApi = {
   getProviders: async (): Promise<Provider[]> => {
     const { data } = await client.get('/billing/providers')
-    return data.items || []
+    return Array.isArray(data?.items) ? data.items : []
   },
   createProvider: async (payload: { name: string; faviconLink?: string; loginUrl?: string }) => {
     const { data } = await client.post('/billing/providers', payload)
@@ -53,7 +53,7 @@ export const billingApi = {
   },
   getHistory: async (): Promise<BillingRecord[]> => {
     const { data } = await client.get('/billing/history')
-    return data.items || []
+    return Array.isArray(data?.items) ? data.items : []
   },
   createRecord: async (payload: { providerUuid: string; amount: number; billedAt: string }) => {
     const { data } = await client.post('/billing/history', payload)
