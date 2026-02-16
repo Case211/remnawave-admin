@@ -755,8 +755,8 @@
       "lastSeen": "Последняя связь",
       "metrics": "Метрики",
       "disk": "Диск",
-      "download": "Download",
-      "upload": "Upload",
+      "download": "Загрузка",
+      "upload": "Отдача",
       "trafficAndActions": "Трафик и действия",
       "trafficToday": "Сегодня",
       "trafficTotal": "Всего",
@@ -852,7 +852,8 @@
     "toast": {
       "restarted": "Нода перезапущена",
       "enabled": "Нода включена",
-      "disabled": "Нода отключена"
+      "disabled": "Нода отключена",
+      "error": "Ошибка операции"
     }
   },
   "hosts": {

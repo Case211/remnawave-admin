@@ -334,7 +334,7 @@ function AgentTokenModal({
       toast.success(t('nodes.toast.tokenGenerated'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
     },
   })
 
@@ -348,7 +348,7 @@ function AgentTokenModal({
       toast.success(t('nodes.toast.tokenRevoked'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
     },
   })
 
@@ -739,47 +739,50 @@ export default function Nodes() {
   })
 
   // Mutations
+  /** Find node name by UUID for descriptive toasts */
+  const getNodeName = (uuid: string) => nodes.find((n) => n.uuid === uuid)?.name || uuid.slice(0, 8)
+
   const restartNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/restart`),
-    onSuccess: () => {
+    onSuccess: (_data, uuid) => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success(t('nodes.toast.restarted'))
+      toast.success(t('nodes.toast.restarted'), { description: getNodeName(uuid) })
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
     },
   })
 
   const enableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/enable`),
-    onSuccess: () => {
+    onSuccess: (_data, uuid) => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success(t('nodes.toast.enabled'))
+      toast.success(t('nodes.toast.enabled'), { description: getNodeName(uuid) })
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
     },
   })
 
   const disableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/disable`),
-    onSuccess: () => {
+    onSuccess: (_data, uuid) => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success(t('nodes.toast.disabled'))
+      toast.success(t('nodes.toast.disabled'), { description: getNodeName(uuid) })
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
     },
   })
 
   const deleteNode = useMutation({
     mutationFn: (uuid: string) => client.delete(`/nodes/${uuid}`),
-    onSuccess: () => {
+    onSuccess: (_data, uuid) => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] })
-      toast.success(t('nodes.toast.deleted'))
+      toast.success(t('nodes.toast.deleted'), { description: getNodeName(uuid) })
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
     },
   })
 
@@ -794,7 +797,7 @@ export default function Nodes() {
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setEditError(err.response?.data?.detail || err.message || t('nodes.toast.saveError'))
-      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
     },
   })
 
@@ -808,7 +811,7 @@ export default function Nodes() {
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       setCreateError(err.response?.data?.detail || err.message || t('nodes.toast.createError'))
-      toast.error(t('nodes.toast.error') + ': ' + (err.response?.data?.detail || err.message))
+      toast.error(t('nodes.toast.error'), { description: err.response?.data?.detail || err.message })
     },
   })
 

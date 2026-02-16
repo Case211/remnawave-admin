@@ -852,7 +852,8 @@
     "toast": {
       "restarted": "Node restarted",
       "enabled": "Node enabled",
-      "disabled": "Node disabled"
+      "disabled": "Node disabled",
+      "error": "Operation failed"
     }
   },
   "hosts": {

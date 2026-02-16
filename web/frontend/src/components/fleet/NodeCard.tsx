@@ -136,7 +136,7 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
   return (
     <Card
       className={cn(
-        'cursor-pointer transition-all duration-200 hover:border-dark-200/40',
+        'cursor-pointer transition-all duration-200 hover:border-dark-200/40 overflow-hidden',
         status === 'offline' && 'border-red-500/30',
         node.is_disabled && 'opacity-50',
         isExpanded && 'border-accent-500/40',
@@ -145,10 +145,9 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
     >
       <CardContent className="p-4">
         {/* Row 1: Name + Status + Terminal */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-white font-semibold truncate text-sm">{node.name}</span>
-            <span className="text-dark-400 text-xs font-mono hidden sm:inline">{node.address}</span>
           </div>
           <div className="flex items-center gap-2">
             {onTerminalConnect && status === 'online' && (
@@ -169,6 +168,8 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
             <StatusBadge status={status} />
           </div>
         </div>
+        {/* Address line */}
+        <div className="text-dark-400 text-xs font-mono truncate mb-3">{node.address}:{node.port}</div>
 
         {/* Row 2: System specs */}
         <div className="flex items-center gap-3 text-xs text-dark-200 mb-3">
@@ -193,45 +194,55 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
         <Separator className="mb-3" />
 
         {/* Row 3: Metrics section */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-2">
           {/* CPU gauge */}
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-dark-300 uppercase tracking-wider mb-1.5">CPU</span>
-            <CircularGauge value={node.cpu_usage} size={52} strokeWidth={4} />
+          <div className="flex items-center gap-3 sm:flex-col sm:items-center sm:gap-0">
+            <CircularGauge value={node.cpu_usage} size={44} strokeWidth={4} className="sm:mb-0" />
+            <div className="flex flex-col sm:items-center">
+              <span className="text-[10px] text-dark-300 uppercase tracking-wider sm:order-first sm:mb-1.5">CPU</span>
+              <span className="text-xs text-dark-200 font-mono sm:hidden">
+                {node.cpu_usage != null ? `${Math.round(node.cpu_usage)}%` : '-'}
+              </span>
+            </div>
           </div>
 
           {/* RAM gauge */}
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-dark-300 uppercase tracking-wider mb-1.5">RAM</span>
-            <CircularGauge value={node.memory_usage} size={52} strokeWidth={4} />
+          <div className="flex items-center gap-3 sm:flex-col sm:items-center sm:gap-0">
+            <CircularGauge value={node.memory_usage} size={44} strokeWidth={4} className="sm:mb-0" />
+            <div className="flex flex-col sm:items-center">
+              <span className="text-[10px] text-dark-300 uppercase tracking-wider sm:order-first sm:mb-1.5">RAM</span>
+              <span className="text-xs text-dark-200 font-mono sm:hidden">
+                {node.memory_usage != null ? `${Math.round(node.memory_usage)}%` : '-'}
+              </span>
+            </div>
           </div>
 
           {/* Network speeds */}
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-dark-300 uppercase tracking-wider mb-1.5">{t('fleet.card.network')}</span>
-            <div className="flex flex-col items-center gap-1 mt-1">
-              <div className="flex items-center gap-1">
-                <ArrowUp className="w-3 h-3 text-emerald-400" />
-                <span className="text-[11px] font-mono text-white">{formatSpeedCompact(node.upload_speed_bps)}</span>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-dark-300 uppercase tracking-wider mb-1.5 sm:text-center">{t('fleet.card.network')}</span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span className="text-xs font-mono text-white">{formatSpeedCompact(node.upload_speed_bps)}</span>
               </div>
-              <div className="flex items-center gap-1">
-                <ArrowDown className="w-3 h-3 text-blue-400" />
-                <span className="text-[11px] font-mono text-white">{formatSpeedCompact(node.download_speed_bps)}</span>
+              <div className="flex items-center gap-1.5">
+                <ArrowDown className="w-3 h-3 text-blue-400 shrink-0" />
+                <span className="text-xs font-mono text-white">{formatSpeedCompact(node.download_speed_bps)}</span>
               </div>
             </div>
           </div>
 
           {/* Disk I/O */}
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-dark-300 uppercase tracking-wider mb-1.5">{t('fleet.card.disk')}</span>
-            <div className="flex flex-col items-center gap-1 mt-1">
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-dark-400 font-mono w-2">R</span>
-                <span className="text-[11px] font-mono text-white">{formatSpeedCompact(node.disk_read_speed_bps)}</span>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-dark-300 uppercase tracking-wider mb-1.5 sm:text-center">{t('fleet.card.disk')}</span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-dark-400 font-mono w-2 shrink-0">R</span>
+                <span className="text-xs font-mono text-white">{formatSpeedCompact(node.disk_read_speed_bps)}</span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-dark-400 font-mono w-2">W</span>
-                <span className="text-[11px] font-mono text-white">{formatSpeedCompact(node.disk_write_speed_bps)}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-dark-400 font-mono w-2 shrink-0">W</span>
+                <span className="text-xs font-mono text-white">{formatSpeedCompact(node.disk_write_speed_bps)}</span>
               </div>
             </div>
           </div>
