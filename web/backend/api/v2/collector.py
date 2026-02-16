@@ -283,6 +283,15 @@ async def receive_connections(
             # Violation detection for each affected user
             for user_uuid in affected_user_uuids:
                 try:
+                    # Connection stats (для violations.log)
+                    stats = await connection_monitor.get_user_connection_stats(user_uuid, window_minutes=60)
+                    if stats:
+                        logger.debug(
+                            "Connection stats for user %s: active=%d, unique_ips=%d, simultaneous=%d",
+                            user_uuid, stats.active_connections_count,
+                            stats.unique_ips_in_window, stats.simultaneous_connections,
+                        )
+
                     violation_score = await violation_detector.check_user(user_uuid, window_minutes=60)
                     if violation_score and violation_score.total >= violation_detector.THRESHOLDS["monitor"]:
                         logger.warning(
@@ -292,22 +301,22 @@ async def receive_connections(
                             violation_score.reasons[:3],
                         )
 
+                        # Fetch data once for both notification and DB save
+                        active_conns = await connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
+                        user_info = await db_service.get_user_by_uuid(user_uuid)
+
+                        ip_metadata = {}
+                        if active_conns:
+                            try:
+                                from shared.geoip import get_geoip_service
+                                geoip = get_geoip_service()
+                                unique_ips = list(set(str(c.ip_address) for c in active_conns))
+                                ip_metadata = await geoip.lookup_batch(unique_ips)
+                            except Exception as geo_error:
+                                logger.debug("Failed to get GeoIP data: %s", geo_error)
+
                         # Send notification via web backend notification_service
                         try:
-                            active_conns = await connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
-
-                            ip_metadata = {}
-                            if active_conns:
-                                try:
-                                    from shared.geoip import get_geoip_service
-                                    geoip = get_geoip_service()
-                                    unique_ips = list(set(str(c.ip_address) for c in active_conns))
-                                    ip_metadata = await geoip.lookup_batch(unique_ips)
-                                except Exception as geo_error:
-                                    logger.debug("Failed to get GeoIP data: %s", geo_error)
-
-                            user_info = await db_service.get_user_by_uuid(user_uuid)
-
                             from web.backend.core.violation_notifier import send_violation_notification
                             await send_violation_notification(
                                 user_uuid=user_uuid,
@@ -334,10 +343,7 @@ async def receive_connections(
                             profile = breakdown.get("profile")
                             device = breakdown.get("device")
 
-                            active_conns = active_conns if "active_conns" in dir() else await connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
                             ip_addresses = list(set(str(c.ip_address) for c in active_conns)) if active_conns else None
-
-                            user_info = user_info if "user_info" in dir() else await db_service.get_user_by_uuid(user_uuid)
                             username = user_info.get("username") if user_info else None
                             email = user_info.get("email") if user_info else None
                             telegram_id = user_info.get("telegram_id") if user_info else None
