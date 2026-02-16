@@ -62,7 +62,7 @@ class JsonI18n(I18n):
 def _get_bot_language() -> str:
     """Get bot language from config_service (DB > .env > default)."""
     try:
-        from src.services.config_service import config_service
+        from shared.config_service import config_service
         if config_service._initialized:
             lang = config_service.get("bot_language")
             if lang:

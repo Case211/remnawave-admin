@@ -9,9 +9,9 @@ from src.keyboards.billing_menu import billing_menu_keyboard
 from src.keyboards.billing_nodes_menu import billing_nodes_menu_keyboard
 from src.keyboards.navigation import NavTarget, input_keyboard, nav_row
 from src.keyboards.providers_menu import providers_menu_keyboard
-from src.services.api_client import ApiClientError, UnauthorizedError, api_client
+from shared.api_client import ApiClientError, UnauthorizedError, api_client
 from src.utils.formatters import build_billing_history, build_billing_nodes, build_infra_providers, format_datetime
-from src.utils.logger import logger
+from shared.logger import logger
 
 # Функции перенесены из basic.py
 

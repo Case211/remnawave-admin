@@ -13,10 +13,10 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Set
 from enum import Enum
 
-from src.services.database import DatabaseService
+from shared.database import DatabaseService
 from src.services.connection_monitor import ConnectionMonitor, ActiveConnection, ConnectionStats
-from src.services.geoip import GeoIPService, IPMetadata, get_geoip_service
-from src.utils.logger import logger
+from shared.geoip import GeoIPService, IPMetadata, get_geoip_service
+from shared.logger import logger
 
 
 class ViolationAction(Enum):
@@ -982,7 +982,7 @@ class ASNAnalyzer:
             db_service: Сервис для работы с БД (для доступа к базе ASN)
         """
         self.geoip = geoip_service or get_geoip_service()
-        from src.services.database import db_service as global_db_service
+        from shared.database import db_service as global_db_service
         self.db = db_service or global_db_service
     
     async def analyze(

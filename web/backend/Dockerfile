@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/web/backend/requirements.txt
 
 # Copy application code
-COPY src/ /app/src/
+COPY shared/ /app/shared/
 COPY web/backend/ /app/web/backend/
 
 # Set Python path

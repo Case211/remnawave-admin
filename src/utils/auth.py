@@ -6,7 +6,7 @@ from aiogram.utils.i18n import gettext as _
 
 from src.config import get_settings
 from src.utils.i18n import get_i18n
-from src.utils.logger import log_button_click, log_command, log_user_input, logger
+from shared.logger import log_button_click, log_command, log_user_input, logger
 
 
 def is_admin(user_id: int) -> bool:

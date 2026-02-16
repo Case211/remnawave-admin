@@ -5,9 +5,9 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 
 from src.handlers.state import ADMIN_COMMAND_DELETE_DELAY, BACKGROUND_TASKS, LAST_BOT_MESSAGES, LAST_BOT_MESSAGES_LOCK
-from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError
+from shared.api_client import ApiClientError, NotFoundError, UnauthorizedError
 from src.utils.auth import is_admin
-from src.utils.logger import logger
+from shared.logger import logger
 
 
 async def _cleanup_message(message: Message, delay: float = 0.0) -> None:
@@ -166,7 +166,7 @@ def _get_error_message(exc: Exception, include_code: bool = True, include_hint: 
     Returns:
         Форматированное сообщение об ошибке
     """
-    from src.services.api_client import (
+    from shared.api_client import (
         ApiClientError,
         NetworkError,
         NotFoundError,

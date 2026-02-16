@@ -19,6 +19,7 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --prefer-binary --no-cache-dir -r requirements.txt
 
+COPY shared ./shared
 COPY src ./src
 COPY locales ./locales
 COPY alembic ./alembic

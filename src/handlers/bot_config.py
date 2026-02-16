@@ -15,8 +15,8 @@ from src.keyboards.bot_config_menu import (
     bot_config_item_keyboard,
     bot_config_menu_keyboard,
 )
-from src.services.config_service import ConfigCategory, ConfigItem, config_service
-from src.utils.logger import logger
+from shared.config_service import ConfigCategory, ConfigItem, config_service
+from shared.logger import logger
 
 router = Router(name="bot_config")
 

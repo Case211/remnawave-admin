@@ -71,7 +71,7 @@ async def handle_pending(message: Message, state: FSMContext) -> None:
     if await _not_admin(message):
         return
     user_id = message.from_user.id
-    from src.utils.logger import logger
+    from shared.logger import logger
     in_pending = user_id in PENDING_INPUT
 
     logger.info(

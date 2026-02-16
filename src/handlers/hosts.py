@@ -13,8 +13,8 @@ from src.keyboards.host_edit import host_edit_keyboard
 from src.keyboards.hosts_menu import hosts_menu_keyboard
 from src.keyboards.main_menu import main_menu_keyboard
 from src.keyboards.navigation import NavTarget, input_keyboard, nav_keyboard, nav_row
-from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
-from src.services.database import db_service
+from shared.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from shared.database import db_service
 from src.utils.formatters import build_host_summary
 from src.utils.logger import logger
 

@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from src.services.database import DatabaseService
-from src.utils.logger import logger
+from shared.database import DatabaseService
+from shared.logger import logger
 
 
 @dataclass

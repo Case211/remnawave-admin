@@ -9,10 +9,10 @@ from fastapi.responses import JSONResponse
 from aiogram import Bot
 
 from src.config import get_settings
-from src.services.api_client import api_client, NotFoundError
-from src.services.database import db_service
-from src.services.sync import sync_service
-from src.utils.logger import logger
+from shared.api_client import api_client, NotFoundError
+from shared.database import db_service
+from shared.sync import sync_service
+from shared.logger import logger
 from src.utils.notifications import (
     send_user_notification,
     send_node_notification,

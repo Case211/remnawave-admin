@@ -16,8 +16,8 @@ from src.keyboards.filters import (
     users_filter_keyboard,
 )
 from src.keyboards.navigation import NavTarget
-from src.services.api_client import ApiClientError, api_client
-from src.utils.logger import logger
+from shared.api_client import ApiClientError, api_client
+from shared.logger import logger
 
 router = Router(name="filters")
 
