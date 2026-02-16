@@ -76,7 +76,7 @@ def _ensure_snake_case(user: dict) -> dict:
 async def _get_users_list():
     """Get users from DB, fall back to API."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             users = await db_service.get_all_users(limit=50000)
             if users:
@@ -133,7 +133,7 @@ async def list_users(
 
         # Enrich with HWID device counts from local DB (single query, no API calls)
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected:
                 device_counts = await db_service.get_hwid_device_counts_bulk()
                 if device_counts:
@@ -335,12 +335,12 @@ async def get_internal_squads(
     """Get available internal squads — reads from DB (synced), falls back to API."""
     squads = []
     try:
-        from src.services.data_access import get_all_internal_squads
+        from shared.data_access import get_all_internal_squads
         squads = await get_all_internal_squads()
     except ImportError:
         # Fallback: direct API call if data_access module is unavailable
         try:
-            from src.services.api_client import api_client
+            from shared.api_client import api_client
             result = await api_client.get_internal_squads()
             payload = result.get("response", result) if isinstance(result, dict) else result
             if isinstance(payload, dict):
@@ -363,12 +363,12 @@ async def get_external_squads(
     """Get available external squads — reads from DB (synced), falls back to API."""
     squads = []
     try:
-        from src.services.data_access import get_all_external_squads
+        from shared.data_access import get_all_external_squads
         squads = await get_all_external_squads()
     except ImportError:
         # Fallback: direct API call if data_access module is unavailable
         try:
-            from src.services.api_client import api_client
+            from shared.api_client import api_client
             result = await api_client.get_external_squads()
             payload = result.get("response", result) if isinstance(result, dict) else result
             if isinstance(payload, dict):
@@ -394,7 +394,7 @@ async def get_user(
         # Try to get user from DB first, then API
         user_data = None
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected:
                 user_data = await db_service.get_user_by_uuid(user_uuid)
         except Exception:
@@ -402,7 +402,7 @@ async def get_user(
 
         if not user_data:
             try:
-                from src.services.api_client import api_client
+                from shared.api_client import api_client
                 resp = await api_client.get_user_by_uuid(user_uuid)
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
@@ -416,7 +416,7 @@ async def get_user(
 
         # Enrich with anti-abuse data from DB
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected:
                 # Violation count for last 30 days
                 violations = await db_service.get_user_violations(
@@ -459,7 +459,7 @@ async def create_user(
 ):
     """Create a new user."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         # Compute expire_at ISO string
         if data.expire_at:
@@ -526,7 +526,7 @@ async def update_user(
 ):
     """Update user fields."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True, mode='json')
         # Convert snake_case keys to camelCase for Remnawave API
@@ -572,13 +572,13 @@ async def delete_user(
 ):
     """Delete a user."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.delete_user(user_uuid)
 
         # Also remove from local DB so UI updates immediately
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected:
                 await db_service.delete_user(user_uuid)
         except Exception as e:
@@ -611,7 +611,7 @@ async def enable_user(
 ):
     """Enable a disabled user."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.enable_user(user_uuid)
 
@@ -637,7 +637,7 @@ async def disable_user(
 ):
     """Disable a user."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.disable_user(user_uuid)
 
@@ -663,7 +663,7 @@ async def reset_user_traffic(
 ):
     """Reset user's traffic usage."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.reset_user_traffic(user_uuid)
 
@@ -689,7 +689,7 @@ async def revoke_user_subscription(
 ):
     """Revoke user's subscription (regenerate subscription UUID)."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.revoke_user_subscription(user_uuid)
 
@@ -717,7 +717,7 @@ async def get_hwid_device_counts(
 
     async def _get_count(uuid: str) -> tuple:
         try:
-            from src.services.api_client import api_client
+            from shared.api_client import api_client
             result = await api_client.get_user_hwid_devices(uuid)
             response = result.get("response", result) if isinstance(result, dict) else result
             devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
@@ -753,7 +753,7 @@ async def get_user_traffic_stats(
         # Get user data for current/lifetime traffic
         user_data = None
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected:
                 user_data = await db_service.get_user_by_uuid(user_uuid)
         except Exception:
@@ -761,7 +761,7 @@ async def get_user_traffic_stats(
 
         if not user_data:
             try:
-                from src.services.api_client import api_client as _api
+                from shared.api_client import api_client as _api
                 resp = await _api.get_user_by_uuid(user_uuid)
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
@@ -798,7 +798,7 @@ async def get_user_traffic_stats(
         period_bytes = 0
         nodes_traffic = []
         try:
-            from src.services.api_client import api_client
+            from shared.api_client import api_client
             result = await api_client.get_user_traffic_stats(
                 user_uuid, start=start_str, end=end_str, top_nodes_limit=50
             )
@@ -844,7 +844,7 @@ async def sync_user_hwid_devices(
 ):
     """Force re-sync HWID devices for a user from Remnawave API to local DB."""
     try:
-        from src.services.sync import sync_service
+        from shared.sync import sync_service
         synced = await sync_service.sync_user_hwid_devices(user_uuid)
         return {"success": True, "synced": synced}
     except Exception as e:
@@ -875,7 +875,7 @@ async def get_user_hwid_devices(
 
     # Read from local DB first (kept up-to-date via sync + webhooks)
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             db_devices = await db_service.get_user_hwid_devices(user_uuid)
             if db_devices:
@@ -885,7 +885,7 @@ async def get_user_hwid_devices(
 
     # Fall back to API if local DB has no data
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         result = await api_client.get_user_hwid_devices(user_uuid)
         response = result.get("response", result) if isinstance(result, dict) else result
@@ -893,7 +893,7 @@ async def get_user_hwid_devices(
 
         # Save API-fetched devices to local DB so future list views show correct counts
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected and devices:
                 for d in devices:
                     await db_service.upsert_hwid_device(
@@ -930,7 +930,7 @@ async def bulk_enable_users(
 ):
     """Enable multiple users at once (max 100)."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
 
@@ -961,7 +961,7 @@ async def bulk_disable_users(
 ):
     """Disable multiple users at once (max 100)."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
 
@@ -992,7 +992,7 @@ async def bulk_delete_users(
 ):
     """Delete multiple users at once (max 100)."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
 
@@ -1001,7 +1001,7 @@ async def bulk_delete_users(
         try:
             await api_client.delete_user(uuid)
             try:
-                from src.services.database import db_service
+                from shared.database import db_service
                 if db_service.is_connected:
                     await db_service.delete_user(uuid)
             except Exception as e:
@@ -1029,7 +1029,7 @@ async def bulk_reset_traffic(
 ):
     """Reset traffic for multiple users at once (max 100)."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
     except ImportError:
         raise HTTPException(status_code=503, detail="API service not available")
 

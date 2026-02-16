@@ -46,7 +46,7 @@ class InboundMailHandler:
             return "550 Invalid recipient"
 
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             async with db_service.acquire() as conn:
                 is_configured = await conn.fetchval(
                     "SELECT 1 FROM domain_config WHERE domain = $1 AND inbound_enabled = true AND is_active = true",
@@ -129,7 +129,7 @@ class InboundMailHandler:
             remote_hostname = session.host_name or ""
 
             # Store in DB for each recipient
-            from src.services.database import db_service
+            from shared.database import db_service
             async with db_service.acquire() as conn:
                 for rcpt in envelope.rcpt_tos:
                     await conn.execute(

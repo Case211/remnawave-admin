@@ -28,7 +28,7 @@ async def get_geo_connections(
 async def _compute_geo(period: str = "7d"):
     """Compute geo connections (cacheable)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return {"countries": [], "cities": []}
 
@@ -149,7 +149,7 @@ async def get_top_users_by_traffic(
 async def _compute_top_users(limit: int = 20):
     """Compute top users by traffic (cacheable)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return {"items": []}
 
@@ -213,7 +213,7 @@ async def get_trends(
 async def _compute_trends(metric: str = "users", period: str = "30d"):
     """Compute trends (cacheable)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return {"series": [], "total_growth": 0}
 

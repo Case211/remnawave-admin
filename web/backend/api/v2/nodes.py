@@ -59,7 +59,7 @@ def _ensure_node_snake_case(node: dict) -> dict:
 async def _get_nodes_list():
     """Get nodes from DB (normalized), fall back to API."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             nodes = await db_service.get_all_nodes()
             if nodes:
@@ -186,14 +186,14 @@ async def get_node(
     try:
         node_data = None
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected:
                 node_data = await db_service.get_node_by_uuid(node_uuid)
         except Exception as e:
             logger.debug("Non-critical: %s", e)
 
         if not node_data:
-            from src.services.api_client import api_client
+            from shared.api_client import api_client
             raw = await api_client.get_node(node_uuid)
             node_data = raw.get('response', raw) if isinstance(raw, dict) else raw
 
@@ -217,7 +217,7 @@ async def create_node(
 ):
     """Create a new node."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         result = await api_client.create_node(
             name=data.name,
@@ -260,7 +260,7 @@ async def update_node(
 ):
     """Update node fields."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True)
         result = await api_client.update_node(node_uuid, **update_data)
@@ -294,13 +294,13 @@ async def delete_node(
 ):
     """Delete a node."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.delete_node(node_uuid)
 
         # Also remove from local DB so UI updates immediately
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected:
                 await db_service.delete_node(node_uuid)
         except Exception as e:
@@ -332,7 +332,7 @@ async def restart_node(
 ):
     """Restart a node."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.restart_node(node_uuid)
 
@@ -362,7 +362,7 @@ async def enable_node(
 ):
     """Enable a disabled node."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.enable_node(node_uuid)
 
@@ -391,7 +391,7 @@ async def get_agent_token_status(
 ):
     """Get agent token status for a node (masked)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             token = await db_service.get_node_agent_token(node_uuid)
             if token:
@@ -415,8 +415,8 @@ async def generate_agent_token(
 ):
     """Generate a new agent token for a node."""
     try:
-        from src.services.database import db_service
-        from src.utils.agent_tokens import set_node_agent_token
+        from shared.database import db_service
+        from shared.agent_tokens import set_node_agent_token
 
         token = await set_node_agent_token(db_service, node_uuid)
         if token:
@@ -446,8 +446,8 @@ async def revoke_agent_token(
 ):
     """Revoke agent token for a node."""
     try:
-        from src.services.database import db_service
-        from src.utils.agent_tokens import revoke_node_agent_token
+        from shared.database import db_service
+        from shared.agent_tokens import revoke_node_agent_token
 
         success = await revoke_node_agent_token(db_service, node_uuid)
         if success:
@@ -477,7 +477,7 @@ async def disable_node(
 ):
     """Disable a node."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
 
         await api_client.disable_node(node_uuid)
 

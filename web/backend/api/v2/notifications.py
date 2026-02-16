@@ -52,7 +52,7 @@ async def _require_account_id(admin: AdminUser) -> int:
         return admin.account_id
 
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             row = None
             if admin.telegram_id:
@@ -108,7 +108,7 @@ async def list_notifications(
     admin: AdminUser = Depends(require_permission("notifications", "view")),
 ):
     """List notifications for the current admin."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = _get_admin_id(admin)
     if aid is not None:
@@ -156,7 +156,7 @@ async def get_unread_count(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """Get count of unread notifications for the current admin."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
@@ -179,7 +179,7 @@ async def mark_notifications_read(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """Mark notifications as read. Empty ids = mark all."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
@@ -214,7 +214,7 @@ async def delete_notification(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """Delete a single notification."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
@@ -241,7 +241,7 @@ async def delete_old_notifications(
     admin: AdminUser = Depends(require_permission("notifications", "delete")),
 ):
     """Delete old notifications."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:
@@ -290,7 +290,7 @@ async def list_channels(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """Get notification channels for the current admin."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = await _require_account_id(admin)
     async with db_service.acquire() as conn:
@@ -314,7 +314,7 @@ async def create_channel(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """Create or update a notification channel for the current admin."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = await _require_account_id(admin)
     config_json = json.dumps(data.config)
@@ -341,7 +341,7 @@ async def update_channel(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """Update a notification channel."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = await _require_account_id(admin)
     updates = []
@@ -385,7 +385,7 @@ async def delete_channel(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """Delete a notification channel."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = await _require_account_id(admin)
     async with db_service.acquire() as conn:
@@ -408,7 +408,7 @@ async def get_smtp_config(
     admin: AdminUser = Depends(require_superadmin()),
 ):
     """Get SMTP configuration."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     async with db_service.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM smtp_config ORDER BY id LIMIT 1")
@@ -425,7 +425,7 @@ async def update_smtp_config(
     admin: AdminUser = Depends(require_superadmin()),
 ):
     """Update SMTP configuration."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     updates = []
     params = []
@@ -482,7 +482,7 @@ async def list_alert_rules(
     admin: AdminUser = Depends(require_permission("notifications", "view")),
 ):
     """List all alert rules."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     async with db_service.acquire() as conn:
         rows = await conn.fetch("SELECT * FROM alert_rules ORDER BY created_at DESC")
@@ -502,7 +502,7 @@ async def create_alert_rule(
     admin: AdminUser = Depends(require_permission("notifications", "create")),
 ):
     """Create a new alert rule."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     channels_json = json.dumps(data.channels)
     async with db_service.acquire() as conn:
@@ -533,7 +533,7 @@ async def update_alert_rule(
     admin: AdminUser = Depends(require_permission("notifications", "edit")),
 ):
     """Update an alert rule."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     updates = []
     params = [rule_id]
@@ -575,7 +575,7 @@ async def delete_alert_rule(
     admin: AdminUser = Depends(require_permission("notifications", "delete")),
 ):
     """Delete an alert rule."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     async with db_service.acquire() as conn:
         deleted = await conn.fetchval(
@@ -593,7 +593,7 @@ async def toggle_alert_rule(
     admin: AdminUser = Depends(require_permission("notifications", "edit")),
 ):
     """Toggle an alert rule's enabled state."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
@@ -624,7 +624,7 @@ async def list_alert_logs(
     admin: AdminUser = Depends(require_permission("notifications", "view")),
 ):
     """List alert logs."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     conditions = ["1=1"]
     params = []
@@ -667,7 +667,7 @@ async def acknowledge_alerts(
     admin: AdminUser = Depends(require_permission("notifications", "edit")),
 ):
     """Acknowledge alert log entries."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     aid = _get_admin_id(admin)
     async with db_service.acquire() as conn:

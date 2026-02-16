@@ -182,7 +182,7 @@ class TerminalSessionManager:
     async def _log_session_start(self, session: TerminalSession) -> None:
         """Record session start in node_command_log."""
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if not db_service.is_connected:
                 return
             async with db_service.acquire() as conn:
@@ -203,7 +203,7 @@ class TerminalSessionManager:
     async def _log_session_end(self, session: TerminalSession, reason: str) -> None:
         """Update session record in node_command_log."""
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if not db_service.is_connected:
                 return
             async with db_service.acquire() as conn:

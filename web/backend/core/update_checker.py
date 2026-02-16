@@ -97,7 +97,7 @@ async def get_dependency_versions() -> Dict[str, Any]:
 
     # PostgreSQL version
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             async with db_service.acquire() as conn:
                 row = await conn.fetchval("SELECT version()")
@@ -117,7 +117,7 @@ async def get_dependency_versions() -> Dict[str, Any]:
 
     # Xray versions on nodes (extract from raw_data JSON if available)
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             async with db_service.acquire() as conn:
                 # Check if xray_version column exists

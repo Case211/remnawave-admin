@@ -96,7 +96,7 @@ async def get_audit_stats(
 ):
     """Get audit log statistics for dashboard widgets."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return {"total": 0, "today": 0, "by_resource": {}, "by_admin": []}
 

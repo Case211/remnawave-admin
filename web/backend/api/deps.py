@@ -320,11 +320,11 @@ def get_client_ip(request: Request) -> str:
 
 async def get_db():
     """Dependency for database access."""
-    from src.services.database import db_service
+    from shared.database import db_service
     return db_service
 
 
 async def get_api_client():
     """Dependency for API client access."""
-    from src.services.api_client import api_client
+    from shared.api_client import api_client
     return api_client

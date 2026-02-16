@@ -135,7 +135,7 @@ class SystemComponentsResponse(BaseModel):
 async def _get_users_data() -> List[Dict[str, Any]]:
     """Get users from DB (normalized), fall back to API if DB is empty/unavailable."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             users = await db_service.get_all_users(limit=50000)
             if users:
@@ -151,7 +151,7 @@ async def _get_users_data() -> List[Dict[str, Any]]:
 async def _get_nodes_data() -> List[Dict[str, Any]]:
     """Get nodes from DB (normalized), fall back to API if DB is empty/unavailable."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             nodes = await db_service.get_all_nodes()
             if nodes:
@@ -166,7 +166,7 @@ async def _get_nodes_data() -> List[Dict[str, Any]]:
 async def _get_hosts_data() -> List[Dict[str, Any]]:
     """Get hosts from DB, fall back to API if DB is empty/unavailable."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             hosts = await db_service.get_all_hosts()
             if hosts:
@@ -181,7 +181,7 @@ async def _get_hosts_data() -> List[Dict[str, Any]]:
 async def _get_violation_counts() -> Dict[str, int]:
     """Get violation counts for today and this week from DB."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             now = datetime.utcnow()
             today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -695,7 +695,7 @@ async def _compute_deltas() -> DeltaStats:
         logger.debug("Failed to compute traffic delta: %s", e)
 
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             today_stats = await db_service.get_violations_stats_for_period(
                 start_date=today_start, end_date=now,
@@ -783,7 +783,7 @@ async def get_node_fleet(
 
         # Enrich with system metrics from DB (collected by Node Agent)
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if db_service.is_connected:
                 db_nodes = await db_service.get_all_nodes()
                 metrics_map = {}
@@ -945,7 +945,7 @@ async def get_system_components(
 
     # 2. Check Database
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             # Quick query to verify
             users_count = 0

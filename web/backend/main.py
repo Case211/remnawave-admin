@@ -172,7 +172,7 @@ async def lifespan(app: FastAPI):
     database_url = os.environ.get("DATABASE_URL") or getattr(settings, "database_url", None)
     if database_url:
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             connected = await db_service.connect(database_url=database_url)
             if connected:
                 logger.info("Database connected")
@@ -183,7 +183,7 @@ async def lifespan(app: FastAPI):
                 await ensure_rbac_tables()
 
                 # Initialize dynamic config service (DB settings cache)
-                from src.services.config_service import config_service
+                from shared.config_service import config_service
                 await config_service.initialize()
 
                 # Start automation engine
@@ -225,7 +225,7 @@ async def lifespan(app: FastAPI):
     # Ensure MaxMind GeoLite2 databases are downloaded
     # Supports: license key (official), GitHub mirror (ltsdev/maxmind), or auto
     try:
-        from src.services.maxmind_updater import ensure_databases
+        from shared.maxmind_updater import ensure_databases
         maxmind_key = os.environ.get("MAXMIND_LICENSE_KEY")
         maxmind_source = os.environ.get("MAXMIND_SOURCE", "auto")
         city_path = os.environ.get("MAXMIND_CITY_DB", "/app/geoip/GeoLite2-City.mmdb")
@@ -263,7 +263,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             await db_service.disconnect()
     except Exception:

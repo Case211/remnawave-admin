@@ -95,7 +95,7 @@ async def list_scripts(
 ):
     """List all scripts, optionally filtered by category."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return []
 
@@ -126,7 +126,7 @@ async def get_script(
     admin: AdminUser = Depends(require_permission("fleet", "scripts")),
 ):
     """Get full script details including content."""
-    from src.services.database import db_service
+    from shared.database import db_service
     if not db_service.is_connected:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
@@ -150,7 +150,7 @@ async def create_script(
     admin: AdminUser = Depends(require_permission("fleet", "scripts")),
 ):
     """Create a custom script."""
-    from src.services.database import db_service
+    from shared.database import db_service
     if not db_service.is_connected:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
@@ -184,7 +184,7 @@ async def update_script(
     admin: AdminUser = Depends(require_permission("fleet", "scripts")),
 ):
     """Update a script. Cannot modify built-in scripts."""
-    from src.services.database import db_service
+    from shared.database import db_service
     if not db_service.is_connected:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
@@ -229,7 +229,7 @@ async def delete_script(
     admin: AdminUser = Depends(require_permission("fleet", "scripts")),
 ):
     """Delete a custom script. Cannot delete built-in scripts."""
-    from src.services.database import db_service
+    from shared.database import db_service
     if not db_service.is_connected:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
@@ -253,7 +253,7 @@ async def exec_script(
     admin: AdminUser = Depends(require_permission("fleet", "scripts")),
 ):
     """Execute a script on a node via Agent v2 WebSocket."""
-    from src.services.database import db_service
+    from shared.database import db_service
     if not db_service.is_connected:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
@@ -328,7 +328,7 @@ async def get_exec_status(
     admin: AdminUser = Depends(require_permission("fleet", "view")),
 ):
     """Get execution status and output."""
-    from src.services.database import db_service
+    from shared.database import db_service
     if not db_service.is_connected:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
