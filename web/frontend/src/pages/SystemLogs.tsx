@@ -49,14 +49,6 @@ const TAB_CONFIG: Record<LogTab, { icon: typeof Terminal; labelKey: string }> = 
   postgres: { icon: Database, labelKey: 'logs.tabs.postgres' },
 }
 
-const LEVEL_COLORS: Record<string, string> = {
-  DEBUG: 'text-gray-400',
-  INFO: 'text-blue-400',
-  WARNING: 'text-yellow-400',
-  ERROR: 'text-red-400',
-  CRITICAL: 'text-red-500 font-bold',
-}
-
 const LEVEL_BADGE_COLORS: Record<string, string> = {
   DEBUG: 'bg-gray-500/20 text-gray-400',
   INFO: 'bg-blue-500/20 text-blue-400',
@@ -241,19 +233,19 @@ export default function SystemLogs() {
   const currentLevel = activeTab === 'backend' ? logLevels?.backend : activeTab === 'bot' ? logLevels?.bot : null
 
   return (
-    <div className="p-4 md:p-6 space-y-4 animate-fade-in">
+    <div className="p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4 animate-fade-in overflow-x-hidden max-w-full">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Terminal className="w-6 h-6 text-primary-400" />
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2">
+            <Terminal className="w-5 h-5 sm:w-6 sm:h-6 text-primary-400 shrink-0" />
             {t('logs.title')}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 hidden sm:block">
             {t('logs.subtitle')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -263,17 +255,20 @@ export default function SystemLogs() {
                   setIsStreaming(!isStreaming)
                   if (!isStreaming) refetch()
                 }}
-                className={isStreaming ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-dark-600'}
+                className={cn(
+                  'h-8 px-2 sm:px-3',
+                  isStreaming ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-dark-600',
+                )}
               >
                 {isStreaming ? (
                   <>
-                    <Pause className="w-4 h-4 mr-1" />
-                    Live
+                    <Pause className="w-4 h-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Live</span>
                   </>
                 ) : (
                   <>
-                    <Play className="w-4 h-4 mr-1" />
-                    Paused
+                    <Play className="w-4 h-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Paused</span>
                   </>
                 )}
               </Button>
@@ -288,7 +283,7 @@ export default function SystemLogs() {
                 variant="outline"
                 size="sm"
                 onClick={() => setAutoScroll(!autoScroll)}
-                className={cn('border-dark-600', autoScroll && 'bg-dark-700')}
+                className={cn('border-dark-600 h-8 w-8 p-0', autoScroll && 'bg-dark-700')}
               >
                 <ArrowDown className="w-4 h-4" />
               </Button>
@@ -301,107 +296,117 @@ export default function SystemLogs() {
             variant="outline"
             size="sm"
             onClick={handleClear}
-            className="border-dark-600"
+            className="border-dark-600 h-8 px-2 sm:px-3"
           >
-            <Trash2 className="w-4 h-4 mr-1" />
-            {t('logs.clear')}
+            <Trash2 className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">{t('logs.clear')}</span>
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="bg-dark-800 border border-dark-700">
-          {(Object.entries(TAB_CONFIG) as [LogTab, typeof TAB_CONFIG[LogTab]][]).map(([key, cfg]) => {
-            const Icon = cfg.icon
-            const fileInfo = logFiles?.find((f: LogFile) => f.key === key)
-            return (
-              <TabsTrigger
-                key={key}
-                value={key}
-                className="gap-1.5 data-[state=active]:bg-dark-700"
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span className="text-xs sm:text-sm">{t(cfg.labelKey)}</span>
-                {fileInfo && fileInfo.exists && (
-                  <span className="text-[10px] text-muted-foreground ml-1">
-                    {formatFileSize(fileInfo.size_bytes)}
-                  </span>
-                )}
-              </TabsTrigger>
-            )
-          })}
-        </TabsList>
+        <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 no-scrollbar">
+          <TabsList className="bg-dark-800 border border-dark-700 w-max sm:w-auto">
+            {(Object.entries(TAB_CONFIG) as [LogTab, typeof TAB_CONFIG[LogTab]][]).map(([key, cfg]) => {
+              const Icon = cfg.icon
+              const fileInfo = logFiles?.find((f: LogFile) => f.key === key)
+              return (
+                <TabsTrigger
+                  key={key}
+                  value={key}
+                  className="gap-1 sm:gap-1.5 px-2 sm:px-3 data-[state=active]:bg-dark-700"
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-xs sm:text-sm whitespace-nowrap">{t(cfg.labelKey)}</span>
+                  {fileInfo && fileInfo.exists && (
+                    <span className="text-[10px] text-muted-foreground ml-0.5 sm:ml-1 hidden sm:inline">
+                      {formatFileSize(fileInfo.size_bytes)}
+                    </span>
+                  )}
+                </TabsTrigger>
+              )
+            })}
+          </TabsList>
+        </div>
 
         {/* Shared content for all tabs */}
         {(Object.keys(TAB_CONFIG) as LogTab[]).map((tab) => (
           <TabsContent key={tab} value={tab} className="mt-4 space-y-3">
             {/* Filters toolbar */}
             <Card className="bg-dark-800 border-dark-700">
-              <CardContent className="p-3">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder={t('logs.searchPlaceholder')}
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                      className="pl-9 bg-dark-900 border-dark-600 font-mono text-sm"
-                    />
-                  </div>
-                  <Select value={levelFilter} onValueChange={(v) => { setLevelFilter(v); setStreamLines([]) }}>
-                    <SelectTrigger className="w-[140px] bg-dark-900 border-dark-600">
-                      <SelectValue placeholder={t('logs.level')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t('logs.allLevels')}</SelectItem>
-                      <SelectItem value="DEBUG">DEBUG</SelectItem>
-                      <SelectItem value="INFO">INFO</SelectItem>
-                      <SelectItem value="WARNING">WARNING</SelectItem>
-                      <SelectItem value="ERROR">ERROR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    onClick={handleSearch}
-                    className="border-dark-600"
-                  >
-                    <Search className="w-4 h-4 mr-2" />
-                    {t('common.search')}
-                  </Button>
-
-                  {/* Dynamic log level control */}
-                  {canChangeLevel && currentLevel && (
-                    <div className="flex items-center gap-2 border-l border-dark-600 pl-3">
-                      <Settings2 className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {t('logs.logLevel')}:
-                      </span>
-                      <Select
-                        value={currentLevel}
-                        onValueChange={(v) => handleLevelChange(activeTab, v)}
-                      >
-                        <SelectTrigger className="w-[110px] h-8 bg-dark-900 border-dark-600 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="DEBUG">
-                            <Badge className={cn('text-xs', LEVEL_BADGE_COLORS.DEBUG)}>DEBUG</Badge>
-                          </SelectItem>
-                          <SelectItem value="INFO">
-                            <Badge className={cn('text-xs', LEVEL_BADGE_COLORS.INFO)}>INFO</Badge>
-                          </SelectItem>
-                          <SelectItem value="WARNING">
-                            <Badge className={cn('text-xs', LEVEL_BADGE_COLORS.WARNING)}>WARNING</Badge>
-                          </SelectItem>
-                          <SelectItem value="ERROR">
-                            <Badge className={cn('text-xs', LEVEL_BADGE_COLORS.ERROR)}>ERROR</Badge>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+              <CardContent className="p-2 sm:p-3">
+                <div className="flex flex-col gap-2 sm:gap-3">
+                  {/* Row 1: Search input + level filter */}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1 min-w-0">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder={t('logs.searchPlaceholder')}
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                        className="pl-9 bg-dark-900 border-dark-600 font-mono text-xs sm:text-sm h-9"
+                      />
                     </div>
-                  )}
+                    <Select value={levelFilter} onValueChange={(v) => { setLevelFilter(v); setStreamLines([]) }}>
+                      <SelectTrigger className="w-[110px] sm:w-[140px] bg-dark-900 border-dark-600 shrink-0 h-9">
+                        <SelectValue placeholder={t('logs.level')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('logs.allLevels')}</SelectItem>
+                        <SelectItem value="DEBUG">DEBUG</SelectItem>
+                        <SelectItem value="INFO">INFO</SelectItem>
+                        <SelectItem value="WARNING">WARNING</SelectItem>
+                        <SelectItem value="ERROR">ERROR</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Row 2: Search button + log level control */}
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSearch}
+                      className="border-dark-600 h-8"
+                    >
+                      <Search className="w-4 h-4 mr-1.5" />
+                      {t('common.search')}
+                    </Button>
+
+                    {/* Dynamic log level control */}
+                    {canChangeLevel && currentLevel && (
+                      <div className="flex items-center gap-1.5 sm:gap-2 border-l border-dark-600 pl-2 sm:pl-3 ml-auto">
+                        <Settings2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground shrink-0" />
+                        <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">
+                          {t('logs.logLevel')}:
+                        </span>
+                        <Select
+                          value={currentLevel}
+                          onValueChange={(v) => handleLevelChange(activeTab, v)}
+                        >
+                          <SelectTrigger className="w-[90px] sm:w-[110px] h-7 sm:h-8 bg-dark-900 border-dark-600 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DEBUG">
+                              <Badge className={cn('text-xs', LEVEL_BADGE_COLORS.DEBUG)}>DEBUG</Badge>
+                            </SelectItem>
+                            <SelectItem value="INFO">
+                              <Badge className={cn('text-xs', LEVEL_BADGE_COLORS.INFO)}>INFO</Badge>
+                            </SelectItem>
+                            <SelectItem value="WARNING">
+                              <Badge className={cn('text-xs', LEVEL_BADGE_COLORS.WARNING)}>WARNING</Badge>
+                            </SelectItem>
+                            <SelectItem value="ERROR">
+                              <Badge className={cn('text-xs', LEVEL_BADGE_COLORS.ERROR)}>ERROR</Badge>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -428,7 +433,7 @@ export default function SystemLogs() {
                 </div>
                 <div
                   ref={logContainerRef}
-                  className="h-[calc(100vh-500px)] min-h-[250px] md:h-[calc(100vh-420px)] md:min-h-[400px] overflow-x-auto overflow-y-auto font-mono text-xs leading-5 p-2"
+                  className="h-[calc(100vh-480px)] min-h-[250px] md:h-[calc(100vh-420px)] md:min-h-[400px] overflow-y-auto overflow-x-hidden font-mono text-xs leading-5 p-1.5 sm:p-2"
                 >
                   {allLines.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -439,7 +444,6 @@ export default function SystemLogs() {
                     </div>
                   ) : (
                     allLines.map((entry, idx) => {
-                      const levelColor = entry.level ? LEVEL_COLORS[entry.level] : 'text-gray-500'
                       const badgeColor = entry.level ? (LEVEL_BADGE_COLORS[entry.level] || 'bg-gray-500/20 text-gray-400') : ''
                       const isError = entry.level === 'ERROR' || entry.level === 'CRITICAL'
                       const isWarning = entry.level === 'WARNING'
@@ -454,9 +458,10 @@ export default function SystemLogs() {
 
                       return (
                         <div key={idx}>
+                          {/* Desktop layout: single row */}
                           <div
                             className={cn(
-                              'flex items-start gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-0.5 rounded hover:bg-dark-800/50 transition-colors',
+                              'hidden sm:flex items-start gap-2 px-2 py-0.5 rounded hover:bg-dark-800/50 transition-colors',
                               isError && 'bg-red-500/5',
                               isWarning && 'bg-yellow-500/5',
                               hasExtra && 'cursor-pointer',
@@ -466,47 +471,29 @@ export default function SystemLogs() {
                             {/* Expand indicator */}
                             {hasExtra ? (
                               <span className={cn('shrink-0 w-3 mt-0.5', isExpanded ? 'text-primary-400' : 'text-dark-500')}>
-                                {isExpanded ? (
-                                  <ChevronDown className="w-3 h-3" />
-                                ) : (
-                                  <ChevronRight className="w-3 h-3" />
-                                )}
+                                {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                               </span>
                             ) : (
                               <span className="w-3 shrink-0" />
                             )}
-
-                            {/* Timestamp: time only on mobile, full on desktop */}
                             {entry.timestamp && (
-                              <>
-                                <span className="text-dark-400 whitespace-nowrap shrink-0 select-none text-[10px] sm:hidden">
-                                  {displayTimestamp}
-                                </span>
-                                <span className="text-dark-400 whitespace-nowrap shrink-0 select-none text-xs hidden sm:inline">
-                                  {fullTimestamp}
-                                </span>
-                              </>
+                              <span className="text-dark-400 whitespace-nowrap shrink-0 select-none text-xs">
+                                {fullTimestamp}
+                              </span>
                             )}
-
-                            {/* Level badge */}
                             {entry.level && (
                               <span className={cn(
-                                'shrink-0 rounded px-1.5 py-0 text-[10px] sm:text-[11px] font-medium leading-5 text-center',
-                                'w-[52px] sm:w-[60px]',
+                                'shrink-0 rounded px-1.5 py-0 text-[11px] font-medium leading-5 text-center w-[60px]',
                                 badgeColor,
                               )}>
                                 {entry.level}
                               </span>
                             )}
-
-                            {/* Source: hidden on mobile */}
                             {entry.source && (
-                              <span className="text-cyan-400/70 w-[80px] shrink-0 truncate hidden sm:inline">
+                              <span className="text-cyan-400/70 w-[80px] shrink-0 truncate">
                                 {entry.source}
                               </span>
                             )}
-
-                            {/* Message */}
                             <span className={cn(
                               'text-dark-100 whitespace-pre-wrap break-words min-w-0',
                               isError && 'text-red-300',
@@ -516,13 +503,61 @@ export default function SystemLogs() {
                             </span>
                           </div>
 
+                          {/* Mobile layout: stacked — meta row + message row */}
+                          <div
+                            className={cn(
+                              'sm:hidden px-1.5 py-1 rounded hover:bg-dark-800/50 transition-colors',
+                              isError && 'bg-red-500/5',
+                              isWarning && 'bg-yellow-500/5',
+                              hasExtra && 'cursor-pointer',
+                            )}
+                            onClick={hasExtra ? () => toggleExpandRow(idx) : undefined}
+                          >
+                            {/* Meta line: chevron + time + level + source */}
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              {hasExtra ? (
+                                <span className={cn('shrink-0 w-3', isExpanded ? 'text-primary-400' : 'text-dark-500')}>
+                                  {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                </span>
+                              ) : (
+                                <span className="w-3 shrink-0" />
+                              )}
+                              {displayTimestamp && (
+                                <span className="text-dark-400 text-[10px] select-none shrink-0">
+                                  {displayTimestamp}
+                                </span>
+                              )}
+                              {entry.level && (
+                                <span className={cn(
+                                  'shrink-0 rounded px-1 py-0 text-[10px] font-medium leading-4 text-center',
+                                  badgeColor,
+                                )}>
+                                  {entry.level}
+                                </span>
+                              )}
+                              {entry.source && (
+                                <span className="text-cyan-400/70 text-[10px] truncate">
+                                  {entry.source}
+                                </span>
+                              )}
+                            </div>
+                            {/* Message: full width */}
+                            <div className={cn(
+                              'text-dark-100 text-[11px] leading-4 whitespace-pre-wrap break-words pl-[18px]',
+                              isError && 'text-red-300',
+                              isWarning && 'text-yellow-200',
+                            )}>
+                              {entry.message}
+                            </div>
+                          </div>
+
                           {/* Expanded extra fields */}
                           {hasExtra && isExpanded && (
-                            <div className="ml-6 sm:ml-8 pl-3 sm:pl-4 py-1 border-l-2 border-dark-600 mb-1 space-y-0.5">
+                            <div className="ml-5 sm:ml-8 pl-2 sm:pl-4 py-1 border-l-2 border-dark-600 mb-1 space-y-0.5">
                               {Object.entries(entry.extra!).map(([key, value]) => (
-                                <div key={key} className="flex gap-2 text-[10px] sm:text-[11px]">
+                                <div key={key} className="flex gap-1.5 sm:gap-2 text-[10px] sm:text-[11px]">
                                   <span className="text-purple-400 shrink-0 font-medium">{key}:</span>
-                                  <span className="text-dark-300 break-all">
+                                  <span className="text-dark-300 break-words min-w-0">
                                     {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
                                   </span>
                                 </div>
