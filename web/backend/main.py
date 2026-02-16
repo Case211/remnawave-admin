@@ -101,9 +101,9 @@ class _CompressedRotatingFileHandler(RotatingFileHandler):
             self.stream = self._open()
 
 
-def _shorten_logger_name(logger_name: str, event_dict: dict) -> dict:
+def _shorten_logger_name(logger: object, method_name: str, event_dict: dict) -> dict:
     """structlog processor: сокращает имена логгеров."""
-    name = event_dict.get("logger", logger_name or "")
+    name = event_dict.get("logger", "")
     for prefix, short in _LOGGER_NAME_MAP.items():
         if name == prefix or name.startswith(prefix + "."):
             event_dict["logger"] = short
