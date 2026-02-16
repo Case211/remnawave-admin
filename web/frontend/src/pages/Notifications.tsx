@@ -11,12 +11,12 @@ import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  Bell, BellRing, Settings2, Shield, Mail, MessageSquare, Webhook,
+  Bell, Settings2, Shield, Mail, MessageSquare, Webhook,
   Check, Trash2, Plus, Power, PowerOff, Pencil, Send, AlertTriangle,
-  CheckCircle2, XCircle, ChevronDown, ChevronRight, Info, MonitorSmartphone,
+  CheckCircle2, ChevronDown, ChevronRight, MonitorSmartphone,
 } from 'lucide-react'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -24,31 +24,19 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   notificationsApi,
-  type Notification,
   type AlertRule,
-  type AlertLog,
-  type NotificationChannel,
   type SmtpConfig,
 } from '@/api/notifications'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ────────────────────────────────────────────────────
-
-function timeAgo(dateStr: string | null, t: (k: string, o?: Record<string, unknown>) => string): string {
-  if (!dateStr) return ''
-  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
-  if (diff < 60) return t('common.justNow')
-  if (diff < 3600) return t('common.minutesAgo', { count: Math.floor(diff / 60) })
-  if (diff < 86400) return t('common.hoursAgo', { count: Math.floor(diff / 3600) })
-  return t('common.daysAgo', { count: Math.floor(diff / 86400) })
-}
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—'
@@ -73,7 +61,6 @@ const SEVERITY_DOT: Record<string, string> = {
 
 export default function Notifications() {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const canEdit = useHasPermission('notifications', 'edit')
   const canCreate = useHasPermission('notifications', 'create')
   const canDelete = useHasPermission('notifications', 'delete')
@@ -155,6 +142,7 @@ function NotificationsTab() {
       queryClient.invalidateQueries({ queryKey: ['notifications-unread'] })
       toast.success(t('notifications.allMarkedRead'))
     },
+    onError: () => toast.error(t('common.error')),
   })
 
   const deleteOld = useMutation({
@@ -163,6 +151,7 @@ function NotificationsTab() {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
       toast.success(t('notifications.oldDeleted'))
     },
+    onError: () => toast.error(t('common.error')),
   })
 
   const deleteOne = useMutation({
@@ -171,6 +160,7 @@ function NotificationsTab() {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
       queryClient.invalidateQueries({ queryKey: ['notifications-unread'] })
     },
+    onError: () => toast.error(t('common.error')),
   })
 
   const items = data?.items || []
@@ -309,6 +299,7 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
       queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
       toast.success(rule.is_enabled ? t('notifications.alerts.ruleEnabled') : t('notifications.alerts.ruleDisabled'))
     },
+    onError: () => toast.error(t('common.error')),
   })
 
   const deleteRule = useMutation({
@@ -318,6 +309,7 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
       toast.success(t('notifications.alerts.ruleDeleted'))
       setDeleteId(null)
     },
+    onError: () => toast.error(t('common.error')),
   })
 
   return (
@@ -425,7 +417,8 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
         title={t('notifications.alerts.deleteConfirmTitle')}
         description={t('notifications.alerts.deleteConfirmDesc')}
         onConfirm={() => deleteId && deleteRule.mutate(deleteId)}
-        onCancel={() => setDeleteId(null)}
+        onOpenChange={(open) => { if (!open) setDeleteId(null) }}
+        variant="destructive"
       />
     </div>
   )
@@ -465,7 +458,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
       toast.success(isEdit ? t('notifications.alerts.ruleUpdated') : t('notifications.alerts.ruleCreated'))
       onClose()
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const metrics = [
@@ -744,11 +737,13 @@ function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
       queryClient.invalidateQueries({ queryKey: ['alert-logs'] })
       toast.success(t('notifications.alertLogs.allAcknowledged'))
     },
+    onError: () => toast.error(t('common.error')),
   })
 
   const ackOne = useMutation({
     mutationFn: (id: number) => notificationsApi.acknowledgeAlerts([id]),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alert-logs'] }),
+    onError: () => toast.error(t('common.error')),
   })
 
   const items = data?.items || []
@@ -853,7 +848,6 @@ function ChannelsTab() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [addType, setAddType] = useState('telegram')
 
   const { data: channels = [], isLoading } = useQuery({
     queryKey: ['notification-channels'],
@@ -866,6 +860,7 @@ function ChannelsTab() {
       queryClient.invalidateQueries({ queryKey: ['notification-channels'] })
       toast.success(t('notifications.channels.deleted'))
     },
+    onError: () => toast.error(t('common.error')),
   })
 
   const toggleChannel = useMutation({
@@ -874,6 +869,7 @@ function ChannelsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notification-channels'] })
     },
+    onError: () => toast.error(t('common.error')),
   })
 
   const channelIcons: Record<string, typeof Mail> = {
@@ -974,7 +970,7 @@ function AddChannelDialog({ open, onClose }: { open: boolean; onClose: () => voi
       toast.success(t('notifications.channels.created'))
       onClose()
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   return (
@@ -1062,7 +1058,7 @@ function SmtpConfigSection() {
   const queryClient = useQueryClient()
   const [testEmail, setTestEmail] = useState('')
 
-  const { data: smtp, isLoading } = useQuery({
+  const { data: smtp } = useQuery({
     queryKey: ['smtp-config'],
     queryFn: () => notificationsApi.getSmtpConfig(),
     retry: false,
@@ -1076,7 +1072,7 @@ function SmtpConfigSection() {
       queryClient.invalidateQueries({ queryKey: ['smtp-config'] })
       toast.success(t('notifications.smtp.saved'))
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const testSmtp = useMutation({

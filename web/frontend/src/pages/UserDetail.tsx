@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -651,6 +651,11 @@ export default function UserDetail() {
   })
   const [editError, setEditError] = useState('')
   const [editSuccess, setEditSuccess] = useState(false)
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  useEffect(() => {
+    return () => { timersRef.current.forEach(clearTimeout) }
+  }, [])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Fetch user data
@@ -747,7 +752,7 @@ export default function UserDetail() {
       toast.success(t('userDetail.toasts.userUpdated'))
       setEditSuccess(true)
       setEditError('')
-      setTimeout(() => setEditSuccess(false), 3000)
+      timersRef.current.push(setTimeout(() => setEditSuccess(false), 3000))
       setIsEditing(false)
       setSearchParams({})
     },
@@ -854,7 +859,7 @@ export default function UserDetail() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    timersRef.current.push(setTimeout(() => setCopied(false), 2000))
   }
 
   if (isLoading) {

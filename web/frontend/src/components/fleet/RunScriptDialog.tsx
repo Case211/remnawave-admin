@@ -56,7 +56,7 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
   })
 
   // Poll execution status
-  const { data: execStatus, isLoading: isPolling } = useQuery({
+  const { data: execStatus } = useQuery({
     queryKey: ['fleet-exec', execId],
     queryFn: async () => {
       if (!execId) return null
@@ -101,7 +101,6 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
   }
 
   const isRunning = execStatus?.status === 'running' || execMutation.isPending
-  const isDone = execStatus?.status === 'completed' || execStatus?.status === 'error' || execStatus?.status === 'blocked'
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>

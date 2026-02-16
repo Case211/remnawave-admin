@@ -479,6 +479,7 @@ function ChangePasswordBlock() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const user = useAuthStore((s) => s.user)
 
   const { data: adminInfo } = useQuery({
@@ -504,7 +505,8 @@ function ChangePasswordBlock() {
     try {
       await navigator.clipboard.writeText(newPassword)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000)
     } catch {
       // clipboard may not be available
     }
@@ -832,6 +834,7 @@ export default function Settings() {
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
   const [errorKeys, setErrorKeys] = useState<Record<string, string>>({})
   const [pendingValues, setPendingValues] = useState<Record<string, string>>({})
+  const savedTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Fetch settings
   const { data: settingsData, isLoading: settingsLoading, refetch: refetchSettings } = useQuery({
@@ -858,7 +861,8 @@ export default function Settings() {
       setSavedKeys((prev) => new Set(prev).add(key))
       setPendingValues((prev) => { const n = { ...prev }; delete n[key]; return n })
       queryClient.invalidateQueries({ queryKey: ['settings'] })
-      setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
+      clearTimeout(savedTimersRef.current[key])
+      savedTimersRef.current[key] = setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
     },
     onError: (error: Error, { key }) => {
       setSavingKeys((prev) => { const n = new Set(prev); n.delete(key); return n })
@@ -873,7 +877,8 @@ export default function Settings() {
       setPendingValues((prev) => { const n = { ...prev }; delete n[key]; return n })
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       setSavedKeys((prev) => new Set(prev).add(key))
-      setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
+      clearTimeout(savedTimersRef.current[key])
+      savedTimersRef.current[key] = setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
     },
   })
 

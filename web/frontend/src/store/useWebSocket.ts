@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from './authStore'
 import { authApi } from '../api/auth'
@@ -41,45 +42,30 @@ function getWsUrl(token: string): string {
   return `${base}/ws?token=${encodeURIComponent(token)}`
 }
 
-const AUDIT_ACTION_LABELS: Record<string, string> = {
-  create_user: 'создал пользователя',
-  update_user: 'обновил пользователя',
-  delete_user: 'удалил пользователя',
-  enable_user: 'включил пользователя',
-  disable_user: 'отключил пользователя',
-  revoke_sub: 'отозвал подписку',
-  create_host: 'создал хост',
-  update_host: 'обновил хост',
-  delete_host: 'удалил хост',
-  update_settings: 'изменил настройки',
-  create_admin: 'создал администратора',
-  update_admin: 'обновил администратора',
-  delete_admin: 'удалил администратора',
-  create_role: 'создал роль',
-  update_role: 'обновил роль',
-  delete_role: 'удалил роль',
-  login: 'вошёл в систему',
-  resolve_violation: 'обработал нарушение',
-}
+function formatAuditAction(action: string, resource: string, t: (key: string) => string): string {
+  // Try exact i18n description: audit.descriptions.{action}.{resource}
+  const descKey = `audit.descriptions.${action}.${resource}`
+  const desc = t(descKey)
+  if (desc !== descKey) return desc
 
-const AUDIT_RESOURCE_LABELS: Record<string, string> = {
-  users: 'пользователя',
-  hosts: 'хост',
-  nodes: 'ноду',
-  settings: 'настройки',
-  admins: 'администратора',
-  roles: 'роль',
-  violations: 'нарушение',
-}
+  // Try splitting compound action (e.g., create_user → create + user)
+  const idx = action.indexOf('_')
+  if (idx > 0) {
+    const verb = action.slice(0, idx)
+    const noun = action.slice(idx + 1)
+    const compoundKey = `audit.descriptions.${verb}.${noun}`
+    const compoundDesc = t(compoundKey)
+    if (compoundDesc !== compoundKey) return compoundDesc
+  }
 
-function formatAuditAction(action: string, resource: string): string {
-  const label = AUDIT_ACTION_LABELS[action]
-  if (label) return label
-
-  // Fallback: try to build from action + resource
-  const resLabel = AUDIT_RESOURCE_LABELS[resource]
-  if (resLabel) return `${action} ${resLabel}`
-  return `${action} ${resource || ''}`
+  // Compose from action + resource labels
+  const actionKey = `audit.actions.${action}`
+  const actionLabel = t(actionKey)
+  const resourceKey = `audit.resources.${resource}`
+  const resourceLabel = t(resourceKey)
+  const resolvedAction = actionLabel !== actionKey ? actionLabel : action
+  const resolvedResource = resourceLabel !== resourceKey ? resourceLabel : resource
+  return resolvedResource ? `${resolvedAction}: ${resolvedResource}` : resolvedAction
 }
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000]
@@ -90,6 +76,7 @@ const AUTH_FAILURE_CODE = 4001
 
 export function useRealtimeUpdates() {
   const queryClient = useQueryClient()
+  const { t } = useTranslation()
   const setTokens = useAuthStore((s) => s.setTokens)
   const logout = useAuthStore((s) => s.logout)
 
@@ -180,7 +167,7 @@ export function useRealtimeUpdates() {
               const action = (msg.data?.action as string) || ''
               const resource = (msg.data?.resource as string) || ''
               toast.info(
-                `${auditAdmin}: ${formatAuditAction(action, resource)}`,
+                `${auditAdmin}: ${formatAuditAction(action, resource, t)}`,
                 { duration: 4000 },
               )
             }
@@ -191,7 +178,7 @@ export function useRealtimeUpdates() {
         // Non-JSON message, ignore
       }
     },
-    [queryClient],
+    [queryClient, t],
   )
 
   /**

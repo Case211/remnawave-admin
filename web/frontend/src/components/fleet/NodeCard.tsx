@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useFormatters } from '@/lib/useFormatters'
+
 import {
   Cpu,
   MemoryStick,
@@ -7,8 +7,6 @@ import {
   Clock,
   ArrowUp,
   ArrowDown,
-  Wifi,
-  WifiOff,
   Terminal,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -59,20 +57,6 @@ export function getNodeStatus(node: FleetNode): NodeStatus {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
-
-function formatBytesShort(bytes: number | null): string {
-  if (bytes == null || bytes === 0) return '0'
-  const units = ['B', 'K', 'M', 'G', 'T']
-  let value = bytes
-  let unitIndex = 0
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex++
-  }
-  return unitIndex === 0
-    ? `${Math.round(value)} ${units[unitIndex]}`
-    : `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[unitIndex]}`
-}
 
 function formatSpeedCompact(bps: number): string {
   if (bps === 0) return '0 B/s'
@@ -140,7 +124,6 @@ interface NodeCardProps {
 
 export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect, children }: NodeCardProps) {
   const { t } = useTranslation()
-  const { formatBytes } = useFormatters()
   const status = getNodeStatus(node)
 
   const memoryGb = node.memory_total_bytes != null

@@ -1347,7 +1347,7 @@
       "uniqueUsersColumn": "Users",
       "searchPlaceholder": "Search by city or user...",
       "citiesCount": "{{count}} cities",
-      "totalConnections": "{{count}} conn."
+      "totalConnections": "{{formattedCount}} conn."
     },
     "topUsers": {
       "title": "Top users by traffic",

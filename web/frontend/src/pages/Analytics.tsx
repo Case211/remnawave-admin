@@ -328,7 +328,7 @@ function CityUsersList({
                 </span>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-xs text-muted-foreground">
-                    {t('analytics.geo.totalConnections', { count: city.count.toLocaleString() })}
+                    {t('analytics.geo.totalConnections', { count: city.count, formattedCount: city.count.toLocaleString() })}
                   </span>
                   {city.unique_users > 0 && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">

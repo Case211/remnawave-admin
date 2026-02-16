@@ -208,6 +208,8 @@ export default function Login() {
   const { login, loginWithPassword, register, isAuthenticated, isLoading, error, clearError } =
     useAuthStore()
 
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>()
+
   // Setup check
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
   const [setupChecked, setSetupChecked] = useState(false)
@@ -238,6 +240,10 @@ export default function Login() {
 
     authApi.getSetupStatus().then((status) => {
       setNeedsSetup(status.needs_setup)
+      setSetupChecked(true)
+    }).catch(() => {
+      // If API is unreachable, fall back to login form
+      setNeedsSetup(false)
       setSetupChecked(true)
     })
   }, [isAuthenticated, navigate])
@@ -316,7 +322,8 @@ export default function Login() {
     if (regPassword) {
       navigator.clipboard.writeText(regPassword).then(() => {
         setCopiedPassword(true)
-        setTimeout(() => setCopiedPassword(false), 2000)
+        clearTimeout(copyTimerRef.current)
+        copyTimerRef.current = setTimeout(() => setCopiedPassword(false), 2000)
       })
     }
   }, [regPassword])

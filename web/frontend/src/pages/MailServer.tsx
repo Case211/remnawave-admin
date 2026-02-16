@@ -11,8 +11,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   Globe, Send, Inbox, ListOrdered, Plus, Trash2, RefreshCw,
-  CheckCircle2, XCircle, Copy, Mail, Eye, MailOpen, X, Ban,
-  RotateCcw, Search, KeyRound, Pencil,
+  CheckCircle2, XCircle, Copy, Mail, MailOpen, X, Ban,
+  RotateCcw, KeyRound, Pencil,
 } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,16 +26,12 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
+import { useHasPermission } from '@/components/PermissionGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   mailserverApi,
   type MailDomain,
-  type DnsRecord,
-  type EmailQueueItem,
-  type QueueStats,
   type InboxItem,
-  type InboxDetail,
   type SmtpCredential,
 } from '@/api/mailserver'
 import { cn } from '@/lib/utils'
@@ -59,7 +55,6 @@ const STATUS_BADGE: Record<string, string> = {
 
 export default function MailServer() {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const canEdit = useHasPermission('mailserver', 'edit')
   const canCreate = useHasPermission('mailserver', 'create')
   const canDelete = useHasPermission('mailserver', 'delete')
@@ -137,7 +132,7 @@ function DomainsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; can
       setNewDomain('')
       setNewFromName('')
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const deleteMut = useMutation({
@@ -147,14 +142,14 @@ function DomainsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; can
       toast.success(t('mailServer.domainDeleted'))
       setDeleteId(null)
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const toggleMut = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
       mailserverApi.updateDomain(id, { is_active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mailserver-domains'] }),
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const checkDnsMut = useMutation({
@@ -163,7 +158,7 @@ function DomainsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; can
       queryClient.invalidateQueries({ queryKey: ['mailserver-domains'] })
       toast.success(t('mailServer.dnsChecked'))
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-32 w-full" />)}</div>
@@ -292,7 +287,7 @@ function DomainCard({
       setEditingFromName(false)
       toast.success(t('mailServer.senderNameUpdated'))
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   return (
@@ -480,7 +475,7 @@ function DnsRecordsDialog({ domainId, onClose }: { domainId: number; onClose: ()
 
 // ── Queue Tab ─────────────────────────────────────────────────
 
-function QueueTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean }) {
+function QueueTab({ canEdit }: { canEdit: boolean; canDelete: boolean }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -506,7 +501,7 @@ function QueueTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
       queryClient.invalidateQueries({ queryKey: ['mailserver-queue'] })
       toast.success(t('mailServer.retryQueued'))
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const cancelMut = useMutation({
@@ -515,7 +510,7 @@ function QueueTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
       queryClient.invalidateQueries({ queryKey: ['mailserver-queue'] })
       toast.success(t('mailServer.cancelled'))
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   return (
@@ -639,6 +634,7 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
   const markReadMut = useMutation({
     mutationFn: (ids: number[]) => mailserverApi.markRead(ids),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mailserver-inbox'] }),
+    onError: () => toast.error(t('common.error')),
   })
 
   const deleteMut = useMutation({
@@ -649,7 +645,7 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
       setDeleteId(null)
       toast.success(t('mailServer.messageDeleted'))
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const openMessage = (item: InboxItem) => {
@@ -815,7 +811,7 @@ function ComposeTab() {
       setSubject('')
       setBody('')
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const testMut = useMutation({
@@ -828,7 +824,7 @@ function ComposeTab() {
       })
     },
     onSuccess: () => toast.success(t('mailServer.testSent')),
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   return (
@@ -971,7 +967,7 @@ function CredentialsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean;
       setShowAdd(false)
       resetForm()
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const updateMut = useMutation({
@@ -987,14 +983,14 @@ function CredentialsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean;
       setEditCred(null)
       resetForm()
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const toggleMut = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
       mailserverApi.updateSmtpCredential(id, { is_active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mailserver-smtp-credentials'] }),
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   const deleteMut = useMutation({
@@ -1004,7 +1000,7 @@ function CredentialsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean;
       toast.success(t('mailServer.credentials.deleted'))
       setDeleteId(null)
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || t('common.error')),
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
   if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
