@@ -446,7 +446,15 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
 
 const DEVICES_PER_PAGE = 3
 
-function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
+function PaginatedDeviceList({
+  devices,
+  onDeleteDevice,
+  onDeleteAll
+}: {
+  devices: HwidDevice[]
+  onDeleteDevice?: (deviceId: string) => void
+  onDeleteAll?: () => void
+}) {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
   const [devicePage, setDevicePage] = useState(1)
@@ -471,9 +479,21 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
                   <PlatformIcon className="h-4 w-4 text-primary-400" />
                   <span className="text-sm font-medium text-white">{pi.label}</span>
                 </div>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-mono">
-                  #{globalIdx + 1}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-mono">
+                    #{globalIdx + 1}
+                  </Badge>
+                  {onDeleteDevice && device.hwid && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onDeleteDevice(device.hwid!)}
+                      className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="space-y-1.5 text-xs">
                 {device.os_version && (
@@ -518,6 +538,21 @@ function PaginatedDeviceList({ devices }: { devices: HwidDevice[] }) {
           )
         })}
       </div>
+
+      {/* Delete all button */}
+      {onDeleteAll && devices.length > 0 && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={onDeleteAll}
+            className="text-xs"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+            {t('userDetail.devices.deleteAll', 'Удалить все устройства')}
+          </Button>
+        </div>
+      )}
 
       {/* Pagination controls */}
       {totalDevicePages > 1 && (
@@ -703,6 +738,40 @@ export default function UserDetail() {
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.syncError'))
+    },
+  })
+
+  // Delete single HWID device
+  const [deviceToDelete, setDeviceToDelete] = useState<string | null>(null)
+  const deleteDeviceMutation = useMutation({
+    mutationFn: async (deviceId: string) => {
+      await client.delete(`/users/${uuid}/hwid-devices/${deviceId}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
+      queryClient.invalidateQueries({ queryKey: ['user', uuid] })
+      toast.success(t('userDetail.toasts.deviceDeleted', 'HWID устройство удалено'))
+      setDeviceToDelete(null)
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.deleteError'))
+    },
+  })
+
+  // Delete all HWID devices
+  const [showDeleteAllDevices, setShowDeleteAllDevices] = useState(false)
+  const deleteAllDevicesMutation = useMutation({
+    mutationFn: async () => {
+      await client.delete(`/users/${uuid}/hwid-devices`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
+      queryClient.invalidateQueries({ queryKey: ['user', uuid] })
+      toast.success(t('userDetail.toasts.allDevicesDeleted', 'Все HWID устройства удалены'))
+      setShowDeleteAllDevices(false)
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.deleteError'))
     },
   })
 
@@ -1407,7 +1476,11 @@ export default function UserDetail() {
             <CardContent>
               {/* HWID device cards with pagination */}
               {hwidDevices && hwidDevices.length > 0 ? (
-                <PaginatedDeviceList devices={hwidDevices} />
+                <PaginatedDeviceList
+                  devices={hwidDevices}
+                  onDeleteDevice={setDeviceToDelete}
+                  onDeleteAll={() => setShowDeleteAllDevices(true)}
+                />
               ) : (
                 <div className="text-center py-6 text-dark-300 text-sm">
                   {t('userDetail.devices.noDevices')}
@@ -1623,6 +1696,28 @@ export default function UserDetail() {
         confirmLabel={t('userDetail.deleteConfirm.confirm')}
         variant="destructive"
         onConfirm={() => { deleteMutation.mutate(); setShowDeleteConfirm(false) }}
+      />
+
+      {/* Delete single HWID device confirm */}
+      <ConfirmDialog
+        open={!!deviceToDelete}
+        onOpenChange={(open) => !open && setDeviceToDelete(null)}
+        title={t('userDetail.devices.deleteConfirm.title', 'Удалить HWID устройство?')}
+        description={t('userDetail.devices.deleteConfirm.description', 'Это действие нельзя отменить. Устройство будет удалено из системы.')}
+        confirmLabel={t('userDetail.devices.deleteConfirm.confirm', 'Удалить')}
+        variant="destructive"
+        onConfirm={() => deviceToDelete && deleteDeviceMutation.mutate(deviceToDelete)}
+      />
+
+      {/* Delete all HWID devices confirm */}
+      <ConfirmDialog
+        open={showDeleteAllDevices}
+        onOpenChange={setShowDeleteAllDevices}
+        title={t('userDetail.devices.deleteAllConfirm.title', 'Удалить все HWID устройства?')}
+        description={t('userDetail.devices.deleteAllConfirm.description', 'Это действие нельзя отменить. Все устройства пользователя будут удалены из системы.')}
+        confirmLabel={t('userDetail.devices.deleteAllConfirm.confirm', 'Удалить все')}
+        variant="destructive"
+        onConfirm={() => deleteAllDevicesMutation.mutate()}
       />
 
       {/* QR Code Dialog */}

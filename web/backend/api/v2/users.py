@@ -918,6 +918,59 @@ async def get_user_hwid_devices(
     return []
 
 
+@router.delete("/{user_uuid}/hwid-devices/{device_id}")
+async def delete_user_hwid_device(
+    user_uuid: str,
+    device_id: str,
+    admin: AdminUser = Depends(require_permission("users", "edit")),
+):
+    """Delete a specific HWID device for a user."""
+    try:
+        from shared.database import db_service
+        from shared.api_client import api_client
+
+        # Delete from local DB (parameter is hwid, not device_id)
+        if db_service.is_connected:
+            await db_service.delete_hwid_device(user_uuid=user_uuid, hwid=device_id)
+
+        # Also delete from main API
+        try:
+            await api_client.delete_user_hwid_device(user_uuid, device_id)
+        except Exception as e:
+            logger.warning("Failed to delete HWID device %s from API for %s: %s", device_id, user_uuid, e)
+
+        return {"success": True, "message": "Device deleted"}
+    except Exception as e:
+        logger.error("Error deleting HWID device %s for %s: %s", device_id, user_uuid, e)
+        raise HTTPException(status_code=500, detail=f"Failed to delete device: {str(e)}")
+
+
+@router.delete("/{user_uuid}/hwid-devices")
+async def delete_all_user_hwid_devices(
+    user_uuid: str,
+    admin: AdminUser = Depends(require_permission("users", "edit")),
+):
+    """Delete all HWID devices for a user."""
+    try:
+        from shared.database import db_service
+        from shared.api_client import api_client
+
+        # Delete from local DB
+        if db_service.is_connected:
+            await db_service.delete_all_user_hwid_devices(user_uuid=user_uuid)
+
+        # Also delete from main API
+        try:
+            await api_client.delete_all_user_hwid_devices(user_uuid)
+        except Exception as e:
+            logger.warning("Failed to delete all HWID devices from API for %s: %s", user_uuid, e)
+
+        return {"success": True, "message": "All devices deleted"}
+    except Exception as e:
+        logger.error("Error deleting all HWID devices for %s: %s", user_uuid, e)
+        raise HTTPException(status_code=500, detail=f"Failed to delete all devices: {str(e)}")
+
+
 # ── Bulk operations ──────────────────────────────────────────────
 
 

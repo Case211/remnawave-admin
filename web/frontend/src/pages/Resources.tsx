@@ -718,7 +718,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TEMPLATE_TYPES.map((type) => (
+                  {Array.isArray(TEMPLATE_TYPES) && TEMPLATE_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>
                       {type}
                     </SelectItem>

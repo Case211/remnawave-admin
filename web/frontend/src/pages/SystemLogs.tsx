@@ -322,15 +322,10 @@ export default function SystemLogs() {
                 className="gap-1.5 data-[state=active]:bg-dark-700"
               >
                 <Icon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{t(cfg.labelKey)}</span>
-                {fileInfo && fileInfo.exists && key !== 'frontend' && (
+                <span className="text-xs sm:text-sm">{t(cfg.labelKey)}</span>
+                {fileInfo && fileInfo.exists && (
                   <span className="text-[10px] text-muted-foreground ml-1">
                     {formatFileSize(fileInfo.size_bytes)}
-                  </span>
-                )}
-                {key === 'frontend' && fileInfo && (
-                  <span className="text-[10px] text-muted-foreground ml-1">
-                    {fileInfo.size_bytes}
                   </span>
                 )}
               </TabsTrigger>
@@ -433,7 +428,7 @@ export default function SystemLogs() {
                 </div>
                 <div
                   ref={logContainerRef}
-                  className="h-[calc(100vh-420px)] min-h-[400px] overflow-auto font-mono text-xs leading-5 p-2"
+                  className="h-[calc(100vh-500px)] min-h-[250px] md:h-[calc(100vh-420px)] md:min-h-[400px] overflow-auto font-mono text-xs leading-5 p-2"
                 >
                   {allLines.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-muted-foreground">

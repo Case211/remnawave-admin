@@ -237,7 +237,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
     })
   }
 
-  const billingNodes = nodesData?.billingNodes || []
+  const billingNodes = Array.isArray(nodesData?.billingNodes) ? nodesData.billingNodes : []
   const stats = nodesData?.stats
 
   return (
@@ -790,7 +790,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
                   <SelectValue placeholder={t('billing.nodes.nodePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableNodes.items?.map((node) => (
+                  {Array.isArray(availableNodes?.items) && availableNodes.items.map((node) => (
                     <SelectItem key={node.uuid} value={node.uuid}>
                       <span className="flex items-center gap-2">
                         <span>{node.countryCode}</span>

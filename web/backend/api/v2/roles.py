@@ -42,6 +42,7 @@ AVAILABLE_RESOURCES = {
     "audit": ["view"],
     "logs": ["view"],
     "automation": ["view", "create", "edit", "delete", "run"],
+    "notifications": ["view", "edit"],
 }
 
 
