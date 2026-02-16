@@ -23,6 +23,8 @@ Critical shared components used by both bot and web backend:
 - **`config_service.py`** - Dynamic configuration (DB-first, then .env fallback)
 - **`logger.py`** - Structlog-based logging (JSON output, processor pipeline)
 - **`sync.py`** - Background sync service (Panel API → local DB cache)
+- **`connection_monitor.py`** - Active connection tracking and stats (used by violation detector)
+- **`violation_detector.py`** - Multi-factor abuse detection (5 analyzers: temporal, geo, ASN, profile, device)
 
 **Key principle**: Bot and web backend MUST NOT duplicate logic. Common operations go in `shared/`.
 
@@ -32,7 +34,7 @@ Entry point: `src/main.py`
 
 - **Handlers** (`src/handlers/`) - User-facing commands (users, nodes, hosts, billing, reports, violations)
 - **Services** (`src/services/`) - Business logic:
-  - `violation_detector.py` - Multi-factor abuse detection (temporal, geo, ASN, device fingerprinting)
+  - `violation_detector.py` - Re-export from `shared/` (backward compat)
   - `webhook.py` - FastAPI app receiving events from Panel
   - `report_scheduler.py` - Scheduled violation reports
   - `health_check.py` - Panel health monitoring
@@ -46,8 +48,8 @@ Entry point: `web/backend/main.py`
 Structure:
 ```
 web/backend/
-├── api/v2/          # REST endpoints (users, nodes, hosts, violations, analytics, roles, mailserver)
-├── core/            # Config, security, auth, permissions, audit middleware
+├── api/v2/          # REST endpoints (users, nodes, hosts, violations, analytics, roles, mailserver, collector)
+├── core/            # Config, security, auth, permissions, audit middleware, violation notifier
 ├── schemas/         # Pydantic models
 └── tests/           # Pytest test suite
 ```
@@ -181,12 +183,13 @@ docker exec -it <container_name> python3 scripts/admin_cli.py create-superadmin 
 
 ### Data Flow: Violations & Analytics
 
-1. **Node Agent** → sends connection data → **Bot Collector API** (`/api/v1/connections/batch`)
-2. **Collector** → runs `ViolationDetector` → stores in DB (`violations` table)
-3. **Web Backend** → reads from DB → exposes `/api/v2/violations/*` endpoints
-4. **Web Frontend** → fetches data → displays in UI
+1. **Node Agent** → sends connection data → **Web Backend Collector API** (`/api/v2/collector/batch`)
+2. **Collector** → runs `ViolationDetector` (from `shared/`) → stores in DB (`violations` table)
+3. **Collector** → sends notifications via `notification_service` (Telegram, in-app)
+4. **Web Backend** → exposes `/api/v2/violations/*` endpoints for UI
+5. **Web Frontend** → fetches data → displays in UI
 
-**Critical**: Violations are detected in the bot's collector service, NOT in web backend. Web backend is read-only for violations.
+**Critical**: Node Agent sends data directly to Web Backend (port 8081), NOT to the bot. The bot no longer has a collector endpoint. The `AGENT_COLLECTOR_URL` in node-agent `.env` must point to the web backend.
 
 ### Authentication Flow
 

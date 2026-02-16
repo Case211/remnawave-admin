@@ -167,7 +167,7 @@ async def run_webhook_server(bot: Bot, port: int) -> None:
             msg = str(record.getMessage())
             if "Invalid HTTP request" in msg:
                 return False
-            if "/api/v1/connections/" in msg:
+            if "/api/v1/connections/" in msg or "/api/v2/collector/" in msg:
                 return False
             return True
 

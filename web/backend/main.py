@@ -49,6 +49,7 @@ from web.backend.api.v2 import config_profiles as config_profiles_api
 from web.backend.api.v2 import billing as billing_api
 from web.backend.api.v2 import reports as reports_api
 from web.backend.api.v2 import asn as asn_api
+from web.backend.api.v2 import collector as collector_api
 
 
 # ── Logging setup (structlog) ────────────────────────────────────
@@ -431,8 +432,8 @@ def create_app() -> FastAPI:
     # IP whitelist middleware (checked before routing)
     @app.middleware("http")
     async def ip_whitelist_middleware(request: Request, call_next):
-        # Skip health check so monitoring still works
-        if request.url.path in ("/", "/api/v2/health"):
+        # Skip health check and collector API (agents connect from external IPs)
+        if request.url.path in ("/", "/api/v2/health") or request.url.path.startswith("/api/v2/collector/"):
             return await call_next(request)
 
         allowed = get_allowed_ips()
@@ -493,6 +494,7 @@ def create_app() -> FastAPI:
     app.include_router(billing_api.router, prefix="/api/v2/billing", tags=["billing"])
     app.include_router(reports_api.router, prefix="/api/v2/reports", tags=["reports"])
     app.include_router(asn_api.router, prefix="/api/v2/asn", tags=["asn"])
+    app.include_router(collector_api.router, prefix="/api/v2/collector", tags=["collector"])
 
     # Health check endpoint
     @app.get("/api/v2/health", tags=["health"])

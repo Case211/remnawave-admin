@@ -22,13 +22,7 @@ from src.utils.notifications import (
     send_crm_notification,
     send_generic_notification,
 )
-from src.services.collector import router as collector_router
-
-
 app = FastAPI(title="Remnawave Admin Webhook")
-
-# Подключаем Collector API роутер
-app.include_router(collector_router)
 
 # One-time warning about missing webhook secret
 _settings = get_settings()
@@ -52,40 +46,15 @@ async def catch_invalid_requests(request: Request, call_next):
             return JSONResponse(status_code=405, content={"error": "Method not allowed"})
         
         # Проверяем путь - если это не наш endpoint, возвращаем 404 без логирования
-        # Collector API пути начинаются с /api/v1/connections
-        collector_paths = [
-            "/api/v1/connections/batch",
-            "/api/v1/connections/health",
-            "/api/v1/connections/test"
-        ]
-        if request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"] + collector_paths:
+        if request.url.path not in ["/webhook", "/webhook/health", "/webhook/test", "/"]:
             # Для корневого пути возвращаем простой ответ
             if request.url.path == "/":
                 return JSONResponse(status_code=200, content={"service": "remnawave-admin-webhook", "status": "ok"})
             # Для других путей - 404 без логирования
             return JSONResponse(status_code=404, content={"error": "Not found"})
         
-        # Логируем запросы к Collector API только на уровне DEBUG
-        if request.url.path in collector_paths:
-            logger.debug(
-                "Collector API request: %s %s from %s",
-                request.method,
-                request.url.path,
-                request.client.host if request.client else "unknown"
-            )
-        
         # Продолжаем обработку валидного запроса
         response = await call_next(request)
-        
-        # Логируем ответ для Collector API
-        if request.url.path in collector_paths:
-            logger.debug(
-                "Collector API response: %s %s -> status %d",
-                request.method,
-                request.url.path,
-                response.status_code
-            )
-        
         return response
     except Exception:
         # Если произошла ошибка при обработке запроса, возвращаем 400 без логирования
