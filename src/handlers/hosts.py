@@ -16,7 +16,7 @@ from src.keyboards.navigation import NavTarget, input_keyboard, nav_keyboard, na
 from shared.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
 from shared.database import db_service
 from src.utils.formatters import build_host_summary
-from src.utils.logger import logger
+from shared.logger import logger
 
 # Функции перенесены из basic.py
 

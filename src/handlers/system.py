@@ -10,11 +10,11 @@ from src.keyboards.main_menu import system_menu_keyboard
 from src.keyboards.navigation import NavTarget, nav_row
 from src.keyboards.stats_menu import stats_menu_keyboard, stats_period_keyboard
 from src.keyboards.system_nodes import system_nodes_keyboard
-from src.services.api_client import ApiClientError, UnauthorizedError, api_client
+from shared.api_client import ApiClientError, UnauthorizedError, api_client
 from src.services.asn_parser import ASNParser
-from src.services.database import db_service
+from shared.database import db_service
 from src.utils.formatters import build_bandwidth_stats, format_bytes, format_datetime, format_uptime
-from src.utils.logger import logger
+from shared.logger import logger
 
 from src.handlers.nodes import _fetch_nodes_text
 

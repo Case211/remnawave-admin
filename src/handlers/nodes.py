@@ -13,10 +13,10 @@ from src.keyboards.navigation import NavTarget, nav_keyboard, nav_row
 from src.keyboards.node_actions import node_actions_keyboard
 from src.keyboards.node_edit import node_edit_keyboard
 from src.keyboards.navigation import input_keyboard
-from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
-from src.services.database import db_service
+from shared.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from shared.database import db_service
 from src.utils.formatters import _esc, build_node_summary, build_nodes_realtime_usage, build_nodes_usage_range, format_bytes
-from src.utils.logger import logger
+from shared.logger import logger
 
 # Функции перенесены из basic.py
 
@@ -1769,7 +1769,7 @@ async def cb_node_agent_token_generate(callback: CallbackQuery) -> None:
         node_name = node_info.get("name", "n/a")
         
         # Генерируем новый токен
-        from src.utils.agent_tokens import set_node_agent_token
+        from shared.agent_tokens import set_node_agent_token
         
         new_token = await set_node_agent_token(db_service, node_uuid)
         
@@ -1876,7 +1876,7 @@ async def cb_node_agent_token_revoke(callback: CallbackQuery) -> None:
         node_name = node_info.get("name", "n/a")
         
         # Отзываем токен
-        from src.utils.agent_tokens import revoke_node_agent_token
+        from shared.agent_tokens import revoke_node_agent_token
         
         success = await revoke_node_agent_token(db_service, node_uuid)
         

@@ -35,8 +35,8 @@ from src.keyboards.user_create import (
 from src.keyboards.user_stats import user_stats_keyboard
 from src.keyboards.hwid_devices import hwid_devices_keyboard
 from src.keyboards.hwid_menu import hwid_management_keyboard
-from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
-from src.services.database import db_service
+from shared.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from shared.database import db_service
 from src.services import data_access
 from src.utils.formatters import (
     _esc,
@@ -47,7 +47,7 @@ from src.utils.formatters import (
     format_hwid_device,
     format_hwid_devices_list,
 )
-from src.utils.logger import logger
+from shared.logger import logger
 from src.utils.notifications import send_user_notification
 
 # Функции перенесены из basic.py

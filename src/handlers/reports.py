@@ -14,11 +14,11 @@ from src.keyboards.reports_menu import (
     reports_schedule_keyboard,
     reports_view_keyboard,
 )
-from src.services.config_service import config_service
-from src.services.database import db_service
+from shared.config_service import config_service
+from shared.database import db_service
 from src.services.report_scheduler import get_report_scheduler
 from src.services.violation_reports import ReportType, violation_report_service
-from src.utils.logger import logger
+from shared.logger import logger
 
 router = Router(name="reports")
 

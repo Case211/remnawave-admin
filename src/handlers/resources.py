@@ -13,8 +13,8 @@ from src.keyboards.snippet_actions import snippet_actions_keyboard
 from src.keyboards.template_actions import template_actions_keyboard
 from src.keyboards.template_menu import template_list_keyboard, template_menu_keyboard
 from src.keyboards.token_actions import token_actions_keyboard
-from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
-from src.services.database import db_service
+from shared.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from shared.database import db_service
 from src.services import data_access
 from src.utils.formatters import (
     build_config_profiles_list,
@@ -25,7 +25,7 @@ from src.utils.formatters import (
     build_templates_list,
     build_tokens_list,
 )
-from src.utils.logger import logger
+from shared.logger import logger
 
 # Функции перенесены из basic.py
 

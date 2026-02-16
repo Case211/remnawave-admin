@@ -30,10 +30,10 @@ from src.keyboards.main_menu import (
 )
 from src.keyboards.navigation import NavTarget, nav_keyboard, nav_row
 from src.keyboards.providers_menu import providers_menu_keyboard
-from src.services.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
+from shared.api_client import ApiClientError, NotFoundError, UnauthorizedError, api_client
 from src.services import data_access
-from src.services.database import db_service
-from src.utils.logger import logger
+from shared.database import db_service
+from shared.logger import logger
 
 # Импорты из соответствующих модулей
 from src.handlers.billing import _fetch_billing_nodes_text, _fetch_billing_text, _fetch_providers_text
@@ -66,7 +66,7 @@ async def _fetch_main_menu_text(force_refresh: bool = False) -> str:
     try:
         # Пытаемся получить health checker из контекста диспетчера
         # Это работает только если бот уже запущен
-        from src.services.api_client import ApiClientError
+        from shared.api_client import ApiClientError
         try:
             await api_client.get_health()
             panel_status = "🟢"
