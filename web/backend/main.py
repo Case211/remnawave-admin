@@ -113,6 +113,61 @@ def _shorten_logger_name(logger: object, method_name: str, event_dict: dict) -> 
     return event_dict
 
 
+def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
+    """structlog processor: компактный формат для api_call и api_error."""
+    event = event_dict.get("event", "")
+    if event == "api_call":
+        method = event_dict.pop("method", "")
+        endpoint = event_dict.pop("endpoint", "")
+        status = event_dict.pop("status_code", "")
+        duration = event_dict.pop("duration_ms", "")
+        parts = []
+        if method and endpoint:
+            parts.append(f"{method} {endpoint}")
+        if status:
+            parts.append(f"→ {status}")
+        if duration:
+            parts.append(f"({duration}ms)")
+        event_dict["event"] = " ".join(parts) if parts else event
+    elif event == "api_error":
+        method = event_dict.pop("method", "")
+        endpoint = event_dict.pop("endpoint", "")
+        status = event_dict.pop("status_code", "")
+        error = event_dict.pop("error", "")
+        parts = []
+        if method and endpoint:
+            parts.append(f"{method} {endpoint}")
+        if status:
+            parts.append(f"→ {status}")
+        if error:
+            parts.append(f"| {error}")
+        event_dict["event"] = " ".join(parts) if parts else event
+    return event_dict
+
+
+# Цвета уровней логирования (ANSI)
+_LEVEL_STYLES = {
+    "critical": "\033[1;91m",   # bold bright red
+    "exception": "\033[1;91m",  # bold bright red
+    "error": "\033[91m",        # bright red
+    "warn": "\033[93m",         # bright yellow
+    "warning": "\033[93m",      # bright yellow
+    "info": "\033[36m",         # cyan
+    "debug": "\033[2;37m",      # dim white
+    "notset": "\033[2m",        # dim
+}
+
+
+def _make_console_renderer() -> structlog.dev.ConsoleRenderer:
+    """Создаёт ConsoleRenderer с красивым форматированием."""
+    return structlog.dev.ConsoleRenderer(
+        colors=True,
+        force_colors=True,
+        pad_event_to=40,
+        level_styles=_LEVEL_STYLES,
+    )
+
+
 def _setup_web_logging():
     """Настраивает structlog логирование для web backend."""
     root = logging.getLogger()
@@ -138,7 +193,8 @@ def _setup_web_logging():
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             _shorten_logger_name,
-            structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty()),
+            _compact_kv,
+            _make_console_renderer(),
         ],
         foreign_pre_chain=shared_processors,
     ))

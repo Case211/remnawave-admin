@@ -42,7 +42,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
 
   // Permissions
   const canCreate = useHasPermission('billing', 'create')
-  const canUpdate = useHasPermission('billing', 'update')
+  const canUpdate = useHasPermission('billing', 'edit')
   const canDelete = useHasPermission('billing', 'delete')
 
   // Tab state

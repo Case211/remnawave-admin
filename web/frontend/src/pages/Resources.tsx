@@ -55,7 +55,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
 
   // Permissions
   const canCreate = useHasPermission('resources', 'create')
-  const canUpdate = useHasPermission('resources', 'update')
+  const canUpdate = useHasPermission('resources', 'edit')
   const canDelete = useHasPermission('resources', 'delete')
 
   // Tab state
