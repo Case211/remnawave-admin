@@ -142,9 +142,10 @@ async def receive_connections(
     node_uuid: str = Depends(verify_agent_token),
 ):
     """Принимает батч подключений от Node Agent."""
-    logger.debug(
-        "Received batch: node_uuid=%s connections=%d",
-        node_uuid, len(report.connections) if report.connections else 0,
+    logger.info(
+        "Batch received: node=%s connections=%d metrics=%s",
+        node_uuid[:8], len(report.connections) if report.connections else 0,
+        "yes" if report.system_metrics else "no",
     )
 
     if report.node_uuid != node_uuid:
@@ -227,7 +228,7 @@ async def receive_connections(
         logger.warning("Batch processed with errors: node=%s total=%d processed=%d errors=%d",
                        node_uuid, len(report.connections), processed, errors)
     else:
-        logger.debug("Batch processed: node=%s total=%d processed=%d", node_uuid, len(report.connections), processed)
+        logger.info("Batch processed: node=%s total=%d processed=%d", node_uuid[:8], len(report.connections), processed)
 
     # Post-processing: auto-close old connections + violation detection
     if processed > 0:
