@@ -44,6 +44,9 @@ AVAILABLE_RESOURCES = {
     "automation": ["view", "create", "edit", "delete", "run"],
     "notifications": ["view", "edit"],
     "resources": ["view", "edit"],
+    "billing": ["view", "create", "edit", "delete"],
+    "reports": ["view", "create"],
+    "mailserver": ["view", "create", "edit", "delete"],
 }
 
 
