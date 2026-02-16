@@ -478,7 +478,7 @@ export default function Fleet() {
       : null
     const totalDl = onlineNodes.reduce((sum, n) => sum + n.download_speed_bps, 0)
     const totalUl = onlineNodes.reduce((sum, n) => sum + n.upload_speed_bps, 0)
-    const totalUsers = fleet.nodes.reduce((sum, n) => sum + n.users_online, 0)
+    const totalUsers = Array.isArray(fleet.nodes) ? fleet.nodes.reduce((sum, n) => sum + n.users_online, 0) : 0
 
     return { avgCpu, avgRam, totalDl, totalUl, totalUsers }
   }, [fleet?.nodes])

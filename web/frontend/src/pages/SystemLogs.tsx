@@ -428,7 +428,7 @@ export default function SystemLogs() {
                 </div>
                 <div
                   ref={logContainerRef}
-                  className="h-[calc(100vh-500px)] min-h-[250px] md:h-[calc(100vh-420px)] md:min-h-[400px] overflow-auto font-mono text-xs leading-5 p-2"
+                  className="h-[calc(100vh-500px)] min-h-[250px] md:h-[calc(100vh-420px)] md:min-h-[400px] overflow-x-auto overflow-y-auto font-mono text-xs leading-5 p-2"
                 >
                   {allLines.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -468,7 +468,7 @@ export default function SystemLogs() {
                             )}
 
                             {entry.timestamp && (
-                              <span className="text-dark-400 whitespace-nowrap shrink-0 select-none">
+                              <span className="text-dark-400 whitespace-nowrap shrink-0 select-none text-[10px] md:text-xs">
                                 {entry.timestamp}
                               </span>
                             )}
@@ -482,7 +482,7 @@ export default function SystemLogs() {
                                 {entry.source}
                               </span>
                             )}
-                            <span className={cn('text-dark-100 break-all', isError && 'text-red-300')}>
+                            <span className={cn('text-dark-100 whitespace-pre-wrap break-words', isError && 'text-red-300')}>
                               {entry.message}
                             </span>
                           </div>
