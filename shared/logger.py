@@ -1,11 +1,15 @@
 import gzip
+import json
 import logging
 import os
 import shutil
 import sys
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Optional
+
+import structlog
 
 from shared.config import get_shared_settings as get_settings
 
@@ -28,14 +32,6 @@ _LOGGER_NAME_MAP = {
     "sqlalchemy": "db",
 }
 
-# Формат для консоли (кратко)
-_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
-_CONSOLE_DATEFMT = "%H:%M:%S"
-
-# Формат для файлов (подробно, с датой)
-_FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
-_FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
-
 # Ротация: 10 MB, 5 файлов, с gzip-сжатием
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 5
@@ -51,7 +47,6 @@ class CompressedRotatingFileHandler(RotatingFileHandler):
             self.stream.close()
             self.stream = None
 
-        # Сдвигаем существующие .gz файлы
         for i in range(self.backupCount - 1, 0, -1):
             sfn = self.rotation_filename(f"{self.baseFilename}.{i}.gz")
             dfn = self.rotation_filename(f"{self.baseFilename}.{i + 1}.gz")
@@ -60,7 +55,6 @@ class CompressedRotatingFileHandler(RotatingFileHandler):
                     os.remove(dfn)
                 os.rename(sfn, dfn)
 
-        # Сжимаем текущий лог в .1.gz
         dfn = self.rotation_filename(f"{self.baseFilename}.1.gz")
         if os.path.exists(dfn):
             os.remove(dfn)
@@ -68,32 +62,11 @@ class CompressedRotatingFileHandler(RotatingFileHandler):
             with open(self.baseFilename, "rb") as f_in:
                 with gzip.open(dfn, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
-            # Очищаем текущий файл
             with open(self.baseFilename, "w"):
                 pass
 
         if not self.delay:
             self.stream = self._open()
-
-
-class CleanFormatter(logging.Formatter):
-    """Компактный форматтер с короткими именами логгеров."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        # Сохраняем оригинальное имя и подставляем короткое
-        original_name = record.name
-        name = record.name
-        for prefix, short in _LOGGER_NAME_MAP.items():
-            if name == prefix or name.startswith(prefix + "."):
-                record.name = short
-                break
-        else:
-            if "." in name:
-                record.name = name.rsplit(".", 1)[-1]
-
-        result = super().format(record)
-        record.name = original_name  # восстанавливаем для других хэндлеров
-        return result
 
 
 class ViolationLogFilter(logging.Filter):
@@ -120,11 +93,22 @@ class ViolationLogFilter(logging.Filter):
         return any(kw in msg_lower for kw in self._KEYWORDS)
 
 
+def _shorten_logger_name(logger_name: str, event_dict: dict) -> dict:
+    """structlog processor: сокращает имена логгеров."""
+    name = event_dict.get("logger", logger_name or "")
+    for prefix, short in _LOGGER_NAME_MAP.items():
+        if name == prefix or name.startswith(prefix + "."):
+            event_dict["logger"] = short
+            return event_dict
+    if "." in name:
+        event_dict["logger"] = name.rsplit(".", 1)[-1]
+    return event_dict
+
+
 def _ensure_log_dir() -> Path:
     """Создаёт директорию для логов если не существует."""
-    log_dir = _LOG_DIR
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    return _LOG_DIR
 
 
 def setup_logger() -> logging.Logger:
@@ -133,58 +117,57 @@ def setup_logger() -> logging.Logger:
 
     root = logging.getLogger()
     root.handlers.clear()
-    root.setLevel(logging.DEBUG)  # root ловит всё, фильтрация на хэндлерах
+    root.setLevel(logging.DEBUG)
 
-    # === Console handler ===
-    # Console always shows messages at the configured level (INFO by default).
-    # In Docker the console IS the primary log output, so suppressing INFO
-    # makes migrations, API checks, and startup logs invisible.
+    # === Общие structlog процессоры ===
+    shared_processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.UnicodeDecoder(),
+    ]
+
+    # === Console handler (цветной вывод) ===
     console = logging.StreamHandler()
     console.setLevel(level)
-    console.setFormatter(CleanFormatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT))
+    console_formatter = structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            _shorten_logger_name,
+            structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty()),
+        ],
+        foreign_pre_chain=shared_processors,
+    )
+    console.setFormatter(console_formatter)
     root.addHandler(console)
 
-    # === File handlers: подробные логи с ротацией ===
+    # === File handlers ===
     try:
         log_dir = _ensure_log_dir()
 
-        debug_path = log_dir / "bot_DEBUG.log"
-        info_path = log_dir / "bot_INFO.log"
-        warn_path = log_dir / "bot_WARNING.log"
+        # JSON formatter для файлов
+        json_formatter = structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                _shorten_logger_name,
+                structlog.processors.JSONRenderer(),
+            ],
+            foreign_pre_chain=shared_processors,
+        )
 
-        # DEBUG файл (создаётся только при LOG_LEVEL=DEBUG)
-        if level <= logging.DEBUG:
-            debug_handler = CompressedRotatingFileHandler(
-                filename=str(debug_path),
-                maxBytes=_MAX_BYTES,
-                backupCount=_BACKUP_COUNT,
-                encoding="utf-8",
-            )
-            debug_handler.setLevel(logging.DEBUG)
-            debug_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
-            root.addHandler(debug_handler)
-
-        # INFO+ файл
-        info_handler = CompressedRotatingFileHandler(
-            filename=str(info_path),
+        # Единый файл bot.log (INFO+)
+        bot_path = log_dir / "bot.log"
+        bot_handler = CompressedRotatingFileHandler(
+            filename=str(bot_path),
             maxBytes=_MAX_BYTES,
             backupCount=_BACKUP_COUNT,
             encoding="utf-8",
         )
-        info_handler.setLevel(logging.INFO)
-        info_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
-        root.addHandler(info_handler)
-
-        # WARNING+ файл
-        warn_handler = CompressedRotatingFileHandler(
-            filename=str(warn_path),
-            maxBytes=_MAX_BYTES,
-            backupCount=_BACKUP_COUNT,
-            encoding="utf-8",
-        )
-        warn_handler.setLevel(logging.WARNING)
-        warn_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
-        root.addHandler(warn_handler)
+        bot_handler.setLevel(logging.INFO)
+        bot_handler.setFormatter(json_formatter)
+        root.addHandler(bot_handler)
 
         # Violations файл (фильтрует записи о нарушениях из всех источников)
         violations_path = log_dir / "violations.log"
@@ -195,12 +178,11 @@ def setup_logger() -> logging.Logger:
             encoding="utf-8",
         )
         violations_handler.setLevel(logging.DEBUG)
-        violations_handler.setFormatter(CleanFormatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT))
+        violations_handler.setFormatter(json_formatter)
         violations_handler.addFilter(ViolationLogFilter())
         root.addHandler(violations_handler)
 
-        # Проверяем, что файлы действительно созданы и доступны для записи
-        _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
+        _verify_ok = bot_path.exists() and os.access(bot_path, os.W_OK)
         print(
             f"[LOGGING] File logging active: {log_dir} "
             f"(writable={_verify_ok})",
@@ -209,8 +191,7 @@ def setup_logger() -> logging.Logger:
         )
 
     except OSError as exc:
-        # Если не удалось создать файлы (read-only FS и т.п.) — работаем только с консолью
-        console.setLevel(level)  # fallback: показываем всё в консоли
+        console.setLevel(level)
         root.warning("Cannot create log files (%s), logging to console only", exc)
         print(
             f"[LOGGING] File logging DISABLED: {exc}. "
@@ -219,13 +200,24 @@ def setup_logger() -> logging.Logger:
             flush=True,
         )
 
-    # Подавляем шумные сторонние логгеры (при DEBUG показываем httpx/httpcore)
+    # Подавляем шумные сторонние логгеры
     http_level = logging.DEBUG if level <= logging.DEBUG else logging.WARNING
     logging.getLogger("httpx").setLevel(http_level)
     logging.getLogger("httpcore").setLevel(http_level)
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
     logging.getLogger("aiosqlite").setLevel(logging.WARNING)
     logging.getLogger("aiogram").setLevel(level)
+
+    # Конфигурируем structlog
+    structlog.configure(
+        processors=[
+            *shared_processors,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
 
     return logging.getLogger("remnawave-admin-bot")
 
@@ -234,25 +226,18 @@ logger = setup_logger()
 
 
 def set_log_level(level_name: str) -> None:
-    """Динамически изменяет уровень логирования для всех хэндлеров без перезапуска.
-
-    Args:
-        level_name: Уровень логирования (DEBUG, INFO, WARNING, ERROR)
-    """
+    """Динамически изменяет уровень логирования для всех хэндлеров без перезапуска."""
     level = getattr(logging, level_name.upper(), logging.INFO)
     root = logging.getLogger()
 
     for handler in root.handlers:
         if isinstance(handler, logging.StreamHandler) and not isinstance(handler, RotatingFileHandler):
-            # Console handler: always matches the configured level
             handler.setLevel(level)
         elif isinstance(handler, RotatingFileHandler):
-            # Файловые хэндлеры: DEBUG файл = DEBUG, остальные оставляем как есть
             base = os.path.basename(handler.baseFilename)
-            if "DEBUG" in base:
-                handler.setLevel(logging.DEBUG)
+            if "violations" not in base:
+                handler.setLevel(level)
 
-    # Подавляем/открываем шумные логгеры
     http_level = logging.DEBUG if level <= logging.DEBUG else logging.WARNING
     logging.getLogger("httpx").setLevel(http_level)
     logging.getLogger("httpcore").setLevel(http_level)
@@ -262,12 +247,7 @@ def set_log_level(level_name: str) -> None:
 
 
 def set_rotation_params(max_bytes: int, backup_count: int) -> None:
-    """Динамически обновляет параметры ротации для всех файловых хэндлеров.
-
-    Args:
-        max_bytes: Максимальный размер файла в байтах
-        backup_count: Количество бэкап-файлов
-    """
+    """Динамически обновляет параметры ротации для всех файловых хэндлеров."""
     root = logging.getLogger()
     for handler in root.handlers:
         if isinstance(handler, RotatingFileHandler):
@@ -284,17 +264,15 @@ def log_user_action(
     level: int = logging.INFO,
 ) -> None:
     """Логирует действие пользователя в структурированном формате."""
-    parts = [f"👤 {action}"]
-
+    log = structlog.get_logger("bot.user")
+    kwargs: dict[str, Any] = {"action": action}
     if user_id:
-        parts.append(f"id={user_id}")
+        kwargs["user_id"] = user_id
     if username:
-        parts.append(f"@{username}")
+        kwargs["username"] = username
     if details:
-        detail_str = ", ".join(f"{k}={v}" for k, v in details.items())
-        parts.append(detail_str)
-
-    logger.log(level, " | ".join(parts))
+        kwargs.update(details)
+    log.log(level, action, **kwargs)
 
 
 def log_button_click(callback_data: str, user_id: Optional[int] = None, username: Optional[str] = None) -> None:
@@ -309,7 +287,7 @@ def log_button_click(callback_data: str, user_id: Optional[int] = None, username
 
 def log_command(command: str, user_id: Optional[int] = None, username: Optional[str] = None, args: Optional[str] = None) -> None:
     """Логирует выполнение команды."""
-    details = {"cmd": command}
+    details: dict[str, Any] = {"cmd": command}
     if args:
         details["args"] = args
     log_user_action(
@@ -322,7 +300,7 @@ def log_command(command: str, user_id: Optional[int] = None, username: Optional[
 
 def log_user_input(field: str, user_id: Optional[int] = None, username: Optional[str] = None, preview: Optional[str] = None) -> None:
     """Логирует ввод данных пользователем."""
-    details = {"field": field}
+    details: dict[str, Any] = {"field": field}
     if preview:
         details["preview"] = preview[:50] + ("..." if len(preview) > 50 else "")
     log_user_action(
@@ -335,18 +313,19 @@ def log_user_input(field: str, user_id: Optional[int] = None, username: Optional
 
 def log_api_call(method: str, endpoint: str, status_code: Optional[int] = None, duration_ms: Optional[float] = None) -> None:
     """Логирует вызов API."""
-    parts = [f"🌐 {method} {endpoint}"]
+    log = structlog.get_logger("bot.api")
+    kwargs: dict[str, Any] = {"method": method, "endpoint": endpoint}
     if status_code:
-        parts.append(f"status={status_code}")
+        kwargs["status_code"] = status_code
     if duration_ms is not None:
-        parts.append(f"{duration_ms:.0f}ms")
-    logger.info(" | ".join(parts))
+        kwargs["duration_ms"] = round(duration_ms)
+    log.info("api_call", **kwargs)
 
 
 def log_api_error(method: str, endpoint: str, error: Exception, status_code: Optional[int] = None) -> None:
     """Логирует ошибку API."""
-    parts = [f"❌ {method} {endpoint}"]
+    log = structlog.get_logger("bot.api")
+    kwargs: dict[str, Any] = {"method": method, "endpoint": endpoint, "error": f"{type(error).__name__}: {error}"}
     if status_code:
-        parts.append(f"status={status_code}")
-    parts.append(f"{type(error).__name__}: {error}")
-    logger.error(" | ".join(parts))
+        kwargs["status_code"] = status_code
+    log.error("api_error", **kwargs)

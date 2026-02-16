@@ -12,6 +12,8 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import structlog
+
 # Add project root to path for importing src modules
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -49,15 +51,24 @@ from web.backend.api.v2 import reports as reports_api
 from web.backend.api.v2 import asn as asn_api
 
 
-# ── Logging setup ─────────────────────────────────────────────────
+# ── Logging setup (structlog) ────────────────────────────────────
 
-_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
-_CONSOLE_DATEFMT = "%H:%M:%S"
-_FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
-_FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 5
 _LOG_DIR = Path("/app/logs")
+
+# Короткие имена для сторонних логгеров
+_LOGGER_NAME_MAP = {
+    "uvicorn.error": "uvicorn",
+    "uvicorn.access": "uvicorn",
+    "web.backend.api.deps": "web",
+    "web.backend.core.api_helper": "web",
+    "httpx": "http",
+    "httpcore": "http",
+    "asyncpg": "db",
+    "alembic": "migration",
+    "sqlalchemy": "db",
+}
 
 
 class _CompressedRotatingFileHandler(RotatingFileHandler):
@@ -90,57 +101,76 @@ class _CompressedRotatingFileHandler(RotatingFileHandler):
             self.stream = self._open()
 
 
-def _setup_web_logging():
-    """Настраивает логирование для web backend."""
-    import os
+def _shorten_logger_name(logger_name: str, event_dict: dict) -> dict:
+    """structlog processor: сокращает имена логгеров."""
+    name = event_dict.get("logger", logger_name or "")
+    for prefix, short in _LOGGER_NAME_MAP.items():
+        if name == prefix or name.startswith(prefix + "."):
+            event_dict["logger"] = short
+            return event_dict
+    if "." in name:
+        event_dict["logger"] = name.rsplit(".", 1)[-1]
+    return event_dict
 
+
+def _setup_web_logging():
+    """Настраивает structlog логирование для web backend."""
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(logging.DEBUG)
 
-    # Determine console log level from environment (default: INFO)
     console_level_name = os.environ.get("WEB_LOG_LEVEL", "INFO").upper()
     console_level = getattr(logging, console_level_name, logging.INFO)
 
-    fmt = logging.Formatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT)
+    shared_processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.UnicodeDecoder(),
+    ]
 
-    # Console: INFO+ by default (visible in docker-compose logs)
+    # Console: цветной вывод
     console = logging.StreamHandler()
     console.setLevel(console_level)
-    console.setFormatter(fmt)
+    console.setFormatter(structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            _shorten_logger_name,
+            structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty()),
+        ],
+        foreign_pre_chain=shared_processors,
+    ))
     root.addHandler(console)
 
-    # File handlers (optional, for persistent logs)
+    # File handler: JSON формат
     try:
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
-        file_fmt = logging.Formatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT)
 
-        info_path = _LOG_DIR / "web_INFO.log"
-        warn_path = _LOG_DIR / "web_WARNING.log"
+        json_formatter = structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                _shorten_logger_name,
+                structlog.processors.JSONRenderer(),
+            ],
+            foreign_pre_chain=shared_processors,
+        )
 
-        info_h = _CompressedRotatingFileHandler(
-            str(info_path),
+        backend_path = _LOG_DIR / "backend.log"
+        backend_h = _CompressedRotatingFileHandler(
+            str(backend_path),
             maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
         )
-        info_h.setLevel(logging.INFO)
-        info_h.setFormatter(file_fmt)
-        root.addHandler(info_h)
+        backend_h.setLevel(logging.INFO)
+        backend_h.setFormatter(json_formatter)
+        root.addHandler(backend_h)
 
-        warn_h = _CompressedRotatingFileHandler(
-            str(warn_path),
-            maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
-        )
-        warn_h.setLevel(logging.WARNING)
-        warn_h.setFormatter(file_fmt)
-        root.addHandler(warn_h)
-
-        # NOTE: violations.log is written by the bot process (src/utils/logger.py)
+        # NOTE: violations.log is written by the bot process (shared/logger.py)
         # which has the proper ViolationLogFilter. The web backend must NOT add its
-        # own handler for the same file — two processes sharing a RotatingFileHandler
-        # causes data loss on rotation and the broad keyword filter ("violation")
-        # matches WebSocket subscription debug messages, flooding the log with noise.
+        # own handler for the same file.
 
-        _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
+        _verify_ok = backend_path.exists() and os.access(backend_path, os.W_OK)
         print(
             f"[LOGGING] File logging active: {_LOG_DIR} "
             f"(writable={_verify_ok})",
@@ -161,6 +191,17 @@ def _setup_web_logging():
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    # Конфигурируем structlog
+    structlog.configure(
+        processors=[
+            *shared_processors,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
 
 
 _setup_web_logging()

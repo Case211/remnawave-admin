@@ -4,6 +4,7 @@ import { useAuthStore } from './store/authStore'
 import { usePermissionStore } from './store/permissionStore'
 import { AppearanceProvider } from './components/AppearanceProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { clientLogger } from './lib/clientLogger'
 
 // Layout
 import Layout from './components/layout/Layout'
@@ -57,6 +58,12 @@ export default function App() {
   const validateSession = useAuthStore((s) => s.validateSession)
   const clearPermissions = usePermissionStore((s) => s.clearPermissions)
   const [isValidating, setIsValidating] = useState(true)
+
+  // Initialize frontend error collection
+  useEffect(() => {
+    clientLogger.init()
+    return () => clientLogger.destroy()
+  }, [])
 
   // Validate persisted session on app startup
   useEffect(() => {

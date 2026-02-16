@@ -1314,7 +1314,15 @@
     "notFound": "File not found",
     "linesCount": "{{count}} lines",
     "waitingForEntries": "Waiting for entries...",
-    "noEntries": "No entries"
+    "noEntries": "No entries",
+    "logLevel": "Log level",
+    "tabs": {
+      "backend": "Backend",
+      "bot": "Bot",
+      "frontend": "Frontend",
+      "violations": "Violations",
+      "postgres": "PostgreSQL"
+    }
   },
   "analytics": {
     "title": "Analytics",

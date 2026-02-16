@@ -1314,7 +1314,15 @@
     "notFound": "Файл не найден",
     "linesCount": "{{count}} строк",
     "waitingForEntries": "Ожидание записей...",
-    "noEntries": "Нет записей"
+    "noEntries": "Нет записей",
+    "logLevel": "Уровень логирования",
+    "tabs": {
+      "backend": "Бэкенд",
+      "bot": "Бот",
+      "frontend": "Фронтенд",
+      "violations": "Нарушения",
+      "postgres": "PostgreSQL"
+    }
   },
   "analytics": {
     "title": "Аналитика",

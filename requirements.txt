@@ -4,6 +4,7 @@ python-dotenv==1.0.1
 pydantic==2.8.2
 pydantic-settings==2.4.0
 ujson==5.10.0
+structlog>=24.1.0
 fastapi==0.115.0
 uvicorn==0.32.0
 # GeoIP
