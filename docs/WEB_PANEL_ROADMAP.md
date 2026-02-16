@@ -61,6 +61,7 @@
 - **Redis-кеширование**: CacheService с fallback на in-memory. `@cached` декоратор для analytics (30-300с TTL). Настройка через `REDIS_URL`
 - **Rate limiting**: Гранулярные лимиты по эндпоинтам (auth 5-10/мин, analytics 30/мин, bulk 10/мин, глобальный 200/мин). Redis-бэкенд для distributed rate limiting
 - **Cursor-based пагинация**: audit_log, automation_log — эффективная пагинация для больших таблиц
+- **Модульная архитектура (shared/)**: Общие сервисы (database, api_client, config_service, sync, geoip, cache, logger, agent_tokens, maxmind_updater, asn_parser, data_access) вынесены в `shared/` модуль. Бот (`src/`) и веб-бэкенд (`web/backend/`) импортируют из `shared/` напрямую. Независимые Dockerfiles для каждого компонента
 
 ### База данных (25 миграций Alembic)
 
@@ -89,6 +90,7 @@
 | 12 | Мультиязычность (frontend) | react-i18next, RU/EN локали, переключатель языка, useFormatters() хук |
 | 13 (frontend) | Оптимизация frontend | Code splitting (16 чанков), виртуализация таблиц, React.memo, lazy Leaflet, Service Worker/PWA |
 | 13 (backend) | Оптимизация backend | Redis-кеширование (CacheService + @cached), cursor-based пагинация (audit/automation logs), 7 составных индексов, WebSocket permessage-deflate, гранулярный rate limiting |
+| Arch | Рефакторинг shared/ | Выделение shared/ модуля (9 сервисов), миграция импортов бота и веб-бэкенда, обновление Dockerfiles, независимый деплой компонентов |
 
 ---
 
@@ -435,6 +437,39 @@ One-click настройка свежего VPS как VPN-ноды.
 
 ---
 
+## Архитектурный рефакторинг — shared/ модуль ✅
+
+**Зачем:** Бот и веб-панель дублировали ~9000+ строк сервисного кода. Рефакторинг устраняет дублирование и позволяет деплоить компоненты независимо.
+
+**Статус: полностью выполнено.**
+
+### Что сделано
+
+| # | Задача | Статус | Описание |
+|---|--------|--------|----------|
+| A.1 | Создание shared/ модуля | ✅ | 11 сервисов вынесены: database, api_client, config_service, sync, geoip, cache, logger, agent_tokens, maxmind_updater, asn_parser, data_access |
+| A.2 | Миграция веб-бэкенда | ✅ | Все импорты `web/backend/` переведены на `from shared.` |
+| A.3 | Миграция бота | ✅ | Все handlers, services, utils переведены на `from shared.` для shared-модулей. Бот-специфичный код остался в `src/` |
+| A.4 | Обновление Dockerfiles | ✅ | Bot Dockerfile копирует `shared/` + `src/`. Web backend Dockerfile копирует `shared/` + `web/backend/` (без `src/`) |
+| A.5 | Re-export обёртки | ✅ | `src/services/*.py` содержат re-export из `shared/` для обратной совместимости (не используются внутри проекта) |
+| A.6 | Тестирование | ✅ | 663 теста (459 backend + 204 frontend) — все проходят |
+
+### Архитектура
+
+```
+remnawave-admin/
+├── shared/              ← Общие сервисы (database, api_client, logger, ...)
+├── src/                 ← Telegram-бот (handlers, keyboards, бот-специфичные services)
+│   ├── handlers/        ← import from shared.* + src.*
+│   ├── services/        ← бот-специфичные + re-export обёртки
+│   └── utils/           ← бот-утилиты (formatters, notifications, ...)
+├── web/
+│   ├── backend/         ← FastAPI (import from shared.* + web.backend.*)
+│   └── frontend/        ← React (TypeScript, Vite)
+```
+
+---
+
 ## Фаза 14 — Бэкап, импорт и миграция
 
 **Зачем:** Возможность экспортировать всю конфигурацию, перенести на другой сервер, восстановить после сбоя.
@@ -485,6 +520,7 @@ One-click настройка свежего VPS как VPN-ноды.
   Фаза 12 (i18n)               ██████████  Мультиязычность (фронтенд)          ✅
   Фаза 13 (Performance FE)     ██████████  Оптимизация фронтенда               ✅
   Фаза 13 (Performance BE)     ██████████  Redis, cursor-based, индексы, WS     ✅
+  Arch    (shared/ модуль)      ██████████  11 сервисов в shared/, независимый деплой ✅
 
 Частично выполнено:
   Фаза 7  (Fleet: редактор)    █████████░  Нет визуального редактора скриптов  ⚠️ (~95%)
