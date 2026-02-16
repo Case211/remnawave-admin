@@ -40,6 +40,13 @@ from web.backend.api.v2 import agent_ws as agent_ws_api
 from web.backend.api.v2 import fleet as fleet_api
 from web.backend.api.v2 import terminal as terminal_api
 from web.backend.api.v2 import scripts as scripts_api
+from web.backend.api.v2 import tokens as tokens_api
+from web.backend.api.v2 import templates as templates_api
+from web.backend.api.v2 import snippets as snippets_api
+from web.backend.api.v2 import config_profiles as config_profiles_api
+from web.backend.api.v2 import billing as billing_api
+from web.backend.api.v2 import reports as reports_api
+from web.backend.api.v2 import asn as asn_api
 
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -382,6 +389,13 @@ def create_app() -> FastAPI:
     app.include_router(fleet_api.router, prefix="/api/v2/fleet", tags=["fleet"])
     app.include_router(terminal_api.router, prefix="/api/v2", tags=["terminal"])
     app.include_router(scripts_api.router, prefix="/api/v2/fleet", tags=["scripts"])
+    app.include_router(tokens_api.router, prefix="/api/v2/tokens", tags=["tokens"])
+    app.include_router(templates_api.router, prefix="/api/v2/templates", tags=["templates"])
+    app.include_router(snippets_api.router, prefix="/api/v2/snippets", tags=["snippets"])
+    app.include_router(config_profiles_api.router, prefix="/api/v2/config-profiles", tags=["config-profiles"])
+    app.include_router(billing_api.router, prefix="/api/v2/billing", tags=["billing"])
+    app.include_router(reports_api.router, prefix="/api/v2/reports", tags=["reports"])
+    app.include_router(asn_api.router, prefix="/api/v2/asn", tags=["asn"])
 
     # Health check endpoint
     @app.get("/api/v2/health", tags=["health"])

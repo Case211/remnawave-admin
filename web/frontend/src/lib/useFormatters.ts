@@ -89,6 +89,18 @@ export function useFormatters() {
     [locale, t],
   )
 
+  const formatCurrency = useCallback(
+    (amount: number, currency = 'USD'): string => {
+      return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount)
+    },
+    [locale],
+  )
+
   return {
     formatDate,
     formatDateShort,
@@ -96,6 +108,7 @@ export function useFormatters() {
     formatNumber,
     formatBytes,
     formatSpeed,
+    formatCurrency,
     locale,
   }
 }

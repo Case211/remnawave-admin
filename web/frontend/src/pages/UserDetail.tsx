@@ -26,6 +26,8 @@ import {
   Activity,
   TrendingUp,
   Eye,
+  QrCode,
+  Download,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import client from '../api/client'
@@ -39,8 +41,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
+import { QRCodeSVG } from 'qrcode.react'
 
 interface UserDetailData {
   uuid: string
@@ -633,6 +637,8 @@ export default function UserDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
+  const [qrDialogOpen, setQrDialogOpen] = useState(false)
+  const qrRef = useRef<HTMLDivElement>(null)
   const canEdit = useHasPermission('users', 'edit')
   const canDelete = useHasPermission('users', 'delete')
   const [isEditing, setIsEditing] = useState(searchParams.get('edit') === '1' && canEdit)
@@ -1491,6 +1497,15 @@ export default function UserDetail() {
                           </>
                         )}
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setQrDialogOpen(true)}
+                        className="flex-shrink-0"
+                      >
+                        <QrCode className="h-3.5 w-3.5 mr-1" />
+                        QR
+                      </Button>
                     </div>
                   </div>
                 ) : user.subscription_uuid ? (
@@ -1609,6 +1624,58 @@ export default function UserDetail() {
         variant="destructive"
         onConfirm={() => { deleteMutation.mutate(); setShowDeleteConfirm(false) }}
       />
+
+      {/* QR Code Dialog */}
+      <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <QrCode className="h-5 w-5" />
+              {t('userDetail.subscription.qrTitle')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('userDetail.subscription.qrDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4">
+            <div ref={qrRef} className="bg-white p-4 rounded-lg">
+              <QRCodeSVG
+                value={user?.subscription_url || ''}
+                size={256}
+                level="M"
+              />
+            </div>
+            <p className="text-xs text-dark-300 text-center font-mono break-all px-2">
+              {user?.subscription_url}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const svg = qrRef.current?.querySelector('svg')
+                if (!svg) return
+                const svgData = new XMLSerializer().serializeToString(svg)
+                const canvas = document.createElement('canvas')
+                const ctx = canvas.getContext('2d')
+                const img = new Image()
+                img.onload = () => {
+                  canvas.width = img.width
+                  canvas.height = img.height
+                  ctx?.drawImage(img, 0, 0)
+                  const a = document.createElement('a')
+                  a.download = `subscription-qr-${user?.short_uuid || 'code'}.png`
+                  a.href = canvas.toDataURL('image/png')
+                  a.click()
+                }
+                img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)))
+              }}
+            >
+              <Download className="h-3.5 w-3.5 mr-1" />
+              {t('userDetail.subscription.qrDownload')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

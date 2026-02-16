@@ -46,8 +46,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import Billing from './Billing'
 
 // Types
 interface Node {
@@ -857,6 +859,18 @@ export default function Nodes() {
         </div>
       </div>
 
+      <Tabs defaultValue="nodes">
+        <TabsList>
+          <TabsTrigger value="nodes">{t('nodes.tabs.nodes')}</TabsTrigger>
+          <TabsTrigger value="billing">{t('nodes.tabs.billing')}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="billing" className="mt-4">
+          <Billing embedded />
+        </TabsContent>
+
+        <TabsContent value="nodes" className="space-y-6 mt-4">
+
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
@@ -984,6 +998,8 @@ export default function Nodes() {
           setConfirmAction(null)
         }}
       />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

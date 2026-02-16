@@ -34,7 +34,9 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import Resources from './Resources'
 
 // Types matching backend ConfigItemResponse
 interface ConfigItem {
@@ -1198,6 +1200,18 @@ export default function Settings() {
         </Button>
       </div>
 
+      <Tabs defaultValue="general">
+        <TabsList>
+          <TabsTrigger value="general">{t('settings.tabs.general')}</TabsTrigger>
+          <TabsTrigger value="resources">{t('settings.tabs.resources')}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="resources" className="mt-4">
+          <Resources embedded />
+        </TabsContent>
+
+        <TabsContent value="general" className="space-y-6 mt-4">
+
       {/* Search */}
       <div className="relative animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
@@ -1345,6 +1359,8 @@ export default function Settings() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
