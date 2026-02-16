@@ -74,8 +74,8 @@ class CollectorSender:
                 resp = await client.post(self._url, json=payload)
                 resp.raise_for_status()
                 # Любой 2xx после raise_for_status = успех
-                logger.info("Batch sent: %d connections, %s metrics",
-                            len(connections), "with" if system_metrics else "no")
+                logger.debug("Batch sent: %d connections, %s metrics",
+                             len(connections), "with" if system_metrics else "no")
                 return True
             except httpx.HTTPStatusError as e:
                 logger.warning(

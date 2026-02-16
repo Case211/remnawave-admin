@@ -74,7 +74,7 @@ class ViolationLogFilter(logging.Filter):
 
     _SOURCE_MODULES = (
         "violation_detector", "connection_monitor", "collector", "geoip",
-        "violation_reports", "maxmind",
+        "violation_reports", "maxmind", "violation_notifier",
     )
     _KEYWORDS = (
         "violation detected", "violation for user", "violation saved",

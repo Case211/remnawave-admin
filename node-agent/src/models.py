@@ -1,6 +1,6 @@
 """
 Pydantic-модели для контракта с Collector API.
-Формат должен совпадать с Admin Bot: POST /api/v1/connections/batch
+Формат: POST /api/v2/collector/batch (Web Backend)
 """
 from datetime import datetime, timezone
 from typing import Optional
@@ -42,7 +42,7 @@ class SystemMetrics(BaseModel):
 
 
 class BatchReport(BaseModel):
-    """Батч от одной ноды — тело POST /api/v1/connections/batch."""
+    """Батч от одной ноды — тело POST /api/v2/collector/batch."""
 
     node_uuid: str
     timestamp: datetime = Field(default_factory=_utcnow)
