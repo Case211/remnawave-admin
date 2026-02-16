@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="remnawave-admin.webp" alt="Remnawave Admin" width="100%" />
+
 **Telegram-бот и веб-панель для управления панелью Remnawave**
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
