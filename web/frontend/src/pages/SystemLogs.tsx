@@ -440,23 +440,32 @@ export default function SystemLogs() {
                   ) : (
                     allLines.map((entry, idx) => {
                       const levelColor = entry.level ? LEVEL_COLORS[entry.level] : 'text-gray-500'
+                      const badgeColor = entry.level ? (LEVEL_BADGE_COLORS[entry.level] || 'bg-gray-500/20 text-gray-400') : ''
                       const isError = entry.level === 'ERROR' || entry.level === 'CRITICAL'
+                      const isWarning = entry.level === 'WARNING'
                       const hasExtra = entry.extra && Object.keys(entry.extra).length > 0
                       const isExpanded = expandedRows.has(idx)
+
+                      // On mobile, show only time (HH:MM:SS) from timestamp
+                      const displayTimestamp = entry.timestamp
+                        ? entry.timestamp.replace(/^\d{4}-\d{2}-\d{2}\s+/, '')
+                        : null
+                      const fullTimestamp = entry.timestamp
 
                       return (
                         <div key={idx}>
                           <div
                             className={cn(
-                              'flex items-start gap-2 px-2 py-0.5 rounded hover:bg-dark-800/50',
+                              'flex items-start gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-0.5 rounded hover:bg-dark-800/50 transition-colors',
                               isError && 'bg-red-500/5',
+                              isWarning && 'bg-yellow-500/5',
                               hasExtra && 'cursor-pointer',
                             )}
                             onClick={hasExtra ? () => toggleExpandRow(idx) : undefined}
                           >
-                            {/* Expand indicator for rows with extra data */}
+                            {/* Expand indicator */}
                             {hasExtra ? (
-                              <span className="text-dark-500 shrink-0 w-3 mt-0.5">
+                              <span className={cn('shrink-0 w-3 mt-0.5', isExpanded ? 'text-primary-400' : 'text-dark-500')}>
                                 {isExpanded ? (
                                   <ChevronDown className="w-3 h-3" />
                                 ) : (
@@ -467,33 +476,54 @@ export default function SystemLogs() {
                               <span className="w-3 shrink-0" />
                             )}
 
+                            {/* Timestamp: time only on mobile, full on desktop */}
                             {entry.timestamp && (
-                              <span className="text-dark-400 whitespace-nowrap shrink-0 select-none text-[10px] md:text-xs">
-                                {entry.timestamp}
-                              </span>
+                              <>
+                                <span className="text-dark-400 whitespace-nowrap shrink-0 select-none text-[10px] sm:hidden">
+                                  {displayTimestamp}
+                                </span>
+                                <span className="text-dark-400 whitespace-nowrap shrink-0 select-none text-xs hidden sm:inline">
+                                  {fullTimestamp}
+                                </span>
+                              </>
                             )}
+
+                            {/* Level badge */}
                             {entry.level && (
-                              <span className={cn('w-[60px] shrink-0 text-right', levelColor)}>
+                              <span className={cn(
+                                'shrink-0 rounded px-1.5 py-0 text-[10px] sm:text-[11px] font-medium leading-5 text-center',
+                                'w-[52px] sm:w-[60px]',
+                                badgeColor,
+                              )}>
                                 {entry.level}
                               </span>
                             )}
+
+                            {/* Source: hidden on mobile */}
                             {entry.source && (
-                              <span className="text-cyan-400/70 w-[80px] shrink-0 truncate">
+                              <span className="text-cyan-400/70 w-[80px] shrink-0 truncate hidden sm:inline">
                                 {entry.source}
                               </span>
                             )}
-                            <span className={cn('text-dark-100 whitespace-pre-wrap break-words', isError && 'text-red-300')}>
+
+                            {/* Message */}
+                            <span className={cn(
+                              'text-dark-100 whitespace-pre-wrap break-words min-w-0',
+                              isError && 'text-red-300',
+                              isWarning && 'text-yellow-200',
+                            )}>
                               {entry.message}
                             </span>
                           </div>
+
                           {/* Expanded extra fields */}
                           {hasExtra && isExpanded && (
-                            <div className="ml-8 pl-4 py-1 border-l border-dark-700 mb-1">
+                            <div className="ml-6 sm:ml-8 pl-3 sm:pl-4 py-1 border-l-2 border-dark-600 mb-1 space-y-0.5">
                               {Object.entries(entry.extra!).map(([key, value]) => (
-                                <div key={key} className="flex gap-2 text-[11px]">
-                                  <span className="text-purple-400 shrink-0">{key}:</span>
+                                <div key={key} className="flex gap-2 text-[10px] sm:text-[11px]">
+                                  <span className="text-purple-400 shrink-0 font-medium">{key}:</span>
                                   <span className="text-dark-300 break-all">
-                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                    {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
                                   </span>
                                 </div>
                               ))}

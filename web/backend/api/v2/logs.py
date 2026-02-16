@@ -52,6 +52,63 @@ class FrontendLogEntry(BaseModel):
 
 # ── Log line parsers ─────────────────────────────────────────────
 
+def _format_event(data: dict) -> str:
+    """Format special event types into human-readable messages."""
+    event = data.get("event", "")
+
+    if event == "api_call":
+        method = data.pop("method", "")
+        endpoint = data.pop("endpoint", "")
+        status = data.pop("status_code", "")
+        duration = data.pop("duration_ms", "")
+        parts = []
+        if method and endpoint:
+            parts.append(f"{method} {endpoint}")
+        if status:
+            parts.append(f"\u2192 {status}")
+        if duration:
+            parts.append(f"({duration}ms)")
+        return " ".join(parts) if parts else event
+
+    if event == "api_error":
+        method = data.pop("method", "")
+        endpoint = data.pop("endpoint", "")
+        status = data.pop("status_code", "")
+        error = data.pop("error", "")
+        parts = []
+        if method and endpoint:
+            parts.append(f"{method} {endpoint}")
+        if status:
+            parts.append(f"\u2192 {status}")
+        if error:
+            parts.append(f"| {error}")
+        return " ".join(parts) if parts else event
+
+    if event == "button_click":
+        callback = data.pop("callback", "")
+        return f"\u229e {callback}" if callback else event
+
+    if event == "command":
+        cmd = data.pop("cmd", "")
+        args = data.pop("args", "")
+        parts = [f"/{cmd}"] if cmd else []
+        if args:
+            parts.append(args)
+        return " ".join(parts) if parts else event
+
+    if event == "input":
+        field = data.pop("field", "")
+        preview = data.pop("preview", "")
+        parts = []
+        if field:
+            parts.append(field)
+        if preview:
+            parts.append(f"\u2192 {preview}")
+        return " ".join(parts) if parts else event
+
+    return event
+
+
 def _parse_json_line(line: str) -> Optional[dict]:
     """Parse a structlog JSON line."""
     line = line.strip()
@@ -60,13 +117,14 @@ def _parse_json_line(line: str) -> Optional[dict]:
     try:
         data = json.loads(line)
         # structlog JSON format: {"event": "...", "level": "...", "logger": "...", "timestamp": "..."}
+        message = _format_event(data)
         extra = {k: v for k, v in data.items()
                  if k not in ("event", "level", "logger", "timestamp")}
         return {
             "timestamp": data.get("timestamp"),
             "level": (data.get("level") or "").upper(),
             "source": data.get("logger", ""),
-            "message": data.get("event", ""),
+            "message": message,
             "extra": extra if extra else None,
         }
     except (json.JSONDecodeError, TypeError):
