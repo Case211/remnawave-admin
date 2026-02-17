@@ -13,12 +13,23 @@ interface State {
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error }
+  static getDerivedStateFromError(error: unknown): State {
+    if (error instanceof Error) {
+      return { hasError: true, error }
+    }
+    // Wrap non-Error throws (e.g. plain objects, strings) into a proper Error
+    const message =
+      typeof error === 'string'
+        ? error
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? String((error as { message: unknown }).message)
+          : 'Unknown error'
+    return { hasError: true, error: new Error(message) }
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, info.componentStack)
+  componentDidCatch(error: unknown, info: React.ErrorInfo) {
+    const errorMessage = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    console.error('ErrorBoundary caught:', errorMessage, '\nStack:', error instanceof Error ? error.stack : 'N/A', '\nComponent stack:', info.componentStack)
   }
 
   render() {

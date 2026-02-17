@@ -47,8 +47,21 @@ class ClientLogger {
     console.error = (...args: unknown[]) => {
       this.capture({
         level: 'ERROR',
-        message: args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '),
+        message: args.map((a) => {
+          if (a instanceof Error) {
+            return `${a.name}: ${a.message}`
+          }
+          if (typeof a === 'object' && a !== null) {
+            try {
+              return JSON.stringify(a)
+            } catch {
+              return String(a)
+            }
+          }
+          return String(a)
+        }).join(' '),
         source: 'console.error',
+        stack: args.find((a): a is Error => a instanceof Error)?.stack,
       })
       this.originalConsoleError?.apply(console, args)
     }

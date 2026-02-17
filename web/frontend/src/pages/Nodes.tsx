@@ -78,7 +78,8 @@ interface NodeEditFormData {
 // API functions
 const fetchNodes = async (): Promise<Node[]> => {
   const { data } = await client.get('/nodes')
-  return data.items || data
+  const items = data.items || data
+  return Array.isArray(items) ? items : []
 }
 
 // Node edit modal

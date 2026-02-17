@@ -497,7 +497,7 @@ export default function Fleet() {
   // ── Aggregates ────────────────────────────────────────────────
 
   const aggregates = useMemo(() => {
-    if (!fleet?.nodes?.length) return { avgCpu: null, avgRam: null, totalDl: 0, totalUl: 0, totalUsers: 0 }
+    if (!Array.isArray(fleet?.nodes) || fleet.nodes.length === 0) return { avgCpu: null, avgRam: null, totalDl: 0, totalUl: 0, totalUsers: 0 }
 
     const onlineNodes = fleet.nodes.filter((n) => n.is_connected && !n.is_disabled)
 

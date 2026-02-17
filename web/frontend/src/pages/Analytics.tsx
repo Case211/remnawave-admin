@@ -131,8 +131,8 @@ function GeoMapCard() {
     staleTime: 60_000,
   })
 
-  const cities = geoData?.cities || []
-  const countries = geoData?.countries || []
+  const cities = Array.isArray(geoData?.cities) ? geoData.cities : []
+  const countries = Array.isArray(geoData?.countries) ? geoData.countries : []
 
   // Compute max count for radius scaling
   const maxCount = useMemo(

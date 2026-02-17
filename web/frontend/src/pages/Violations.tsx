@@ -168,12 +168,18 @@ const fetchViolationStats = async (days: number): Promise<ViolationStats> => {
 
 const fetchViolationDetail = async (id: number): Promise<ViolationDetail> => {
   const { data } = await client.get(`/violations/${id}`)
-  return data
+  return {
+    ...data,
+    reasons: Array.isArray(data.reasons) ? data.reasons : [],
+    countries: Array.isArray(data.countries) ? data.countries : [],
+    asn_types: Array.isArray(data.asn_types) ? data.asn_types : [],
+    ips: Array.isArray(data.ips) ? data.ips : [],
+  }
 }
 
 const fetchTopViolators = async (days: number): Promise<TopViolator[]> => {
   const { data } = await client.get('/violations/top-violators', { params: { days, limit: 15 } })
-  return data
+  return Array.isArray(data) ? data : []
 }
 
 const fetchIPLookup = async (ips: string[]): Promise<Record<string, IPInfo>> => {

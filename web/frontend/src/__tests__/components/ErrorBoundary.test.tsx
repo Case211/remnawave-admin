@@ -89,7 +89,8 @@ describe('ErrorBoundary', () => {
     )
 
     expect(spy).toHaveBeenCalled()
-    expect(spy.mock.calls[0][0].message).toBe('Caught error')
+    const caughtError = spy.mock.calls[0][0] as Error
+    expect(caughtError.message).toBe('Caught error')
     spy.mockRestore()
   })
 })

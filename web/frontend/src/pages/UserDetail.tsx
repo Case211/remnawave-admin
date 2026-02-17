@@ -220,7 +220,11 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
       const params: Record<string, string> = {}
       if (apiPeriod) params.period = apiPeriod
       const response = await client.get(`/users/${user.uuid}/traffic-stats`, { params })
-      return response.data
+      const data = response.data
+      return {
+        ...data,
+        nodes_traffic: Array.isArray(data.nodes_traffic) ? data.nodes_traffic : [],
+      }
     },
     enabled: !!user.uuid && (period !== 'current' && period !== 'lifetime'),
     staleTime: 30_000,
