@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { usePermissionStore } from './store/permissionStore'
@@ -9,23 +9,25 @@ import { clientLogger } from './lib/clientLogger'
 // Layout
 import Layout from './components/layout/Layout'
 
-// Pages
+// Login and Dashboard loaded eagerly (critical path)
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Users from './pages/Users'
-import UserDetail from './pages/UserDetail'
-import Nodes from './pages/Nodes'
-import Fleet from './pages/Fleet'
-import Hosts from './pages/Hosts'
-import Violations from './pages/Violations'
-import Settings from './pages/Settings'
-import Admins from './pages/Admins'
-import AuditLog from './pages/AuditLog'
-import SystemLogs from './pages/SystemLogs'
-import Analytics from './pages/Analytics'
-import Automations from './pages/automations'
-import Notifications from './pages/Notifications'
-import MailServer from './pages/MailServer'
+
+// Lazy-loaded pages
+const Users = lazy(() => import('./pages/Users'))
+const UserDetail = lazy(() => import('./pages/UserDetail'))
+const Nodes = lazy(() => import('./pages/Nodes'))
+const Fleet = lazy(() => import('./pages/Fleet'))
+const Hosts = lazy(() => import('./pages/Hosts'))
+const Violations = lazy(() => import('./pages/Violations'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Admins = lazy(() => import('./pages/Admins'))
+const AuditLog = lazy(() => import('./pages/AuditLog'))
+const SystemLogs = lazy(() => import('./pages/SystemLogs'))
+const Analytics = lazy(() => import('./pages/Analytics'))
+const Automations = lazy(() => import('./pages/automations'))
+const Notifications = lazy(() => import('./pages/Notifications'))
+const MailServer = lazy(() => import('./pages/MailServer'))
 
 /**
  * Protected route wrapper - redirects to login if not authenticated.
@@ -96,24 +98,26 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/users" element={<Users />} />
-                      <Route path="/users/:uuid" element={<UserDetail />} />
-                      <Route path="/nodes" element={<Nodes />} />
-                      <Route path="/fleet" element={<Fleet />} />
-                      <Route path="/hosts" element={<Hosts />} />
-                      <Route path="/violations" element={<Violations />} />
-                      <Route path="/automations" element={<Automations />} />
-                      <Route path="/notifications" element={<Notifications />} />
-                      <Route path="/mailserver" element={<MailServer />} />
-                      <Route path="/admins" element={<Admins />} />
-                      <Route path="/audit" element={<AuditLog />} />
-                      <Route path="/logs" element={<SystemLogs />} />
-                      <Route path="/analytics" element={<Analytics />} />
-                      <Route path="/settings" element={<Settings />} />
-                      <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
+                    <Suspense fallback={null}>
+                      <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/users" element={<Users />} />
+                        <Route path="/users/:uuid" element={<UserDetail />} />
+                        <Route path="/nodes" element={<Nodes />} />
+                        <Route path="/fleet" element={<Fleet />} />
+                        <Route path="/hosts" element={<Hosts />} />
+                        <Route path="/violations" element={<Violations />} />
+                        <Route path="/automations" element={<Automations />} />
+                        <Route path="/notifications" element={<Notifications />} />
+                        <Route path="/mailserver" element={<MailServer />} />
+                        <Route path="/admins" element={<Admins />} />
+                        <Route path="/audit" element={<AuditLog />} />
+                        <Route path="/logs" element={<SystemLogs />} />
+                        <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                      </Routes>
+                    </Suspense>
                   </Layout>
                 </ProtectedRoute>
               }

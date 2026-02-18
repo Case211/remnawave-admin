@@ -94,7 +94,7 @@ describe('ConfirmDialog', () => {
     expect(confirmButton.className).toContain('bg-red-600')
   })
 
-  it('does not render description when not provided', () => {
+  it('renders hidden description for accessibility when not provided', () => {
     render(
       <ConfirmDialog
         open={true}
@@ -104,10 +104,9 @@ describe('ConfirmDialog', () => {
       />
     )
 
-    expect(screen.getByText('Simple confirm')).toBeInTheDocument()
-    // AlertDialogDescription is not rendered
-    const descriptions = screen.queryAllByRole('paragraph')
-    // Only the title should be present, no extra description
-    expect(descriptions).toHaveLength(0)
+    expect(screen.getByRole('heading', { name: 'Simple confirm' })).toBeInTheDocument()
+    // AlertDialogDescription is rendered but visually hidden (sr-only)
+    const description = screen.getByText('Simple confirm', { selector: 'p' })
+    expect(description.className).toContain('sr-only')
   })
 })
