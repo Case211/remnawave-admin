@@ -37,7 +37,7 @@ def _get_global_telegram_config(topic_type: str = "service") -> tuple:
 async def _get_smtp_config() -> Optional[Dict[str, Any]]:
     """Load SMTP config from DB."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM smtp_config WHERE is_enabled = true ORDER BY id LIMIT 1"
@@ -310,7 +310,7 @@ async def create_notification(
     notification_id = None
 
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
 
         if admin_id is not None:
             # Single admin
@@ -435,7 +435,7 @@ async def _dispatch_external(
 ):
     """Dispatch notification to external channels based on admin's channel config."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             channels = await conn.fetch(
                 "SELECT channel_type, config FROM notification_channels "

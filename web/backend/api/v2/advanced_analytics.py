@@ -28,7 +28,7 @@ async def get_geo_connections(
 async def _compute_geo(period: str = "7d"):
     """Compute geo connections (cacheable)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return {"countries": [], "cities": []}
 
@@ -60,13 +60,16 @@ async def _compute_geo(period: str = "7d"):
                 for r in country_rows
             ]
 
-            # Get city distribution
+            # Get city distribution (AVG coords to merge same city with different lat/lon)
             city_rows = await conn.fetch(
                 """
-                SELECT city, country_name, latitude, longitude, COUNT(*) as count
+                SELECT city, country_name,
+                       AVG(latitude) as latitude,
+                       AVG(longitude) as longitude,
+                       COUNT(*) as count
                 FROM ip_metadata
                 WHERE created_at >= $1 AND city IS NOT NULL AND latitude IS NOT NULL
-                GROUP BY city, country_name, latitude, longitude
+                GROUP BY city, country_name
                 ORDER BY count DESC
                 LIMIT 100
                 """,
@@ -149,7 +152,7 @@ async def get_top_users_by_traffic(
 async def _compute_top_users(limit: int = 20):
     """Compute top users by traffic (cacheable)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return {"items": []}
 
@@ -213,7 +216,7 @@ async def get_trends(
 async def _compute_trends(metric: str = "users", period: str = "30d"):
     """Compute trends (cacheable)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return {"series": [], "total_growth": 0}
 

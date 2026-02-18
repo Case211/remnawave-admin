@@ -62,6 +62,55 @@ vi.mock('@/api/automations', () => ({
   AutomationTemplate: {},
 }))
 
+// Mock notifications API
+vi.mock('@/api/notifications', () => ({
+  notificationsApi: {
+    list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    unreadCount: vi.fn().mockResolvedValue({ count: 0 }),
+    markRead: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    deleteOld: vi.fn().mockResolvedValue(undefined),
+    create: vi.fn().mockResolvedValue(undefined),
+    listChannels: vi.fn().mockResolvedValue([]),
+    createChannel: vi.fn(),
+    updateChannel: vi.fn(),
+    deleteChannel: vi.fn(),
+    getSmtpConfig: vi.fn().mockResolvedValue({}),
+    updateSmtpConfig: vi.fn(),
+    testSmtp: vi.fn(),
+    listAlertRules: vi.fn().mockResolvedValue([]),
+    createAlertRule: vi.fn(),
+    updateAlertRule: vi.fn(),
+    deleteAlertRule: vi.fn(),
+    toggleAlertRule: vi.fn(),
+    listAlertLogs: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    acknowledgeAlerts: vi.fn(),
+  },
+}))
+
+// Mock mailserver API
+vi.mock('@/api/mailserver', () => ({
+  mailserverApi: {
+    listDomains: vi.fn().mockResolvedValue([]),
+    getDomain: vi.fn(),
+    createDomain: vi.fn(),
+    updateDomain: vi.fn(),
+    deleteDomain: vi.fn(),
+    checkDns: vi.fn(),
+    getDnsRecords: vi.fn().mockResolvedValue([]),
+    listQueue: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    retryMessage: vi.fn(),
+    cancelMessage: vi.fn(),
+    listInbox: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    getInboxItem: vi.fn(),
+    deleteInboxItem: vi.fn(),
+    sendEmail: vi.fn(),
+    listCredentials: vi.fn().mockResolvedValue([]),
+    createCredential: vi.fn(),
+    deleteCredential: vi.fn(),
+  },
+}))
+
 // Mock WebSocket hook
 vi.mock('@/store/useWebSocket', () => ({
   useRealtimeUpdates: vi.fn(),
@@ -261,6 +310,18 @@ describe('Page smoke tests', () => {
   it('Automations renders without errors', async () => {
     const Automations = (await import('@/pages/automations')).default
     const { container } = renderPage(<Automations />)
+    expect(container).toBeTruthy()
+  })
+
+  it('Notifications renders without errors', async () => {
+    const Notifications = (await import('@/pages/Notifications')).default
+    const { container } = renderPage(<Notifications />)
+    expect(container).toBeTruthy()
+  })
+
+  it('MailServer renders without errors', async () => {
+    const MailServer = (await import('@/pages/MailServer')).default
+    const { container } = renderPage(<MailServer />)
     expect(container).toBeTruthy()
   })
 

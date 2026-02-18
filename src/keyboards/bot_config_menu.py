@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.i18n import gettext as _
 
 from src.keyboards.navigation import NavTarget, nav_row
-from src.services.config_service import ConfigCategory, ConfigItem
+from shared.config_service import ConfigCategory, ConfigItem
 
 
 # Эмодзи для категорий

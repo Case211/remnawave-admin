@@ -44,7 +44,7 @@ async def create_domain(
     try:
         row = await mail_service.setup_domain(payload.domain)
         # Apply extra settings
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             await conn.execute(
                 "UPDATE domain_config SET inbound_enabled = $1, outbound_enabled = $2, "
@@ -71,7 +71,7 @@ async def list_domains(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """List all configured mail domains."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         rows = await conn.fetch("SELECT * FROM domain_config ORDER BY id")
     return [dict(r) for r in rows]
@@ -83,7 +83,7 @@ async def get_domain(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """Get domain details."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM domain_config WHERE id = $1", domain_id)
     if not row:
@@ -99,7 +99,7 @@ async def update_domain(
     admin: AdminUser = Depends(require_permission("mailserver", "edit")),
 ):
     """Update domain settings."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
@@ -137,7 +137,7 @@ async def delete_domain(
     admin: AdminUser = Depends(require_permission("mailserver", "delete")),
 ):
     """Delete a domain and its DKIM keys."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         deleted = await conn.execute("DELETE FROM domain_config WHERE id = $1", domain_id)
     await write_audit_log(
@@ -187,7 +187,7 @@ async def list_queue(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """List outbound email queue."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     conditions = []
     params = []
@@ -221,7 +221,7 @@ async def get_queue_stats(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """Get queue statistics."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT "
@@ -241,7 +241,7 @@ async def get_queue_item(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """Get queue item details."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM email_queue WHERE id = $1", item_id)
     if not row:
@@ -255,7 +255,7 @@ async def retry_queue_item(
     admin: AdminUser = Depends(require_permission("mailserver", "edit")),
 ):
     """Retry a failed queue item."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         result = await conn.execute(
             "UPDATE email_queue SET status = 'pending', attempts = 0, "
@@ -271,7 +271,7 @@ async def cancel_queue_item(
     admin: AdminUser = Depends(require_permission("mailserver", "edit")),
 ):
     """Cancel a pending queue item."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         await conn.execute(
             "UPDATE email_queue SET status = 'cancelled' WHERE id = $1 AND status IN ('pending', 'failed')",
@@ -286,7 +286,7 @@ async def clear_old_queue(
     admin: AdminUser = Depends(require_permission("mailserver", "delete")),
 ):
     """Clear queue items older than N days."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         result = await conn.execute(
             "DELETE FROM email_queue WHERE created_at < NOW() - ($1 || ' days')::INTERVAL",
@@ -305,7 +305,7 @@ async def list_inbox(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """List inbox messages."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     conditions = []
     params = []
@@ -336,7 +336,7 @@ async def get_inbox_item(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """Get full inbox message."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM email_inbox WHERE id = $1", item_id)
     if not row:
@@ -350,7 +350,7 @@ async def mark_inbox_read(
     admin: AdminUser = Depends(require_permission("mailserver", "edit")),
 ):
     """Mark inbox messages as read."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         if payload.ids:
             await conn.execute(
@@ -368,7 +368,7 @@ async def delete_inbox_item(
     admin: AdminUser = Depends(require_permission("mailserver", "delete")),
 ):
     """Delete an inbox message."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         await conn.execute("DELETE FROM email_inbox WHERE id = $1", item_id)
     return {"ok": True}
@@ -441,7 +441,7 @@ async def create_smtp_credential(
 ):
     """Create SMTP credentials for external services to relay mail."""
     from web.backend.core.mail.submission_server import hash_password_for_storage
-    from src.services.database import db_service
+    from shared.database import db_service
 
     password_hash = hash_password_for_storage(payload.password)
     try:
@@ -473,7 +473,7 @@ async def list_smtp_credentials(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """List all SMTP credentials."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             "SELECT id, username, description, is_active, allowed_from_domains, "
@@ -489,7 +489,7 @@ async def get_smtp_credential(
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
 ):
     """Get SMTP credential details."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT id, username, description, is_active, allowed_from_domains, "
@@ -509,7 +509,7 @@ async def update_smtp_credential(
     admin: AdminUser = Depends(require_permission("mailserver", "edit")),
 ):
     """Update SMTP credential settings."""
-    from src.services.database import db_service
+    from shared.database import db_service
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
@@ -558,7 +558,7 @@ async def delete_smtp_credential(
     admin: AdminUser = Depends(require_permission("mailserver", "delete")),
 ):
     """Delete an SMTP credential."""
-    from src.services.database import db_service
+    from shared.database import db_service
     async with db_service.acquire() as conn:
         await conn.execute("DELETE FROM smtp_credentials WHERE id = $1", cred_id)
     from web.backend.core.mail.mail_service import mail_service

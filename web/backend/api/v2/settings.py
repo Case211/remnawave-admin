@@ -81,7 +81,7 @@ async def get_panel_name(
 ):
     """Get panel name for sidebar display. Requires only authentication."""
     try:
-        from src.services.config_service import config_service
+        from shared.config_service import config_service
         val = config_service.get("panel_name")
         return {"panel_name": val or ""}
     except Exception as e:
@@ -95,8 +95,8 @@ async def get_all_settings(
 ):
     """Get all settings grouped by category. Priority: DB > .env > default."""
     try:
-        from src.services.database import db_service
-        from src.services.config_service import DEFAULT_CONFIG_DEFINITIONS
+        from shared.database import db_service
+        from shared.config_service import DEFAULT_CONFIG_DEFINITIONS
         if not db_service.is_connected:
             return ConfigByCategoryResponse(categories={})
 
@@ -189,13 +189,13 @@ def _apply_dynamic_setting(key: str, value: str) -> None:
     """Apply setting changes that take effect immediately (no restart)."""
     try:
         if key == "log_level":
-            from src.utils.logger import set_log_level
+            from shared.logger import set_log_level
             set_log_level(value)
 
         elif key == "log_max_size_mb":
-            from src.utils.logger import set_rotation_params
+            from shared.logger import set_rotation_params
             try:
-                from src.services.config_service import config_service
+                from shared.config_service import config_service
                 backup = int(config_service.get("log_backup_count", "5"))
             except Exception as e:
                 logger.debug("Non-critical: %s", e)
@@ -203,9 +203,9 @@ def _apply_dynamic_setting(key: str, value: str) -> None:
             set_rotation_params(int(value) * 1024 * 1024, backup)
 
         elif key == "log_backup_count":
-            from src.utils.logger import set_rotation_params
+            from shared.logger import set_rotation_params
             try:
-                from src.services.config_service import config_service
+                from shared.config_service import config_service
                 max_mb = int(config_service.get("log_max_size_mb", "10"))
             except Exception as e:
                 logger.debug("Non-critical: %s", e)
@@ -225,7 +225,7 @@ async def update_setting(
 ):
     """Update a single setting value. DB takes priority over .env."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             raise HTTPException(status_code=503, detail="Database not connected")
 
@@ -251,7 +251,7 @@ async def update_setting(
 
         # Update config_service cache for immediate effect
         try:
-            from src.services.config_service import config_service
+            from shared.config_service import config_service
             if key in config_service._cache:
                 config_service._cache[key].value = data.value
                 config_service._cache[key].updated_at = datetime.utcnow()
@@ -288,7 +288,7 @@ async def reset_setting(
 ):
     """Reset a setting to default (remove DB value, fallback to .env or default)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             raise HTTPException(status_code=503, detail="Database not connected")
 
@@ -313,7 +313,7 @@ async def reset_setting(
 
         # Update config_service cache
         try:
-            from src.services.config_service import config_service
+            from shared.config_service import config_service
             if key in config_service._cache:
                 config_service._cache[key].value = None
                 config_service._cache[key].updated_at = datetime.utcnow()
@@ -412,7 +412,7 @@ async def get_sync_status(
 ):
     """Get sync status for all entity types."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return {"items": []}
 
@@ -447,7 +447,7 @@ async def trigger_sync(
 ):
     """Trigger manual sync for a specific entity type."""
     try:
-        from src.services.sync import sync_service
+        from shared.sync import sync_service
 
         sync_methods = {
             'users': sync_service.sync_users,
@@ -459,8 +459,8 @@ async def trigger_sync(
         }
 
         if entity == 'asn':
-            from src.services.asn_parser import ASNParser
-            from src.services.database import db_service
+            from shared.asn_parser import ASNParser
+            from shared.database import db_service
             parser = ASNParser(db_service)
             try:
                 stats = await parser.sync_russian_asn_database(limit=None)
@@ -509,7 +509,7 @@ async def get_maxmind_status(
 ):
     """Get MaxMind GeoIP database status."""
     try:
-        from src.services.maxmind_updater import get_db_status
+        from shared.maxmind_updater import get_db_status
 
         city_path = os.environ.get("MAXMIND_CITY_DB", "/app/geoip/GeoLite2-City.mmdb")
         asn_path = os.environ.get("MAXMIND_ASN_DB", "/app/geoip/GeoLite2-ASN.mmdb")
@@ -519,7 +519,7 @@ async def get_maxmind_status(
         # Check if GeoIP service has MaxMind loaded
         maxmind_active = False
         try:
-            from src.services.geoip import get_geoip_service
+            from shared.geoip import get_geoip_service
             geoip = get_geoip_service()
             maxmind_active = geoip.has_maxmind
         except Exception as e:
@@ -544,7 +544,7 @@ async def trigger_maxmind_update(
 ):
     """Force update MaxMind GeoIP databases."""
     try:
-        from src.services.maxmind_updater import ensure_databases
+        from shared.maxmind_updater import ensure_databases
 
         maxmind_key = os.environ.get("MAXMIND_LICENSE_KEY")
         source = os.environ.get("MAXMIND_SOURCE", "auto")
@@ -561,7 +561,7 @@ async def trigger_maxmind_update(
 
         # Reinitialize GeoIP service with new databases
         try:
-            from src.services.geoip import get_geoip_service
+            from shared.geoip import get_geoip_service
             geoip = get_geoip_service()
             geoip._close_maxmind()
             geoip._init_maxmind()

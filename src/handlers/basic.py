@@ -53,7 +53,7 @@ from src.keyboards.node_edit import node_edit_keyboard
 from src.keyboards.billing_menu import billing_menu_keyboard
 from src.keyboards.billing_nodes_menu import billing_nodes_menu_keyboard
 from src.keyboards.providers_menu import providers_menu_keyboard
-from src.services.api_client import (
+from shared.api_client import (
     ApiClientError,
     NotFoundError,
     UnauthorizedError,
@@ -87,7 +87,7 @@ from src.utils.formatters import (
     build_billing_nodes,
     build_bandwidth_stats,
 )
-from src.utils.logger import logger
+from shared.logger import logger
 from src.handlers.hosts import _apply_host_update, _fetch_hosts_text, _host_config_profiles_keyboard
 from src.handlers.common import _cleanup_message, _not_admin, _send_clean_message, _get_target_user_id, _clear_user_state, _edit_text_safe
 from src.handlers.resources import _show_tokens, _fetch_configs_text, _fetch_snippets_text, _send_templates, _send_template_detail

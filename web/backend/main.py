@@ -12,6 +12,8 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import structlog
+
 # Add project root to path for importing src modules
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -40,17 +42,34 @@ from web.backend.api.v2 import agent_ws as agent_ws_api
 from web.backend.api.v2 import fleet as fleet_api
 from web.backend.api.v2 import terminal as terminal_api
 from web.backend.api.v2 import scripts as scripts_api
+from web.backend.api.v2 import tokens as tokens_api
+from web.backend.api.v2 import templates as templates_api
+from web.backend.api.v2 import snippets as snippets_api
+from web.backend.api.v2 import config_profiles as config_profiles_api
+from web.backend.api.v2 import billing as billing_api
+from web.backend.api.v2 import reports as reports_api
+from web.backend.api.v2 import asn as asn_api
+from web.backend.api.v2 import collector as collector_api
 
 
-# ── Logging setup ─────────────────────────────────────────────────
+# ── Logging setup (structlog) ────────────────────────────────────
 
-_CONSOLE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
-_CONSOLE_DATEFMT = "%H:%M:%S"
-_FILE_FMT = "%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s"
-_FILE_DATEFMT = "%Y-%m-%d %H:%M:%S"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 5
 _LOG_DIR = Path("/app/logs")
+
+# Короткие имена для сторонних логгеров
+_LOGGER_NAME_MAP = {
+    "uvicorn.error": "uvicorn",
+    "uvicorn.access": "uvicorn",
+    "web.backend.api.deps": "web",
+    "web.backend.core.api_helper": "web",
+    "httpx": "http",
+    "httpcore": "http",
+    "asyncpg": "db",
+    "alembic": "migration",
+    "sqlalchemy": "db",
+}
 
 
 class _CompressedRotatingFileHandler(RotatingFileHandler):
@@ -83,57 +102,140 @@ class _CompressedRotatingFileHandler(RotatingFileHandler):
             self.stream = self._open()
 
 
-def _setup_web_logging():
-    """Настраивает логирование для web backend."""
-    import os
+def _shorten_logger_name(logger: object, method_name: str, event_dict: dict) -> dict:
+    """structlog processor: сокращает имена логгеров."""
+    name = event_dict.get("logger", "")
+    for prefix, short in _LOGGER_NAME_MAP.items():
+        if name == prefix or name.startswith(prefix + "."):
+            event_dict["logger"] = short
+            return event_dict
+    if "." in name:
+        event_dict["logger"] = name.rsplit(".", 1)[-1]
+    return event_dict
 
+
+def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
+    """structlog processor: компактный формат для api_call и api_error."""
+    event = event_dict.get("event", "")
+    if event == "api_call":
+        method = event_dict.pop("method", "")
+        endpoint = event_dict.pop("endpoint", "")
+        status = event_dict.pop("status_code", "")
+        duration = event_dict.pop("duration_ms", "")
+        parts = []
+        if method and endpoint:
+            parts.append(f"{method} {endpoint}")
+        if status:
+            parts.append(f"→ {status}")
+        if duration:
+            parts.append(f"({duration}ms)")
+        event_dict["event"] = " ".join(parts) if parts else event
+    elif event == "api_error":
+        method = event_dict.pop("method", "")
+        endpoint = event_dict.pop("endpoint", "")
+        status = event_dict.pop("status_code", "")
+        error = event_dict.pop("error", "")
+        parts = []
+        if method and endpoint:
+            parts.append(f"{method} {endpoint}")
+        if status:
+            parts.append(f"→ {status}")
+        if error:
+            parts.append(f"| {error}")
+        event_dict["event"] = " ".join(parts) if parts else event
+    return event_dict
+
+
+# Цвета уровней логирования (ANSI)
+_LEVEL_STYLES = {
+    "critical": "\033[1;91m",   # bold bright red
+    "exception": "\033[1;91m",  # bold bright red
+    "error": "\033[91m",        # bright red
+    "warn": "\033[93m",         # bright yellow
+    "warning": "\033[93m",      # bright yellow
+    "info": "\033[36m",         # cyan
+    "debug": "\033[2;37m",      # dim white
+    "notset": "\033[2m",        # dim
+}
+
+
+def _make_console_renderer() -> structlog.dev.ConsoleRenderer:
+    """Создаёт ConsoleRenderer с красивым форматированием."""
+    return structlog.dev.ConsoleRenderer(
+        colors=True,
+        force_colors=True,
+        pad_event_to=40,
+        level_styles=_LEVEL_STYLES,
+    )
+
+
+def _setup_web_logging():
+    """Настраивает structlog логирование для web backend."""
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(logging.DEBUG)
 
-    # Determine console log level from environment (default: INFO)
     console_level_name = os.environ.get("WEB_LOG_LEVEL", "INFO").upper()
     console_level = getattr(logging, console_level_name, logging.INFO)
 
-    fmt = logging.Formatter(fmt=_CONSOLE_FMT, datefmt=_CONSOLE_DATEFMT)
+    shared_processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.UnicodeDecoder(),
+    ]
 
-    # Console: INFO+ by default (visible in docker-compose logs)
+    # Console: цветной вывод
     console = logging.StreamHandler()
     console.setLevel(console_level)
-    console.setFormatter(fmt)
+    console.setFormatter(structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            _shorten_logger_name,
+            _compact_kv,
+            _make_console_renderer(),
+        ],
+        foreign_pre_chain=shared_processors,
+    ))
     root.addHandler(console)
 
-    # File handlers (optional, for persistent logs)
+    # File handler: JSON формат
     try:
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
-        file_fmt = logging.Formatter(fmt=_FILE_FMT, datefmt=_FILE_DATEFMT)
 
-        info_path = _LOG_DIR / "web_INFO.log"
-        warn_path = _LOG_DIR / "web_WARNING.log"
+        json_formatter = structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                _shorten_logger_name,
+                structlog.processors.JSONRenderer(),
+            ],
+            foreign_pre_chain=shared_processors,
+        )
 
-        info_h = _CompressedRotatingFileHandler(
-            str(info_path),
+        backend_path = _LOG_DIR / "backend.log"
+        backend_h = _CompressedRotatingFileHandler(
+            str(backend_path),
             maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
         )
-        info_h.setLevel(logging.INFO)
-        info_h.setFormatter(file_fmt)
-        root.addHandler(info_h)
+        backend_h.setLevel(logging.INFO)
+        backend_h.setFormatter(json_formatter)
+        root.addHandler(backend_h)
 
-        warn_h = _CompressedRotatingFileHandler(
-            str(warn_path),
+        # Violations log (фильтрует записи о нарушениях из collector, violation_detector и т.д.)
+        from shared.logger import ViolationLogFilter
+        violations_path = _LOG_DIR / "violations.log"
+        violations_h = _CompressedRotatingFileHandler(
+            str(violations_path),
             maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8",
         )
-        warn_h.setLevel(logging.WARNING)
-        warn_h.setFormatter(file_fmt)
-        root.addHandler(warn_h)
+        violations_h.setLevel(logging.DEBUG)
+        violations_h.setFormatter(json_formatter)
+        violations_h.addFilter(ViolationLogFilter())
+        root.addHandler(violations_h)
 
-        # NOTE: violations.log is written by the bot process (src/utils/logger.py)
-        # which has the proper ViolationLogFilter. The web backend must NOT add its
-        # own handler for the same file — two processes sharing a RotatingFileHandler
-        # causes data loss on rotation and the broad keyword filter ("violation")
-        # matches WebSocket subscription debug messages, flooding the log with noise.
-
-        _verify_ok = info_path.exists() and os.access(info_path, os.W_OK)
+        _verify_ok = backend_path.exists() and os.access(backend_path, os.W_OK)
         print(
             f"[LOGGING] File logging active: {_LOG_DIR} "
             f"(writable={_verify_ok})",
@@ -155,6 +257,17 @@ def _setup_web_logging():
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
+    # Конфигурируем structlog
+    structlog.configure(
+        processors=[
+            *shared_processors,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
+
 
 _setup_web_logging()
 logger = logging.getLogger("web")
@@ -172,7 +285,7 @@ async def lifespan(app: FastAPI):
     database_url = os.environ.get("DATABASE_URL") or getattr(settings, "database_url", None)
     if database_url:
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             connected = await db_service.connect(database_url=database_url)
             if connected:
                 logger.info("Database connected")
@@ -183,7 +296,7 @@ async def lifespan(app: FastAPI):
                 await ensure_rbac_tables()
 
                 # Initialize dynamic config service (DB settings cache)
-                from src.services.config_service import config_service
+                from shared.config_service import config_service
                 await config_service.initialize()
 
                 # Start automation engine
@@ -225,7 +338,7 @@ async def lifespan(app: FastAPI):
     # Ensure MaxMind GeoLite2 databases are downloaded
     # Supports: license key (official), GitHub mirror (ltsdev/maxmind), or auto
     try:
-        from src.services.maxmind_updater import ensure_databases
+        from shared.maxmind_updater import ensure_databases
         maxmind_key = os.environ.get("MAXMIND_LICENSE_KEY")
         maxmind_source = os.environ.get("MAXMIND_SOURCE", "auto")
         city_path = os.environ.get("MAXMIND_CITY_DB", "/app/geoip/GeoLite2-City.mmdb")
@@ -263,7 +376,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             await db_service.disconnect()
     except Exception:
@@ -327,8 +440,8 @@ def create_app() -> FastAPI:
     # IP whitelist middleware (checked before routing)
     @app.middleware("http")
     async def ip_whitelist_middleware(request: Request, call_next):
-        # Skip health check so monitoring still works
-        if request.url.path in ("/", "/api/v2/health"):
+        # Skip health check and collector API (agents connect from external IPs)
+        if request.url.path in ("/", "/api/v2/health") or request.url.path.startswith("/api/v2/collector/"):
             return await call_next(request)
 
         allowed = get_allowed_ips()
@@ -382,6 +495,14 @@ def create_app() -> FastAPI:
     app.include_router(fleet_api.router, prefix="/api/v2/fleet", tags=["fleet"])
     app.include_router(terminal_api.router, prefix="/api/v2", tags=["terminal"])
     app.include_router(scripts_api.router, prefix="/api/v2/fleet", tags=["scripts"])
+    app.include_router(tokens_api.router, prefix="/api/v2/tokens", tags=["tokens"])
+    app.include_router(templates_api.router, prefix="/api/v2/templates", tags=["templates"])
+    app.include_router(snippets_api.router, prefix="/api/v2/snippets", tags=["snippets"])
+    app.include_router(config_profiles_api.router, prefix="/api/v2/config-profiles", tags=["config-profiles"])
+    app.include_router(billing_api.router, prefix="/api/v2/billing", tags=["billing"])
+    app.include_router(reports_api.router, prefix="/api/v2/reports", tags=["reports"])
+    app.include_router(asn_api.router, prefix="/api/v2/asn", tags=["asn"])
+    app.include_router(collector_api.router, prefix="/api/v2/collector", tags=["collector"])
 
     # Health check endpoint
     @app.get("/api/v2/health", tags=["health"])

@@ -34,7 +34,9 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import Resources from './Resources'
 
 // Types matching backend ConfigItemResponse
 interface ConfigItem {
@@ -102,10 +104,14 @@ function SyncStatusBlock({
   syncItems,
   queryClient,
   canEdit,
+  syncConfigItems,
+  renderConfigItem,
 }: {
   syncItems: SyncStatusItem[]
   queryClient: ReturnType<typeof useQueryClient>
   canEdit: boolean
+  syncConfigItems?: ConfigItem[]
+  renderConfigItem?: (item: ConfigItem) => JSX.Element
 }) {
   const { t } = useTranslation()
   const { formatTimeAgo } = useFormatters()
@@ -193,6 +199,12 @@ function SyncStatusBlock({
 
       {isOpen && (
         <div className="px-4 pb-4 md:px-5 md:pb-5 space-y-3">
+          {/* Sync config settings (e.g. sync interval) */}
+          {syncConfigItems && syncConfigItems.length > 0 && renderConfigItem && (
+            <div className="divide-y divide-dark-700/50">
+              {syncConfigItems.map((item) => renderConfigItem(item))}
+            </div>
+          )}
           {/* Sync all button */}
           <div className="flex justify-end">
             <Button
@@ -479,6 +491,7 @@ function ChangePasswordBlock() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const user = useAuthStore((s) => s.user)
 
   const { data: adminInfo } = useQuery({
@@ -504,7 +517,8 @@ function ChangePasswordBlock() {
     try {
       await navigator.clipboard.writeText(newPassword)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000)
     } catch {
       // clipboard may not be available
     }
@@ -832,6 +846,7 @@ export default function Settings() {
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
   const [errorKeys, setErrorKeys] = useState<Record<string, string>>({})
   const [pendingValues, setPendingValues] = useState<Record<string, string>>({})
+  const savedTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Fetch settings
   const { data: settingsData, isLoading: settingsLoading, refetch: refetchSettings } = useQuery({
@@ -858,7 +873,8 @@ export default function Settings() {
       setSavedKeys((prev) => new Set(prev).add(key))
       setPendingValues((prev) => { const n = { ...prev }; delete n[key]; return n })
       queryClient.invalidateQueries({ queryKey: ['settings'] })
-      setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
+      clearTimeout(savedTimersRef.current[key])
+      savedTimersRef.current[key] = setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
     },
     onError: (error: Error, { key }) => {
       setSavingKeys((prev) => { const n = new Set(prev); n.delete(key); return n })
@@ -873,7 +889,8 @@ export default function Settings() {
       setPendingValues((prev) => { const n = { ...prev }; delete n[key]; return n })
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       setSavedKeys((prev) => new Set(prev).add(key))
-      setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
+      clearTimeout(savedTimersRef.current[key])
+      savedTimersRef.current[key] = setTimeout(() => setSavedKeys((prev) => { const n = new Set(prev); n.delete(key); return n }), 2000)
     },
   })
 
@@ -1193,6 +1210,18 @@ export default function Settings() {
         </Button>
       </div>
 
+      <Tabs defaultValue="general">
+        <TabsList>
+          <TabsTrigger value="general">{t('settings.tabs.general')}</TabsTrigger>
+          <TabsTrigger value="resources">{t('settings.tabs.resources')}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="resources" className="mt-4">
+          <Resources embedded />
+        </TabsContent>
+
+        <TabsContent value="general" className="space-y-6 mt-4">
+
       {/* Search */}
       <div className="relative animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
@@ -1222,7 +1251,13 @@ export default function Settings() {
 
       {/* Sync status - collapsible */}
       {!search && (
-        <SyncStatusBlock syncItems={syncItems} queryClient={queryClient} canEdit={canEdit} />
+        <SyncStatusBlock
+          syncItems={syncItems}
+          queryClient={queryClient}
+          canEdit={canEdit}
+          syncConfigItems={categories['sync']}
+          renderConfigItem={renderConfigItem}
+        />
       )}
 
       {/* Security blocks */}
@@ -1242,7 +1277,7 @@ export default function Settings() {
         </div>
       ) : Object.keys(categories).length > 0 ? (
         <div className="space-y-2">
-          {Object.entries(categories).map(([category, items], catIdx) => {
+          {Object.entries(categories).filter(([category]) => category !== 'sync').map(([category, items], catIdx) => {
             const isOpen = effectiveOpenCategories[category] ?? false
             const filteredCount = filteredCounts[category] || 0
             const dbCount = items.filter((i) => i.source === 'db').length
@@ -1340,6 +1375,8 @@ export default function Settings() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

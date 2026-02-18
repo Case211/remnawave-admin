@@ -7,7 +7,7 @@ from aiogram.types import Message
 
 from src.config import get_settings
 from src.utils.formatters import format_bytes, format_datetime, format_provider_name
-from src.utils.logger import logger
+from shared.logger import logger
 
 
 # Кэш для throttling уведомлений о нарушениях
@@ -39,7 +39,7 @@ def _cleanup_notification_cache() -> None:
 async def _get_squad_name_by_uuid(squad_uuid: str) -> str:
     """Получает имя сквада по UUID из API."""
     try:
-        from src.services.api_client import api_client
+        from shared.api_client import api_client
         squads_res = await api_client.get_internal_squads()
         all_squads = squads_res.get("response", {}).get("internalSquads", [])
         # Ищем сквад по UUID
@@ -842,7 +842,7 @@ async def send_violation_notification(
     try:
         # Получаем информацию о пользователе если не передана
         if not user_info:
-            from src.services.database import db_service
+            from shared.database import db_service
             user_info = await db_service.get_user_by_uuid(user_uuid)
 
         # Извлекаем данные пользователя
@@ -894,7 +894,7 @@ async def send_violation_notification(
         nodes_used = set()
         if node_uuids:
             try:
-                from src.services.database import db_service
+                from shared.database import db_service
                 for node_uuid in node_uuids:
                     node_info = await db_service.get_node_by_uuid(node_uuid)
                     if node_info and node_info.get("name"):
@@ -973,7 +973,7 @@ async def send_violation_notification(
         # Получаем HWID устройства из БД
         hwid_devices = []
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             hwid_devices = await db_service.get_user_hwid_devices(user_uuid)
         except Exception as hwid_error:
             logger.debug("Failed to get HWID devices for user %s: %s", user_uuid, hwid_error)

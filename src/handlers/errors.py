@@ -2,7 +2,7 @@ from aiogram.types.error_event import ErrorEvent
 from aiogram.utils.i18n import gettext as _
 
 from src.handlers.common import _get_error_message
-from src.services.api_client import (
+from shared.api_client import (
     ApiClientError,
     NetworkError,
     NotFoundError,
@@ -12,7 +12,7 @@ from src.services.api_client import (
     UnauthorizedError,
     ValidationError,
 )
-from src.utils.logger import logger
+from shared.logger import logger
 
 
 def _get_error_code(exc: Exception) -> str:

@@ -6,8 +6,8 @@ from typing import Optional
 from aiogram import Bot
 
 from src.config import get_settings
-from src.services.api_client import ApiClientError, api_client
-from src.utils.logger import logger
+from shared.api_client import ApiClientError, api_client
+from shared.logger import logger
 from src.utils.notifications import send_service_notification
 
 

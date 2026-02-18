@@ -1,4 +1,4 @@
-import { useState, useCallback, memo, useMemo } from 'react'
+import { useState, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
 import { exportCSV, exportJSON } from '@/lib/export'
+import Reports from './Reports'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -1170,7 +1171,7 @@ function ViolationSkeleton() {
 
 // ── Main page component ──────────────────────────────────────────
 
-type Tab = 'all' | 'pending' | 'top'
+type Tab = 'all' | 'pending' | 'top' | 'reports'
 
 export default function Violations() {
   const { t } = useTranslation()
@@ -1465,6 +1466,7 @@ export default function Violations() {
           { key: 'all' as Tab, label: t('violations.tabs.all'), count: stats?.total },
           { key: 'pending' as Tab, label: t('violations.tabs.pending'), count: undefined },
           { key: 'top' as Tab, label: t('violations.tabs.topViolators'), count: undefined },
+          { key: 'reports' as Tab, label: t('violations.tabs.reports'), count: undefined },
         ]).map((tabItem) => (
           <button
             key={tabItem.key}
@@ -1484,13 +1486,15 @@ export default function Violations() {
         ))}
       </div>
 
-      {/* Stats section */}
-      <StatsOverview stats={stats} />
-
       {/* Content based on tab */}
-      {tab === 'top' ? (
+      {tab === 'reports' ? (
+        <Reports embedded />
+      ) : tab === 'top' ? (
         <TopViolatorsTab days={days} onViewUser={(uuid) => navigate(`/users/${uuid}`)} />
       ) : (
+        <>
+        {/* Stats section */}
+        <StatsOverview stats={stats} />
         <>
           {/* Violations list */}
           <div className="space-y-3">
@@ -1561,6 +1565,7 @@ export default function Violations() {
               </div>
             </div>
           )}
+        </>
         </>
       )}
     </div>

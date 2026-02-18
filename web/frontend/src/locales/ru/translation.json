@@ -108,7 +108,10 @@
     "analytics": "Аналитика",
     "settings": "Настройки",
     "administration": "Администрирование",
-    "mailServer": "Почтовый сервер"
+    "mailServer": "Почтовый сервер",
+    "resources": "Ресурсы",
+    "billing": "Биллинг",
+    "reports": "Отчёты"
   },
   "header": {
     "searchPlaceholder": "Поиск...",
@@ -568,7 +571,10 @@
       "noActive": "Нет активной подписки",
       "lastOpened": "Последнее открытие",
       "revoked": "Отозвана",
-      "userAgent": "User Agent"
+      "userAgent": "User Agent",
+      "qrTitle": "QR-код подписки",
+      "qrDescription": "Отсканируйте QR-код VPN-клиентом для импорта подписки",
+      "qrDownload": "Скачать PNG"
     },
     "antiAbuse": {
       "title": "Anti-Abuse",
@@ -625,6 +631,10 @@
   "nodes": {
     "title": "Ноды",
     "subtitle": "Управление серверами",
+    "tabs": {
+      "nodes": "Ноды",
+      "billing": "Биллинг"
+    },
     "totalNodes": "Всего",
     "onlineNodes": "Онлайн",
     "offlineNodes": "Офлайн",
@@ -745,8 +755,8 @@
       "lastSeen": "Последняя связь",
       "metrics": "Метрики",
       "disk": "Диск",
-      "download": "Download",
-      "upload": "Upload",
+      "download": "Загрузка",
+      "upload": "Отдача",
       "trafficAndActions": "Трафик и действия",
       "trafficToday": "Сегодня",
       "trafficTotal": "Всего",
@@ -821,6 +831,7 @@
     },
     "terminal": {
       "title": "Терминал",
+      "label": "Терминал",
       "connect": "Подключить",
       "disconnect": "Отключить",
       "connecting": "Подключение",
@@ -842,7 +853,8 @@
     "toast": {
       "restarted": "Нода перезапущена",
       "enabled": "Нода включена",
-      "disabled": "Нода отключена"
+      "disabled": "Нода отключена",
+      "error": "Ошибка операции"
     }
   },
   "hosts": {
@@ -930,7 +942,8 @@
     "tabs": {
       "all": "Все",
       "pending": "Ожидают",
-      "topViolators": "Топ нарушителей"
+      "topViolators": "Топ нарушителей",
+      "reports": "Отчёты и ASN"
     },
     "severity": {
       "critical": "Критический",
@@ -1303,7 +1316,15 @@
     "notFound": "Файл не найден",
     "linesCount": "{{count}} строк",
     "waitingForEntries": "Ожидание записей...",
-    "noEntries": "Нет записей"
+    "noEntries": "Нет записей",
+    "logLevel": "Уровень логирования",
+    "tabs": {
+      "backend": "Бэкенд",
+      "bot": "Бот",
+      "frontend": "Фронтенд",
+      "violations": "Нарушения",
+      "postgres": "PostgreSQL"
+    }
   },
   "analytics": {
     "title": "Аналитика",
@@ -1347,7 +1368,16 @@
       "uniqueUsersColumn": "Пользователи",
       "searchPlaceholder": "Поиск по городу или пользователю...",
       "citiesCount": "{{count}} городов",
-      "totalConnections": "{{count}} подкл."
+      "totalConnections": "{{formattedCount}} подкл.",
+      "allCountries": "Все страны",
+      "sort": {
+        "countDesc": "Подключения (убыв.)",
+        "countAsc": "Подключения (возр.)",
+        "usersDesc": "Пользователи (убыв.)",
+        "usersAsc": "Пользователи (возр.)",
+        "cityAsc": "Город (А-Я)",
+        "cityDesc": "Город (Я-А)"
+      }
     },
     "topUsers": {
       "title": "Топ пользователей по трафику",
@@ -1791,6 +1821,10 @@
   "settings": {
     "title": "Настройки",
     "subtitle": "Конфигурация бота и панели. Приоритет: БД > .env > по умолчанию",
+    "tabs": {
+      "general": "Общие",
+      "resources": "Ресурсы Remnawave"
+    },
     "searchPlaceholder": "Поиск настроек...",
     "foundSettings": "Найдено: {{count}} настроек",
     "noSettings": "Настройки не найдены",
@@ -2225,5 +2259,206 @@
     "title": "Язык",
     "ru": "Русский",
     "en": "English"
+  },
+  "resources": {
+    "title": "Ресурсы",
+    "subtitle": "Управление API-токенами, шаблонами, сниппетами и профилями конфигурации",
+    "tabs": {
+      "tokens": "API-токены",
+      "templates": "Шаблоны",
+      "snippets": "Сниппеты",
+      "profiles": "Профили конфигурации"
+    },
+    "tokens": {
+      "description": "API-токены для доступа к Remnawave Panel API",
+      "create": "Создать токен",
+      "empty": "Нет API-токенов",
+      "created": "Токен создан",
+      "createError": "Не удалось создать токен",
+      "deleted": "Токен удалён",
+      "deleteError": "Не удалось удалить токен",
+      "createTitle": "Создать API-токен",
+      "createDescription": "Введите имя для нового API-токена",
+      "nameLabel": "Имя токена",
+      "namePlaceholder": "напр. my-bot-token",
+      "tokenLabel": "Токен",
+      "tokenCreated": "Токен создан",
+      "tokenCreatedDescription": "Скопируйте токен сейчас — он больше не будет показан",
+      "deleteTitle": "Удалить токен",
+      "deleteDescription": "Вы уверены, что хотите удалить этот токен? Это действие нельзя отменить."
+    },
+    "templates": {
+      "description": "Шаблоны конфигурации VPN-подписок",
+      "create": "Создать шаблон",
+      "empty": "Нет шаблонов",
+      "created": "Шаблон создан",
+      "createError": "Не удалось создать шаблон",
+      "updated": "Шаблон обновлён",
+      "updateError": "Не удалось обновить шаблон",
+      "deleted": "Шаблон удалён",
+      "deleteError": "Не удалось удалить шаблон",
+      "invalidJson": "Некорректный формат JSON",
+      "createTitle": "Создать шаблон",
+      "createDescription": "Введите имя и тип для нового шаблона",
+      "editTitle": "Редактировать шаблон",
+      "nameLabel": "Имя",
+      "namePlaceholder": "напр. Default Xray Config",
+      "typeLabel": "Тип шаблона",
+      "jsonLabel": "JSON шаблона",
+      "deleteTitle": "Удалить шаблон",
+      "deleteDescription": "Вы уверены, что хотите удалить этот шаблон? Это действие нельзя отменить."
+    },
+    "snippets": {
+      "description": "Переиспользуемые JSON-сниппеты конфигурации",
+      "create": "Создать сниппет",
+      "empty": "Нет сниппетов",
+      "created": "Сниппет создан",
+      "createError": "Не удалось создать сниппет",
+      "updated": "Сниппет обновлён",
+      "updateError": "Не удалось обновить сниппет",
+      "deleted": "Сниппет удалён",
+      "deleteError": "Не удалось удалить сниппет",
+      "invalidJson": "Некорректный формат JSON",
+      "createTitle": "Создать сниппет",
+      "createDescription": "Введите имя и JSON-содержимое для нового сниппета",
+      "editTitle": "Редактировать сниппет",
+      "nameLabel": "Имя",
+      "namePlaceholder": "напр. tls-settings",
+      "jsonLabel": "JSON сниппета",
+      "deleteTitle": "Удалить сниппет",
+      "deleteDescription": "Вы уверены, что хотите удалить этот сниппет? Это действие нельзя отменить."
+    },
+    "profiles": {
+      "description": "Профили конфигурации VPN с настройками inbound",
+      "empty": "Нет профилей конфигурации",
+      "loadError": "Не удалось загрузить вычисленную конфигурацию",
+      "viewTitle": "Вычисленная конфигурация",
+      "viewDescription": "Полная раскрытая конфигурация для этого профиля"
+    }
+  },
+  "billing": {
+    "title": "Биллинг",
+    "subtitle": "Управление провайдерами инфраструктуры, историей платежей и биллингом нод",
+    "tabs": {
+      "providers": "Провайдеры",
+      "history": "История платежей",
+      "nodes": "Биллинг нод"
+    },
+    "providers": {
+      "description": "Провайдеры инфраструктуры для хостинга нод",
+      "create": "Добавить провайдера",
+      "empty": "Нет провайдеров",
+      "openPanel": "Открыть панель провайдера",
+      "totalSpent": "Всего потрачено",
+      "totalBills": "Всего счетов",
+      "created": "Провайдер создан",
+      "createError": "Не удалось создать провайдера",
+      "updated": "Провайдер обновлён",
+      "updateError": "Не удалось обновить провайдера",
+      "deleted": "Провайдер удалён",
+      "deleteError": "Не удалось удалить провайдера",
+      "createTitle": "Добавить провайдера",
+      "createDescription": "Введите данные нового провайдера инфраструктуры",
+      "editTitle": "Редактировать провайдера",
+      "editDescription": "Обновить данные провайдера",
+      "nameLabel": "Название провайдера",
+      "namePlaceholder": "напр. Hetzner",
+      "faviconLabel": "URL иконки",
+      "faviconPlaceholder": "https://example.com/favicon.ico",
+      "loginUrlLabel": "URL для входа",
+      "loginUrlPlaceholder": "https://console.example.com",
+      "deleteTitle": "Удалить провайдера",
+      "deleteDescription": "Вы уверены, что хотите удалить этого провайдера? Все связанные записи биллинга будут затронуты."
+    },
+    "history": {
+      "description": "Отслеживание платежей провайдерам инфраструктуры",
+      "create": "Добавить запись",
+      "empty": "Нет записей биллинга",
+      "totalAmount": "Общая сумма",
+      "totalRecords": "Всего записей",
+      "provider": "Провайдер",
+      "amount": "Сумма",
+      "billedAt": "Дата оплаты",
+      "created": "Запись биллинга создана",
+      "createError": "Не удалось создать запись биллинга",
+      "deleted": "Запись биллинга удалена",
+      "deleteError": "Не удалось удалить запись биллинга",
+      "createTitle": "Добавить запись биллинга",
+      "createDescription": "Зафиксировать платёж провайдеру инфраструктуры",
+      "providerLabel": "Провайдер",
+      "providerPlaceholder": "Выберите провайдера",
+      "amountLabel": "Сумма",
+      "amountPlaceholder": "0.00",
+      "billedAtLabel": "Дата оплаты",
+      "deleteTitle": "Удалить запись",
+      "deleteDescription": "Вы уверены, что хотите удалить эту запись биллинга? Это действие нельзя отменить."
+    },
+    "nodes": {
+      "description": "Управление биллинговыми привязками нод",
+      "create": "Добавить ноду",
+      "empty": "Нет биллинговых нод",
+      "upcoming": "Предстоящие платежи",
+      "currentMonth": "Текущий месяц",
+      "totalSpent": "Всего потрачено",
+      "node": "Нода",
+      "provider": "Провайдер",
+      "nextBilling": "Следующий платёж",
+      "created": "Биллинговая нода добавлена",
+      "createError": "Не удалось добавить биллинговую ноду",
+      "deleted": "Биллинговая нода удалена",
+      "deleteError": "Не удалось удалить биллинговую ноду",
+      "createTitle": "Добавить биллинговую ноду",
+      "createDescription": "Привязать ноду к провайдеру биллинга",
+      "providerLabel": "Провайдер",
+      "providerPlaceholder": "Выберите провайдера",
+      "nodeLabel": "Нода",
+      "nodePlaceholder": "Выберите ноду",
+      "nextBillingLabel": "Дата следующего платежа",
+      "deleteTitle": "Удалить биллинговую ноду",
+      "deleteDescription": "Вы уверены, что хотите удалить привязку биллинга к этой ноде?"
+    }
+  },
+  "reports": {
+    "title": "Отчёты",
+    "subtitle": "Отчёты по нарушениям и управление базой ASN",
+    "tabs": {
+      "reports": "Отчёты по нарушениям",
+      "asn": "База ASN"
+    },
+    "filterAll": "Все типы",
+    "filterDaily": "Ежедневный",
+    "filterWeekly": "Еженедельный",
+    "filterMonthly": "Ежемесячный",
+    "generate": "Сгенерировать",
+    "generating": "Генерация...",
+    "generated": "Отчёт успешно сгенерирован",
+    "generateError": "Не удалось сгенерировать отчёт",
+    "generateTitle": "Сгенерировать отчёт",
+    "generateDescription": "Сгенерировать новый отчёт по нарушениям за выбранный период",
+    "reportType": "Тип отчёта",
+    "empty": "Нет отчётов",
+    "uniqueUsers": "Уникальных пользователей",
+    "topViolators": "Топ нарушителей",
+    "score": "Рейтинг",
+    "violations": "нарушений",
+    "byCountry": "По странам",
+    "byAsnType": "По типу ASN",
+    "asn": {
+      "description": "База ASN России, синхронизированная из RIPE",
+      "sync": "Синхронизация из RIPE",
+      "syncing": "Синхронизация...",
+      "syncSuccess": "Синхронизировано {{count}} записей ASN",
+      "syncError": "Не удалось синхронизировать базу ASN",
+      "totalRecords": "Всего записей",
+      "searchPlaceholder": "Поиск по названию организации...",
+      "filterByType": "Фильтр по типу",
+      "allTypes": "Все типы",
+      "searchHint": "Поиск по названию организации или фильтр по типу провайдера",
+      "noResults": "Записи ASN не найдены",
+      "orgName": "Организация",
+      "type": "Тип",
+      "region": "Регион",
+      "showingOf": "Показано {{shown}} из {{total}} записей"
+    }
   }
 }

@@ -19,8 +19,8 @@ from web.backend.schemas.violation import (
     IPLookupResponse,
     IPInfo,
 )
-from src.services.database import DatabaseService
-from src.services.geoip import get_geoip_service
+from shared.database import DatabaseService
+from shared.geoip import get_geoip_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

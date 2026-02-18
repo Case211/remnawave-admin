@@ -24,7 +24,7 @@ router = APIRouter()
 async def _get_agent_token(node_uuid: str) -> str | None:
     """Get agent auth token from DB for HMAC signing."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:

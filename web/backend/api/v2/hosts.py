@@ -69,7 +69,7 @@ def _map_host_detail(h: dict) -> dict:
 async def _get_hosts_list() -> List[dict]:
     """Get hosts from DB first, fall back to API."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if db_service.is_connected:
             hosts = await db_service.get_all_hosts()
             if hosts:

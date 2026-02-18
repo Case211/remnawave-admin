@@ -59,7 +59,7 @@ class OutboundMailQueue:
     ) -> Optional[int]:
         """Add an email to the outbound queue. Returns the queue row id."""
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             async with db_service.acquire() as conn:
                 # Auto-resolve domain_id from sender address
                 if domain_id is None:
@@ -108,7 +108,7 @@ class OutboundMailQueue:
     async def _process_queue(self):
         """Pick up pending emails and attempt delivery."""
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if not db_service.is_connected:
                 return
 
@@ -138,7 +138,7 @@ class OutboundMailQueue:
 
     async def _send_one(self, row: Dict[str, Any]):
         """Attempt to deliver a single queued email."""
-        from src.services.database import db_service
+        from shared.database import db_service
 
         queue_id = row["id"]
         to_email = row["to_email"]

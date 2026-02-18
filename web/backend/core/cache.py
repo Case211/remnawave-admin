@@ -93,8 +93,8 @@ class CacheService:
         if self._using_redis:
             try:
                 return await self._redis.get(key)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Redis GET failed for key %s: %s", key, e)
         return await self._fallback.get(key)
 
     async def set(self, key: str, value: str, ex: int = 60) -> None:
@@ -102,8 +102,8 @@ class CacheService:
             try:
                 await self._redis.set(key, value, ex=ex)
                 return
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Redis SET failed for key %s: %s", key, e)
         await self._fallback.set(key, value, ex=ex)
 
     async def delete(self, key: str) -> None:
@@ -111,8 +111,8 @@ class CacheService:
             try:
                 await self._redis.delete(key)
                 return
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Redis DELETE failed for key %s: %s", key, e)
         await self._fallback.delete(key)
 
     async def flush_pattern(self, pattern: str) -> int:
@@ -125,8 +125,8 @@ class CacheService:
                 if keys:
                     await self._redis.delete(*keys)
                 return len(keys)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Redis flush_pattern failed for %s: %s", pattern, e)
         return await self._fallback.flush_pattern(pattern)
 
     async def close(self) -> None:

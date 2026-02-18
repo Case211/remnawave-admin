@@ -26,7 +26,7 @@ async def _ensure_cache() -> None:
         return
 
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return
         async with db_service.acquire() as conn:
@@ -78,7 +78,7 @@ async def get_all_permissions_for_role_id(role_id: int) -> Set[Tuple[str, str]]:
 async def get_admin_account_by_username(username: str) -> Optional[dict]:
     """Fetch admin account by username (case-insensitive)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -100,7 +100,7 @@ async def get_admin_account_by_username(username: str) -> Optional[dict]:
 async def get_admin_account_by_telegram_id(telegram_id: int) -> Optional[dict]:
     """Fetch admin account by Telegram ID."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -122,7 +122,7 @@ async def get_admin_account_by_telegram_id(telegram_id: int) -> Optional[dict]:
 async def get_admin_account_by_id(admin_id: int) -> Optional[dict]:
     """Fetch admin account by ID."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -144,7 +144,7 @@ async def get_admin_account_by_id(admin_id: int) -> Optional[dict]:
 async def list_admin_accounts() -> List[dict]:
     """List all admin accounts with role info."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return []
         async with db_service.acquire() as conn:
@@ -176,7 +176,7 @@ async def create_admin_account(
 ) -> Optional[dict]:
     """Create a new admin account. Returns the created record."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -232,7 +232,7 @@ async def update_admin_account(
     )
 
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -246,7 +246,7 @@ async def update_admin_account(
 async def delete_admin_account(admin_id: int) -> bool:
     """Delete admin account by ID."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return False
         async with db_service.acquire() as conn:
@@ -271,7 +271,7 @@ async def increment_usage_counter(admin_id: int, counter: str, amount: int = 1) 
     if not query:
         return False
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return False
         async with db_service.acquire() as conn:
@@ -285,7 +285,7 @@ async def increment_usage_counter(admin_id: int, counter: str, amount: int = 1) 
 async def admin_account_exists() -> bool:
     """Check if any admin account exists."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return False
         async with db_service.acquire() as conn:
@@ -301,7 +301,7 @@ async def admin_account_exists() -> bool:
 async def list_roles() -> List[dict]:
     """List all roles with permission counts."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return []
         async with db_service.acquire() as conn:
@@ -326,7 +326,7 @@ async def list_roles() -> List[dict]:
 async def get_role_by_id(role_id: int) -> Optional[dict]:
     """Fetch role with its permissions."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -350,7 +350,7 @@ async def get_role_by_id(role_id: int) -> Optional[dict]:
 async def get_role_by_name(name: str) -> Optional[dict]:
     """Fetch role by name."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -371,7 +371,7 @@ async def create_role(
 ) -> Optional[dict]:
     """Create role with permissions. permissions = [{resource, action}, ...]"""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -411,7 +411,7 @@ async def update_role(
 ) -> Optional[dict]:
     """Update role and optionally replace all permissions."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return None
         async with db_service.acquire() as conn:
@@ -459,7 +459,7 @@ async def update_role(
 async def delete_role(role_id: int) -> bool:
     """Delete a custom role (system roles cannot be deleted)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return False
         async with db_service.acquire() as conn:
@@ -488,7 +488,7 @@ async def write_audit_log(
 ) -> None:
     """Write an entry to the audit log."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return
         async with db_service.acquire() as conn:
@@ -525,7 +525,7 @@ async def get_audit_logs(
     Returns (logs, total_count).
     """
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return [], 0
 
@@ -636,7 +636,7 @@ async def get_audit_logs_for_resource(
 ) -> List[dict]:
     """Fetch audit logs for a specific resource (e.g., user history)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return []
 
@@ -659,7 +659,7 @@ async def get_audit_logs_for_resource(
 async def get_audit_distinct_actions() -> List[str]:
     """Get distinct action names for filter dropdowns."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return []
 
@@ -708,7 +708,7 @@ async def ensure_rbac_tables() -> None:
     This is a safety net — in production, use Alembic migrations.
     """
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return
         async with db_service.acquire() as conn:

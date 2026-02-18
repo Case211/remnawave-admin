@@ -183,3 +183,26 @@ async def anon_client(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+# ── Database mock fixtures ───────────────────────────────────
+
+@pytest.fixture()
+def mock_db():
+    """Mock asyncpg connection with common query methods."""
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value=None)
+    conn.fetch = AsyncMock(return_value=[])
+    conn.fetchval = AsyncMock(return_value=None)
+    conn.execute = AsyncMock()
+    conn.transaction = AsyncMock()
+    return conn
+
+
+@pytest.fixture()
+def mock_db_acquire(mock_db):
+    """Patch db_service.acquire() to return mock_db as context manager."""
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=mock_db)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    return mock_db, cm

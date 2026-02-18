@@ -72,7 +72,7 @@ class AlertEngine:
     async def _check_rules(self):
         """Load enabled threshold rules and evaluate them."""
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             if not db_service.is_connected:
                 return
 
@@ -105,7 +105,7 @@ class AlertEngine:
         metrics: Dict[str, Any] = {}
 
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
 
             async with db_service.acquire() as conn:
                 # Node metrics from DB (only columns that actually exist)
@@ -279,7 +279,7 @@ class AlertEngine:
             details += f" | Nodes: {node_names}"
 
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
 
             # Log the alert
             async with db_service.acquire() as conn:
@@ -338,7 +338,7 @@ class AlertEngine:
         await asyncio.sleep(delay_minutes * 60)
 
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             async with db_service.acquire() as conn:
                 # Check if any recent log entry for this rule is still unacknowledged
                 unacked = await conn.fetchval(

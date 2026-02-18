@@ -10,9 +10,9 @@ from src.handlers.state import PENDING_INPUT, SEARCH_PAGE_SIZE
 from src.keyboards.bulk_hosts import bulk_hosts_keyboard
 from src.keyboards.bulk_nodes import bulk_nodes_keyboard
 from src.keyboards.bulk_users import bulk_users_keyboard
-from src.services.api_client import ApiClientError, UnauthorizedError, api_client
-from src.services.database import db_service
-from src.utils.logger import logger
+from shared.api_client import ApiClientError, UnauthorizedError, api_client
+from shared.database import db_service
+from shared.logger import logger
 from src.utils.notifications import send_user_notification
 
 from src.handlers.hosts import _fetch_hosts_text

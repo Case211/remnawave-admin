@@ -1,8 +1,8 @@
 # Remnawave Node Agent
 
-Агент для сбора данных о подключениях с нод (Xray) и отправки в Admin Bot (Collector API).
+Агент для сбора данных о подключениях с нод (Xray) и отправки в Web Backend (Collector API).
 
-Без этого агента Anti-Abuse система Admin Bot не может работать.
+Без этого агента Anti-Abuse система не может работать.
 
 ---
 
@@ -10,14 +10,14 @@
 
 1. Агент читает `access.log` Xray на ноде
 2. Парсит строки с подключениями пользователей
-3. Периодически отправляет батч в Admin Bot: `POST /api/v1/connections/batch`
+3. Периодически отправляет батч в Web Backend: `POST /api/v2/collector/batch`
 
 ## Требования
 
 - Python 3.12+ (или Docker)
 - Доступ к файлу логов Xray: `/var/log/remnanode/access.log`
-- Токен агента (генерируется в Admin Bot)
-- UUID ноды (из Remnawave / Admin Bot)
+- Токен агента (генерируется в веб-панели или Admin Bot)
+- UUID ноды (из Remnawave Panel)
 
 ---
 
@@ -25,9 +25,13 @@
 
 ### Шаг 1: Получение токена агента
 
-1. Открой Admin Bot в Telegram
-2. **Ноды** → выбери ноду → **Редактировать** → **Токен агента** → **Сгенерировать**
-3. **Скопируй токен** — он показывается только один раз
+**Вариант А** — через веб-панель:
+1. Откройте веб-панель → **Ноды** → выберите ноду → **Токен агента** → **Сгенерировать**
+
+**Вариант Б** — через Admin Bot в Telegram:
+1. Откройте Admin Bot → **Ноды** → выберите ноду → **Редактировать** → **Токен агента** → **Сгенерировать**
+
+Скопируйте токен — он показывается только один раз.
 
 ### Шаг 2: Настройка .env
 
@@ -48,8 +52,8 @@ AGENT_XRAY_LOG_PATH=/var/log/remnanode/access.log
 
 | Переменная | Описание | По умолчанию |
 |------------|----------|-------------|
-| `AGENT_NODE_UUID` | UUID ноды (из Remnawave/Admin Bot) | **обязательно** |
-| `AGENT_COLLECTOR_URL` | URL Admin Bot | **обязательно** |
+| `AGENT_NODE_UUID` | UUID ноды (из Remnawave Panel) | **обязательно** |
+| `AGENT_COLLECTOR_URL` | URL Web Backend (порт 8081) | **обязательно** |
 | `AGENT_AUTH_TOKEN` | Токен агента для этой ноды | **обязательно** |
 | `AGENT_INTERVAL_SECONDS` | Интервал отправки батчей (секунды) | `30` |
 | `AGENT_LOG_PARSING_MODE` | Режим парсинга: `realtime` или `polling` | `realtime` |
@@ -128,11 +132,11 @@ sudo systemctl status remnawave-node-agent
 
 Ожидаемые логи при работе:
 ```
-INFO: Collector API connectivity check passed: https://admin.yourdomain.com/api/v1/connections/health
+INFO: Collector API OK: https://admin.yourdomain.com/api/v2/collector/health
 INFO: Log file found: /var/log/remnanode/access.log (size: X bytes)
 INFO: Node Agent started: node_uuid=..., collector=..., mode=realtime, interval=30s
 INFO: Real-time parsing: new_lines=X accepted_lines=X matched_lines=X connections=X
-INFO: Batch sent successfully: X connections, response: {...}
+DEBUG: Batch OK: X connections
 ```
 
 При корректной остановке (`docker compose stop`) агент отправит оставшиеся данные:
@@ -145,18 +149,26 @@ INFO: Node Agent stopped
 
 ---
 
-## Настройка Caddy для Admin Bot
+## Настройка Caddy (reverse proxy)
 
-Если Admin Bot за обратным прокси (Caddy), добавь проксирование Collector API:
+Если Web Backend за обратным прокси (Caddy), добавьте проксирование Collector API:
 
 ```caddyfile
 admin.yourdomain.com {
-    reverse_proxy /api/v1/connections/* bot:8080 {
+    # Collector API для Node Agent
+    reverse_proxy /api/v2/collector/* web-backend:8081 {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto {scheme}
     }
 
+    # Web Backend API
+    reverse_proxy /api/v2/* web-backend:8081 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+    }
+
+    # Webhook для Remnawave Panel → Bot
     reverse_proxy /webhook bot:8080 {
         header_up X-Real-IP {remote_host}
     }
@@ -167,7 +179,7 @@ admin.yourdomain.com {
 
 ## Контракт с Collector API
 
-- **POST** `{COLLECTOR_URL}/api/v1/connections/batch`
+- **POST** `{COLLECTOR_URL}/api/v2/collector/batch`
 - **Header:** `Authorization: Bearer {AGENT_AUTH_TOKEN}`
 - **Body:**
 
@@ -310,7 +322,7 @@ docker inspect remnawave-node-agent | grep -A3 Health
 
 Ожидаемый вывод при успешном старте:
 ```
-INFO: Collector API connectivity check passed: https://admin.yourdomain.com/api/v1/connections/health
+INFO: Collector API OK: https://admin.yourdomain.com/api/v2/collector/health
 INFO: Log file found: /var/log/remnanode/access.log (size: X bytes)
 INFO: Node Agent started: node_uuid=..., collector=..., mode=realtime, interval=30s
 ```
@@ -360,6 +372,125 @@ cp .env.backup .env
 ```bash
 docker compose pull && docker compose up -d
 ```
+
+---
+
+## Миграция: перенос Collector API с бота на Web Backend
+
+С этой версии обработка подключений и детекция нарушений перенесена из Telegram Bot в Web Backend. Node Agent теперь отправляет данные напрямую в Web Backend (`/api/v2/collector/batch`) вместо бота (`/api/v1/connections/batch`).
+
+### Что изменилось
+
+| Было (старая схема) | Стало (новая схема) |
+|---------------------|---------------------|
+| Agent → Bot (порт 8080) → `/api/v1/connections/batch` | Agent → Web Backend (порт 8081) → `/api/v2/collector/batch` |
+| Детекция нарушений в боте | Детекция нарушений в Web Backend |
+| Уведомления только в Telegram | Уведомления в Telegram + in-app (веб-панель) |
+| `AGENT_COLLECTOR_URL` = URL бота | `AGENT_COLLECTOR_URL` = URL Web Backend |
+
+### Пошаговая миграция
+
+**1. Убедитесь, что веб-панель запущена**
+
+```bash
+docker compose --profile web up -d
+```
+
+Web Backend должен быть доступен и healthy:
+```bash
+curl http://localhost:8081/api/v2/collector/health
+# Ответ: {"status":"ok","service":"collector","database_connected":true}
+```
+
+**2. Добавьте переменные уведомлений в web-backend** (если ещё не добавлены)
+
+В `docker-compose.yml` в секции `web-backend.environment` должны быть:
+```yaml
+- NOTIFICATIONS_CHAT_ID=${NOTIFICATIONS_CHAT_ID:-}
+- NOTIFICATIONS_TOPIC_ID=${NOTIFICATIONS_TOPIC_ID:-}
+- NOTIFICATIONS_TOPIC_VIOLATIONS=${NOTIFICATIONS_TOPIC_VIOLATIONS:-}
+- NOTIFICATIONS_TOPIC_SERVICE=${NOTIFICATIONS_TOPIC_SERVICE:-}
+- NOTIFICATIONS_TOPIC_ERRORS=${NOTIFICATIONS_TOPIC_ERRORS:-}
+```
+
+Перезапустите web-backend после изменений:
+```bash
+docker compose --profile web up -d
+```
+
+**3. Обновите `.env` на каждой ноде**
+
+Измените `AGENT_COLLECTOR_URL`:
+
+```bash
+# Было:
+AGENT_COLLECTOR_URL=https://admin.yourdomain.com
+# или
+AGENT_COLLECTOR_URL=http://host.docker.internal:8080
+
+# Стало (если агент в Docker на том же хосте):
+AGENT_COLLECTOR_URL=http://remnawave-web-backend:8081
+
+# Стало (если через reverse proxy):
+AGENT_COLLECTOR_URL=https://admin.yourdomain.com
+
+# Стало (если по IP напрямую):
+AGENT_COLLECTOR_URL=http://your-server-ip:8081
+```
+
+> **Важно**: Если используете reverse proxy (Caddy, Nginx), обновите конфигурацию — проксируйте `/api/v2/collector/*` на `web-backend:8081` вместо `bot:8080`.
+
+**4. Перезапустите агент**
+
+```bash
+cd /path/to/node-agent
+docker compose restart
+```
+
+**5. Проверьте подключение**
+
+```bash
+docker compose logs -f
+```
+
+Ожидаемый вывод:
+```
+INFO: Collector API OK: https://admin.yourdomain.com/api/v2/collector/health
+INFO: Node Agent started: ...
+```
+
+Если видите ошибку 404 — агент всё ещё стучится на старый endpoint. Убедитесь, что обновили образ агента (`docker compose pull`).
+
+**6. Обновите Caddy/Nginx (если используется reverse proxy)**
+
+Caddy:
+```caddyfile
+admin.yourdomain.com {
+    # Collector API (Node Agent → Web Backend)
+    reverse_proxy /api/v2/collector/* web-backend:8081 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Остальные API
+    reverse_proxy /api/v2/* web-backend:8081
+}
+```
+
+Nginx:
+```nginx
+location /api/v2/collector/ {
+    proxy_pass http://web-backend:8081;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+### Откат
+
+Откат на старую схему **не поддерживается** — endpoint `/api/v1/connections/batch` удалён из бота. Если Web Backend недоступен, агент будет буферизовать данные (до `AGENT_MAX_BUFFER_SIZE`) и повторять попытки отправки. При восстановлении Web Backend все накопленные данные будут отправлены автоматически.
 
 ---
 
@@ -419,17 +550,17 @@ INFO: Agent v2 command channel disabled (AGENT_COMMAND_ENABLED=false)
 1. Установите `AGENT_LOG_LEVEL=DEBUG` в `.env` и перезапустите
 2. Проверьте наличие файла логов: `ls -la /var/log/remnanode/access.log`
 3. Проверьте формат: `tail -n 5 /var/log/remnanode/access.log` — строки должны содержать `accepted` и `email:`
-4. Проверьте доступность Collector API: `curl https://admin.yourdomain.com/api/v1/connections/health`
+4. Проверьте доступность Collector API: `curl https://admin.yourdomain.com/api/v2/collector/health`
 
 ### "Invalid token" / 403
 
 - Токен скопирован полностью (без пробелов)?
-- Токен не отозван в Admin Bot?
+- Токен не отозван в веб-панели / Admin Bot?
 - `AGENT_NODE_UUID` соответствует ноде, для которой выдан токен?
 
 ### "User not found"
 
-- Синхронизация пользователей работает в Admin Bot?
+- Синхронизация пользователей работает в Web Backend?
 - Email/ID в логах Xray совпадает с данными в БД?
 
 ### Логи не читаются
@@ -444,7 +575,7 @@ docker inspect remnawave-node-agent | grep -A5 Mounts
 
 ### Отзыв скомпрометированного токена
 
-1. Admin Bot: **Ноды** → **Редактировать** → **Токен агента** → **Отозвать**
+1. Веб-панель или Admin Bot: **Ноды** → **Токен агента** → **Отозвать**
 2. Сгенерируйте новый токен
 3. Обновите `.env` на ноде
 4. Перезапустите агент

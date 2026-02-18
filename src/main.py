@@ -7,16 +7,16 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import uvicorn
 
 from src.config import get_settings
-from src.services.api_client import api_client
-from src.services.config_service import config_service
-from src.services.database import db_service
-from src.services.sync import sync_service
+from shared.api_client import api_client
+from shared.config_service import config_service
+from shared.database import db_service
+from shared.sync import sync_service
 from src.services.health_check import PanelHealthChecker
 from src.services.report_scheduler import init_report_scheduler
 from src.services.webhook import app as webhook_app
 from src.utils.auth import AdminMiddleware
 from src.utils.i18n import get_i18n_middleware
-from src.utils.logger import logger
+from shared.logger import logger
 from src.handlers import register_handlers
 
 
@@ -167,7 +167,7 @@ async def run_webhook_server(bot: Bot, port: int) -> None:
             msg = str(record.getMessage())
             if "Invalid HTTP request" in msg:
                 return False
-            if "/api/v1/connections/" in msg:
+            if "/api/v1/connections/" in msg or "/api/v2/collector/" in msg:
                 return False
             return True
 
@@ -259,7 +259,7 @@ async def main() -> None:
     # Инициализируем MaxMind updater (если настроен лицензионный ключ)
     maxmind_updater = None
     if settings.maxmind_license_key:
-        from src.services.maxmind_updater import MaxMindUpdater
+        from shared.maxmind_updater import MaxMindUpdater
         maxmind_updater = MaxMindUpdater(
             license_key=settings.maxmind_license_key,
             city_path=settings.maxmind_city_db,

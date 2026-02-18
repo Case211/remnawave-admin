@@ -141,36 +141,46 @@ function NodeDetailPanel({
 
   return (
     <div className="animate-fade-in">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         {/* Column 1: Connection info */}
         <div className="space-y-3">
           <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.info')}</h4>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
-              <Globe className="w-3.5 h-3.5 text-dark-300" />
-              <span className="text-dark-200">{t('fleet.detail.address')}</span>
-              <span className="text-white ml-auto font-mono text-xs">{node.address}:{node.port}</span>
+              <Globe className="w-3.5 h-3.5 text-dark-300 shrink-0" />
+              <span className="text-dark-200 shrink-0">{t('fleet.detail.address')}</span>
+              <span className="text-white ml-auto font-mono text-xs truncate">{node.address}:{node.port}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5 text-yellow-400" />
-              <span className="text-dark-200">Xray</span>
+              <Zap className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+              <span className="text-dark-200 shrink-0">Xray</span>
               <span className="text-white ml-auto font-mono text-xs">{node.xray_version || '-'}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Activity className="w-3.5 h-3.5 text-dark-300" />
-              <span className="text-dark-200">{t('fleet.detail.xrayRunning')}</span>
-              <span className="ml-auto">
+              <Activity className="w-3.5 h-3.5 text-dark-300 shrink-0" />
+              <span className="text-dark-200 shrink-0">{t('fleet.detail.xrayRunning')}</span>
+              <span className="ml-auto flex items-center gap-1.5">
                 {node.is_xray_running ? (
-                  <ShieldCheck className="w-4 h-4 text-green-400" />
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-green-400" />
+                    <span className="text-green-400 text-xs">{t('common.yes')}</span>
+                  </>
                 ) : (
-                  <ShieldAlert className="w-4 h-4 text-red-400" />
+                  <>
+                    <ShieldAlert className="w-4 h-4 text-red-400" />
+                    <span className="text-red-400 text-xs">{t('common.no')}</span>
+                  </>
                 )}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-dark-300" />
-              <span className="text-dark-200">{t('fleet.detail.lastSeen')}</span>
-              <span className="text-white ml-auto text-xs">{node.last_seen_at ? formatTimeAgo(node.last_seen_at) : t('fleet.statusNever')}</span>
+              <Clock className="w-3.5 h-3.5 text-dark-300 shrink-0" />
+              <span className="text-dark-200 shrink-0">{t('fleet.detail.lastSeen')}</span>
+              <span className="text-white ml-auto text-xs">
+                {node.last_seen_at ? formatTimeAgo(node.last_seen_at) : (
+                  node.is_connected ? t('common.justNow') : t('fleet.statusNever')
+                )}
+              </span>
             </div>
           </div>
         </div>
@@ -180,7 +190,7 @@ function NodeDetailPanel({
           <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.metrics')}</h4>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
-              <Cpu className="w-3.5 h-3.5 text-orange-400" />
+              <Cpu className="w-3.5 h-3.5 text-orange-400 shrink-0" />
               <span className="text-dark-200">CPU</span>
               <span className={cn('ml-auto font-mono', getCpuColor(node.cpu_usage))}>
                 {node.cpu_usage != null ? `${node.cpu_usage.toFixed(1)}%` : '-'}
@@ -198,10 +208,13 @@ function NodeDetailPanel({
               </div>
             )}
             <div className="flex items-center gap-2">
-              <MemoryStick className="w-3.5 h-3.5 text-pink-400" />
+              <MemoryStick className="w-3.5 h-3.5 text-pink-400 shrink-0" />
               <span className="text-dark-200">RAM</span>
               <span className={cn('ml-auto font-mono', getRamColor(node.memory_usage))}>
                 {node.memory_usage != null ? `${node.memory_usage.toFixed(1)}%` : '-'}
+                {node.memory_total_bytes != null && (
+                  <span className="text-dark-400 text-[10px] ml-1">({formatBytes(node.memory_used_bytes ?? 0)} / {formatBytes(node.memory_total_bytes)})</span>
+                )}
               </span>
             </div>
             {node.memory_usage != null && (
@@ -216,29 +229,32 @@ function NodeDetailPanel({
               </div>
             )}
             <div className="flex items-center gap-2">
-              <HardDrive className="w-3.5 h-3.5 text-violet-400" />
+              <HardDrive className="w-3.5 h-3.5 text-violet-400 shrink-0" />
               <span className="text-dark-200">{t('fleet.detail.disk')}</span>
               <span className={cn('ml-auto font-mono', node.disk_usage != null && node.disk_usage >= 95 ? 'text-red-400' : node.disk_usage != null && node.disk_usage >= 80 ? 'text-yellow-400' : 'text-white')}>
                 {node.disk_usage != null ? `${node.disk_usage.toFixed(1)}%` : '-'}
                 {node.disk_total_bytes != null && <span className="text-dark-400 text-[10px] ml-1">({formatBytes(node.disk_used_bytes ?? 0)} / {formatBytes(node.disk_total_bytes)})</span>}
               </span>
             </div>
-            {node.memory_total_bytes != null && (
-              <div className="flex items-center gap-2">
-                <MemoryStick className="w-3.5 h-3.5 text-dark-400" />
-                <span className="text-dark-300 text-[10px]">
-                  {formatBytes(node.memory_used_bytes ?? 0)} / {formatBytes(node.memory_total_bytes)}
-                </span>
+            {node.disk_usage != null && (
+              <div className="h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-500',
+                    node.disk_usage >= 95 ? 'bg-red-500' : node.disk_usage >= 80 ? 'bg-yellow-500' : 'bg-violet-500',
+                  )}
+                  style={{ width: `${Math.min(node.disk_usage, 100)}%` }}
+                />
               </div>
             )}
             <div className="flex items-center gap-2">
-              <ArrowDownRight className="w-3.5 h-3.5 text-blue-400" />
-              <span className="text-dark-200">Download</span>
+              <ArrowDownRight className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="text-dark-200">{t('fleet.detail.download')}</span>
               <span className="text-white ml-auto font-mono text-xs">{formatSpeed(node.download_speed_bps)}</span>
             </div>
             <div className="flex items-center gap-2">
-              <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-dark-200">Upload</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="text-dark-200">{t('fleet.detail.upload')}</span>
               <span className="text-white ml-auto font-mono text-xs">{formatSpeed(node.upload_speed_bps)}</span>
             </div>
           </div>
@@ -249,22 +265,22 @@ function NodeDetailPanel({
           <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.trafficAndActions')}</h4>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-3.5 h-3.5 text-violet-400" />
-              <span className="text-dark-200">{t('fleet.detail.today')}</span>
+              <BarChart3 className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+              <span className="text-dark-200">{t('fleet.detail.trafficToday')}</span>
               <span className="text-white ml-auto font-mono text-xs">{formatBytes(node.traffic_today_bytes)}</span>
             </div>
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-3.5 h-3.5 text-dark-300" />
-              <span className="text-dark-200">{t('fleet.detail.total')}</span>
+              <BarChart3 className="w-3.5 h-3.5 text-dark-300 shrink-0" />
+              <span className="text-dark-200">{t('fleet.detail.trafficTotal')}</span>
               <span className="text-white ml-auto font-mono text-xs">{formatBytes(node.traffic_total_bytes)}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Users className="w-3.5 h-3.5 text-cyan-400" />
+              <Users className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span className="text-dark-200">{t('fleet.detail.users')}</span>
               <span className="text-white ml-auto font-mono">{node.users_online}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-green-400" />
+              <Clock className="w-3.5 h-3.5 text-green-400 shrink-0" />
               <span className="text-dark-200">Uptime</span>
               <span className="text-white ml-auto font-mono text-xs">{formatUptime(node.uptime_seconds)}</span>
             </div>
@@ -274,7 +290,7 @@ function NodeDetailPanel({
           {canEdit && (
             <>
               <Separator />
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 {status === 'online' && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -368,22 +384,40 @@ export default function Fleet() {
 
   // ── Mutations ─────────────────────────────────────────────────
 
+  /** Find node name by UUID for descriptive toasts */
+  const getNodeName = (uuid: string) => fleet?.nodes?.find((n) => n.uuid === uuid)?.name || uuid.slice(0, 8)
+
   const restartNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/restart`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success(t('fleet.toast.restarted')) },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('fleet.toast.error')) },
+    onSuccess: (_data, uuid) => {
+      queryClient.invalidateQueries({ queryKey: ['fleet'] })
+      toast.success(t('fleet.toast.restarted'), { description: getNodeName(uuid) })
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(t('fleet.toast.error'), { description: err.response?.data?.detail || err.message })
+    },
   })
 
   const enableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/enable`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success(t('fleet.toast.enabled')) },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('fleet.toast.error')) },
+    onSuccess: (_data, uuid) => {
+      queryClient.invalidateQueries({ queryKey: ['fleet'] })
+      toast.success(t('fleet.toast.enabled'), { description: getNodeName(uuid) })
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(t('fleet.toast.error'), { description: err.response?.data?.detail || err.message })
+    },
   })
 
   const disableNode = useMutation({
     mutationFn: (uuid: string) => client.post(`/nodes/${uuid}/disable`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['fleet'] }); toast.success(t('fleet.toast.disabled')) },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('fleet.toast.error')) },
+    onSuccess: (_data, uuid) => {
+      queryClient.invalidateQueries({ queryKey: ['fleet'] })
+      toast.success(t('fleet.toast.disabled'), { description: getNodeName(uuid) })
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(t('fleet.toast.error'), { description: err.response?.data?.detail || err.message })
+    },
   })
 
   const mutationPending = restartNode.isPending || enableNode.isPending || disableNode.isPending
@@ -478,7 +512,7 @@ export default function Fleet() {
       : null
     const totalDl = onlineNodes.reduce((sum, n) => sum + n.download_speed_bps, 0)
     const totalUl = onlineNodes.reduce((sum, n) => sum + n.upload_speed_bps, 0)
-    const totalUsers = fleet.nodes.reduce((sum, n) => sum + n.users_online, 0)
+    const totalUsers = Array.isArray(fleet.nodes) ? fleet.nodes.reduce((sum, n) => sum + n.users_online, 0) : 0
 
     return { avgCpu, avgRam, totalDl, totalUl, totalUsers }
   }, [fleet?.nodes])

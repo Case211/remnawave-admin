@@ -13,6 +13,7 @@ import {
   WifiOff,
   ChevronDown,
   Search,
+  ArrowUpDown,
 } from 'lucide-react'
 import {
   AreaChart,
@@ -41,6 +42,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
 import { useChartTheme } from '@/lib/useChartTheme'
@@ -251,6 +259,8 @@ function CityUsersList({
 }) {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('count_desc')
+  const [countryFilter, setCountryFilter] = useState('all')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const toggle = useCallback((key: string) => {
@@ -262,23 +272,52 @@ function CityUsersList({
     })
   }, [])
 
+  const availableCountries = useMemo(() => {
+    const countrySet = new Set(cities.map((c) => c.country))
+    return Array.from(countrySet).sort()
+  }, [cities])
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return cities
-    const q = search.toLowerCase()
-    return cities.filter((c) => {
-      if (c.city.toLowerCase().includes(q)) return true
-      if (c.country.toLowerCase().includes(q)) return true
-      return (c.users || []).some(
-        (u) => (u.username || '').toLowerCase().includes(q),
-      )
+    let result = cities
+
+    // Country filter
+    if (countryFilter !== 'all') {
+      result = result.filter((c) => c.country === countryFilter)
+    }
+
+    // Text search
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter((c) => {
+        if (c.city.toLowerCase().includes(q)) return true
+        if (c.country.toLowerCase().includes(q)) return true
+        return (c.users || []).some(
+          (u) => (u.username || '').toLowerCase().includes(q),
+        )
+      })
+    }
+
+    // Sorting
+    result = [...result].sort((a, b) => {
+      switch (sortBy) {
+        case 'count_desc': return b.count - a.count
+        case 'count_asc': return a.count - b.count
+        case 'users_desc': return b.unique_users - a.unique_users
+        case 'users_asc': return a.unique_users - b.unique_users
+        case 'city_asc': return a.city.localeCompare(b.city)
+        case 'city_desc': return b.city.localeCompare(a.city)
+        default: return b.count - a.count
+      }
     })
-  }, [cities, search])
+
+    return result
+  }, [cities, search, sortBy, countryFilter])
 
   return (
     <div>
-      {/* Header + search */}
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2">
+      {/* Header + filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mr-auto">
           <MapPin className="w-4 h-4 text-cyan-400" />
           <h3 className="text-sm font-medium text-white">
             {t('analytics.geo.usersByCity')}
@@ -287,6 +326,37 @@ function CityUsersList({
             {t('analytics.geo.citiesCount', { count: filtered.length })}
           </span>
         </div>
+
+        {/* Country filter */}
+        <Select value={countryFilter} onValueChange={setCountryFilter}>
+          <SelectTrigger className="h-8 w-[150px] text-xs">
+            <SelectValue placeholder={t('analytics.geo.allCountries')} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('analytics.geo.allCountries')}</SelectItem>
+            {availableCountries.map((country) => (
+              <SelectItem key={country} value={country}>{country}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Sort */}
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="h-8 w-[170px] text-xs">
+            <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="count_desc">{t('analytics.geo.sort.countDesc')}</SelectItem>
+            <SelectItem value="count_asc">{t('analytics.geo.sort.countAsc')}</SelectItem>
+            <SelectItem value="users_desc">{t('analytics.geo.sort.usersDesc')}</SelectItem>
+            <SelectItem value="users_asc">{t('analytics.geo.sort.usersAsc')}</SelectItem>
+            <SelectItem value="city_asc">{t('analytics.geo.sort.cityAsc')}</SelectItem>
+            <SelectItem value="city_desc">{t('analytics.geo.sort.cityDesc')}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Search */}
         <div className="relative w-full max-w-[240px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
@@ -328,7 +398,7 @@ function CityUsersList({
                 </span>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-xs text-muted-foreground">
-                    {t('analytics.geo.totalConnections', { count: city.count.toLocaleString() })}
+                    {t('analytics.geo.totalConnections', { count: city.count, formattedCount: city.count.toLocaleString() })}
                   </span>
                   {city.unique_users > 0 && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">

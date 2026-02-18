@@ -23,7 +23,7 @@ class MailService:
         Reads settings from config_service (DB > .env > default).
         """
         try:
-            from src.services.config_service import config_service
+            from shared.config_service import config_service
 
             mail_enabled = config_service.get("mailserver_enabled", False)
             if not mail_enabled:
@@ -115,7 +115,7 @@ class MailService:
         Returns the created domain config dict.
         """
         from web.backend.core.mail.dkim_manager import generate_dkim_keypair
-        from src.services.database import db_service
+        from shared.database import db_service
 
         private_pem, public_pem = generate_dkim_keypair()
 
@@ -140,7 +140,7 @@ class MailService:
             check_mx_records, check_spf_record, check_dkim_record,
             check_dmarc_record, check_ptr_record, get_server_ip,
         )
-        from src.services.database import db_service
+        from shared.database import db_service
 
         async with db_service.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM domain_config WHERE id = $1", domain_id)
@@ -177,7 +177,7 @@ class MailService:
     async def get_active_outbound_domain(self) -> Optional[Dict[str, Any]]:
         """Return the first active outbound domain config, or None."""
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             async with db_service.acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT * FROM domain_config "
@@ -196,7 +196,7 @@ class MailService:
     async def get_domain_dns_records(self, domain_id: int) -> List[Dict[str, Any]]:
         """Get the required DNS records for a domain."""
         from web.backend.core.mail.dns_checker import get_required_dns_records
-        from src.services.database import db_service
+        from shared.database import db_service
 
         async with db_service.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM domain_config WHERE id = $1", domain_id)

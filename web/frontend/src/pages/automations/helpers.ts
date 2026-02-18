@@ -180,7 +180,7 @@ export function getIntervalPresets() {
   ] as const
 }
 
-export const INTERVAL_PRESETS = new Proxy([] as ReturnType<typeof getIntervalPresets>, {
+export const INTERVAL_PRESETS = new Proxy([] as unknown as ReturnType<typeof getIntervalPresets>, {
   get(_target, prop) {
     const presets = getIntervalPresets()
     if (prop === Symbol.iterator) return presets[Symbol.iterator].bind(presets)
@@ -353,7 +353,7 @@ export function getTriggerTypes() {
     { value: 'threshold', label: t('automations.triggerTypes.threshold'), description: t('automations.triggerTypes.thresholdDesc') },
   ] as const
 }
-export const TRIGGER_TYPES = new Proxy([] as ReturnType<typeof getTriggerTypes>, {
+export const TRIGGER_TYPES = new Proxy([] as unknown as ReturnType<typeof getTriggerTypes>, {
   get(_target, prop) { const d = getTriggerTypes(); if (prop === 'map') return d.map.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })
 
@@ -364,7 +364,7 @@ export function getEventTypes() {
     { value: 'user.traffic_exceeded', label: t('automations.events.user_traffic_exceeded'), description: t('automations.events.user_traffic_exceededDesc') },
   ] as const
 }
-export const EVENT_TYPES = new Proxy([] as ReturnType<typeof getEventTypes>, {
+export const EVENT_TYPES = new Proxy([] as unknown as ReturnType<typeof getEventTypes>, {
   get(_target, prop) { const d = getEventTypes(); if (prop === 'map') return d.map.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })
 
@@ -376,7 +376,7 @@ export function getThresholdMetrics() {
     { value: 'user_traffic_percent', label: t('automations.metrics.user_traffic_percent'), description: t('automations.metrics.user_traffic_percentDesc') },
   ] as const
 }
-export const THRESHOLD_METRICS = new Proxy([] as ReturnType<typeof getThresholdMetrics>, {
+export const THRESHOLD_METRICS = new Proxy([] as unknown as ReturnType<typeof getThresholdMetrics>, {
   get(_target, prop) { const d = getThresholdMetrics(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })
 
@@ -392,7 +392,7 @@ export function getConditionOperators() {
     { value: 'not_contains', label: t('automations.operators.not_contains') },
   ] as const
 }
-export const CONDITION_OPERATORS = new Proxy([] as ReturnType<typeof getConditionOperators>, {
+export const CONDITION_OPERATORS = new Proxy([] as unknown as ReturnType<typeof getConditionOperators>, {
   get(_target, prop) { const d = getConditionOperators(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })
 
@@ -406,7 +406,7 @@ export function getConditionFields() {
     { value: 'days_expired', label: t('automations.conditionFields.days_expired') },
   ] as const
 }
-export const CONDITION_FIELDS = new Proxy([] as ReturnType<typeof getConditionFields>, {
+export const CONDITION_FIELDS = new Proxy([] as unknown as ReturnType<typeof getConditionFields>, {
   get(_target, prop) { const d = getConditionFields(); if (prop === 'map') return d.map.bind(d); if (prop === 'find') return d.find.bind(d); if (prop === 'some') return d.some.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })
 
@@ -421,7 +421,7 @@ export function getActionTypes() {
     { value: 'force_sync', label: t('automations.actionTypes.force_sync'), category: 'system', description: t('automations.actionTypes.force_syncDesc') },
   ] as const
 }
-export const ACTION_TYPES = new Proxy([] as ReturnType<typeof getActionTypes>, {
+export const ACTION_TYPES = new Proxy([] as unknown as ReturnType<typeof getActionTypes>, {
   get(_target, prop) { const d = getActionTypes(); if (prop === 'map') return d.map.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })
 
@@ -433,6 +433,6 @@ export function getCategories() {
     { value: 'system', label: t('automations.categories.system') },
   ] as const
 }
-export const CATEGORIES = new Proxy([] as ReturnType<typeof getCategories>, {
+export const CATEGORIES = new Proxy([] as unknown as ReturnType<typeof getCategories>, {
   get(_target, prop) { const d = getCategories(); if (prop === 'map') return d.map.bind(d); if (prop === 'length') return d.length; if (typeof prop === 'string' && !isNaN(Number(prop))) return d[Number(prop)]; return (d as any)[prop] }, // eslint-disable-line @typescript-eslint/no-explicit-any
 })

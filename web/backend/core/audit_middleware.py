@@ -174,8 +174,8 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 request_body = json.loads(body_bytes)
         except (json.JSONDecodeError, UnicodeDecodeError):
             pass
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).debug("Failed to read request body for audit: %s", e)
 
         # Execute the actual request
         response = await call_next(request)

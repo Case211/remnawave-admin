@@ -12,11 +12,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from aiogram import Bot
 
-from src.services.database import db_service
+from shared.database import db_service
 from src.services.connection_monitor import ConnectionMonitor
 from src.services.violation_detector import IntelligentViolationDetector
-from src.utils.agent_tokens import get_node_by_token
-from src.utils.logger import logger
+from shared.agent_tokens import get_node_by_token
+from shared.logger import logger
 from src.utils.notifications import send_violation_notification
 
 # Инициализируем сервисы
@@ -396,7 +396,7 @@ async def receive_connections(
                                     ip_metadata = {}
                                     if active_connections:
                                         try:
-                                            from src.services.geoip import get_geoip_service
+                                            from shared.geoip import get_geoip_service
                                             geoip = get_geoip_service()
                                             unique_ips = list(set(str(c.ip_address) for c in active_connections))
                                             ip_metadata = await geoip.lookup_batch(unique_ips)

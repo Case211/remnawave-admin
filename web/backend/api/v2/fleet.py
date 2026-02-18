@@ -67,7 +67,7 @@ async def get_fleet_agents(
 ):
     """List all nodes with agent v2 connection status."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return FleetAgentsResponse()
 
@@ -123,7 +123,7 @@ async def get_command_log(
 ):
     """Get paginated command execution log."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return CommandLogResponse()
 

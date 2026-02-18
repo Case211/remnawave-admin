@@ -97,7 +97,7 @@ async def list_automation_rules(
 ) -> Tuple[List[dict], int]:
     """List automation rules with pagination and filters."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             where_parts = []
             params: list = []
@@ -139,7 +139,7 @@ async def list_automation_rules(
 async def get_automation_rules_stats() -> dict:
     """Get global aggregate stats for automation rules."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -158,7 +158,7 @@ async def get_automation_rules_stats() -> dict:
 async def get_automation_rule_by_id(rule_id: int) -> Optional[dict]:
     """Get a single automation rule by ID."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM automation_rules WHERE id = $1", rule_id
@@ -183,7 +183,7 @@ async def create_automation_rule(
 ) -> Optional[dict]:
     """Create a new automation rule."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -206,7 +206,7 @@ async def create_automation_rule(
 async def update_automation_rule(rule_id: int, **fields) -> Optional[dict]:
     """Update an automation rule. Only provided fields are updated."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
 
         # Build SET clause dynamically
         set_parts = []
@@ -244,7 +244,7 @@ async def update_automation_rule(rule_id: int, **fields) -> Optional[dict]:
 async def toggle_automation_rule(rule_id: int) -> Optional[dict]:
     """Toggle is_enabled flag on a rule."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -264,7 +264,7 @@ async def toggle_automation_rule(rule_id: int) -> Optional[dict]:
 async def delete_automation_rule(rule_id: int) -> bool:
     """Delete an automation rule (cascades to logs)."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             result = await conn.execute(
                 "DELETE FROM automation_rules WHERE id = $1", rule_id
@@ -278,7 +278,7 @@ async def delete_automation_rule(rule_id: int) -> bool:
 async def increment_trigger_count(rule_id: int) -> None:
     """Increment trigger_count and update last_triggered_at atomically."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             await conn.execute(
                 """
@@ -300,7 +300,7 @@ async def try_acquire_trigger(rule_id: int, min_interval_seconds: int = 60) -> b
     has passed since last_triggered_at). This prevents double-triggering.
     """
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -333,7 +333,7 @@ async def write_automation_log(
 ) -> None:
     """Write an entry to the automation_log table."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             await conn.execute(
                 """
@@ -363,7 +363,7 @@ async def get_automation_logs(
     to efficiently fetch the next page without OFFSET.
     """
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             where_parts = []
             params: list = []
@@ -442,7 +442,7 @@ async def get_automation_logs(
 async def get_enabled_rules_by_trigger_type(trigger_type: str) -> List[dict]:
     """Get all enabled rules with a specific trigger type."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -461,7 +461,7 @@ async def get_enabled_rules_by_trigger_type(trigger_type: str) -> List[dict]:
 async def get_enabled_event_rules(event_type: str) -> List[dict]:
     """Get all enabled event-type rules matching a specific event."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         async with db_service.acquire() as conn:
             rows = await conn.fetch(
                 """

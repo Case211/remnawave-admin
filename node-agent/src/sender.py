@@ -1,5 +1,5 @@
 """
-Отправка батчей подключений в Collector API (Admin Bot).
+Отправка батчей подключений в Collector API (Web Backend).
 """
 import asyncio
 import logging
@@ -18,8 +18,8 @@ class CollectorSender:
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self._url = f"{settings.collector_url.rstrip('/')}/api/v1/connections/batch"
-        self._health_url = f"{settings.collector_url.rstrip('/')}/api/v1/connections/health"
+        self._url = f"{settings.collector_url.rstrip('/')}/api/v2/collector/batch"
+        self._health_url = f"{settings.collector_url.rstrip('/')}/api/v2/collector/health"
         self._headers = {"Authorization": f"Bearer {settings.auth_token}"}
         self._client: httpx.AsyncClient | None = None
 
@@ -74,7 +74,8 @@ class CollectorSender:
                 resp = await client.post(self._url, json=payload)
                 resp.raise_for_status()
                 # Любой 2xx после raise_for_status = успех
-                logger.debug("Batch OK: %d connections", len(connections))
+                logger.debug("Batch sent: %d connections, %s metrics",
+                             len(connections), "with" if system_metrics else "no")
                 return True
             except httpx.HTTPStatusError as e:
                 logger.warning(

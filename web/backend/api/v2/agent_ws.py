@@ -22,7 +22,7 @@ router = APIRouter()
 async def _verify_agent(token: str, node_uuid: str) -> bool:
     """Verify agent token against the database."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return False
         async with db_service.acquire() as conn:
@@ -41,7 +41,7 @@ async def _verify_agent(token: str, node_uuid: str) -> bool:
 async def _set_agent_v2_status(node_uuid: str, connected: bool) -> None:
     """Update agent_v2_connected and agent_v2_last_ping in the DB."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return
         async with db_service.acquire() as conn:
@@ -124,7 +124,7 @@ async def agent_websocket(
                     await websocket.send_text(json.dumps({"type": "pong"}))
                     # Update last ping
                     try:
-                        from src.services.database import db_service
+                        from shared.database import db_service
                         if db_service.is_connected:
                             async with db_service.acquire() as conn:
                                 await conn.execute(
@@ -165,7 +165,7 @@ async def agent_websocket(
 async def _handle_command_result(node_uuid: str, msg: dict) -> None:
     """Update command log entry with result."""
     try:
-        from src.services.database import db_service
+        from shared.database import db_service
         if not db_service.is_connected:
             return
 

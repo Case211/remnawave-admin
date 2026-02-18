@@ -65,7 +65,7 @@ class SubmissionAuthenticator:
     async def refresh_credentials(self):
         """(Re)load active SMTP credentials from the database into memory."""
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             async with db_service.acquire() as conn:
                 rows = await conn.fetch(
                     "SELECT id, username, password_hash, is_active, "
@@ -147,7 +147,7 @@ class SubmissionAuthenticator:
     async def _update_last_login(cred_id: int, remote_ip: str):
         """Update last_login_at / last_login_ip in the background."""
         try:
-            from src.services.database import db_service
+            from shared.database import db_service
             async with db_service.acquire() as conn:
                 await conn.execute(
                     "UPDATE smtp_credentials SET last_login_at = NOW(), last_login_ip = $1 WHERE id = $2",

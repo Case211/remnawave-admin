@@ -15,8 +15,8 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from src.services.database import db_service
-from src.utils.logger import logger
+from shared.database import db_service
+from shared.logger import logger
 
 
 class ReportType(Enum):
