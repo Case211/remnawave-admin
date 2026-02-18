@@ -373,10 +373,10 @@ function AgentTokenModal({
 
   // Auto-detect backend URL from current page origin
   const backendUrl = window.location.origin
-  const wsUrl = backendUrl.replace(/^http/, 'ws') + '/api/v2/collector/ws'
+  const wsUrl = backendUrl.replace(/^http/, 'ws')
 
   const envConfig = generatedToken
-    ? `AGENT_NODE_UUID=${node.uuid}\nAGENT_AUTH_TOKEN=${generatedToken}\nAGENT_COLLECTOR_URL=${backendUrl}\nAGENT_WS_URL=${wsUrl}`
+    ? `AGENT_NODE_UUID=${node.uuid}\nAGENT_AUTH_TOKEN=${generatedToken}\nAGENT_COLLECTOR_URL=${backendUrl}\nAGENT_WS_URL=${wsUrl}\nAGENT_COMMAND_ENABLED=true`
     : null
 
   return (
