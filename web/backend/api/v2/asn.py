@@ -60,19 +60,27 @@ async def get_asn_stats(
     """Get ASN database statistics."""
     try:
         from shared.database import db_service as db
-        provider_types = [
-            "mobile", "mobile_isp", "fixed", "isp", "regional_isp",
-            "hosting", "datacenter", "vpn", "business", "infrastructure",
-        ]
-        stats = {}
-        total = 0
-        for pt in provider_types:
-            records = await db.get_asn_by_provider_type(pt)
-            stats[pt] = len(records)
-            total += len(records)
+        async with db.acquire() as conn:
+            # Total active records
+            total = await conn.fetchval(
+                "SELECT COUNT(*) FROM asn_russia WHERE is_active = true"
+            ) or 0
+
+            # Count by provider_type (single query)
+            type_rows = await conn.fetch(
+                """
+                SELECT COALESCE(provider_type, 'unknown') as provider_type, COUNT(*) as cnt
+                FROM asn_russia
+                WHERE is_active = true
+                GROUP BY provider_type
+                ORDER BY cnt DESC
+                """
+            )
+            by_type = {r["provider_type"]: r["cnt"] for r in type_rows}
+
         return {
             "total": total,
-            "by_type": stats,
+            "by_type": by_type,
         }
     except Exception as e:
         logger.error("Failed to get ASN stats: %s", e)

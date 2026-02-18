@@ -362,7 +362,7 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t('reports.asn.allTypes')}</SelectItem>
-                {providerTypes.map((pt) => (
+                {(asnStats ? Object.entries(asnStats.by_type).sort(([,a],[,b]) => b - a).map(([pt]) => pt) : providerTypes).map((pt) => (
                   <SelectItem key={pt} value={pt}>
                     {pt.replace('_', ' ')}
                     {asnStats?.by_type[pt] ? ` (${asnStats.by_type[pt]})` : ''}
