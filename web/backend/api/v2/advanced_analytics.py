@@ -81,7 +81,8 @@ async def _compute_geo(period: str = "7d"):
             # Fetch all users grouped by city in a single query (avoids N+1)
             city_users_map: dict = {}
             try:
-                # host() extracts IP without CIDR mask (/32) from INET columns
+                # Join user_connections (INET) with ip_metadata (VARCHAR)
+                # Use host() to strip CIDR mask from INET, with text fallback
                 user_city_rows = await conn.fetch(
                     """
                     SELECT im.city, im.country_name,
@@ -89,7 +90,7 @@ async def _compute_geo(period: str = "7d"):
                            COUNT(uc.id) as connections
                     FROM user_connections uc
                     JOIN ip_metadata im
-                        ON host(uc.ip_address) = TRIM(im.ip_address::text)
+                        ON SPLIT_PART(uc.ip_address::text, '/', 1) = TRIM(im.ip_address)
                     JOIN users u ON uc.user_uuid = u.uuid
                     WHERE im.city IS NOT NULL AND im.country_name IS NOT NULL
                     GROUP BY im.city, im.country_name, u.uuid, u.username, u.status
