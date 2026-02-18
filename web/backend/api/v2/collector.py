@@ -19,6 +19,7 @@ from shared.database import db_service
 from shared.connection_monitor import ConnectionMonitor
 from shared.violation_detector import IntelligentViolationDetector
 from shared.agent_tokens import get_node_by_token
+from shared.config_service import config_service
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +282,11 @@ async def receive_connections(
                     logger.warning("Error auto-closing connections for user %s: %s", user_uuid, e, exc_info=True)
 
             # Violation detection for each affected user
+            violations_enabled = config_service.get("violations_enabled", True)
+            min_score = config_service.get("violations_min_score", 50.0)
             for user_uuid in affected_user_uuids:
+                if not violations_enabled:
+                    break
                 try:
                     # Connection stats (для violations.log)
                     stats = await connection_monitor.get_user_connection_stats(user_uuid, window_minutes=60)
@@ -293,7 +298,7 @@ async def receive_connections(
                         )
 
                     violation_score = await violation_detector.check_user(user_uuid, window_minutes=60)
-                    if violation_score and violation_score.total >= violation_detector.THRESHOLDS["monitor"]:
+                    if violation_score and violation_score.total >= min_score:
                         logger.warning(
                             "Violation detected: user=%s score=%.1f action=%s reasons=%s",
                             user_uuid, violation_score.total,

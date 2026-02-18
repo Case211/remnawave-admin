@@ -831,6 +831,7 @@
     },
     "terminal": {
       "title": "Terminal",
+      "label": "Terminal",
       "connect": "Connect",
       "disconnect": "Disconnect",
       "connecting": "Connecting",
@@ -1367,7 +1368,16 @@
       "uniqueUsersColumn": "Users",
       "searchPlaceholder": "Search by city or user...",
       "citiesCount": "{{count}} cities",
-      "totalConnections": "{{formattedCount}} conn."
+      "totalConnections": "{{formattedCount}} conn.",
+      "allCountries": "All countries",
+      "sort": {
+        "countDesc": "Connections (desc)",
+        "countAsc": "Connections (asc)",
+        "usersDesc": "Users (desc)",
+        "usersAsc": "Users (asc)",
+        "cityAsc": "City (A-Z)",
+        "cityDesc": "City (Z-A)"
+      }
     },
     "topUsers": {
       "title": "Top users by traffic",
@@ -1813,7 +1823,7 @@
     "subtitle": "Bot and panel configuration. Priority: DB > .env > default",
     "tabs": {
       "general": "General",
-      "resources": "Resources"
+      "resources": "Remnawave Resources"
     },
     "searchPlaceholder": "Search settings...",
     "foundSettings": "Found: {{count}} settings",

@@ -288,10 +288,10 @@ class TemporalAnalyzer:
                             # Очень короткое перекрытие — переключение сети, сильно снижаем
                             score *= 0.15
                             reasons.append(f"Кратковременное перекрытие ({overlap_minutes:.1f} мин) — вероятно переключение сети")
-                        elif overlap_duration_minutes < 5:
+                        elif overlap_minutes < 5:
                             # Короткое перекрытие — возможно переключение
                             score *= 0.4
-                        elif overlap_duration_minutes < 15:
+                        elif overlap_minutes < 15:
                             # Среднее перекрытие — неоднозначно
                             score *= 0.7
                         # > 15 мин — длительное перекрытие, скор не снижаем
@@ -1503,7 +1503,6 @@ class DeviceFingerprintAnalyzer:
             fp_key = (
                 fp.get('os_family', ''),
                 fp.get('client_type', ''),
-                fp.get('user_agent', '')[:100]  # Первые 100 символов User-Agent
             )
             
             if fp_key not in seen_fps:
@@ -1606,7 +1605,13 @@ class IntelligentViolationDetector:
         if not self.db.is_connected:
             logger.warning("Database not connected, cannot check user violations")
             return None
-        
+
+        # Проверка глобального включения через конфиг
+        from shared.config_service import config_service
+        if not config_service.get("violations_enabled", True):
+            logger.debug("Violation detection disabled via config, skipping user %s", user_uuid)
+            return None
+
         try:
             # Получаем количество устройств пользователя из локальной БД
             user_device_count = await self.db.get_user_devices_count(user_uuid)
@@ -1655,7 +1660,19 @@ class IntelligentViolationDetector:
             
             # Анализируем fingerprint устройств
             device_score = self.device_analyzer.analyze(active_connections, connection_history)
-            
+
+            # Обнуляем скоры отключённых анализаторов через конфиг
+            if not config_service.get("violations_analyzer_temporal", True):
+                temporal_score = TemporalScore(score=0.0, reasons=[])
+            if not config_service.get("violations_analyzer_geo", True):
+                geo_score = GeoScore(score=0.0, reasons=[], countries=set(), cities=set())
+            if not config_service.get("violations_analyzer_asn", True):
+                asn_score = ASNScore(score=0.0, reasons=[], asn_types=set())
+            if not config_service.get("violations_analyzer_profile", True):
+                profile_score = ProfileScore(score=0.0, reasons=[])
+            if not config_service.get("violations_analyzer_device", True):
+                device_score = DeviceScore(score=0.0, reasons=[], unique_fingerprints_count=0, different_os_count=0)
+
             # Вычисляем взвешенный скор
             raw_score = (
                 temporal_score.score * self.WEIGHTS['temporal'] +

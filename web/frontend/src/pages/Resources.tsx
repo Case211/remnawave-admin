@@ -354,7 +354,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
                 <Skeleton key={i} className="h-24 w-full" />
               ))}
             </div>
-          ) : tokens.length === 0 ? (
+          ) : !Array.isArray(tokens) || tokens.length === 0 ? (
             <Card className="border-dark-600 bg-dark-800">
               <CardContent className="p-8 text-center">
                 <FileText className="w-12 h-12 mx-auto mb-3 text-dark-400" />
@@ -363,7 +363,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
             </Card>
           ) : (
             <div className="space-y-3">
-              {tokens.map((token) => {
+              {(Array.isArray(tokens) ? tokens : []).map((token) => {
                 const isRevealed = revealedTokens.has(token.uuid)
                 return (
                   <Card key={token.uuid} className="border-dark-600 bg-dark-800 hover:border-dark-500 transition-colors">
@@ -440,7 +440,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
                 <Skeleton key={i} className="h-32 w-full" />
               ))}
             </div>
-          ) : templates.length === 0 ? (
+          ) : !Array.isArray(templates) || templates.length === 0 ? (
             <Card className="border-dark-600 bg-dark-800">
               <CardContent className="p-8 text-center">
                 <Code className="w-12 h-12 mx-auto mb-3 text-dark-400" />
@@ -449,7 +449,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {templates.map((template) => (
+              {(Array.isArray(templates) ? templates : []).map((template) => (
                 <Card
                   key={template.uuid}
                   className="border-dark-600 bg-dark-800 hover:border-dark-500 transition-colors cursor-pointer"
@@ -516,7 +516,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
                 <Skeleton key={i} className="h-24 w-full" />
               ))}
             </div>
-          ) : snippets.length === 0 ? (
+          ) : !Array.isArray(snippets) || snippets.length === 0 ? (
             <Card className="border-dark-600 bg-dark-800">
               <CardContent className="p-8 text-center">
                 <Code className="w-12 h-12 mx-auto mb-3 text-dark-400" />
@@ -525,7 +525,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
             </Card>
           ) : (
             <div className="space-y-3">
-              {snippets.map((snippet) => (
+              {(Array.isArray(snippets) ? snippets : []).map((snippet) => (
                 <Card
                   key={snippet.name}
                   className="border-dark-600 bg-dark-800 hover:border-dark-500 transition-colors cursor-pointer"
@@ -581,7 +581,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
                 <Skeleton key={i} className="h-32 w-full" />
               ))}
             </div>
-          ) : configProfiles.length === 0 ? (
+          ) : !Array.isArray(configProfiles) || configProfiles.length === 0 ? (
             <Card className="border-dark-600 bg-dark-800">
               <CardContent className="p-8 text-center">
                 <Settings className="w-12 h-12 mx-auto mb-3 text-dark-400" />
@@ -590,7 +590,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {configProfiles.map((profile) => (
+              {(Array.isArray(configProfiles) ? configProfiles : []).map((profile) => (
                 <Card
                   key={profile.uuid}
                   className="border-dark-600 bg-dark-800 hover:border-dark-500 transition-colors cursor-pointer"

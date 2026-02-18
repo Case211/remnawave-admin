@@ -1261,7 +1261,7 @@ export default function Settings() {
         </div>
       ) : Object.keys(categories).length > 0 ? (
         <div className="space-y-2">
-          {Object.entries(categories).map(([category, items], catIdx) => {
+          {Object.entries(categories).filter(([category]) => category !== 'sync').map(([category, items], catIdx) => {
             const isOpen = effectiveOpenCategories[category] ?? false
             const filteredCount = filteredCounts[category] || 0
             const dbCount = items.filter((i) => i.source === 'db').length

@@ -60,13 +60,16 @@ async def _compute_geo(period: str = "7d"):
                 for r in country_rows
             ]
 
-            # Get city distribution
+            # Get city distribution (AVG coords to merge same city with different lat/lon)
             city_rows = await conn.fetch(
                 """
-                SELECT city, country_name, latitude, longitude, COUNT(*) as count
+                SELECT city, country_name,
+                       AVG(latitude) as latitude,
+                       AVG(longitude) as longitude,
+                       COUNT(*) as count
                 FROM ip_metadata
                 WHERE created_at >= $1 AND city IS NOT NULL AND latitude IS NOT NULL
-                GROUP BY city, country_name, latitude, longitude
+                GROUP BY city, country_name
                 ORDER BY count DESC
                 LIMIT 100
                 """,

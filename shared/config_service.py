@@ -29,6 +29,7 @@ class ConfigCategory(str, Enum):
     NOTIFICATIONS = "notifications"
     SYNC = "sync"
     REPORTS = "reports"
+    VIOLATIONS = "violations"
     MAILSERVER = "mailserver"
 
 
@@ -346,6 +347,71 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "ID топика для отправки отчётов (0 = основной чат)",
         "env_var_name": "NOTIFICATIONS_TOPIC_REPORTS",
         "sort_order": 13,
+    },
+
+    # === VIOLATIONS ===
+    {
+        "key": "violations_enabled",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "Детектирование нарушений",
+        "description": "Глобальное включение/выключение детектирования нарушений",
+        "default_value": "true",
+        "sort_order": 1,
+    },
+    {
+        "key": "violations_min_score",
+        "value_type": "float",
+        "category": "violations",
+        "display_name": "Минимальный скор уведомления",
+        "description": "Минимальный скор нарушения для отправки уведомления (по умолчанию 50)",
+        "default_value": "50.0",
+        "sort_order": 2,
+    },
+    {
+        "key": "violations_analyzer_temporal",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "Временной анализатор",
+        "description": "Анализ одновременных подключений и паттернов переключения",
+        "default_value": "true",
+        "sort_order": 3,
+    },
+    {
+        "key": "violations_analyzer_geo",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "Гео-анализатор",
+        "description": "Определение невозможных перемещений и подозрительной географии",
+        "default_value": "true",
+        "sort_order": 4,
+    },
+    {
+        "key": "violations_analyzer_asn",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "ASN-анализатор",
+        "description": "Классификация провайдеров (VPN, датацентр, мобильный оператор)",
+        "default_value": "true",
+        "sort_order": 5,
+    },
+    {
+        "key": "violations_analyzer_profile",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "Профильный анализатор",
+        "description": "Анализ отклонений от обычного поведения пользователя",
+        "default_value": "true",
+        "sort_order": 6,
+    },
+    {
+        "key": "violations_analyzer_device",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "Анализатор устройств",
+        "description": "Определение уникальных fingerprint устройств (ОС, клиент)",
+        "default_value": "true",
+        "sort_order": 7,
     },
 
     # === MAILSERVER ===

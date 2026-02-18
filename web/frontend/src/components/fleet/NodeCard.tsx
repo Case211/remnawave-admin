@@ -12,7 +12,6 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import CircularGauge from './CircularGauge'
@@ -151,19 +150,15 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
           </div>
           <div className="flex items-center gap-2">
             {onTerminalConnect && status === 'online' && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-dark-200 hover:text-green-400"
-                    onClick={(e) => { e.stopPropagation(); onTerminalConnect() }}
-                  >
-                    <Terminal className="w-3.5 h-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('fleet.terminal.connect')}</TooltipContent>
-              </Tooltip>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 gap-1 text-dark-200 hover:text-green-400 text-[11px]"
+                onClick={(e) => { e.stopPropagation(); onTerminalConnect() }}
+              >
+                <Terminal className="w-3.5 h-3.5" />
+                {t('fleet.terminal.label')}
+              </Button>
             )}
             <StatusBadge status={status} />
           </div>

@@ -831,6 +831,7 @@
     },
     "terminal": {
       "title": "Терминал",
+      "label": "Терминал",
       "connect": "Подключить",
       "disconnect": "Отключить",
       "connecting": "Подключение",
@@ -1367,7 +1368,16 @@
       "uniqueUsersColumn": "Пользователи",
       "searchPlaceholder": "Поиск по городу или пользователю...",
       "citiesCount": "{{count}} городов",
-      "totalConnections": "{{formattedCount}} подкл."
+      "totalConnections": "{{formattedCount}} подкл.",
+      "allCountries": "Все страны",
+      "sort": {
+        "countDesc": "Подключения (убыв.)",
+        "countAsc": "Подключения (возр.)",
+        "usersDesc": "Пользователи (убыв.)",
+        "usersAsc": "Пользователи (возр.)",
+        "cityAsc": "Город (А-Я)",
+        "cityDesc": "Город (Я-А)"
+      }
     },
     "topUsers": {
       "title": "Топ пользователей по трафику",
@@ -1813,7 +1823,7 @@
     "subtitle": "Конфигурация бота и панели. Приоритет: БД > .env > по умолчанию",
     "tabs": {
       "general": "Общие",
-      "resources": "Ресурсы"
+      "resources": "Ресурсы Remnawave"
     },
     "searchPlaceholder": "Поиск настроек...",
     "foundSettings": "Найдено: {{count}} настроек",
