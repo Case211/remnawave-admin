@@ -1,4 +1,9 @@
-"""API tokens management — proxy to Remnawave Panel API."""
+"""API tokens management — proxy to Remnawave Panel API.
+
+NOTE: Remnawave Panel's /api/tokens endpoints are forbidden for API-key auth
+and require admin JWT-token. We use local DB as primary source via data_access,
+with graceful fallback when API is unavailable.
+"""
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,20 +23,16 @@ class TokenCreate(BaseModel):
 async def list_tokens(
     admin: AdminUser = Depends(require_permission("resources", "view")),
 ):
-    """List all API tokens."""
-    try:
-        from shared.api_client import api_client
-        result = await api_client.get_tokens()
-        tokens = result.get("response", [])
-        # Mask token values in list
-        for t in tokens:
-            if "token" in t and t["token"]:
-                val = t["token"]
-                t["token"] = val[:8] + "..." + val[-4:] if len(val) > 12 else "***"
-        return {"items": tokens, "total": len(tokens)}
-    except Exception as e:
-        logger.error("Failed to list tokens: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+    """List all API tokens. Uses local DB first, API fallback."""
+    from shared.data_access import get_all_tokens
+
+    tokens = await get_all_tokens()
+    # Mask token values in list
+    for t in tokens:
+        if "token" in t and t["token"]:
+            val = t["token"]
+            t["token"] = val[:8] + "..." + val[-4:] if len(val) > 12 else "***"
+    return {"items": tokens, "total": len(tokens)}
 
 
 @router.post("")

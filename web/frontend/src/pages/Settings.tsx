@@ -104,10 +104,14 @@ function SyncStatusBlock({
   syncItems,
   queryClient,
   canEdit,
+  syncConfigItems,
+  renderConfigItem,
 }: {
   syncItems: SyncStatusItem[]
   queryClient: ReturnType<typeof useQueryClient>
   canEdit: boolean
+  syncConfigItems?: ConfigItem[]
+  renderConfigItem?: (item: ConfigItem) => JSX.Element
 }) {
   const { t } = useTranslation()
   const { formatTimeAgo } = useFormatters()
@@ -195,6 +199,12 @@ function SyncStatusBlock({
 
       {isOpen && (
         <div className="px-4 pb-4 md:px-5 md:pb-5 space-y-3">
+          {/* Sync config settings (e.g. sync interval) */}
+          {syncConfigItems && syncConfigItems.length > 0 && renderConfigItem && (
+            <div className="divide-y divide-dark-700/50">
+              {syncConfigItems.map((item) => renderConfigItem(item))}
+            </div>
+          )}
           {/* Sync all button */}
           <div className="flex justify-end">
             <Button
@@ -1241,7 +1251,13 @@ export default function Settings() {
 
       {/* Sync status - collapsible */}
       {!search && (
-        <SyncStatusBlock syncItems={syncItems} queryClient={queryClient} canEdit={canEdit} />
+        <SyncStatusBlock
+          syncItems={syncItems}
+          queryClient={queryClient}
+          canEdit={canEdit}
+          syncConfigItems={categories['sync']}
+          renderConfigItem={renderConfigItem}
+        />
       )}
 
       {/* Security blocks */}
