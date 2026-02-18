@@ -42,7 +42,15 @@ async def get_asn_by_type(
     """Get ASN records by provider type."""
     try:
         from shared.database import db_service as db
-        records = await db.get_asn_by_provider_type(provider_type)
+        if provider_type == "unknown":
+            # Records with NULL provider_type
+            async with db.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT * FROM asn_russia WHERE provider_type IS NULL AND is_active = true ORDER BY org_name"
+                )
+                records = [dict(row) for row in rows]
+        else:
+            records = await db.get_asn_by_provider_type(provider_type)
         for r in records:
             for key in ("created_at", "updated_at", "last_synced_at"):
                 if r.get(key):

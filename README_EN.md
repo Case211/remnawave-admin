@@ -341,6 +341,43 @@ Internet
 
 ---
 
+### Step 8️⃣ — Node Agent (optional)
+
+The Anti-Abuse system requires a **Node Agent** on each node. The agent collects connection data from Xray logs and sends it to the Web Backend.
+
+**1. Generate agent token** — in the web panel: **Nodes** → select a node → **Agent Token** → **Generate**. The `.env` variables will be shown after generation.
+
+**2. Install the agent on the node:**
+
+```bash
+mkdir -p /opt/remnawave-node-agent && cd /opt/remnawave-node-agent
+
+# Download docker-compose.yml
+curl -sLO https://raw.githubusercontent.com/case211/remnawave-admin/main/node-agent/docker-compose.yml
+
+# Create .env and paste the variables from the web panel
+nano .env
+```
+
+```env
+AGENT_NODE_UUID=node-uuid-from-panel
+AGENT_AUTH_TOKEN=generated-token
+AGENT_COLLECTOR_URL=https://admin.yourdomain.com
+AGENT_INTERVAL_SECONDS=30
+AGENT_XRAY_LOG_PATH=/var/log/remnanode/access.log
+```
+
+**3. Start:**
+
+```bash
+docker compose up -d
+docker compose logs -f  # Verify: "Collector API OK" + "Node Agent started"
+```
+
+> 📖 Full documentation: [node-agent/README.md](node-agent/README.md) — parsing modes, Command Channel (terminal/scripts), systemd, migration, troubleshooting.
+
+---
+
 ## 💻 Local Development
 
 ```bash
