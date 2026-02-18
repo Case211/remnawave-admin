@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "web/backend/**"
+      - "shared/**"
       - "alembic/**"
   pull_request:
     paths:
       - "web/backend/**"
+      - "shared/**"
       - "alembic/**"
 
 jobs:
@@ -34,5 +36,7 @@ jobs:
           pip install -r web/backend/requirements.txt
 
       - name: Run tests
+        env:
+          PYTHONPATH: .
         run: |
           python -m pytest web/backend/tests/ -v --tb=short
