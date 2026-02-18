@@ -141,12 +141,12 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
         <TabsContent value="reports" className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Select value={reportFilter} onValueChange={setReportFilter}>
+              <Select value={reportFilter} onValueChange={(v) => setReportFilter(v === 'all' ? '' : v)}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder={t('reports.filterAll')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('reports.filterAll')}</SelectItem>
+                  <SelectItem value="all">{t('reports.filterAll')}</SelectItem>
                   <SelectItem value="daily">{t('reports.filterDaily')}</SelectItem>
                   <SelectItem value="weekly">{t('reports.filterWeekly')}</SelectItem>
                   <SelectItem value="monthly">{t('reports.filterMonthly')}</SelectItem>
@@ -356,12 +356,12 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
                 className="pl-9"
               />
             </div>
-            <Select value={asnTypeFilter} onValueChange={(v) => { setAsnTypeFilter(v); setAsnSearch('') }}>
+            <Select value={asnTypeFilter || 'all'} onValueChange={(v) => { setAsnTypeFilter(v === 'all' ? '' : v); setAsnSearch('') }}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder={t('reports.asn.filterByType')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">{t('reports.asn.allTypes')}</SelectItem>
+                <SelectItem value="all">{t('reports.asn.allTypes')}</SelectItem>
                 {providerTypes.map((pt) => (
                   <SelectItem key={pt} value={pt}>
                     {pt.replace('_', ' ')}

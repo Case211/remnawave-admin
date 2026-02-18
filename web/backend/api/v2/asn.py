@@ -22,7 +22,7 @@ async def search_asn(
 ):
     """Search ASN records by organization name."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         records = await db.get_asn_by_org_name(org_name)
         for r in records:
             for key in ("created_at", "updated_at", "last_synced_at"):
@@ -41,7 +41,7 @@ async def get_asn_by_type(
 ):
     """Get ASN records by provider type."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         records = await db.get_asn_by_provider_type(provider_type)
         for r in records:
             for key in ("created_at", "updated_at", "last_synced_at"):
@@ -59,7 +59,7 @@ async def get_asn_stats(
 ):
     """Get ASN database statistics."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         provider_types = [
             "mobile", "mobile_isp", "fixed", "isp", "regional_isp",
             "hosting", "datacenter", "vpn", "business", "infrastructure",
@@ -86,7 +86,7 @@ async def get_asn(
 ):
     """Get a single ASN record."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         record = await db.get_asn_record(asn)
         if not record:
             raise HTTPException(status_code=404, detail="ASN not found")
