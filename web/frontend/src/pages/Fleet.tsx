@@ -141,25 +141,25 @@ function NodeDetailPanel({
 
   return (
     <div className="animate-fade-in">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Column 1: Connection info */}
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0">
           <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.info')}</h4>
           <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Globe className="w-3.5 h-3.5 text-dark-300 shrink-0" />
               <span className="text-dark-200 shrink-0">{t('fleet.detail.address')}</span>
-              <span className="text-white ml-auto font-mono text-xs truncate">{node.address}:{node.port}</span>
+              <span className="text-white ml-auto font-mono text-xs truncate max-w-[50%]">{node.address}:{node.port}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Zap className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
               <span className="text-dark-200 shrink-0">Xray</span>
               <span className="text-white ml-auto font-mono text-xs">{node.xray_version || '-'}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Activity className="w-3.5 h-3.5 text-dark-300 shrink-0" />
-              <span className="text-dark-200 shrink-0">{t('fleet.detail.xrayRunning')}</span>
-              <span className="ml-auto flex items-center gap-1.5">
+              <span className="text-dark-200 truncate">{t('fleet.detail.xrayRunning')}</span>
+              <span className="ml-auto flex items-center gap-1.5 shrink-0">
                 {node.is_xray_running ? (
                   <>
                     <ShieldCheck className="w-4 h-4 text-green-400" />
@@ -173,10 +173,10 @@ function NodeDetailPanel({
                 )}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Clock className="w-3.5 h-3.5 text-dark-300 shrink-0" />
-              <span className="text-dark-200 shrink-0">{t('fleet.detail.lastSeen')}</span>
-              <span className="text-white ml-auto text-xs">
+              <span className="text-dark-200 truncate">{t('fleet.detail.lastSeen')}</span>
+              <span className="text-white ml-auto text-xs shrink-0">
                 {node.last_seen_at ? formatTimeAgo(node.last_seen_at) : (
                   node.is_connected ? t('common.justNow') : t('fleet.statusNever')
                 )}
@@ -186,7 +186,7 @@ function NodeDetailPanel({
         </div>
 
         {/* Column 2: Detailed metrics */}
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0">
           <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.metrics')}</h4>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
@@ -261,7 +261,7 @@ function NodeDetailPanel({
         </div>
 
         {/* Column 3: Actions + Traffic */}
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0">
           <h4 className="text-xs font-medium text-dark-200 uppercase tracking-wider">{t('fleet.detail.trafficAndActions')}</h4>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">

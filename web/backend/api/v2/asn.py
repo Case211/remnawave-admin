@@ -22,7 +22,7 @@ async def search_asn(
 ):
     """Search ASN records by organization name."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         records = await db.get_asn_by_org_name(org_name)
         for r in records:
             for key in ("created_at", "updated_at", "last_synced_at"):
@@ -41,8 +41,16 @@ async def get_asn_by_type(
 ):
     """Get ASN records by provider type."""
     try:
-        from shared.database import db
-        records = await db.get_asn_by_provider_type(provider_type)
+        from shared.database import db_service as db
+        if provider_type == "unknown":
+            # Records with NULL provider_type
+            async with db.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT * FROM asn_russia WHERE provider_type IS NULL AND is_active = true ORDER BY org_name"
+                )
+                records = [dict(row) for row in rows]
+        else:
+            records = await db.get_asn_by_provider_type(provider_type)
         for r in records:
             for key in ("created_at", "updated_at", "last_synced_at"):
                 if r.get(key):
@@ -59,20 +67,28 @@ async def get_asn_stats(
 ):
     """Get ASN database statistics."""
     try:
-        from shared.database import db
-        provider_types = [
-            "mobile", "mobile_isp", "fixed", "isp", "regional_isp",
-            "hosting", "datacenter", "vpn", "business", "infrastructure",
-        ]
-        stats = {}
-        total = 0
-        for pt in provider_types:
-            records = await db.get_asn_by_provider_type(pt)
-            stats[pt] = len(records)
-            total += len(records)
+        from shared.database import db_service as db
+        async with db.acquire() as conn:
+            # Total active records
+            total = await conn.fetchval(
+                "SELECT COUNT(*) FROM asn_russia WHERE is_active = true"
+            ) or 0
+
+            # Count by provider_type (single query)
+            type_rows = await conn.fetch(
+                """
+                SELECT COALESCE(provider_type, 'unknown') as provider_type, COUNT(*) as cnt
+                FROM asn_russia
+                WHERE is_active = true
+                GROUP BY provider_type
+                ORDER BY cnt DESC
+                """
+            )
+            by_type = {r["provider_type"]: r["cnt"] for r in type_rows}
+
         return {
             "total": total,
-            "by_type": stats,
+            "by_type": by_type,
         }
     except Exception as e:
         logger.error("Failed to get ASN stats: %s", e)
@@ -86,7 +102,7 @@ async def get_asn(
 ):
     """Get a single ASN record."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         record = await db.get_asn_record(asn)
         if not record:
             raise HTTPException(status_code=404, detail="ASN not found")

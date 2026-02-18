@@ -854,6 +854,13 @@ async def get_node_fleet(
                 except Exception:
                     metrics_updated = str(metrics_updated)
 
+            # Derive is_xray_running: Panel API doesn't provide this field,
+            # but if node is connected and has xray_version, xray is running
+            xray_version = n.get('xray_version') or n.get('xrayVersion')
+            is_xray_running = bool(n.get('is_xray_running') or n.get('isXrayRunning'))
+            if not is_xray_running and is_connected and xray_version:
+                is_xray_running = True
+
             fleet_items.append(NodeFleetItem(
                 uuid=n.get('uuid', ''),
                 name=n.get('name', ''),
@@ -861,8 +868,8 @@ async def get_node_fleet(
                 port=int(n.get('port') or 443),
                 is_connected=is_connected,
                 is_disabled=is_disabled,
-                is_xray_running=bool(n.get('is_xray_running')),
-                xray_version=n.get('xray_version'),
+                is_xray_running=is_xray_running,
+                xray_version=xray_version,
                 users_online=int(n.get('users_online') or 0),
                 traffic_today_bytes=int(n.get('traffic_today_bytes') or 0),
                 traffic_total_bytes=int(n.get('traffic_total_bytes') or 0),

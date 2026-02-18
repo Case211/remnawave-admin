@@ -352,15 +352,31 @@ function AgentTokenModal({
     },
   })
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Fallback for non-HTTPS or restricted contexts
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
     setCopied(true)
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
     copyTimerRef.current = setTimeout(() => setCopied(false), 2000)
   }
 
+  // Auto-detect backend URL from current page origin
+  const backendUrl = window.location.origin
+  const wsUrl = backendUrl.replace(/^http/, 'ws')
+
   const envConfig = generatedToken
-    ? `AGENT_NODE_UUID=${node.uuid}\nAGENT_AUTH_TOKEN=${generatedToken}\nAGENT_COLLECTOR_URL=https://your-admin-bot.com`
+    ? `AGENT_NODE_UUID=${node.uuid}\nAGENT_AUTH_TOKEN=${generatedToken}\nAGENT_COLLECTOR_URL=${backendUrl}\nAGENT_WS_URL=${wsUrl}\nAGENT_COMMAND_ENABLED=true`
     : null
 
   return (

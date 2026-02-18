@@ -26,7 +26,7 @@ async def list_reports(
 ):
     """List violation reports history."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         reports = await db.get_reports_history(report_type=report_type, limit=limit)
         for r in reports:
             for key in ("top_violators", "by_country", "by_action", "by_asn_type"):
@@ -51,7 +51,7 @@ async def get_report(
 ):
     """Get a single report by ID."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         reports = await db.get_reports_history(limit=200)
         report = next((r for r in reports if r.get("id") == report_id), None)
         if not report:
@@ -80,7 +80,7 @@ async def generate_report(
 ):
     """Generate a new violation report."""
     try:
-        from shared.database import db
+        from shared.database import db_service as db
         from src.services.violation_reports import ViolationReportService, ReportType
 
         report_type_map = {

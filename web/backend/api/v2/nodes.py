@@ -53,6 +53,13 @@ def _ensure_node_snake_case(node: dict) -> dict:
     # Fallback: traffic_total_bytes = traffic_used_bytes if not present
     if 'traffic_total_bytes' not in result and 'traffic_used_bytes' in result:
         result['traffic_total_bytes'] = result['traffic_used_bytes']
+    # Derive is_xray_running: Panel API doesn't provide this field,
+    # but if node is connected and has xray_version, xray is running
+    if not result.get('is_xray_running') and not result.get('isXrayRunning'):
+        if bool(result.get('is_connected') or result.get('isConnected')):
+            xv = result.get('xray_version') or result.get('xrayVersion')
+            if xv:
+                result['is_xray_running'] = True
     return result
 
 
