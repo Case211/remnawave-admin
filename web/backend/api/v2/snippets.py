@@ -33,7 +33,8 @@ async def list_snippets(
     try:
         from shared.api_client import api_client
         result = await api_client.get_snippets()
-        snippets = result.get("response", [])
+        payload = result.get("response", {})
+        snippets = payload.get("snippets", []) if isinstance(payload, dict) else []
         return {"items": snippets, "total": len(snippets)}
     except Exception as e:
         logger.error("Failed to list snippets: %s", e)
