@@ -11,6 +11,7 @@ export interface GeoCityUser {
   uuid: string
   status: string
   connections: number
+  ips: string[]
 }
 
 export interface GeoCity {

@@ -837,6 +837,58 @@ async def get_user_traffic_stats(
         raise HTTPException(status_code=500, detail="Internal error")
 
 
+@router.get("/{user_uuid}/ip-history")
+async def get_user_ip_history(
+    user_uuid: str,
+    period: str = Query("24h", description="Period: 24h, 7d, 30d"),
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Get unique IP addresses for a user with geo enrichment."""
+    period_days = {"24h": 1, "7d": 7, "30d": 30}.get(period, 1)
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"items": [], "total": 0}
+
+        async with db_service.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    SPLIT_PART(uc.ip_address::text, '/', 1) as ip,
+                    im.country_name as country,
+                    im.city,
+                    im.asn_org,
+                    COUNT(uc.id) as connections,
+                    MAX(uc.connected_at) as last_seen
+                FROM user_connections uc
+                LEFT JOIN ip_metadata im
+                    ON SPLIT_PART(uc.ip_address::text, '/', 1) = TRIM(im.ip_address)
+                WHERE uc.user_uuid = $1
+                  AND uc.connected_at > NOW() - make_interval(days => $2)
+                GROUP BY SPLIT_PART(uc.ip_address::text, '/', 1),
+                         im.country_name, im.city, im.asn_org
+                ORDER BY last_seen DESC
+                """,
+                user_uuid,
+                period_days,
+            )
+            items = [
+                {
+                    "ip": r["ip"],
+                    "country": r["country"] or "",
+                    "city": r["city"] or "",
+                    "asn_org": r["asn_org"] or "",
+                    "connections": r["connections"],
+                    "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
+                }
+                for r in rows
+            ]
+            return {"items": items, "total": len(items)}
+    except Exception as e:
+        logger.error("Error getting IP history for %s: %s", user_uuid, e)
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
 @router.post("/{user_uuid}/sync-hwid-devices")
 async def sync_user_hwid_devices(
     user_uuid: str,

@@ -20,6 +20,7 @@ import {
   Laptop,
   Server,
   Globe,
+  Network,
   Clock,
   AlertTriangle,
   Users,
@@ -663,6 +664,147 @@ function UserHistory({ uuid }: { uuid: string }) {
   )
 }
 
+
+const IP_DEFAULT_LIMIT = 10
+
+interface IpHistoryItem {
+  ip: string
+  country: string
+  city: string
+  asn_org: string
+  connections: number
+  last_seen: string | null
+}
+
+function IpHistoryCard({ userUuid }: { userUuid: string }) {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+  const [period, setPeriod] = useState('24h')
+  const [showAll, setShowAll] = useState(false)
+  const [copiedIp, setCopiedIp] = useState<string | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['user-ips', userUuid, period],
+    queryFn: async () => {
+      const { data } = await client.get(`/users/${userUuid}/ip-history`, { params: { period } })
+      return data as { items: IpHistoryItem[]; total: number }
+    },
+  })
+
+  const items = data?.items || []
+  const visible = showAll ? items : items.slice(0, IP_DEFAULT_LIMIT)
+  const hasMore = items.length > IP_DEFAULT_LIMIT && !showAll
+
+  const copyIp = (ip: string) => {
+    navigator.clipboard.writeText(ip)
+    setCopiedIp(ip)
+    setTimeout(() => setCopiedIp(null), 1500)
+  }
+
+  // Reset showAll when period changes
+  useEffect(() => { setShowAll(false) }, [period])
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.18s' }}>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary-400" />
+            {t('userDetail.ips.title')}
+            {items.length > 0 && (
+              <Badge variant="secondary" className="ml-1">{items.length}</Badge>
+            )}
+          </CardTitle>
+          <div className="flex gap-1">
+            {(['24h', '7d', '30d'] as const).map((p) => (
+              <Button
+                key={p}
+                variant={period === p ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setPeriod(p)}
+              >
+                {t(`userDetail.ips.periods.${p}`)}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-6 text-dark-300 text-sm">
+            {t('userDetail.ips.noData')}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {/* Header */}
+            <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_1fr_auto_auto] gap-2 px-2 pb-1 text-[10px] text-dark-300 uppercase tracking-wider">
+              <span>{t('userDetail.ips.ip')}</span>
+              <span className="hidden sm:block">{t('userDetail.ips.city')}</span>
+              <span className="text-right">{t('userDetail.ips.connections')}</span>
+              <span className="text-right w-[80px]">{t('userDetail.ips.lastSeen')}</span>
+            </div>
+            {/* Rows */}
+            {visible.map((item) => (
+              <div
+                key={item.ip}
+                className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center px-2 py-1.5 rounded-md hover:bg-dark-600/30 transition-colors group"
+              >
+                <div className="flex flex-col min-w-0">
+                  <button
+                    onClick={() => copyIp(item.ip)}
+                    className="font-mono text-sm text-white truncate text-left hover:text-primary-400 transition-colors"
+                    title={copiedIp === item.ip ? 'Copied!' : item.ip}
+                  >
+                    {copiedIp === item.ip ? (
+                      <span className="flex items-center gap-1">
+                        <Check className="h-3 w-3 text-green-400" />
+                        {item.ip}
+                      </span>
+                    ) : (
+                      item.ip
+                    )}
+                  </button>
+                  {item.asn_org && (
+                    <span className="text-[10px] text-dark-300 truncate">{item.asn_org}</span>
+                  )}
+                  {/* Mobile-only city */}
+                  {(item.city || item.country) && (
+                    <span className="text-[10px] text-dark-300 sm:hidden">
+                      {[item.city, item.country].filter(Boolean).join(', ')}
+                    </span>
+                  )}
+                </div>
+                <span className="hidden sm:block text-xs text-dark-200 truncate">
+                  {[item.city, item.country].filter(Boolean).join(', ') || '—'}
+                </span>
+                <span className="text-xs font-mono text-dark-100 text-right">
+                  {item.connections}
+                </span>
+                <span className="text-[11px] text-dark-300 text-right w-[80px]">
+                  {item.last_seen ? formatDate(item.last_seen) : '—'}
+                </span>
+              </div>
+            ))}
+            {/* Show all button */}
+            {hasMore && (
+              <button
+                onClick={() => setShowAll(true)}
+                className="w-full text-center py-2 text-xs text-primary-400 hover:text-primary-300 transition-colors"
+              >
+                {t('userDetail.ips.showAll', { count: items.length })}
+              </button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
 export default function UserDetail() {
   const { t } = useTranslation()
@@ -1488,6 +1630,9 @@ export default function UserDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Block: IP Addresses */}
+          <IpHistoryCard userUuid={uuid!} />
 
           {/* Block: Violations */}
           {violations && violations.length > 0 && (

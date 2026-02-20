@@ -87,7 +87,8 @@ async def _compute_geo(period: str = "7d"):
                     """
                     SELECT im.city, im.country_name,
                            u.username, u.uuid::text as uuid, u.status,
-                           COUNT(uc.id) as connections
+                           COUNT(uc.id) as connections,
+                           array_agg(DISTINCT SPLIT_PART(uc.ip_address::text, '/', 1)) as ips
                     FROM user_connections uc
                     JOIN ip_metadata im
                         ON SPLIT_PART(uc.ip_address::text, '/', 1) = TRIM(im.ip_address)
@@ -101,13 +102,13 @@ async def _compute_geo(period: str = "7d"):
                     key = (ur["city"], ur["country_name"])
                     if key not in city_users_map:
                         city_users_map[key] = []
-                    if len(city_users_map[key]) < 15:
-                        city_users_map[key].append({
-                            "username": ur["username"],
-                            "uuid": ur["uuid"],
-                            "status": ur["status"],
-                            "connections": ur["connections"],
-                        })
+                    city_users_map[key].append({
+                        "username": ur["username"],
+                        "uuid": ur["uuid"],
+                        "status": ur["status"],
+                        "connections": ur["connections"],
+                        "ips": [str(ip) for ip in (ur["ips"] or [])],
+                    })
                 logger.info(
                     "Geo users: found %d user-city pairs across %d cities",
                     len(user_city_rows),

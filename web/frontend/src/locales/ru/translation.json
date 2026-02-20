@@ -583,6 +583,21 @@
       "connections": "Подключений",
       "uniqueIps24h": "Уникальных IP (24ч)"
     },
+    "ips": {
+      "title": "IP-адреса",
+      "ip": "IP",
+      "city": "Город",
+      "provider": "Провайдер",
+      "connections": "Подкл.",
+      "lastSeen": "Последнее",
+      "noData": "Нет данных об IP-адресах",
+      "showAll": "Показать все ({{count}})",
+      "periods": {
+        "24h": "24 часа",
+        "7d": "Неделя",
+        "30d": "Месяц"
+      }
+    },
     "history": {
       "title": "История изменений"
     },
@@ -1361,6 +1376,7 @@
       "more": "ещё",
       "uniqueUsers": "{{count}} польз.",
       "andMore": "+{{count}} ещё",
+      "showAll": "Показать всех ({{count}})",
       "usersByCity": "Пользователи по городам",
       "cityColumn": "Город",
       "userColumn": "Пользователь",
@@ -1506,7 +1522,9 @@
       "node_uptime_percent": "Аптайм ноды (%)",
       "node_uptime_percentDesc": "Процент времени доступности узла за последние 24 часа",
       "user_traffic_percent": "Использование трафика (%)",
-      "user_traffic_percentDesc": "Процент использованного трафика от лимита по тарифу"
+      "user_traffic_percentDesc": "Процент использованного трафика от лимита по тарифу",
+      "user_node_traffic_gb": "Трафик на ноде (ГБ)",
+      "user_node_traffic_gbDesc": "Трафик пользователя на конкретной ноде в гигабайтах за сегодня"
     },
     "operators": {
       "eq": "равно (=)",
@@ -1868,6 +1886,7 @@
         "snippets": "Сниппеты",
         "squads": "Сквады",
         "hwid_devices": "HWID устройства",
+        "node_traffic": "Трафик по нодам",
         "asn": "ASN база"
       }
     },

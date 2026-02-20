@@ -103,6 +103,18 @@ CREATE TABLE IF NOT EXISTS config_profiles (
     raw_data JSONB
 );
 
+-- Трафик пользователей по нодам (синхронизируется из Remnawave API)
+CREATE TABLE IF NOT EXISTS user_node_traffic (
+    user_uuid UUID REFERENCES users(uuid) ON DELETE CASCADE,
+    node_uuid UUID REFERENCES nodes(uuid) ON DELETE CASCADE,
+    traffic_bytes BIGINT NOT NULL DEFAULT 0,
+    synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (user_uuid, node_uuid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_node_traffic_node ON user_node_traffic(node_uuid);
+CREATE INDEX IF NOT EXISTS idx_user_node_traffic_bytes ON user_node_traffic(traffic_bytes DESC);
+
 -- Метаданные синхронизации
 CREATE TABLE IF NOT EXISTS sync_metadata (
     key VARCHAR(100) PRIMARY KEY,
@@ -1326,6 +1338,65 @@ class DatabaseService:
                 connection_id
             )
             return result == "UPDATE 1"
+
+    # ==================== User Node Traffic Methods ====================
+
+    async def upsert_user_node_traffic(
+        self, user_uuid: str, node_uuid: str, traffic_bytes: int
+    ) -> None:
+        """Upsert traffic record for a user on a specific node."""
+        if not self.is_connected:
+            return
+        async with self.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO user_node_traffic (user_uuid, node_uuid, traffic_bytes, synced_at)
+                VALUES ($1::uuid, $2::uuid, $3, NOW())
+                ON CONFLICT (user_uuid, node_uuid)
+                DO UPDATE SET traffic_bytes = $3, synced_at = NOW()
+                """,
+                user_uuid, node_uuid, traffic_bytes,
+            )
+
+    async def get_node_users_traffic(self, node_uuid: str) -> List[Dict[str, Any]]:
+        """Get all users' traffic on a specific node, joined with username."""
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT unt.user_uuid, u.username, unt.traffic_bytes,
+                       n.name as node_name
+                FROM user_node_traffic unt
+                JOIN users u ON unt.user_uuid = u.uuid
+                JOIN nodes n ON unt.node_uuid = n.uuid
+                WHERE unt.node_uuid = $1::uuid
+                ORDER BY unt.traffic_bytes DESC
+                """,
+                node_uuid,
+            )
+            return [dict(r) for r in rows]
+
+    async def get_all_user_node_traffic_above(
+        self, threshold_bytes: int
+    ) -> List[Dict[str, Any]]:
+        """Get all user-node pairs where traffic exceeds threshold."""
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT unt.user_uuid, u.username, unt.node_uuid,
+                       n.name as node_name, unt.traffic_bytes
+                FROM user_node_traffic unt
+                JOIN users u ON unt.user_uuid = u.uuid
+                JOIN nodes n ON unt.node_uuid = n.uuid
+                WHERE unt.traffic_bytes >= $1
+                ORDER BY unt.traffic_bytes DESC
+                """,
+                threshold_bytes,
+            )
+            return [dict(r) for r in rows]
 
     # ==================== API Tokens Methods ====================
     

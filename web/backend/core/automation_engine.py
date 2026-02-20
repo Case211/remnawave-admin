@@ -382,6 +382,28 @@ class AutomationEngine:
                                 },
                             ))
 
+                elif metric == "user_node_traffic_gb":
+                    from shared.database import db_service
+                    node_uuid = trigger_config.get("node_uuid")
+                    if node_uuid:
+                        rows = await db_service.get_node_users_traffic(node_uuid)
+                    else:
+                        rows = await db_service.get_all_user_node_traffic_above(
+                            int(threshold_value * (1024 ** 3))
+                        )
+                    for row in rows:
+                        traffic_gb = row["traffic_bytes"] / (1024 ** 3)
+                        if op_fn(traffic_gb, threshold_value):
+                            targets.append((
+                                "user",
+                                str(row["user_uuid"]),
+                                {
+                                    "username": row.get("username", ""),
+                                    "node_name": row.get("node_name", ""),
+                                    "traffic_gb": round(traffic_gb, 2),
+                                },
+                            ))
+
                 if not targets:
                     continue
 
@@ -812,6 +834,7 @@ class AutomationEngine:
             "traffic_today": "Трафик за сегодня (ГБ)",
             "node_uptime_percent": "Аптайм ноды (%)",
             "user_traffic_percent": "Использование трафика (%)",
+            "user_node_traffic_gb": "Трафик на ноде (ГБ)",
         }
         _OPERATOR_LABELS = {
             "==": "=", "!=": "≠", ">": ">", ">=": "≥",
@@ -886,6 +909,25 @@ class AutomationEngine:
                                 "name": node.get("name", ""),
                                 "value": uptime,
                             })
+
+            elif metric == "user_node_traffic_gb" and op_fn:
+                from shared.database import db_service
+                node_uuid = trigger_config.get("node_uuid")
+                if node_uuid:
+                    rows = await db_service.get_node_users_traffic(node_uuid)
+                else:
+                    rows = await db_service.get_all_user_node_traffic_above(
+                        int(threshold_value * (1024 ** 3))
+                    )
+                for row in rows:
+                    traffic_gb = row["traffic_bytes"] / (1024 ** 3)
+                    if op_fn(traffic_gb, threshold_value):
+                        matching_targets.append({
+                            "type": "user",
+                            "id": str(row["user_uuid"]),
+                            "name": row.get("username", ""),
+                            "value": round(traffic_gb, 2),
+                        })
 
             would_trigger = len(matching_targets) > 0
             metric_label = _METRIC_LABELS.get(metric, metric)

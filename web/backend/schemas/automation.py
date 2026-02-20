@@ -19,7 +19,7 @@ LogResult = Literal["success", "error", "skipped"]
 _ALLOWED_TRIGGER_KEYS: dict[str, set[str]] = {
     "event": {"event", "min_score", "offline_minutes"},
     "schedule": {"cron", "interval_minutes"},
-    "threshold": {"metric", "operator", "value"},
+    "threshold": {"metric", "operator", "value", "node_uuid"},
 }
 _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
     "disable_user": {"reason"},

@@ -3,7 +3,7 @@ Sync service for synchronizing data between API and local PostgreSQL database.
 Handles periodic sync, webhook events, and on-demand sync.
 """
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from shared.config import get_shared_settings as get_settings
@@ -191,6 +191,13 @@ class SyncService:
         except Exception as e:
             logger.error("Failed to sync HWID devices: %s", e)
             results["hwid_devices"] = -1
+
+        try:
+            # Sync per-node user traffic
+            results["node_traffic"] = await self.sync_node_traffic()
+        except Exception as e:
+            logger.error("Failed to sync node traffic: %s", e)
+            results["node_traffic"] = -1
 
         logger.debug("Full sync completed: %s", results)
         return results
@@ -763,6 +770,70 @@ class SyncService:
             logger.info("Deleted HWID device %s for user %s (webhook)", hwid[:20], user_uuid)
 
         return result
+
+    # ==================== Node Traffic Sync ====================
+
+    async def sync_node_traffic(self) -> int:
+        """Sync per-user traffic for each active node from Remnawave API.
+
+        Calls /api/bandwidth-stats/nodes/{uuid}/users for each connected node,
+        stores results in the local user_node_traffic table.
+        Returns total number of upserted records.
+        """
+        if not db_service.is_connected:
+            return 0
+
+        try:
+            nodes = await db_service.get_all_nodes()
+            active_nodes = [
+                n for n in nodes
+                if n.get("is_connected") and not n.get("is_disabled")
+            ]
+
+            now = datetime.now(timezone.utc)
+            start_str = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d")
+            end_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+
+            total_synced = 0
+
+            for node in active_nodes:
+                node_uuid = str(node["uuid"])
+                try:
+                    result = await api_client.get_node_users_usage(
+                        node_uuid, start=start_str, end=end_str, top_users_limit=500
+                    )
+                    response = result.get("response", result) if isinstance(result, dict) else result
+                    top_users = response.get("topUsers", []) if isinstance(response, dict) else []
+
+                    for u in top_users:
+                        user_uuid = u.get("uuid", u.get("userUuid", ""))
+                        total_bytes = int(u.get("total", 0) or 0)
+                        if user_uuid and total_bytes > 0:
+                            await db_service.upsert_user_node_traffic(
+                                user_uuid, node_uuid, total_bytes
+                            )
+                            total_synced += 1
+                except Exception as e:
+                    logger.warning(
+                        "Failed to sync traffic for node %s: %s",
+                        node.get("name", node_uuid), e,
+                    )
+
+            await db_service.update_sync_metadata(
+                key="node_traffic",
+                status="success",
+                records_synced=total_synced,
+            )
+            logger.debug("Synced node traffic: %d records across %d nodes", total_synced, len(active_nodes))
+            return total_synced
+
+        except Exception as e:
+            await db_service.update_sync_metadata(
+                key="node_traffic",
+                status="error",
+                error_message=str(e),
+            )
+            raise
 
     # ==================== On-Demand Sync ====================
 

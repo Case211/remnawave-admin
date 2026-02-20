@@ -583,6 +583,21 @@
       "connections": "Connections",
       "uniqueIps24h": "Unique IPs (24h)"
     },
+    "ips": {
+      "title": "IP Addresses",
+      "ip": "IP",
+      "city": "City",
+      "provider": "Provider",
+      "connections": "Conn.",
+      "lastSeen": "Last Seen",
+      "noData": "No IP address data",
+      "showAll": "Show all ({{count}})",
+      "periods": {
+        "24h": "24 hours",
+        "7d": "Week",
+        "30d": "Month"
+      }
+    },
     "history": {
       "title": "Change history"
     },
@@ -1361,6 +1376,7 @@
       "more": "more",
       "uniqueUsers": "{{count}} users",
       "andMore": "+{{count}} more",
+      "showAll": "Show all ({{count}})",
       "usersByCity": "Users by city",
       "cityColumn": "City",
       "userColumn": "User",
@@ -1506,7 +1522,9 @@
       "node_uptime_percent": "Node uptime (%)",
       "node_uptime_percentDesc": "Node availability percentage over the last 24 hours",
       "user_traffic_percent": "Traffic usage (%)",
-      "user_traffic_percentDesc": "Percentage of traffic used from the limit"
+      "user_traffic_percentDesc": "Percentage of traffic used from the limit",
+      "user_node_traffic_gb": "Node traffic (GB)",
+      "user_node_traffic_gbDesc": "User traffic on a specific node in gigabytes today"
     },
     "operators": {
       "eq": "equal (=)",
@@ -1868,6 +1886,7 @@
         "snippets": "Snippets",
         "squads": "Squads",
         "hwid_devices": "HWID Devices",
+        "node_traffic": "Node Traffic",
         "asn": "ASN Database"
       }
     },

@@ -262,12 +262,21 @@ function CityUsersList({
   const [sortBy, setSortBy] = useState('count_desc')
   const [countryFilter, setCountryFilter] = useState('all')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [expandedFull, setExpandedFull] = useState<Set<string>>(new Set())
 
   const toggle = useCallback((key: string) => {
     setExpanded((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
+      return next
+    })
+  }, [])
+
+  const showAllUsers = useCallback((key: string) => {
+    setExpandedFull((prev) => {
+      const next = new Set(prev)
+      next.add(key)
       return next
     })
   }, [])
@@ -373,8 +382,11 @@ function CityUsersList({
         {filtered.map((city) => {
           const key = `${city.city}-${city.country}`
           const isOpen = expanded.has(key)
-          const users = city.users || []
-          const hasUsers = users.length > 0
+          const allUsers = city.users || []
+          const hasUsers = allUsers.length > 0
+          const showFull = expandedFull.has(key)
+          const users = showFull ? allUsers : allUsers.slice(0, 15)
+          const hasMore = allUsers.length > 15 && !showFull
 
           return (
             <div
@@ -435,12 +447,19 @@ function CityUsersList({
                           onClick={() => navigate(`/users/${user.uuid}`)}
                         >
                           <TableCell>
-                            <div className="flex items-center gap-1.5">
-                              <Users className="w-3 h-3 shrink-0 text-muted-foreground" />
-                              <span className="font-medium text-sm text-white truncate max-w-[200px]">
-                                {user.username || user.uuid.slice(0, 8)}
-                              </span>
-                              <ArrowUpRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <Users className="w-3 h-3 shrink-0 text-muted-foreground" />
+                                <span className="font-medium text-sm text-white truncate max-w-[200px]">
+                                  {user.username || user.uuid.slice(0, 8)}
+                                </span>
+                                <ArrowUpRight className="w-3 h-3 text-muted-foreground shrink-0" />
+                              </div>
+                              {user.ips && user.ips.length > 0 && (
+                                <span className="text-[10px] font-mono text-muted-foreground pl-[18px] truncate max-w-[280px]" title={user.ips.join(', ')}>
+                                  {user.ips.join(', ')}
+                                </span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
@@ -456,12 +475,15 @@ function CityUsersList({
                           </TableCell>
                         </TableRow>
                       ))}
-                      {city.unique_users > users.length && (
+                      {hasMore && (
                         <TableRow>
                           <TableCell colSpan={3} className="text-center">
-                            <span className="text-[11px] text-muted-foreground">
-                              {t('analytics.geo.andMore', { count: city.unique_users - users.length })}
-                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); showAllUsers(key) }}
+                              className="text-[11px] text-primary-400 hover:text-primary-300 transition-colors"
+                            >
+                              {t('analytics.geo.showAll', { count: allUsers.length })}
+                            </button>
                           </TableCell>
                         </TableRow>
                       )}

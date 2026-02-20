@@ -97,6 +97,7 @@ const SYNCABLE_ENTITIES: Record<string, string> = {
   hosts: 'hosts',
   config_profiles: 'config_profiles',
   hwid_devices: 'hwid_devices',
+  node_traffic: 'node_traffic',
   asn: 'asn',
 }
 
