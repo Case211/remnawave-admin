@@ -978,6 +978,8 @@
       "warn": "Warn",
       "warnShort": "Warn",
       "dismiss": "Dismiss",
+      "annul": "Annul",
+      "annulAll": "Annul all",
       "resolve": "Take action"
     },
     "actionStatuses": {
@@ -985,6 +987,7 @@
       "blocked": "Blocked",
       "warned": "Warned",
       "dismissed": "Dismissed",
+      "annulled": "Annulled",
       "resolved": "Resolved"
     },
     "recommendedActions": {
@@ -1066,7 +1069,9 @@
     "allProcessed": "All violations processed",
     "noRecords": "No violation records for the selected period",
     "toast": {
-      "resolved": "Violation processed"
+      "resolved": "Violation processed",
+      "annulled": "Violation annulled",
+      "annulledAll": "All user violations annulled"
     }
   },
   "admins": {

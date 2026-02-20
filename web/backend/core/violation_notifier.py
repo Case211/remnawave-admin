@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Throttling cache: user_uuid -> last notification time
 _violation_notification_cache: Dict[str, datetime] = {}
-VIOLATION_NOTIFICATION_COOLDOWN_MINUTES = 15
+VIOLATION_NOTIFICATION_COOLDOWN_MINUTES = 30
 
 
 def _cleanup_cache() -> None:

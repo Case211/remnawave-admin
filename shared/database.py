@@ -2281,6 +2281,16 @@ class DatabaseService:
 
         try:
             async with self.acquire() as conn:
+                # Deduplication: skip if same user already has a violation within last 10 min
+                existing = await conn.fetchval(
+                    "SELECT id FROM violations WHERE user_uuid = $1 "
+                    "AND detected_at > NOW() - INTERVAL '10 minutes'",
+                    user_uuid,
+                )
+                if existing:
+                    logger.debug("Skipping duplicate violation for user %s (existing id=%d)", user_uuid, existing)
+                    return existing
+
                 result = await conn.fetchval(
                     """
                     INSERT INTO violations (
@@ -2691,6 +2701,41 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error updating violation action: %s", e, exc_info=True)
             return False
+
+    async def annul_pending_violations(
+        self,
+        user_uuid: str,
+        admin_telegram_id: int,
+    ) -> int:
+        """
+        Аннулировать все нерассмотренные нарушения пользователя.
+
+        Returns:
+            Количество аннулированных записей
+        """
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    UPDATE violations
+                    SET action_taken = 'annulled',
+                        action_taken_at = NOW(),
+                        action_taken_by = $1
+                    WHERE user_uuid = $2
+                      AND action_taken IS NULL
+                    """,
+                    admin_telegram_id, user_uuid,
+                )
+                # result format: "UPDATE N"
+                count = int(result.split()[-1]) if result else 0
+                return count
+
+        except Exception as e:
+            logger.error("Error annulling violations for user %s: %s", user_uuid, e, exc_info=True)
+            return 0
 
     async def mark_violation_notified(self, violation_id: int) -> bool:
         """Отметить нарушение как отправленное в уведомлении."""
