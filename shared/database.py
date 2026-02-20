@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS user_hwid_devices (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_hwid_devices_user_hwid ON user_hwid_devices(user_uuid, hwid);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_user_uuid ON user_hwid_devices(user_uuid);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_platform ON user_hwid_devices(platform);
+CREATE INDEX IF NOT EXISTS idx_hwid_devices_hwid ON user_hwid_devices(hwid);
 """
 
 
@@ -2266,7 +2267,8 @@ class DatabaseService:
         is_mobile: bool = False,
         is_datacenter: bool = False,
         is_vpn: bool = False,
-        raw_breakdown: Optional[str] = None
+        raw_breakdown: Optional[str] = None,
+        hwid_score: Optional[float] = None,
     ) -> Optional[int]:
         """
         Сохранить нарушение в базу данных.
@@ -2285,21 +2287,23 @@ class DatabaseService:
                         user_uuid, username, email, telegram_id,
                         score, recommended_action, confidence,
                         temporal_score, geo_score, asn_score, profile_score, device_score,
+                        hwid_score,
                         ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                         simultaneous_connections, unique_ips_count, device_limit,
                         impossible_travel, is_mobile, is_datacenter, is_vpn,
                         raw_breakdown, detected_at
                     )
                     VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                        $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
-                        $23, $24, $25, $26, $27, NOW()
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+                        $24, $25, $26, $27, $28, NOW()
                     )
                     RETURNING id
                     """,
                     user_uuid, username, email, telegram_id,
                     score, recommended_action, confidence,
                     temporal_score, geo_score, asn_score, profile_score, device_score,
+                    hwid_score,
                     ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                     simultaneous_connections, unique_ips_count, device_limit,
                     impossible_travel, is_mobile, is_datacenter, is_vpn,
@@ -3177,6 +3181,104 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error getting HWID devices stats: %s", e, exc_info=True)
             return {'total_devices': 0, 'unique_users': 0, 'by_platform': {}}
+
+    async def get_shared_hwids(self, min_users: int = 2, limit: int = 50) -> List[Dict[str, Any]]:
+        """Find HWIDs shared across multiple user accounts (for analytics)."""
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    WITH shared AS (
+                        SELECT hwid
+                        FROM user_hwid_devices
+                        GROUP BY hwid
+                        HAVING COUNT(DISTINCT user_uuid) >= $1
+                        ORDER BY COUNT(DISTINCT user_uuid) DESC
+                        LIMIT $2
+                    )
+                    SELECT h.hwid, h.platform, h.device_model, h.app_version,
+                           h.created_at as hwid_first_seen,
+                           u.uuid::text as user_uuid, u.username, u.status,
+                           u.created_at as user_created_at
+                    FROM shared s
+                    JOIN user_hwid_devices h ON h.hwid = s.hwid
+                    JOIN users u ON h.user_uuid = u.uuid
+                    ORDER BY h.hwid, h.created_at ASC
+                    """,
+                    min_users, limit,
+                )
+
+                # Group by hwid
+                groups: Dict[str, Dict[str, Any]] = {}
+                for r in rows:
+                    hwid = r["hwid"]
+                    if hwid not in groups:
+                        groups[hwid] = {
+                            "hwid": hwid,
+                            "platform": r["platform"],
+                            "device_model": r["device_model"],
+                            "user_count": 0,
+                            "users": [],
+                        }
+                    groups[hwid]["user_count"] += 1
+                    groups[hwid]["users"].append({
+                        "uuid": r["user_uuid"],
+                        "username": r["username"],
+                        "status": r["status"],
+                        "created_at": r["user_created_at"].isoformat() if r["user_created_at"] else None,
+                        "hwid_first_seen": r["hwid_first_seen"].isoformat() if r["hwid_first_seen"] else None,
+                    })
+
+                # Sort by user_count desc
+                result = sorted(groups.values(), key=lambda g: g["user_count"], reverse=True)
+                return result
+
+        except Exception as e:
+            logger.error("Error getting shared HWIDs: %s", e, exc_info=True)
+            return []
+
+    async def get_shared_hwids_for_user(self, user_uuid: str) -> List[Dict[str, Any]]:
+        """For a given user, find other users sharing the same HWID(s)."""
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT h2.hwid, u.uuid::text as user_uuid, u.username, u.status
+                    FROM user_hwid_devices h1
+                    JOIN user_hwid_devices h2 ON h1.hwid = h2.hwid AND h2.user_uuid != h1.user_uuid
+                    JOIN users u ON h2.user_uuid = u.uuid
+                    WHERE h1.user_uuid = $1
+                    ORDER BY h2.hwid, u.username
+                    """,
+                    user_uuid,
+                )
+
+                if not rows:
+                    return []
+
+                # Group by hwid
+                groups: Dict[str, Dict[str, Any]] = {}
+                for r in rows:
+                    hwid = r["hwid"]
+                    if hwid not in groups:
+                        groups[hwid] = {"hwid": hwid, "other_users": []}
+                    groups[hwid]["other_users"].append({
+                        "uuid": r["user_uuid"],
+                        "username": r["username"],
+                        "status": r["status"],
+                    })
+
+                return list(groups.values())
+
+        except Exception as e:
+            logger.error("Error getting shared HWIDs for user %s: %s", user_uuid, e, exc_info=True)
+            return []
 
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:

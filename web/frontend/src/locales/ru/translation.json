@@ -1354,7 +1354,8 @@
     "tabs": {
       "geography": "География",
       "topUsers": "Топ юзеры",
-      "trends": "Тренды"
+      "trends": "Тренды",
+      "sharedHwids": "Общие HWID"
     },
     "periods": {
       "day": "День",
@@ -1429,6 +1430,16 @@
         "violations": "Нарушения",
         "traffic": "Трафик"
       }
+    },
+    "sharedHwids": {
+      "title": "Общие HWID устройства",
+      "tooltip": "Устройства (HWID), используемые несколькими аккаунтами — признак триального абьюза",
+      "noData": "Общих HWID не найдено",
+      "noDataHint": "Данные появятся при совпадении HWID у разных пользователей",
+      "accounts": "аккаунтов",
+      "createdAt": "Создан",
+      "firstSeen": "Первый HWID",
+      "searchPlaceholder": "Поиск по HWID или юзеру..."
     }
   },
   "automations": {

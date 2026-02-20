@@ -347,6 +347,7 @@ async def receive_connections(
                             asn = breakdown.get("asn")
                             profile = breakdown.get("profile")
                             device = breakdown.get("device")
+                            hwid = breakdown.get("hwid")
 
                             ip_addresses = list(set(str(c.ip_address) for c in active_conns)) if active_conns else None
                             username = user_info.get("username") if user_info else None
@@ -381,6 +382,7 @@ async def receive_connections(
                                 is_mobile=asn.is_mobile_carrier if asn else False,
                                 is_datacenter=asn.is_datacenter if asn else False,
                                 is_vpn=asn.is_vpn if asn else False,
+                                hwid_score=hwid.score if hwid else None,
                             )
                             logger.debug("Violation saved to DB for user %s: score=%.1f", user_uuid, violation_score.total)
                         except Exception as save_error:

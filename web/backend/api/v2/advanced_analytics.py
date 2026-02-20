@@ -295,3 +295,31 @@ async def _compute_trends(metric: str = "users", period: str = "30d"):
     except Exception as e:
         logger.error("get_trends failed: %s", e)
         return {"series": [], "total_growth": 0}
+
+
+@router.get("/shared-hwids")
+@limiter.limit(RATE_ANALYTICS)
+async def get_shared_hwids(
+    request: Request,
+    min_users: int = Query(2, ge=2, le=10),
+    limit: int = Query(50, ge=5, le=200),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get HWIDs shared across multiple user accounts."""
+    return await _compute_shared_hwids(min_users=min_users, limit=limit)
+
+
+@cached("analytics:shared-hwids", ttl=CACHE_TTL_LONG, key_args=("min_users", "limit"))
+async def _compute_shared_hwids(min_users: int = 2, limit: int = 50):
+    """Compute shared HWIDs (cacheable)."""
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"items": [], "total_shared_hwids": 0}
+
+        items = await db_service.get_shared_hwids(min_users=min_users, limit=limit)
+        return {"items": items, "total_shared_hwids": len(items)}
+
+    except Exception as e:
+        logger.error("get_shared_hwids failed: %s", e)
+        return {"items": [], "total_shared_hwids": 0}

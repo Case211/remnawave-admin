@@ -1354,7 +1354,8 @@
     "tabs": {
       "geography": "Geography",
       "topUsers": "Top Users",
-      "trends": "Trends"
+      "trends": "Trends",
+      "sharedHwids": "Shared HWIDs"
     },
     "periods": {
       "day": "Day",
@@ -1429,6 +1430,16 @@
         "violations": "Violations",
         "traffic": "Traffic"
       }
+    },
+    "sharedHwids": {
+      "title": "Shared HWID Devices",
+      "tooltip": "Devices (HWID) used by multiple accounts — indicates trial abuse",
+      "noData": "No shared HWIDs found",
+      "noDataHint": "Data will appear when different users share the same HWID",
+      "accounts": "accounts",
+      "createdAt": "Created",
+      "firstSeen": "First HWID",
+      "searchPlaceholder": "Search by HWID or username..."
     }
   },
   "automations": {

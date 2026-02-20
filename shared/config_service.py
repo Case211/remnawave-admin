@@ -413,6 +413,15 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "default_value": "true",
         "sort_order": 7,
     },
+    {
+        "key": "violations_analyzer_hwid",
+        "value_type": "bool",
+        "category": "violations",
+        "display_name": "HWID кросс-аккаунт анализатор",
+        "description": "Обнаружение одного HWID на нескольких аккаунтах (триальный абьюз)",
+        "default_value": "true",
+        "sort_order": 8,
+    },
 
     # === MAILSERVER ===
     {
