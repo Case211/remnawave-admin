@@ -1034,6 +1034,7 @@
       "provider": "Provider",
       "profileScore": "Profile",
       "device": "Device",
+      "hwid": "HWID",
       "finalScore": "Final score",
       "reasons": "Reasons",
       "countriesTitle": "Countries",

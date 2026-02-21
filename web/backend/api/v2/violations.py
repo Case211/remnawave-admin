@@ -387,6 +387,7 @@ async def get_violation(
         asn_score=violation.get('asn_score') or 0,
         profile_score=violation.get('profile_score') or 0,
         device_score=violation.get('device_score') or 0,
+        hwid_score=violation.get('hwid_score') or 0,
         reasons=violation.get('reasons') or [],
         countries=violation.get('countries') or [],
         asn_types=violation.get('asn_types') or [],

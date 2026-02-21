@@ -26,6 +26,7 @@ import {
   Server,
   Smartphone,
   Fingerprint,
+  Users,
   ArrowLeft,
   ExternalLink,
   MessageCircle,
@@ -79,6 +80,7 @@ interface ViolationDetail {
   asn_score: number
   profile_score: number
   device_score: number
+  hwid_score: number
   reasons: string[]
   countries: string[]
   asn_types: string[]
@@ -304,14 +306,17 @@ function getConnectionTypeBadge(info: IPInfo, t: (key: string) => string): { lab
 
 // ── Score bar component ──────────────────────────────────────────
 
-const ScoreBar = memo(function ScoreBar({ label, score, icon }: { label: string; score: number; icon: React.ReactNode }) {
+const ScoreBar = memo(function ScoreBar({ label, score, weight, icon }: { label: string; score: number; weight?: number; icon: React.ReactNode }) {
   const barColor =
     score >= 60 ? 'bg-red-500' : score >= 40 ? 'bg-yellow-500' : score >= 20 ? 'bg-blue-500' : 'bg-green-500'
   return (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-2 w-32 flex-shrink-0">
+      <div className="flex items-center gap-2 w-40 flex-shrink-0">
         <span className="text-dark-200">{icon}</span>
         <span className="text-sm text-dark-100">{label}</span>
+        {weight != null && (
+          <span className="text-xs text-dark-400">×{weight}</span>
+        )}
       </div>
       <div className="flex-1 h-2 bg-dark-700 rounded-full overflow-hidden">
         <div
@@ -657,27 +662,38 @@ function ViolationDetailPanel({
             <ScoreBar
               label={t('violations.detail.temporal')}
               score={detail.temporal_score}
+              weight={0.20}
               icon={<Clock className="w-4 h-4" />}
             />
             <ScoreBar
               label={t('violations.detail.geo')}
               score={detail.geo_score}
+              weight={0.20}
               icon={<Globe className="w-4 h-4" />}
             />
             <ScoreBar
               label={t('violations.detail.provider')}
               score={detail.asn_score}
+              weight={0.10}
               icon={<Server className="w-4 h-4" />}
             />
             <ScoreBar
               label={t('violations.detail.profileScore')}
               score={detail.profile_score}
+              weight={0.15}
               icon={<Fingerprint className="w-4 h-4" />}
             />
             <ScoreBar
               label={t('violations.detail.device')}
               score={detail.device_score}
+              weight={0.10}
               icon={<Smartphone className="w-4 h-4" />}
+            />
+            <ScoreBar
+              label={t('violations.detail.hwid')}
+              score={detail.hwid_score}
+              weight={0.25}
+              icon={<Users className="w-4 h-4" />}
             />
           </div>
           <div className="mt-4 pt-3 border-t border-dark-400/10 flex items-center justify-between">
