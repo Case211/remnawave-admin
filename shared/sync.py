@@ -952,8 +952,20 @@ class SyncService:
                 # Получаем устройства из API с пагинацией
                 response = await api_client.get_all_hwid_devices(start=start, size=page_size)
                 payload = response.get("response", {})
-                devices = payload.get("devices", []) if isinstance(payload, dict) else []
-                total = payload.get("total", 0) if isinstance(payload, dict) else 0
+                if isinstance(payload, dict):
+                    devices = (
+                        payload.get("devices")
+                        or payload.get("hwidDevices")
+                        or payload.get("list")
+                        or []
+                    )
+                    total = payload.get("total", 0)
+                elif isinstance(payload, list):
+                    devices = payload
+                    total = len(devices)
+                else:
+                    devices = []
+                    total = 0
 
                 if not devices:
                     break
