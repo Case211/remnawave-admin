@@ -1034,6 +1034,7 @@
       "provider": "Провайдер",
       "profileScore": "Профиль",
       "device": "Устройство",
+      "hwid": "HWID",
       "finalScore": "Итоговый скор",
       "reasons": "Причины",
       "countriesTitle": "Страны",
