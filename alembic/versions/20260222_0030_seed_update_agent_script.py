@@ -26,7 +26,7 @@ UPDATE_AGENT_SCRIPT = {
     "script_content": r"""#!/bin/bash
 set -e
 
-AGENT_DIR="${AGENT_DIR:-/opt/remnawave-agent}"
+AGENT_DIR="${AGENT_DIR:-/opt/node-agent}"
 SERVICE_NAME="${SERVICE_NAME:-remnawave-agent}"
 
 echo "=== Updating Remnawave Node Agent ==="
