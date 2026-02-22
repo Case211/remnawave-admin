@@ -35,8 +35,8 @@ async def list_providers(
     try:
         from shared.api_client import api_client
         result = await api_client.get_infra_providers()
-        response = result.get("response", [])
-        providers = response if isinstance(response, list) else []
+        response = result.get("response", {})
+        providers = response.get("providers", []) if isinstance(response, dict) else []
         return {"items": providers, "total": len(providers)}
     except Exception as e:
         logger.error("Failed to list providers: %s", e)
@@ -129,8 +129,8 @@ async def list_billing_history(
     try:
         from shared.api_client import api_client
         result = await api_client.get_infra_billing_history()
-        response = result.get("response", [])
-        records = response if isinstance(response, list) else []
+        response = result.get("response", {})
+        records = response.get("records", []) if isinstance(response, dict) else []
         return {"items": records, "total": len(records)}
     except Exception as e:
         logger.error("Failed to list billing history: %s", e)
