@@ -18,6 +18,8 @@
     "enable": "Enable",
     "disable": "Disable",
     "restart": "Restart",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
     "reset": "Reset",
     "loading": "Loading...",
     "error": "Error",
@@ -583,6 +585,21 @@
       "connections": "Connections",
       "uniqueIps24h": "Unique IPs (24h)"
     },
+    "ips": {
+      "title": "IP Addresses",
+      "ip": "IP",
+      "city": "City",
+      "provider": "Provider",
+      "connections": "Conn.",
+      "lastSeen": "Last Seen",
+      "noData": "No IP address data",
+      "showAll": "Show all ({{count}})",
+      "periods": {
+        "24h": "24 hours",
+        "7d": "Week",
+        "30d": "Month"
+      }
+    },
     "history": {
       "title": "Change history"
     },
@@ -821,6 +838,45 @@
       "historyStatus": "Status",
       "historyDuration": "Duration",
       "historyDate": "Date",
+      "createScript": "Create Script",
+      "editScript": "Edit Script",
+      "createScriptDescription": "Create a new custom script for the catalog",
+      "editScriptDescription": "Edit the custom script",
+      "deleteScript": "Delete Script",
+      "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?",
+      "deleted": "Script deleted",
+      "created": "Script created",
+      "updated": "Script updated",
+      "formName": "Internal name",
+      "formNameHint": "Unique identifier (auto-generated from display name)",
+      "formDisplayName": "Display name",
+      "formDescription": "Description",
+      "formDescriptionPlaceholder": "What does this script do?",
+      "formCategory": "Category",
+      "formContent": "Script content",
+      "formTimeout": "Timeout (seconds)",
+      "formRequiresRoot": "Requires root",
+      "importFromGithub": "Import from GitHub",
+      "importDescription": "Import scripts from a GitHub URL or browse a repository",
+      "importFromUrl": "From URL",
+      "importFromRepo": "From Repository",
+      "importUrl": "Script URL",
+      "importUrlHint": "Direct link to a .sh file (supports github.com and raw.githubusercontent.com)",
+      "repoUrl": "Repository URL",
+      "repoUrlHint": "e.g. https://github.com/user/repo",
+      "preview": "Preview",
+      "browseRepo": "Browse",
+      "import": "Import",
+      "importSelected": "Import Selected",
+      "importing": "Importing...",
+      "imported": "Script imported",
+      "bulkImported": "{{count}} scripts imported",
+      "noShFiles": "No .sh files found in this repository",
+      "truncatedWarning": "Repository has too many files, some may not be shown",
+      "downloadError": "Failed to download script",
+      "categoryForAll": "Category for all",
+      "timeoutForAll": "Timeout for all",
+      "source": "Source",
       "categories": {
         "security": "Security",
         "network": "Network",
@@ -963,6 +1019,8 @@
       "warn": "Warn",
       "warnShort": "Warn",
       "dismiss": "Dismiss",
+      "annul": "Annul",
+      "annulAll": "Annul all",
       "resolve": "Take action"
     },
     "actionStatuses": {
@@ -970,6 +1028,7 @@
       "blocked": "Blocked",
       "warned": "Warned",
       "dismissed": "Dismissed",
+      "annulled": "Annulled",
       "resolved": "Resolved"
     },
     "recommendedActions": {
@@ -1016,6 +1075,7 @@
       "provider": "Provider",
       "profileScore": "Profile",
       "device": "Device",
+      "hwid": "HWID",
       "finalScore": "Final score",
       "reasons": "Reasons",
       "countriesTitle": "Countries",
@@ -1051,7 +1111,9 @@
     "allProcessed": "All violations processed",
     "noRecords": "No violation records for the selected period",
     "toast": {
-      "resolved": "Violation processed"
+      "resolved": "Violation processed",
+      "annulled": "Violation annulled",
+      "annulledAll": "All user violations annulled"
     }
   },
   "admins": {
@@ -1339,7 +1401,8 @@
     "tabs": {
       "geography": "Geography",
       "topUsers": "Top Users",
-      "trends": "Trends"
+      "trends": "Trends",
+      "sharedHwids": "Shared HWIDs"
     },
     "periods": {
       "day": "Day",
@@ -1361,6 +1424,7 @@
       "more": "more",
       "uniqueUsers": "{{count}} users",
       "andMore": "+{{count}} more",
+      "showAll": "Show all ({{count}})",
       "usersByCity": "Users by city",
       "cityColumn": "City",
       "userColumn": "User",
@@ -1413,6 +1477,16 @@
         "violations": "Violations",
         "traffic": "Traffic"
       }
+    },
+    "sharedHwids": {
+      "title": "Shared HWID Devices",
+      "tooltip": "Devices (HWID) used by multiple accounts — indicates trial abuse",
+      "noData": "No shared HWIDs found",
+      "noDataHint": "Data will appear when different users share the same HWID",
+      "accounts": "accounts",
+      "createdAt": "Created",
+      "firstSeen": "First HWID",
+      "searchPlaceholder": "Search by HWID or username..."
     }
   },
   "automations": {
@@ -1506,7 +1580,9 @@
       "node_uptime_percent": "Node uptime (%)",
       "node_uptime_percentDesc": "Node availability percentage over the last 24 hours",
       "user_traffic_percent": "Traffic usage (%)",
-      "user_traffic_percentDesc": "Percentage of traffic used from the limit"
+      "user_traffic_percentDesc": "Percentage of traffic used from the limit",
+      "user_node_traffic_gb": "Node traffic (GB)",
+      "user_node_traffic_gbDesc": "User traffic on a specific node in gigabytes today"
     },
     "operators": {
       "eq": "equal (=)",
@@ -1868,6 +1944,7 @@
         "snippets": "Snippets",
         "squads": "Squads",
         "hwid_devices": "HWID Devices",
+        "node_traffic": "Node Traffic",
         "asn": "ASN Database"
       }
     },

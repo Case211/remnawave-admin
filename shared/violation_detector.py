@@ -80,6 +80,16 @@ class DeviceScore:
 
 
 @dataclass
+class HwidScore:
+    """Скор анализа кросс-аккаунт HWID."""
+    score: float
+    reasons: List[str]
+    shared_hwids_count: int = 0
+    other_accounts_count: int = 0
+    other_accounts: List[str] = None  # usernames других аккаунтов
+
+
+@dataclass
 class ViolationScore:
     """Итоговый скор нарушения."""
     total: float
@@ -1547,20 +1557,85 @@ class DeviceFingerprintAnalyzer:
         )
 
 
+class HwidCrossAccountAnalyzer:
+    """
+    Анализ кросс-аккаунт HWID — обнаружение одного устройства на нескольких аккаунтах.
+
+    Это сильный сигнал триального абьюза: один человек создаёт аккаунты с разных ников,
+    но с одного физического устройства.
+
+    Скоринг:
+    - HWID совпадает с любым другим аккаунтом: 100 (стопроцентное нарушение)
+    """
+
+    def __init__(self, db_service: DatabaseService):
+        self.db = db_service
+
+    async def analyze(self, user_uuid: str) -> HwidScore:
+        """Проверить, используются ли HWID пользователя на других аккаунтах."""
+        try:
+            shared = await self.db.get_shared_hwids_for_user(user_uuid)
+        except Exception as e:
+            logger.warning("HWID cross-account check failed for %s: %s", user_uuid, e)
+            return HwidScore(score=0.0, reasons=[])
+
+        if not shared:
+            return HwidScore(score=0.0, reasons=[])
+
+        # Собираем уникальных чужих пользователей по всем совпавшим HWID
+        all_other_uuids: set = set()
+        all_other_usernames: List[str] = []
+        for group in shared:
+            for user in group.get("other_users", []):
+                uid = user["uuid"]
+                if uid not in all_other_uuids:
+                    all_other_uuids.add(uid)
+                    all_other_usernames.append(user.get("username") or uid[:8])
+
+        other_count = len(all_other_uuids)
+        shared_hwid_count = len(shared)
+
+        if other_count == 0:
+            return HwidScore(score=0.0, reasons=[])
+
+        # Один HWID на разных аккаунтах = стопроцентное нарушение
+        score = 100.0
+
+        reasons = []
+        usernames_str = ", ".join(all_other_usernames[:5])
+        if len(all_other_usernames) > 5:
+            usernames_str += f" (+{len(all_other_usernames) - 5})"
+
+        reasons.append(
+            f"HWID совпадает с {other_count} другими аккаунтами: {usernames_str}"
+        )
+        if shared_hwid_count > 1:
+            reasons.append(f"{shared_hwid_count} HWID используются на нескольких аккаунтах")
+
+        return HwidScore(
+            score=min(score, 100.0),
+            reasons=reasons,
+            shared_hwids_count=shared_hwid_count,
+            other_accounts_count=other_count,
+            other_accounts=all_other_usernames[:10],
+        )
+
+
 class IntelligentViolationDetector:
     """
     Система многофакторного анализа для детектирования нарушений.
-    
+
     Объединяет результаты всех анализаторов и вычисляет итоговый скор нарушения.
     """
     
     # Веса факторов
     WEIGHTS = {
-        'temporal': 0.25,      # Временной паттерн
-        'geo': 0.25,           # География
-        'asn': 0.15,           # Тип провайдера
-        'profile': 0.20,        # Отклонение от профиля
-        'device': 0.15,        # Fingerprint устройств
+        'temporal': 0.20,      # Временной паттерн (было 0.25)
+        'geo': 0.20,           # География (было 0.25)
+        'asn': 0.10,           # Тип провайдера (было 0.15)
+        'profile': 0.15,       # Отклонение от профиля (было 0.20)
+        'device': 0.10,        # Fingerprint устройств (было 0.15)
+        'hwid': 0.25,          # Кросс-аккаунт HWID (сильный сигнал)
     }
     
     # Пороги для действий
@@ -1590,6 +1665,7 @@ class IntelligentViolationDetector:
         self.asn_analyzer = ASNAnalyzer(geoip_service=geoip)
         self.profile_analyzer = UserProfileAnalyzer(db_service)
         self.device_analyzer = DeviceFingerprintAnalyzer()
+        self.hwid_analyzer = HwidCrossAccountAnalyzer(db_service)
     
     async def check_user(self, user_uuid: str, window_minutes: int = 60) -> Optional[ViolationScore]:
         """
@@ -1661,6 +1737,9 @@ class IntelligentViolationDetector:
             # Анализируем fingerprint устройств
             device_score = self.device_analyzer.analyze(active_connections, connection_history)
 
+            # Анализируем кросс-аккаунт HWID
+            hwid_score = await self.hwid_analyzer.analyze(user_uuid)
+
             # Обнуляем скоры отключённых анализаторов через конфиг
             if not config_service.get("violations_analyzer_temporal", True):
                 temporal_score = TemporalScore(score=0.0, reasons=[])
@@ -1672,6 +1751,8 @@ class IntelligentViolationDetector:
                 profile_score = ProfileScore(score=0.0, reasons=[])
             if not config_service.get("violations_analyzer_device", True):
                 device_score = DeviceScore(score=0.0, reasons=[], unique_fingerprints_count=0, different_os_count=0)
+            if not config_service.get("violations_analyzer_hwid", True):
+                hwid_score = HwidScore(score=0.0, reasons=[])
 
             # Вычисляем взвешенный скор
             raw_score = (
@@ -1679,7 +1760,8 @@ class IntelligentViolationDetector:
                 geo_score.score * self.WEIGHTS['geo'] +
                 asn_score.score * self.WEIGHTS['asn'] +
                 profile_score.score * self.WEIGHTS['profile'] +
-                device_score.score * self.WEIGHTS['device']
+                device_score.score * self.WEIGHTS['device'] +
+                hwid_score.score * self.WEIGHTS['hwid']
             )
             
             # Применяем модификаторы на основе типов провайдеров
@@ -1780,6 +1862,10 @@ class IntelligentViolationDetector:
             if not is_network_switch:
                 if temporal_score.score >= 80.0 and temporal_score.simultaneous_connections_count > 1:
                     raw_score = max(raw_score, 70.0)
+
+            # HWID кросс-аккаунт — стопроцентное нарушение, минимум 80 (soft_block)
+            if hwid_score.score >= 100.0 and hwid_score.other_accounts_count >= 1:
+                raw_score = max(raw_score, 80.0)
             
             # Определяем рекомендуемое действие
             recommended_action = self._get_action(raw_score)
@@ -1794,7 +1880,8 @@ class IntelligentViolationDetector:
             all_reasons.extend(asn_score.reasons)
             all_reasons.extend(profile_score.reasons)
             all_reasons.extend(device_score.reasons)
-            
+            all_reasons.extend(hwid_score.reasons)
+
             return ViolationScore(
                 total=min(raw_score, 100.0),
                 breakdown={
@@ -1803,6 +1890,7 @@ class IntelligentViolationDetector:
                     'asn': asn_score,
                     'profile': profile_score,
                     'device': device_score,
+                    'hwid': hwid_score,
                 },
                 recommended_action=recommended_action,
                 confidence=confidence,

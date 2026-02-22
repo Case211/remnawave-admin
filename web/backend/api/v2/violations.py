@@ -382,15 +382,16 @@ async def get_violation(
         recommended_action=violation.get('recommended_action') or 'no_action',
         confidence=float(violation.get('confidence', 0) or 0),
         detected_at=violation.get('detected_at') or datetime.utcnow(),
-        temporal_score=violation.get('temporal_score', 0),
-        geo_score=violation.get('geo_score', 0),
-        asn_score=violation.get('asn_score', 0),
-        profile_score=violation.get('profile_score', 0),
-        device_score=violation.get('device_score', 0),
-        reasons=violation.get('reasons', []),
-        countries=violation.get('countries', []),
-        asn_types=violation.get('asn_types', []),
-        ips=violation.get('ip_addresses', violation.get('ips', [])),
+        temporal_score=violation.get('temporal_score') or 0,
+        geo_score=violation.get('geo_score') or 0,
+        asn_score=violation.get('asn_score') or 0,
+        profile_score=violation.get('profile_score') or 0,
+        device_score=violation.get('device_score') or 0,
+        hwid_score=violation.get('hwid_score') or 0,
+        reasons=violation.get('reasons') or [],
+        countries=violation.get('countries') or [],
+        asn_types=violation.get('asn_types') or [],
+        ips=violation.get('ip_addresses') or violation.get('ips') or [],
         action_taken=violation.get('action_taken'),
         action_taken_at=violation.get('action_taken_at'),
         action_taken_by=violation.get('action_taken_by'),
@@ -435,6 +436,62 @@ async def resolve_violation(
     )
 
     return {"status": "ok", "action": data.action}
+
+
+@router.post("/{violation_id}/annul")
+async def annul_violation(
+    violation_id: int,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Аннулировать нарушение (ложное срабатывание)."""
+    success = await db.update_violation_action(
+        violation_id=violation_id,
+        action_taken="annulled",
+        admin_telegram_id=admin.telegram_id,
+    )
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Violation not found or update failed")
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violation.annul",
+        resource="violations",
+        resource_id=str(violation_id),
+        details=json.dumps({"action": "annulled"}),
+        ip_address=get_client_ip(request),
+    )
+
+    return {"status": "ok", "action": "annulled"}
+
+
+@router.post("/user/{user_uuid}/annul-all")
+async def annul_user_violations(
+    user_uuid: str,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Аннулировать все нерассмотренные нарушения пользователя."""
+    count = await db.annul_pending_violations(
+        user_uuid=user_uuid,
+        admin_telegram_id=admin.telegram_id,
+    )
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violation.annul_bulk",
+        resource="violations",
+        resource_id=user_uuid,
+        details=json.dumps({"action": "annulled", "count": count}),
+        ip_address=get_client_ip(request),
+    )
+
+    return {"status": "ok", "action": "annulled", "count": count}
 
 
 @router.get("/user/{user_uuid}")

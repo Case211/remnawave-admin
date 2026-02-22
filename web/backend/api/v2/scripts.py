@@ -1,10 +1,13 @@
 """Script catalog API endpoints.
 
 CRUD for scripts + execution on nodes via Agent v2 WebSocket.
+Import from GitHub URLs and repositories.
 """
 import logging
+import re
 from typing import List, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
@@ -40,6 +43,8 @@ class ScriptDetail(BaseModel):
     timeout_seconds: int = 60
     requires_root: bool = False
     is_builtin: bool = False
+    source_url: Optional[str] = None
+    imported_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -138,7 +143,7 @@ async def get_script(
         raise HTTPException(status_code=404, detail="Script not found")
 
     r = dict(row)
-    for dt_field in ('created_at', 'updated_at'):
+    for dt_field in ('created_at', 'updated_at', 'imported_at'):
         if r.get(dt_field):
             r[dt_field] = r[dt_field].isoformat()
     return ScriptDetail(**r)
@@ -171,7 +176,7 @@ async def create_script(
         )
 
     r = dict(row)
-    for dt_field in ('created_at', 'updated_at'):
+    for dt_field in ('created_at', 'updated_at', 'imported_at'):
         if r.get(dt_field):
             r[dt_field] = r[dt_field].isoformat()
     return ScriptDetail(**r)
@@ -217,7 +222,7 @@ async def update_script(
         )
 
     r = dict(row)
-    for dt_field in ('created_at', 'updated_at'):
+    for dt_field in ('created_at', 'updated_at', 'imported_at'):
         if r.get(dt_field):
             r[dt_field] = r[dt_field].isoformat()
     return ScriptDetail(**r)
@@ -351,3 +356,207 @@ async def get_exec_status(
         elif dt_field == 'started_at':
             r[dt_field] = ''
     return ExecStatusResponse(**r)
+
+
+# ── GitHub Import ────────────────────────────────────────────────
+
+
+class ImportUrlRequest(BaseModel):
+    url: str
+    name: str
+    display_name: str
+    description: Optional[str] = None
+    category: str = 'custom'
+    timeout_seconds: int = 60
+    requires_root: bool = False
+
+
+class BrowseRepoRequest(BaseModel):
+    repo_url: str
+
+
+class RepoFileItem(BaseModel):
+    path: str
+    name: str
+    size: int
+    download_url: str
+
+
+class BrowseRepoResponse(BaseModel):
+    repo: str
+    files: List[RepoFileItem] = []
+    truncated: bool = False
+
+
+class BulkImportRequest(BaseModel):
+    files: List[ImportUrlRequest]
+
+
+class BulkImportResponse(BaseModel):
+    imported: int = 0
+    errors: List[str] = []
+
+
+def _normalize_github_url(url: str) -> str:
+    """Convert github.com file URL to raw.githubusercontent.com."""
+    m = re.match(r'https?://github\.com/([^/]+)/([^/]+)/blob/(.+)', url)
+    if m:
+        return f"https://raw.githubusercontent.com/{m.group(1)}/{m.group(2)}/{m.group(3)}"
+    return url
+
+
+def _parse_repo_url(url: str) -> tuple:
+    """Parse GitHub repo URL -> (owner, repo)."""
+    m = re.match(r'https?://github\.com/([^/]+)/([^/\s#?.]+)', url)
+    if not m:
+        raise HTTPException(status_code=400, detail="Invalid GitHub repository URL")
+    return m.group(1), m.group(2).replace('.git', '')
+
+
+async def _download_script_content(url: str) -> str:
+    """Download script content from URL. Max 1MB."""
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        resp = await client.get(url, headers={"User-Agent": "remnawave-admin/script-import"})
+        resp.raise_for_status()
+        if len(resp.content) > 1_048_576:
+            raise HTTPException(status_code=400, detail="Script content too large (max 1MB)")
+        return resp.text
+
+
+@router.post("/scripts/import-url", response_model=ScriptDetail, status_code=201)
+async def import_script_from_url(
+    body: ImportUrlRequest,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Import a script by downloading content from a URL."""
+    from shared.database import db_service
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    url = _normalize_github_url(body.url.strip())
+
+    try:
+        content = await _download_script_content(url)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=400, detail=f"Failed to download: HTTP {e.response.status_code}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to download: {e}")
+
+    admin_id = admin.id if hasattr(admin, 'id') else None
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO node_scripts (name, display_name, description, category,
+                                      script_content, timeout_seconds, requires_root,
+                                      is_builtin, created_by, source_url, imported_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9, NOW())
+            RETURNING *
+            """,
+            body.name, body.display_name, body.description, body.category,
+            content, body.timeout_seconds, body.requires_root,
+            admin_id, url,
+        )
+
+    r = dict(row)
+    for dt_field in ('created_at', 'updated_at', 'imported_at'):
+        if r.get(dt_field):
+            r[dt_field] = r[dt_field].isoformat()
+    return ScriptDetail(**r)
+
+
+@router.post("/scripts/browse-repo", response_model=BrowseRepoResponse)
+@limiter.limit(RATE_ANALYTICS)
+async def browse_github_repo(
+    request: Request,
+    body: BrowseRepoRequest,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Browse a GitHub repository and list .sh files."""
+    owner, repo = _parse_repo_url(body.repo_url.strip())
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            # Get default branch
+            repo_resp = await client.get(
+                f"https://api.github.com/repos/{owner}/{repo}",
+                headers={
+                    "Accept": "application/vnd.github.v3+json",
+                    "User-Agent": "remnawave-admin",
+                },
+            )
+            repo_resp.raise_for_status()
+            default_branch = repo_resp.json().get("default_branch", "main")
+
+            # Get tree recursively
+            tree_resp = await client.get(
+                f"https://api.github.com/repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1",
+                headers={
+                    "Accept": "application/vnd.github.v3+json",
+                    "User-Agent": "remnawave-admin",
+                },
+            )
+            tree_resp.raise_for_status()
+            data = tree_resp.json()
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Repository not found")
+        raise HTTPException(status_code=400, detail=f"GitHub API error: {e.response.status_code}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"GitHub API error: {e}")
+
+    files = []
+    for item in data.get("tree", []):
+        if item.get("type") == "blob" and item["path"].endswith(".sh"):
+            files.append(RepoFileItem(
+                path=item["path"],
+                name=item["path"].split("/")[-1],
+                size=item.get("size", 0),
+                download_url=f"https://raw.githubusercontent.com/{owner}/{repo}/{default_branch}/{item['path']}",
+            ))
+
+    return BrowseRepoResponse(
+        repo=f"{owner}/{repo}",
+        files=files,
+        truncated=data.get("truncated", False),
+    )
+
+
+@router.post("/scripts/bulk-import", response_model=BulkImportResponse, status_code=201)
+async def bulk_import_scripts(
+    body: BulkImportRequest,
+    admin: AdminUser = Depends(require_permission("fleet", "scripts")),
+):
+    """Bulk import scripts from URLs."""
+    from shared.database import db_service
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    admin_id = admin.id if hasattr(admin, 'id') else None
+    imported = 0
+    errors = []
+
+    for item in body.files:
+        url = _normalize_github_url(item.url.strip())
+        try:
+            content = await _download_script_content(url)
+
+            async with db_service.acquire() as conn:
+                await conn.fetchrow(
+                    """
+                    INSERT INTO node_scripts (name, display_name, description, category,
+                                              script_content, timeout_seconds, requires_root,
+                                              is_builtin, created_by, source_url, imported_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9, NOW())
+                    RETURNING id
+                    """,
+                    item.name, item.display_name, item.description, item.category,
+                    content, item.timeout_seconds, item.requires_root,
+                    admin_id, url,
+                )
+            imported += 1
+        except Exception as e:
+            errors.append(f"{item.name}: {e}")
+
+    return BulkImportResponse(imported=imported, errors=errors)

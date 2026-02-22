@@ -18,6 +18,8 @@
     "enable": "Включить",
     "disable": "Отключить",
     "restart": "Перезапустить",
+    "selectAll": "Выбрать все",
+    "deselectAll": "Снять выбор",
     "reset": "Сбросить",
     "loading": "Загрузка...",
     "error": "Ошибка",
@@ -583,6 +585,21 @@
       "connections": "Подключений",
       "uniqueIps24h": "Уникальных IP (24ч)"
     },
+    "ips": {
+      "title": "IP-адреса",
+      "ip": "IP",
+      "city": "Город",
+      "provider": "Провайдер",
+      "connections": "Подкл.",
+      "lastSeen": "Последнее",
+      "noData": "Нет данных об IP-адресах",
+      "showAll": "Показать все ({{count}})",
+      "periods": {
+        "24h": "24 часа",
+        "7d": "Неделя",
+        "30d": "Месяц"
+      }
+    },
     "history": {
       "title": "История изменений"
     },
@@ -821,6 +838,45 @@
       "historyStatus": "Статус",
       "historyDuration": "Длительность",
       "historyDate": "Дата",
+      "createScript": "Создать скрипт",
+      "editScript": "Редактировать скрипт",
+      "createScriptDescription": "Создать новый пользовательский скрипт для каталога",
+      "editScriptDescription": "Редактировать пользовательский скрипт",
+      "deleteScript": "Удалить скрипт",
+      "deleteConfirm": "Вы уверены, что хотите удалить \"{{name}}\"?",
+      "deleted": "Скрипт удалён",
+      "created": "Скрипт создан",
+      "updated": "Скрипт обновлён",
+      "formName": "Внутреннее имя",
+      "formNameHint": "Уникальный идентификатор (генерируется из названия)",
+      "formDisplayName": "Название",
+      "formDescription": "Описание",
+      "formDescriptionPlaceholder": "Что делает этот скрипт?",
+      "formCategory": "Категория",
+      "formContent": "Содержимое скрипта",
+      "formTimeout": "Таймаут (секунды)",
+      "formRequiresRoot": "Требует root",
+      "importFromGithub": "Импорт из GitHub",
+      "importDescription": "Импортируйте скрипты из GitHub по ссылке или просмотрите репозиторий",
+      "importFromUrl": "По ссылке",
+      "importFromRepo": "Из репозитория",
+      "importUrl": "URL скрипта",
+      "importUrlHint": "Прямая ссылка на .sh файл (поддерживается github.com и raw.githubusercontent.com)",
+      "repoUrl": "URL репозитория",
+      "repoUrlHint": "например https://github.com/user/repo",
+      "preview": "Предпросмотр",
+      "browseRepo": "Обзор",
+      "import": "Импортировать",
+      "importSelected": "Импортировать выбранные",
+      "importing": "Импорт...",
+      "imported": "Скрипт импортирован",
+      "bulkImported": "{{count}} скриптов импортировано",
+      "noShFiles": "В репозитории не найдено .sh файлов",
+      "truncatedWarning": "В репозитории слишком много файлов, некоторые могут не отображаться",
+      "downloadError": "Не удалось скачать скрипт",
+      "categoryForAll": "Категория для всех",
+      "timeoutForAll": "Таймаут для всех",
+      "source": "Источник",
       "categories": {
         "security": "Безопасность",
         "network": "Сеть",
@@ -963,6 +1019,8 @@
       "warn": "Предупредить",
       "warnShort": "Пред.",
       "dismiss": "Отклонить",
+      "annul": "Аннулировать",
+      "annulAll": "Аннулировать все",
       "resolve": "Принять решение"
     },
     "actionStatuses": {
@@ -970,6 +1028,7 @@
       "blocked": "Заблокирован",
       "warned": "Предупреждён",
       "dismissed": "Отклонено",
+      "annulled": "Аннулировано",
       "resolved": "Разрешено"
     },
     "recommendedActions": {
@@ -1016,6 +1075,7 @@
       "provider": "Провайдер",
       "profileScore": "Профиль",
       "device": "Устройство",
+      "hwid": "HWID",
       "finalScore": "Итоговый скор",
       "reasons": "Причины",
       "countriesTitle": "Страны",
@@ -1051,7 +1111,9 @@
     "allProcessed": "Все нарушения обработаны",
     "noRecords": "За выбранный период нет записей о нарушениях",
     "toast": {
-      "resolved": "Нарушение обработано"
+      "resolved": "Нарушение обработано",
+      "annulled": "Нарушение аннулировано",
+      "annulledAll": "Все нарушения пользователя аннулированы"
     }
   },
   "admins": {
@@ -1339,7 +1401,8 @@
     "tabs": {
       "geography": "География",
       "topUsers": "Топ юзеры",
-      "trends": "Тренды"
+      "trends": "Тренды",
+      "sharedHwids": "Общие HWID"
     },
     "periods": {
       "day": "День",
@@ -1361,6 +1424,7 @@
       "more": "ещё",
       "uniqueUsers": "{{count}} польз.",
       "andMore": "+{{count}} ещё",
+      "showAll": "Показать всех ({{count}})",
       "usersByCity": "Пользователи по городам",
       "cityColumn": "Город",
       "userColumn": "Пользователь",
@@ -1413,6 +1477,16 @@
         "violations": "Нарушения",
         "traffic": "Трафик"
       }
+    },
+    "sharedHwids": {
+      "title": "Общие HWID устройства",
+      "tooltip": "Устройства (HWID), используемые несколькими аккаунтами — признак триального абьюза",
+      "noData": "Общих HWID не найдено",
+      "noDataHint": "Данные появятся при совпадении HWID у разных пользователей",
+      "accounts": "аккаунтов",
+      "createdAt": "Создан",
+      "firstSeen": "Первый HWID",
+      "searchPlaceholder": "Поиск по HWID или юзеру..."
     }
   },
   "automations": {
@@ -1506,7 +1580,9 @@
       "node_uptime_percent": "Аптайм ноды (%)",
       "node_uptime_percentDesc": "Процент времени доступности узла за последние 24 часа",
       "user_traffic_percent": "Использование трафика (%)",
-      "user_traffic_percentDesc": "Процент использованного трафика от лимита по тарифу"
+      "user_traffic_percentDesc": "Процент использованного трафика от лимита по тарифу",
+      "user_node_traffic_gb": "Трафик на ноде (ГБ)",
+      "user_node_traffic_gbDesc": "Трафик пользователя на конкретной ноде в гигабайтах за сегодня"
     },
     "operators": {
       "eq": "равно (=)",
@@ -1868,6 +1944,7 @@
         "snippets": "Сниппеты",
         "squads": "Сквады",
         "hwid_devices": "HWID устройства",
+        "node_traffic": "Трафик по нодам",
         "asn": "ASN база"
       }
     },

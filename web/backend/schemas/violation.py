@@ -60,6 +60,7 @@ class ViolationDetail(ViolationBase):
     asn_score: float = 0.0
     profile_score: float = 0.0
     device_score: float = 0.0
+    hwid_score: float = 0.0
     reasons: List[str] = []
     countries: List[str] = []
     asn_types: List[str] = []

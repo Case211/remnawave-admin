@@ -87,12 +87,13 @@ async def get_fleet_agents(
         for row in rows:
             is_connected = bool(row["agent_v2_connected"])
             # Cross-check with live connection manager
-            is_live = agent_manager.is_connected(row["uuid"])
+            node_uuid = str(row["uuid"])
+            is_live = agent_manager.is_connected(node_uuid)
             actual_connected = is_connected and is_live
 
             last_ping = row["agent_v2_last_ping"]
             items.append(FleetAgentItem(
-                uuid=row["uuid"],
+                uuid=node_uuid,
                 name=row["name"] or '',
                 address=row["address"] or '',
                 agent_v2_connected=actual_connected,

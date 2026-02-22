@@ -122,6 +122,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const [thresholdMetric, setThresholdMetric] = useState('users_online')
   const [thresholdOperator, setThresholdOperator] = useState('>=')
   const [thresholdValue, setThresholdValue] = useState('')
+  const [thresholdNodeUuid, setThresholdNodeUuid] = useState('')
 
   // Conditions
   const [conditions, setConditions] = useState<Condition[]>([])
@@ -149,7 +150,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         is_disabled: boolean
       }>
     },
-    enabled: open && actionType === 'restart_node',
+    enabled: open && (actionType === 'restart_node' || thresholdMetric === 'user_node_traffic_gb'),
     staleTime: 30_000,
   })
 
@@ -182,6 +183,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
           setThresholdMetric(tc.metric || 'users_online')
           setThresholdOperator(tc.operator || '>=')
           setThresholdValue(tc.value?.toString() || '')
+          setThresholdNodeUuid(tc.node_uuid?.toString() || '')
         }
 
         // Conditions
@@ -225,6 +227,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         setThresholdMetric('users_online')
         setThresholdOperator('>=')
         setThresholdValue('')
+        setThresholdNodeUuid('')
         setConditions([])
         setNotifyChannel('telegram')
         setNotifyMessage('')
@@ -258,11 +261,15 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
       return {}
     }
     if (triggerType === 'threshold') {
-      return {
+      const cfg: Record<string, unknown> = {
         metric: thresholdMetric,
         operator: thresholdOperator,
         value: parseFloat(thresholdValue) || 0,
       }
+      if (thresholdMetric === 'user_node_traffic_gb' && thresholdNodeUuid) {
+        cfg.node_uuid = thresholdNodeUuid
+      }
+      return cfg
     }
     return {}
   }
@@ -641,6 +648,29 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     ))}
                   </div>
                 </div>
+
+                {/* Node selector for user_node_traffic_gb metric */}
+                {thresholdMetric === 'user_node_traffic_gb' && (
+                  <div className="p-3 rounded-lg bg-dark-800 border-2 border-accent-teal/30 space-y-2">
+                    <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.selectNode')}</Label>
+                    <Select value={thresholdNodeUuid} onValueChange={setThresholdNodeUuid}>
+                      <SelectTrigger className="bg-dark-900 border-dark-500 text-white">
+                        <SelectValue placeholder={t('automations.constructor.allNodes')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">{t('automations.constructor.allNodes')}</SelectItem>
+                        {(nodesList || []).map((node) => (
+                          <SelectItem key={node.uuid} value={node.uuid}>
+                            <span className="flex items-center gap-2">
+                              <span className={`w-1.5 h-1.5 rounded-full ${node.is_connected ? 'bg-green-400' : 'bg-red-400'}`} />
+                              {node.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="p-3 rounded-lg bg-dark-800 border-2 border-dark-600 space-y-3">
                   <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.triggerCondition')}</Label>

@@ -455,6 +455,7 @@ async def trigger_sync(
             'hosts': sync_service.sync_hosts,
             'config_profiles': sync_service.sync_config_profiles,
             'hwid_devices': sync_service.sync_all_hwid_devices,
+            'node_traffic': sync_service.sync_node_traffic,
             'all': sync_service.full_sync,
         }
 

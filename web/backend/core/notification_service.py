@@ -333,10 +333,26 @@ async def create_notification(
                 )
         else:
             # Broadcast to all admins
+            all_deduplicated = True
             async with db_service.acquire() as conn:
                 admin_ids = await conn.fetch("SELECT id FROM admin_accounts WHERE is_active = true")
                 for row in admin_ids:
                     aid = row["id"]
+
+                    # Deduplication: skip if same group_key exists within last 15 min
+                    if group_key:
+                        existing = await conn.fetchval(
+                            "SELECT id FROM notifications WHERE admin_id = $1 AND group_key = $2 "
+                            "AND created_at > NOW() - INTERVAL '15 minutes'",
+                            aid, group_key,
+                        )
+                        if existing:
+                            logger.debug("Skipping duplicate broadcast notification (admin=%s, group_key=%s)", aid, group_key)
+                            if notification_id is None:
+                                notification_id = existing
+                            continue
+
+                    all_deduplicated = False
                     nid = await conn.fetchval(
                         "INSERT INTO notifications (admin_id, type, severity, title, body, link, source, source_id, group_key) "
                         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
@@ -344,6 +360,11 @@ async def create_notification(
                     )
                     if notification_id is None:
                         notification_id = nid
+
+            # If all broadcast notifications were deduplicated, skip all dispatch
+            if all_deduplicated and admin_ids:
+                logger.debug("All broadcast notifications deduplicated (group_key=%s), skipping dispatch", group_key)
+                return notification_id
 
         # Broadcast via WebSocket
         try:

@@ -374,6 +374,7 @@ export function getThresholdMetrics() {
     { value: 'traffic_today', label: t('automations.metrics.traffic_today'), description: t('automations.metrics.traffic_todayDesc') },
     { value: 'node_uptime_percent', label: t('automations.metrics.node_uptime_percent'), description: t('automations.metrics.node_uptime_percentDesc') },
     { value: 'user_traffic_percent', label: t('automations.metrics.user_traffic_percent'), description: t('automations.metrics.user_traffic_percentDesc') },
+    { value: 'user_node_traffic_gb', label: t('automations.metrics.user_node_traffic_gb'), description: t('automations.metrics.user_node_traffic_gbDesc') },
   ] as const
 }
 export const THRESHOLD_METRICS = new Proxy([] as unknown as ReturnType<typeof getThresholdMetrics>, {

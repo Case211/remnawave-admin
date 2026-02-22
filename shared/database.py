@@ -103,6 +103,18 @@ CREATE TABLE IF NOT EXISTS config_profiles (
     raw_data JSONB
 );
 
+-- Трафик пользователей по нодам (синхронизируется из Remnawave API)
+CREATE TABLE IF NOT EXISTS user_node_traffic (
+    user_uuid UUID REFERENCES users(uuid) ON DELETE CASCADE,
+    node_uuid UUID REFERENCES nodes(uuid) ON DELETE CASCADE,
+    traffic_bytes BIGINT NOT NULL DEFAULT 0,
+    synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (user_uuid, node_uuid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_node_traffic_node ON user_node_traffic(node_uuid);
+CREATE INDEX IF NOT EXISTS idx_user_node_traffic_bytes ON user_node_traffic(traffic_bytes DESC);
+
 -- Метаданные синхронизации
 CREATE TABLE IF NOT EXISTS sync_metadata (
     key VARCHAR(100) PRIMARY KEY,
@@ -145,6 +157,7 @@ CREATE TABLE IF NOT EXISTS user_hwid_devices (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_hwid_devices_user_hwid ON user_hwid_devices(user_uuid, hwid);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_user_uuid ON user_hwid_devices(user_uuid);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_platform ON user_hwid_devices(platform);
+CREATE INDEX IF NOT EXISTS idx_hwid_devices_hwid ON user_hwid_devices(hwid);
 """
 
 
@@ -1327,6 +1340,65 @@ class DatabaseService:
             )
             return result == "UPDATE 1"
 
+    # ==================== User Node Traffic Methods ====================
+
+    async def upsert_user_node_traffic(
+        self, user_uuid: str, node_uuid: str, traffic_bytes: int
+    ) -> None:
+        """Upsert traffic record for a user on a specific node."""
+        if not self.is_connected:
+            return
+        async with self.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO user_node_traffic (user_uuid, node_uuid, traffic_bytes, synced_at)
+                VALUES ($1::uuid, $2::uuid, $3, NOW())
+                ON CONFLICT (user_uuid, node_uuid)
+                DO UPDATE SET traffic_bytes = $3, synced_at = NOW()
+                """,
+                user_uuid, node_uuid, traffic_bytes,
+            )
+
+    async def get_node_users_traffic(self, node_uuid: str) -> List[Dict[str, Any]]:
+        """Get all users' traffic on a specific node, joined with username."""
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT unt.user_uuid, u.username, unt.traffic_bytes,
+                       n.name as node_name
+                FROM user_node_traffic unt
+                JOIN users u ON unt.user_uuid = u.uuid
+                JOIN nodes n ON unt.node_uuid = n.uuid
+                WHERE unt.node_uuid = $1::uuid
+                ORDER BY unt.traffic_bytes DESC
+                """,
+                node_uuid,
+            )
+            return [dict(r) for r in rows]
+
+    async def get_all_user_node_traffic_above(
+        self, threshold_bytes: int
+    ) -> List[Dict[str, Any]]:
+        """Get all user-node pairs where traffic exceeds threshold."""
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT unt.user_uuid, u.username, unt.node_uuid,
+                       n.name as node_name, unt.traffic_bytes
+                FROM user_node_traffic unt
+                JOIN users u ON unt.user_uuid = u.uuid
+                JOIN nodes n ON unt.node_uuid = n.uuid
+                WHERE unt.traffic_bytes >= $1
+                ORDER BY unt.traffic_bytes DESC
+                """,
+                threshold_bytes,
+            )
+            return [dict(r) for r in rows]
+
     # ==================== API Tokens Methods ====================
     
     async def upsert_token(self, data: Dict[str, Any]) -> bool:
@@ -2195,7 +2267,8 @@ class DatabaseService:
         is_mobile: bool = False,
         is_datacenter: bool = False,
         is_vpn: bool = False,
-        raw_breakdown: Optional[str] = None
+        raw_breakdown: Optional[str] = None,
+        hwid_score: Optional[float] = None,
     ) -> Optional[int]:
         """
         Сохранить нарушение в базу данных.
@@ -2208,27 +2281,39 @@ class DatabaseService:
 
         try:
             async with self.acquire() as conn:
+                # Deduplication: skip if same user already has a violation within last 10 min
+                existing = await conn.fetchval(
+                    "SELECT id FROM violations WHERE user_uuid = $1 "
+                    "AND detected_at > NOW() - INTERVAL '10 minutes'",
+                    user_uuid,
+                )
+                if existing:
+                    logger.debug("Skipping duplicate violation for user %s (existing id=%d)", user_uuid, existing)
+                    return existing
+
                 result = await conn.fetchval(
                     """
                     INSERT INTO violations (
                         user_uuid, username, email, telegram_id,
                         score, recommended_action, confidence,
                         temporal_score, geo_score, asn_score, profile_score, device_score,
+                        hwid_score,
                         ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                         simultaneous_connections, unique_ips_count, device_limit,
                         impossible_travel, is_mobile, is_datacenter, is_vpn,
                         raw_breakdown, detected_at
                     )
                     VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                        $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
-                        $23, $24, $25, $26, $27, NOW()
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+                        $24, $25, $26, $27, $28, NOW()
                     )
                     RETURNING id
                     """,
                     user_uuid, username, email, telegram_id,
                     score, recommended_action, confidence,
                     temporal_score, geo_score, asn_score, profile_score, device_score,
+                    hwid_score,
                     ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                     simultaneous_connections, unique_ips_count, device_limit,
                     impossible_travel, is_mobile, is_datacenter, is_vpn,
@@ -2616,6 +2701,41 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error updating violation action: %s", e, exc_info=True)
             return False
+
+    async def annul_pending_violations(
+        self,
+        user_uuid: str,
+        admin_telegram_id: int,
+    ) -> int:
+        """
+        Аннулировать все нерассмотренные нарушения пользователя.
+
+        Returns:
+            Количество аннулированных записей
+        """
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    UPDATE violations
+                    SET action_taken = 'annulled',
+                        action_taken_at = NOW(),
+                        action_taken_by = $1
+                    WHERE user_uuid = $2
+                      AND action_taken IS NULL
+                    """,
+                    admin_telegram_id, user_uuid,
+                )
+                # result format: "UPDATE N"
+                count = int(result.split()[-1]) if result else 0
+                return count
+
+        except Exception as e:
+            logger.error("Error annulling violations for user %s: %s", user_uuid, e, exc_info=True)
+            return 0
 
     async def mark_violation_notified(self, violation_id: int) -> bool:
         """Отметить нарушение как отправленное в уведомлении."""
@@ -3106,6 +3226,104 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error getting HWID devices stats: %s", e, exc_info=True)
             return {'total_devices': 0, 'unique_users': 0, 'by_platform': {}}
+
+    async def get_shared_hwids(self, min_users: int = 2, limit: int = 50) -> List[Dict[str, Any]]:
+        """Find HWIDs shared across multiple user accounts (for analytics)."""
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    WITH shared AS (
+                        SELECT hwid
+                        FROM user_hwid_devices
+                        GROUP BY hwid
+                        HAVING COUNT(DISTINCT user_uuid) >= $1
+                        ORDER BY COUNT(DISTINCT user_uuid) DESC
+                        LIMIT $2
+                    )
+                    SELECT h.hwid, h.platform, h.device_model, h.app_version,
+                           h.created_at as hwid_first_seen,
+                           u.uuid::text as user_uuid, u.username, u.status,
+                           u.created_at as user_created_at
+                    FROM shared s
+                    JOIN user_hwid_devices h ON h.hwid = s.hwid
+                    JOIN users u ON h.user_uuid = u.uuid
+                    ORDER BY h.hwid, h.created_at ASC
+                    """,
+                    min_users, limit,
+                )
+
+                # Group by hwid
+                groups: Dict[str, Dict[str, Any]] = {}
+                for r in rows:
+                    hwid = r["hwid"]
+                    if hwid not in groups:
+                        groups[hwid] = {
+                            "hwid": hwid,
+                            "platform": r["platform"],
+                            "device_model": r["device_model"],
+                            "user_count": 0,
+                            "users": [],
+                        }
+                    groups[hwid]["user_count"] += 1
+                    groups[hwid]["users"].append({
+                        "uuid": r["user_uuid"],
+                        "username": r["username"],
+                        "status": r["status"],
+                        "created_at": r["user_created_at"].isoformat() if r["user_created_at"] else None,
+                        "hwid_first_seen": r["hwid_first_seen"].isoformat() if r["hwid_first_seen"] else None,
+                    })
+
+                # Sort by user_count desc
+                result = sorted(groups.values(), key=lambda g: g["user_count"], reverse=True)
+                return result
+
+        except Exception as e:
+            logger.error("Error getting shared HWIDs: %s", e, exc_info=True)
+            return []
+
+    async def get_shared_hwids_for_user(self, user_uuid: str) -> List[Dict[str, Any]]:
+        """For a given user, find other users sharing the same HWID(s)."""
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT h2.hwid, u.uuid::text as user_uuid, u.username, u.status
+                    FROM user_hwid_devices h1
+                    JOIN user_hwid_devices h2 ON h1.hwid = h2.hwid AND h2.user_uuid != h1.user_uuid
+                    JOIN users u ON h2.user_uuid = u.uuid
+                    WHERE h1.user_uuid = $1
+                    ORDER BY h2.hwid, u.username
+                    """,
+                    user_uuid,
+                )
+
+                if not rows:
+                    return []
+
+                # Group by hwid
+                groups: Dict[str, Dict[str, Any]] = {}
+                for r in rows:
+                    hwid = r["hwid"]
+                    if hwid not in groups:
+                        groups[hwid] = {"hwid": hwid, "other_users": []}
+                    groups[hwid]["other_users"].append({
+                        "uuid": r["user_uuid"],
+                        "username": r["username"],
+                        "status": r["status"],
+                    })
+
+                return list(groups.values())
+
+        except Exception as e:
+            logger.error("Error getting shared HWIDs for user %s: %s", user_uuid, e, exc_info=True)
+            return []
 
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:

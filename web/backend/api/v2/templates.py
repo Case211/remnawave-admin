@@ -38,7 +38,8 @@ async def list_templates(
     try:
         from shared.api_client import api_client
         result = await api_client.get_templates()
-        templates = result.get("response", [])
+        payload = result.get("response", {})
+        templates = payload.get("subscriptionTemplates", []) if isinstance(payload, dict) else []
         return {"items": templates, "total": len(templates)}
     except Exception as e:
         logger.error("Failed to list templates: %s", e)

@@ -17,7 +17,8 @@ async def list_config_profiles(
     try:
         from shared.api_client import api_client
         result = await api_client.get_config_profiles()
-        profiles = result.get("response", [])
+        payload = result.get("response", {})
+        profiles = payload.get("configProfiles", []) if isinstance(payload, dict) else []
         return {"items": profiles, "total": len(profiles)}
     except Exception as e:
         logger.error("Failed to list config profiles: %s", e)

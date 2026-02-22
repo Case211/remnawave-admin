@@ -837,6 +837,58 @@ async def get_user_traffic_stats(
         raise HTTPException(status_code=500, detail="Internal error")
 
 
+@router.get("/{user_uuid}/ip-history")
+async def get_user_ip_history(
+    user_uuid: str,
+    period: str = Query("24h", description="Period: 24h, 7d, 30d"),
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Get unique IP addresses for a user with geo enrichment."""
+    period_days = {"24h": 1, "7d": 7, "30d": 30}.get(period, 1)
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"items": [], "total": 0}
+
+        async with db_service.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    SPLIT_PART(uc.ip_address::text, '/', 1) as ip,
+                    im.country_name as country,
+                    im.city,
+                    im.asn_org,
+                    COUNT(uc.id) as connections,
+                    MAX(uc.connected_at) as last_seen
+                FROM user_connections uc
+                LEFT JOIN ip_metadata im
+                    ON SPLIT_PART(uc.ip_address::text, '/', 1) = TRIM(im.ip_address)
+                WHERE uc.user_uuid = $1
+                  AND uc.connected_at > NOW() - make_interval(days => $2)
+                GROUP BY SPLIT_PART(uc.ip_address::text, '/', 1),
+                         im.country_name, im.city, im.asn_org
+                ORDER BY last_seen DESC
+                """,
+                user_uuid,
+                period_days,
+            )
+            items = [
+                {
+                    "ip": r["ip"],
+                    "country": r["country"] or "",
+                    "city": r["city"] or "",
+                    "asn_org": r["asn_org"] or "",
+                    "connections": r["connections"],
+                    "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
+                }
+                for r in rows
+            ]
+            return {"items": items, "total": len(items)}
+    except Exception as e:
+        logger.error("Error getting IP history for %s: %s", user_uuid, e)
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
 @router.post("/{user_uuid}/sync-hwid-devices")
 async def sync_user_hwid_devices(
     user_uuid: str,
@@ -883,37 +935,18 @@ async def get_user_hwid_devices(
     except Exception as e:
         logger.debug("DB HWID fetch failed for %s, trying API: %s", user_uuid, e)
 
-    # Fall back to API if local DB has no data
+    # DB empty — trigger sync from Panel API (uses same logic as manual sync button)
     try:
-        from shared.api_client import api_client
-
-        result = await api_client.get_user_hwid_devices(user_uuid)
-        response = result.get("response", result) if isinstance(result, dict) else result
-        devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
-
-        # Save API-fetched devices to local DB so future list views show correct counts
-        try:
+        from shared.sync import sync_service
+        synced = await sync_service.sync_user_hwid_devices(user_uuid)
+        if synced:
             from shared.database import db_service
-            if db_service.is_connected and devices:
-                for d in devices:
-                    await db_service.upsert_hwid_device(
-                        user_uuid=user_uuid,
-                        hwid=d.get("hwid", ""),
-                        platform=d.get("platform"),
-                        os_version=d.get("osVersion") or d.get("os_version"),
-                        device_model=d.get("deviceModel") or d.get("device_model"),
-                        app_version=d.get("appVersion") or d.get("app_version"),
-                        user_agent=d.get("userAgent") or d.get("user_agent"),
-                    )
-        except Exception as e:
-            logger.debug("Failed to cache API HWID devices for %s: %s", user_uuid, e)
-
-        return _parse_devices(devices)
-
-    except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+            if db_service.is_connected:
+                db_devices = await db_service.get_user_hwid_devices(user_uuid)
+                if db_devices:
+                    return _parse_devices(db_devices)
     except Exception as e:
-        logger.error("API HWID fetch also failed for %s: %s", user_uuid, e)
+        logger.debug("Sync HWID failed for %s: %s", user_uuid, e)
 
     return []
 

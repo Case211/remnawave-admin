@@ -11,6 +11,7 @@ export interface GeoCityUser {
   uuid: string
   status: string
   connections: number
+  ips: string[]
 }
 
 export interface GeoCity {
@@ -51,6 +52,27 @@ export interface TrendData {
   total_growth: number
 }
 
+export interface SharedHwidUser {
+  uuid: string
+  username: string
+  status: string
+  created_at: string | null
+  hwid_first_seen: string | null
+}
+
+export interface SharedHwidGroup {
+  hwid: string
+  platform: string | null
+  device_model: string | null
+  user_count: number
+  users: SharedHwidUser[]
+}
+
+export interface SharedHwidsData {
+  items: SharedHwidGroup[]
+  total_shared_hwids: number
+}
+
 export const advancedAnalyticsApi = {
   geo: async (period = '7d'): Promise<GeoData> => {
     const { data } = await client.get('/analytics/advanced/geo', { params: { period } })
@@ -64,6 +86,13 @@ export const advancedAnalyticsApi = {
 
   trends: async (metric = 'users', period = '30d'): Promise<TrendData> => {
     const { data } = await client.get('/analytics/advanced/trends', { params: { metric, period } })
+    return data
+  },
+
+  sharedHwids: async (minUsers = 2, limit = 50): Promise<SharedHwidsData> => {
+    const { data } = await client.get('/analytics/advanced/shared-hwids', {
+      params: { min_users: minUsers, limit },
+    })
     return data
   },
 }

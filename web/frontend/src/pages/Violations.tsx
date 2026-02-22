@@ -26,9 +26,12 @@ import {
   Server,
   Smartphone,
   Fingerprint,
+  Users,
   ArrowLeft,
   ExternalLink,
   MessageCircle,
+  XCircle,
+  Trash2,
 } from 'lucide-react'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -77,6 +80,7 @@ interface ViolationDetail {
   asn_score: number
   profile_score: number
   device_score: number
+  hwid_score: number
   reasons: string[]
   countries: string[]
   asn_types: string[]
@@ -230,6 +234,7 @@ function getActionConfig(action: string | null) {
     warned: { labelKey: 'violations.actionStatuses.warned', variant: 'default' },
     ignore: { labelKey: 'violations.actionStatuses.dismissed', variant: 'secondary' },
     dismissed: { labelKey: 'violations.actionStatuses.dismissed', variant: 'secondary' },
+    annulled: { labelKey: 'violations.actionStatuses.annulled', variant: 'secondary' },
     resolved: { labelKey: 'violations.actionStatuses.resolved', variant: 'success' },
   }
   return config[action] || { labelKey: action, variant: 'secondary' as const }
@@ -301,14 +306,17 @@ function getConnectionTypeBadge(info: IPInfo, t: (key: string) => string): { lab
 
 // ── Score bar component ──────────────────────────────────────────
 
-const ScoreBar = memo(function ScoreBar({ label, score, icon }: { label: string; score: number; icon: React.ReactNode }) {
+const ScoreBar = memo(function ScoreBar({ label, score, weight, icon }: { label: string; score: number; weight?: number; icon: React.ReactNode }) {
   const barColor =
     score >= 60 ? 'bg-red-500' : score >= 40 ? 'bg-yellow-500' : score >= 20 ? 'bg-blue-500' : 'bg-green-500'
   return (
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-2 w-32 flex-shrink-0">
+      <div className="flex items-center gap-2 w-40 flex-shrink-0">
         <span className="text-dark-200">{icon}</span>
         <span className="text-sm text-dark-100">{label}</span>
+        {weight != null && (
+          <span className="text-xs text-dark-400">×{weight}</span>
+        )}
       </div>
       <div className="flex-1 h-2 bg-dark-700 rounded-full overflow-hidden">
         <div
@@ -345,6 +353,7 @@ const ViolationCard = memo(function ViolationCard({
   onBlock,
   onWarn,
   onDismiss,
+  onAnnul,
   onViewDetail,
   onViewUser,
 }: {
@@ -353,6 +362,7 @@ const ViolationCard = memo(function ViolationCard({
   onBlock: () => void
   onWarn: () => void
   onDismiss: () => void
+  onAnnul: () => void
   onViewDetail: () => void
   onViewUser: () => void
 }) {
@@ -431,6 +441,9 @@ const ViolationCard = memo(function ViolationCard({
             <Button variant="ghost" size="sm" onClick={onDismiss} className="gap-1">
               <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
             </Button>
+            <Button variant="ghost" size="sm" onClick={onAnnul} className="gap-1 text-dark-300 hover:text-dark-100">
+              <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
+            </Button>
             <Button variant="ghost" size="sm" onClick={onViewDetail} className="gap-1 ml-auto">
               <Eye className="w-4 h-4" />
               <span className="hidden sm:inline">{t('common.details')}</span>
@@ -499,6 +512,8 @@ function ViolationDetailPanel({
   onBlock,
   onWarn,
   onDismiss,
+  onAnnul,
+  onAnnulAll,
   onViewUser,
 }: {
   violationId: number
@@ -507,6 +522,8 @@ function ViolationDetailPanel({
   onBlock: (id: number) => void
   onWarn: (id: number) => void
   onDismiss: (id: number) => void
+  onAnnul: (id: number) => void
+  onAnnulAll: (userUuid: string) => void
   onViewUser: (uuid: string) => void
 }) {
   const { t } = useTranslation()
@@ -645,27 +662,38 @@ function ViolationDetailPanel({
             <ScoreBar
               label={t('violations.detail.temporal')}
               score={detail.temporal_score}
+              weight={0.20}
               icon={<Clock className="w-4 h-4" />}
             />
             <ScoreBar
               label={t('violations.detail.geo')}
               score={detail.geo_score}
+              weight={0.20}
               icon={<Globe className="w-4 h-4" />}
             />
             <ScoreBar
               label={t('violations.detail.provider')}
               score={detail.asn_score}
+              weight={0.10}
               icon={<Server className="w-4 h-4" />}
             />
             <ScoreBar
               label={t('violations.detail.profileScore')}
               score={detail.profile_score}
+              weight={0.15}
               icon={<Fingerprint className="w-4 h-4" />}
             />
             <ScoreBar
               label={t('violations.detail.device')}
               score={detail.device_score}
+              weight={0.10}
               icon={<Smartphone className="w-4 h-4" />}
+            />
+            <ScoreBar
+              label={t('violations.detail.hwid')}
+              score={detail.hwid_score}
+              weight={0.25}
+              icon={<Users className="w-4 h-4" />}
             />
           </div>
           <div className="mt-4 pt-3 border-t border-dark-400/10 flex items-center justify-between">
@@ -876,6 +904,12 @@ function ViolationDetailPanel({
               </Button>
               <Button variant="ghost" onClick={() => onDismiss(detail.id)} className="gap-2">
                 <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
+              </Button>
+              <Button variant="ghost" onClick={() => onAnnul(detail.id)} className="gap-2 text-dark-300 hover:text-dark-100">
+                <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
+              </Button>
+              <Button variant="ghost" onClick={() => onAnnulAll(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-dark-100">
+                <Trash2 className="w-4 h-4" /> {t('violations.actions.annulAll')}
               </Button>
             </div>
           </CardContent>
@@ -1303,6 +1337,45 @@ export default function Violations() {
     [resolveViolation],
   )
 
+  const annulViolation = useMutation({
+    mutationFn: (id: number) => client.post(`/violations/${id}/annul`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['violations'] })
+      queryClient.invalidateQueries({ queryKey: ['violationStats'] })
+      queryClient.invalidateQueries({ queryKey: ['topViolators'] })
+      queryClient.invalidateQueries({ queryKey: ['violationDetail'] })
+      setSelectedViolationId(null)
+      toast.success(t('violations.toast.annulled'))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
+  const annulAllViolations = useMutation({
+    mutationFn: (userUuid: string) => client.post(`/violations/user/${userUuid}/annul-all`),
+    onSuccess: (_data, _userUuid) => {
+      queryClient.invalidateQueries({ queryKey: ['violations'] })
+      queryClient.invalidateQueries({ queryKey: ['violationStats'] })
+      queryClient.invalidateQueries({ queryKey: ['topViolators'] })
+      queryClient.invalidateQueries({ queryKey: ['violationDetail'] })
+      setSelectedViolationId(null)
+      toast.success(t('violations.toast.annulledAll'))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
+  const handleAnnul = useCallback(
+    (id: number) => annulViolation.mutate(id),
+    [annulViolation],
+  )
+  const handleAnnulAll = useCallback(
+    (userUuid: string) => annulAllViolations.mutate(userUuid),
+    [annulAllViolations],
+  )
+
   const handleTabChange = (newTab: Tab) => {
     setTab(newTab)
     setPage(1)
@@ -1320,6 +1393,8 @@ export default function Violations() {
           onBlock={handleBlock}
           onWarn={handleWarn}
           onDismiss={handleDismiss}
+          onAnnul={handleAnnul}
+          onAnnulAll={handleAnnulAll}
           onViewUser={(uuid) => navigate(`/users/${uuid}`)}
         />
       </div>
@@ -1527,6 +1602,7 @@ export default function Violations() {
                     onBlock={() => handleBlock(violation.id)}
                     onWarn={() => handleWarn(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}
+                    onAnnul={() => handleAnnul(violation.id)}
                     onViewDetail={() => setSelectedViolationId(violation.id)}
                     onViewUser={() => navigate(`/users/${violation.user_uuid}`)}
                   />

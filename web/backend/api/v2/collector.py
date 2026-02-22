@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 connection_monitor = ConnectionMonitor(db_service)
 violation_detector = IntelligentViolationDetector(db_service, connection_monitor)
 
+# Per-user cooldown for violation checks (avoid re-checking every 30s batch)
+_violation_check_cooldown: dict[str, datetime] = {}
+VIOLATION_CHECK_COOLDOWN_MINUTES = 5
+
 router = APIRouter()
 
 
@@ -284,9 +288,25 @@ async def receive_connections(
             # Violation detection for each affected user
             violations_enabled = config_service.get("violations_enabled", True)
             min_score = config_service.get("violations_min_score", 50.0)
+
+            # Cleanup stale cooldown entries (older than 1h)
+            now_cleanup = datetime.utcnow()
+            expired_keys = [k for k, v in _violation_check_cooldown.items()
+                           if (now_cleanup - v).total_seconds() > 3600]
+            for k in expired_keys:
+                del _violation_check_cooldown[k]
+
             for user_uuid in affected_user_uuids:
                 if not violations_enabled:
                     break
+
+                # Per-user cooldown: skip if already checked recently
+                now_check = datetime.utcnow()
+                last_check = _violation_check_cooldown.get(user_uuid)
+                if last_check and (now_check - last_check).total_seconds() < VIOLATION_CHECK_COOLDOWN_MINUTES * 60:
+                    logger.debug("Violation check cooldown active for user %s, skipping", user_uuid)
+                    continue
+
                 try:
                     # Connection stats (для violations.log)
                     stats = await connection_monitor.get_user_connection_stats(user_uuid, window_minutes=60)
@@ -298,6 +318,10 @@ async def receive_connections(
                         )
 
                     violation_score = await violation_detector.check_user(user_uuid, window_minutes=60)
+
+                    # Update cooldown regardless of score
+                    _violation_check_cooldown[user_uuid] = datetime.utcnow()
+
                     if violation_score and violation_score.total >= min_score:
                         logger.warning(
                             "Violation detected: user=%s score=%.1f action=%s reasons=%s",
@@ -347,6 +371,7 @@ async def receive_connections(
                             asn = breakdown.get("asn")
                             profile = breakdown.get("profile")
                             device = breakdown.get("device")
+                            hwid = breakdown.get("hwid")
 
                             ip_addresses = list(set(str(c.ip_address) for c in active_conns)) if active_conns else None
                             username = user_info.get("username") if user_info else None
@@ -381,6 +406,7 @@ async def receive_connections(
                                 is_mobile=asn.is_mobile_carrier if asn else False,
                                 is_datacenter=asn.is_datacenter if asn else False,
                                 is_vpn=asn.is_vpn if asn else False,
+                                hwid_score=hwid.score if hwid else None,
                             )
                             logger.debug("Violation saved to DB for user %s: score=%.1f", user_uuid, violation_score.total)
                         except Exception as save_error:

@@ -70,6 +70,20 @@ AUTOMATION_TEMPLATES = [
         "action_config": {},
     },
     {
+        "id": "node_traffic_alert",
+        "name": "Node Traffic Alert",
+        "description": "Telegram-уведомление когда пользователь использует > N ГБ на ноде",
+        "category": "users",
+        "trigger_type": "threshold",
+        "trigger_config": {"metric": "user_node_traffic_gb", "operator": ">=", "value": 10},
+        "conditions": [],
+        "action_type": "notify",
+        "action_config": {
+            "channel": "telegram",
+            "message": "User {username} used {traffic_gb} GB on node {node_name}",
+        },
+    },
+    {
         "id": "daily_report",
         "name": "Daily Report",
         "description": "Ежедневная Telegram-сводка в 23:00",
