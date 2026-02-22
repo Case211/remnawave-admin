@@ -104,7 +104,7 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base">
             {t('fleet.scripts.run')}: {script?.display_name}
@@ -142,7 +142,7 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
           {scriptDetail?.script_content && (
             <div>
               <label className="text-xs text-dark-200 mb-1.5 block">{t('fleet.scripts.scriptContent')}</label>
-              <pre className="bg-dark-900 border border-dark-700 rounded-md p-3 text-xs font-mono text-dark-100 max-h-[200px] overflow-auto">
+              <pre className="bg-dark-900 border border-dark-700 rounded-md p-3 text-xs font-mono text-dark-100 max-h-[150px] overflow-auto whitespace-pre-wrap">
                 {scriptDetail.script_content}
               </pre>
             </div>
