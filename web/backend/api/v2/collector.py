@@ -300,6 +300,11 @@ async def receive_connections(
                 if not violations_enabled:
                     break
 
+                # Whitelist check: full or partial exclusion
+                whitelisted, excluded_analyzers = await db_service.is_user_violation_whitelisted(user_uuid)
+                if whitelisted and excluded_analyzers is None:
+                    continue  # Full whitelist — skip all detection
+
                 # Per-user cooldown: skip if already checked recently
                 now_check = datetime.utcnow()
                 last_check = _violation_check_cooldown.get(user_uuid)
@@ -317,7 +322,9 @@ async def receive_connections(
                             stats.unique_ips_in_window, stats.simultaneous_connections,
                         )
 
-                    violation_score = await violation_detector.check_user(user_uuid, window_minutes=60)
+                    violation_score = await violation_detector.check_user(
+                        user_uuid, window_minutes=60, excluded_analyzers=excluded_analyzers
+                    )
 
                     # Update cooldown regardless of score
                     _violation_check_cooldown[user_uuid] = datetime.utcnow()

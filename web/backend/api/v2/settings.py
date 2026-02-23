@@ -14,6 +14,7 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission, get_client_ip
+from web.backend.core.errors import api_error, E
 from web.backend.core.rbac import write_audit_log
 
 logger = logging.getLogger(__name__)
@@ -227,7 +228,7 @@ async def update_setting(
     try:
         from shared.database import db_service
         if not db_service.is_connected:
-            raise HTTPException(status_code=503, detail="Database not connected")
+            raise api_error(503, E.DB_UNAVAILABLE)
 
         # Check if setting exists and is editable
         async with db_service.acquire() as conn:
@@ -237,10 +238,10 @@ async def update_setting(
             )
 
         if not row:
-            raise HTTPException(status_code=404, detail="Setting not found")
+            raise api_error(404, E.SETTING_NOT_FOUND)
 
         if row['is_readonly']:
-            raise HTTPException(status_code=403, detail="Setting is read-only")
+            raise api_error(403, E.SETTING_READONLY)
 
         # Update in DB (no env blocking — DB takes priority now)
         async with db_service.acquire() as conn:
@@ -277,7 +278,7 @@ async def update_setting(
         raise
     except Exception as e:
         logger.error("Error updating setting %s: %s", key, e)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.delete("/{key}")
@@ -290,7 +291,7 @@ async def reset_setting(
     try:
         from shared.database import db_service
         if not db_service.is_connected:
-            raise HTTPException(status_code=503, detail="Database not connected")
+            raise api_error(503, E.DB_UNAVAILABLE)
 
         async with db_service.acquire() as conn:
             row = await conn.fetchrow(
@@ -299,10 +300,10 @@ async def reset_setting(
             )
 
         if not row:
-            raise HTTPException(status_code=404, detail="Setting not found")
+            raise api_error(404, E.SETTING_NOT_FOUND)
 
         if row['is_readonly']:
-            raise HTTPException(status_code=403, detail="Setting is read-only")
+            raise api_error(403, E.SETTING_READONLY)
 
         # Set value to NULL — fallback to .env or default
         async with db_service.acquire() as conn:
@@ -336,7 +337,7 @@ async def reset_setting(
         raise
     except Exception as e:
         logger.error("Error resetting setting %s: %s", key, e)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.get("/ip-whitelist")

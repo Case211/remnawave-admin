@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
+import i18n from '../i18n'
 import { getAuthState } from '../store/authBridge'
 
 /**
@@ -132,6 +133,19 @@ client.interceptors.response.use(
     // If already retried and still 401, force logout
     if (error.response?.status === 401 && originalRequest._retry) {
       forceLogout()
+    }
+
+    // Normalize structured error responses: {detail: {detail, code}} → string
+    const respData = error.response?.data as Record<string, unknown> | undefined
+    if (respData?.detail && typeof respData.detail === 'object') {
+      const { code, detail: fallbackMessage } = respData.detail as { code?: string; detail?: string }
+      if (code) {
+        const i18nKey = `errors.${code}`
+        const translated = i18n.t(i18nKey)
+        // Use translation if available, otherwise fallback to server message
+        respData.detail = translated !== i18nKey ? translated : (fallbackMessage || code)
+        respData.code = code
+      }
     }
 
     return Promise.reject(error)

@@ -1,5 +1,6 @@
 """Violation schemas for web panel API."""
-from pydantic import BaseModel
+import re
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -133,3 +134,74 @@ class IPInfo(BaseModel):
 class IPLookupResponse(BaseModel):
     """Ответ с информацией по IP адресам."""
     results: Dict[str, IPInfo]
+
+
+# ── Whitelist ─────────────────────────────────────────────────
+
+VALID_ANALYZERS = {"temporal", "geo", "asn", "profile", "device", "hwid"}
+
+
+class WhitelistAddRequest(BaseModel):
+    """Запрос на добавление пользователя в whitelist."""
+    user_uuid: str
+    reason: Optional[str] = Field(None, max_length=1000)
+    expires_in_days: Optional[int] = Field(None, ge=1, le=3650)  # None = бессрочно
+    excluded_analyzers: Optional[List[str]] = Field(
+        None,
+        description="Список анализаторов для исключения. None = полный whitelist.",
+    )
+
+    @field_validator('user_uuid')
+    @classmethod
+    def validate_uuid(cls, v: str) -> str:
+        uuid_re = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+        if not uuid_re.match(v.strip()):
+            raise ValueError('Invalid UUID format')
+        return v.strip()
+
+    @field_validator('excluded_analyzers')
+    @classmethod
+    def validate_analyzers(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None:
+            invalid = set(v) - VALID_ANALYZERS
+            if invalid:
+                raise ValueError(f'Invalid analyzer names: {", ".join(sorted(invalid))}')
+            v = sorted(set(v))
+        return v
+
+
+class WhitelistUpdateRequest(BaseModel):
+    """Запрос на обновление исключений whitelist."""
+    excluded_analyzers: Optional[List[str]] = Field(
+        None,
+        description="Список анализаторов для исключения. None = полный whitelist.",
+    )
+
+    @field_validator('excluded_analyzers')
+    @classmethod
+    def validate_analyzers(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None:
+            invalid = set(v) - VALID_ANALYZERS
+            if invalid:
+                raise ValueError(f'Invalid analyzer names: {", ".join(sorted(invalid))}')
+            v = sorted(set(v))
+        return v
+
+
+class WhitelistItem(BaseModel):
+    """Элемент whitelist."""
+    id: int
+    user_uuid: str
+    username: Optional[str] = None
+    email: Optional[str] = None
+    reason: Optional[str] = None
+    added_by_username: Optional[str] = None
+    added_at: datetime
+    expires_at: Optional[datetime] = None
+    excluded_analyzers: Optional[List[str]] = None
+
+
+class WhitelistListResponse(BaseModel):
+    """Ответ списка whitelist."""
+    items: List[WhitelistItem]
+    total: int

@@ -1,10 +1,11 @@
 """Hosts API endpoints."""
 import json
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from typing import List
 
 from web.backend.api.deps import get_current_admin, get_api_client, AdminUser, require_permission, require_quota, get_client_ip
+from web.backend.core.errors import api_error, E
 from web.backend.core.rbac import write_audit_log
 from web.backend.schemas.host import (
     HostListItem,
@@ -107,7 +108,7 @@ async def get_host(
     data = await api_client.get_host(host_uuid)
 
     if not data:
-        raise HTTPException(status_code=404, detail="Host not found")
+        raise api_error(404, E.HOST_NOT_FOUND)
 
     h = data.get('response', data) if isinstance(data, dict) else data
 
@@ -187,7 +188,7 @@ async def create_host(
     result = await api_client.create_host_raw(payload)
 
     if not result:
-        raise HTTPException(status_code=400, detail="Failed to create host")
+        raise api_error(400, E.HOST_CREATE_FAILED)
 
     h = result.get('response', result) if isinstance(result, dict) else result
 
@@ -278,7 +279,7 @@ async def update_host(
     result = await api_client.update_host_raw(payload)
 
     if not result:
-        raise HTTPException(status_code=404, detail="Host not found or update failed")
+        raise api_error(404, E.HOST_UPDATE_FAILED)
 
     h = result.get('response', result) if isinstance(result, dict) else result
 
@@ -306,7 +307,7 @@ async def delete_host(
     result = await api_client.delete_host(host_uuid)
 
     if not result:
-        raise HTTPException(status_code=404, detail="Host not found or delete failed")
+        raise api_error(404, E.HOST_DELETE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -332,7 +333,7 @@ async def enable_host(
     result = await api_client.enable_hosts([host_uuid])
 
     if not result:
-        raise HTTPException(status_code=400, detail="Failed to enable host")
+        raise api_error(400, E.HOST_ENABLE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -358,7 +359,7 @@ async def disable_host(
     result = await api_client.disable_hosts([host_uuid])
 
     if not result:
-        raise HTTPException(status_code=400, detail="Failed to disable host")
+        raise api_error(400, E.HOST_DISABLE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,

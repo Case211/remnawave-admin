@@ -28,6 +28,9 @@ const Analytics = lazy(() => import('./pages/Analytics'))
 const Automations = lazy(() => import('./pages/automations'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const MailServer = lazy(() => import('./pages/MailServer'))
+const Billing = lazy(() => import('./pages/Billing'))
+const Backup = lazy(() => import('./pages/Backup'))
+const ApiKeys = lazy(() => import('./pages/ApiKeys'))
 
 /**
  * Protected route wrapper - redirects to login if not authenticated.
@@ -114,6 +117,9 @@ export default function App() {
                         <Route path="/audit" element={<AuditLog />} />
                         <Route path="/logs" element={<SystemLogs />} />
                         <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/billing" element={<Billing />} />
+                        <Route path="/backups" element={<Backup />} />
+                        <Route path="/api-keys" element={<ApiKeys />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>

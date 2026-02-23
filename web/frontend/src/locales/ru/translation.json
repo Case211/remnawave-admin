@@ -113,17 +113,22 @@
     "mailServer": "Почтовый сервер",
     "resources": "Ресурсы",
     "billing": "Биллинг",
-    "reports": "Отчёты"
+    "reports": "Отчёты",
+    "backups": "Бэкапы",
+    "apiKeys": "API и Вебхуки"
   },
   "header": {
     "searchPlaceholder": "Поиск...",
-    "commandHint": "Cmd+K для поиска"
+    "commandHint": "Cmd+K для поиска",
+    "online": "Онлайн"
   },
   "sidebar": {
     "expand": "Развернуть",
     "collapse": "Свернуть",
     "telegramChat": "Чат в Telegram",
-    "support": "Поддержать автора"
+    "support": "Поддержать автора",
+    "administrator": "Администратор",
+    "logout": "Выход"
   },
   "commandPalette": {
     "placeholder": "Поиск страниц, пользователей, действий...",
@@ -288,7 +293,14 @@
     "recentActivity": "Последняя активность",
     "topUsers": "Топ пользователей",
     "trafficChart": "Трафик",
-    "noActivity": "Нет активности"
+    "noActivity": "Нет активности",
+    "billing": "Биллинг",
+    "billingTooltip": "Сводка по биллингу инфраструктуры",
+    "billingMonthly": "В этом месяце",
+    "billingProviders": "Провайдеры",
+    "billingNodes": "Биллинг-ноды",
+    "billingTotalSpent": "Всего потрачено",
+    "billingNextPayment": "Следующий платёж"
   },
   "users": {
     "title": "Пользователи",
@@ -1113,7 +1125,53 @@
     "toast": {
       "resolved": "Нарушение обработано",
       "annulled": "Нарушение аннулировано",
-      "annulledAll": "Все нарушения пользователя аннулированы"
+      "annulledAll": "Все нарушения пользователя аннулированы",
+      "whitelistAdded": "Пользователь добавлен в whitelist",
+      "whitelistRemoved": "Пользователь удалён из whitelist"
+    },
+    "whitelist": {
+      "tab": "Whitelist",
+      "title": "Whitelist нарушений",
+      "addButton": "Добавить в whitelist",
+      "removeButton": "Удалить",
+      "reason": "Причина",
+      "reasonPlaceholder": "Почему исключить из проверок?",
+      "duration": "Срок действия",
+      "forever": "Навсегда",
+      "days7": "7 дней",
+      "days30": "30 дней",
+      "days90": "90 дней",
+      "expiresAt": "Истекает",
+      "addedBy": "Добавил",
+      "addedAt": "Добавлен",
+      "noExpiration": "Бессрочно",
+      "empty": "Whitelist пуст",
+      "emptyDesc": "Пользователи в whitelist не проверяются системой обнаружения нарушений",
+      "confirmRemove": "Убрать пользователя из whitelist?",
+      "confirmRemoveDesc": "Обнаружение нарушений для этого пользователя будет возобновлено.",
+      "userUuid": "UUID пользователя",
+      "userUuidPlaceholder": "Введите UUID пользователя",
+      "addTitle": "Добавить в whitelist",
+      "expired": "Истёк"
+    },
+    "analyzers": {
+      "temporal": "Временной (одновременные подключения)",
+      "geo": "Географический (невозможное перемещение)",
+      "asn": "ASN (тип провайдера)",
+      "profile": "Профиль (отклонение поведения)",
+      "device": "Устройства (fingerprint)",
+      "hwid": "HWID (кросс-аккаунт)"
+    },
+    "exclusions": {
+      "mode": "Режим исключения",
+      "fullWhitelist": "Полный whitelist",
+      "partialExclusion": "Частичное исключение",
+      "configureButton": "Настроить исключения",
+      "configureTitle": "Исключения анализаторов",
+      "removeWhitelist": "Убрать из whitelist",
+      "mode_none": "Без исключений",
+      "mode_partial": "Частичное",
+      "mode_full": "Полный whitelist"
     }
   },
   "admins": {
@@ -1754,6 +1812,29 @@
       "every24Hours": "Каждые 24 часа (раз в сутки)",
       "everyNHours": "Каждые {{n}} ч.",
       "everyNHoursNMin": "Каждые {{h}} ч. {{m}} мин."
+    },
+    "templates": {
+      "auto_block_sharing": {
+        "description": "Автоматическая блокировка пользователей с score нарушения > 80"
+      },
+      "node_monitoring": {
+        "description": "Telegram-уведомление когда нода офлайн > 5 минут"
+      },
+      "cleanup_expired": {
+        "description": "Ежедневная очистка пользователей с истёкшей подпиской > 30 дней"
+      },
+      "traffic_notification": {
+        "description": "Уведомление администратора когда трафик пользователя > 90%"
+      },
+      "auto_restart_node": {
+        "description": "Автоматический перезапуск ноды офлайн > 15 минут"
+      },
+      "node_traffic_alert": {
+        "description": "Telegram-уведомление когда пользователь использует > N ГБ на ноде"
+      },
+      "daily_report": {
+        "description": "Ежедневная Telegram-сводка в 23:00"
+      }
     },
     "templatesGallery": {
       "noTemplates": "Нет доступных шаблонов",
@@ -2500,7 +2581,25 @@
     "subtitle": "Отчёты по нарушениям и управление базой ASN",
     "tabs": {
       "reports": "Отчёты по нарушениям",
+      "schedule": "Расписание",
       "asn": "База ASN"
+    },
+    "schedule": {
+      "globalEnabled": "Расписание отчётов включено",
+      "globalDescription": "Включить/отключить все запланированные отчёты (ежедневные, еженедельные, ежемесячные)",
+      "daily": "Ежедневный",
+      "weekly": "Еженедельный",
+      "monthly": "Ежемесячный",
+      "time": "Время (UTC)",
+      "dayOfWeek": "День недели",
+      "dayOfMonth": "День месяца",
+      "monday": "Понедельник",
+      "tuesday": "Вторник",
+      "wednesday": "Среда",
+      "thursday": "Четверг",
+      "friday": "Пятница",
+      "saturday": "Суббота",
+      "sunday": "Воскресенье"
     },
     "filterAll": "Все типы",
     "filterDaily": "Ежедневный",
@@ -2537,5 +2636,183 @@
       "region": "Регион",
       "showingOf": "Показано {{shown}} из {{total}} записей"
     }
+  },
+
+  "errors": {
+    "INVALID_AUTH_HEADER": "Некорректный заголовок авторизации",
+    "TOKEN_REQUIRED": "Требуется токен аутентификации",
+    "INVALID_TOKEN": "Недействительный или просроченный токен",
+    "TOKEN_ALREADY_USED": "Токен уже был использован",
+    "INVALID_REFRESH_TOKEN": "Недействительный refresh-токен",
+    "ACCOUNT_DISABLED": "Аккаунт отключён",
+    "ADMIN_NOT_FOUND": "Администратор не найден",
+    "NOT_AN_ADMIN": "Вы не являетесь администратором",
+    "INVALID_PASSWORD": "Неверный пароль",
+    "PASSWORD_UPDATE_FAILED": "Не удалось обновить пароль",
+    "INVALID_USERNAME": "Некорректное имя пользователя",
+    "FORBIDDEN": "Доступ запрещён",
+
+    "USERNAME_EXISTS": "Имя пользователя уже занято",
+    "CANNOT_MODIFY_SELF": "Нельзя изменить свой собственный аккаунт",
+    "ADMIN_CREATE_FAILED": "Не удалось создать администратора",
+    "ADMIN_UPDATE_FAILED": "Не удалось обновить администратора",
+    "ADMIN_DELETE_FAILED": "Не удалось удалить администратора",
+
+    "ROLE_NOT_FOUND": "Роль не найдена",
+    "ROLE_NAME_EXISTS": "Название роли уже существует",
+    "ROLE_CREATE_FAILED": "Не удалось создать роль",
+    "ROLE_UPDATE_FAILED": "Не удалось обновить роль",
+    "ROLE_DELETE_FAILED": "Не удалось удалить роль",
+    "SYSTEM_ROLE_PROTECTED": "Системная роль защищена от изменений",
+    "UNKNOWN_RESOURCE": "Неизвестный тип ресурса",
+    "INVALID_ACTION": "Недопустимое действие",
+
+    "USER_NOT_FOUND": "Пользователь не найден",
+    "SYNC_FAILED": "Ошибка синхронизации",
+
+    "NODE_NOT_FOUND": "Нода не найдена",
+    "TOKEN_GENERATE_FAILED": "Не удалось сгенерировать токен",
+    "TOKEN_REVOKE_FAILED": "Не удалось отозвать токен",
+
+    "HOST_NOT_FOUND": "Хост не найден",
+    "HOST_CREATE_FAILED": "Не удалось создать хост",
+    "HOST_UPDATE_FAILED": "Не удалось обновить хост",
+    "HOST_DELETE_FAILED": "Не удалось удалить хост",
+    "HOST_ENABLE_FAILED": "Не удалось включить хост",
+    "HOST_DISABLE_FAILED": "Не удалось отключить хост",
+
+    "VIOLATION_NOT_FOUND": "Нарушение не найдено",
+    "VIOLATION_UPDATE_FAILED": "Не удалось обновить нарушение",
+    "WHITELIST_ADD_FAILED": "Не удалось добавить в белый список",
+    "WHITELIST_USER_NOT_FOUND": "Пользователь белого списка не найден",
+
+    "AUTOMATION_NOT_FOUND": "Правило автоматизации не найдено",
+    "AUTOMATION_CREATE_FAILED": "Не удалось создать правило автоматизации",
+    "AUTOMATION_UPDATE_FAILED": "Не удалось обновить правило автоматизации",
+    "AUTOMATION_TOGGLE_FAILED": "Не удалось переключить правило автоматизации",
+    "AUTOMATION_DELETE_FAILED": "Не удалось удалить правило автоматизации",
+    "AUTOMATION_ACTIVATE_FAILED": "Не удалось активировать правило автоматизации",
+    "TEMPLATE_NOT_FOUND": "Шаблон автоматизации не найден",
+
+    "SETTING_NOT_FOUND": "Настройка не найдена",
+    "SETTING_READONLY": "Эта настройка доступна только для чтения",
+
+    "SCRIPT_NOT_FOUND": "Скрипт не найден",
+    "BUILTIN_SCRIPT_PROTECTED": "Встроенный скрипт нельзя изменить",
+    "AGENT_NOT_CONNECTED": "Агент ноды не подключён",
+    "AGENT_TOKEN_NOT_FOUND": "Токен агента не найден",
+    "AGENT_COMMAND_FAILED": "Команда агента не выполнена",
+    "EXECUTION_NOT_FOUND": "Выполнение не найдено",
+    "INVALID_GITHUB_URL": "Некорректный URL GitHub",
+    "CONTENT_TOO_LARGE": "Содержимое слишком большое",
+    "REPO_NOT_FOUND": "Репозиторий не найден",
+
+    "NOTIFICATION_NOT_FOUND": "Уведомление не найдено",
+    "CHANNEL_NOT_FOUND": "Канал уведомлений не найден",
+    "ALERT_RULE_NOT_FOUND": "Правило оповещения не найдено",
+    "SMTP_NOT_CONFIGURED": "SMTP не настроен",
+    "SMTP_UPDATE_FAILED": "Не удалось обновить настройки SMTP",
+    "SMTP_CREDENTIAL_NOT_FOUND": "Учётные данные SMTP не найдены",
+
+    "DOMAIN_NOT_FOUND": "Почтовый домен не найден",
+    "NO_OUTBOUND_DOMAIN": "Исходящий почтовый домен не настроен",
+    "QUEUE_ITEM_NOT_FOUND": "Элемент очереди не найден",
+    "MESSAGE_NOT_FOUND": "Сообщение не найдено",
+
+    "REPORT_NOT_FOUND": "Отчёт не найден",
+    "ASN_NOT_FOUND": "Запись ASN не найдена",
+
+    "BACKUP_NOT_FOUND": "Файл резервной копии не найден",
+    "BACKUP_CREATE_FAILED": "Не удалось создать резервную копию",
+    "BACKUP_RESTORE_FAILED": "Не удалось восстановить базу данных",
+    "BACKUP_DELETE_FAILED": "Не удалось удалить резервную копию",
+    "IMPORT_FAILED": "Ошибка импорта",
+    "INVALID_FILENAME": "Недопустимое имя файла",
+
+    "NO_FIELDS_TO_UPDATE": "Нет полей для обновления",
+    "API_SERVICE_UNAVAILABLE": "Сервис API недоступен",
+    "DB_UNAVAILABLE": "База данных недоступна",
+    "INTERNAL_ERROR": "Внутренняя ошибка сервера"
+  },
+  "backup": {
+    "title": "Резервные копии",
+    "subtitle": "Бэкапы базы данных, экспорт/импорт конфигурации и импорт пользователей",
+    "tabs": {
+      "backups": "Бэкапы",
+      "import": "Импорт",
+      "history": "История"
+    },
+    "files": "Файлы бэкапов",
+    "noFiles": "Файлов бэкапов пока нет",
+    "createDatabase": "Бэкап БД",
+    "createConfig": "Бэкап конфига",
+    "creating": "Создание...",
+    "created": "Бэкап создан: {{filename}}",
+    "createFailed": "Не удалось создать бэкап",
+    "download": "Скачать",
+    "delete": "Удалить",
+    "deleted": "Бэкап удалён",
+    "deleteFailed": "Не удалось удалить бэкап",
+    "restore": "Восстановить",
+    "restored": "База данных успешно восстановлена",
+    "restoreFailed": "Не удалось восстановить базу данных",
+    "confirmDelete": "Удалить бэкап?",
+    "confirmDeleteDesc": "Вы уверены, что хотите удалить \"{{filename}}\"? Это действие нельзя отменить.",
+    "confirmRestore": "Восстановить базу данных?",
+    "confirmRestoreDesc": "Текущая база данных будет перезаписана из бэкапа \"{{filename}}\". Это действие нельзя отменить. Вы уверены?",
+    "history": "История операций",
+    "noHistory": "Записей об операциях нет",
+    "importConfig": "Импорт конфигурации",
+    "noConfigFiles": "Нет файлов бэкапа конфигурации. Сначала создайте бэкап конфига.",
+    "importMissing": "Добавить недостающие",
+    "importOverwrite": "Перезаписать все",
+    "importConfigSuccess": "Конфиг импортирован: {{imported}} настроек обновлено, {{skipped}} пропущено",
+    "importFailed": "Ошибка импорта",
+    "importUsers": "Импорт пользователей",
+    "noUserFiles": "Нет файлов экспорта пользователей. Загрузите JSON-файл в директорию бэкапов.",
+    "importUsersWarning": "Импорт создаст новых пользователей через API Remnawave Panel. Пользователи с существующими именами будут пропущены.",
+    "importStart": "Импортировать",
+    "importUsersSuccess": "Пользователи импортированы: {{imported}} создано, {{skipped}} пропущено",
+    "importUsersErrors": "{{count}} ошибок при импорте"
+  },
+  "apiKeys": {
+    "title": "API ключи и Вебхуки",
+    "subtitle": "Управление внешним API доступом и подписками на вебхуки",
+    "apiDocs": "Документация API",
+    "tabs": {
+      "keys": "API ключи",
+      "webhooks": "Вебхуки"
+    },
+    "keys": "API ключи",
+    "noKeys": "API ключи ещё не созданы",
+    "createKey": "Создать API ключ",
+    "keyName": "Название ключа",
+    "keyNamePlaceholder": "напр. Интеграция мониторинга",
+    "scopes": "Разрешения",
+    "noScopes": "нет разрешений",
+    "create": "Создать",
+    "createFailed": "Не удалось создать",
+    "deleted": "API ключ удалён",
+    "disabled": "Отключён",
+    "lastUsed": "Последнее использование",
+    "keyCreated": "API ключ создан",
+    "keyCreatedWarning": "Скопируйте этот ключ сейчас. Вы больше не сможете его увидеть.",
+    "confirmDelete": "Удалить API ключ?",
+    "confirmDeleteDesc": "Это безвозвратно отзовёт API ключ. Все интеграции, использующие его, перестанут работать.",
+    "webhooks": "Вебхуки",
+    "noWebhooks": "Подписки на вебхуки ещё не созданы",
+    "createWebhook": "Создать вебхук",
+    "webhookName": "Название",
+    "webhookNamePlaceholder": "напр. Уведомления в Slack",
+    "webhookSecret": "Секрет (необязательно)",
+    "webhookSecretPlaceholder": "Секрет для HMAC подписи",
+    "events": "События",
+    "webhookCreated": "Вебхук создан",
+    "webhookDeleted": "Вебхук удалён",
+    "signed": "Подписан",
+    "failures": "ошибок",
+    "lastTriggered": "Последний вызов",
+    "confirmDeleteWebhook": "Удалить вебхук?",
+    "confirmDeleteWebhookDesc": "Это безвозвратно удалит подписку на вебхук."
   }
 }

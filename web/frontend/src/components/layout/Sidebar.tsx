@@ -20,6 +20,8 @@ import {
   Zap,
   BellRing,
   Mail,
+  HardDrive,
+  Key,
   ShieldCheck,
   ChevronDown,
   ChevronsLeft,
@@ -105,6 +107,8 @@ const navigation: NavigationEntry[] = [
   { name: 'nav.notifications', href: '/notifications', icon: BellRing, permission: { resource: 'notifications', action: 'view' } },
   { name: 'nav.mailServer', href: '/mailserver', icon: Mail, permission: { resource: 'mailserver', action: 'view' } },
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
+  { name: 'nav.backups', href: '/backups', icon: HardDrive, permission: { resource: 'backups', action: 'view' } },
+  { name: 'nav.apiKeys', href: '/api-keys', icon: Key, permission: { resource: 'api_keys', action: 'view' } },
   {
     type: 'group',
     name: 'nav.administration',
@@ -479,7 +483,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                 <p className="text-sm font-medium text-white truncate">
                   {user?.username || 'Admin'}
                 </p>
-                <p className="text-xs text-muted-foreground capitalize">{role || 'Administrator'}</p>
+                <p className="text-xs text-muted-foreground capitalize">{role || t('sidebar.administrator')}</p>
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -492,7 +496,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                     <LogOut className="w-5 h-5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Logout</TooltipContent>
+                <TooltipContent>{t('sidebar.logout')}</TooltipContent>
               </Tooltip>
             </>
           )}
@@ -508,7 +512,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                   <LogOut className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Logout</TooltipContent>
+              <TooltipContent side="right">{t('sidebar.logout')}</TooltipContent>
             </Tooltip>
           )}
         </div>

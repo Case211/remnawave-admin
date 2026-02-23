@@ -9,6 +9,8 @@ from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from web.backend.core.errors import api_error, E
 from pydantic import BaseModel
 
 from web.backend.api.deps import AdminUser, require_permission
@@ -133,14 +135,14 @@ async def get_script(
     """Get full script details including content."""
     from shared.database import db_service
     if not db_service.is_connected:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise api_error(503, E.DB_UNAVAILABLE)
 
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT * FROM node_scripts WHERE id = $1", script_id,
         )
     if not row:
-        raise HTTPException(status_code=404, detail="Script not found")
+        raise api_error(404, E.SCRIPT_NOT_FOUND)
 
     r = dict(row)
     for dt_field in ('created_at', 'updated_at', 'imported_at'):
@@ -157,7 +159,7 @@ async def create_script(
     """Create a custom script."""
     from shared.database import db_service
     if not db_service.is_connected:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise api_error(503, E.DB_UNAVAILABLE)
 
     admin_id = admin.id if hasattr(admin, 'id') else None
 
@@ -191,20 +193,20 @@ async def update_script(
     """Update a script. Cannot modify built-in scripts."""
     from shared.database import db_service
     if not db_service.is_connected:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise api_error(503, E.DB_UNAVAILABLE)
 
     async with db_service.acquire() as conn:
         existing = await conn.fetchrow(
             "SELECT is_builtin FROM node_scripts WHERE id = $1", script_id,
         )
         if not existing:
-            raise HTTPException(status_code=404, detail="Script not found")
+            raise api_error(404, E.SCRIPT_NOT_FOUND)
         if existing["is_builtin"]:
-            raise HTTPException(status_code=403, detail="Cannot modify built-in scripts")
+            raise api_error(403, E.BUILTIN_SCRIPT_PROTECTED)
 
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
         if not updates:
-            raise HTTPException(status_code=400, detail="No fields to update")
+            raise api_error(400, E.NO_FIELDS_TO_UPDATE)
 
         set_clauses = []
         params = []
@@ -236,16 +238,16 @@ async def delete_script(
     """Delete a custom script. Cannot delete built-in scripts."""
     from shared.database import db_service
     if not db_service.is_connected:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise api_error(503, E.DB_UNAVAILABLE)
 
     async with db_service.acquire() as conn:
         existing = await conn.fetchrow(
             "SELECT is_builtin FROM node_scripts WHERE id = $1", script_id,
         )
         if not existing:
-            raise HTTPException(status_code=404, detail="Script not found")
+            raise api_error(404, E.SCRIPT_NOT_FOUND)
         if existing["is_builtin"]:
-            raise HTTPException(status_code=403, detail="Cannot delete built-in scripts")
+            raise api_error(403, E.BUILTIN_SCRIPT_PROTECTED)
 
         await conn.execute("DELETE FROM node_scripts WHERE id = $1", script_id)
 
@@ -260,11 +262,11 @@ async def exec_script(
     """Execute a script on a node via Agent v2 WebSocket."""
     from shared.database import db_service
     if not db_service.is_connected:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise api_error(503, E.DB_UNAVAILABLE)
 
     # Check agent connected
     if not agent_manager.is_connected(body.node_uuid):
-        raise HTTPException(status_code=400, detail="Agent not connected")
+        raise api_error(400, E.AGENT_NOT_CONNECTED)
 
     # Get script
     async with db_service.acquire() as conn:
@@ -272,7 +274,7 @@ async def exec_script(
             "SELECT * FROM node_scripts WHERE id = $1", body.script_id,
         )
     if not script:
-        raise HTTPException(status_code=404, detail="Script not found")
+        raise api_error(404, E.SCRIPT_NOT_FOUND)
 
     # Get agent token
     agent_token = None
@@ -283,7 +285,7 @@ async def exec_script(
         if row:
             agent_token = row["agent_token"]
     if not agent_token:
-        raise HTTPException(status_code=400, detail="Agent token not found")
+        raise api_error(400, E.AGENT_TOKEN_NOT_FOUND)
 
     admin_id = admin.id if hasattr(admin, 'id') else None
     admin_username = admin.username or str(admin.telegram_id)
@@ -320,7 +322,7 @@ async def exec_script(
                 "UPDATE node_command_log SET status = 'error', output = 'Failed to send to agent' "
                 "WHERE id = $1", exec_id,
             )
-        raise HTTPException(status_code=500, detail="Failed to send command to agent")
+        raise api_error(500, E.AGENT_COMMAND_FAILED)
 
     return ExecScriptResponse(exec_id=exec_id, status="running")
 
@@ -335,7 +337,7 @@ async def get_exec_status(
     """Get execution status and output."""
     from shared.database import db_service
     if not db_service.is_connected:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise api_error(503, E.DB_UNAVAILABLE)
 
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
@@ -347,7 +349,7 @@ async def get_exec_status(
             exec_id,
         )
     if not row:
-        raise HTTPException(status_code=404, detail="Execution not found")
+        raise api_error(404, E.EXECUTION_NOT_FOUND)
 
     r = dict(row)
     for dt_field in ('started_at', 'finished_at'):
@@ -409,7 +411,7 @@ def _parse_repo_url(url: str) -> tuple:
     """Parse GitHub repo URL -> (owner, repo)."""
     m = re.match(r'https?://github\.com/([^/]+)/([^/\s#?.]+)', url)
     if not m:
-        raise HTTPException(status_code=400, detail="Invalid GitHub repository URL")
+        raise api_error(400, E.INVALID_GITHUB_URL)
     return m.group(1), m.group(2).replace('.git', '')
 
 
@@ -419,7 +421,7 @@ async def _download_script_content(url: str) -> str:
         resp = await client.get(url, headers={"User-Agent": "remnawave-admin/script-import"})
         resp.raise_for_status()
         if len(resp.content) > 1_048_576:
-            raise HTTPException(status_code=400, detail="Script content too large (max 1MB)")
+            raise api_error(400, E.CONTENT_TOO_LARGE)
         return resp.text
 
 
@@ -431,7 +433,7 @@ async def import_script_from_url(
     """Import a script by downloading content from a URL."""
     from shared.database import db_service
     if not db_service.is_connected:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise api_error(503, E.DB_UNAVAILABLE)
 
     url = _normalize_github_url(body.url.strip())
 
@@ -501,7 +503,7 @@ async def browse_github_repo(
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail="Repository not found")
+            raise api_error(404, E.REPO_NOT_FOUND)
         raise HTTPException(status_code=400, detail=f"GitHub API error: {e.response.status_code}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"GitHub API error: {e}")
@@ -531,7 +533,7 @@ async def bulk_import_scripts(
     """Bulk import scripts from URLs."""
     from shared.database import db_service
     if not db_service.is_connected:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise api_error(503, E.DB_UNAVAILABLE)
 
     admin_id = admin.id if hasattr(admin, 'id') else None
     imported = 0

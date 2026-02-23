@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Request
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota, get_client_ip
+from web.backend.core.errors import api_error, E
 from web.backend.core.rbac import write_audit_log
 from web.backend.core.api_helper import (
     fetch_nodes_from_api, fetch_nodes_realtime_usage,
@@ -205,14 +206,14 @@ async def get_node(
             node_data = raw.get('response', raw) if isinstance(raw, dict) else raw
 
         if not node_data:
-            raise HTTPException(status_code=404, detail="Node not found")
+            raise api_error(404, E.NODE_NOT_FOUND)
 
         return NodeDetail(**_ensure_node_snake_case(node_data))
 
     except HTTPException:
         raise
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
 
 @router.post("", response_model=NodeDetail)
@@ -253,7 +254,7 @@ async def create_node(
         return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -288,7 +289,7 @@ async def update_node(
         return NodeDetail(**_ensure_node_snake_case(node))
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -326,7 +327,7 @@ async def delete_node(
         return SuccessResponse(message="Node deleted")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -356,7 +357,7 @@ async def restart_node(
         return SuccessResponse(message="Node restart initiated")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -386,7 +387,7 @@ async def enable_node(
         return SuccessResponse(message="Node enabled")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -406,12 +407,12 @@ async def get_agent_token_status(
                 masked = token[:8] + '...' + token[-4:] if len(token) > 12 else '***'
                 return {"has_token": True, "masked_token": masked}
             return {"has_token": False, "masked_token": None}
-        raise HTTPException(status_code=503, detail="Database not available")
+        raise api_error(503, E.DB_UNAVAILABLE)
     except HTTPException:
         raise
     except Exception as e:
         logger.error("Error getting agent token status for %s: %s", node_uuid, e)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.post("/{node_uuid}/agent-token/generate")
@@ -437,12 +438,12 @@ async def generate_agent_token(
                 ip_address=get_client_ip(request),
             )
             return {"success": True, "token": token}
-        raise HTTPException(status_code=500, detail="Failed to generate token")
+        raise api_error(500, E.TOKEN_GENERATE_FAILED)
     except HTTPException:
         raise
     except Exception as e:
         logger.error("Error generating agent token for %s: %s", node_uuid, e)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.post("/{node_uuid}/agent-token/revoke")
@@ -468,12 +469,12 @@ async def revoke_agent_token(
                 ip_address=get_client_ip(request),
             )
             return {"success": True}
-        raise HTTPException(status_code=500, detail="Failed to revoke token")
+        raise api_error(500, E.TOKEN_REVOKE_FAILED)
     except HTTPException:
         raise
     except Exception as e:
         logger.error("Error revoking agent token for %s: %s", node_uuid, e)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.post("/{node_uuid}/disable", response_model=SuccessResponse)
@@ -501,6 +502,6 @@ async def disable_node(
         return SuccessResponse(message="Node disabled")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

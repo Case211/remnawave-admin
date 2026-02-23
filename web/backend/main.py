@@ -50,6 +50,10 @@ from web.backend.api.v2 import billing as billing_api
 from web.backend.api.v2 import reports as reports_api
 from web.backend.api.v2 import asn as asn_api
 from web.backend.api.v2 import collector as collector_api
+from web.backend.api.v2 import backup as backup_api
+from web.backend.api.v2 import api_keys as api_keys_api
+from web.backend.api.v2 import webhooks as webhooks_api
+from web.backend.api.v3 import public as public_api_v3
 
 
 # ── Logging setup (structlog) ────────────────────────────────────
@@ -503,6 +507,14 @@ def create_app() -> FastAPI:
     app.include_router(reports_api.router, prefix="/api/v2/reports", tags=["reports"])
     app.include_router(asn_api.router, prefix="/api/v2/asn", tags=["asn"])
     app.include_router(collector_api.router, prefix="/api/v2/collector", tags=["collector"])
+    app.include_router(backup_api.router, prefix="/api/v2/backups", tags=["backups"])
+    app.include_router(api_keys_api.router, prefix="/api/v2/api-keys", tags=["api-keys"])
+    app.include_router(webhooks_api.router, prefix="/api/v2/webhooks", tags=["webhooks"])
+
+    # Public API v3 — enabled via EXTERNAL_API_ENABLED=true
+    if settings.external_api_enabled:
+        app.include_router(public_api_v3.router, prefix="/api/v3", tags=["public-api"])
+        logger.info("External API v3 enabled")
 
     # Health check endpoint
     @app.get("/api/v2/health", tags=["health"])

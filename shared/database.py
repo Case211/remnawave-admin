@@ -4,6 +4,7 @@ Provides async database operations for caching API data locally.
 """
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
@@ -171,6 +172,9 @@ class DatabaseService:
         self._pool: Optional[Pool] = None
         self._initialized: bool = False
         self._lock = asyncio.Lock()
+        self._whitelist_cache: Dict[str, tuple] = {}  # {user_uuid: ((bool, Optional[List[str]]), timestamp)}
+        self._whitelist_table_available: Optional[bool] = None  # None = not checked yet
+        self._whitelist_column_available: Optional[bool] = None  # excluded_analyzers column
     
     @property
     def is_connected(self) -> bool:
@@ -2405,6 +2409,7 @@ class DatabaseService:
                     WHERE detected_at >= $1
                     AND detected_at < $2
                     AND score >= $3
+                    AND action_taken IS DISTINCT FROM 'annulled'
                     """,
                     start_date, end_date, min_score
                 )
@@ -2464,6 +2469,7 @@ class DatabaseService:
                     WHERE detected_at >= $1
                     AND detected_at < $2
                     AND score >= $3
+                    AND action_taken IS DISTINCT FROM 'annulled'
                     GROUP BY user_uuid
                     ORDER BY violations_count DESC, max_score DESC
                     LIMIT $4
@@ -2503,6 +2509,7 @@ class DatabaseService:
                     AND detected_at < $2
                     AND score >= $3
                     AND countries IS NOT NULL
+                    AND action_taken IS DISTINCT FROM 'annulled'
                     GROUP BY country
                     ORDER BY count DESC
                     """,
@@ -2540,6 +2547,7 @@ class DatabaseService:
                     WHERE detected_at >= $1
                     AND detected_at < $2
                     AND score >= $3
+                    AND action_taken IS DISTINCT FROM 'annulled'
                     GROUP BY recommended_action
                     ORDER BY count DESC
                     """,
@@ -2578,6 +2586,7 @@ class DatabaseService:
                     AND detected_at < $2
                     AND score >= $3
                     AND asn_types IS NOT NULL
+                    AND action_taken IS DISTINCT FROM 'annulled'
                     GROUP BY asn_type
                     ORDER BY count DESC
                     """,
@@ -2686,16 +2695,36 @@ class DatabaseService:
 
         try:
             async with self.acquire() as conn:
-                result = await conn.execute(
-                    """
-                    UPDATE violations
-                    SET action_taken = $1,
-                        action_taken_at = NOW(),
-                        action_taken_by = $2
-                    WHERE id = $3
-                    """,
-                    action_taken, admin_telegram_id, violation_id
-                )
+                if action_taken == "annulled":
+                    # При аннулировании обнуляем скор — ложное срабатывание
+                    result = await conn.execute(
+                        """
+                        UPDATE violations
+                        SET action_taken = $1,
+                            action_taken_at = NOW(),
+                            action_taken_by = $2,
+                            score = 0,
+                            temporal_score = 0,
+                            geo_score = 0,
+                            asn_score = 0,
+                            profile_score = 0,
+                            device_score = 0,
+                            hwid_score = 0
+                        WHERE id = $3
+                        """,
+                        action_taken, admin_telegram_id, violation_id
+                    )
+                else:
+                    result = await conn.execute(
+                        """
+                        UPDATE violations
+                        SET action_taken = $1,
+                            action_taken_at = NOW(),
+                            action_taken_by = $2
+                        WHERE id = $3
+                        """,
+                        action_taken, admin_telegram_id, violation_id
+                    )
                 return result == "UPDATE 1"
 
         except Exception as e:
@@ -2723,7 +2752,14 @@ class DatabaseService:
                     UPDATE violations
                     SET action_taken = 'annulled',
                         action_taken_at = NOW(),
-                        action_taken_by = $1
+                        action_taken_by = $1,
+                        score = 0,
+                        temporal_score = 0,
+                        geo_score = 0,
+                        asn_score = 0,
+                        profile_score = 0,
+                        device_score = 0,
+                        hwid_score = 0
                     WHERE user_uuid = $2
                       AND action_taken IS NULL
                     """,
@@ -2757,6 +2793,229 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error marking violation as notified: %s", e, exc_info=True)
             return False
+
+    # ==================== Violation Whitelist ====================
+
+    _WHITELIST_CACHE_TTL = 60  # seconds
+    _WHITELIST_CACHE_MAX_SIZE = 10000
+
+    async def is_user_violation_whitelisted(self, user_uuid: str) -> tuple:
+        """
+        Проверить, находится ли пользователь в whitelist нарушений.
+        Результат кэшируется на 60 секунд для минимизации нагрузки в collector pipeline.
+
+        Returns:
+            (is_whitelisted: bool, excluded_analyzers: Optional[List[str]])
+            - (True, None) = полный whitelist (все проверки отключены)
+            - (True, ["hwid", "geo"]) = частичное исключение
+            - (False, None) = не в whitelist
+        """
+        now = time.time()
+        cached = self._whitelist_cache.get(user_uuid)
+        if cached and (now - cached[1]) < self._WHITELIST_CACHE_TTL:
+            return cached[0]
+
+        # Evict expired entries if cache grows too large
+        if len(self._whitelist_cache) > self._WHITELIST_CACHE_MAX_SIZE:
+            expired = [k for k, (_, ts) in self._whitelist_cache.items() if (now - ts) >= self._WHITELIST_CACHE_TTL]
+            for k in expired:
+                del self._whitelist_cache[k]
+
+        if not self.is_connected:
+            return (False, None)
+
+        # If we already know the table doesn't exist, skip the query
+        if self._whitelist_table_available is False:
+            return (False, None)
+
+        # If excluded_analyzers column not available, use legacy query
+        if self._whitelist_column_available is False:
+            return await self._is_user_whitelisted_legacy(user_uuid, now)
+
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT excluded_analyzers FROM violation_whitelist
+                    WHERE user_uuid = $1
+                    AND (expires_at IS NULL OR expires_at > NOW())
+                    """,
+                    user_uuid,
+                )
+                self._whitelist_table_available = True
+                self._whitelist_column_available = True
+                if row is None:
+                    result = (False, None)
+                else:
+                    excluded = row["excluded_analyzers"]
+                    result = (True, list(excluded) if excluded else None)
+                self._whitelist_cache[user_uuid] = (result, now)
+                return result
+        except Exception as e:
+            err_msg = str(e)
+            if "violation_whitelist" in err_msg and "does not exist" in err_msg:
+                if self._whitelist_table_available is not False:
+                    logger.warning("violation_whitelist table does not exist yet — run 'alembic upgrade head' to create it")
+                    self._whitelist_table_available = False
+                return (False, None)
+            if "excluded_analyzers" in err_msg and "does not exist" in err_msg:
+                logger.warning("excluded_analyzers column not yet added — run 'alembic upgrade head'")
+                self._whitelist_column_available = False
+                return await self._is_user_whitelisted_legacy(user_uuid, now)
+            logger.error("Error checking violation whitelist for %s: %s", user_uuid, e, exc_info=True)
+            return (False, None)
+
+    async def _is_user_whitelisted_legacy(self, user_uuid: str, now: float) -> tuple:
+        """Fallback for old schema without excluded_analyzers column."""
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchval(
+                    """
+                    SELECT 1 FROM violation_whitelist
+                    WHERE user_uuid = $1
+                    AND (expires_at IS NULL OR expires_at > NOW())
+                    """,
+                    user_uuid,
+                )
+                result = (row is not None, None) if row else (False, None)
+                self._whitelist_cache[user_uuid] = (result, now)
+                return result
+        except Exception:
+            return (False, None)
+
+    async def add_to_violation_whitelist(
+        self,
+        user_uuid: str,
+        reason: Optional[str] = None,
+        admin_id: Optional[int] = None,
+        admin_username: Optional[str] = None,
+        expires_at: Optional[datetime] = None,
+        excluded_analyzers: Optional[List[str]] = None,
+    ) -> bool:
+        """Добавить пользователя в whitelist нарушений.
+
+        Args:
+            excluded_analyzers: None = полный whitelist. Список = частичное исключение
+                из конкретных анализаторов (temporal, geo, asn, profile, device, hwid).
+        """
+        if not self.is_connected:
+            return False
+
+        try:
+            async with self.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO violation_whitelist
+                        (user_uuid, reason, added_by_admin_id, added_by_username, expires_at, excluded_analyzers)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (user_uuid) DO UPDATE SET
+                        reason = EXCLUDED.reason,
+                        added_by_admin_id = EXCLUDED.added_by_admin_id,
+                        added_by_username = EXCLUDED.added_by_username,
+                        added_at = NOW(),
+                        expires_at = EXCLUDED.expires_at,
+                        excluded_analyzers = EXCLUDED.excluded_analyzers
+                    """,
+                    user_uuid, reason, admin_id, admin_username, expires_at, excluded_analyzers,
+                )
+                # Invalidate cache
+                self._whitelist_cache.pop(user_uuid, None)
+                return True
+        except Exception as e:
+            logger.error("Error adding user %s to violation whitelist: %s", user_uuid, e, exc_info=True)
+            return False
+
+    async def update_violation_whitelist_exclusions(
+        self,
+        user_uuid: str,
+        excluded_analyzers: Optional[List[str]] = None,
+    ) -> bool:
+        """Обновить список исключённых анализаторов для пользователя в whitelist."""
+        if not self.is_connected:
+            return False
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    UPDATE violation_whitelist
+                    SET excluded_analyzers = $2
+                    WHERE user_uuid = $1
+                    """,
+                    user_uuid, excluded_analyzers,
+                )
+                self._whitelist_cache.pop(user_uuid, None)
+                return result == "UPDATE 1"
+        except Exception as e:
+            logger.error("Error updating exclusions for %s: %s", user_uuid, e, exc_info=True)
+            return False
+
+    async def remove_from_violation_whitelist(self, user_uuid: str) -> bool:
+        """Убрать пользователя из whitelist нарушений."""
+        if not self.is_connected:
+            return False
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    "DELETE FROM violation_whitelist WHERE user_uuid = $1",
+                    user_uuid,
+                )
+                # Invalidate cache
+                self._whitelist_cache.pop(user_uuid, None)
+                return result == "DELETE 1"
+        except Exception as e:
+            logger.error("Error removing user %s from violation whitelist: %s", user_uuid, e, exc_info=True)
+            return False
+
+    async def get_violation_whitelist(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Получить список пользователей в whitelist с данными из users."""
+        if not self.is_connected:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        w.id,
+                        w.user_uuid,
+                        w.reason,
+                        w.added_by_admin_id,
+                        w.added_by_username,
+                        w.added_at,
+                        w.expires_at,
+                        w.excluded_analyzers,
+                        u.username,
+                        u.email
+                    FROM violation_whitelist w
+                    LEFT JOIN users u ON u.uuid = w.user_uuid
+                    ORDER BY w.added_at DESC
+                    LIMIT $1 OFFSET $2
+                    """,
+                    limit, offset,
+                )
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error("Error getting violation whitelist: %s", e, exc_info=True)
+            return []
+
+    async def get_violation_whitelist_count(self) -> int:
+        """Получить количество пользователей в whitelist."""
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchval("SELECT COUNT(*) FROM violation_whitelist")
+                return row or 0
+        except Exception as e:
+            logger.error("Error getting violation whitelist count: %s", e, exc_info=True)
+            return 0
 
     # ==================== Violation Reports ====================
 

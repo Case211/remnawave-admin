@@ -108,9 +108,11 @@ services:
       - MAXMIND_ASN_DB=${MAXMIND_ASN_DB:-/app/geoip/GeoLite2-ASN.mmdb}
       # Redis (опционально, нужен при >1 инстансе для общего кеша и rate limiting)
       # - REDIS_URL=redis://redis:6379/0
+      - BACKUP_DIR=/app/backups
     volumes:
       - ./logs:/app/logs
       - geoip_data:/app/geoip
+      - ./backups:/app/backups
     ports:
       - "${WEB_BACKEND_PORT:-8081}:8081"
       - "${MAIL_INBOUND_PORT:-2525}:${MAIL_INBOUND_PORT:-2525}"

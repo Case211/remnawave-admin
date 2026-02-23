@@ -113,17 +113,22 @@
     "mailServer": "Mail Server",
     "resources": "Resources",
     "billing": "Billing",
-    "reports": "Reports"
+    "reports": "Reports",
+    "backups": "Backups",
+    "apiKeys": "API & Webhooks"
   },
   "header": {
     "searchPlaceholder": "Search...",
-    "commandHint": "Cmd+K to search"
+    "commandHint": "Cmd+K to search",
+    "online": "Online"
   },
   "sidebar": {
     "expand": "Expand",
     "collapse": "Collapse",
     "telegramChat": "Telegram Chat",
-    "support": "Support the author"
+    "support": "Support the author",
+    "administrator": "Administrator",
+    "logout": "Logout"
   },
   "commandPalette": {
     "placeholder": "Search pages, users, actions...",
@@ -288,7 +293,14 @@
     "recentActivity": "Recent activity",
     "topUsers": "Top users",
     "trafficChart": "Traffic",
-    "noActivity": "No activity"
+    "noActivity": "No activity",
+    "billing": "Billing",
+    "billingTooltip": "Infrastructure billing summary",
+    "billingMonthly": "This month",
+    "billingProviders": "Providers",
+    "billingNodes": "Billing nodes",
+    "billingTotalSpent": "Total spent",
+    "billingNextPayment": "Next payment"
   },
   "users": {
     "title": "Users",
@@ -1113,7 +1125,53 @@
     "toast": {
       "resolved": "Violation processed",
       "annulled": "Violation annulled",
-      "annulledAll": "All user violations annulled"
+      "annulledAll": "All user violations annulled",
+      "whitelistAdded": "User added to whitelist",
+      "whitelistRemoved": "User removed from whitelist"
+    },
+    "whitelist": {
+      "tab": "Whitelist",
+      "title": "Violation Whitelist",
+      "addButton": "Add to whitelist",
+      "removeButton": "Remove",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why exclude from checks?",
+      "duration": "Duration",
+      "forever": "Forever",
+      "days7": "7 days",
+      "days30": "30 days",
+      "days90": "90 days",
+      "expiresAt": "Expires",
+      "addedBy": "Added by",
+      "addedAt": "Added",
+      "noExpiration": "No expiration",
+      "empty": "No whitelisted users",
+      "emptyDesc": "Users added to whitelist will not be checked by the violation detection system",
+      "confirmRemove": "Remove user from whitelist?",
+      "confirmRemoveDesc": "Violation detection will resume for this user.",
+      "userUuid": "User UUID",
+      "userUuidPlaceholder": "Enter user UUID",
+      "addTitle": "Add to whitelist",
+      "expired": "Expired"
+    },
+    "analyzers": {
+      "temporal": "Temporal (simultaneous connections)",
+      "geo": "Geographic (impossible travel)",
+      "asn": "ASN (provider type)",
+      "profile": "Profile (behavior deviation)",
+      "device": "Device (fingerprint)",
+      "hwid": "HWID (cross-account)"
+    },
+    "exclusions": {
+      "mode": "Exclusion mode",
+      "fullWhitelist": "Full whitelist",
+      "partialExclusion": "Partial exclusion",
+      "configureButton": "Configure exclusions",
+      "configureTitle": "Analyzer Exclusions",
+      "removeWhitelist": "Remove from whitelist",
+      "mode_none": "No exclusion",
+      "mode_partial": "Partial",
+      "mode_full": "Full whitelist"
     }
   },
   "admins": {
@@ -1754,6 +1812,29 @@
       "every24Hours": "Every 24 hours (once a day)",
       "everyNHours": "Every {{n}} h.",
       "everyNHoursNMin": "Every {{h}} h. {{m}} min."
+    },
+    "templates": {
+      "auto_block_sharing": {
+        "description": "Automatically block users with violation score > 80"
+      },
+      "node_monitoring": {
+        "description": "Telegram notification when a node is offline for > 5 minutes"
+      },
+      "cleanup_expired": {
+        "description": "Daily cleanup of users with subscriptions expired > 30 days"
+      },
+      "traffic_notification": {
+        "description": "Notify admin when user traffic exceeds 90%"
+      },
+      "auto_restart_node": {
+        "description": "Automatically restart a node offline for > 15 minutes"
+      },
+      "node_traffic_alert": {
+        "description": "Telegram notification when user uses > N GB on a node"
+      },
+      "daily_report": {
+        "description": "Daily Telegram summary at 23:00"
+      }
     },
     "templatesGallery": {
       "noTemplates": "No available templates",
@@ -2500,7 +2581,25 @@
     "subtitle": "Violation reports and ASN database management",
     "tabs": {
       "reports": "Violation Reports",
+      "schedule": "Schedule",
       "asn": "ASN Database"
+    },
+    "schedule": {
+      "globalEnabled": "Report scheduling enabled",
+      "globalDescription": "Enable/disable all scheduled reports (daily, weekly, monthly)",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "time": "Time (UTC)",
+      "dayOfWeek": "Day of week",
+      "dayOfMonth": "Day of month",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday"
     },
     "filterAll": "All types",
     "filterDaily": "Daily",
@@ -2537,5 +2636,183 @@
       "region": "Region",
       "showingOf": "Showing {{shown}} of {{total}} records"
     }
+  },
+
+  "errors": {
+    "INVALID_AUTH_HEADER": "Invalid authorization header",
+    "TOKEN_REQUIRED": "Authentication token required",
+    "INVALID_TOKEN": "Invalid or expired token",
+    "TOKEN_ALREADY_USED": "Token has already been used",
+    "INVALID_REFRESH_TOKEN": "Invalid refresh token",
+    "ACCOUNT_DISABLED": "Account is disabled",
+    "ADMIN_NOT_FOUND": "Administrator not found",
+    "NOT_AN_ADMIN": "You are not an administrator",
+    "INVALID_PASSWORD": "Invalid password",
+    "PASSWORD_UPDATE_FAILED": "Failed to update password",
+    "INVALID_USERNAME": "Invalid username",
+    "FORBIDDEN": "Access denied",
+
+    "USERNAME_EXISTS": "Username already exists",
+    "CANNOT_MODIFY_SELF": "Cannot modify your own account",
+    "ADMIN_CREATE_FAILED": "Failed to create administrator",
+    "ADMIN_UPDATE_FAILED": "Failed to update administrator",
+    "ADMIN_DELETE_FAILED": "Failed to delete administrator",
+
+    "ROLE_NOT_FOUND": "Role not found",
+    "ROLE_NAME_EXISTS": "Role name already exists",
+    "ROLE_CREATE_FAILED": "Failed to create role",
+    "ROLE_UPDATE_FAILED": "Failed to update role",
+    "ROLE_DELETE_FAILED": "Failed to delete role",
+    "SYSTEM_ROLE_PROTECTED": "System role cannot be modified",
+    "UNKNOWN_RESOURCE": "Unknown resource type",
+    "INVALID_ACTION": "Invalid action",
+
+    "USER_NOT_FOUND": "User not found",
+    "SYNC_FAILED": "Synchronization failed",
+
+    "NODE_NOT_FOUND": "Node not found",
+    "TOKEN_GENERATE_FAILED": "Failed to generate token",
+    "TOKEN_REVOKE_FAILED": "Failed to revoke token",
+
+    "HOST_NOT_FOUND": "Host not found",
+    "HOST_CREATE_FAILED": "Failed to create host",
+    "HOST_UPDATE_FAILED": "Failed to update host",
+    "HOST_DELETE_FAILED": "Failed to delete host",
+    "HOST_ENABLE_FAILED": "Failed to enable host",
+    "HOST_DISABLE_FAILED": "Failed to disable host",
+
+    "VIOLATION_NOT_FOUND": "Violation not found",
+    "VIOLATION_UPDATE_FAILED": "Failed to update violation",
+    "WHITELIST_ADD_FAILED": "Failed to add to whitelist",
+    "WHITELIST_USER_NOT_FOUND": "Whitelisted user not found",
+
+    "AUTOMATION_NOT_FOUND": "Automation rule not found",
+    "AUTOMATION_CREATE_FAILED": "Failed to create automation rule",
+    "AUTOMATION_UPDATE_FAILED": "Failed to update automation rule",
+    "AUTOMATION_TOGGLE_FAILED": "Failed to toggle automation rule",
+    "AUTOMATION_DELETE_FAILED": "Failed to delete automation rule",
+    "AUTOMATION_ACTIVATE_FAILED": "Failed to activate automation rule",
+    "TEMPLATE_NOT_FOUND": "Automation template not found",
+
+    "SETTING_NOT_FOUND": "Setting not found",
+    "SETTING_READONLY": "This setting is read-only",
+
+    "SCRIPT_NOT_FOUND": "Script not found",
+    "BUILTIN_SCRIPT_PROTECTED": "Built-in script cannot be modified",
+    "AGENT_NOT_CONNECTED": "Node agent is not connected",
+    "AGENT_TOKEN_NOT_FOUND": "Agent token not found",
+    "AGENT_COMMAND_FAILED": "Agent command failed",
+    "EXECUTION_NOT_FOUND": "Execution not found",
+    "INVALID_GITHUB_URL": "Invalid GitHub URL",
+    "CONTENT_TOO_LARGE": "Content is too large",
+    "REPO_NOT_FOUND": "Repository not found",
+
+    "NOTIFICATION_NOT_FOUND": "Notification not found",
+    "CHANNEL_NOT_FOUND": "Notification channel not found",
+    "ALERT_RULE_NOT_FOUND": "Alert rule not found",
+    "SMTP_NOT_CONFIGURED": "SMTP is not configured",
+    "SMTP_UPDATE_FAILED": "Failed to update SMTP configuration",
+    "SMTP_CREDENTIAL_NOT_FOUND": "SMTP credential not found",
+
+    "DOMAIN_NOT_FOUND": "Mail domain not found",
+    "NO_OUTBOUND_DOMAIN": "No outbound mail domain configured",
+    "QUEUE_ITEM_NOT_FOUND": "Mail queue item not found",
+    "MESSAGE_NOT_FOUND": "Mail message not found",
+
+    "REPORT_NOT_FOUND": "Report not found",
+    "ASN_NOT_FOUND": "ASN record not found",
+
+    "BACKUP_NOT_FOUND": "Backup file not found",
+    "BACKUP_CREATE_FAILED": "Failed to create backup",
+    "BACKUP_RESTORE_FAILED": "Failed to restore backup",
+    "BACKUP_DELETE_FAILED": "Failed to delete backup",
+    "IMPORT_FAILED": "Import failed",
+    "INVALID_FILENAME": "Invalid filename",
+
+    "NO_FIELDS_TO_UPDATE": "No fields to update",
+    "API_SERVICE_UNAVAILABLE": "API service is unavailable",
+    "DB_UNAVAILABLE": "Database is unavailable",
+    "INTERNAL_ERROR": "Internal server error"
+  },
+  "backup": {
+    "title": "Backups",
+    "subtitle": "Database backups, config export/import, and user import",
+    "tabs": {
+      "backups": "Backups",
+      "import": "Import",
+      "history": "History"
+    },
+    "files": "Backup Files",
+    "noFiles": "No backup files yet",
+    "createDatabase": "Database Backup",
+    "createConfig": "Config Backup",
+    "creating": "Creating...",
+    "created": "Backup created: {{filename}}",
+    "createFailed": "Failed to create backup",
+    "download": "Download",
+    "delete": "Delete",
+    "deleted": "Backup deleted",
+    "deleteFailed": "Failed to delete backup",
+    "restore": "Restore",
+    "restored": "Database restored successfully",
+    "restoreFailed": "Failed to restore database",
+    "confirmDelete": "Delete backup?",
+    "confirmDeleteDesc": "Are you sure you want to delete \"{{filename}}\"? This action cannot be undone.",
+    "confirmRestore": "Restore database?",
+    "confirmRestoreDesc": "This will overwrite the current database with the backup \"{{filename}}\". This action cannot be undone. Are you sure?",
+    "history": "Operation History",
+    "noHistory": "No backup operations recorded",
+    "importConfig": "Import Configuration",
+    "noConfigFiles": "No config backup files available. Create a config backup first.",
+    "importMissing": "Import Missing",
+    "importOverwrite": "Overwrite All",
+    "importConfigSuccess": "Config imported: {{imported}} settings updated, {{skipped}} skipped",
+    "importFailed": "Import failed",
+    "importUsers": "Import Users",
+    "noUserFiles": "No user export files available. Upload a JSON file to the backup directory.",
+    "importUsersWarning": "User import will create new users via the Remnawave Panel API. Existing users with the same username will be skipped.",
+    "importStart": "Import",
+    "importUsersSuccess": "Users imported: {{imported}} created, {{skipped}} skipped",
+    "importUsersErrors": "{{count}} errors occurred during import"
+  },
+  "apiKeys": {
+    "title": "API Keys & Webhooks",
+    "subtitle": "Manage external API access and webhook subscriptions",
+    "apiDocs": "API Docs",
+    "tabs": {
+      "keys": "API Keys",
+      "webhooks": "Webhooks"
+    },
+    "keys": "API Keys",
+    "noKeys": "No API keys created yet",
+    "createKey": "Create API Key",
+    "keyName": "Key name",
+    "keyNamePlaceholder": "e.g. Monitoring Integration",
+    "scopes": "Scopes",
+    "noScopes": "no scopes",
+    "create": "Create",
+    "createFailed": "Failed to create",
+    "deleted": "API key deleted",
+    "disabled": "Disabled",
+    "lastUsed": "Last used",
+    "keyCreated": "API Key Created",
+    "keyCreatedWarning": "Copy this key now. You won't be able to see it again.",
+    "confirmDelete": "Delete API key?",
+    "confirmDeleteDesc": "This will permanently revoke this API key. Any integrations using it will stop working.",
+    "webhooks": "Webhooks",
+    "noWebhooks": "No webhook subscriptions yet",
+    "createWebhook": "Create Webhook",
+    "webhookName": "Name",
+    "webhookNamePlaceholder": "e.g. Slack Notifications",
+    "webhookSecret": "Secret (optional)",
+    "webhookSecretPlaceholder": "HMAC signing secret",
+    "events": "Events",
+    "webhookCreated": "Webhook created",
+    "webhookDeleted": "Webhook deleted",
+    "signed": "Signed",
+    "failures": "failures",
+    "lastTriggered": "Last triggered",
+    "confirmDeleteWebhook": "Delete webhook?",
+    "confirmDeleteWebhookDesc": "This will permanently delete this webhook subscription."
   }
 }

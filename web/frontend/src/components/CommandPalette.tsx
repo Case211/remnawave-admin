@@ -16,6 +16,12 @@ import {
   ClipboardList,
   Terminal,
   BarChart3,
+  Zap,
+  BellRing,
+  Mail,
+  CreditCard,
+  HardDrive,
+  Key,
 } from 'lucide-react'
 import {
   CommandDialog,
@@ -136,11 +142,53 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             {t('nav.violations')}
           </CommandItem>
           <CommandItem
+            value="automations автоматизации правила"
+            onSelect={() => runCommand(() => navigate('/automations'))}
+          >
+            <Zap className="mr-2 h-4 w-4" />
+            {t('nav.automations')}
+          </CommandItem>
+          <CommandItem
+            value="notifications уведомления"
+            onSelect={() => runCommand(() => navigate('/notifications'))}
+          >
+            <BellRing className="mr-2 h-4 w-4" />
+            {t('nav.notifications')}
+          </CommandItem>
+          <CommandItem
+            value="mailserver почта mail smtp"
+            onSelect={() => runCommand(() => navigate('/mailserver'))}
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            {t('nav.mailServer')}
+          </CommandItem>
+          <CommandItem
             value="analytics аналитика гео карта тренды"
             onSelect={() => runCommand(() => navigate('/analytics'))}
           >
             <BarChart3 className="mr-2 h-4 w-4" />
             {t('nav.analytics')}
+          </CommandItem>
+          <CommandItem
+            value="billing биллинг оплата провайдеры"
+            onSelect={() => runCommand(() => navigate('/billing'))}
+          >
+            <CreditCard className="mr-2 h-4 w-4" />
+            {t('nav.billing')}
+          </CommandItem>
+          <CommandItem
+            value="backups бэкап резервные копии"
+            onSelect={() => runCommand(() => navigate('/backups'))}
+          >
+            <HardDrive className="mr-2 h-4 w-4" />
+            {t('nav.backups')}
+          </CommandItem>
+          <CommandItem
+            value="api keys webhooks ключи вебхуки"
+            onSelect={() => runCommand(() => navigate('/api-keys'))}
+          >
+            <Key className="mr-2 h-4 w-4" />
+            {t('nav.apiKeys')}
           </CommandItem>
           <CommandItem
             value="settings настройки"

@@ -115,7 +115,9 @@ function TemplateCard({
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-medium text-white">{template.name}</h3>
-            <p className="text-xs text-dark-400 mt-1">{template.description}</p>
+            <p className="text-xs text-dark-400 mt-1">
+              {template.description_key ? t(template.description_key, { defaultValue: template.description }) : template.description}
+            </p>
           </div>
         </div>
 

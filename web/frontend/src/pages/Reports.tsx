@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
@@ -17,8 +17,12 @@ import {
   Play,
   ChevronDown,
   ChevronUp,
+  Clock,
+  Calendar,
+  CalendarDays,
 } from 'lucide-react'
 import { reportsApi, asnApi, ViolationReport, ASNRecord } from '../api/reports'
+import client from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +30,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useHasPermission } from '@/components/PermissionGate'
@@ -130,6 +135,10 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
           <TabsTrigger value="reports">
             <FileText className="w-4 h-4 mr-2" />
             {t('reports.tabs.reports')}
+          </TabsTrigger>
+          <TabsTrigger value="schedule">
+            <Clock className="w-4 h-4 mr-2" />
+            {t('reports.tabs.schedule')}
           </TabsTrigger>
           <TabsTrigger value="asn">
             <Network className="w-4 h-4 mr-2" />
@@ -296,7 +305,12 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
           )}
         </TabsContent>
 
-        {/* ── Tab 2: ASN Database ───────────────────────────── */}
+        {/* ── Tab 2: Schedule ─────────────────────────────── */}
+        <TabsContent value="schedule" className="space-y-4">
+          <ReportScheduleTab />
+        </TabsContent>
+
+        {/* ── Tab 3: ASN Database ───────────────────────────── */}
         <TabsContent value="asn" className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-dark-200">{t('reports.asn.description')}</p>
@@ -427,6 +441,218 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ── Report Schedule Tab ────────────────────────────────────────
+
+interface ScheduleSettings {
+  reports_enabled: string
+  reports_daily_enabled: string
+  reports_daily_time: string
+  reports_weekly_enabled: string
+  reports_weekly_day: string
+  reports_weekly_time: string
+  reports_monthly_enabled: string
+  reports_monthly_day: string
+  reports_monthly_time: string
+}
+
+function ReportScheduleTab() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const canEdit = useHasPermission('settings', 'edit')
+
+  const { data: settingsData, isLoading } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const { data } = await client.get('/settings')
+      // Extract reports settings from categories
+      const result: Record<string, string> = {}
+      const categories = data?.categories || {}
+      const reportsCategory = categories['reports'] || []
+      for (const item of reportsCategory) {
+        result[item.key] = item.value ?? item.default_value ?? ''
+      }
+      return result as unknown as ScheduleSettings
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      await client.put(`/settings/${key}`, { value })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      toast.success(t('common.saved'))
+    },
+    onError: () => {
+      toast.error(t('common.error'))
+    },
+  })
+
+  const updateSetting = (key: string, value: string) => {
+    if (!canEdit) return
+    updateMutation.mutate({ key, value })
+  }
+
+  const toBool = (v: string | undefined) => v === 'true' || v === '1'
+
+  const dayNames = [
+    t('reports.schedule.monday'),
+    t('reports.schedule.tuesday'),
+    t('reports.schedule.wednesday'),
+    t('reports.schedule.thursday'),
+    t('reports.schedule.friday'),
+    t('reports.schedule.saturday'),
+    t('reports.schedule.sunday'),
+  ]
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-48 w-full" />)}
+      </div>
+    )
+  }
+
+  const s = settingsData || {} as ScheduleSettings
+
+  return (
+    <div className="space-y-4">
+      {/* Global toggle */}
+      <Card className="border-dark-600 bg-dark-800">
+        <CardContent className="p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-white">{t('reports.schedule.globalEnabled')}</p>
+            <p className="text-xs text-dark-300">{t('reports.schedule.globalDescription')}</p>
+          </div>
+          <Switch
+            checked={toBool(s.reports_enabled)}
+            onCheckedChange={(v) => updateSetting('reports_enabled', v ? 'true' : 'false')}
+            disabled={!canEdit}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Schedule cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Daily */}
+        <Card className="border-dark-600 bg-dark-800">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-cyan-400" />
+                <span className="text-sm font-medium text-white">{t('reports.schedule.daily')}</span>
+              </div>
+              <Switch
+                checked={toBool(s.reports_daily_enabled)}
+                onCheckedChange={(v) => updateSetting('reports_daily_enabled', v ? 'true' : 'false')}
+                disabled={!canEdit || !toBool(s.reports_enabled)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('reports.schedule.time')}</Label>
+              <Input
+                type="time"
+                value={s.reports_daily_time || '09:00'}
+                onChange={(e) => updateSetting('reports_daily_time', e.target.value)}
+                disabled={!canEdit || !toBool(s.reports_daily_enabled)}
+                className="mt-1"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Weekly */}
+        <Card className="border-dark-600 bg-dark-800">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-green-400" />
+                <span className="text-sm font-medium text-white">{t('reports.schedule.weekly')}</span>
+              </div>
+              <Switch
+                checked={toBool(s.reports_weekly_enabled)}
+                onCheckedChange={(v) => updateSetting('reports_weekly_enabled', v ? 'true' : 'false')}
+                disabled={!canEdit || !toBool(s.reports_enabled)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('reports.schedule.dayOfWeek')}</Label>
+              <Select
+                value={s.reports_weekly_day || '0'}
+                onValueChange={(v) => updateSetting('reports_weekly_day', v)}
+                disabled={!canEdit || !toBool(s.reports_weekly_enabled)}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {dayNames.map((name, i) => (
+                    <SelectItem key={i} value={String(i)}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('reports.schedule.time')}</Label>
+              <Input
+                type="time"
+                value={s.reports_weekly_time || '10:00'}
+                onChange={(e) => updateSetting('reports_weekly_time', e.target.value)}
+                disabled={!canEdit || !toBool(s.reports_weekly_enabled)}
+                className="mt-1"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Monthly */}
+        <Card className="border-dark-600 bg-dark-800">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-yellow-400" />
+                <span className="text-sm font-medium text-white">{t('reports.schedule.monthly')}</span>
+              </div>
+              <Switch
+                checked={toBool(s.reports_monthly_enabled)}
+                onCheckedChange={(v) => updateSetting('reports_monthly_enabled', v ? 'true' : 'false')}
+                disabled={!canEdit || !toBool(s.reports_enabled)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('reports.schedule.dayOfMonth')}</Label>
+              <Select
+                value={s.reports_monthly_day || '1'}
+                onValueChange={(v) => updateSetting('reports_monthly_day', v)}
+                disabled={!canEdit || !toBool(s.reports_monthly_enabled)}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                    <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-dark-300">{t('reports.schedule.time')}</Label>
+              <Input
+                type="time"
+                value={s.reports_monthly_time || '10:00'}
+                onChange={(e) => updateSetting('reports_monthly_time', e.target.value)}
+                disabled={!canEdit || !toBool(s.reports_monthly_enabled)}
+                className="mt-1"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

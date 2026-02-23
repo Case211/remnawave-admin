@@ -145,6 +145,7 @@ class AutomationTemplate(BaseModel):
     id: str
     name: str
     description: str
+    description_key: Optional[str] = None
     category: str
     trigger_type: str
     trigger_config: dict
