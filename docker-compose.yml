@@ -112,7 +112,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - geoip_data:/app/geoip
-      - backup_data:/app/backups
+      - ./backups:/app/backups
     ports:
       - "${WEB_BACKEND_PORT:-8081}:8081"
       - "${MAIL_INBOUND_PORT:-2525}:${MAIL_INBOUND_PORT:-2525}"
@@ -172,7 +172,6 @@ services:
 volumes:
   postgres_data:
   geoip_data:
-  backup_data:
   # redis_data:
 
 networks:
