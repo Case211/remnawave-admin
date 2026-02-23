@@ -196,11 +196,16 @@ def _service_unavailable():
     return HTTPException(status_code=503, detail="Service unavailable")
 
 
-# ── API docs (always enabled) ───────────────────────────────────
+# ── API docs (disabled by default, enable via EXTERNAL_API_DOCS=true) ──
 
 @router.get("/docs", response_class=HTMLResponse, include_in_schema=False)
 async def api_v3_docs():
     """Swagger UI for public API v3."""
+    from web.backend.core.config import get_web_settings
+    if not get_web_settings().external_api_docs:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+
     return """<!DOCTYPE html>
 <html><head><title>Remnawave Public API v3</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
@@ -220,10 +225,14 @@ SwaggerUIBundle({
 @router.get("/openapi.json", include_in_schema=False)
 async def api_v3_openapi():
     """OpenAPI schema for public API v3 endpoints only."""
+    from web.backend.core.config import get_web_settings
+    if not get_web_settings().external_api_docs:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+
     from fastapi.openapi.utils import get_openapi
     from fastapi import FastAPI
 
-    # Build a temporary app just to generate v3 schema
     temp = FastAPI()
     temp.include_router(router, prefix="")
 

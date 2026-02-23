@@ -27,7 +27,10 @@ async def api_status(
     """Check if external API v3 is enabled."""
     from web.backend.core.config import get_web_settings
     settings = get_web_settings()
-    return {"external_api_enabled": settings.external_api_enabled}
+    return {
+        "external_api_enabled": settings.external_api_enabled,
+        "external_api_docs": settings.external_api_docs,
+    }
 
 
 # ── Schemas ──────────────────────────────────────────────────────
