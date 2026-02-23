@@ -300,6 +300,10 @@ async def receive_connections(
                 if not violations_enabled:
                     break
 
+                # Whitelist check: skip detection for whitelisted users
+                if await db_service.is_user_violation_whitelisted(user_uuid):
+                    continue
+
                 # Per-user cooldown: skip if already checked recently
                 now_check = datetime.utcnow()
                 last_check = _violation_check_cooldown.get(user_uuid)

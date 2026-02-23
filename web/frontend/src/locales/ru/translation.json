@@ -1113,7 +1113,34 @@
     "toast": {
       "resolved": "Нарушение обработано",
       "annulled": "Нарушение аннулировано",
-      "annulledAll": "Все нарушения пользователя аннулированы"
+      "annulledAll": "Все нарушения пользователя аннулированы",
+      "whitelistAdded": "Пользователь добавлен в whitelist",
+      "whitelistRemoved": "Пользователь удалён из whitelist"
+    },
+    "whitelist": {
+      "tab": "Whitelist",
+      "title": "Whitelist нарушений",
+      "addButton": "Добавить в whitelist",
+      "removeButton": "Удалить",
+      "reason": "Причина",
+      "reasonPlaceholder": "Почему исключить из проверок?",
+      "duration": "Срок действия",
+      "forever": "Навсегда",
+      "days7": "7 дней",
+      "days30": "30 дней",
+      "days90": "90 дней",
+      "expiresAt": "Истекает",
+      "addedBy": "Добавил",
+      "addedAt": "Добавлен",
+      "noExpiration": "Бессрочно",
+      "empty": "Whitelist пуст",
+      "emptyDesc": "Пользователи в whitelist не проверяются системой обнаружения нарушений",
+      "confirmRemove": "Убрать пользователя из whitelist?",
+      "confirmRemoveDesc": "Обнаружение нарушений для этого пользователя будет возобновлено.",
+      "userUuid": "UUID пользователя",
+      "userUuidPlaceholder": "Введите UUID пользователя",
+      "addTitle": "Добавить в whitelist",
+      "expired": "Истёк"
     }
   },
   "admins": {

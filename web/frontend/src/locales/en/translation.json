@@ -1113,7 +1113,34 @@
     "toast": {
       "resolved": "Violation processed",
       "annulled": "Violation annulled",
-      "annulledAll": "All user violations annulled"
+      "annulledAll": "All user violations annulled",
+      "whitelistAdded": "User added to whitelist",
+      "whitelistRemoved": "User removed from whitelist"
+    },
+    "whitelist": {
+      "tab": "Whitelist",
+      "title": "Violation Whitelist",
+      "addButton": "Add to whitelist",
+      "removeButton": "Remove",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why exclude from checks?",
+      "duration": "Duration",
+      "forever": "Forever",
+      "days7": "7 days",
+      "days30": "30 days",
+      "days90": "90 days",
+      "expiresAt": "Expires",
+      "addedBy": "Added by",
+      "addedAt": "Added",
+      "noExpiration": "No expiration",
+      "empty": "No whitelisted users",
+      "emptyDesc": "Users added to whitelist will not be checked by the violation detection system",
+      "confirmRemove": "Remove user from whitelist?",
+      "confirmRemoveDesc": "Violation detection will resume for this user.",
+      "userUuid": "User UUID",
+      "userUuidPlaceholder": "Enter user UUID",
+      "addTitle": "Add to whitelist",
+      "expired": "Expired"
     }
   },
   "admins": {

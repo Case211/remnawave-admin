@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react'
+import { useState, useCallback, useEffect, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -32,6 +32,10 @@ import {
   MessageCircle,
   XCircle,
   Trash2,
+  ShieldOff,
+  ShieldCheck,
+  Plus,
+  Calendar,
 } from 'lucide-react'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -39,6 +43,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { InfoTooltip } from '@/components/InfoTooltip'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
@@ -135,6 +141,17 @@ interface IPInfo {
   is_mobile: boolean
 }
 
+interface WhitelistItem {
+  id: number
+  user_uuid: string
+  username: string | null
+  email: string | null
+  reason: string | null
+  added_by_username: string | null
+  added_at: string
+  expires_at: string | null
+}
+
 // ── API ──────────────────────────────────────────────────────────
 
 const fetchViolations = async (params: {
@@ -184,6 +201,11 @@ const fetchIPLookup = async (ips: string[]): Promise<Record<string, IPInfo>> => 
   if (!ips.length) return {}
   const { data } = await client.post('/violations/ip-lookup', { ips })
   return data.results || {}
+}
+
+const fetchWhitelist = async (limit: number, offset: number): Promise<{ items: WhitelistItem[]; total: number }> => {
+  const { data } = await client.get('/violations/whitelist', { params: { limit, offset } })
+  return data
 }
 
 // ── Utilities ────────────────────────────────────────────────────
@@ -354,6 +376,7 @@ const ViolationCard = memo(function ViolationCard({
   onWarn,
   onDismiss,
   onAnnul,
+  onWhitelist,
   onViewDetail,
   onViewUser,
 }: {
@@ -363,6 +386,7 @@ const ViolationCard = memo(function ViolationCard({
   onWarn: () => void
   onDismiss: () => void
   onAnnul: () => void
+  onWhitelist: () => void
   onViewDetail: () => void
   onViewUser: () => void
 }) {
@@ -444,6 +468,10 @@ const ViolationCard = memo(function ViolationCard({
             <Button variant="ghost" size="sm" onClick={onAnnul} className="gap-1 text-dark-300 hover:text-dark-100">
               <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
             </Button>
+            <Button variant="ghost" size="sm" onClick={onWhitelist} className="gap-1 text-dark-300 hover:text-emerald-400" title={t('violations.whitelist.addButton')}>
+              <ShieldOff className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('violations.whitelist.addButton')}</span>
+            </Button>
             <Button variant="ghost" size="sm" onClick={onViewDetail} className="gap-1 ml-auto">
               <Eye className="w-4 h-4" />
               <span className="hidden sm:inline">{t('common.details')}</span>
@@ -514,6 +542,7 @@ function ViolationDetailPanel({
   onDismiss,
   onAnnul,
   onAnnulAll,
+  onWhitelist,
   onViewUser,
 }: {
   violationId: number
@@ -524,6 +553,7 @@ function ViolationDetailPanel({
   onDismiss: (id: number) => void
   onAnnul: (id: number) => void
   onAnnulAll: (userUuid: string) => void
+  onWhitelist: (userUuid: string) => void
   onViewUser: (uuid: string) => void
 }) {
   const { t } = useTranslation()
@@ -911,6 +941,9 @@ function ViolationDetailPanel({
               <Button variant="ghost" onClick={() => onAnnulAll(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-dark-100">
                 <Trash2 className="w-4 h-4" /> {t('violations.actions.annulAll')}
               </Button>
+              <Button variant="ghost" onClick={() => onWhitelist(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-emerald-400">
+                <ShieldOff className="w-4 h-4" /> {t('violations.whitelist.addButton')}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -1025,6 +1058,289 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
           </Card>
         )
       })}
+    </div>
+  )
+}
+
+// ── Whitelist dialog ─────────────────────────────────────────────
+
+function WhitelistAddDialog({
+  open,
+  onOpenChange,
+  userUuid: initialUserUuid,
+  onSubmit,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  userUuid: string
+  onSubmit: (data: { user_uuid: string; reason?: string; expires_in_days?: number }) => void
+}) {
+  const { t } = useTranslation()
+  const [userUuid, setUserUuid] = useState(initialUserUuid)
+  const [reason, setReason] = useState('')
+  const [duration, setDuration] = useState<string>('forever')
+
+  // Sync when prop changes
+  useEffect(() => { setUserUuid(initialUserUuid) }, [initialUserUuid])
+
+  const handleSubmit = () => {
+    if (!userUuid.trim()) return
+    const expiresInDays = duration === 'forever' ? undefined : parseInt(duration, 10)
+    onSubmit({
+      user_uuid: userUuid.trim(),
+      reason: reason.trim() || undefined,
+      expires_in_days: expiresInDays,
+    })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('violations.whitelist.addTitle')}</DialogTitle>
+          <DialogDescription className="text-sm text-dark-200">
+            {initialUserUuid || t('violations.whitelist.emptyDesc')}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          {!initialUserUuid && (
+            <div>
+              <label className="text-sm font-medium text-dark-100 mb-1.5 block">
+                {t('violations.whitelist.userUuid')}
+              </label>
+              <input
+                type="text"
+                value={userUuid}
+                onChange={(e) => setUserUuid(e.target.value)}
+                placeholder={t('violations.whitelist.userUuidPlaceholder')}
+                className="w-full rounded-md border border-dark-400/30 bg-dark-800 px-3 py-2 text-sm text-white placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+              />
+            </div>
+          )}
+          <div>
+            <label className="text-sm font-medium text-dark-100 mb-1.5 block">
+              {t('violations.whitelist.reason')}
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={t('violations.whitelist.reasonPlaceholder')}
+              className="w-full rounded-md border border-dark-400/30 bg-dark-800 px-3 py-2 text-sm text-white placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/40 min-h-[80px] resize-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-dark-100 mb-1.5 block">
+              {t('violations.whitelist.duration')}
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: 'forever', label: t('violations.whitelist.forever') },
+                { value: '7', label: t('violations.whitelist.days7') },
+                { value: '30', label: t('violations.whitelist.days30') },
+                { value: '90', label: t('violations.whitelist.days90') },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setDuration(opt.value)}
+                  className={cn(
+                    'px-3 py-2 rounded-md text-sm font-medium transition-all border',
+                    duration === opt.value
+                      ? 'bg-primary-600/20 text-primary-400 border-primary-500/30'
+                      : 'bg-dark-700/50 text-dark-200 border-dark-400/20 hover:text-white hover:border-dark-400/40'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button onClick={handleSubmit} className="gap-2">
+            <ShieldOff className="w-4 h-4" />
+            {t('violations.whitelist.addButton')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Whitelist tab ────────────────────────────────────────────────
+
+function WhitelistTab() {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+  const queryClient = useQueryClient()
+  const canResolve = useHasPermission('violations', 'resolve')
+  const [wlPage, setWlPage] = useState(1)
+  const perPage = 20
+  const [confirmRemoveUuid, setConfirmRemoveUuid] = useState<string | null>(null)
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [manualUuid, setManualUuid] = useState('')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['violationWhitelist', wlPage],
+    queryFn: () => fetchWhitelist(perPage, (wlPage - 1) * perPage),
+  })
+
+  const addMutation = useMutation({
+    mutationFn: (body: { user_uuid: string; reason?: string; expires_in_days?: number }) =>
+      client.post('/violations/whitelist', body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })
+      queryClient.invalidateQueries({ queryKey: ['violations'] })
+      queryClient.invalidateQueries({ queryKey: ['violationStats'] })
+      toast.success(t('violations.toast.whitelistAdded'))
+      setAddDialogOpen(false)
+      setManualUuid('')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: (userUuid: string) => client.delete(`/violations/whitelist/${userUuid}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })
+      toast.success(t('violations.toast.whitelistRemoved'))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
+  const items = data?.items || []
+  const total = data?.total || 0
+  const totalPages = Math.max(1, Math.ceil(total / perPage))
+
+  const isExpired = (expiresAt: string | null) => {
+    if (!expiresAt) return false
+    return new Date(expiresAt) < new Date()
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header with add button */}
+      {canResolve && (
+        <div className="flex justify-end">
+          <Button onClick={() => setAddDialogOpen(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            {t('violations.whitelist.addButton')}
+          </Button>
+        </div>
+      )}
+
+      {/* List */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Card key={i}><CardContent className="p-4"><Skeleton className="h-12 w-full" /></CardContent></Card>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <Card className="text-center py-12">
+          <CardContent>
+            <ShieldCheck className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+            <p className="text-dark-200 text-lg">{t('violations.whitelist.empty')}</p>
+            <p className="text-sm text-dark-200 mt-1">{t('violations.whitelist.emptyDesc')}</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item, i) => (
+            <Card
+              key={item.id}
+              className={cn(
+                'hover:border-dark-400/40 transition-colors animate-fade-in-up',
+                isExpired(item.expires_at) && 'opacity-60'
+              )}
+              style={{ animationDelay: `${i * 0.04}s` }}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 flex-shrink-0">
+                    <ShieldOff className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="font-semibold text-white">
+                        {item.username || item.email || item.user_uuid.slice(0, 8)}
+                      </span>
+                      {isExpired(item.expires_at) && (
+                        <Badge variant="secondary" className="text-xs">{t('violations.whitelist.expired')}</Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dark-200">
+                      {item.reason && <span>{item.reason}</span>}
+                      <span>
+                        <Calendar className="w-3.5 h-3.5 inline mr-0.5" />
+                        {t('violations.whitelist.addedBy')}: {item.added_by_username || '—'}
+                      </span>
+                      <span>{formatDate(item.added_at)}</span>
+                      {item.expires_at ? (
+                        <span>
+                          {t('violations.whitelist.expiresAt')}: {formatDate(item.expires_at)}
+                        </span>
+                      ) : (
+                        <span className="text-emerald-400">{t('violations.whitelist.noExpiration')}</span>
+                      )}
+                    </div>
+                  </div>
+                  {canResolve && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConfirmRemoveUuid(item.user_uuid)}
+                      className="text-dark-300 hover:text-red-400 flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 pt-2">
+          <Button variant="ghost" size="sm" disabled={wlPage <= 1} onClick={() => setWlPage(wlPage - 1)}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-sm text-dark-200">{wlPage} / {totalPages}</span>
+          <Button variant="ghost" size="sm" disabled={wlPage >= totalPages} onClick={() => setWlPage(wlPage + 1)}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Add dialog (manual UUID) */}
+      <WhitelistAddDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        userUuid={manualUuid}
+        onSubmit={(data) => addMutation.mutate(data)}
+      />
+
+      {/* Confirm remove dialog */}
+      <ConfirmDialog
+        open={confirmRemoveUuid !== null}
+        onOpenChange={(open) => { if (!open) setConfirmRemoveUuid(null) }}
+        title={t('violations.whitelist.confirmRemove')}
+        description={t('violations.whitelist.confirmRemoveDesc')}
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmRemoveUuid) removeMutation.mutate(confirmRemoveUuid)
+          setConfirmRemoveUuid(null)
+        }}
+      />
     </div>
   )
 }
@@ -1205,7 +1521,7 @@ function ViolationSkeleton() {
 
 // ── Main page component ──────────────────────────────────────────
 
-type Tab = 'all' | 'pending' | 'top' | 'reports'
+type Tab = 'all' | 'pending' | 'top' | 'reports' | 'whitelist'
 
 export default function Violations() {
   const { t } = useTranslation()
@@ -1376,6 +1692,33 @@ export default function Violations() {
     [annulAllViolations],
   )
 
+  // Whitelist
+  const [whitelistDialogOpen, setWhitelistDialogOpen] = useState(false)
+  const [whitelistUserUuid, setWhitelistUserUuid] = useState('')
+
+  const addToWhitelist = useMutation({
+    mutationFn: (body: { user_uuid: string; reason?: string; expires_in_days?: number }) =>
+      client.post('/violations/whitelist', body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })
+      queryClient.invalidateQueries({ queryKey: ['violations'] })
+      queryClient.invalidateQueries({ queryKey: ['violationStats'] })
+      setWhitelistDialogOpen(false)
+      toast.success(t('violations.toast.whitelistAdded'))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
+  const handleWhitelist = useCallback(
+    (userUuid: string) => {
+      setWhitelistUserUuid(userUuid)
+      setWhitelistDialogOpen(true)
+    },
+    [],
+  )
+
   const handleTabChange = (newTab: Tab) => {
     setTab(newTab)
     setPage(1)
@@ -1395,6 +1738,7 @@ export default function Violations() {
           onDismiss={handleDismiss}
           onAnnul={handleAnnul}
           onAnnulAll={handleAnnulAll}
+          onWhitelist={handleWhitelist}
           onViewUser={(uuid) => navigate(`/users/${uuid}`)}
         />
       </div>
@@ -1541,6 +1885,7 @@ export default function Violations() {
           { key: 'all' as Tab, label: t('violations.tabs.all'), count: stats?.total },
           { key: 'pending' as Tab, label: t('violations.tabs.pending'), count: undefined },
           { key: 'top' as Tab, label: t('violations.tabs.topViolators'), count: undefined },
+          { key: 'whitelist' as Tab, label: t('violations.whitelist.tab'), count: undefined },
           { key: 'reports' as Tab, label: t('violations.tabs.reports'), count: undefined },
         ]).map((tabItem) => (
           <button
@@ -1566,6 +1911,8 @@ export default function Violations() {
         <Reports embedded />
       ) : tab === 'top' ? (
         <TopViolatorsTab days={days} onViewUser={(uuid) => navigate(`/users/${uuid}`)} />
+      ) : tab === 'whitelist' ? (
+        <WhitelistTab />
       ) : (
         <>
         {/* Stats section */}
@@ -1603,6 +1950,7 @@ export default function Violations() {
                     onWarn={() => handleWarn(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}
                     onAnnul={() => handleAnnul(violation.id)}
+                    onWhitelist={() => handleWhitelist(violation.user_uuid)}
                     onViewDetail={() => setSelectedViolationId(violation.id)}
                     onViewUser={() => navigate(`/users/${violation.user_uuid}`)}
                   />
@@ -1644,6 +1992,14 @@ export default function Violations() {
         </>
         </>
       )}
+
+      {/* Whitelist add dialog */}
+      <WhitelistAddDialog
+        open={whitelistDialogOpen}
+        onOpenChange={setWhitelistDialogOpen}
+        userUuid={whitelistUserUuid}
+        onSubmit={(data) => addToWhitelist.mutate(data)}
+      />
     </div>
   )
 }
