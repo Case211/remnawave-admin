@@ -119,13 +119,16 @@
   },
   "header": {
     "searchPlaceholder": "Search...",
-    "commandHint": "Cmd+K to search"
+    "commandHint": "Cmd+K to search",
+    "online": "Online"
   },
   "sidebar": {
     "expand": "Expand",
     "collapse": "Collapse",
     "telegramChat": "Telegram Chat",
-    "support": "Support the author"
+    "support": "Support the author",
+    "administrator": "Administrator",
+    "logout": "Logout"
   },
   "commandPalette": {
     "placeholder": "Search pages, users, actions...",
@@ -2756,6 +2759,7 @@
   "apiKeys": {
     "title": "API Keys & Webhooks",
     "subtitle": "Manage external API access and webhook subscriptions",
+    "apiDocs": "API Docs",
     "tabs": {
       "keys": "API Keys",
       "webhooks": "Webhooks"

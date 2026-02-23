@@ -483,7 +483,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                 <p className="text-sm font-medium text-white truncate">
                   {user?.username || 'Admin'}
                 </p>
-                <p className="text-xs text-muted-foreground capitalize">{role || 'Administrator'}</p>
+                <p className="text-xs text-muted-foreground capitalize">{role || t('sidebar.administrator')}</p>
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -496,7 +496,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                     <LogOut className="w-5 h-5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Logout</TooltipContent>
+                <TooltipContent>{t('sidebar.logout')}</TooltipContent>
               </Tooltip>
             </>
           )}
@@ -512,7 +512,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                   <LogOut className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Logout</TooltipContent>
+              <TooltipContent side="right">{t('sidebar.logout')}</TooltipContent>
             </Tooltip>
           )}
         </div>

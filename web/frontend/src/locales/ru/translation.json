@@ -119,13 +119,16 @@
   },
   "header": {
     "searchPlaceholder": "Поиск...",
-    "commandHint": "Cmd+K для поиска"
+    "commandHint": "Cmd+K для поиска",
+    "online": "Онлайн"
   },
   "sidebar": {
     "expand": "Развернуть",
     "collapse": "Свернуть",
     "telegramChat": "Чат в Telegram",
-    "support": "Поддержать автора"
+    "support": "Поддержать автора",
+    "administrator": "Администратор",
+    "logout": "Выход"
   },
   "commandPalette": {
     "placeholder": "Поиск страниц, пользователей, действий...",
@@ -2756,6 +2759,7 @@
   "apiKeys": {
     "title": "API ключи и Вебхуки",
     "subtitle": "Управление внешним API доступом и подписками на вебхуки",
+    "apiDocs": "Документация API",
     "tabs": {
       "keys": "API ключи",
       "webhooks": "Вебхуки"

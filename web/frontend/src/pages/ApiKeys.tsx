@@ -108,7 +108,7 @@ function ApiKeysTab() {
           rel="noopener noreferrer"
           className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1"
         >
-          API Docs <ExternalLink className="w-3.5 h-3.5" />
+          {t('apiKeys.apiDocs')} <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>
 

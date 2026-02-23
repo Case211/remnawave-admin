@@ -235,7 +235,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
             className="w-2 h-2 rounded-full animate-pulse"
             style={{ backgroundColor: 'var(--accent-from)', boxShadow: '0 0 8px rgba(var(--glow-rgb), 0.5)' }}
           />
-          <span className="hidden sm:inline text-xs">Online</span>
+          <span className="hidden sm:inline text-xs">{t('header.online')}</span>
         </Badge>
       </div>
     </header>
