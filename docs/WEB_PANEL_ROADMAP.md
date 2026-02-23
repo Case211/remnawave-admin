@@ -21,7 +21,6 @@
 - Breadcrumbs с динамическим разрешением имён
 - Сохранённые фильтры (Zustand + localStorage)
 - Мультиязычность (react-i18next): RU/EN, переключатель в Header, localStorage + navigator detection
-- PWA: Service Worker (vite-plugin-pwa), precache, offline-индикатор
 - Code splitting: React.lazy + Suspense для каждой страницы, manual chunks для vendor-библиотек
 - Виртуализация таблиц: @tanstack/react-virtual для Users
 
@@ -31,11 +30,14 @@
 |----------|-----------------|
 | **Dashboard** | Карточки статистики с дельта-индикаторами, графики трафика (stacked area chart по нодам, переключатель 24ч/7д/30д), парк серверов (компактные карточки с быстрыми действиями), системный статус (API, PostgreSQL, ноды, WebSocket), проверка обновлений (GitHub Releases API) |
 | **Users** | CRUD с пагинацией/фильтрацией/сортировкой, массовые операции (чекбоксы, enable/disable/delete/reset-traffic, до 100 за раз), экспорт CSV/JSON, виртуализация таблиц |
-| **User Detail** | Трафик, стратегия сброса трафика (NO_RESET/DAY/WEEK/MONTH), HWID устройства (полный CRUD: список, удаление, лимит, платформа, модель, версия), подписка (URL, copy-to-clipboard), нарушения, история действий админов (timeline) |
+| **User Detail** | Трафик, стратегия сброса трафика (NO_RESET/DAY/WEEK/MONTH), HWID устройства (полный CRUD: список, удаление, лимит, платформа, модель, версия), подписка (URL, copy-to-clipboard, QR-код), нарушения, история действий админов (timeline) |
 | **Nodes** | CRUD, статус, перезапуск Xray, агент-токены (генерация/отзыв/статус), enable/disable |
-| **Fleet** | Полноценный центр управления: мониторинг (CPU, RAM, диск, скорость, uptime, Xray-версия), веб-терминал (xterm.js через PTY), каталог скриптов (~20 встроенных с параметрами), история команд, провижининг нод. Node Agent v2 (WebSocket + HMAC подпись команд) |
+| **Fleet** | Полноценный центр управления: мониторинг (CPU, RAM, диск, скорость, uptime, Xray-версия), веб-терминал (xterm.js через PTY), каталог скриптов (~20 встроенных + CRUD + импорт из GitHub + скрипт обновления агента), история команд, провижининг нод. Node Agent v2 (WebSocket + HMAC подпись команд) |
 | **Hosts** | CRUD, inbound конфигурация, security layer (TLS, Reality, XTLS), SNI/host/path, порты, позиционирование |
-| **Violations** | Просмотр нарушений с IP Lookup и скор-разбивкой (temporal, geo, ASN, profile, device), фильтры по IP/стране/дате, resolve-действия, экспорт CSV/JSON |
+| **Violations** | Просмотр нарушений с IP Lookup и скор-разбивкой (temporal, geo, ASN, profile, device), фильтры по IP/стране/дате, resolve-действия (ignore/warn/block), аннулирование (обнуление скора), **whitelist** (CRUD, таб, кнопки в карточках, expiration), экспорт CSV/JSON |
+| **Billing** | История платежей за инфраструктуру, управление провайдерами (CRUD), привязка нод к провайдерам, overdue-индикаторы |
+| **Resources** | CRUD шаблонов VPN-конфигов (templates), сниппетов, конфигурационных профилей. API-токены Remnawave (управление через Settings) |
+| **Reports** | Генерация отчётов (daily/weekly/monthly), сводка по нарушениям, трафику, пользователям |
 | **Automations** | Конструктор правил (4-шаговый визард), 3 типа триггеров (событие/расписание/порог), 7 типов действий, 6 готовых шаблонов, лог срабатываний, dry-run тестирование, CRON-билдер |
 | **Analytics** | Географическая карта подключений (Leaflet, lazy-load), топ пользователей по трафику, анализ тенденций (area chart) |
 | **Admins** | CRUD админов, конструктор ролей (матрица прав 9 ресурсов × 5 действий), прогресс-бары лимитов, журнал аудита |
@@ -57,19 +59,19 @@
 - **Аудит**: AuditMiddleware перехватывает все POST/PUT/PATCH/DELETE, broadcast через WebSocket
 - **Проверка обновлений**: GitHub Releases API с 30-мин кешем, семантическое сравнение версий
 - **i18n**: react-i18next, 2 локали (RU/EN), useFormatters() хук для Intl API, переключатель языка в Header
-- **PWA**: Service Worker с precache (48 записей), runtime cache (Google Fonts, map tiles), offline-индикатор
+- **Кэширование фронтенда**: Hashed chunks с immutable cache (1y), index.html с no-cache/no-store, nginx Cache-Control headers
 - **Redis-кеширование**: CacheService с fallback на in-memory. `@cached` декоратор для analytics (30-300с TTL). Настройка через `REDIS_URL`
 - **Rate limiting**: Гранулярные лимиты по эндпоинтам (auth 5-10/мин, analytics 30/мин, bulk 10/мин, глобальный 200/мин). Redis-бэкенд для distributed rate limiting
 - **Cursor-based пагинация**: audit_log, automation_log — эффективная пагинация для больших таблиц
 - **Модульная архитектура (shared/)**: Общие сервисы (database, api_client, config_service, sync, geoip, cache, logger, agent_tokens, maxmind_updater, asn_parser, data_access) вынесены в `shared/` модуль. Бот (`src/`) и веб-бэкенд (`web/backend/`) импортируют из `shared/` напрямую. Независимые Dockerfiles для каждого компонента
 
-### База данных (25 миграций Alembic)
+### База данных (32 миграции Alembic)
 
-Основные таблицы: `users`, `nodes`, `hosts`, `violations`, `ip_metadata`, `hwid_devices`, `bot_config`, `admin_roles`, `admin_permissions`, `admin_accounts`, `admin_audit_log`, `automation_rules`, `automation_log`, `node_agent_tokens`, `notifications`, `notification_channels`, `smtp_config`, `alert_rules`, `alert_rule_log`, `domain_config`, `email_queue`, `email_inbox`, `smtp_credentials`, `node_command_log`, `node_scripts`, `node_provision_sessions`
+Основные таблицы: `users`, `nodes`, `hosts`, `violations`, `violation_whitelist`, `ip_metadata`, `hwid_devices`, `bot_config`, `admin_roles`, `admin_permissions`, `admin_accounts`, `admin_audit_log`, `automation_rules`, `automation_log`, `node_agent_tokens`, `notifications`, `notification_channels`, `smtp_config`, `alert_rules`, `alert_rule_log`, `domain_config`, `email_queue`, `email_inbox`, `smtp_credentials`, `node_command_log`, `node_scripts`, `node_provision_sessions`
 
-### Backend API (23 модуля маршрутов)
+### Backend API (29 модулей маршрутов)
 
-`auth`, `users`, `nodes`, `hosts`, `violations`, `analytics`, `advanced_analytics`, `automations`, `settings`, `admins`, `roles`, `audit`, `logs`, `notifications`, `mailserver`, `fleet`, `scripts`, `terminal`, `agent_ws`, `websocket`, `deps`
+`auth`, `users`, `nodes`, `hosts`, `violations`, `analytics`, `advanced_analytics`, `automations`, `settings`, `admins`, `roles`, `audit`, `logs`, `notifications`, `mailserver`, `fleet`, `scripts`, `terminal`, `agent_ws`, `websocket`, `collector`, `billing`, `reports`, `templates`, `snippets`, `config_profiles`, `tokens`, `resources`, `deps`
 
 ---
 
@@ -180,7 +182,7 @@
 | 7.3.5 | Agent: script_executor | ✅ | `command_runner.py` — bash, стриминг stdout/stderr, таймаут |
 | 7.3.6 | Frontend: каталог | ✅ | `ScriptCatalog.tsx` — карточки с категориями |
 | 7.3.7 | Frontend: диалог запуска | ✅ | `RunScriptDialog.tsx` — параметры, подтверждение, live-вывод |
-| 7.3.8 | Frontend: редактор скриптов | ⏳ | Пользовательские скрипты — только через API (нет визуального редактора) |
+| 7.3.8 | Frontend: редактор скриптов | ✅ | ScriptFormDialog (CRUD), ImportScriptDialog (импорт из GitHub), скрипт обновления агента (миграция 0030) |
 | 7.3.9 | Frontend: история выполнений | ✅ | `CommandHistory.tsx` — список запусков с фильтрами |
 
 ### 7.4 Провижининг нод ✅
@@ -205,67 +207,69 @@ One-click настройка свежего VPS как VPN-ноды.
 
 ---
 
-## Фаза 8 — Миграция функционала бота в панель
+## Фаза 8 — Миграция функционала бота в панель ✅
 
 **Зачем:** Telegram-бот содержит функционал, которого нет в веб-панели: шаблоны VPN-конфигов, сниппеты, API-токены, биллинг инфраструктуры, провайдеры, отчёты, ASN-синхронизация. Цель — перенести всё в панель и свести бот к роли уведомлений и быстрого доступа.
 
-**Что есть в боте, но НЕТ в вебке (актуальный статус):**
+**Статус: практически полностью реализовано (~90%).** Все основные функции перенесены. Осталось: UI настроек бота (bot_config) + расписание отчётов через автоматизации.
+
+**Сводка миграции:**
 
 | Функционал | Бот | Вебка | Статус |
 |-----------|-----|-------|--------|
-| Шаблоны VPN-конфигов (templates) | CRUD | -- | ⏳ Перенести |
-| Сниппеты конфигов (snippets) | CRUD | -- | ⏳ Перенести |
-| API-токены Remnawave | CRUD | -- | ⏳ Перенести |
-| Config profiles | CRUD | -- | ⏳ Перенести |
-| Биллинг инфраструктуры | Просмотр | -- | ⏳ Перенести |
-| Провайдеры (AWS, DO и т.д.) | CRUD | -- | ⏳ Перенести |
-| Подписки (URL, revoke) | Управление | URL + copy | ✅ Частично (нет QR-кода) |
-| Отчёты (daily/weekly/monthly) | Scheduled | -- | ⏳ Перенести |
-| HWID устройства (CRUD) | Полный | Полный | ✅ Готово (список, удаление, лимит, платформа, модель, версия) |
-| Настройки бота (bot_config) | Управление | -- | ⏳ В Settings |
-| Синхронизация ASN | Запуск | -- | ⏳ Перенести |
-| Traffic reset strategy | На пользователе | ✅ | ✅ Готово (NO_RESET/DAY/WEEK/MONTH) |
+| Шаблоны VPN-конфигов (templates) | CRUD | CRUD (Resources.tsx + templates.py) | ✅ Готово |
+| Сниппеты конфигов (snippets) | CRUD | CRUD (Resources.tsx + snippets.py) | ✅ Готово |
+| API-токены Remnawave | CRUD | CRUD (Settings + tokens.py) | ✅ Готово |
+| Config profiles | CRUD | CRUD (Resources.tsx + config_profiles.py) | ✅ Готово |
+| Биллинг инфраструктуры | Просмотр | Полная страница (Billing.tsx + billing.py) | ✅ Готово |
+| Провайдеры (AWS, DO и т.д.) | CRUD | CRUD (в Billing + billing.py) | ✅ Готово |
+| Подписки (URL, revoke) | Управление | URL + copy + QR-код (qrcode.react) | ✅ Готово |
+| Отчёты (daily/weekly/monthly) | Scheduled | Страница Reports (Reports.tsx + reports.py) | ✅ Готово |
+| HWID устройства (CRUD) | Полный | Полный | ✅ Готово |
+| Настройки бота (bot_config) | Управление | -- | ⏳ Нет UI |
+| Синхронизация ASN | Запуск | Кнопка в Settings (SYNCABLE_ENTITIES) | ✅ Готово |
+| Traffic reset strategy | На пользователе | ✅ | ✅ Готово |
 
-### 8.1 Ресурсы и конфигурация
-
-| # | Задача | Описание |
-|---|--------|----------|
-| 8.1.1 | Страница «Шаблоны» | CRUD VPN-конфигов (templates): список, создание, редактирование, удаление |
-| 8.1.2 | Страница «Сниппеты» | CRUD code snippets: список, редактор с подсветкой синтаксиса, фильтры |
-| 8.1.3 | Страница «API-токены» | Генерация, список, отзыв токенов Remnawave API |
-| 8.1.4 | Страница «Config Profiles» | CRUD конфигурационных профилей |
-
-### 8.2 Биллинг и провайдеры
-
-| # | Задача | Описание |
-|---|--------|----------|
-| 8.2.1 | Страница «Биллинг» | История платежей за инфраструктуру, суммы, сроки, overdue |
-| 8.2.2 | Управление провайдерами | CRUD: название, favicon, URL, привязанные ноды |
-| 8.2.3 | Биллинг нод | Стоимость каждой ноды, дата следующего платежа, overdue-алерты |
-| 8.2.4 | Dashboard: виджет биллинга | Ближайшие платежи, суммарные расходы за месяц |
-
-### 8.3 Подписки и HWID
+### 8.1 Ресурсы и конфигурация ✅
 
 | # | Задача | Статус | Описание |
 |---|--------|--------|----------|
-| 8.3.1 | Управление подписками | ⚠️ | URL подписки + copy-to-clipboard реализованы. Осталось: QR-код, revoke, продление |
+| 8.1.1 | Страница «Шаблоны» | ✅ | CRUD VPN-конфигов — Resources.tsx + templates.py |
+| 8.1.2 | Страница «Сниппеты» | ✅ | CRUD сниппетов — Resources.tsx + snippets.py |
+| 8.1.3 | Управление «API-токенами» | ✅ | Генерация, список, отзыв — Settings + tokens.py |
+| 8.1.4 | Страница «Config Profiles» | ✅ | CRUD конфигурационных профилей — Resources.tsx + config_profiles.py |
+
+### 8.2 Биллинг и провайдеры ✅
+
+| # | Задача | Статус | Описание |
+|---|--------|--------|----------|
+| 8.2.1 | Страница «Биллинг» | ✅ | Billing.tsx — история платежей, суммы, сроки, overdue |
+| 8.2.2 | Управление провайдерами | ✅ | CRUD в Billing: название, favicon, URL, привязанные ноды |
+| 8.2.3 | Биллинг нод | ✅ | Стоимость нод, дата следующего платежа, overdue-индикаторы |
+| 8.2.4 | Dashboard: виджет биллинга | ⏳ | Ближайшие платежи, суммарные расходы за месяц — не реализован |
+
+### 8.3 Подписки и HWID ✅
+
+| # | Задача | Статус | Описание |
+|---|--------|--------|----------|
+| 8.3.1 | Управление подписками | ✅ | URL + copy-to-clipboard + QR-код (qrcode.react в UserDetail.tsx) |
 | 8.3.2 | HWID устройства | ✅ | Полный CRUD: список устройств (платформа, модель, OS, app version, user agent), удаление, лимит, пагинация, синхронизация |
 | 8.3.3 | Traffic reset strategy | ✅ | В форме пользователя: NO_RESET / DAY / WEEK / MONTH + last_traffic_reset_at |
 
-### 8.4 Отчёты и аналитика
+### 8.4 Отчёты и аналитика ✅
 
-| # | Задача | Описание |
-|---|--------|----------|
-| 8.4.1 | Генератор отчётов | Формирование: за день/неделю/месяц с графиками и сводкой |
-| 8.4.2 | Расписание отчётов | Интеграция с автоматизациями: cron-триггер → отчёт → Telegram/email |
-| 8.4.3 | ASN синхронизация | Секция в Settings: запуск синхронизации, настройка лимитов |
+| # | Задача | Статус | Описание |
+|---|--------|--------|----------|
+| 8.4.1 | Генератор отчётов | ✅ | Reports.tsx + reports.py — за день/неделю/месяц |
+| 8.4.2 | Расписание отчётов | ⏳ | Интеграция с автоматизациями: cron-триггер → отчёт → Telegram/email |
+| 8.4.3 | ASN синхронизация | ✅ | Кнопка в Settings (SYNCABLE_ENTITIES) |
 
 ### 8.5 Настройки бота
 
-| # | Задача | Описание |
-|---|--------|----------|
-| 8.5.1 | Bot Config в Settings | Секция настроек бота: язык, topic ID'ы, интервалы |
-| 8.5.2 | Управление уведомлениями | Какие события отправлять в Telegram, в какие топики |
+| # | Задача | Статус | Описание |
+|---|--------|--------|----------|
+| 8.5.1 | Bot Config в Settings | ⏳ | Секция настроек бота: язык, topic ID'ы, интервалы (таблица bot_config существует, нет UI) |
+| 8.5.2 | Управление уведомлениями | ✅ | Реализовано через Notifications: правила алертов, каналы доставки (Telegram topics, webhook, email) |
 
 ---
 
@@ -351,7 +355,7 @@ One-click настройка свежего VPS как VPN-ноды.
 
 **Зачем:** Проект вырос до 16+ страниц, 23+ API-модулей, 25+ миграций. Тесты — необходимость для стабильности.
 
-**Итого: 663 теста** (459 backend + 204 frontend), 46 тест-файлов, 0 failures.
+**Итого: 1005+ тестов** (801 backend + 204 frontend), 55 тест-файлов (38 BE + 17 FE), 0 failures.
 
 ### 11.1 Frontend-тесты ✅ (204 теста, 17 файлов)
 
@@ -364,7 +368,7 @@ One-click настройка свежего VPS как VPN-ноды.
 | 11.1.5 | Компонентные тесты | ✅ | PermissionGate, ConfirmDialog, ExportDropdown, CommandPalette, ErrorBoundary (fallback UI, componentDidCatch, reload) |
 | 11.1.6 | Тесты страниц (smoke) | ✅ | 16 страниц рендерятся без ошибок (Dashboard, Users, UserDetail, Nodes, Fleet, Hosts, Violations, Settings, Admins, AuditLog, SystemLogs, Analytics, Automations, Notifications, MailServer, Login) |
 
-### 11.2 Backend-тесты ✅ (459 тестов, 29 файлов)
+### 11.2 Backend-тесты ✅ (801 тест, 38 файлов)
 
 | # | Задача | Статус | Описание |
 |---|--------|--------|----------|
@@ -423,7 +427,7 @@ One-click настройка свежего VPS как VPN-ноды.
 | 13.1.2 | Виртуализация таблиц | @tanstack/react-virtual для Users (30+ строк): sticky header, виртуальные spacers | ✅ |
 | 13.1.3 | Оптимизация re-renders | React.memo для StatusBadge, TrafficBar, OnlineIndicator, MobileUserCard, ViolationCard, ScoreBar, StatCard и др. useMemo/useCallback для хэндлеров | ✅ |
 | 13.1.4 | Оптимизация Leaflet | Lazy-load через React.lazy (LazyGeoMap) — карта + leaflet CSS загружаются только на вкладке Geography | ✅ |
-| 13.1.5 | Service Worker | vite-plugin-pwa: precache 48 записей, runtime cache (Google Fonts, map tiles), offline-индикатор | ✅ |
+| 13.1.5 | Кэширование | Hashed chunks с immutable cache (1y), index.html с no-cache/no-store, nginx headers. PWA/Service Worker удалён (вызывал stale content после деплоев) | ✅ |
 
 ### 13.2 Backend ✅
 
@@ -452,7 +456,7 @@ One-click настройка свежего VPS как VPN-ноды.
 | A.3 | Миграция бота | ✅ | Все handlers, services, utils переведены на `from shared.` для shared-модулей. Бот-специфичный код остался в `src/` |
 | A.4 | Обновление Dockerfiles | ✅ | Bot Dockerfile копирует `shared/` + `src/`. Web backend Dockerfile копирует `shared/` + `web/backend/` (без `src/`) |
 | A.5 | Re-export обёртки | ✅ | `src/services/*.py` содержат re-export из `shared/` для обратной совместимости (не используются внутри проекта) |
-| A.6 | Тестирование | ✅ | 663 теста (459 backend + 204 frontend) — все проходят |
+| A.6 | Тестирование | ✅ | 1005+ тестов (801 backend + 204 frontend) — все проходят |
 
 ### Архитектура
 
@@ -514,21 +518,20 @@ remnawave-admin/
   Фаза 4  (Improvements)       ██████████  Массовые операции, поиск, UX        ✅
   Фаза 5  (New features)       ██████████  Аудит, логи, аналитика              ✅
   Фаза 6  (Automations)        ██████████  Конструктор правил                  ✅
-  Фаза 7  (Fleet Management)   ██████████  Терминал, скрипты, провижининг      ✅
+  Фаза 7  (Fleet Management)   ██████████  Терминал, скрипты, CRUD, импорт     ✅
+  Фаза 8  (Bot Migration)      █████████░  Ресурсы, биллинг, отчёты, подписки  ✅ (~90%)
   Фаза 10 (Notifications)      ██████████  Уведомления, алерты, почта          ✅
-  Фаза 11 (Testing)            ██████████  663 теста (459 BE + 204 FE) + E2E   ✅
+  Фаза 11 (Testing)            ██████████  1005+ тестов (801 BE + 204 FE) + E2E ✅
   Фаза 12 (i18n)               ██████████  Мультиязычность (фронтенд)          ✅
   Фаза 13 (Performance FE)     ██████████  Оптимизация фронтенда               ✅
   Фаза 13 (Performance BE)     ██████████  Redis, cursor-based, индексы, WS     ✅
   Arch    (shared/ модуль)      ██████████  11 сервисов в shared/, независимый деплой ✅
 
 Частично выполнено:
-  Фаза 7  (Fleet: редактор)    █████████░  Нет визуального редактора скриптов  ⚠️ (~95%)
-  Фаза 8  (Bot Migration)      ███░░░░░░░  HWID + traffic reset + подписки     ⚠️ (~30%)
+  Фаза 8  (Bot Config UI)      █░░░░░░░░░  Нет UI для bot_config в Settings    ⚠️
   Фаза 12 (i18n backend)       ██░░░░░░░░  Нет кодов ошибок, нет i18n шаблонов ⚠️ (~80%)
 
 Планируется:
-  Фаза 8  (Bot Migration)      ░░░░░░░░░░  Шаблоны, сниппеты, биллинг, отчёты
   Фаза 9  (Mini App)           ░░░░░░░░░░  Telegram Mini App
   Фаза 14 (Backup)             ░░░░░░░░░░  Бэкап, импорт, миграция
   Фаза 15 (External API)       ░░░░░░░░░░  API-ключи, SDK, документация
@@ -536,9 +539,9 @@ remnawave-admin/
 
 ### Порядок реализации (оставшиеся задачи)
 
-1. **Фаза 8** — миграция бота: переносит оставшийся функционал (шаблоны, сниппеты, API-токены, биллинг, провайдеры, отчёты, настройки бота). HWID, traffic reset strategy и подписки уже перенесены
-2. **Фаза 9** — Mini App: лёгкий доступ к панели из Telegram после миграции основного функционала
-3. **Фаза 12.2** — i18n бэкенда: коды ошибок, i18n шаблонов автоматизаций/уведомлений
+1. **Фаза 8 (остаток)** — UI настроек бота (bot_config в Settings), виджет биллинга на Dashboard, расписание отчётов
+2. **Фаза 12.2** — i18n бэкенда: коды ошибок, i18n шаблонов автоматизаций/уведомлений
+3. **Фаза 9** — Mini App: лёгкий доступ к панели из Telegram
 4. **Фаза 14** — бэкап: экспорт/импорт конфигурации, pg_dump/pg_restore из панели
 5. **Фаза 15** — внешний API: API-ключи, webhook-подписки, SDK, документация
 
@@ -558,4 +561,4 @@ remnawave-admin/
 
 ---
 
-*Последнее обновление: 16 февраля 2026*
+*Последнее обновление: 23 февраля 2026*
