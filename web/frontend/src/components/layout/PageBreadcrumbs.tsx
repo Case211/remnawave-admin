@@ -18,12 +18,17 @@ const ROUTE_LABEL_KEYS: Record<string, string> = {
   fleet: 'nav.fleet',
   hosts: 'nav.hosts',
   violations: 'nav.violations',
-  admins: 'nav.admins',
+  automations: 'nav.automations',
+  notifications: 'nav.notifications',
+  mailserver: 'nav.mailServer',
   analytics: 'nav.analytics',
+  billing: 'nav.billing',
+  backups: 'nav.backups',
+  'api-keys': 'nav.apiKeys',
+  admins: 'nav.admins',
   audit: 'nav.audit',
   logs: 'nav.logs',
   settings: 'nav.settings',
-  automations: 'nav.automations',
 }
 
 /**
