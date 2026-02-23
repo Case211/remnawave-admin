@@ -109,6 +109,14 @@ class ErrorCode(str, Enum):
     REPORT_NOT_FOUND = "REPORT_NOT_FOUND"
     ASN_NOT_FOUND = "ASN_NOT_FOUND"
 
+    # ── Backups ─────────────────────────────────────────────────
+    BACKUP_NOT_FOUND = "BACKUP_NOT_FOUND"
+    BACKUP_CREATE_FAILED = "BACKUP_CREATE_FAILED"
+    BACKUP_RESTORE_FAILED = "BACKUP_RESTORE_FAILED"
+    BACKUP_DELETE_FAILED = "BACKUP_DELETE_FAILED"
+    IMPORT_FAILED = "IMPORT_FAILED"
+    INVALID_FILENAME = "INVALID_FILENAME"
+
     # ── Generic ───────────────────────────────────────────────
     NO_FIELDS_TO_UPDATE = "NO_FIELDS_TO_UPDATE"
     API_SERVICE_UNAVAILABLE = "API_SERVICE_UNAVAILABLE"
@@ -139,6 +147,12 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.DOMAIN_NOT_FOUND: "Domain not found",
     E.REPORT_NOT_FOUND: "Report not found",
     E.ASN_NOT_FOUND: "ASN not found",
+    E.BACKUP_NOT_FOUND: "Backup file not found",
+    E.BACKUP_CREATE_FAILED: "Failed to create backup",
+    E.BACKUP_RESTORE_FAILED: "Failed to restore backup",
+    E.BACKUP_DELETE_FAILED: "Failed to delete backup",
+    E.IMPORT_FAILED: "Import failed",
+    E.INVALID_FILENAME: "Invalid filename",
     E.API_SERVICE_UNAVAILABLE: "API service not available",
     E.DB_UNAVAILABLE: "Database not available",
     E.INTERNAL_ERROR: "Internal error",

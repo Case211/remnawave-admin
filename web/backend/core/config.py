@@ -51,6 +51,9 @@ class WebSettings(BaseSettings):
     api_base_url: str = Field(..., alias="API_BASE_URL")
     api_token: Optional[str] = Field(default=None, alias="API_TOKEN")
 
+    # External API (disabled by default)
+    external_api_enabled: bool = Field(default=False, alias="EXTERNAL_API_ENABLED")
+
     # Redis (optional, for distributed caching and rate limiting)
     redis_url: Optional[str] = Field(default=None, alias="REDIS_URL")
 

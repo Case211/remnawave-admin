@@ -48,6 +48,8 @@ AVAILABLE_RESOURCES = {
     "billing": ["view", "create", "edit", "delete"],
     "reports": ["view", "create"],
     "mailserver": ["view", "create", "edit", "delete"],
+    "backups": ["view", "create", "delete"],
+    "api_keys": ["view", "create", "edit", "delete"],
 }
 
 

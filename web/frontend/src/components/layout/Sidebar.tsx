@@ -20,6 +20,8 @@ import {
   Zap,
   BellRing,
   Mail,
+  HardDrive,
+  Key,
   ShieldCheck,
   ChevronDown,
   ChevronsLeft,
@@ -105,6 +107,8 @@ const navigation: NavigationEntry[] = [
   { name: 'nav.notifications', href: '/notifications', icon: BellRing, permission: { resource: 'notifications', action: 'view' } },
   { name: 'nav.mailServer', href: '/mailserver', icon: Mail, permission: { resource: 'mailserver', action: 'view' } },
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
+  { name: 'nav.backups', href: '/backups', icon: HardDrive, permission: { resource: 'backups', action: 'view' } },
+  { name: 'nav.apiKeys', href: '/api-keys', icon: Key, permission: { resource: 'api_keys', action: 'view' } },
   {
     type: 'group',
     name: 'nav.administration',
