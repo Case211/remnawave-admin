@@ -11,7 +11,7 @@ from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
-BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", "/data/backups"))
+BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", "/app/backups"))
 
 
 def ensure_backup_dir() -> Path:
