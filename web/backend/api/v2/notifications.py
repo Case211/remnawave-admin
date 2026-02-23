@@ -12,6 +12,7 @@ from web.backend.api.deps import (
     require_permission,
     require_superadmin,
 )
+from web.backend.core.errors import api_error, E
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 from web.backend.schemas.notification import (
     AlertLogAcknowledge,
@@ -230,7 +231,7 @@ async def delete_notification(
             )
 
     if not deleted:
-        raise HTTPException(status_code=404, detail="Notification not found")
+        raise api_error(404, E.NOTIFICATION_NOT_FOUND)
 
     return SuccessResponse(message="Deleted")
 
@@ -359,7 +360,7 @@ async def update_channel(
         idx += 1
 
     if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        raise api_error(400, E.NO_FIELDS_TO_UPDATE)
 
     updates.append("updated_at = NOW()")
 
@@ -371,7 +372,7 @@ async def update_channel(
         )
 
     if not row:
-        raise HTTPException(status_code=404, detail="Channel not found")
+        raise api_error(404, E.CHANNEL_NOT_FOUND)
 
     d = dict(row)
     if isinstance(d.get("config"), str):
@@ -395,7 +396,7 @@ async def delete_channel(
         )
 
     if not deleted:
-        raise HTTPException(status_code=404, detail="Channel not found")
+        raise api_error(404, E.CHANNEL_NOT_FOUND)
     return SuccessResponse(message="Channel deleted")
 
 
@@ -414,7 +415,7 @@ async def get_smtp_config(
         row = await conn.fetchrow("SELECT * FROM smtp_config ORDER BY id LIMIT 1")
 
     if not row:
-        raise HTTPException(status_code=404, detail="SMTP not configured")
+        raise api_error(404, E.SMTP_NOT_CONFIGURED)
 
     return SmtpConfigRead(**dict(row))
 
@@ -438,7 +439,7 @@ async def update_smtp_config(
             idx += 1
 
     if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        raise api_error(400, E.NO_FIELDS_TO_UPDATE)
 
     updates.append("updated_at = NOW()")
 
@@ -457,7 +458,7 @@ async def update_smtp_config(
         )
 
     if not row:
-        raise HTTPException(status_code=500, detail="Failed to update SMTP config")
+        raise api_error(500, E.SMTP_UPDATE_FAILED)
 
     return SmtpConfigRead(**dict(row))
 
@@ -550,7 +551,7 @@ async def update_alert_rule(
             idx += 1
 
     if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        raise api_error(400, E.NO_FIELDS_TO_UPDATE)
 
     updates.append("updated_at = NOW()")
 
@@ -561,7 +562,7 @@ async def update_alert_rule(
         )
 
     if not row:
-        raise HTTPException(status_code=404, detail="Alert rule not found")
+        raise api_error(404, E.ALERT_RULE_NOT_FOUND)
 
     d = dict(row)
     if isinstance(d.get("channels"), str):
@@ -583,7 +584,7 @@ async def delete_alert_rule(
         )
 
     if not deleted:
-        raise HTTPException(status_code=404, detail="Alert rule not found")
+        raise api_error(404, E.ALERT_RULE_NOT_FOUND)
     return SuccessResponse(message="Alert rule deleted")
 
 
@@ -603,7 +604,7 @@ async def toggle_alert_rule(
         )
 
     if not row:
-        raise HTTPException(status_code=404, detail="Alert rule not found")
+        raise api_error(404, E.ALERT_RULE_NOT_FOUND)
 
     d = dict(row)
     if isinstance(d.get("channels"), str):

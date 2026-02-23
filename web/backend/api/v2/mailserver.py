@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from web.backend.core.errors import api_error, E
 from web.backend.api.deps import AdminUser, get_client_ip, require_permission
 from web.backend.core.rbac import write_audit_log
 from web.backend.schemas.mailserver import (
@@ -87,7 +88,7 @@ async def get_domain(
     async with db_service.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM domain_config WHERE id = $1", domain_id)
     if not row:
-        raise HTTPException(status_code=404, detail="Domain not found")
+        raise api_error(404, E.DOMAIN_NOT_FOUND)
     return dict(row)
 
 
@@ -103,7 +104,7 @@ async def update_domain(
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        raise api_error(400, E.NO_FIELDS_TO_UPDATE)
 
     set_clauses = []
     values = []
@@ -119,7 +120,7 @@ async def update_domain(
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(query, *values)
     if not row:
-        raise HTTPException(status_code=404, detail="Domain not found")
+        raise api_error(404, E.DOMAIN_NOT_FOUND)
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
         action="mailserver.update_domain", resource="mailserver",
@@ -172,7 +173,7 @@ async def get_domain_dns_records(
     from web.backend.core.mail.mail_service import mail_service
     records = await mail_service.get_domain_dns_records(domain_id)
     if not records:
-        raise HTTPException(status_code=404, detail="Domain not found")
+        raise api_error(404, E.DOMAIN_NOT_FOUND)
     return records
 
 
@@ -245,7 +246,7 @@ async def get_queue_item(
     async with db_service.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM email_queue WHERE id = $1", item_id)
     if not row:
-        raise HTTPException(status_code=404, detail="Queue item not found")
+        raise api_error(404, E.QUEUE_ITEM_NOT_FOUND)
     return dict(row)
 
 
@@ -340,7 +341,7 @@ async def get_inbox_item(
     async with db_service.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM email_inbox WHERE id = $1", item_id)
     if not row:
-        raise HTTPException(status_code=404, detail="Message not found")
+        raise api_error(404, E.MESSAGE_NOT_FOUND)
     return dict(row)
 
 
@@ -395,7 +396,7 @@ async def send_email(
         priority=1,
     )
     if queue_id is None:
-        raise HTTPException(status_code=400, detail="No active outbound domain configured")
+        raise api_error(400, E.NO_OUTBOUND_DOMAIN)
     return {"ok": True, "queue_id": queue_id}
 
 
@@ -427,7 +428,7 @@ async def send_test_email(
         priority=2,
     )
     if queue_id is None:
-        raise HTTPException(status_code=400, detail="No active outbound domain configured")
+        raise api_error(400, E.NO_OUTBOUND_DOMAIN)
     return {"ok": True, "queue_id": queue_id}
 
 
@@ -497,7 +498,7 @@ async def get_smtp_credential(
             "FROM smtp_credentials WHERE id = $1", cred_id,
         )
     if not row:
-        raise HTTPException(status_code=404, detail="SMTP credential not found")
+        raise api_error(404, E.SMTP_CREDENTIAL_NOT_FOUND)
     return dict(row)
 
 
@@ -513,7 +514,7 @@ async def update_smtp_credential(
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        raise api_error(400, E.NO_FIELDS_TO_UPDATE)
 
     # Hash password if provided
     if "password" in updates:
@@ -538,7 +539,7 @@ async def update_smtp_credential(
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(query, *values)
     if not row:
-        raise HTTPException(status_code=404, detail="SMTP credential not found")
+        raise api_error(404, E.SMTP_CREDENTIAL_NOT_FOUND)
     from web.backend.core.mail.mail_service import mail_service
     await mail_service.refresh_smtp_credentials()
     await write_audit_log(

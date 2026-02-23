@@ -6,6 +6,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 from web.backend.api.deps import get_current_admin, get_db, AdminUser, require_permission, get_client_ip
+from web.backend.core.errors import api_error, E
 from web.backend.core.rbac import write_audit_log
 from web.backend.schemas.violation import (
     ViolationListItem,
@@ -399,7 +400,7 @@ async def add_to_whitelist(
     )
 
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to add user to whitelist")
+        raise api_error(500, E.WHITELIST_ADD_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -428,7 +429,7 @@ async def remove_from_whitelist(
     success = await db.remove_from_violation_whitelist(user_uuid)
 
     if not success:
-        raise HTTPException(status_code=404, detail="User not found in whitelist")
+        raise api_error(404, E.WHITELIST_USER_NOT_FOUND)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -516,7 +517,7 @@ async def get_violation(
             break
 
     if not violation:
-        raise HTTPException(status_code=404, detail="Violation not found")
+        raise api_error(404, E.VIOLATION_NOT_FOUND)
 
     return ViolationDetail(
         id=int(violation.get('id', 0)),
@@ -569,7 +570,7 @@ async def resolve_violation(
     )
 
     if not success:
-        raise HTTPException(status_code=404, detail="Violation not found or update failed")
+        raise api_error(404, E.VIOLATION_UPDATE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -599,7 +600,7 @@ async def annul_violation(
     )
 
     if not success:
-        raise HTTPException(status_code=404, detail="Violation not found or update failed")
+        raise api_error(404, E.VIOLATION_UPDATE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,

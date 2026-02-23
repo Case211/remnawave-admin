@@ -17,6 +17,8 @@ import {
   Wifi,
   Database,
   Globe,
+  CreditCard,
+  CalendarClock,
 } from 'lucide-react'
 import {
   BarChart,
@@ -33,6 +35,7 @@ import {
   Area,
 } from 'recharts'
 import client from '../api/client'
+import { billingApi } from '../api/billing'
 import { usePermissionStore } from '../store/permissionStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -545,6 +548,102 @@ function SystemStatusCard({
   )
 }
 
+// ── BillingSummaryCard ───────────────────────────────────────────
+
+function BillingSummaryCard({ loading }: { loading: boolean }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const { formatCurrency, formatDate } = useFormatters()
+
+  const { data: billing, isLoading } = useQuery({
+    queryKey: ['billingSummary'],
+    queryFn: billingApi.getSummary,
+    refetchInterval: 120000,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const isCardLoading = loading || isLoading
+
+  return (
+    <Card
+      className="animate-fade-in-up cursor-pointer hover:shadow-glow-teal transition-shadow"
+      style={{ animationDelay: '0.35s' }}
+      onClick={() => navigate('/billing')}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base md:text-lg">{t('dashboard.billing')}</CardTitle>
+            <InfoTooltip text={t('dashboard.billingTooltip')} side="right" />
+          </div>
+          <div
+            className="p-2 rounded-lg"
+            style={{
+              background: 'rgba(251, 191, 36, 0.15)',
+              border: '1px solid rgba(251, 191, 36, 0.3)',
+            }}
+          >
+            <CreditCard className="w-5 h-5 text-yellow-400" />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isCardLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        ) : billing ? (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground">{t('dashboard.billingMonthly')}</p>
+              <p className="text-xl font-bold text-white">
+                {formatCurrency(Number(billing.current_month_payments) || 0)}
+              </p>
+            </div>
+            <Separator />
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{t('dashboard.billingProviders')}</span>
+                <span className="text-xs text-white font-mono">{billing.total_providers}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{t('dashboard.billingNodes')}</span>
+                <span className="text-xs text-white font-mono">{billing.total_billing_nodes}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{t('dashboard.billingTotalSpent')}</span>
+                <span className="text-xs text-cyan-400 font-semibold font-mono">
+                  {formatCurrency(Number(billing.total_spent) || 0)}
+                </span>
+              </div>
+              {billing.next_payment_date && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CalendarClock className="w-3 h-3" />
+                    {t('dashboard.billingNextPayment')}
+                  </span>
+                  <span className="text-xs text-yellow-400 font-mono">
+                    {formatDate(billing.next_payment_date)}
+                  </span>
+                </div>
+              )}
+            </div>
+            <Separator />
+            <span className="text-xs text-muted-foreground group-hover:text-primary-400 flex items-center gap-1 transition-colors duration-200">
+              {t('dashboard.details')} <ExternalLink className="w-3 h-3" />
+            </span>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t('common.noData')}</p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Constants ────────────────────────────────────────────────────
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -708,6 +807,7 @@ export default function Dashboard() {
   const canViewNodes = hasPermission('nodes', 'view')
   const canViewViolations = hasPermission('violations', 'view')
   const canViewAnalytics = hasPermission('analytics', 'view')
+  const canViewBilling = hasPermission('billing', 'view')
   // Chart state
   const [trafficPeriod, setTrafficPeriod] = useState('7d')
   const chart = useChartTheme()
@@ -785,6 +885,7 @@ export default function Dashboard() {
     queryClient.invalidateQueries({ queryKey: ['timeseries'] })
     queryClient.invalidateQueries({ queryKey: ['deltas'] })
     queryClient.invalidateQueries({ queryKey: ['systemComponents'] })
+    queryClient.invalidateQueries({ queryKey: ['billingSummary'] })
   }
 
   // ── Chart data ───────────────────────────────────────────────
@@ -1282,6 +1383,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Billing summary */}
+        {canViewBilling && <BillingSummaryCard loading={false} />}
 
         {/* Update checker */}
         {canViewAnalytics && <UpdateCheckerCard />}

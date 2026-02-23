@@ -54,6 +54,7 @@ export interface SetupStatus {
 
 interface ApiError {
   detail: string
+  code?: string
 }
 
 /**

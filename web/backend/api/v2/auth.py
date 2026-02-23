@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
 
 from web.backend.api.deps import get_current_admin, AdminUser
+from web.backend.core.errors import api_error, E
 from web.backend.core.config import get_web_settings
 from web.backend.core.login_guard import login_guard
 from web.backend.core.notifier import (
@@ -103,10 +104,7 @@ async def register_admin(request: Request, data: RegisterRequest):
         logger.debug("Non-critical: %s", e)
 
     if has_env_auth or has_db_auth or has_rbac_accounts:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin account already exists. Registration is disabled.",
-        )
+        raise api_error(403, E.FORBIDDEN, "Admin account already exists. Registration is disabled.")
 
     # Validate password strength
     from web.backend.core.admin_credentials import (
@@ -117,17 +115,17 @@ async def register_admin(request: Request, data: RegisterRequest):
 
     is_strong, strength_error = validate_password_strength(data.password)
     if not is_strong:
-        raise HTTPException(status_code=400, detail=strength_error)
+        raise api_error(400, E.INVALID_PASSWORD, strength_error)
 
     # Validate username
     if len(data.username.strip()) < 3:
-        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+        raise api_error(400, E.INVALID_USERNAME, "Username must be at least 3 characters")
 
     # Create the admin account
     await ensure_table()
     success = await create_admin(data.username.strip(), data.password, is_generated=False)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to create admin account")
+        raise api_error(500, E.ADMIN_CREATE_FAILED)
 
     logger.info("First admin registered: '%s' from %s", data.username, client_ip)
 
@@ -180,10 +178,7 @@ async def telegram_login(request: Request, data: TelegramAuthData):
         )
         if locked:
             await notify_ip_blocked(client_ip, 900, 5)
-        raise HTTPException(
-            status_code=401,
-            detail=f"Invalid Telegram auth data: {error_message}"
-        )
+        raise api_error(401, E.INVALID_TOKEN, f"Invalid Telegram auth data: {error_message}")
 
     # Check if user is in admins list
     if data.id not in settings.admins:
@@ -197,10 +192,7 @@ async def telegram_login(request: Request, data: TelegramAuthData):
         )
         if locked:
             await notify_ip_blocked(client_ip, 900, 5)
-        raise HTTPException(
-            status_code=403,
-            detail="Access denied"
-        )
+        raise api_error(403, E.NOT_AN_ADMIN)
 
     # Success
     login_guard.record_success(client_ip)
@@ -250,10 +242,7 @@ async def password_login(request: Request, data: LoginRequest):
         logger.debug("Non-critical: %s", e)
 
     if not has_env_auth and not has_db_auth:
-        raise HTTPException(
-            status_code=403,
-            detail="Password authentication is not configured",
-        )
+        raise api_error(403, E.FORBIDDEN, "Password authentication is not configured")
 
     logger.info("Password login attempt for user '%s' from %s", data.username, client_ip)
 
@@ -269,10 +258,7 @@ async def password_login(request: Request, data: LoginRequest):
         )
         if locked:
             await notify_ip_blocked(client_ip, 900, 5)
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid username or password",
-        )
+        raise api_error(401, E.INVALID_PASSWORD, "Invalid username or password")
 
     # Success
     login_guard.record_success(client_ip)
@@ -302,12 +288,12 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
     """
     # Check if this refresh token has already been used (blacklisted)
     if token_blacklist.is_blacklisted(data.refresh_token):
-        raise HTTPException(status_code=401, detail="Refresh token already used")
+        raise api_error(401, E.TOKEN_ALREADY_USED)
 
     payload = decode_token(data.refresh_token)
 
     if not payload or payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        raise api_error(401, E.INVALID_REFRESH_TOKEN)
 
     subject = payload["sub"]
     settings = get_web_settings()
@@ -323,7 +309,7 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
             if account:
                 # DB account exists — it is the source of truth
                 if not account.get("is_active", True):
-                    raise HTTPException(status_code=403, detail="Admin account disabled")
+                    raise api_error(403, E.ACCOUNT_DISABLED)
                 is_valid = True
         except HTTPException:
             raise
@@ -332,13 +318,13 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
         # Fallback to .env only when no DB account was found
         if not is_valid:
             if not settings.admin_login or username.lower() != settings.admin_login.lower():
-                raise HTTPException(status_code=403, detail="Admin account not found")
+                raise api_error(403, E.ADMIN_NOT_FOUND)
         access_token = create_access_token(subject, username, auth_method="password")
     else:
         # Telegram-based auth — verify still in admins list
         telegram_id = int(subject)
         if telegram_id not in settings.admins:
-            raise HTTPException(status_code=403, detail="Not an admin")
+            raise api_error(403, E.NOT_AN_ADMIN)
         access_token = create_access_token(subject, payload.get("username", "admin"), auth_method="telegram")
 
     refresh_token = create_refresh_token(subject)
@@ -411,7 +397,7 @@ async def change_password(
     # Validate new password strength
     is_strong, strength_error = validate_password_strength(data.new_password)
     if not is_strong:
-        raise HTTPException(status_code=400, detail=strength_error)
+        raise api_error(400, E.INVALID_PASSWORD, strength_error)
 
     # Look up admin in admin_accounts
     account = None
@@ -421,14 +407,11 @@ async def change_password(
         account = await get_admin_account_by_username(admin.username)
 
     if not account or not account.get("password_hash"):
-        raise HTTPException(
-            status_code=400,
-            detail="Password change is only available for DB-managed accounts",
-        )
+        raise api_error(400, E.INVALID_PASSWORD, "Password change is only available for DB-managed accounts")
 
     # Verify current password
     if not verify_password(data.current_password, account["password_hash"]):
-        raise HTTPException(status_code=401, detail="Current password is incorrect")
+        raise api_error(401, E.INVALID_PASSWORD, "Current password is incorrect")
 
     # Update password
     new_hash = hash_password(data.new_password)
@@ -438,7 +421,7 @@ async def change_password(
         is_generated_password=False,
     )
     if not updated:
-        raise HTTPException(status_code=500, detail="Failed to update password")
+        raise api_error(500, E.PASSWORD_UPDATE_FAILED)
 
     logger.info("Password changed for user '%s'", admin.username)
     return SuccessResponse(message="Password changed successfully")

@@ -1,13 +1,14 @@
 """Role management API endpoints."""
 import json
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, Request
 
 from web.backend.api.deps import (
     AdminUser,
     require_permission,
     get_client_ip,
 )
+from web.backend.core.errors import api_error, E
 from web.backend.core.rbac import (
     list_roles,
     get_role_by_id,
@@ -99,7 +100,7 @@ async def get_role(
     """Get role with its permissions."""
     role = await get_role_by_id(role_id)
     if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
+        raise api_error(404, E.ROLE_NOT_FOUND)
     return _role_to_response(role)
 
 
@@ -113,20 +114,14 @@ async def create_new_role(
     # Check name uniqueness
     existing = await get_role_by_name(data.name)
     if existing:
-        raise HTTPException(status_code=409, detail="Role name already exists")
+        raise api_error(409, E.ROLE_NAME_EXISTS)
 
     # Validate permissions
     for perm in data.permissions:
         if perm.resource not in AVAILABLE_RESOURCES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown resource: {perm.resource}",
-            )
+            raise api_error(400, E.UNKNOWN_RESOURCE, f"Unknown resource: {perm.resource}")
         if perm.action not in AVAILABLE_RESOURCES[perm.resource]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid action '{perm.action}' for resource '{perm.resource}'",
-            )
+            raise api_error(400, E.INVALID_ACTION, f"Invalid action '{perm.action}' for resource '{perm.resource}'")
 
     role = await create_role(
         name=data.name,
@@ -135,7 +130,7 @@ async def create_new_role(
         permissions=[p.model_dump() for p in data.permissions],
     )
     if not role:
-        raise HTTPException(status_code=500, detail="Failed to create role")
+        raise api_error(500, E.ROLE_CREATE_FAILED)
 
     # Audit
     await write_audit_log(
@@ -161,21 +156,15 @@ async def update_existing_role(
     """Update an existing role."""
     existing = await get_role_by_id(role_id)
     if not existing:
-        raise HTTPException(status_code=404, detail="Role not found")
+        raise api_error(404, E.ROLE_NOT_FOUND)
 
     # Validate permissions if provided
     if data.permissions is not None:
         for perm in data.permissions:
             if perm.resource not in AVAILABLE_RESOURCES:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unknown resource: {perm.resource}",
-                )
+                raise api_error(400, E.UNKNOWN_RESOURCE, f"Unknown resource: {perm.resource}")
             if perm.action not in AVAILABLE_RESOURCES[perm.resource]:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid action '{perm.action}' for resource '{perm.resource}'",
-                )
+                raise api_error(400, E.INVALID_ACTION, f"Invalid action '{perm.action}' for resource '{perm.resource}'")
 
     role = await update_role(
         role_id=role_id,
@@ -184,7 +173,7 @@ async def update_existing_role(
         permissions=[p.model_dump() for p in data.permissions] if data.permissions is not None else None,
     )
     if not role:
-        raise HTTPException(status_code=500, detail="Failed to update role")
+        raise api_error(500, E.ROLE_UPDATE_FAILED)
 
     # Audit
     await write_audit_log(
@@ -208,14 +197,14 @@ async def delete_existing_role(
     """Delete a custom role. System roles cannot be deleted."""
     existing = await get_role_by_id(role_id)
     if not existing:
-        raise HTTPException(status_code=404, detail="Role not found")
+        raise api_error(404, E.ROLE_NOT_FOUND)
 
     if existing.get("is_system"):
-        raise HTTPException(status_code=400, detail="Cannot delete system roles")
+        raise api_error(400, E.SYSTEM_ROLE_PROTECTED)
 
     success = await delete_role(role_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete role")
+        raise api_error(500, E.ROLE_DELETE_FAILED)
 
     # Audit
     await write_audit_log(

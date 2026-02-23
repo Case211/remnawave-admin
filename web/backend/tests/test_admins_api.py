@@ -240,7 +240,9 @@ class TestUpdateAdmin:
                 json={"role_id": 4},
             )
             assert resp.status_code == 400
-            assert "own role" in resp.json()["detail"].lower()
+            detail = resp.json()["detail"]
+            msg = detail["detail"] if isinstance(detail, dict) else detail
+            assert "own role" in msg.lower()
 
     @pytest.mark.asyncio
     @patch(
@@ -287,7 +289,9 @@ class TestDeleteAdmin:
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.delete("/api/v2/admins/1")
             assert resp.status_code == 400
-            assert "yourself" in resp.json()["detail"].lower()
+            detail = resp.json()["detail"]
+            msg = detail["detail"] if isinstance(detail, dict) else detail
+            assert "yourself" in msg.lower()
 
     @pytest.mark.asyncio
     @patch(

@@ -35,7 +35,20 @@ export interface BillingNodesResponse {
   }
 }
 
+export interface BillingSummary {
+  total_providers: number
+  current_month_payments: number
+  total_spent: number
+  upcoming_nodes: number
+  next_payment_date: string | null
+  total_billing_nodes: number
+}
+
 export const billingApi = {
+  getSummary: async (): Promise<BillingSummary> => {
+    const { data } = await client.get('/billing/summary')
+    return data
+  },
   getProviders: async (): Promise<Provider[]> => {
     const { data } = await client.get('/billing/providers')
     return Array.isArray(data?.items) ? data.items : []

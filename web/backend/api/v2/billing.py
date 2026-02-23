@@ -112,6 +112,55 @@ async def delete_provider(
         raise HTTPException(status_code=502, detail=str(e))
 
 
+# ── Summary ────────────────────────────────────────────────────
+
+
+@router.get("/summary")
+async def billing_summary(
+    admin: AdminUser = Depends(require_permission("billing", "view")),
+):
+    """Aggregated billing summary for Dashboard widget."""
+    try:
+        from shared.api_client import api_client
+
+        # Fetch providers and billing nodes in parallel for stats
+        providers_result = await api_client.get_infra_providers()
+        providers_resp = providers_result.get("response", {})
+        providers = providers_resp.get("providers", []) if isinstance(providers_resp, dict) else []
+
+        nodes_result = await api_client.get_infra_billing_nodes()
+        nodes_data = nodes_result.get("response", {})
+        stats = nodes_data.get("stats", {}) if isinstance(nodes_data, dict) else {}
+        billing_nodes = nodes_data.get("billingNodes", []) if isinstance(nodes_data, dict) else []
+
+        # Find nearest next billing date
+        next_payment_date = None
+        if isinstance(billing_nodes, list):
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            for bn in billing_nodes:
+                nba = bn.get("nextBillingAt")
+                if nba:
+                    try:
+                        dt = datetime.fromisoformat(nba.replace("Z", "+00:00"))
+                        if dt > now and (next_payment_date is None or dt < next_payment_date):
+                            next_payment_date = dt
+                    except (ValueError, TypeError):
+                        pass
+
+        return {
+            "total_providers": len(providers),
+            "current_month_payments": stats.get("currentMonthPayments", 0),
+            "total_spent": stats.get("totalSpent", 0),
+            "upcoming_nodes": stats.get("upcomingNodesCount", 0),
+            "next_payment_date": next_payment_date.isoformat() if next_payment_date else None,
+            "total_billing_nodes": len(billing_nodes) if isinstance(billing_nodes, list) else 0,
+        }
+    except Exception as e:
+        logger.error("Failed to get billing summary: %s", e)
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 # ── Billing History ────────────────────────────────────────────
 
 

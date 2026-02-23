@@ -173,6 +173,7 @@ class DatabaseService:
         self._initialized: bool = False
         self._lock = asyncio.Lock()
         self._whitelist_cache: Dict[str, tuple] = {}  # {user_uuid: (is_whitelisted, timestamp)}
+        self._whitelist_table_available: Optional[bool] = None  # None = not checked yet
     
     @property
     def is_connected(self) -> bool:
@@ -2816,6 +2817,10 @@ class DatabaseService:
         if not self.is_connected:
             return False
 
+        # If we already know the table doesn't exist, skip the query
+        if self._whitelist_table_available is False:
+            return False
+
         try:
             async with self.acquire() as conn:
                 row = await conn.fetchval(
@@ -2826,10 +2831,17 @@ class DatabaseService:
                     """,
                     user_uuid,
                 )
+                self._whitelist_table_available = True
                 result = row is not None
                 self._whitelist_cache[user_uuid] = (result, now)
                 return result
         except Exception as e:
+            err_msg = str(e)
+            if "violation_whitelist" in err_msg and "does not exist" in err_msg:
+                if self._whitelist_table_available is not False:
+                    logger.warning("violation_whitelist table does not exist yet — run 'alembic upgrade head' to create it")
+                    self._whitelist_table_available = False
+                return False
             logger.error("Error checking violation whitelist for %s: %s", user_uuid, e, exc_info=True)
             return False
 

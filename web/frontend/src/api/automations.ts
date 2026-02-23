@@ -60,6 +60,7 @@ export interface AutomationTemplate {
   id: string
   name: string
   description: string
+  description_key?: string
   category: string
   trigger_type: string
   trigger_config: Record<string, unknown>

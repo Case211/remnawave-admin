@@ -4,7 +4,9 @@ import logging
 import math
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Query
+from fastapi import APIRouter, Depends, Request, Query
+
+from web.backend.core.errors import api_error, E
 
 from web.backend.api.deps import (
     AdminUser,
@@ -142,7 +144,7 @@ async def create_automation(
         created_by=admin.account_id,
     )
     if not rule:
-        raise HTTPException(status_code=500, detail="Failed to create automation rule")
+        raise api_error(500, E.AUTOMATION_CREATE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -176,7 +178,7 @@ async def activate_template(
     """Create a new automation rule from a template."""
     template = next((t for t in AUTOMATION_TEMPLATES if t["id"] == template_id), None)
     if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
+        raise api_error(404, E.TEMPLATE_NOT_FOUND)
 
     rule = await create_automation_rule(
         name=template["name"],
@@ -191,7 +193,7 @@ async def activate_template(
         created_by=admin.account_id,
     )
     if not rule:
-        raise HTTPException(status_code=500, detail="Failed to activate template")
+        raise api_error(500, E.AUTOMATION_ACTIVATE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -264,7 +266,7 @@ async def get_automation(
     """Get automation rule details."""
     rule = await get_automation_rule_by_id(rule_id)
     if not rule:
-        raise HTTPException(status_code=404, detail="Automation rule not found")
+        raise api_error(404, E.AUTOMATION_NOT_FOUND)
     return _rule_to_response(rule)
 
 
@@ -280,7 +282,7 @@ async def update_automation(
     """Update an automation rule."""
     existing = await get_automation_rule_by_id(rule_id)
     if not existing:
-        raise HTTPException(status_code=404, detail="Automation rule not found")
+        raise api_error(404, E.AUTOMATION_NOT_FOUND)
 
     fields = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
     if not fields:
@@ -288,7 +290,7 @@ async def update_automation(
 
     rule = await update_automation_rule(rule_id, **fields)
     if not rule:
-        raise HTTPException(status_code=500, detail="Failed to update automation rule")
+        raise api_error(500, E.AUTOMATION_UPDATE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -314,11 +316,11 @@ async def toggle_automation(
     """Toggle automation rule enabled/disabled."""
     existing = await get_automation_rule_by_id(rule_id)
     if not existing:
-        raise HTTPException(status_code=404, detail="Automation rule not found")
+        raise api_error(404, E.AUTOMATION_NOT_FOUND)
 
     rule = await toggle_automation_rule(rule_id)
     if not rule:
-        raise HTTPException(status_code=500, detail="Failed to toggle automation rule")
+        raise api_error(500, E.AUTOMATION_TOGGLE_FAILED)
 
     new_state = "enabled" if rule["is_enabled"] else "disabled"
     await write_audit_log(
@@ -345,11 +347,11 @@ async def delete_automation(
     """Delete an automation rule."""
     existing = await get_automation_rule_by_id(rule_id)
     if not existing:
-        raise HTTPException(status_code=404, detail="Automation rule not found")
+        raise api_error(404, E.AUTOMATION_NOT_FOUND)
 
     success = await delete_automation_rule(rule_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete automation rule")
+        raise api_error(500, E.AUTOMATION_DELETE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -374,7 +376,7 @@ async def test_automation(
     """Run a dry-run test of an automation rule without side effects."""
     existing = await get_automation_rule_by_id(rule_id)
     if not existing:
-        raise HTTPException(status_code=404, detail="Automation rule not found")
+        raise api_error(404, E.AUTOMATION_NOT_FOUND)
 
     result = await automation_engine.dry_run(rule_id)
     return AutomationTestResult(**result)

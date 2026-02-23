@@ -8,6 +8,8 @@ from typing import Optional, List
 
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 
+from web.backend.core.errors import api_error, E
+
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
@@ -348,7 +350,7 @@ async def get_internal_squads(
             elif isinstance(payload, list):
                 squads = payload
         except ImportError:
-            raise HTTPException(status_code=503, detail="API service not available")
+            raise api_error(503, E.API_SERVICE_UNAVAILABLE)
         except Exception as e:
             logger.error("Error fetching internal squads: %s", e)
             return []
@@ -376,7 +378,7 @@ async def get_external_squads(
             elif isinstance(payload, list):
                 squads = payload
         except ImportError:
-            raise HTTPException(status_code=503, detail="API service not available")
+            raise api_error(503, E.API_SERVICE_UNAVAILABLE)
         except Exception as e:
             logger.error("Error fetching external squads: %s", e)
             return []
@@ -406,10 +408,10 @@ async def get_user(
                 resp = await api_client.get_user_by_uuid(user_uuid)
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
-                raise HTTPException(status_code=503, detail="API service not available")
+                raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
         if not user_data:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise api_error(404, E.USER_NOT_FOUND)
 
         # Normalize to snake_case
         user_data = _ensure_snake_case(user_data)
@@ -447,7 +449,7 @@ async def get_user(
         raise
     except Exception as e:
         logger.error("Error getting user %s: %s", user_uuid, e)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.post("", response_model=UserDetail)
@@ -512,7 +514,7 @@ async def create_user(
         return UserDetail(**_ensure_snake_case(user))
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -559,7 +561,7 @@ async def update_user(
         return UserDetail(**_ensure_snake_case(user))
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -598,7 +600,7 @@ async def delete_user(
         return SuccessResponse(message="User deleted")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -624,7 +626,7 @@ async def enable_user(
         return SuccessResponse(message="User enabled")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -650,7 +652,7 @@ async def disable_user(
         return SuccessResponse(message="User disabled")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -676,7 +678,7 @@ async def reset_user_traffic(
         return SuccessResponse(message="Traffic reset")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -702,7 +704,7 @@ async def revoke_user_subscription(
         return SuccessResponse(message="Subscription revoked")
 
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -765,10 +767,10 @@ async def get_user_traffic_stats(
                 resp = await _api.get_user_by_uuid(user_uuid)
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
-                raise HTTPException(status_code=503, detail="API service not available")
+                raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
         if not user_data:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise api_error(404, E.USER_NOT_FOUND)
 
         user_data = _ensure_snake_case(user_data)
 
@@ -834,7 +836,7 @@ async def get_user_traffic_stats(
         raise
     except Exception as e:
         logger.error("Error getting traffic stats for %s: %s", user_uuid, e)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.get("/{user_uuid}/ip-history")
@@ -886,7 +888,7 @@ async def get_user_ip_history(
             return {"items": items, "total": len(items)}
     except Exception as e:
         logger.error("Error getting IP history for %s: %s", user_uuid, e)
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.post("/{user_uuid}/sync-hwid-devices")
@@ -901,7 +903,7 @@ async def sync_user_hwid_devices(
         return {"success": True, "synced": synced}
     except Exception as e:
         logger.error("Error syncing HWID devices for %s: %s", user_uuid, e)
-        raise HTTPException(status_code=500, detail="Sync failed")
+        raise api_error(500, E.SYNC_FAILED)
 
 
 @router.get("/{user_uuid}/hwid-devices", response_model=List[HwidDevice])
@@ -1018,7 +1020,7 @@ async def bulk_enable_users(
     try:
         from shared.api_client import api_client
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
@@ -1049,7 +1051,7 @@ async def bulk_disable_users(
     try:
         from shared.api_client import api_client
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
@@ -1080,7 +1082,7 @@ async def bulk_delete_users(
     try:
         from shared.api_client import api_client
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
@@ -1117,7 +1119,7 @@ async def bulk_reset_traffic(
     try:
         from shared.api_client import api_client
     except ImportError:
-        raise HTTPException(status_code=503, detail="API service not available")
+        raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:

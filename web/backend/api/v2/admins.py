@@ -2,8 +2,9 @@
 import json
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, Request, Query
+from fastapi import APIRouter, Depends, Request, Query
 
+from web.backend.core.errors import api_error, E
 from web.backend.api.deps import (
     AdminUser,
     get_current_admin,
@@ -82,7 +83,7 @@ async def get_admin(
     """Get admin account by ID."""
     account = await get_admin_account_by_id(admin_id)
     if not account:
-        raise HTTPException(status_code=404, detail="Admin not found")
+        raise api_error(404, E.ADMIN_NOT_FOUND)
     return _account_to_response(account)
 
 
@@ -96,19 +97,19 @@ async def create_admin(
     # Check role exists
     role = await get_role_by_id(data.role_id)
     if not role:
-        raise HTTPException(status_code=400, detail="Role not found")
+        raise api_error(400, E.ROLE_NOT_FOUND)
 
     # Check username uniqueness
     existing = await get_admin_account_by_username(data.username)
     if existing:
-        raise HTTPException(status_code=409, detail="Username already exists")
+        raise api_error(409, E.USERNAME_EXISTS)
 
     # Hash password if provided
     pw_hash = None
     if data.password:
         is_strong, error = validate_password_strength(data.password)
         if not is_strong:
-            raise HTTPException(status_code=400, detail=error)
+            raise api_error(400, E.INVALID_PASSWORD, error)
         pw_hash = hash_password(data.password)
 
     account = await create_admin_account(
@@ -123,7 +124,7 @@ async def create_admin(
         created_by=admin.account_id,
     )
     if not account:
-        raise HTTPException(status_code=500, detail="Failed to create admin account")
+        raise api_error(500, E.ADMIN_CREATE_FAILED)
 
     # Audit
     await write_audit_log(
@@ -151,28 +152,28 @@ async def update_admin(
     """Update an admin account."""
     existing = await get_admin_account_by_id(admin_id)
     if not existing:
-        raise HTTPException(status_code=404, detail="Admin not found")
+        raise api_error(404, E.ADMIN_NOT_FOUND)
 
     # Cannot edit own role / deactivate self
     if admin.account_id == admin_id:
         if data.role_id is not None and data.role_id != existing.get("role_id"):
-            raise HTTPException(status_code=400, detail="Cannot change your own role")
+            raise api_error(400, E.CANNOT_MODIFY_SELF, "Cannot change your own role")
         if data.is_active is not None and not data.is_active:
-            raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
+            raise api_error(400, E.CANNOT_MODIFY_SELF, "Cannot deactivate yourself")
 
     fields = {}
     if data.username is not None:
         # Check uniqueness
         dup = await get_admin_account_by_username(data.username)
         if dup and dup["id"] != admin_id:
-            raise HTTPException(status_code=409, detail="Username already exists")
+            raise api_error(409, E.USERNAME_EXISTS)
         fields["username"] = data.username
     if data.telegram_id is not None:
         fields["telegram_id"] = data.telegram_id
     if data.role_id is not None:
         role = await get_role_by_id(data.role_id)
         if not role:
-            raise HTTPException(status_code=400, detail="Role not found")
+            raise api_error(400, E.ROLE_NOT_FOUND)
         fields["role_id"] = data.role_id
     if data.max_users is not None:
         fields["max_users"] = data.max_users
@@ -187,13 +188,13 @@ async def update_admin(
     if data.password is not None:
         is_strong, error = validate_password_strength(data.password)
         if not is_strong:
-            raise HTTPException(status_code=400, detail=error)
+            raise api_error(400, E.INVALID_PASSWORD, error)
         fields["password_hash"] = hash_password(data.password)
         fields["is_generated_password"] = False
 
     updated = await update_admin_account(admin_id, **fields)
     if not updated:
-        raise HTTPException(status_code=500, detail="Failed to update admin account")
+        raise api_error(500, E.ADMIN_UPDATE_FAILED)
 
     # Audit
     await write_audit_log(
@@ -218,15 +219,15 @@ async def delete_admin_endpoint(
 ):
     """Delete an admin account."""
     if admin.account_id == admin_id:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+        raise api_error(400, E.CANNOT_MODIFY_SELF, "Cannot delete yourself")
 
     existing = await get_admin_account_by_id(admin_id)
     if not existing:
-        raise HTTPException(status_code=404, detail="Admin not found")
+        raise api_error(404, E.ADMIN_NOT_FOUND)
 
     success = await delete_admin_account(admin_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete admin account")
+        raise api_error(500, E.ADMIN_DELETE_FAILED)
 
     # Audit
     await write_audit_log(
