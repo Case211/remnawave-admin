@@ -1,5 +1,6 @@
 """Backup service — database dump, config export/import, user import."""
 import asyncio
+import gzip as gzip_module
 import json
 import logging
 import os
@@ -31,8 +32,6 @@ async def create_database_backup(database_url: str) -> dict:
     filename = f"db_backup_{ts}.sql.gz"
     filepath = BACKUP_DIR / filename
 
-    # Parse DATABASE_URL for pg_dump
-    # Format: postgresql://user:pass@host:port/dbname
     try:
         proc = await asyncio.create_subprocess_exec(
             "pg_dump", database_url,
@@ -40,25 +39,15 @@ async def create_database_backup(database_url: str) -> dict:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-
-        # Pipe through gzip
-        gzip_proc = await asyncio.create_subprocess_exec(
-            "gzip",
-            stdin=proc.stdout,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        stdout, stderr = await gzip_proc.communicate()
-
-        if proc.returncode is None:
-            await proc.wait()
+        stdout, stderr = await proc.communicate()
 
         if proc.returncode != 0:
-            err = (await proc.stderr.read()).decode() if proc.stderr else "unknown error"
-            raise RuntimeError(f"pg_dump failed: {err}")
+            raise RuntimeError(f"pg_dump failed: {stderr.decode()}")
 
-        filepath.write_bytes(stdout)
+        # Compress with Python gzip (no need for external gzip binary)
+        with gzip_module.open(filepath, "wb") as f:
+            f.write(stdout)
+
         size_bytes = filepath.stat().st_size
 
         return {
@@ -76,36 +65,24 @@ async def restore_database_backup(database_url: str, filename: str) -> None:
     if not filepath.exists():
         raise FileNotFoundError(f"Backup file not found: {filename}")
 
+    # Read SQL data (decompress if gzipped)
     if filename.endswith(".gz"):
-        # Decompress and pipe to psql
-        gunzip = await asyncio.create_subprocess_exec(
-            "gunzip", "-c", str(filepath),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        psql = await asyncio.create_subprocess_exec(
-            "psql", database_url,
-            stdin=gunzip.stdout,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        _, stderr = await psql.communicate()
-        if gunzip.returncode is None:
-            await gunzip.wait()
-
-        if psql.returncode != 0:
-            raise RuntimeError(f"psql restore failed: {stderr.decode()}")
+        with gzip_module.open(filepath, "rb") as f:
+            sql_data = f.read()
     else:
-        proc = await asyncio.create_subprocess_exec(
-            "psql", database_url, "-f", str(filepath),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            raise RuntimeError(f"psql restore failed: {stderr.decode()}")
+        sql_data = filepath.read_bytes()
+
+    # Feed SQL to psql via stdin
+    psql = await asyncio.create_subprocess_exec(
+        "psql", database_url,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await psql.communicate(input=sql_data)
+
+    if psql.returncode != 0:
+        raise RuntimeError(f"psql restore failed: {stderr.decode()}")
 
 
 # ── Config export/import ─────────────────────────────────────
