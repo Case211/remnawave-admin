@@ -133,7 +133,8 @@ async def create_db_backup(
         )
 
         return BackupResult(**result)
-    except RuntimeError as e:
+    except Exception as e:
+        logger.error("Database backup failed: %s", e, exc_info=True)
         raise api_error(500, E.BACKUP_CREATE_FAILED, str(e))
 
 
