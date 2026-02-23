@@ -80,8 +80,7 @@ async def generate_report(
 ):
     """Generate a new violation report."""
     try:
-        from shared.database import db_service as db
-        from src.services.violation_reports import ViolationReportService, ReportType
+        from shared.violation_reports import ViolationReportService, ReportType
 
         report_type_map = {
             "daily": ReportType.DAILY,
@@ -92,7 +91,7 @@ async def generate_report(
         if not rt:
             raise HTTPException(status_code=400, detail=f"Invalid report type: {data.report_type}")
 
-        service = ViolationReportService(db)
+        service = ViolationReportService()
 
         if data.start_date and data.end_date:
             from datetime import datetime
