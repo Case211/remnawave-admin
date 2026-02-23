@@ -1153,6 +1153,25 @@
       "userUuidPlaceholder": "Введите UUID пользователя",
       "addTitle": "Добавить в whitelist",
       "expired": "Истёк"
+    },
+    "analyzers": {
+      "temporal": "Временной (одновременные подключения)",
+      "geo": "Географический (невозможное перемещение)",
+      "asn": "ASN (тип провайдера)",
+      "profile": "Профиль (отклонение поведения)",
+      "device": "Устройства (fingerprint)",
+      "hwid": "HWID (кросс-аккаунт)"
+    },
+    "exclusions": {
+      "mode": "Режим исключения",
+      "fullWhitelist": "Полный whitelist",
+      "partialExclusion": "Частичное исключение",
+      "configureButton": "Настроить исключения",
+      "configureTitle": "Исключения анализаторов",
+      "removeWhitelist": "Убрать из whitelist",
+      "mode_none": "Без исключений",
+      "mode_partial": "Частичное",
+      "mode_full": "Полный whitelist"
     }
   },
   "admins": {

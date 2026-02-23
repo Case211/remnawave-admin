@@ -1153,6 +1153,25 @@
       "userUuidPlaceholder": "Enter user UUID",
       "addTitle": "Add to whitelist",
       "expired": "Expired"
+    },
+    "analyzers": {
+      "temporal": "Temporal (simultaneous connections)",
+      "geo": "Geographic (impossible travel)",
+      "asn": "ASN (provider type)",
+      "profile": "Profile (behavior deviation)",
+      "device": "Device (fingerprint)",
+      "hwid": "HWID (cross-account)"
+    },
+    "exclusions": {
+      "mode": "Exclusion mode",
+      "fullWhitelist": "Full whitelist",
+      "partialExclusion": "Partial exclusion",
+      "configureButton": "Configure exclusions",
+      "configureTitle": "Analyzer Exclusions",
+      "removeWhitelist": "Remove from whitelist",
+      "mode_none": "No exclusion",
+      "mode_partial": "Partial",
+      "mode_full": "Full whitelist"
     }
   },
   "admins": {

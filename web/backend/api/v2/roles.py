@@ -36,7 +36,7 @@ AVAILABLE_RESOURCES = {
     "hosts": ["view", "create", "edit", "delete"],
     "violations": ["view", "resolve"],
     "settings": ["view", "edit"],
-    "fleet": ["view", "edit"],
+    "fleet": ["view", "edit", "scripts"],
     "analytics": ["view"],
     "admins": ["view", "create", "edit", "delete"],
     "roles": ["view", "create", "edit", "delete"],

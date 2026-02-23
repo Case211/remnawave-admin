@@ -136,8 +136,52 @@ async def _resolve_telegram_admin(subject: str, payload: dict, settings) -> Admi
     except Exception as e:
         logger.debug("RBAC lookup failed: %s", e)
 
-    # 2. Fallback: ADMINS env var (legacy — treat as superadmin)
+    # 2. Fallback: ADMINS env var — auto-provision RBAC account
     if telegram_id in settings.admins:
+        try:
+            from web.backend.core.rbac import get_role_by_name, get_all_permissions_for_role_id
+            from shared.database import db_service
+
+            role = await get_role_by_name("superadmin")
+            if role and db_service.is_connected:
+                username = payload.get("username", f"admin_{telegram_id}")
+                async with db_service.acquire() as conn:
+                    account = await conn.fetchrow(
+                        """
+                        INSERT INTO admin_accounts (username, telegram_id, role_id, is_active)
+                        VALUES ($1, $2, $3, true)
+                        ON CONFLICT (telegram_id) DO UPDATE SET
+                            username = EXCLUDED.username
+                        RETURNING *
+                        """,
+                        username, telegram_id, role["id"],
+                    )
+                if account:
+                    actual_role_id = account["role_id"]
+                    perms = await get_all_permissions_for_role_id(actual_role_id)
+                    # Determine actual role name (may have been changed by superadmin)
+                    role_name = "superadmin"
+                    if actual_role_id != role["id"]:
+                        from web.backend.core.rbac import get_role_by_id
+                        actual_role = await get_role_by_id(actual_role_id)
+                        role_name = actual_role["name"] if actual_role else "admin"
+                    logger.info(
+                        "RBAC account for ADMINS env admin: tg_id=%d, account_id=%d, role=%s",
+                        telegram_id, account["id"], role_name,
+                    )
+                    return AdminUser(
+                        telegram_id=telegram_id,
+                        username=account["username"],
+                        role=role_name,
+                        role_id=actual_role_id,
+                        auth_method="telegram",
+                        account_id=account["id"],
+                        permissions=perms,
+                    )
+        except Exception as e:
+            logger.warning("Failed to auto-provision admin account for tg_id=%d: %s", telegram_id, e)
+
+        # Final fallback: legacy mode (no RBAC account — DB unavailable)
         return AdminUser(
             telegram_id=telegram_id,
             username=payload.get("username", "admin"),

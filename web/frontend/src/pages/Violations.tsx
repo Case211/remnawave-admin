@@ -150,7 +150,10 @@ interface WhitelistItem {
   added_by_username: string | null
   added_at: string
   expires_at: string | null
+  excluded_analyzers: string[] | null
 }
+
+const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid'] as const
 
 // ── API ──────────────────────────────────────────────────────────
 
@@ -1073,15 +1076,36 @@ function WhitelistAddDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   userUuid: string
-  onSubmit: (data: { user_uuid: string; reason?: string; expires_in_days?: number }) => void
+  onSubmit: (data: { user_uuid: string; reason?: string; expires_in_days?: number; excluded_analyzers?: string[] }) => void
 }) {
   const { t } = useTranslation()
   const [userUuid, setUserUuid] = useState(initialUserUuid)
   const [reason, setReason] = useState('')
   const [duration, setDuration] = useState<string>('forever')
+  const [exclusionMode, setExclusionMode] = useState<'full' | 'partial'>('full')
+  const [selectedAnalyzers, setSelectedAnalyzers] = useState<Set<string>>(new Set())
 
   // Sync when prop changes
   useEffect(() => { setUserUuid(initialUserUuid) }, [initialUserUuid])
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open) {
+      setExclusionMode('full')
+      setSelectedAnalyzers(new Set())
+      setReason('')
+      setDuration('forever')
+    }
+  }, [open])
+
+  const toggleAnalyzer = (key: string) => {
+    setSelectedAnalyzers(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   const handleSubmit = () => {
     if (!userUuid.trim()) return
@@ -1090,6 +1114,9 @@ function WhitelistAddDialog({
       user_uuid: userUuid.trim(),
       reason: reason.trim() || undefined,
       expires_in_days: expiresInDays,
+      excluded_analyzers: exclusionMode === 'partial' && selectedAnalyzers.size > 0
+        ? Array.from(selectedAnalyzers)
+        : undefined,
     })
   }
 
@@ -1154,6 +1181,59 @@ function WhitelistAddDialog({
               ))}
             </div>
           </div>
+          {/* Exclusion mode */}
+          <div>
+            <label className="text-sm font-medium text-dark-100 mb-1.5 block">
+              {t('violations.exclusions.mode')}
+            </label>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <button
+                onClick={() => setExclusionMode('full')}
+                className={cn(
+                  'px-3 py-2 rounded-md text-sm font-medium transition-all border',
+                  exclusionMode === 'full'
+                    ? 'bg-primary-600/20 text-primary-400 border-primary-500/30'
+                    : 'bg-dark-700/50 text-dark-200 border-dark-400/20 hover:text-white hover:border-dark-400/40'
+                )}
+              >
+                {t('violations.exclusions.fullWhitelist')}
+              </button>
+              <button
+                onClick={() => setExclusionMode('partial')}
+                className={cn(
+                  'px-3 py-2 rounded-md text-sm font-medium transition-all border',
+                  exclusionMode === 'partial'
+                    ? 'bg-amber-600/20 text-amber-400 border-amber-500/30'
+                    : 'bg-dark-700/50 text-dark-200 border-dark-400/20 hover:text-white hover:border-dark-400/40'
+                )}
+              >
+                {t('violations.exclusions.partialExclusion')}
+              </button>
+            </div>
+            {exclusionMode === 'partial' && (
+              <div className="space-y-1.5 mt-2">
+                {ANALYZER_KEYS.map(key => (
+                  <label
+                    key={key}
+                    className={cn(
+                      'flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer transition-all border',
+                      selectedAnalyzers.has(key)
+                        ? 'bg-amber-600/10 border-amber-500/30 text-amber-300'
+                        : 'bg-dark-700/30 border-dark-400/15 text-dark-200 hover:border-dark-400/30'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedAnalyzers.has(key)}
+                      onChange={() => toggleAnalyzer(key)}
+                      className="rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/40"
+                    />
+                    <span className="text-sm">{t(`violations.analyzers.${key}`)}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -1188,7 +1268,7 @@ function WhitelistTab() {
   })
 
   const addMutation = useMutation({
-    mutationFn: (body: { user_uuid: string; reason?: string; expires_in_days?: number }) =>
+    mutationFn: (body: { user_uuid: string; reason?: string; expires_in_days?: number; excluded_analyzers?: string[] }) =>
       client.post('/violations/whitelist', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })
@@ -1274,7 +1354,25 @@ function WhitelistTab() {
                       {isExpired(item.expires_at) && (
                         <Badge variant="secondary" className="text-xs">{t('violations.whitelist.expired')}</Badge>
                       )}
+                      {item.excluded_analyzers ? (
+                        <Badge variant="outline" className="text-xs text-amber-400 border-amber-500/30">
+                          {t('violations.exclusions.partialExclusion')}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30">
+                          {t('violations.exclusions.fullWhitelist')}
+                        </Badge>
+                      )}
                     </div>
+                    {item.excluded_analyzers && (
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {item.excluded_analyzers.map(a => (
+                          <Badge key={a} variant="secondary" className="text-xs bg-amber-600/10 text-amber-300 border-amber-500/20">
+                            {t(`violations.analyzers.${a}`)}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dark-200">
                       {item.reason && <span>{item.reason}</span>}
                       <span>
@@ -1697,7 +1795,7 @@ export default function Violations() {
   const [whitelistUserUuid, setWhitelistUserUuid] = useState('')
 
   const addToWhitelist = useMutation({
-    mutationFn: (body: { user_uuid: string; reason?: string; expires_in_days?: number }) =>
+    mutationFn: (body: { user_uuid: string; reason?: string; expires_in_days?: number; excluded_analyzers?: string[] }) =>
       client.post('/violations/whitelist', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })

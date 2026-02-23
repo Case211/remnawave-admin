@@ -29,6 +29,8 @@ import {
   Eye,
   QrCode,
   Download,
+  ShieldOff,
+  Settings,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import client from '../api/client'
@@ -46,6 +48,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import { QRCodeSVG } from 'qrcode.react'
+
+const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid'] as const
 
 interface UserDetailData {
   uuid: string
@@ -840,6 +844,30 @@ export default function UserDetail() {
     return () => { timersRef.current.forEach(clearTimeout) }
   }, [])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [exclusionDialogOpen, setExclusionDialogOpen] = useState(false)
+  const [selectedExclusions, setSelectedExclusions] = useState<Set<string>>(new Set())
+  const [exclusionMode, setExclusionMode] = useState<'full' | 'partial' | 'none'>('none')
+
+  // Reset exclusion dialog state on open
+  useEffect(() => {
+    if (exclusionDialogOpen) {
+      setExclusionMode('none')
+      setSelectedExclusions(new Set())
+    }
+  }, [exclusionDialogOpen])
+
+  const exclusionMutation = useMutation({
+    mutationFn: (body: { user_uuid: string; excluded_analyzers?: string[]; reason?: string }) =>
+      client.post('/violations/whitelist', body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })
+      toast.success(t('violations.toast.whitelistAdded'))
+      setExclusionDialogOpen(false)
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
 
   // Fetch user data
   const { data: user, isLoading, error } = useQuery<UserDetailData>({
@@ -1824,6 +1852,16 @@ export default function UserDetail() {
                   <p className="text-xl md:text-2xl font-bold text-white">{user.unique_ips_24h}</p>
                   <p className="text-xs text-dark-200">{t('userDetail.antiAbuse.uniqueIps24h')}</p>
                 </div>
+                {/* Exclusion settings button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2 mt-2"
+                  onClick={() => setExclusionDialogOpen(true)}
+                >
+                  <Settings className="w-4 h-4" />
+                  {t('violations.exclusions.configureButton')}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -1913,6 +1951,104 @@ export default function UserDetail() {
               <Download className="h-3.5 w-3.5 mr-1" />
               {t('userDetail.subscription.qrDownload')}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Analyzer Exclusions Dialog */}
+      <Dialog open={exclusionDialogOpen} onOpenChange={setExclusionDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldOff className="h-5 w-5" />
+              {t('violations.exclusions.configureTitle')}
+            </DialogTitle>
+            <DialogDescription>
+              {user?.username || uuid}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-3 gap-2">
+              {(['none', 'partial', 'full'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => { setExclusionMode(mode); if (mode !== 'partial') setSelectedExclusions(new Set()) }}
+                  className={cn(
+                    'px-3 py-2 rounded-md text-sm font-medium transition-all border',
+                    exclusionMode === mode
+                      ? mode === 'full' ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30'
+                        : mode === 'partial' ? 'bg-amber-600/20 text-amber-400 border-amber-500/30'
+                        : 'bg-dark-600 text-white border-dark-400/30'
+                      : 'bg-dark-700/50 text-dark-200 border-dark-400/20 hover:text-white hover:border-dark-400/40'
+                  )}
+                >
+                  {t(`violations.exclusions.mode_${mode}`)}
+                </button>
+              ))}
+            </div>
+            {exclusionMode === 'partial' && (
+              <div className="space-y-1.5">
+                {ANALYZER_KEYS.map(key => (
+                  <label
+                    key={key}
+                    className={cn(
+                      'flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer transition-all border',
+                      selectedExclusions.has(key)
+                        ? 'bg-amber-600/10 border-amber-500/30 text-amber-300'
+                        : 'bg-dark-700/30 border-dark-400/15 text-dark-200 hover:border-dark-400/30'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedExclusions.has(key)}
+                      onChange={() => {
+                        setSelectedExclusions(prev => {
+                          const next = new Set(prev)
+                          if (next.has(key)) next.delete(key); else next.add(key)
+                          return next
+                        })
+                      }}
+                      className="rounded border-dark-400/30 bg-dark-800 text-primary-500 focus:ring-primary-500/40"
+                    />
+                    <span className="text-sm">{t(`violations.analyzers.${key}`)}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setExclusionDialogOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            {exclusionMode === 'none' ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (uuid) client.delete(`/violations/whitelist/${uuid}`).then(() => {
+                    toast.success(t('violations.toast.whitelistRemoved'))
+                    setExclusionDialogOpen(false)
+                  }).catch(() => toast.error(t('common.error')))
+                }}
+              >
+                {t('violations.exclusions.removeWhitelist')}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  if (!uuid) return
+                  exclusionMutation.mutate({
+                    user_uuid: uuid,
+                    excluded_analyzers: exclusionMode === 'partial' && selectedExclusions.size > 0
+                      ? Array.from(selectedExclusions) : undefined,
+                    reason: exclusionMode === 'full' ? 'Full whitelist via user detail' : 'Partial exclusion via user detail',
+                  })
+                }}
+                className="gap-2"
+              >
+                <ShieldOff className="w-4 h-4" />
+                {t('common.save')}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

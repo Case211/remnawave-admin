@@ -138,11 +138,18 @@ class IPLookupResponse(BaseModel):
 
 # ── Whitelist ─────────────────────────────────────────────────
 
+VALID_ANALYZERS = {"temporal", "geo", "asn", "profile", "device", "hwid"}
+
+
 class WhitelistAddRequest(BaseModel):
     """Запрос на добавление пользователя в whitelist."""
     user_uuid: str
     reason: Optional[str] = Field(None, max_length=1000)
     expires_in_days: Optional[int] = Field(None, ge=1, le=3650)  # None = бессрочно
+    excluded_analyzers: Optional[List[str]] = Field(
+        None,
+        description="Список анализаторов для исключения. None = полный whitelist.",
+    )
 
     @field_validator('user_uuid')
     @classmethod
@@ -151,6 +158,34 @@ class WhitelistAddRequest(BaseModel):
         if not uuid_re.match(v.strip()):
             raise ValueError('Invalid UUID format')
         return v.strip()
+
+    @field_validator('excluded_analyzers')
+    @classmethod
+    def validate_analyzers(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None:
+            invalid = set(v) - VALID_ANALYZERS
+            if invalid:
+                raise ValueError(f'Invalid analyzer names: {", ".join(sorted(invalid))}')
+            v = sorted(set(v))
+        return v
+
+
+class WhitelistUpdateRequest(BaseModel):
+    """Запрос на обновление исключений whitelist."""
+    excluded_analyzers: Optional[List[str]] = Field(
+        None,
+        description="Список анализаторов для исключения. None = полный whitelist.",
+    )
+
+    @field_validator('excluded_analyzers')
+    @classmethod
+    def validate_analyzers(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None:
+            invalid = set(v) - VALID_ANALYZERS
+            if invalid:
+                raise ValueError(f'Invalid analyzer names: {", ".join(sorted(invalid))}')
+            v = sorted(set(v))
+        return v
 
 
 class WhitelistItem(BaseModel):
@@ -163,6 +198,7 @@ class WhitelistItem(BaseModel):
     added_by_username: Optional[str] = None
     added_at: datetime
     expires_at: Optional[datetime] = None
+    excluded_analyzers: Optional[List[str]] = None
 
 
 class WhitelistListResponse(BaseModel):

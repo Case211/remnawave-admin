@@ -20,6 +20,7 @@ from web.backend.schemas.violation import (
     IPLookupResponse,
     IPInfo,
     WhitelistAddRequest,
+    WhitelistUpdateRequest,
     WhitelistItem,
     WhitelistListResponse,
 )
@@ -365,6 +366,7 @@ async def get_whitelist(
 
     items = []
     for row in items_raw:
+        excluded = row.get('excluded_analyzers')
         items.append(WhitelistItem(
             id=row['id'],
             user_uuid=str(row['user_uuid']),
@@ -374,6 +376,7 @@ async def get_whitelist(
             added_by_username=row.get('added_by_username'),
             added_at=row.get('added_at') or datetime.utcnow(),
             expires_at=row.get('expires_at'),
+            excluded_analyzers=list(excluded) if excluded else None,
         ))
 
     return WhitelistListResponse(items=items, total=total)
@@ -397,6 +400,7 @@ async def add_to_whitelist(
         admin_id=admin.account_id,
         admin_username=admin.username,
         expires_at=expires_at,
+        excluded_analyzers=data.excluded_analyzers,
     )
 
     if not success:
@@ -411,11 +415,44 @@ async def add_to_whitelist(
         details=json.dumps({
             "reason": data.reason,
             "expires_in_days": data.expires_in_days,
+            "excluded_analyzers": data.excluded_analyzers,
         }),
         ip_address=get_client_ip(request),
     )
 
     return {"status": "ok", "user_uuid": data.user_uuid}
+
+
+@router.patch("/whitelist/{user_uuid}")
+async def update_whitelist_entry(
+    data: WhitelistUpdateRequest,
+    request: Request,
+    user_uuid: str = Path(..., pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Обновить настройки whitelist для пользователя (исключения анализаторов)."""
+    success = await db.update_violation_whitelist_exclusions(
+        user_uuid=user_uuid,
+        excluded_analyzers=data.excluded_analyzers,
+    )
+
+    if not success:
+        raise api_error(404, E.WHITELIST_USER_NOT_FOUND)
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violation.whitelist.update",
+        resource="violations",
+        resource_id=user_uuid,
+        details=json.dumps({
+            "excluded_analyzers": data.excluded_analyzers,
+        }),
+        ip_address=get_client_ip(request),
+    )
+
+    return {"status": "ok", "user_uuid": user_uuid, "excluded_analyzers": data.excluded_analyzers}
 
 
 @router.delete("/whitelist/{user_uuid}")

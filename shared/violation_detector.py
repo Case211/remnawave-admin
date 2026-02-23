@@ -1667,14 +1667,15 @@ class IntelligentViolationDetector:
         self.device_analyzer = DeviceFingerprintAnalyzer()
         self.hwid_analyzer = HwidCrossAccountAnalyzer(db_service)
     
-    async def check_user(self, user_uuid: str, window_minutes: int = 60) -> Optional[ViolationScore]:
+    async def check_user(self, user_uuid: str, window_minutes: int = 60, excluded_analyzers: Optional[List[str]] = None) -> Optional[ViolationScore]:
         """
         Проверить пользователя на нарушения.
-        
+
         Args:
             user_uuid: UUID пользователя
             window_minutes: Временное окно для анализа (по умолчанию 60 минут)
-        
+            excluded_analyzers: Список анализаторов для пропуска (per-user exclusions)
+
         Returns:
             ViolationScore или None при ошибке
         """
@@ -1740,18 +1741,20 @@ class IntelligentViolationDetector:
             # Анализируем кросс-аккаунт HWID
             hwid_score = await self.hwid_analyzer.analyze(user_uuid)
 
-            # Обнуляем скоры отключённых анализаторов через конфиг
-            if not config_service.get("violations_analyzer_temporal", True):
+            # Обнуляем скоры отключённых анализаторов (глобально через конфиг + per-user exclusions)
+            _excluded = set(excluded_analyzers) if excluded_analyzers else set()
+
+            if not config_service.get("violations_analyzer_temporal", True) or "temporal" in _excluded:
                 temporal_score = TemporalScore(score=0.0, reasons=[])
-            if not config_service.get("violations_analyzer_geo", True):
+            if not config_service.get("violations_analyzer_geo", True) or "geo" in _excluded:
                 geo_score = GeoScore(score=0.0, reasons=[], countries=set(), cities=set())
-            if not config_service.get("violations_analyzer_asn", True):
+            if not config_service.get("violations_analyzer_asn", True) or "asn" in _excluded:
                 asn_score = ASNScore(score=0.0, reasons=[], asn_types=set())
-            if not config_service.get("violations_analyzer_profile", True):
+            if not config_service.get("violations_analyzer_profile", True) or "profile" in _excluded:
                 profile_score = ProfileScore(score=0.0, reasons=[])
-            if not config_service.get("violations_analyzer_device", True):
+            if not config_service.get("violations_analyzer_device", True) or "device" in _excluded:
                 device_score = DeviceScore(score=0.0, reasons=[], unique_fingerprints_count=0, different_os_count=0)
-            if not config_service.get("violations_analyzer_hwid", True):
+            if not config_service.get("violations_analyzer_hwid", True) or "hwid" in _excluded:
                 hwid_score = HwidScore(score=0.0, reasons=[])
 
             # Вычисляем взвешенный скор
