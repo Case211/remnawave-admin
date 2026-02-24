@@ -69,16 +69,18 @@ const RESOURCE_ICONS: Record<string, typeof Users> = {
   automation: Zap,
 }
 
+// Mono-accent: all resource badges use the theme accent color
+const ACCENT_RESOURCE = 'bg-primary/20 text-primary-400 border-primary/30'
 const RESOURCE_COLORS: Record<string, string> = {
-  users: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  nodes: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  hosts: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  violations: 'bg-red-500/20 text-red-400 border-red-500/30',
-  settings: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  admins: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-  roles: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
-  auth: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-  automation: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  users: ACCENT_RESOURCE,
+  nodes: ACCENT_RESOURCE,
+  hosts: ACCENT_RESOURCE,
+  violations: 'bg-red-500/20 text-red-400 border-red-500/30', // semantic: violations = danger
+  settings: ACCENT_RESOURCE,
+  admins: ACCENT_RESOURCE,
+  roles: ACCENT_RESOURCE,
+  auth: 'bg-muted text-muted-foreground border-border',
+  automation: ACCENT_RESOURCE,
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -102,15 +104,17 @@ function parseAction(fullAction: string): { resource: string; action: string } {
 }
 
 function getActionColor(action: string): string {
+  // Semantic: destructive actions stay red
   if (action.includes('delete') || action === 'disable' || action.includes('revoke'))
     return 'bg-red-500/20 text-red-400 border-red-500/30'
+  // Semantic: create/enable stay green
   if (action === 'create' || action === 'enable')
-    return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-  if (action.includes('login') || action === 'change_password')
-    return 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+    return 'bg-green-500/20 text-green-400 border-green-500/30'
+  // Neutral actions use muted style
   if (action === 'logout')
-    return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-  return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+    return 'bg-muted text-muted-foreground border-border'
+  // Default: theme accent
+  return 'bg-primary/20 text-primary-400 border-primary/30'
 }
 
 function tryParseJSON(str: string | null): Record<string, unknown> | null {
@@ -326,8 +330,8 @@ export default function AuditLog() {
         <Card className="bg-dark-800 border-dark-700">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-cyan-500/20">
-                <FileText className="w-4 h-4 text-cyan-400" />
+              <div className="p-2 rounded-lg bg-primary/20">
+                <FileText className="w-4 h-4 text-primary-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{t('audit.stats.totalRecords')}</p>
@@ -339,8 +343,8 @@ export default function AuditLog() {
         <Card className="bg-dark-800 border-dark-700">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-500/20">
-                <Clock className="w-4 h-4 text-emerald-400" />
+              <div className="p-2 rounded-lg bg-primary/20">
+                <Clock className="w-4 h-4 text-primary-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{t('audit.stats.today')}</p>
@@ -352,8 +356,8 @@ export default function AuditLog() {
         <Card className="bg-dark-800 border-dark-700">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-500/20">
-                <Users className="w-4 h-4 text-blue-400" />
+              <div className="p-2 rounded-lg bg-primary/20">
+                <Users className="w-4 h-4 text-primary-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{t('audit.stats.activeAdmins')}</p>
@@ -365,8 +369,8 @@ export default function AuditLog() {
         <Card className="bg-dark-800 border-dark-700">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/20">
-                <Activity className="w-4 h-4 text-purple-400" />
+              <div className="p-2 rounded-lg bg-primary/20">
+                <Activity className="w-4 h-4 text-primary-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{t('audit.stats.resourceTypes')}</p>

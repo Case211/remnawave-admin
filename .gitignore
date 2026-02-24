@@ -13,6 +13,7 @@ log_error.json
 IMPROVEMENTS.md
 access.json
 logs_node_agent.json
+design-mockups/
 
 # Node Agent
 node-agent/.env

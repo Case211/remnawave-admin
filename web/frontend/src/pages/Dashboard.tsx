@@ -211,10 +211,10 @@ function formatTimestamp(ts: string): string {
   return ts
 }
 
-// Node chart colors
+// Node chart colors — mono-teal palette (varying brightness for distinction)
 const NODE_COLORS = [
-  '#06b6d4', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444',
-  '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316',
+  '#06b6d4', '#0891b2', '#22d3ee', '#0e7490', '#67e8f9',
+  '#155e75', '#0d9488', '#14b8a6', '#a5f3fc', '#164e63',
 ]
 
 // ── StatCard ─────────────────────────────────────────────────────
@@ -238,32 +238,18 @@ const StatCard = memo(function StatCard({
   delta, deltaType = 'percent', tooltip,
 }: StatCardProps) {
   const { t } = useTranslation()
+  // Mono-accent: all stat card icons use the theme accent color via CSS variables
+  const accentStyle = {
+    bg: 'rgba(var(--glow-rgb), 0.15)',
+    text: 'text-primary-400',
+    border: 'rgba(var(--glow-rgb), 0.3)',
+  }
   const colorConfig = {
-    cyan: {
-      bg: 'rgba(34, 211, 238, 0.15)',
-      text: 'text-cyan-400',
-      border: 'rgba(34, 211, 238, 0.3)',
-    },
-    green: {
-      bg: 'rgba(64, 192, 87, 0.15)',
-      text: 'text-green-400',
-      border: 'rgba(64, 192, 87, 0.3)',
-    },
-    yellow: {
-      bg: 'rgba(250, 176, 5, 0.15)',
-      text: 'text-yellow-400',
-      border: 'rgba(250, 176, 5, 0.3)',
-    },
-    red: {
-      bg: 'rgba(250, 82, 82, 0.15)',
-      text: 'text-red-400',
-      border: 'rgba(250, 82, 82, 0.3)',
-    },
-    violet: {
-      bg: 'rgba(151, 117, 250, 0.15)',
-      text: 'text-violet-400',
-      border: 'rgba(151, 117, 250, 0.3)',
-    },
+    cyan: accentStyle,
+    green: accentStyle,
+    yellow: accentStyle,
+    red: accentStyle,
+    violet: accentStyle,
   }
 
   const cfg = colorConfig[color]
@@ -455,7 +441,7 @@ function SystemStatusCard({
   }
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -580,11 +566,11 @@ function BillingSummaryCard({ loading }: { loading: boolean }) {
           <div
             className="p-2 rounded-lg"
             style={{
-              background: 'rgba(251, 191, 36, 0.15)',
-              border: '1px solid rgba(251, 191, 36, 0.3)',
+              background: 'rgba(var(--glow-rgb), 0.15)',
+              border: '1px solid rgba(var(--glow-rgb), 0.3)',
             }}
           >
-            <CreditCard className="w-5 h-5 text-yellow-400" />
+            <CreditCard className="w-5 h-5 text-primary-400" />
           </div>
         </div>
       </CardHeader>
@@ -615,7 +601,7 @@ function BillingSummaryCard({ loading }: { loading: boolean }) {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">{t('dashboard.billingTotalSpent')}</span>
-                <span className="text-xs text-cyan-400 font-semibold font-mono">
+                <span className="text-xs text-primary-400 font-semibold font-mono">
                   {formatCurrency(Number(billing.total_spent) || 0)}
                 </span>
               </div>
@@ -625,7 +611,7 @@ function BillingSummaryCard({ loading }: { loading: boolean }) {
                     <CalendarClock className="w-3 h-3" />
                     {t('dashboard.billingNextPayment')}
                   </span>
-                  <span className="text-xs text-yellow-400 font-mono">
+                  <span className="text-xs text-primary-400 font-mono">
                     {formatDate(billing.next_payment_date)}
                   </span>
                 </div>
@@ -1063,11 +1049,11 @@ export default function Dashboard() {
                 <div
                   className="p-3 rounded-lg"
                   style={{
-                    background: 'rgba(151, 117, 250, 0.15)',
-                    border: '1px solid rgba(151, 117, 250, 0.3)',
+                    background: 'rgba(var(--glow-rgb), 0.15)',
+                    border: '1px solid rgba(var(--glow-rgb), 0.3)',
                   }}
                 >
-                  <TrendingUp className="w-6 h-6 text-violet-400" />
+                  <TrendingUp className="w-6 h-6 text-primary-400" />
                 </div>
               </div>
               {trafficStats && (
@@ -1076,15 +1062,15 @@ export default function Dashboard() {
                   <div className="space-y-1.5 mt-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">{t('dashboard.today')}</span>
-                      <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.today_bytes)}</span>
+                      <span className="text-xs text-primary-400 font-semibold font-mono">{formatBytes(trafficStats.today_bytes)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">{t('dashboard.thisWeek')}</span>
-                      <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.week_bytes)}</span>
+                      <span className="text-xs text-primary-400 font-semibold font-mono">{formatBytes(trafficStats.week_bytes)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">{t('dashboard.thisMonth')}</span>
-                      <span className="text-xs text-cyan-400 font-semibold font-mono">{formatBytes(trafficStats.month_bytes)}</span>
+                      <span className="text-xs text-primary-400 font-semibold font-mono">{formatBytes(trafficStats.month_bytes)}</span>
                     </div>
                   </div>
                 </>
@@ -1094,96 +1080,107 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── Traffic Chart ───────────────────────────────────────── */}
+      {/* ── System Status + Traffic Chart (side by side) ────────── */}
       {canViewAnalytics && (
-        <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <CardHeader className="pb-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base md:text-lg">{t('dashboard.traffic')}</CardTitle>
-                <InfoTooltip
-                  text={t('dashboard.trafficChartTooltip')}
-                  side="right"
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* System Status (left) */}
+          <SystemStatusCard
+            components={systemComponents?.components || []}
+            uptime={systemComponents?.uptime_seconds ?? null}
+            version={systemComponents?.version || ''}
+            loading={componentsLoading}
+          />
+
+        {/* Traffic Chart (right) */}
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+            <CardHeader className="pb-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base md:text-lg">{t('dashboard.traffic')}</CardTitle>
+                  <InfoTooltip
+                    text={t('dashboard.trafficChartTooltip')}
+                    side="right"
+                  />
+                </div>
+                <PeriodSwitcher
+                  value={trafficPeriod}
+                  onChange={setTrafficPeriod}
+                  options={trafficPeriodOptions}
                 />
               </div>
-              <PeriodSwitcher
-                value={trafficPeriod}
-                onChange={setTrafficPeriod}
-                options={trafficPeriodOptions}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {timeseriesLoading ? (
-              <ChartSkeleton />
-            ) : trafficChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                {nodeUuids.length > 0 && nodeTrafficChartData.length > 0 ? (
-                  <AreaChart data={nodeTrafficChartData}>
-                    <defs>
-                      {nodeUuids.map((uid, i) => (
-                        <linearGradient key={uid} id={`grad-${i}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.05} />
-                        </linearGradient>
-                      ))}
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
-                    <XAxis dataKey="name" stroke={chart.axis} fontSize={11} />
-                    <YAxis
-                      stroke={chart.axis}
-                      fontSize={11}
-                      tickFormatter={(v) => formatBytesShort(v)}
-                    />
-                    <RechartsTooltip content={<TrafficChartTooltip />} />
-                    {nodeUuids.map((uid, i) => (
-                      <Area
-                        key={uid}
-                        type="monotone"
-                        dataKey={uid}
-                        name={nodeNames[uid] || uid.substring(0, 8)}
-                        stackId="traffic"
-                        stroke={NODE_COLORS[i % NODE_COLORS.length]}
-                        fill={`url(#grad-${i})`}
-                        strokeWidth={2}
+            </CardHeader>
+            <CardContent>
+              {timeseriesLoading ? (
+                <ChartSkeleton />
+              ) : trafficChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  {nodeUuids.length > 0 && nodeTrafficChartData.length > 0 ? (
+                    <AreaChart data={nodeTrafficChartData}>
+                      <defs>
+                        {nodeUuids.map((uid, i) => (
+                          <linearGradient key={uid} id={`grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.3} />
+                            <stop offset="95%" stopColor={NODE_COLORS[i % NODE_COLORS.length]} stopOpacity={0.05} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                      <XAxis dataKey="name" stroke={chart.axis} fontSize={11} />
+                      <YAxis
+                        stroke={chart.axis}
+                        fontSize={11}
+                        tickFormatter={(v) => formatBytesShort(v)}
                       />
-                    ))}
-                  </AreaChart>
-                ) : (
-                  <LineChart data={trafficChartData}>
-                    <defs>
-                      <linearGradient id="trafficGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
-                    <XAxis dataKey="name" stroke={chart.axis} fontSize={11} />
-                    <YAxis
-                      stroke={chart.axis}
-                      fontSize={11}
-                      tickFormatter={(v) => formatBytesShort(v)}
-                    />
-                    <RechartsTooltip content={<TrafficChartTooltip />} />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      name={t('dashboard.traffic')}
-                      stroke="#06b6d4"
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4, fill: '#06b6d4' }}
-                    />
-                  </LineChart>
-                )}
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-64 flex items-center justify-center">
-                <span className="text-muted-foreground text-sm">{t('dashboard.noDataForPeriod')}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                      <RechartsTooltip content={<TrafficChartTooltip />} />
+                      {nodeUuids.map((uid, i) => (
+                        <Area
+                          key={uid}
+                          type="monotone"
+                          dataKey={uid}
+                          name={nodeNames[uid] || uid.substring(0, 8)}
+                          stackId="traffic"
+                          stroke={NODE_COLORS[i % NODE_COLORS.length]}
+                          fill={`url(#grad-${i})`}
+                          strokeWidth={2}
+                        />
+                      ))}
+                    </AreaChart>
+                  ) : (
+                    <LineChart data={trafficChartData}>
+                      <defs>
+                        <linearGradient id="trafficGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                      <XAxis dataKey="name" stroke={chart.axis} fontSize={11} />
+                      <YAxis
+                        stroke={chart.axis}
+                        fontSize={11}
+                        tickFormatter={(v) => formatBytesShort(v)}
+                      />
+                      <RechartsTooltip content={<TrafficChartTooltip />} />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        name={t('dashboard.traffic')}
+                        stroke="#06b6d4"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4, fill: '#06b6d4' }}
+                      />
+                    </LineChart>
+                  )}
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-60 flex items-center justify-center">
+                  <span className="text-muted-foreground text-sm">{t('dashboard.noDataForPeriod')}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+      </div>
       )}
 
       {/* ── Connections Chart + Violations ───────────────────────── */}
@@ -1285,11 +1282,11 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── Bottom row: Violations by action + System status ──── */}
+      {/* ── Bottom row: Violations by action + Billing/Updates ──── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Violations by action */}
         {canViewViolations && (
-          <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-base md:text-lg">{t('dashboard.byRecommendation')}</CardTitle>
@@ -1346,14 +1343,12 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* System status */}
-        {canViewAnalytics ? (
-          <SystemStatusCard
-            components={systemComponents?.components || []}
-            uptime={systemComponents?.uptime_seconds ?? null}
-            version={systemComponents?.version || ''}
-            loading={componentsLoading}
-          />
+        {/* Right column: Billing/Updates or QuickActions */}
+        {canViewAnalytics || canViewBilling ? (
+          <div className="space-y-6">
+            {canViewBilling && <BillingSummaryCard loading={false} />}
+            {canViewAnalytics && <UpdateCheckerCard />}
+          </div>
         ) : (
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
             <CardHeader className="pb-2">
@@ -1383,12 +1378,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
-
-        {/* Billing summary */}
-        {canViewBilling && <BillingSummaryCard loading={false} />}
-
-        {/* Update checker */}
-        {canViewAnalytics && <UpdateCheckerCard />}
       </div>
     </div>
   )

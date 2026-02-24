@@ -115,7 +115,13 @@
     "billing": "Billing",
     "reports": "Reports",
     "backups": "Backups",
-    "apiKeys": "API & Webhooks"
+    "apiKeys": "API & Webhooks",
+    "sections": {
+      "core": "Core",
+      "security": "Security",
+      "data": "Data",
+      "admin": "Management"
+    }
   },
   "header": {
     "searchPlaceholder": "Search...",
@@ -478,6 +484,13 @@
     "trafficUnlimited": "Unlimited",
     "protocols": "Protocols",
     "internalSquads": "Internal squads",
+    "squads": {
+      "title": "Squads",
+      "externalSquad": "External squad",
+      "internalSquads": "Internal squads",
+      "notSelected": "Not selected",
+      "noSquadsAvailable": "No squads available"
+    },
     "violations": {
       "title": "Violations"
     },
