@@ -452,11 +452,14 @@ class RemnawaveApiClient:
     async def reset_user_traffic(self, user_uuid: str) -> dict:
         return await self._post(f"/api/users/{user_uuid}/actions/reset-traffic")
 
-    async def revoke_user_subscription(self, user_uuid: str, short_uuid: str | None = None) -> dict:
-        """Отзывает подписку пользователя. short_uuid опционален - если не указан, будет сгенерирован автоматически."""
+    async def revoke_user_subscription(self, user_uuid: str, short_uuid: str | None = None, revoke_only_passwords: bool = False) -> dict:
+        """Отзывает подписку пользователя. short_uuid опционален - если не указан, будет сгенерирован автоматически.
+        revoke_only_passwords=True перегенерирует только пароли подключения, URL подписки останется прежним."""
         payload: dict[str, object] = {}
         if short_uuid:
             payload["shortUuid"] = short_uuid
+        if revoke_only_passwords:
+            payload["revokeOnlyPasswords"] = True
         return await self._post(f"/api/users/{user_uuid}/actions/revoke", json=payload)
 
     async def get_internal_squads(self) -> dict:

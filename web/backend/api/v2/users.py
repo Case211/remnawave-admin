@@ -687,21 +687,24 @@ async def reset_user_traffic(
 async def revoke_user_subscription(
     user_uuid: str,
     request: Request,
+    passwords_only: bool = Query(False, description="If true, only regenerate passwords, keep subscription URL"),
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
-    """Revoke user's subscription (regenerate subscription UUID)."""
+    """Revoke user's subscription. passwords_only=true regenerates only connection passwords."""
     try:
         from shared.api_client import api_client
 
-        await api_client.revoke_user_subscription(user_uuid)
+        await api_client.revoke_user_subscription(user_uuid, revoke_only_passwords=passwords_only)
 
+        action = "user.revoke_passwords" if passwords_only else "user.revoke"
         await write_audit_log(
             admin_id=admin.account_id, admin_username=admin.username,
-            action="user.revoke", resource="users", resource_id=user_uuid,
-            details=json.dumps({"user_uuid": user_uuid}),
+            action=action, resource="users", resource_id=user_uuid,
+            details=json.dumps({"user_uuid": user_uuid, "passwords_only": passwords_only}),
             ip_address=get_client_ip(request),
         )
-        return SuccessResponse(message="Subscription revoked")
+        msg = "Passwords regenerated" if passwords_only else "Subscription revoked"
+        return SuccessResponse(message=msg)
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)

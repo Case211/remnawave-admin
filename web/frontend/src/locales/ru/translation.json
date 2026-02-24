@@ -588,7 +588,15 @@
       "userAgent": "User Agent",
       "qrTitle": "QR-код подписки",
       "qrDescription": "Отсканируйте QR-код VPN-клиентом для импорта подписки",
-      "qrDownload": "Скачать PNG"
+      "qrDownload": "Скачать PNG",
+      "revokeFull": "Полный перевыпуск",
+      "revokePasswords": "Только пароли",
+      "revokeFullConfirm": "Перевыпустить подписку?",
+      "revokeFullConfirmDesc": "URL-адрес подписки и все пароли подключения будут перегенерированы. Пользователю нужно будет заново импортировать подписку.",
+      "revokePasswordsConfirm": "Перевыпустить пароли?",
+      "revokePasswordsConfirmDesc": "Пароли подключения (Trojan, VLESS, Shadowsocks) будут перегенерированы. URL подписки останется прежним.",
+      "revokeFullSuccess": "Подписка полностью перевыпущена",
+      "revokePasswordsSuccess": "Пароли подключения перегенерированы"
     },
     "antiAbuse": {
       "title": "Anti-Abuse",

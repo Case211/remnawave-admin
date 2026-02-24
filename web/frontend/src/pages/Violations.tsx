@@ -1839,6 +1839,12 @@ export default function Violations() {
           onWhitelist={handleWhitelist}
           onViewUser={(uuid) => navigate(`/users/${uuid}`)}
         />
+        <WhitelistAddDialog
+          open={whitelistDialogOpen}
+          onOpenChange={setWhitelistDialogOpen}
+          userUuid={whitelistUserUuid}
+          onSubmit={(data) => addToWhitelist.mutate(data)}
+        />
       </div>
     )
   }

@@ -31,6 +31,7 @@ import {
   Download,
   ShieldOff,
   Settings,
+  KeyRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import client from '../api/client'
@@ -844,6 +845,8 @@ export default function UserDetail() {
     return () => { timersRef.current.forEach(clearTimeout) }
   }, [])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showRevokeFullConfirm, setShowRevokeFullConfirm] = useState(false)
+  const [showRevokePasswordsConfirm, setShowRevokePasswordsConfirm] = useState(false)
   const [exclusionDialogOpen, setExclusionDialogOpen] = useState(false)
   const [selectedExclusions, setSelectedExclusions] = useState<Set<string>>(new Set())
   const [exclusionMode, setExclusionMode] = useState<'full' | 'partial' | 'none'>('none')
@@ -978,6 +981,16 @@ export default function UserDetail() {
   const resetTrafficMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/reset-traffic`) },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.toasts.trafficReset')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
+  })
+  const revokeFullMutation = useMutation({
+    mutationFn: async () => { await client.post(`/users/${uuid}/revoke`) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.subscription.revokeFullSuccess')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
+  })
+  const revokePasswordsMutation = useMutation({
+    mutationFn: async () => { await client.post(`/users/${uuid}/revoke?passwords_only=true`) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.subscription.revokePasswordsSuccess')) },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
   })
   const deleteMutation = useMutation({
@@ -1790,6 +1803,30 @@ export default function UserDetail() {
                     <p className="text-dark-100 text-xs truncate" title={user.sub_last_user_agent}>{user.sub_last_user_agent}</p>
                   </div>
                 )}
+                {canEdit && (
+                  <div className="pt-3 border-t border-dark-400/20 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-amber-400 hover:text-amber-300"
+                      onClick={() => setShowRevokeFullConfirm(true)}
+                      disabled={revokeFullMutation.isPending}
+                    >
+                      <RefreshCw className={cn('h-3.5 w-3.5', revokeFullMutation.isPending && 'animate-spin')} />
+                      {t('userDetail.subscription.revokeFull')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => setShowRevokePasswordsConfirm(true)}
+                      disabled={revokePasswordsMutation.isPending}
+                    >
+                      <KeyRound className={cn('h-3.5 w-3.5', revokePasswordsMutation.isPending && 'animate-pulse')} />
+                      {t('userDetail.subscription.revokePasswords')}
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1879,6 +1916,28 @@ export default function UserDetail() {
         confirmLabel={t('userDetail.deleteConfirm.confirm')}
         variant="destructive"
         onConfirm={() => { deleteMutation.mutate(); setShowDeleteConfirm(false) }}
+      />
+
+      {/* Revoke full subscription confirm */}
+      <ConfirmDialog
+        open={showRevokeFullConfirm}
+        onOpenChange={setShowRevokeFullConfirm}
+        title={t('userDetail.subscription.revokeFullConfirm')}
+        description={t('userDetail.subscription.revokeFullConfirmDesc')}
+        confirmLabel={t('userDetail.subscription.revokeFull')}
+        variant="destructive"
+        onConfirm={() => { revokeFullMutation.mutate(); setShowRevokeFullConfirm(false) }}
+      />
+
+      {/* Revoke passwords only confirm */}
+      <ConfirmDialog
+        open={showRevokePasswordsConfirm}
+        onOpenChange={setShowRevokePasswordsConfirm}
+        title={t('userDetail.subscription.revokePasswordsConfirm')}
+        description={t('userDetail.subscription.revokePasswordsConfirmDesc')}
+        confirmLabel={t('userDetail.subscription.revokePasswords')}
+        variant="destructive"
+        onConfirm={() => { revokePasswordsMutation.mutate(); setShowRevokePasswordsConfirm(false) }}
       />
 
       {/* Delete single HWID device confirm */}

@@ -588,7 +588,15 @@
       "userAgent": "User Agent",
       "qrTitle": "Subscription QR Code",
       "qrDescription": "Scan this QR code with a VPN client to import the subscription",
-      "qrDownload": "Download PNG"
+      "qrDownload": "Download PNG",
+      "revokeFull": "Full reissue",
+      "revokePasswords": "Passwords only",
+      "revokeFullConfirm": "Reissue subscription?",
+      "revokeFullConfirmDesc": "The subscription URL and all connection passwords will be regenerated. The user will need to re-import their subscription.",
+      "revokePasswordsConfirm": "Regenerate passwords?",
+      "revokePasswordsConfirmDesc": "Connection passwords (Trojan, VLESS, Shadowsocks) will be regenerated. The subscription URL will remain the same.",
+      "revokeFullSuccess": "Subscription fully reissued",
+      "revokePasswordsSuccess": "Connection passwords regenerated"
     },
     "antiAbuse": {
       "title": "Anti-Abuse",
