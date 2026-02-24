@@ -115,7 +115,47 @@
     "billing": "Billing",
     "reports": "Reports",
     "backups": "Backups",
-    "apiKeys": "API & Webhooks"
+    "apiKeys": "API & Webhooks",
+    "bedolaga": "Bedolaga"
+  },
+  "bedolaga": {
+    "title": "Bedolaga Integration",
+    "subtitle": "Sales bot management and analytics",
+    "notConfigured": "Bedolaga integration is not configured. Set BEDOLAGA_API_URL and BEDOLAGA_API_KEY in environment.",
+    "status": "Integration Status",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "syncRunning": "Sync Active",
+    "lastSync": "Last Sync",
+    "botVersion": "Bot Version",
+    "tabs": {
+      "overview": "Overview",
+      "users": "Users",
+      "subscriptions": "Subscriptions",
+      "transactions": "Transactions",
+      "tickets": "Tickets",
+      "promos": "Promo Codes",
+      "partners": "Partners"
+    },
+    "overview": {
+      "totalUsers": "Total Users",
+      "activeSubscriptions": "Active Subscriptions",
+      "totalRevenue": "Total Revenue",
+      "totalTransactions": "Transactions",
+      "openTickets": "Open Tickets",
+      "revenueToday": "Today",
+      "revenueWeek": "This Week",
+      "revenueMonth": "This Month"
+    },
+    "sync": {
+      "trigger": "Sync Now",
+      "syncing": "Syncing...",
+      "success": "Sync completed",
+      "error": "Sync failed"
+    },
+    "search": "Search...",
+    "noData": "No data available",
+    "refreshing": "Refreshing..."
   },
   "header": {
     "searchPlaceholder": "Search...",

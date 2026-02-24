@@ -115,7 +115,47 @@
     "billing": "Биллинг",
     "reports": "Отчёты",
     "backups": "Бэкапы",
-    "apiKeys": "API и Вебхуки"
+    "apiKeys": "API и Вебхуки",
+    "bedolaga": "Bedolaga"
+  },
+  "bedolaga": {
+    "title": "Интеграция Bedolaga",
+    "subtitle": "Управление ботом продаж и аналитика",
+    "notConfigured": "Интеграция с Bedolaga не настроена. Укажите BEDOLAGA_API_URL и BEDOLAGA_API_KEY в окружении.",
+    "status": "Статус интеграции",
+    "connected": "Подключено",
+    "disconnected": "Отключено",
+    "syncRunning": "Синхронизация активна",
+    "lastSync": "Последняя синхронизация",
+    "botVersion": "Версия бота",
+    "tabs": {
+      "overview": "Обзор",
+      "users": "Пользователи",
+      "subscriptions": "Подписки",
+      "transactions": "Транзакции",
+      "tickets": "Тикеты",
+      "promos": "Промокоды",
+      "partners": "Партнёры"
+    },
+    "overview": {
+      "totalUsers": "Всего пользователей",
+      "activeSubscriptions": "Активные подписки",
+      "totalRevenue": "Общий доход",
+      "totalTransactions": "Транзакции",
+      "openTickets": "Открытые тикеты",
+      "revenueToday": "Сегодня",
+      "revenueWeek": "За неделю",
+      "revenueMonth": "За месяц"
+    },
+    "sync": {
+      "trigger": "Синхронизировать",
+      "syncing": "Синхронизация...",
+      "success": "Синхронизация завершена",
+      "error": "Ошибка синхронизации"
+    },
+    "search": "Поиск...",
+    "noData": "Нет данных",
+    "refreshing": "Обновление..."
   },
   "header": {
     "searchPlaceholder": "Поиск...",

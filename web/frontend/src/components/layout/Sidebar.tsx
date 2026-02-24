@@ -29,6 +29,7 @@ import {
   Github,
   MessageCircle,
   Heart,
+  Bot,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -109,6 +110,7 @@ const navigation: NavigationEntry[] = [
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   { name: 'nav.backups', href: '/backups', icon: HardDrive, permission: { resource: 'backups', action: 'view' } },
   { name: 'nav.apiKeys', href: '/api-keys', icon: Key, permission: { resource: 'api_keys', action: 'view' } },
+  { name: 'nav.bedolaga', href: '/bedolaga', icon: Bot, permission: { resource: 'bedolaga', action: 'view' } },
   {
     type: 'group',
     name: 'nav.administration',

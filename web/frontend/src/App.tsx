@@ -31,6 +31,7 @@ const MailServer = lazy(() => import('./pages/MailServer'))
 const Billing = lazy(() => import('./pages/Billing'))
 const Backup = lazy(() => import('./pages/Backup'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
+const Bedolaga = lazy(() => import('./pages/Bedolaga'))
 
 /**
  * Protected route wrapper - redirects to login if not authenticated.
@@ -120,6 +121,7 @@ export default function App() {
                         <Route path="/billing" element={<Billing />} />
                         <Route path="/backups" element={<Backup />} />
                         <Route path="/api-keys" element={<ApiKeys />} />
+                        <Route path="/bedolaga" element={<Bedolaga />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>

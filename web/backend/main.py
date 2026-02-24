@@ -53,6 +53,7 @@ from web.backend.api.v2 import collector as collector_api
 from web.backend.api.v2 import backup as backup_api
 from web.backend.api.v2 import api_keys as api_keys_api
 from web.backend.api.v2 import webhooks as webhooks_api
+from web.backend.api.v2 import bedolaga as bedolaga_api
 from web.backend.api.v3 import public as public_api_v3
 
 
@@ -311,6 +312,20 @@ async def lifespan(app: FastAPI):
                 from web.backend.core.alert_engine import alert_engine
                 await alert_engine.start()
 
+                # Start Bedolaga sync service (if configured)
+                bedolaga_url = os.environ.get("BEDOLAGA_API_URL")
+                bedolaga_key = os.environ.get("BEDOLAGA_API_KEY")
+                if bedolaga_url and bedolaga_key:
+                    try:
+                        from shared.bedolaga_client import bedolaga_client
+                        bedolaga_client.configure(bedolaga_url, bedolaga_key)
+                        from shared.bedolaga_sync import bedolaga_sync_service
+                        bedolaga_interval = int(os.environ.get("BEDOLAGA_SYNC_INTERVAL", "300"))
+                        await bedolaga_sync_service.start(interval_seconds=bedolaga_interval)
+                        logger.info("Bedolaga integration enabled: %s", bedolaga_url)
+                    except Exception as e:
+                        logger.warning("Bedolaga sync start failed: %s", e)
+
                 # Start mail service
                 try:
                     from web.backend.core.mail.mail_service import mail_service
@@ -367,6 +382,16 @@ async def lifespan(app: FastAPI):
     try:
         from web.backend.core.mail.mail_service import mail_service
         await mail_service.stop()
+    except Exception:
+        pass
+    try:
+        from shared.bedolaga_sync import bedolaga_sync_service
+        await bedolaga_sync_service.stop()
+    except Exception:
+        pass
+    try:
+        from shared.bedolaga_client import bedolaga_client
+        await bedolaga_client.close()
     except Exception:
         pass
     try:
@@ -510,6 +535,7 @@ def create_app() -> FastAPI:
     app.include_router(backup_api.router, prefix="/api/v2/backups", tags=["backups"])
     app.include_router(api_keys_api.router, prefix="/api/v2/api-keys", tags=["api-keys"])
     app.include_router(webhooks_api.router, prefix="/api/v2/webhooks", tags=["webhooks"])
+    app.include_router(bedolaga_api.router, prefix="/api/v2/bedolaga", tags=["bedolaga"])
 
     # Public API v3 — enabled via EXTERNAL_API_ENABLED=true
     if settings.external_api_enabled:

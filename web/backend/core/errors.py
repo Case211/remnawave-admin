@@ -117,6 +117,11 @@ class ErrorCode(str, Enum):
     IMPORT_FAILED = "IMPORT_FAILED"
     INVALID_FILENAME = "INVALID_FILENAME"
 
+    # ── Bedolaga ─────────────────────────────────────────────
+    BEDOLAGA_NOT_CONFIGURED = "BEDOLAGA_NOT_CONFIGURED"
+    BEDOLAGA_UNAVAILABLE = "BEDOLAGA_UNAVAILABLE"
+    BEDOLAGA_INVALID_ENTITY = "BEDOLAGA_INVALID_ENTITY"
+
     # ── Generic ───────────────────────────────────────────────
     NO_FIELDS_TO_UPDATE = "NO_FIELDS_TO_UPDATE"
     API_SERVICE_UNAVAILABLE = "API_SERVICE_UNAVAILABLE"
@@ -153,6 +158,9 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.BACKUP_DELETE_FAILED: "Failed to delete backup",
     E.IMPORT_FAILED: "Import failed",
     E.INVALID_FILENAME: "Invalid filename",
+    E.BEDOLAGA_NOT_CONFIGURED: "Bedolaga integration not configured",
+    E.BEDOLAGA_UNAVAILABLE: "Bedolaga API unavailable",
+    E.BEDOLAGA_INVALID_ENTITY: "Invalid sync entity",
     E.API_SERVICE_UNAVAILABLE: "API service not available",
     E.DB_UNAVAILABLE: "Database not available",
     E.INTERNAL_ERROR: "Internal error",
