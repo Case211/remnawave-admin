@@ -2891,15 +2891,18 @@ class DatabaseService:
         admin_username: Optional[str] = None,
         expires_at: Optional[datetime] = None,
         excluded_analyzers: Optional[List[str]] = None,
-    ) -> bool:
+    ) -> tuple:
         """Добавить пользователя в whitelist нарушений.
 
         Args:
             excluded_analyzers: None = полный whitelist. Список = частичное исключение
                 из конкретных анализаторов (temporal, geo, asn, profile, device, hwid).
+
+        Returns:
+            (success: bool, error: Optional[str])
         """
         if not self.is_connected:
-            return False
+            return (False, "Database not connected")
 
         try:
             async with self.acquire() as conn:
@@ -2920,10 +2923,48 @@ class DatabaseService:
                 )
                 # Invalidate cache
                 self._whitelist_cache.pop(user_uuid, None)
-                return True
+                return (True, None)
         except Exception as e:
+            err_msg = str(e)
+
+            # Fallback: excluded_analyzers column may not exist (migration 0035 not applied)
+            if "excluded_analyzers" in err_msg and "does not exist" in err_msg:
+                logger.warning(
+                    "excluded_analyzers column missing — inserting without it. "
+                    "Run 'alembic upgrade head' to apply migration 0035."
+                )
+                try:
+                    async with self.acquire() as conn:
+                        await conn.execute(
+                            """
+                            INSERT INTO violation_whitelist
+                                (user_uuid, reason, added_by_admin_id, added_by_username, expires_at)
+                            VALUES ($1, $2, $3, $4, $5)
+                            ON CONFLICT (user_uuid) DO UPDATE SET
+                                reason = EXCLUDED.reason,
+                                added_by_admin_id = EXCLUDED.added_by_admin_id,
+                                added_by_username = EXCLUDED.added_by_username,
+                                added_at = NOW(),
+                                expires_at = EXCLUDED.expires_at
+                            """,
+                            user_uuid, reason, admin_id, admin_username, expires_at,
+                        )
+                        self._whitelist_cache.pop(user_uuid, None)
+                        return (True, None)
+                except Exception as e2:
+                    logger.error("Error adding user %s to whitelist (fallback): %s", user_uuid, e2, exc_info=True)
+                    return (False, str(e2))
+
+            # Fallback: table doesn't exist
+            if "violation_whitelist" in err_msg and "does not exist" in err_msg:
+                logger.error(
+                    "violation_whitelist table does not exist. "
+                    "Run 'alembic upgrade head' to apply migration 0032."
+                )
+                return (False, "Table violation_whitelist not found — run alembic upgrade head")
+
             logger.error("Error adding user %s to violation whitelist: %s", user_uuid, e, exc_info=True)
-            return False
+            return (False, err_msg)
 
     async def update_violation_whitelist_exclusions(
         self,

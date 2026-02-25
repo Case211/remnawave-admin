@@ -394,7 +394,7 @@ async def add_to_whitelist(
     if data.expires_in_days is not None:
         expires_at = datetime.utcnow() + timedelta(days=data.expires_in_days)
 
-    success = await db.add_to_violation_whitelist(
+    success, error = await db.add_to_violation_whitelist(
         user_uuid=data.user_uuid,
         reason=data.reason,
         admin_id=admin.account_id,
@@ -404,7 +404,7 @@ async def add_to_whitelist(
     )
 
     if not success:
-        raise api_error(500, E.WHITELIST_ADD_FAILED)
+        raise api_error(500, E.WHITELIST_ADD_FAILED, error)
 
     await write_audit_log(
         admin_id=admin.account_id,
