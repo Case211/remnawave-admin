@@ -8,6 +8,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Copy,
   Check,
   Pencil,
@@ -31,6 +32,7 @@ import {
   Download,
   ShieldOff,
   Settings,
+  KeyRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import client from '../api/client'
@@ -44,6 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
@@ -120,6 +123,16 @@ interface EditFormData {
   tag: string
   email: string
   telegram_id: string
+  active_internal_squads: string[]
+  external_squad_uuid: string
+}
+
+interface Squad {
+  uuid: string
+  squadTag?: string
+  squadName?: string
+  name?: string
+  tag?: string
 }
 
 function getStatusBadge(status: string, t: (key: string) => string): { label: string; variant: 'default' | 'success' | 'warning' | 'destructive' | 'secondary'; dotColor: string } {
@@ -189,6 +202,66 @@ type TrafficPeriod = 'current' | 'lifetime' | 'today' | 'week' | 'month' | '3mon
 // API period keys (sent to backend)
 const API_PERIODS: TrafficPeriod[] = ['today', 'week', 'month', '3month', '6month', 'year']
 
+// ── CollapsibleSection ────────────────────────────────────────
+function CollapsibleSection({
+  title,
+  icon: Icon,
+  defaultOpen = false,
+  badge,
+  rightContent,
+  children,
+  animationDelay = '0s',
+  onOpenChange,
+}: {
+  title: string
+  icon: React.ElementType
+  defaultOpen?: boolean
+  badge?: React.ReactNode
+  rightContent?: React.ReactNode
+  children: React.ReactNode
+  animationDelay?: string
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  const toggle = () => {
+    const next = !isOpen
+    setIsOpen(next)
+    onOpenChange?.(next)
+  }
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay }}>
+      <button
+        onClick={toggle}
+        aria-expanded={isOpen}
+        className="w-full flex items-center justify-between p-4 hover:bg-dark-700/30 transition-colors rounded-t-lg"
+      >
+        <div className="flex items-center gap-2">
+          {isOpen ? (
+            <ChevronDown className="w-4 h-4 text-dark-200 transition-transform duration-200" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-dark-200 transition-transform duration-200" />
+          )}
+          <Icon className="h-5 w-5 text-primary-400" />
+          <span className="text-base font-semibold text-white">{title}</span>
+          {badge}
+        </div>
+        {rightContent && (
+          <div onClick={(e) => e.stopPropagation()}>
+            {rightContent}
+          </div>
+        )}
+      </button>
+      {isOpen && (
+        <CardContent className="pt-0 animate-fade-in-down">
+          {children}
+        </CardContent>
+      )}
+    </Card>
+  )
+}
+
 function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficPercent: number }) {
   const { t } = useTranslation()
   const { formatBytes } = useFormatters()
@@ -255,14 +328,13 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
   const showLoadingOverlay = isFetching && period !== 'current'
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-primary-400" />
-          {t('userDetail.traffic.title')}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <CollapsibleSection
+      title={t('userDetail.traffic.title')}
+      icon={TrendingUp}
+      defaultOpen={true}
+      animationDelay="0.1s"
+    >
+      <div className="space-y-4">
         {/* Period selector */}
         <div className="flex flex-wrap gap-1">
           {TRAFFIC_PERIODS.map((p) => (
@@ -357,7 +429,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
                     <span className="text-dark-200">{displayed.label}</span>
                     <Badge variant="default" className="text-xs">{t('userDetail.trafficUnlimited')}</Badge>
                   </div>
-                  <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
+                  <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-primary/30 border border-primary-500/20">
                     <div className="absolute inset-0 flex items-center justify-center">
                       <span className="text-sm font-medium text-primary-200">
                         {formatBytes(displayed.value)}{period === 'current' ? ' / \u221E' : ''}
@@ -389,7 +461,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
                       </p>
                     </>
                   ) : (
-                    <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-cyan-600/30 border border-primary-500/20">
+                    <div className="relative w-full h-7 rounded-full overflow-hidden bg-gradient-to-r from-primary-600/30 to-primary/30 border border-primary-500/20">
                       <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-sm font-medium text-primary-200">
                           {formatBytes(displayed.value)}
@@ -444,8 +516,8 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </CollapsibleSection>
   )
 }
 
@@ -603,68 +675,64 @@ interface AuditItem {
 function UserHistory({ uuid }: { uuid: string }) {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
+  const [isOpen, setIsOpen] = useState(false)
+
   const { data, isLoading } = useQuery<{ items: AuditItem[] }>({
     queryKey: ['user-history', uuid],
     queryFn: async () => {
       const response = await client.get(`/audit/resource/users/${uuid}`, { params: { limit: 20 } })
       return response.data
     },
-    enabled: !!uuid,
+    enabled: !!uuid && isOpen,
     staleTime: 30000,
   })
 
   const items = data?.items ?? []
 
-  if (isLoading) {
-    return (
-      <Card className="bg-dark-800 border-dark-700">
-        <CardHeader><CardTitle className="text-white text-base">{t('userDetail.history.title')}</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (items.length === 0) return null
-
   return (
-    <Card className="bg-dark-800 border-dark-700">
-      <CardHeader>
-        <CardTitle className="text-white text-base flex items-center gap-2">
-          <Clock className="w-4 h-4 text-primary-400" />
-          {t('userDetail.history.title')}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="relative pl-6 space-y-4">
-          {/* Timeline line */}
-          <div className="absolute left-[9px] top-2 bottom-2 w-px bg-dark-600" />
-          {items.map((item) => {
-            const dot = item.action?.indexOf('.') ?? -1
-            const action = dot > 0 ? item.action.slice(dot + 1) : item.action
-            return (
-              <div key={item.id} className="relative">
-                {/* Timeline dot */}
-                <div className="absolute -left-6 top-1 w-[7px] h-[7px] rounded-full bg-primary-400 ring-2 ring-dark-800" />
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-white">{item.admin_username}</span>
-                  <Badge variant="outline" className="text-xs bg-dark-700 border-dark-600">
-                    {action}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {item.created_at ? formatDate(item.created_at) : ''}
-                  </span>
-                </div>
-                {item.details && (
-                  <p className="text-xs text-dark-300 mt-0.5 truncate max-w-md">{item.details}</p>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </CardContent>
-    </Card>
+    <CollapsibleSection
+      title={t('userDetail.history.title')}
+      icon={Clock}
+      defaultOpen={false}
+      onOpenChange={setIsOpen}
+      badge={items.length > 0 ? <Badge variant="secondary" className="ml-1">{items.length}</Badge> : undefined}
+      animationDelay="0.25s"
+    >
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="text-center py-4 text-dark-300 text-sm">
+              {t('common.noData')}
+            </div>
+          ) : (
+            <div className="relative pl-6 space-y-4">
+              <div className="absolute left-[9px] top-2 bottom-2 w-px bg-dark-600" />
+              {items.map((item) => {
+                const dot = item.action?.indexOf('.') ?? -1
+                const action = dot > 0 ? item.action.slice(dot + 1) : item.action
+                return (
+                  <div key={item.id} className="relative">
+                    <div className="absolute -left-6 top-1 w-[7px] h-[7px] rounded-full bg-primary-400 ring-2 ring-dark-800" />
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-white">{item.admin_username}</span>
+                      <Badge variant="outline" className="text-xs bg-dark-700 border-dark-600">
+                        {action}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {item.created_at ? formatDate(item.created_at) : ''}
+                      </span>
+                    </div>
+                    {item.details && (
+                      <p className="text-xs text-dark-300 mt-0.5 truncate max-w-md">{item.details}</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+    </CollapsibleSection>
   )
 }
 
@@ -686,6 +754,7 @@ function IpHistoryCard({ userUuid }: { userUuid: string }) {
   const [period, setPeriod] = useState('24h')
   const [showAll, setShowAll] = useState(false)
   const [copiedIp, setCopiedIp] = useState<string | null>(null)
+  const [isOpen, setIsOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['user-ips', userUuid, period],
@@ -693,6 +762,7 @@ function IpHistoryCard({ userUuid }: { userUuid: string }) {
       const { data } = await client.get(`/users/${userUuid}/ip-history`, { params: { period } })
       return data as { items: IpHistoryItem[]; total: number }
     },
+    enabled: !!userUuid && isOpen,
   })
 
   const items = data?.items || []
@@ -709,32 +779,29 @@ function IpHistoryCard({ userUuid }: { userUuid: string }) {
   useEffect(() => { setShowAll(false) }, [period])
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.18s' }}>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Network className="h-5 w-5 text-primary-400" />
-            {t('userDetail.ips.title')}
-            {items.length > 0 && (
-              <Badge variant="secondary" className="ml-1">{items.length}</Badge>
-            )}
-          </CardTitle>
-          <div className="flex gap-1">
-            {(['24h', '7d', '30d'] as const).map((p) => (
-              <Button
-                key={p}
-                variant={period === p ? 'default' : 'ghost'}
-                size="sm"
-                className="h-7 px-2.5 text-xs"
-                onClick={() => setPeriod(p)}
-              >
-                {t(`userDetail.ips.periods.${p}`)}
-              </Button>
-            ))}
-          </div>
+    <CollapsibleSection
+      title={t('userDetail.ips.title')}
+      icon={Network}
+      defaultOpen={false}
+      onOpenChange={setIsOpen}
+      badge={items.length > 0 ? <Badge variant="secondary" className="ml-1">{items.length}</Badge> : undefined}
+      rightContent={
+        <div className="flex gap-1">
+          {(['24h', '7d', '30d'] as const).map((p) => (
+            <Button
+              key={p}
+              variant={period === p ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setPeriod(p)}
+            >
+              {t(`userDetail.ips.periods.${p}`)}
+            </Button>
+          ))}
         </div>
-      </CardHeader>
-      <CardContent>
+      }
+      animationDelay="0.18s"
+    >
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
@@ -805,8 +872,7 @@ function IpHistoryCard({ userUuid }: { userUuid: string }) {
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </CollapsibleSection>
   )
 }
 
@@ -835,6 +901,8 @@ export default function UserDetail() {
     tag: '',
     email: '',
     telegram_id: '',
+    active_internal_squads: [],
+    external_squad_uuid: '',
   })
   const [editError, setEditError] = useState('')
   const [editSuccess, setEditSuccess] = useState(false)
@@ -844,6 +912,8 @@ export default function UserDetail() {
     return () => { timersRef.current.forEach(clearTimeout) }
   }, [])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showRevokeFullConfirm, setShowRevokeFullConfirm] = useState(false)
+  const [showRevokePasswordsConfirm, setShowRevokePasswordsConfirm] = useState(false)
   const [exclusionDialogOpen, setExclusionDialogOpen] = useState(false)
   const [selectedExclusions, setSelectedExclusions] = useState<Set<string>>(new Set())
   const [exclusionMode, setExclusionMode] = useState<'full' | 'partial' | 'none'>('none')
@@ -887,6 +957,25 @@ export default function UserDetail() {
       return response.data
     },
     enabled: !!uuid,
+  })
+
+  // Fetch available squads (for edit mode and view mode name resolution)
+  const { data: internalSquads = [] } = useQuery<Squad[]>({
+    queryKey: ['internal-squads'],
+    queryFn: async () => {
+      const { data } = await client.get('/users/meta/internal-squads')
+      return Array.isArray(data) ? data : []
+    },
+    staleTime: 120_000,
+  })
+
+  const { data: externalSquads = [] } = useQuery<Squad[]>({
+    queryKey: ['external-squads'],
+    queryFn: async () => {
+      const { data } = await client.get('/users/meta/external-squads')
+      return Array.isArray(data) ? data : []
+    },
+    staleTime: 120_000,
   })
 
   // Fetch HWID devices
@@ -960,6 +1049,8 @@ export default function UserDetail() {
         tag: user.tag || '',
         email: user.email || '',
         telegram_id: user.telegram_id ? String(user.telegram_id) : '',
+        active_internal_squads: user.active_internal_squads?.map(sq => sq.uuid) || [],
+        external_squad_uuid: user.external_squad_uuid || '',
       })
     }
   }, [user])
@@ -978,6 +1069,16 @@ export default function UserDetail() {
   const resetTrafficMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/reset-traffic`) },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.toasts.trafficReset')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
+  })
+  const revokeFullMutation = useMutation({
+    mutationFn: async () => { await client.post(`/users/${uuid}/revoke`) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.subscription.revokeFullSuccess')) },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
+  })
+  const revokePasswordsMutation = useMutation({
+    mutationFn: async () => { await client.post(`/users/${uuid}/revoke?passwords_only=true`) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['user', uuid] }); toast.success(t('userDetail.subscription.revokePasswordsSuccess')) },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => { toast.error(err.response?.data?.detail || err.message || t('userDetail.toasts.error')) },
   })
   const deleteMutation = useMutation({
@@ -1066,6 +1167,23 @@ export default function UserDetail() {
       updateData.telegram_id = newTgId
     }
 
+    // Internal squads
+    if (user) {
+      const currentSquadUuids = (user.active_internal_squads?.map(sq => sq.uuid) || []).sort()
+      const newSquadUuids = [...editForm.active_internal_squads].sort()
+      if (JSON.stringify(currentSquadUuids) !== JSON.stringify(newSquadUuids)) {
+        updateData.active_internal_squads = editForm.active_internal_squads
+      }
+    }
+
+    // External squad
+    if (user) {
+      const currentExternal = user.external_squad_uuid || ''
+      if (editForm.external_squad_uuid !== currentExternal) {
+        updateData.external_squad_uuid = editForm.external_squad_uuid || null
+      }
+    }
+
     if (Object.keys(updateData).length === 0) {
       setIsEditing(false)
       setSearchParams({})
@@ -1092,9 +1210,22 @@ export default function UserDetail() {
         tag: user.tag || '',
         email: user.email || '',
         telegram_id: user.telegram_id ? String(user.telegram_id) : '',
+        active_internal_squads: user.active_internal_squads?.map(sq => sq.uuid) || [],
+        external_squad_uuid: user.external_squad_uuid || '',
       })
     }
   }
+
+  const toggleInternalSquad = (squadUuid: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      active_internal_squads: prev.active_internal_squads.includes(squadUuid)
+        ? prev.active_internal_squads.filter(u => u !== squadUuid)
+        : [...prev.active_internal_squads, squadUuid],
+    }))
+  }
+
+  const getSquadName = (sq: Squad) => sq.squadName || sq.name || sq.squadTag || sq.tag || sq.uuid.substring(0, 8)
 
   const handleStartEdit = () => {
     setIsEditing(true)
@@ -1456,6 +1587,65 @@ export default function UserDetail() {
                     />
                   </div>
 
+                  {/* Squads */}
+                  {(internalSquads.length > 0 || externalSquads.length > 0) && (
+                    <>
+                      <Separator />
+                      <div className="space-y-4">
+                        <p className="text-xs font-medium text-dark-300 uppercase tracking-wider">{t('userDetail.squads.title')}</p>
+
+                        {/* External Squad - single select */}
+                        {externalSquads.length > 0 && (
+                          <div className="space-y-2">
+                            <Label>{t('userDetail.squads.externalSquad')}</Label>
+                            <Select
+                              value={editForm.external_squad_uuid || '_none'}
+                              onValueChange={(value) => setEditForm({ ...editForm, external_squad_uuid: value === '_none' ? '' : value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={t('userDetail.squads.notSelected')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="_none">{t('userDetail.squads.notSelected')}</SelectItem>
+                                {externalSquads.map((sq) => (
+                                  <SelectItem key={sq.uuid} value={sq.uuid}>
+                                    {getSquadName(sq)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {/* Internal Squads - multi-select */}
+                        {internalSquads.length > 0 && (
+                          <div className="space-y-2">
+                            <Label>{t('userDetail.squads.internalSquads')}</Label>
+                            <div className="space-y-1">
+                              {internalSquads.map((sq) => (
+                                <label
+                                  key={sq.uuid}
+                                  className={cn(
+                                    'flex items-center gap-2.5 cursor-pointer rounded-md px-2 py-1.5 hover:bg-dark-600/50 transition-colors',
+                                    editForm.active_internal_squads.includes(sq.uuid)
+                                      ? 'bg-primary/10 border border-primary/30'
+                                      : 'bg-dark-700/30 border border-dark-400/15'
+                                  )}
+                                >
+                                  <Checkbox
+                                    checked={editForm.active_internal_squads.includes(sq.uuid)}
+                                    onCheckedChange={() => toggleInternalSquad(sq.uuid)}
+                                  />
+                                  <span className="text-sm text-dark-100">{getSquadName(sq)}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
                   {/* Read-only fields */}
                   <Separator />
                   <div>
@@ -1561,17 +1751,33 @@ export default function UserDetail() {
                     )}
                   </div>
 
-                  {/* Internal squads */}
-                  {user.active_internal_squads && user.active_internal_squads.length > 0 && (
+                  {/* Squads */}
+                  {(user.active_internal_squads?.length || user.external_squad_uuid) && (
                     <>
                       <Separator />
-                      <div>
-                        <p className="text-sm text-dark-200 mb-2">{t('userDetail.internalSquads')}</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {user.active_internal_squads.map((sq) => (
-                            <Badge key={sq.uuid} variant="outline" className="text-xs">{sq.name}</Badge>
-                          ))}
-                        </div>
+                      <div className="space-y-3">
+                        <p className="text-xs font-medium text-dark-300 uppercase tracking-wider">{t('userDetail.squads.title')}</p>
+                        {user.external_squad_uuid && (
+                          <div>
+                            <p className="text-sm text-dark-200 mb-1">{t('userDetail.squads.externalSquad')}</p>
+                            <Badge variant="outline" className="text-xs">
+                              {(() => {
+                                const found = externalSquads.find(sq => sq.uuid === user.external_squad_uuid)
+                                return found ? getSquadName(found) : user.external_squad_uuid.substring(0, 12) + '...'
+                              })()}
+                            </Badge>
+                          </div>
+                        )}
+                        {user.active_internal_squads && user.active_internal_squads.length > 0 && (
+                          <div>
+                            <p className="text-sm text-dark-200 mb-1">{t('userDetail.squads.internalSquads')}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {user.active_internal_squads.map((sq) => (
+                                <Badge key={sq.uuid} variant="outline" className="text-xs">{sq.name}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
@@ -1614,89 +1820,84 @@ export default function UserDetail() {
           <TrafficBlock user={user} trafficPercent={trafficPercent} />
 
           {/* Block: Devices (HWID) */}
-          <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Smartphone className="h-5 w-5 text-primary-400" />
-                  {t('userDetail.devices.title')}
-                  {hwidDevices && hwidDevices.length > 0 && (
-                    <span className="ml-1 text-sm font-normal text-dark-200">
-                      {hwidDevices.length} / {user.hwid_device_limit || '\u221E'}
-                    </span>
-                  )}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => syncHwidMutation.mutate()}
-                    disabled={syncHwidMutation.isPending || hwidFetching}
-                    className="h-8 w-8 p-0"
-                    title={t('userDetail.devices.sync')}
-                  >
-                    <RefreshCw className={cn('h-4 w-4', syncHwidMutation.isPending && 'animate-spin')} />
-                  </Button>
-                  <Badge variant="outline" className="text-xs">
-                    {t('userDetail.devices.limitLabel')}: {user.hwid_device_limit || '\u221E'}
-                  </Badge>
-                </div>
+          <CollapsibleSection
+            title={t('userDetail.devices.title')}
+            icon={Smartphone}
+            defaultOpen={false}
+            badge={
+              hwidDevices && hwidDevices.length > 0 ? (
+                <span className="text-sm font-normal text-dark-200">
+                  {hwidDevices.length} / {user.hwid_device_limit || '\u221E'}
+                </span>
+              ) : undefined
+            }
+            rightContent={
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => syncHwidMutation.mutate()}
+                  disabled={syncHwidMutation.isPending || hwidFetching}
+                  className="h-8 w-8 p-0"
+                  title={t('userDetail.devices.sync')}
+                >
+                  <RefreshCw className={cn('h-4 w-4', syncHwidMutation.isPending && 'animate-spin')} />
+                </Button>
+                <Badge variant="outline" className="text-xs">
+                  {t('userDetail.devices.limitLabel')}: {user.hwid_device_limit || '\u221E'}
+                </Badge>
               </div>
-            </CardHeader>
-            <CardContent>
-              {/* HWID device cards with pagination */}
-              {hwidDevices && hwidDevices.length > 0 ? (
-                <PaginatedDeviceList
-                  devices={hwidDevices}
-                  onDeleteDevice={setDeviceToDelete}
-                  onDeleteAll={() => setShowDeleteAllDevices(true)}
-                />
-              ) : (
-                <div className="text-center py-6 text-dark-300 text-sm">
-                  {t('userDetail.devices.noDevices')}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            }
+            animationDelay="0.15s"
+          >
+            {hwidDevices && hwidDevices.length > 0 ? (
+              <PaginatedDeviceList
+                devices={hwidDevices}
+                onDeleteDevice={setDeviceToDelete}
+                onDeleteAll={() => setShowDeleteAllDevices(true)}
+              />
+            ) : (
+              <div className="text-center py-6 text-dark-300 text-sm">
+                {t('userDetail.devices.noDevices')}
+              </div>
+            )}
+          </CollapsibleSection>
 
           {/* Block: IP Addresses */}
           <IpHistoryCard userUuid={uuid!} />
 
           {/* Block: Violations */}
           {violations && violations.length > 0 && (
-            <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-400" />
-                  {t('userDetail.violations.title')}
-                  <Badge variant="warning" className="ml-1">{violations.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {violations.slice(0, 5).map((v) => {
-                    const sevBadge = getSeverityBadge(v.severity)
-                    return (
-                      <div
-                        key={v.id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-dark-700 rounded-lg"
-                      >
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <Badge variant={sevBadge.variant}>
-                            {v.severity}
-                          </Badge>
-                          <span className="text-white text-sm">Score: {v.score.toFixed(1)}</span>
-                          <span className="text-dark-200 text-sm">{v.recommended_action}</span>
-                        </div>
-                        <span className="text-dark-200 text-xs sm:text-sm flex-shrink-0">
-                          {formatDate(v.detected_at)}
-                        </span>
+            <CollapsibleSection
+              title={t('userDetail.violations.title')}
+              icon={AlertTriangle}
+              defaultOpen={false}
+              badge={<Badge variant="warning" className="ml-1">{violations.length}</Badge>}
+              animationDelay="0.2s"
+            >
+              <div className="space-y-3">
+                {violations.slice(0, 5).map((v) => {
+                  const sevBadge = getSeverityBadge(v.severity)
+                  return (
+                    <div
+                      key={v.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-dark-700 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Badge variant={sevBadge.variant}>
+                          {v.severity}
+                        </Badge>
+                        <span className="text-white text-sm">Score: {v.score.toFixed(1)}</span>
+                        <span className="text-dark-200 text-sm">{v.recommended_action}</span>
                       </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                      <span className="text-dark-200 text-xs sm:text-sm flex-shrink-0">
+                        {formatDate(v.detected_at)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </CollapsibleSection>
           )}
         </div>
 
@@ -1790,6 +1991,30 @@ export default function UserDetail() {
                     <p className="text-dark-100 text-xs truncate" title={user.sub_last_user_agent}>{user.sub_last_user_agent}</p>
                   </div>
                 )}
+                {canEdit && (
+                  <div className="pt-3 border-t border-dark-400/20 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-primary-400 hover:text-primary-300"
+                      onClick={() => setShowRevokeFullConfirm(true)}
+                      disabled={revokeFullMutation.isPending}
+                    >
+                      <RefreshCw className={cn('h-3.5 w-3.5', revokeFullMutation.isPending && 'animate-spin')} />
+                      {t('userDetail.subscription.revokeFull')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => setShowRevokePasswordsConfirm(true)}
+                      disabled={revokePasswordsMutation.isPending}
+                    >
+                      <KeyRound className={cn('h-3.5 w-3.5', revokePasswordsMutation.isPending && 'animate-pulse')} />
+                      {t('userDetail.subscription.revokePasswords')}
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1879,6 +2104,28 @@ export default function UserDetail() {
         confirmLabel={t('userDetail.deleteConfirm.confirm')}
         variant="destructive"
         onConfirm={() => { deleteMutation.mutate(); setShowDeleteConfirm(false) }}
+      />
+
+      {/* Revoke full subscription confirm */}
+      <ConfirmDialog
+        open={showRevokeFullConfirm}
+        onOpenChange={setShowRevokeFullConfirm}
+        title={t('userDetail.subscription.revokeFullConfirm')}
+        description={t('userDetail.subscription.revokeFullConfirmDesc')}
+        confirmLabel={t('userDetail.subscription.revokeFull')}
+        variant="destructive"
+        onConfirm={() => { revokeFullMutation.mutate(); setShowRevokeFullConfirm(false) }}
+      />
+
+      {/* Revoke passwords only confirm */}
+      <ConfirmDialog
+        open={showRevokePasswordsConfirm}
+        onOpenChange={setShowRevokePasswordsConfirm}
+        title={t('userDetail.subscription.revokePasswordsConfirm')}
+        description={t('userDetail.subscription.revokePasswordsConfirmDesc')}
+        confirmLabel={t('userDetail.subscription.revokePasswords')}
+        variant="destructive"
+        onConfirm={() => { revokePasswordsMutation.mutate(); setShowRevokePasswordsConfirm(false) }}
       />
 
       {/* Delete single HWID device confirm */}
@@ -1976,8 +2223,8 @@ export default function UserDetail() {
                   className={cn(
                     'px-3 py-2 rounded-md text-sm font-medium transition-all border',
                     exclusionMode === mode
-                      ? mode === 'full' ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30'
-                        : mode === 'partial' ? 'bg-amber-600/20 text-amber-400 border-amber-500/30'
+                      ? mode === 'full' ? 'bg-primary/20 text-primary-400 border-primary/30'
+                        : mode === 'partial' ? 'bg-primary/20 text-primary-400 border-primary/30'
                         : 'bg-dark-600 text-white border-dark-400/30'
                       : 'bg-dark-700/50 text-dark-200 border-dark-400/20 hover:text-white hover:border-dark-400/40'
                   )}
@@ -1994,7 +2241,7 @@ export default function UserDetail() {
                     className={cn(
                       'flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer transition-all border',
                       selectedExclusions.has(key)
-                        ? 'bg-amber-600/10 border-amber-500/30 text-amber-300'
+                        ? 'bg-primary/10 border-primary/30 text-primary-400'
                         : 'bg-dark-700/30 border-dark-400/15 text-dark-200 hover:border-dark-400/30'
                     )}
                   >

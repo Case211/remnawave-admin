@@ -115,7 +115,13 @@
     "billing": "Биллинг",
     "reports": "Отчёты",
     "backups": "Бэкапы",
-    "apiKeys": "API и Вебхуки"
+    "apiKeys": "API и Вебхуки",
+    "sections": {
+      "core": "Основное",
+      "security": "Безопасность",
+      "data": "Данные",
+      "admin": "Управление"
+    }
   },
   "header": {
     "searchPlaceholder": "Поиск...",
@@ -477,7 +483,14 @@
     "indefinite": "Бессрочно",
     "trafficUnlimited": "Безлимит",
     "protocols": "Протоколы",
-    "internalSquads": "Внутренние отряды",
+    "internalSquads": "Внутренние сквады",
+    "squads": {
+      "title": "Сквады",
+      "externalSquad": "Внешний сквад",
+      "internalSquads": "Внутренние сквады",
+      "notSelected": "Не выбрано",
+      "noSquadsAvailable": "Нет доступных сквадов"
+    },
     "violations": {
       "title": "Нарушения"
     },
@@ -588,7 +601,15 @@
       "userAgent": "User Agent",
       "qrTitle": "QR-код подписки",
       "qrDescription": "Отсканируйте QR-код VPN-клиентом для импорта подписки",
-      "qrDownload": "Скачать PNG"
+      "qrDownload": "Скачать PNG",
+      "revokeFull": "Полный перевыпуск",
+      "revokePasswords": "Только пароли",
+      "revokeFullConfirm": "Перевыпустить подписку?",
+      "revokeFullConfirmDesc": "URL-адрес подписки и все пароли подключения будут перегенерированы. Пользователю нужно будет заново импортировать подписку.",
+      "revokePasswordsConfirm": "Перевыпустить пароли?",
+      "revokePasswordsConfirmDesc": "Пароли подключения (Trojan, VLESS, Shadowsocks) будут перегенерированы. URL подписки останется прежним.",
+      "revokeFullSuccess": "Подписка полностью перевыпущена",
+      "revokePasswordsSuccess": "Пароли подключения перегенерированы"
     },
     "antiAbuse": {
       "title": "Anti-Abuse",

@@ -36,31 +36,33 @@ function formatBytes(bytes: number): string {
 }
 
 function BackupTypeIcon({ type }: { type: string }) {
+  const iconClass = "w-4 h-4 text-primary-400"
   switch (type) {
     case 'database':
-      return <Database className="w-4 h-4 text-blue-400" />
+      return <Database className={iconClass} />
     case 'config':
-      return <Settings2 className="w-4 h-4 text-emerald-400" />
+      return <Settings2 className={iconClass} />
     case 'restore':
-      return <RotateCcw className="w-4 h-4 text-amber-400" />
+      return <RotateCcw className={iconClass} />
     case 'config_import':
-      return <Upload className="w-4 h-4 text-purple-400" />
+      return <Upload className={iconClass} />
     case 'user_import':
-      return <Users className="w-4 h-4 text-cyan-400" />
+      return <Users className={iconClass} />
     default:
-      return <HardDrive className="w-4 h-4 text-gray-400" />
+      return <HardDrive className="w-4 h-4 text-muted-foreground" />
   }
 }
 
 function BackupTypeBadge({ type }: { type: string }) {
+  const accentCls = 'bg-primary/15 text-primary-400 border-primary/20'
   const colorMap: Record<string, string> = {
-    database: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
-    config: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-    restore: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
-    config_import: 'bg-purple-500/15 text-purple-400 border-purple-500/20',
-    user_import: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20',
+    database: accentCls,
+    config: accentCls,
+    restore: accentCls,
+    config_import: accentCls,
+    user_import: accentCls,
   }
-  const cls = colorMap[type] || 'bg-gray-500/15 text-gray-400 border-gray-500/20'
+  const cls = colorMap[type] || 'bg-muted text-muted-foreground border-border'
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>
       <BackupTypeIcon type={type} />
@@ -206,9 +208,9 @@ function BackupsTab() {
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-dark-700/50 hover:bg-dark-700 transition-colors"
                 >
                   {file.filename.endsWith('.sql.gz') ? (
-                    <Database className="w-5 h-5 text-blue-400 flex-shrink-0" />
+                    <Database className="w-5 h-5 text-primary-400 flex-shrink-0" />
                   ) : (
-                    <FileJson className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                    <FileJson className="w-5 h-5 text-primary-400 flex-shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{file.filename}</p>
@@ -232,7 +234,7 @@ function BackupsTab() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-amber-400 hover:text-amber-300"
+                          className="h-8 w-8 text-primary-400 hover:text-primary-300"
                           onClick={() => setConfirmRestore(file.filename)}
                           title={t('backup.restore')}
                         >
@@ -350,7 +352,7 @@ function ImportTab() {
       <Card className="border-dark-600 bg-dark-800/50">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium text-dark-100 flex items-center gap-2">
-            <Settings2 className="w-4 h-4 text-emerald-400" />
+            <Settings2 className="w-4 h-4 text-primary-400" />
             {t('backup.importConfig')}
           </CardTitle>
         </CardHeader>
@@ -364,7 +366,7 @@ function ImportTab() {
                   key={file.filename}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-dark-700/50"
                 >
-                  <FileJson className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                  <FileJson className="w-5 h-5 text-primary-400 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{file.filename}</p>
                     <p className="text-xs text-dark-300">{formatBytes(file.size_bytes)}</p>
@@ -402,7 +404,7 @@ function ImportTab() {
       <Card className="border-dark-600 bg-dark-800/50">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium text-dark-100 flex items-center gap-2">
-            <Users className="w-4 h-4 text-cyan-400" />
+            <Users className="w-4 h-4 text-primary-400" />
             {t('backup.importUsers')}
           </CardTitle>
         </CardHeader>
@@ -420,7 +422,7 @@ function ImportTab() {
                   key={file.filename}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-dark-700/50"
                 >
-                  <FileJson className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                  <FileJson className="w-5 h-5 text-primary-400 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{file.filename}</p>
                     <p className="text-xs text-dark-300">{formatBytes(file.size_bytes)}</p>

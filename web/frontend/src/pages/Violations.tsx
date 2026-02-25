@@ -471,7 +471,7 @@ const ViolationCard = memo(function ViolationCard({
             <Button variant="ghost" size="sm" onClick={onAnnul} className="gap-1 text-dark-300 hover:text-dark-100">
               <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
             </Button>
-            <Button variant="ghost" size="sm" onClick={onWhitelist} className="gap-1 text-dark-300 hover:text-emerald-400" title={t('violations.whitelist.addButton')}>
+            <Button variant="ghost" size="sm" onClick={onWhitelist} className="gap-1 text-dark-300 hover:text-primary-400" title={t('violations.whitelist.addButton')}>
               <ShieldOff className="w-4 h-4" />
               <span className="hidden sm:inline">{t('violations.whitelist.addButton')}</span>
             </Button>
@@ -944,7 +944,7 @@ function ViolationDetailPanel({
               <Button variant="ghost" onClick={() => onAnnulAll(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-dark-100">
                 <Trash2 className="w-4 h-4" /> {t('violations.actions.annulAll')}
               </Button>
-              <Button variant="ghost" onClick={() => onWhitelist(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-emerald-400">
+              <Button variant="ghost" onClick={() => onWhitelist(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-primary-400">
                 <ShieldOff className="w-4 h-4" /> {t('violations.whitelist.addButton')}
               </Button>
             </div>
@@ -1203,7 +1203,7 @@ function WhitelistAddDialog({
                 className={cn(
                   'px-3 py-2 rounded-md text-sm font-medium transition-all border',
                   exclusionMode === 'partial'
-                    ? 'bg-amber-600/20 text-amber-400 border-amber-500/30'
+                    ? 'bg-primary/20 text-primary-400 border-primary/30'
                     : 'bg-dark-700/50 text-dark-200 border-dark-400/20 hover:text-white hover:border-dark-400/40'
                 )}
               >
@@ -1218,7 +1218,7 @@ function WhitelistAddDialog({
                     className={cn(
                       'flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer transition-all border',
                       selectedAnalyzers.has(key)
-                        ? 'bg-amber-600/10 border-amber-500/30 text-amber-300'
+                        ? 'bg-primary/10 border-primary/30 text-primary-400'
                         : 'bg-dark-700/30 border-dark-400/15 text-dark-200 hover:border-dark-400/30'
                     )}
                   >
@@ -1343,8 +1343,8 @@ function WhitelistTab() {
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-4">
-                  <div className="p-2.5 rounded-lg bg-emerald-500/10 flex-shrink-0">
-                    <ShieldOff className="w-5 h-5 text-emerald-400" />
+                  <div className="p-2.5 rounded-lg bg-primary/10 flex-shrink-0">
+                    <ShieldOff className="w-5 h-5 text-primary-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -1355,11 +1355,11 @@ function WhitelistTab() {
                         <Badge variant="secondary" className="text-xs">{t('violations.whitelist.expired')}</Badge>
                       )}
                       {item.excluded_analyzers ? (
-                        <Badge variant="outline" className="text-xs text-amber-400 border-amber-500/30">
+                        <Badge variant="outline" className="text-xs text-primary-400 border-primary/30">
                           {t('violations.exclusions.partialExclusion')}
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30">
+                        <Badge variant="outline" className="text-xs text-primary-400 border-primary/30">
                           {t('violations.exclusions.fullWhitelist')}
                         </Badge>
                       )}
@@ -1367,7 +1367,7 @@ function WhitelistTab() {
                     {item.excluded_analyzers && (
                       <div className="flex flex-wrap gap-1 mb-1">
                         {item.excluded_analyzers.map(a => (
-                          <Badge key={a} variant="secondary" className="text-xs bg-amber-600/10 text-amber-300 border-amber-500/20">
+                          <Badge key={a} variant="secondary" className="text-xs bg-primary/10 text-primary-400 border-primary/20">
                             {t(`violations.analyzers.${a}`)}
                           </Badge>
                         ))}
@@ -1385,7 +1385,7 @@ function WhitelistTab() {
                           {t('violations.whitelist.expiresAt')}: {formatDate(item.expires_at)}
                         </span>
                       ) : (
-                        <span className="text-emerald-400">{t('violations.whitelist.noExpiration')}</span>
+                        <span className="text-primary-400">{t('violations.whitelist.noExpiration')}</span>
                       )}
                     </div>
                   </div>
@@ -1838,6 +1838,12 @@ export default function Violations() {
           onAnnulAll={handleAnnulAll}
           onWhitelist={handleWhitelist}
           onViewUser={(uuid) => navigate(`/users/${uuid}`)}
+        />
+        <WhitelistAddDialog
+          open={whitelistDialogOpen}
+          onOpenChange={setWhitelistDialogOpen}
+          userUuid={whitelistUserUuid}
+          onSubmit={(data) => addToWhitelist.mutate(data)}
         />
       </div>
     )

@@ -27,7 +27,8 @@ import { Label } from '@/components/ui/label'
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { PermissionGate, useHasPermission } from '@/components/PermissionGate'
+import { useHasPermission } from '@/components/PermissionGate'
+import { usePermissionStore } from '@/store/permissionStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   notificationsApi,
@@ -848,6 +849,7 @@ function ChannelsTab() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const isSuperadmin = usePermissionStore((s) => s.role) === 'superadmin'
 
   const { data: channels = [], isLoading } = useQuery({
     queryKey: ['notification-channels'],
@@ -942,10 +944,8 @@ function ChannelsTab() {
         )}
       </div>
 
-      {/* SMTP Config (superadmin) */}
-      <PermissionGate resource="admins" action="edit">
-        <SmtpConfigSection />
-      </PermissionGate>
+      {/* SMTP Config (superadmin only — backend requires require_superadmin()) */}
+      {isSuperadmin && <SmtpConfigSection />}
 
       {/* Add channel dialog */}
       {addDialogOpen && (

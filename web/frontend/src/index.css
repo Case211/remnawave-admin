@@ -544,6 +544,59 @@
   }
 }
 
+/* ============ AURORA BACKGROUND ============ */
+.aurora-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(150px);
+  opacity: 0.10;
+  animation: auroraFloat 30s ease-in-out infinite;
+}
+
+.aurora-blob:nth-child(1) {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, var(--accent-from), var(--accent-to));
+  top: -10%;
+  left: 10%;
+  animation-duration: 32s;
+}
+
+.aurora-blob:nth-child(2) {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--accent-to), var(--accent-from));
+  top: 40%;
+  right: -5%;
+  animation-duration: 28s;
+  animation-delay: -8s;
+}
+
+@keyframes auroraFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(40px, -30px) scale(1.05); }
+  50% { transform: translate(-20px, 40px) scale(0.97); }
+  75% { transform: translate(30px, 15px) scale(1.03); }
+}
+
+/* Hide aurora on light theme */
+[data-theme="light"] .aurora-bg {
+  display: none;
+}
+
+/* Disable aurora animations when animations are off */
+[data-animations="false"] .aurora-blob {
+  animation: none;
+}
+
 /* Utilities */
 @layer utilities {
   .text-gradient {

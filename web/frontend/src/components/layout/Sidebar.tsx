@@ -90,25 +90,42 @@ interface NavGroup {
   items: NavItem[]
 }
 
-type NavigationEntry = NavItem | NavGroup
+interface NavSection {
+  type: 'section'
+  name: string
+}
+
+type NavigationEntry = NavItem | NavGroup | NavSection
 
 function isNavGroup(entry: NavigationEntry): entry is NavGroup {
   return entry.type === 'group'
 }
 
+function isNavSection(entry: NavigationEntry): entry is NavSection {
+  return entry.type === 'section'
+}
+
 const navigation: NavigationEntry[] = [
+  // Core
+  { type: 'section', name: 'nav.sections.core' },
   { name: 'nav.dashboard', href: '/', icon: LayoutDashboard, permission: null },
   { name: 'nav.users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
   { name: 'nav.nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
   { name: 'nav.fleet', href: '/fleet', icon: Activity, permission: { resource: 'fleet', action: 'view' } },
   { name: 'nav.hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
+  // Security
+  { type: 'section', name: 'nav.sections.security' },
   { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
   { name: 'nav.automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
   { name: 'nav.notifications', href: '/notifications', icon: BellRing, permission: { resource: 'notifications', action: 'view' } },
   { name: 'nav.mailServer', href: '/mailserver', icon: Mail, permission: { resource: 'mailserver', action: 'view' } },
+  // Data
+  { type: 'section', name: 'nav.sections.data' },
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   { name: 'nav.backups', href: '/backups', icon: HardDrive, permission: { resource: 'backups', action: 'view' } },
   { name: 'nav.apiKeys', href: '/api-keys', icon: Key, permission: { resource: 'api_keys', action: 'view' } },
+  // Administration
+  { type: 'section', name: 'nav.sections.admin' },
   {
     type: 'group',
     name: 'nav.administration',
@@ -167,12 +184,22 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     return hasPermission(item.permission.resource, item.permission.action)
   }
 
-  // Filter navigation entries based on permissions
-  const visibleNavigation = navigation.filter((entry) => {
+  // Filter navigation entries based on permissions (keep sections if next items are visible)
+  const visibleNavigation = navigation.filter((entry, idx) => {
+    if (isNavSection(entry)) {
+      // Show section header only if at least one following item (before next section) is visible
+      for (let i = idx + 1; i < navigation.length; i++) {
+        const next = navigation[i]
+        if (isNavSection(next)) break
+        if (isNavGroup(next) && next.items.some(isItemVisible)) return true
+        if (!isNavSection(next) && !isNavGroup(next) && isItemVisible(next as NavItem)) return true
+      }
+      return false
+    }
     if (isNavGroup(entry)) {
       return entry.items.some(isItemVisible)
     }
-    return isItemVisible(entry)
+    return isItemVisible(entry as NavItem)
   })
 
   // Check if group has active child
@@ -210,8 +237,24 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
 
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
-        <nav className={cn("px-3 space-y-1", collapsed && "px-2")}>
+        <nav className={cn("px-3 space-y-0.5", collapsed && "px-2")}>
           {visibleNavigation.map((entry) => {
+            // Section header
+            if (isNavSection(entry)) {
+              if (collapsed) {
+                // Thin separator in collapsed mode
+                return <div key={entry.name} className="my-2 mx-1 border-t border-sidebar-border" />
+              }
+              return (
+                <div
+                  key={entry.name}
+                  className="sidebar-section-title px-3 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-dark-400 select-none"
+                >
+                  {t(entry.name)}
+                </div>
+              )
+            }
+
             if (isNavGroup(entry)) {
               const groupActive = isGroupActive(entry)
               const isExpanded = expandedGroups.has(entry.name) || groupActive
@@ -416,7 +459,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                   href="https://github.com/case211/remnawave-admin#-поддержка"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center py-1.5 text-dark-300 hover:text-pink-400 transition-colors"
+                  className="flex items-center justify-center py-1.5 text-dark-300 hover:text-primary-400 transition-colors"
                 >
                   <Heart className="w-4 h-4" />
                 </a>
@@ -448,7 +491,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               href="https://github.com/case211/remnawave-admin#-поддержка"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-2 py-1.5 text-xs text-dark-300 hover:text-pink-400 transition-colors rounded-md hover:bg-dark-600/30"
+              className="flex items-center gap-2 px-2 py-1.5 text-xs text-dark-300 hover:text-primary-400 transition-colors rounded-md hover:bg-dark-600/30"
             >
               <Heart className="w-3.5 h-3.5 shrink-0" />
               <span>{t('sidebar.support')}</span>

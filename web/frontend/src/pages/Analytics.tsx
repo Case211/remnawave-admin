@@ -168,7 +168,7 @@ function GeoMapCard() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Globe className="w-5 h-5 text-cyan-400" />
+            <Globe className="w-5 h-5 text-primary-400" />
             <CardTitle className="text-base">{t('analytics.geo.title')}</CardTitle>
             <InfoTooltip
               text={t('analytics.geo.tooltip')}
@@ -332,7 +332,7 @@ function CityUsersList({
       {/* Header + filters */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <div className="flex items-center gap-2 mr-auto">
-          <MapPin className="w-4 h-4 text-cyan-400" />
+          <MapPin className="w-4 h-4 text-primary-400" />
           <h3 className="text-sm font-medium text-white">
             {t('analytics.geo.usersByCity')}
           </h3>
@@ -409,7 +409,7 @@ function CityUsersList({
                   isOpen && 'bg-dark-600/20',
                 )}
               >
-                <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <MapPin className="w-3.5 h-3.5 text-primary-400 shrink-0" />
                 <span className="text-sm font-medium text-white flex-1 truncate">
                   {city.city}, {city.country}
                 </span>
@@ -535,7 +535,7 @@ function TopUsersCard() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-violet-400" />
+            <BarChart3 className="w-5 h-5 text-primary-400" />
             <CardTitle className="text-base">{t('analytics.topUsers.title')}</CardTitle>
             <InfoTooltip
               text={t('analytics.topUsers.tooltip')}
@@ -647,7 +647,7 @@ function OnlineIndicator({ onlineAt }: { onlineAt: string | null }) {
 
 const UsageBar = memo(function UsageBar({ percent }: { percent: number }) {
   const color =
-    percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-yellow-500' : 'bg-cyan-500'
+    percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-yellow-500' : 'bg-primary'
   return (
     <div className="flex items-center gap-2">
       <div className="w-16 h-1.5 bg-dark-600 rounded-full overflow-hidden">
@@ -706,7 +706,7 @@ function TrendsCard() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-green-400" />
+            <TrendingUp className="w-5 h-5 text-primary-400" />
             <CardTitle className="text-base">{t('analytics.trends.title')}</CardTitle>
             <InfoTooltip
               text={t('analytics.trends.tooltip')}
@@ -915,7 +915,7 @@ function SharedHwidsCard() {
                     <Smartphone className="w-4 h-4 text-muted-foreground shrink-0" />
 
                     <button
-                      className="font-mono text-xs text-white hover:text-cyan-400 transition-colors"
+                      className="font-mono text-xs text-white hover:text-primary-400 transition-colors"
                       title={group.hwid}
                       onClick={(e) => { e.stopPropagation(); copyHwid(group.hwid) }}
                     >
@@ -960,7 +960,7 @@ function SharedHwidsCard() {
                               onClick={() => navigate(`/users/${user.uuid}`)}
                             >
                               <TableCell>
-                                <span className="font-medium text-white text-sm hover:text-cyan-400 transition-colors">
+                                <span className="font-medium text-white text-sm hover:text-primary-400 transition-colors">
                                   {user.username || user.uuid.slice(0, 8)}
                                 </span>
                               </TableCell>

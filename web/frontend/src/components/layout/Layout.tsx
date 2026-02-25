@@ -33,7 +33,13 @@ export default function Layout({ children }: LayoutProps) {
   }, [handleKeyDown])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-dark-800">
+    <div className="flex h-screen overflow-hidden bg-dark-800 relative">
+      {/* Aurora background effect */}
+      <div className="aurora-bg">
+        <div className="aurora-blob" />
+        <div className="aurora-blob" />
+      </div>
+
       {/* Sidebar */}
       <Sidebar
         mobileOpen={sidebarOpen}
