@@ -22,6 +22,10 @@ RUN pip install --no-cache-dir -r /app/web/backend/requirements.txt
 COPY shared/ /app/shared/
 COPY web/backend/ /app/web/backend/
 
+# Copy Alembic migrations (auto-run on startup)
+COPY alembic/ /app/alembic/
+COPY alembic.ini /app/alembic.ini
+
 # Set Python path
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
