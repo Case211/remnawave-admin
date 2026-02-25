@@ -277,6 +277,100 @@ _setup_web_logging()
 logger = logging.getLogger("web")
 
 
+# ── Database migrations ───────────────────────────────────────────
+
+
+async def _run_migrations(database_url: str) -> bool:
+    """
+    Run Alembic migrations automatically on startup.
+    Returns True if migrations succeed or are not needed.
+    """
+    import traceback as _tb
+
+    try:
+        from alembic.config import Config
+        from alembic import command
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        from sqlalchemy import create_engine
+
+        # Normalise URL to sync psycopg2 driver
+        raw_url = str(database_url)
+        if raw_url.startswith("postgresql+asyncpg://"):
+            db_url = raw_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+        elif raw_url.startswith("postgresql://"):
+            db_url = raw_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        else:
+            db_url = raw_url
+
+        def _run_sync():
+            engine = None
+            try:
+                engine = create_engine(
+                    db_url,
+                    pool_pre_ping=True,
+                    pool_recycle=3600,
+                )
+
+                with engine.connect() as conn:
+                    ctx = MigrationContext.configure(conn)
+                    current_rev = ctx.get_current_revision()
+
+                alembic_cfg = Config(str(PROJECT_ROOT / "alembic.ini"))
+                alembic_cfg.set_main_option("sqlalchemy.url", db_url)
+
+                script = ScriptDirectory.from_config(alembic_cfg)
+                head_rev = script.get_current_head()
+
+                logger.info("DB revision: current=%s, head=%s", current_rev or "None", head_rev)
+
+                if current_rev == head_rev:
+                    logger.info("Database schema up to date")
+                    return True
+
+                pending = []
+                for rev in script.iterate_revisions(head_rev, current_rev):
+                    if rev.revision != current_rev:
+                        pending.append(rev.revision)
+                pending.reverse()
+                logger.info(
+                    "Running %d migration(s): %s",
+                    len(pending),
+                    " -> ".join(pending),
+                )
+
+                connection = engine.connect()
+                try:
+                    alembic_cfg.attributes["connection"] = connection
+                    command.upgrade(alembic_cfg, "head")
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+                finally:
+                    connection.close()
+
+                with engine.connect() as conn:
+                    ctx = MigrationContext.configure(conn)
+                    new_rev = ctx.get_current_revision()
+                    logger.info("Migrated: %s -> %s", current_rev or "None", new_rev)
+
+                return True
+
+            finally:
+                if engine:
+                    engine.dispose(close=True)
+
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _run_sync)
+
+    except Exception as e:
+        logger.error("Migration failed: %s", e)
+        logger.error("Migration traceback:\n%s", _tb.format_exc())
+        return False
+
+
 # ── FastAPI app ───────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -288,6 +382,11 @@ async def lifespan(app: FastAPI):
     # Connect to database if configured
     database_url = os.environ.get("DATABASE_URL") or getattr(settings, "database_url", None)
     if database_url:
+        # Run pending Alembic migrations before connecting
+        migration_ok = await _run_migrations(database_url)
+        if not migration_ok:
+            logger.warning("Some migrations failed — app will start but may have limited functionality")
+
         try:
             from shared.database import db_service
             connected = await db_service.connect(database_url=database_url)
