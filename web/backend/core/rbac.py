@@ -724,3 +724,67 @@ async def ensure_rbac_tables() -> None:
                 )
     except Exception as e:
         logger.warning("ensure_rbac_tables check failed: %s", e)
+
+
+async def sync_superadmin_permissions() -> None:
+    """Ensure the superadmin system role has ALL permissions from AVAILABLE_RESOURCES.
+
+    This runs on every startup so that when new resources/actions are added in code,
+    the superadmin role in the database is automatically updated without requiring
+    a manual migration or database edit.
+    """
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return
+
+        # Import AVAILABLE_RESOURCES from roles module
+        from web.backend.api.v2.roles import AVAILABLE_RESOURCES
+
+        async with db_service.acquire() as conn:
+            # Get the superadmin role
+            role_row = await conn.fetchrow(
+                "SELECT id FROM admin_roles WHERE name = 'superadmin'"
+            )
+            if not role_row:
+                logger.debug("sync_superadmin_permissions: superadmin role not found, skipping")
+                return
+
+            role_id = role_row["id"]
+
+            # Get current permissions for superadmin
+            existing = await conn.fetch(
+                "SELECT resource, action FROM admin_permissions WHERE role_id = $1",
+                role_id,
+            )
+            existing_set = {(row["resource"], row["action"]) for row in existing}
+
+            # Build the full set of permissions from AVAILABLE_RESOURCES
+            full_set = set()
+            for resource, actions in AVAILABLE_RESOURCES.items():
+                for action in actions:
+                    full_set.add((resource, action))
+
+            # Find missing permissions
+            missing = full_set - existing_set
+            if not missing:
+                return
+
+            # Insert missing permissions
+            async with conn.transaction():
+                for resource, action in sorted(missing):
+                    await conn.execute(
+                        "INSERT INTO admin_permissions (role_id, resource, action) "
+                        "VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                        role_id, resource, action,
+                    )
+
+            invalidate_cache()
+            logger.info(
+                "sync_superadmin_permissions: added %d missing permissions: %s",
+                len(missing),
+                ", ".join(f"{r}:{a}" for r, a in sorted(missing)),
+            )
+
+    except Exception as e:
+        logger.warning("sync_superadmin_permissions failed: %s", e)

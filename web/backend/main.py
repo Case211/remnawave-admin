@@ -296,8 +296,12 @@ async def lifespan(app: FastAPI):
 
                 # First-run admin setup
                 # Verify RBAC tables exist
-                from web.backend.core.rbac import ensure_rbac_tables
+                from web.backend.core.rbac import ensure_rbac_tables, sync_superadmin_permissions
                 await ensure_rbac_tables()
+
+                # Ensure superadmin role has all permissions from AVAILABLE_RESOURCES
+                # (auto-adds new resources/actions when code is updated)
+                await sync_superadmin_permissions()
 
                 # Initialize dynamic config service (DB settings cache)
                 from shared.config_service import config_service
