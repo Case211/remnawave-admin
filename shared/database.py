@@ -1183,11 +1183,11 @@ class DatabaseService:
                 SELECT * FROM user_connections 
                 WHERE user_uuid = $1 
                 AND disconnected_at IS NULL
-                AND connected_at > NOW() - INTERVAL '%s minutes'
+                AND connected_at > NOW() - make_interval(mins => $2)
                 ORDER BY connected_at DESC
-                LIMIT $2
-                """.replace('%s', str(max_age_minutes)),
-                user_uuid, limit
+                LIMIT $3
+                """,
+                user_uuid, int(max_age_minutes), limit
             )
             return [dict(row) for row in rows]
     
@@ -1204,10 +1204,10 @@ class DatabaseService:
             result = await conn.fetchval(
                 """
                 SELECT COUNT(DISTINCT ip_address) FROM user_connections
-                WHERE user_uuid = $1 
-                AND connected_at > NOW() - INTERVAL '%s hours'
-                """.replace('%s', str(since_hours)),
-                user_uuid
+                WHERE user_uuid = $1
+                AND connected_at > NOW() - make_interval(hours => $2)
+                """,
+                user_uuid, int(since_hours)
             )
             return result or 0
     
@@ -1233,10 +1233,10 @@ class DatabaseService:
             result = await conn.fetchval(
                 """
                 SELECT COUNT(DISTINCT ip_address) FROM user_connections
-                WHERE user_uuid = $1 
-                AND connected_at > NOW() - INTERVAL '%s minutes'
-                """.replace('%s', str(window_minutes)),
-                user_uuid
+                WHERE user_uuid = $1
+                AND connected_at > NOW() - make_interval(mins => $2)
+                """,
+                user_uuid, int(window_minutes)
             )
             return result or 0
     
@@ -1300,11 +1300,12 @@ class DatabaseService:
                     device_info
                 FROM user_connections
                 WHERE user_uuid = $1 
-                AND connected_at > NOW() - INTERVAL '%s days'
+                AND connected_at > NOW() - make_interval(days => $2)
                 ORDER BY connected_at DESC
-                LIMIT $2
-                """.replace('%s', str(days)),
+                LIMIT $3
+                """,
                 user_uuid,
+                int(days),
                 limit
             )
             return [dict(row) for row in rows]
@@ -2334,16 +2335,28 @@ class DatabaseService:
         start_date: datetime,
         end_date: datetime,
         min_score: float = 0.0,
-        limit: int = 1000
+        limit: int = 1000,
+        offset: int = 0,
+        user_uuid: Optional[str] = None,
+        severity: Optional[str] = None,
+        resolved: Optional[bool] = None,
+        ip: Optional[str] = None,
+        country: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Получить нарушения за указанный период.
+        Получить нарушения за указанный период с фильтрацией на стороне БД.
 
         Args:
             start_date: Начало периода
             end_date: Конец периода
             min_score: Минимальный скор (по умолчанию 0)
             limit: Максимальное количество записей
+            offset: Смещение для пагинации
+            user_uuid: Фильтр по UUID пользователя
+            severity: Фильтр по серьёзности (low, medium, high, critical)
+            resolved: Фильтр по статусу разрешения
+            ip: Фильтр по IP адресу
+            country: Фильтр по коду страны
 
         Returns:
             Список нарушений
@@ -2353,22 +2366,148 @@ class DatabaseService:
 
         try:
             async with self.acquire() as conn:
+                conditions = [
+                    "detected_at >= $1",
+                    "detected_at < $2",
+                    "score >= $3",
+                ]
+                params: list = [start_date, end_date, min_score]
+                idx = 4
+
+                if user_uuid:
+                    conditions.append(f"user_uuid::text = ${idx}")
+                    params.append(user_uuid)
+                    idx += 1
+
+                if severity:
+                    severity_ranges = {
+                        'low': (0, 40),
+                        'medium': (40, 60),
+                        'high': (60, 80),
+                        'critical': (80, 101),
+                    }
+                    if severity in severity_ranges:
+                        min_s, max_s = severity_ranges[severity]
+                        conditions.append(f"score >= {min_s} AND score < {max_s}")
+
+                if resolved is not None:
+                    if resolved:
+                        conditions.append("action_taken IS NOT NULL")
+                    else:
+                        conditions.append("action_taken IS NULL")
+
+                if ip:
+                    conditions.append(f"${idx} = ANY(ip_addresses)")
+                    params.append(ip)
+                    idx += 1
+
+                if country:
+                    conditions.append(f"UPPER(${idx}) = ANY(SELECT UPPER(x) FROM UNNEST(countries) AS x)")
+                    params.append(country)
+                    idx += 1
+
+                where = " AND ".join(conditions)
+                params.extend([limit, offset])
+
                 rows = await conn.fetch(
-                    """
+                    f"""
                     SELECT * FROM violations
-                    WHERE detected_at >= $1
-                    AND detected_at < $2
-                    AND score >= $3
+                    WHERE {where}
                     ORDER BY detected_at DESC
-                    LIMIT $4
+                    LIMIT ${idx} OFFSET ${idx + 1}
                     """,
-                    start_date, end_date, min_score, limit
+                    *params
                 )
                 return [dict(row) for row in rows]
 
         except Exception as e:
             logger.error("Error getting violations for period: %s", e, exc_info=True)
             return []
+
+    async def count_violations_for_period(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        min_score: float = 0.0,
+        user_uuid: Optional[str] = None,
+        severity: Optional[str] = None,
+        resolved: Optional[bool] = None,
+        ip: Optional[str] = None,
+        country: Optional[str] = None,
+    ) -> int:
+        """Подсчитать количество нарушений за период с фильтрами (для пагинации)."""
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                conditions = [
+                    "detected_at >= $1",
+                    "detected_at < $2",
+                    "score >= $3",
+                ]
+                params: list = [start_date, end_date, min_score]
+                idx = 4
+
+                if user_uuid:
+                    conditions.append(f"user_uuid::text = ${idx}")
+                    params.append(user_uuid)
+                    idx += 1
+
+                if severity:
+                    severity_ranges = {
+                        'low': (0, 40),
+                        'medium': (40, 60),
+                        'high': (60, 80),
+                        'critical': (80, 101),
+                    }
+                    if severity in severity_ranges:
+                        min_s, max_s = severity_ranges[severity]
+                        conditions.append(f"score >= {min_s} AND score < {max_s}")
+
+                if resolved is not None:
+                    if resolved:
+                        conditions.append("action_taken IS NOT NULL")
+                    else:
+                        conditions.append("action_taken IS NULL")
+
+                if ip:
+                    conditions.append(f"${idx} = ANY(ip_addresses)")
+                    params.append(ip)
+                    idx += 1
+
+                if country:
+                    conditions.append(f"UPPER(${idx}) = ANY(SELECT UPPER(x) FROM UNNEST(countries) AS x)")
+                    params.append(country)
+                    idx += 1
+
+                where = " AND ".join(conditions)
+                row = await conn.fetchval(
+                    f"SELECT COUNT(*) FROM violations WHERE {where}",
+                    *params
+                )
+                return row or 0
+
+        except Exception as e:
+            logger.error("Error counting violations for period: %s", e, exc_info=True)
+            return 0
+
+    async def get_violation_by_id(self, violation_id: int) -> Optional[Dict[str, Any]]:
+        """Получить нарушение по ID."""
+        if not self.is_connected:
+            return None
+
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT * FROM violations WHERE id = $1",
+                    violation_id
+                )
+                return dict(row) if row else None
+
+        except Exception as e:
+            logger.error("Error getting violation by id %s: %s", violation_id, e, exc_info=True)
+            return None
 
     async def get_violations_stats_for_period(
         self,
@@ -2625,9 +2764,9 @@ class DatabaseService:
                     """
                     SELECT COUNT(*) as cnt FROM violations
                     WHERE user_uuid = $1
-                    AND detected_at > NOW() - INTERVAL '%s hours'
-                    """.replace('%s', str(hours)),
-                    user_uuid
+                    AND detected_at > NOW() - make_interval(hours => $2)
+                    """,
+                    user_uuid, int(hours)
                 )
                 return row['cnt'] if row else 0
 
@@ -2661,11 +2800,11 @@ class DatabaseService:
                     """
                     SELECT * FROM violations
                     WHERE user_uuid = $1
-                    AND detected_at > NOW() - INTERVAL '%s days'
+                    AND detected_at > NOW() - make_interval(days => $2)
                     ORDER BY detected_at DESC
-                    LIMIT $2
-                    """.replace('%s', str(days)),
-                    user_uuid, limit
+                    LIMIT $3
+                    """,
+                    user_uuid, int(days), limit
                 )
                 return [dict(row) for row in rows]
 
@@ -2793,6 +2932,66 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error marking violation as notified: %s", e, exc_info=True)
             return False
+
+    async def get_user_last_violation_notification(self, user_uuid: str) -> Optional[datetime]:
+        """Получить время последнего уведомления о нарушении для пользователя."""
+        if not self.is_connected:
+            return None
+
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchval(
+                    "SELECT MAX(notified_at) FROM violations WHERE user_uuid = $1 AND notified_at IS NOT NULL",
+                    user_uuid
+                )
+                return row
+
+        except Exception as e:
+            logger.error("Error getting last violation notification for %s: %s", user_uuid, e, exc_info=True)
+            return None
+
+    async def mark_user_violations_notified(self, user_uuid: str) -> None:
+        """Отметить последнее не-нотифицированное нарушение пользователя."""
+        if not self.is_connected:
+            return
+
+        try:
+            async with self.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE violations SET notified_at = NOW()
+                    WHERE user_uuid = $1 AND notified_at IS NULL AND action_taken IS NULL
+                    """,
+                    user_uuid
+                )
+
+        except Exception as e:
+            logger.error("Error marking violations notified for %s: %s", user_uuid, e, exc_info=True)
+
+    async def cleanup_old_violations(self, retention_days: int = 90) -> int:
+        """Удалить resolved/annulled violations старше N дней.
+
+        Returns:
+            Количество удалённых записей
+        """
+        if not self.is_connected:
+            return 0
+
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    DELETE FROM violations
+                    WHERE action_taken IS NOT NULL
+                    AND detected_at < NOW() - make_interval(days => $1)
+                    """,
+                    retention_days
+                )
+                return int(result.split()[-1]) if result else 0
+
+        except Exception as e:
+            logger.error("Error cleaning up old violations: %s", e, exc_info=True)
+            return 0
 
     # ==================== Violation Whitelist ====================
 

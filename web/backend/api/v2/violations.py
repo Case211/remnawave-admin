@@ -1,7 +1,10 @@
 """Violations API endpoints."""
+import csv
+import io
 import json
 import logging
 from fastapi import APIRouter, Depends, Path, Query, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from typing import Optional
 from datetime import datetime, timedelta
 
@@ -97,85 +100,48 @@ async def list_violations(
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
 
-        # Получаем нарушения из БД
-        violations = await db.get_violations_for_period(
-            start_date=start_date,
-            end_date=end_date,
-            min_score=min_score,
-        )
-
-        # Фильтрация
-        if user_uuid:
-            violations = [v for v in violations if str(v.get('user_uuid', '')) == user_uuid]
-
-        if severity:
-            severity_map = {
-                'low': (0, 40),
-                'medium': (40, 60),
-                'high': (60, 80),
-                'critical': (80, 101),
-            }
-            if severity in severity_map:
-                min_s, max_s = severity_map[severity]
-                violations = [v for v in violations if min_s <= v.get('score', 0) < max_s]
-
-        if resolved is not None:
-            if resolved:
-                violations = [v for v in violations if v.get('action_taken')]
-            else:
-                violations = [v for v in violations if not v.get('action_taken')]
-
-        if ip:
-            violations = [
-                v for v in violations
-                if ip in (v.get('ip_addresses') or v.get('ips') or [])
-            ]
-
-        if country:
-            country_upper = country.upper()
-            violations = [
-                v for v in violations
-                if country_upper in [c.upper() for c in (v.get('countries') or [])]
-            ]
-
+        # Override start/end from date_from/date_to if provided
         if date_from:
             try:
-                dt_from = datetime.fromisoformat(date_from)
-                violations = [
-                    v for v in violations
-                    if (v.get('detected_at') or datetime.min) >= dt_from
-                ]
+                start_date = datetime.fromisoformat(date_from)
             except ValueError:
                 raise HTTPException(
                     status_code=400,
                     detail="Invalid date_from format. Use ISO format (e.g. 2024-01-15T00:00:00)",
                 )
-
         if date_to:
             try:
-                dt_to = datetime.fromisoformat(date_to)
-                violations = [
-                    v for v in violations
-                    if (v.get('detected_at') or datetime.max) <= dt_to
-                ]
+                end_date = datetime.fromisoformat(date_to)
             except ValueError:
                 raise HTTPException(
                     status_code=400,
                     detail="Invalid date_to format. Use ISO format (e.g. 2024-01-15T23:59:59)",
                 )
 
-        # Сортировка по дате (новые первыми)
-        violations.sort(key=lambda x: x.get('detected_at', datetime.min), reverse=True)
+        filter_kwargs = dict(
+            start_date=start_date,
+            end_date=end_date,
+            min_score=min_score,
+            user_uuid=user_uuid,
+            severity=severity,
+            resolved=resolved,
+            ip=ip,
+            country=country,
+        )
 
-        # Пагинация
-        total = len(violations)
-        start = (page - 1) * per_page
-        end = start + per_page
-        items_raw = violations[start:end]
+        # Подсчёт для пагинации
+        total = await db.count_violations_for_period(**filter_kwargs)
+
+        # Получаем страницу данных
+        violations = await db.get_violations_for_period(
+            **filter_kwargs,
+            limit=per_page,
+            offset=(page - 1) * per_page,
+        )
 
         # Преобразуем в модели
         items = []
-        for v in items_raw:
+        for v in violations:
             try:
                 items.append(_row_to_list_item(v))
             except Exception as item_err:
@@ -188,6 +154,8 @@ async def list_violations(
             per_page=per_page,
             pages=(total + per_page - 1) // per_page if total > 0 else 1,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error listing violations: %s", e, exc_info=True)
         return ViolationListResponse(items=[], total=0, page=page, per_page=per_page, pages=1)
@@ -530,6 +498,53 @@ async def get_user_violations(
     return items
 
 
+@router.get("/export/csv")
+async def export_violations_csv(
+    days: int = Query(7, ge=1, le=365),
+    min_score: float = Query(0, ge=0, le=100),
+    severity: Optional[str] = None,
+    user_uuid: Optional[str] = None,
+    resolved: Optional[bool] = None,
+    admin: AdminUser = Depends(require_permission("violations", "view")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Экспорт нарушений в CSV с proper escaping."""
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+
+    violations = await db.get_violations_for_period(
+        start_date=start_date,
+        end_date=end_date,
+        min_score=min_score,
+        severity=severity,
+        user_uuid=user_uuid,
+        resolved=resolved,
+        limit=10000,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    writer.writerow(["Date", "User", "Email", "Score", "Action", "IPs", "Countries", "Reasons", "Status"])
+    for v in violations:
+        writer.writerow([
+            str(v.get('detected_at', '')),
+            v.get('username', ''),
+            v.get('email', ''),
+            v.get('score', 0),
+            v.get('recommended_action', ''),
+            '; '.join(v.get('ip_addresses') or []),
+            '; '.join(v.get('countries') or []),
+            '; '.join(v.get('reasons') or []),
+            v.get('action_taken', 'pending'),
+        ])
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=violations_{days}d.csv"},
+    )
+
+
 @router.get("/{violation_id}", response_model=ViolationDetail)
 async def get_violation(
     violation_id: int,
@@ -537,21 +552,7 @@ async def get_violation(
     db: DatabaseService = Depends(get_db),
 ):
     """Детальная информация о нарушении."""
-    # Получаем нарушение по ID
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=90)
-
-    violations = await db.get_violations_for_period(
-        start_date=start_date,
-        end_date=end_date,
-        min_score=0,
-    )
-
-    violation = None
-    for v in violations:
-        if int(v.get('id', 0)) == violation_id:
-            violation = v
-            break
+    violation = await db.get_violation_by_id(violation_id)
 
     if not violation:
         raise api_error(404, E.VIOLATION_NOT_FOUND)

@@ -65,18 +65,8 @@ interface OverviewStats {
   users_online: number
 }
 
-interface ViolationStats {
-  total: number
-  critical: number
-  high: number
-  medium: number
-  low: number
-  unique_users: number
-  avg_score: number
-  max_score: number
-  by_action: Record<string, number>
-  by_country: Record<string, number>
-}
+// ViolationStats imported from shared types
+import type { ViolationStats } from '@/types/violations'
 
 interface TrafficStats {
   total_bytes: number
