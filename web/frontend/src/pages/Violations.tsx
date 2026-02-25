@@ -50,108 +50,15 @@ import { ExportDropdown } from '@/components/ExportDropdown'
 import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
 import { exportCSV, exportJSON } from '@/lib/export'
 import Reports from './Reports'
-
-// ── Types ────────────────────────────────────────────────────────
-
-interface Violation {
-  id: number
-  user_uuid: string
-  username: string | null
-  email: string | null
-  telegram_id: number | null
-  score: number
-  severity: string
-  recommended_action: string
-  confidence: number
-  action_taken: string | null
-  notified: boolean
-  detected_at: string
-  reasons?: string[]
-  countries?: string[]
-  status?: string
-}
-
-interface ViolationDetail {
-  id: number
-  user_uuid: string
-  username: string | null
-  email: string | null
-  telegram_id: number | null
-  score: number
-  recommended_action: string
-  confidence: number
-  detected_at: string
-  temporal_score: number
-  geo_score: number
-  asn_score: number
-  profile_score: number
-  device_score: number
-  hwid_score: number
-  reasons: string[]
-  countries: string[]
-  asn_types: string[]
-  ips: string[]
-  action_taken: string | null
-  action_taken_at: string | null
-  action_taken_by: number | null
-  notified_at: string | null
-  raw_data: Record<string, unknown> | null
-}
-
-interface ViolationStats {
-  total: number
-  critical: number
-  high: number
-  medium: number
-  low: number
-  unique_users: number
-  avg_score: number
-  max_score: number
-  by_action: Record<string, number>
-  by_country: Record<string, number>
-}
-
-interface PaginatedResponse {
-  items: Violation[]
-  total: number
-  page: number
-  per_page: number
-  pages: number
-}
-
-interface TopViolator {
-  user_uuid: string
-  username: string | null
-  violations_count: number
-  max_score: number
-  avg_score: number
-  last_violation_at: string
-  actions: string[]
-}
-
-interface IPInfo {
-  ip: string
-  asn_org: string | null
-  country: string | null
-  city: string | null
-  connection_type: string | null
-  is_vpn: boolean
-  is_proxy: boolean
-  is_hosting: boolean
-  is_mobile: boolean
-}
-
-interface WhitelistItem {
-  id: number
-  user_uuid: string
-  username: string | null
-  email: string | null
-  reason: string | null
-  added_by_username: string | null
-  added_at: string
-  expires_at: string | null
-  excluded_analyzers: string[] | null
-}
+import type {
+  Violation,
+  ViolationDetail,
+  ViolationStats,
+  PaginatedResponse,
+  TopViolator,
+  IPInfo,
+  WhitelistItem,
+} from '@/types/violations'
 
 const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid'] as const
 
@@ -739,14 +646,14 @@ function ViolationDetailPanel({
       </Card>
 
       {/* Reasons */}
-      {detail.reasons.length > 0 && (
+      {Array.isArray(detail.reasons) && detail.reasons.length > 0 && (
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
               {t('violations.detail.reasons')} ({detail.reasons.length})
             </h3>
             <ul className="space-y-2">
-              {detail.reasons.map((reason, i) => (
+              {(Array.isArray(detail.reasons) ? detail.reasons : []).map((reason, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm">
                   <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
                   <span className="text-dark-100">{reason}</span>
@@ -760,7 +667,7 @@ function ViolationDetailPanel({
       {/* Geo & Network info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Countries */}
-        {detail.countries.length > 0 && (
+        {Array.isArray(detail.countries) && detail.countries.length > 0 && (
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
             <CardContent className="p-4">
               <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
@@ -768,7 +675,7 @@ function ViolationDetailPanel({
                 {t('violations.detail.countriesTitle')}
               </h3>
               <div className="flex flex-wrap gap-2">
-                {detail.countries.map((country, i) => (
+                {(Array.isArray(detail.countries) ? detail.countries : []).map((country, i) => (
                   <Badge key={i} variant="default">{country}</Badge>
                 ))}
               </div>
@@ -777,7 +684,7 @@ function ViolationDetailPanel({
         )}
 
         {/* ASN types */}
-        {detail.asn_types.length > 0 && (
+        {Array.isArray(detail.asn_types) && detail.asn_types.length > 0 && (
           <Card className="animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
             <CardContent className="p-4">
               <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
@@ -785,7 +692,7 @@ function ViolationDetailPanel({
                 {t('violations.detail.providerTypes')}
               </h3>
               <div className="flex flex-wrap gap-2">
-                {detail.asn_types.map((asn, i) => (
+                {(Array.isArray(detail.asn_types) ? detail.asn_types : []).map((asn, i) => (
                   <Badge key={i} variant="secondary">{asn}</Badge>
                 ))}
               </div>
@@ -795,14 +702,14 @@ function ViolationDetailPanel({
       </div>
 
       {/* IPs */}
-      {detail.ips.length > 0 && (
+      {Array.isArray(detail.ips) && detail.ips.length > 0 && (
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
               {t('violations.detail.ipTitle')} ({detail.ips.length})
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {detail.ips.map((ip, i) => {
+              {(Array.isArray(detail.ips) ? detail.ips : []).map((ip, i) => {
                 const info = ipInfo?.[ip]
                 const badge = info ? getConnectionTypeBadge(info, t) : null
                 return (
@@ -843,7 +750,7 @@ function ViolationDetailPanel({
       )}
 
       {/* HWID Devices */}
-      {hwidDevices && hwidDevices.length > 0 && (
+      {Array.isArray(hwidDevices) && hwidDevices.length > 0 && (
         <Card className="animate-fade-in-up" style={{ animationDelay: '0.32s' }}>
           <CardContent className="p-4">
             <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
@@ -1050,9 +957,9 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
               </div>
 
               {/* Actions taken */}
-              {v.actions.length > 0 && (
+              {Array.isArray(v.actions) && v.actions.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
-                  {v.actions.map((action, j) => (
+                  {(Array.isArray(v.actions) ? v.actions : []).map((action, j) => (
                     <ActionBadge key={j} action={action} />
                   ))}
                 </div>
@@ -1364,7 +1271,7 @@ function WhitelistTab() {
                         </Badge>
                       )}
                     </div>
-                    {item.excluded_analyzers && (
+                    {Array.isArray(item.excluded_analyzers) && item.excluded_analyzers.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-1">
                         {item.excluded_analyzers.map(a => (
                           <Badge key={a} variant="secondary" className="text-xs bg-primary/10 text-primary-400 border-primary/20">
@@ -1642,21 +1549,15 @@ export default function Violations() {
 
   const canResolve = useHasPermission('violations', 'resolve')
 
-  // Export handlers
+  // Export handlers — CSV uses server-side endpoint for full export with proper escaping
   const handleExportCSV = () => {
-    const items = data?.items
-    if (!items?.length) return
-    const exportData = items.map((v: Violation) => ({
-      date: v.detected_at || '',
-      username: v.username || '',
-      score: v.score,
-      severity: v.severity,
-      reasons: v.reasons?.join('; ') || '',
-      countries: v.countries?.join(', ') || '',
-      recommendation: v.recommended_action || '',
-      status: v.status || '',
-    }))
-    exportCSV(exportData, `violations-${new Date().toISOString().slice(0, 10)}`)
+    const params = new URLSearchParams()
+    params.set('days', String(days))
+    if (minScore > 0) params.set('min_score', String(minScore))
+    if (severity) params.set('severity', severity)
+    if (resolved !== undefined) params.set('resolved', String(resolved))
+    const baseUrl = client.defaults.baseURL || ''
+    window.open(`${baseUrl}/violations/export/csv?${params.toString()}`, '_blank')
     toast.success(t('common.export.csvDone'))
   }
   const handleExportJSON = () => {
@@ -1709,6 +1610,7 @@ export default function Violations() {
         ...(dateTo && { date_to: dateTo }),
       }),
     enabled: tab !== 'top',
+    refetchInterval: tab === 'pending' ? 30000 : false,
   })
 
   // Fetch stats (always)
@@ -1971,12 +1873,57 @@ export default function Violations() {
                     setSeverity('')
                     setDays(7)
                     setMinScore(0)
+                    setIpFilter('')
+                    setCountryFilter('')
+                    setDateFrom('')
+                    setDateTo('')
                     setPage(1)
                   }}
                   className="w-full"
                 >
                   {t('violations.filters.reset')}
                 </Button>
+              </div>
+            </div>
+            {/* Advanced filters */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4 mt-3 pt-3 border-t border-dark-400/10">
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">IP</label>
+                <input
+                  type="text"
+                  placeholder="192.168.1.1"
+                  value={ipFilter}
+                  onChange={(e) => { setIpFilter(e.target.value); setPage(1) }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.country') || 'Country'}</label>
+                <input
+                  type="text"
+                  placeholder="RU, US, DE..."
+                  value={countryFilter}
+                  onChange={(e) => { setCountryFilter(e.target.value); setPage(1) }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.dateFrom') || 'From'}</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.dateTo') || 'To'}</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                />
               </div>
             </div>
           </CardContent>

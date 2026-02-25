@@ -31,6 +31,9 @@ violation_detector = IntelligentViolationDetector(db_service, connection_monitor
 _violation_check_cooldown: dict[str, datetime] = {}
 VIOLATION_CHECK_COOLDOWN_MINUTES = 5
 
+# Periodic cleanup of old violations
+_last_violation_cleanup: datetime = datetime.min
+
 router = APIRouter()
 
 
@@ -308,7 +311,8 @@ async def receive_connections(
                 # Per-user cooldown: skip if already checked recently
                 now_check = datetime.utcnow()
                 last_check = _violation_check_cooldown.get(user_uuid)
-                if last_check and (now_check - last_check).total_seconds() < VIOLATION_CHECK_COOLDOWN_MINUTES * 60:
+                cooldown_minutes = config_service.get("violation_check_cooldown_minutes", VIOLATION_CHECK_COOLDOWN_MINUTES)
+                if last_check and (now_check - last_check).total_seconds() < cooldown_minutes * 60:
                     logger.debug("Violation check cooldown active for user %s, skipping", user_uuid)
                     continue
 
@@ -425,6 +429,18 @@ async def receive_connections(
                     logger.warning("Error checking violations for user %s: %s", user_uuid, e)
         except Exception as e:
             logger.warning("Error in post-processing: %s", e)
+
+        # Periodic cleanup of old resolved/annulled violations
+        try:
+            global _last_violation_cleanup
+            if (datetime.utcnow() - _last_violation_cleanup).total_seconds() > 3600:
+                retention_days = config_service.get("violation_retention_days", 90)
+                cleaned = await db_service.cleanup_old_violations(retention_days)
+                if cleaned:
+                    logger.info("Cleaned up %d old violations (retention: %d days)", cleaned, retention_days)
+                _last_violation_cleanup = datetime.utcnow()
+        except Exception as cleanup_err:
+            logger.debug("Violation cleanup skipped: %s", cleanup_err)
 
     return JSONResponse(
         status_code=200,

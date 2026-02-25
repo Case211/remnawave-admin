@@ -162,9 +162,10 @@ class TemporalAnalyzer:
                 if not isinstance(conn_time, datetime):
                     continue
 
-                # Убираем timezone для сравнения
+                # Нормализуем timezone в UTC перед сравнением
                 if conn_time.tzinfo:
-                    conn_time = conn_time.replace(tzinfo=None)
+                    from datetime import timezone as tz
+                    conn_time = conn_time.astimezone(tz.utc).replace(tzinfo=None)
 
                 # Пропускаем слишком старые подключения (старше 24 часов)
                 age_hours = (now - conn_time).total_seconds() / 3600
@@ -740,15 +741,17 @@ class GeoAnalyzer:
     async def analyze(
         self,
         connections: List[ActiveConnection],
-        connection_history: List[Dict[str, Any]]
+        connection_history: List[Dict[str, Any]],
+        ip_metadata_cache: Optional[Dict[str, 'IPMetadata']] = None,
     ) -> GeoScore:
         """
         Анализирует географическое распределение IP.
-        
+
         Args:
             connections: Активные подключения
             connection_history: История подключений
-        
+            ip_metadata_cache: Предзагруженный кэш GeoIP данных (для оптимизации)
+
         Returns:
             GeoScore с оценкой и причинами
         """
@@ -757,7 +760,7 @@ class GeoAnalyzer:
         countries: Set[str] = set()
         cities: Set[str] = set()
         impossible_travel = False
-        
+
         # Собираем уникальные IP из активных подключений и истории
         all_ips = set()
         for conn in connections:
@@ -766,9 +769,12 @@ class GeoAnalyzer:
             ip = str(conn.get("ip_address", ""))
             if ip:
                 all_ips.add(ip)
-        
-        # Получаем метаданные для всех IP одним batch запросом (оптимизировано)
-        ip_metadata: Dict[str, IPMetadata] = await self.geoip.lookup_batch(list(all_ips))
+
+        # Используем кэш если передан, иначе делаем lookup
+        if ip_metadata_cache is not None:
+            ip_metadata = {ip: ip_metadata_cache[ip] for ip in all_ips if ip in ip_metadata_cache}
+        else:
+            ip_metadata: Dict[str, IPMetadata] = await self.geoip.lookup_batch(list(all_ips))
 
         for ip, metadata in ip_metadata.items():
             # Debug: логируем данные для каждого IP
@@ -998,15 +1004,17 @@ class ASNAnalyzer:
     async def analyze(
         self,
         connections: List[ActiveConnection],
-        connection_history: List[Dict[str, Any]]
+        connection_history: List[Dict[str, Any]],
+        ip_metadata_cache: Optional[Dict[str, 'IPMetadata']] = None,
     ) -> ASNScore:
         """
         Анализирует типы провайдеров для IP адресов.
-        
+
         Args:
             connections: Активные подключения
             connection_history: История подключений
-        
+            ip_metadata_cache: Предзагруженный кэш GeoIP данных (для оптимизации)
+
         Returns:
             ASNScore с оценкой и причинами
         """
@@ -1016,7 +1024,7 @@ class ASNAnalyzer:
         is_mobile_carrier = False
         is_datacenter = False
         is_vpn = False
-        
+
         # Собираем уникальные IP
         all_ips = set()
         for conn in connections:
@@ -1025,11 +1033,19 @@ class ASNAnalyzer:
             ip = str(conn.get("ip_address", ""))
             if ip:
                 all_ips.add(ip)
-        
-        # Получаем метаданные для всех IP одним batch запросом (оптимизировано)
-        ip_metadata: Dict[str, IPMetadata] = await self.geoip.lookup_batch(list(all_ips))
+
+        # Используем кэш если передан, иначе делаем lookup
+        if ip_metadata_cache is not None:
+            ip_metadata = {ip: ip_metadata_cache[ip] for ip in all_ips if ip in ip_metadata_cache}
+        else:
+            ip_metadata: Dict[str, IPMetadata] = await self.geoip.lookup_batch(list(all_ips))
         
         if not ip_metadata:
+            if all_ips:
+                logger.warning(
+                    "GeoIP lookup returned empty result for %d IPs, ASN analysis skipped",
+                    len(all_ips)
+                )
             return ASNScore(
                 score=0.0,
                 reasons=[],
@@ -1312,14 +1328,6 @@ class UserProfileAnalyzer:
         if baseline is None:
             baseline = await self.build_baseline(user_uuid, days=30)
         
-        # Если недостаточно данных для baseline, возвращаем нулевой скор
-        if baseline['data_points'] < 7:  # Минимум неделя данных
-            return ProfileScore(
-                score=0.0,
-                reasons=[],
-                deviation_from_baseline=0.0
-            )
-        
         # Проверяем, сколько текущих IP уже известны пользователю
         known_ips = set(baseline.get('known_ips', []))
         if current_ips and known_ips:
@@ -1369,12 +1377,20 @@ class UserProfileAnalyzer:
                 score += 20.0
                 reasons.append(f"Новая страна (первый раз): {', '.join(new_countries)}")
 
+        # Проверяем подключение в нетипичное время
+        typical_hours = set(baseline.get('typical_hours', []))
+        if typical_hours and len(typical_hours) >= 3:  # Нужен минимум данных
+            current_hour = datetime.utcnow().hour
+            if current_hour not in typical_hours:
+                score += 10.0
+                reasons.append(f"Подключение в нетипичное время ({current_hour}:00 UTC, обычно: {sorted(typical_hours)[:6]})")
+
         # Если половина IP известны, снижаем скор
         if current_ips and known_ips:
             known_ratio = len(current_ips & known_ips) / len(current_ips)
             if known_ratio >= 0.5:
                 score *= 0.5  # Снижаем на 50% если половина IP известны
-        
+
         return ProfileScore(
             score=min(score, 100.0),
             reasons=reasons,
@@ -1462,15 +1478,17 @@ class DeviceFingerprintAnalyzer:
     def analyze(
         self,
         connections: List[ActiveConnection],
-        connection_history: List[Dict[str, Any]]
+        connection_history: List[Dict[str, Any]],
+        user_device_count: int = 1,
     ) -> DeviceScore:
         """
         Анализирует fingerprint устройств.
-        
+
         Args:
             connections: Активные подключения
             connection_history: История подключений
-        
+            user_device_count: Лимит устройств пользователя
+
         Returns:
             DeviceScore с оценкой и причинами
         """
@@ -1524,28 +1542,38 @@ class DeviceFingerprintAnalyzer:
         # Подсчитываем уникальные ОС (исключаем Unknown)
         os_families = set(fp.get('os_family', 'Unknown') for fp in unique_fingerprints)
         os_families_known = sorted([os for os in os_families if os and os != 'Unknown'])
-        different_os_count = len(os_families)
+        different_os_count = len(os_families_known) if os_families_known else len(os_families)
 
         # Подсчитываем уникальные клиенты (исключаем Unknown)
         client_types = set(fp.get('client_type', 'Unknown') for fp in unique_fingerprints)
         client_types_known = sorted([client for client in client_types if client and client != 'Unknown'])
-        different_clients_count = len(client_types)
+        different_clients_count = len(client_types_known) if client_types_known else len(client_types)
 
-        # Оценка на основе различий
-        if unique_fingerprints_count > 3:
+        # Если количество fingerprints не превышает лимит устройств — это нормально
+        if unique_fingerprints_count <= user_device_count:
+            return DeviceScore(
+                score=0.0,
+                reasons=[],
+                unique_fingerprints_count=unique_fingerprints_count,
+                different_os_count=different_os_count,
+                os_list=os_families_known if os_families_known else None,
+                client_list=client_types_known if client_types_known else None
+            )
+
+        # Оценка на основе различий (с учётом лимита устройств)
+        excess = unique_fingerprints_count - user_device_count
+        if excess >= 3 or unique_fingerprints_count > 3:
             score = 60.0
-            reasons.append(f"Много разных устройств одновременно ({unique_fingerprints_count} fingerprint)")
-        elif different_os_count >= 3:
+            reasons.append(f"Много устройств ({unique_fingerprints_count}) при лимите {user_device_count}")
+        elif different_os_count > user_device_count and different_os_count >= 3:
             score = 40.0
-            reasons.append(f"Разные ОС одновременно: {', '.join(os_families)}")
-        elif different_clients_count >= 2:
+            reasons.append(f"Разные ОС ({different_os_count}) при лимите {user_device_count}: {', '.join(os_families_known or list(os_families))}")
+        elif different_clients_count > user_device_count:
             score = 25.0
-            reasons.append(f"Разные клиенты: {', '.join(client_types)}")
-        elif unique_fingerprints_count > 1:
-            # Проверяем, есть ли разные версии одного клиента
-            if different_clients_count == 1 and unique_fingerprints_count > 1:
-                score = 10.0
-                reasons.append(f"Разные версии одного клиента ({unique_fingerprints_count} fingerprint)")
+            reasons.append(f"Разные клиенты ({different_clients_count}) при лимите {user_device_count}: {', '.join(client_types_known or list(client_types))}")
+        elif excess >= 1:
+            score = 10.0
+            reasons.append(f"Превышение лимита: {unique_fingerprints_count} fingerprints при лимите {user_device_count}")
 
         return DeviceScore(
             score=min(score, 100.0),
@@ -1598,8 +1626,13 @@ class HwidCrossAccountAnalyzer:
         if other_count == 0:
             return HwidScore(score=0.0, reasons=[])
 
-        # Один HWID на разных аккаунтах = стопроцентное нарушение
-        score = 100.0
+        # Градуированный скоринг по количеству чужих аккаунтов
+        if other_count >= 4:
+            score = 100.0
+        elif other_count >= 2:
+            score = 85.0
+        else:
+            score = 75.0
 
         reasons = []
         usernames_str = ", ".join(all_other_usernames[:5])
@@ -1712,11 +1745,27 @@ class IntelligentViolationDetector:
                     i + 1, conn.ip_address, conn.connected_at
                 )
 
+            # Единый GeoIP batch lookup для всех анализаторов (оптимизация)
+            all_ips_for_geo = set()
+            for conn in active_connections:
+                all_ips_for_geo.add(str(conn.ip_address))
+            for conn in connection_history:
+                ip = str(conn.get("ip_address", ""))
+                if ip:
+                    all_ips_for_geo.add(ip)
+
+            ip_metadata_cache = {}
+            if all_ips_for_geo:
+                try:
+                    ip_metadata_cache = await self.geo_analyzer.geoip.lookup_batch(list(all_ips_for_geo))
+                except Exception as geo_err:
+                    logger.warning("Failed pre-fetching GeoIP data for %d IPs: %s", len(all_ips_for_geo), geo_err)
+
             # Анализируем временные паттерны (передаём количество устройств)
             temporal_score = self.temporal_analyzer.analyze(active_connections, connection_history, user_device_count)
-            
-            # Анализируем геолокацию (async)
-            geo_score = await self.geo_analyzer.analyze(active_connections, connection_history)
+
+            # Анализируем геолокацию (используем общий кэш)
+            geo_score = await self.geo_analyzer.analyze(active_connections, connection_history, ip_metadata_cache)
 
             # Debug-логирование гео-данных для диагностики проблем с городами
             logger.debug(
@@ -1727,16 +1776,16 @@ class IntelligentViolationDetector:
                 for reason in geo_score.reasons:
                     logger.debug("  Geo reason: %s", reason)
 
-            # Анализируем тип провайдера (ASN) (async)
-            asn_score = await self.asn_analyzer.analyze(active_connections, connection_history)
+            # Анализируем тип провайдера (ASN) (используем общий кэш)
+            asn_score = await self.asn_analyzer.analyze(active_connections, connection_history, ip_metadata_cache)
             
             # Анализируем отклонения от профиля (async)
             current_ips = {str(conn.ip_address) for conn in active_connections}
             current_countries = geo_score.countries
             profile_score = await self.profile_analyzer.analyze(user_uuid, current_ips, current_countries)
             
-            # Анализируем fingerprint устройств
-            device_score = self.device_analyzer.analyze(active_connections, connection_history)
+            # Анализируем fingerprint устройств (с учётом лимита устройств)
+            device_score = self.device_analyzer.analyze(active_connections, connection_history, user_device_count)
 
             # Анализируем кросс-аккаунт HWID
             hwid_score = await self.hwid_analyzer.analyze(user_uuid)
@@ -1801,13 +1850,20 @@ class IntelligentViolationDetector:
             # т.к. это нормальное поведение пользователя
             is_network_switch = self._detect_network_switch_pattern(asn_score.asn_types)
             if is_network_switch:
-                # Снижаем скор на 50% если это похоже на переключение сетей
-                score_before_switch = raw_score
-                raw_score *= 0.5
-                logger.debug(
-                    "Network switch pattern detected (mobile + home ISP), reducing score: %.2f -> %.2f",
-                    score_before_switch, raw_score
-                )
+                # Применяем снижение только если количество IP правдоподобно для переключения сети
+                sim_count = temporal_score.simultaneous_connections_count if hasattr(temporal_score, 'simultaneous_connections_count') else 0
+                if sim_count <= user_device_count + 2:
+                    score_before_switch = raw_score
+                    raw_score *= 0.5
+                    logger.debug(
+                        "Network switch pattern detected, IPs (%d) within device limit + buffer (%d+2), reducing: %.2f -> %.2f",
+                        sim_count, user_device_count, score_before_switch, raw_score
+                    )
+                else:
+                    logger.debug(
+                        "Network switch pattern detected but IPs (%d) exceed device limit + buffer (%d+2), NOT reducing score",
+                        sim_count, user_device_count,
+                    )
 
             # Проверяем, от одного ли провайдера (ASN) все IP
             # Если да, это снижает вероятность шаринга
