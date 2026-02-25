@@ -9,8 +9,20 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Default cooldown (can be overridden via config_service)
+VIOLATION_NOTIFICATION_COOLDOWN_MINUTES = 30
+
 # Fallback in-memory cache when DB check fails
 _violation_notification_cache: Dict[str, datetime] = {}
+
+
+def _cleanup_cache() -> None:
+    """Remove stale entries older than 1 hour from in-memory fallback cache."""
+    now = datetime.utcnow()
+    max_age = timedelta(hours=1)
+    expired = [k for k, v in _violation_notification_cache.items() if now - v > max_age]
+    for k in expired:
+        del _violation_notification_cache[k]
 
 
 def _esc(text: str) -> str:
@@ -55,24 +67,33 @@ async def send_violation_notification(
     now = datetime.utcnow()
 
     # Configurable cooldown via config_service
-    from shared.config_service import config_service
-    cooldown_minutes = config_service.get("violation_notification_cooldown_minutes", 30)
+    try:
+        from shared.config_service import config_service
+        cooldown_minutes = config_service.get("violation_notification_cooldown_minutes", VIOLATION_NOTIFICATION_COOLDOWN_MINUTES)
+    except Exception:
+        cooldown_minutes = VIOLATION_NOTIFICATION_COOLDOWN_MINUTES
 
-    # Throttling: DB-based (persistent across restarts), in-memory fallback
+    # Throttling: check in-memory cache first (fast path), then DB (persistent)
     if not force:
+        # In-memory check (covers current process session, also used in tests)
+        if user_uuid in _violation_notification_cache:
+            last = _violation_notification_cache[user_uuid]
+            if now - last < timedelta(minutes=cooldown_minutes):
+                logger.debug("Violation notification throttled for user %s (memory)", user_uuid)
+                return
+
+        # DB check (persistent across restarts)
         try:
             from shared.database import db_service
             last_notified = await db_service.get_user_last_violation_notification(user_uuid)
             if last_notified and now - last_notified < timedelta(minutes=cooldown_minutes):
                 logger.debug("Violation notification throttled for user %s (DB: last=%s)", user_uuid, last_notified)
+                _violation_notification_cache[user_uuid] = last_notified  # Sync to memory
                 return
         except Exception:
-            # Fallback to in-memory cache
-            if user_uuid in _violation_notification_cache:
-                last = _violation_notification_cache[user_uuid]
-                if now - last < timedelta(minutes=cooldown_minutes):
-                    logger.debug("Violation notification throttled for user %s (memory)", user_uuid)
-                    return
+            pass  # In-memory already checked above
+
+    _cleanup_cache()
 
     try:
         # User info
