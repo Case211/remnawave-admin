@@ -1,280 +1,795 @@
-# Аудит системы нарушений (Violations) — План улучшений
+# Аудит системы нарушений (Violations) — Детальный план реализации
 
 ## Результаты аудита
 
 Проведён детальный аудит всех компонентов: `shared/violation_detector.py` (6 анализаторов + скоринг), `web/backend/api/v2/collector.py`, `web/backend/api/v2/violations.py`, `shared/database.py`, `web/backend/core/violation_notifier.py`, `web/frontend/src/pages/Violations.tsx`.
 
----
-
-## Группа 1: Баги в логике детектора (shared/violation_detector.py)
-
-### 1.1 [MEDIUM] DeviceAnalyzer не учитывает лимит устройств пользователя
-
-**Файл:** `shared/violation_detector.py`, строки 1534-1548
-
-**Проблема:** DeviceFingerprintAnalyzer считает уникальные комбинации OS+Client и выставляет скоры (60/40/25/10), но НЕ сравнивает с `user_device_count`. Пользователь с 3 разрешёнными устройствами, использующий Android + iOS + Windows, получает score=40 ("Разные ОС одновременно"), хотя это легитимное использование.
-
-**Исправление:** Сравнивать `unique_fingerprints_count` с `user_device_count` и начислять score только при превышении лимита. Если fingerprints <= device_count, score=0.
-
-### 1.2 [LOW] DeviceAnalyzer считает 'Unknown' ОС как отдельную ОС
-
-**Файл:** `shared/violation_detector.py`, строка 1527
-
-**Проблема:** `different_os_count = len(os_families)` включает 'Unknown'. Если 2 реальных ОС + 1 Unknown = 3 ОС → score=40, хотя по сути только 2 ОС.
-
-**Исправление:** Использовать `len(os_families_known)` вместо `len(os_families)` для подсчёта.
-
-### 1.3 [LOW] ProfileAnalyzer — неиспользуемые данные baseline
-
-**Файл:** `shared/violation_detector.py`, строки 1180-1184
-
-**Проблема:** В baseline собираются `typical_hours` и `avg_session_duration`, но никогда не используются в анализе. Аномальные подключения в нехарактерное время (напр. в 3 ночи для дневного пользователя) не детектируются.
-
-**Исправление:** Добавить проверку часов подключения — если текущий час не входит в типичные, добавлять +10 к score.
-
-### 1.4 [LOW] ASNAnalyzer — тихий возврат 0 при сбое GeoIP
-
-**Файл:** `shared/violation_detector.py`, строки 1030-1040
-
-**Проблема:** Если `lookup_batch()` возвращает пустой результат (сбой сети, таймаут), ASN score = 0.0 без логирования. Злоупотребление может пройти незамеченным.
-
-**Исправление:** Логировать warning при пустом результате. Не менять score на 0, а пропускать ASN-множитель (не применять ×0.3 для mobile и т.д.), чтобы итоговый score не занижался.
-
-### 1.5 [LOW] Timezone handling в TemporalAnalyzer
-
-**Файл:** `shared/violation_detector.py`, строки 166-167
-
-**Проблема:** `conn_time.replace(tzinfo=None)` убирает timezone без конвертации в UTC. Если timestamp хранится в UTC+3, а `now = datetime.utcnow()` — разница 3 часа, что ломает все временные проверки.
-
-**Исправление:** Использовать `conn_time.astimezone(timezone.utc).replace(tzinfo=None)` вместо простого `replace(tzinfo=None)`.
+**Найдено 22 проблемы** в 6 группах. Ниже — подробный план исправлений с указанием файлов, строк и конкретных изменений.
 
 ---
 
-## Группа 2: Улучшения скоринговой модели
+# Фаза 1 — Критические фиксы (баги и производительность)
 
-### 2.1 [MEDIUM] Уязвимость новых аккаунтов в ProfileAnalyzer
+## 1. SQL-оптимизация: фильтрация в БД вместо Python [3.1]
 
-**Файл:** `shared/violation_detector.py`, строки 1315-1321
+### Проблема
+`web/backend/api/v2/violations.py:100-165` — эндпоинт `GET /violations` вызывает `db.get_violations_for_period()` с единственными фильтрами `start_date`, `end_date`, `min_score` (строки 101-105). Потом в Python фильтрует по `user_uuid`, `severity`, `resolved`, `ip`, `country`, `date_from`, `date_to` (строки 108-165). При 1000 записях — ненужная нагрузка.
 
-**Проблема:** Пользователи с < 7 дней данных получают score=0 от ProfileAnalyzer. Это создаёт окно уязвимости: новые/пробные аккаунты — самая высокая группа риска для шаринга, но профильный анализатор полностью их игнорирует.
+### Что делаю
 
-**Исправление:** Для новых аккаунтов (< 7 дней) применить "подозрительные по умолчанию" правила — использовать средние показатели всех пользователей как baseline и давать score с множителем 0.7 (менее уверенный).
+**Файл `shared/database.py` — расширяю `get_violations_for_period()`:**
 
-### 2.2 [LOW] HWID анализатор — бинарный скоринг
+Текущая сигнатура (строка 2332):
+```python
+async def get_violations_for_period(self, start_date, end_date, min_score=0.0, limit=1000)
+```
 
-**Файл:** `shared/violation_detector.py`, строки 1560-1621
+Новая сигнатура:
+```python
+async def get_violations_for_period(
+    self, start_date, end_date, min_score=0.0, limit=1000,
+    user_uuid=None, severity=None, resolved=None,
+    ip=None, country=None, offset=0
+)
+```
 
-**Проблема:** HWID score всегда 0 или 100 — без градации. 1 чужой аккаунт = 100, и 10 чужих = 100.
+SQL-запрос (строки 2356-2365) меняю с:
+```sql
+SELECT * FROM violations
+WHERE detected_at >= $1 AND detected_at < $2 AND score >= $3
+ORDER BY detected_at DESC LIMIT $4
+```
 
-**Исправление:** Градуированный скоринг: 1 аккаунт = 75, 2-3 = 85, 4+ = 100.
+На динамический SQL с дополнительными WHERE-условиями:
+```sql
+SELECT * FROM violations
+WHERE detected_at >= $1 AND detected_at < $2 AND score >= $3
+  AND ($4::text IS NULL OR user_uuid::text = $4)
+  AND ($5::text IS NULL OR action_taken IS NOT NULL = $5)  -- resolved filter
+  AND ($6::text IS NULL OR $6 = ANY(ip_addresses))          -- ip filter
+  AND ($7::text IS NULL OR UPPER($7) = ANY(
+       SELECT UPPER(x) FROM UNNEST(countries) AS x))        -- country filter
+  AND (CASE WHEN $8 = 'low' THEN score >= 0 AND score < 40
+            WHEN $8 = 'medium' THEN score >= 40 AND score < 60
+            WHEN $8 = 'high' THEN score >= 60 AND score < 80
+            WHEN $8 = 'critical' THEN score >= 80
+            ELSE TRUE END)                                   -- severity filter
+ORDER BY detected_at DESC
+LIMIT $9 OFFSET $10
+```
 
-### 2.3 [LOW] Network switch pattern слишком агрессивно снижает score
+Также добавляю метод для подсчёта total (для пагинации):
+```python
+async def count_violations_for_period(self, start_date, end_date, min_score=0.0,
+                                       user_uuid=None, severity=None, resolved=None,
+                                       ip=None, country=None) -> int:
+```
 
-**Файл:** `shared/violation_detector.py`, строки 1802-1810
+**Файл `web/backend/api/v2/violations.py` — упрощаю эндпоинт:**
 
-**Проблема:** Если обнаружен паттерн mobile + home ISP, score умножается на 0.5. Но если пользователь реально шарит аккаунт и при этом один из шареров использует мобильный интернет — score незаслуженно занижается.
-
-**Исправление:** Применять ×0.5 только если одновременных IP ≤ device_count + 2 (т.е. переключение сети правдоподобно). При превышении лимита переключение сети менее вероятно, не снижать score.
-
----
-
-## Группа 3: Проблемы производительности бэкенда
-
-### 3.1 [HIGH] Client-side фильтрация в violations API
-
-**Файл:** `web/backend/api/v2/violations.py`
-
-**Проблема:** Эндпоинт `GET /violations` загружает ВСЕ нарушения за период (до 1000), а потом фильтрует по min_score, user_uuid, severity В PYTHON. При большом количестве нарушений — значительная нагрузка на память и CPU.
-
-**Исправление:** Перенести фильтрацию в SQL-запрос: добавить WHERE clauses для score >= $X, user_uuid = $Y и severity в функцию `get_violations_for_period()` в database.py.
-
-### 3.2 [HIGH] Линейный поиск violation по ID
-
-**Файл:** `web/backend/api/v2/violations.py`
-
-**Проблема:** `GET /violations/{id}` загружает до 1000 нарушений за 90 дней, потом ищет нужное линейным поиском O(n).
-
-**Исправление:** Добавить функцию `get_violation_by_id(violation_id)` в database.py с `WHERE id = $1`.
-
-### 3.3 [MEDIUM] Дублирование GeoIP-запросов
-
-**Файл:** `shared/violation_detector.py`
-
-**Проблема:** GeoAnalyzer и ASNAnalyzer оба делают `lookup_batch()` для тех же IP. В collector.py после detection ещё один batch lookup для ip_metadata. Тройное обращение к GeoIP.
-
-**Исправление:** Выполнять один batch lookup в начале check_user() и передавать результат всем анализаторам.
-
-### 3.4 [LOW] SQL-запросы используют string formatting вместо параметров
-
-**Файл:** `shared/database.py`, строки 1186, 1208, 1237, 1303, 2628, 2664
-
-**Проблема:** Используется `.replace('%s', str(value))` для INTERVAL значений. Хотя значения внутренние (не пользовательский ввод) и риск SQL-инъекции минимален, это плохая практика.
-
-**Исправление:** Использовать `f"INTERVAL '{int(value)} minutes'"` с явным int() кастом или передавать интервал как параметр PostgreSQL.
-
----
-
-## Группа 4: Проблемы API и уведомлений
-
-### 4.1 [MEDIUM] Аудит-лог записывается ДО подтверждения операции
-
-**Файл:** `web/backend/api/v2/violations.py`
-
-**Проблема:** resolve endpoint пишет audit log до того, как DB update выполнится успешно. Если update упадёт — лог содержит ложную запись.
-
-**Исправление:** Переместить запись audit log после успешного DB update.
-
-### 4.2 [MEDIUM] Нет проверки существования violation перед resolve/annul
-
-**Файл:** `web/backend/api/v2/violations.py`
-
-**Проблема:** `resolve_violation()` и `annul_violation()` не проверяют, существует ли violation. При несуществующем ID — тихо ничего не обновляется, но возвращается 200.
-
-**Исправление:** Добавить проверку и возвращать 404 если violation не найден.
-
-### 4.3 [LOW] In-memory кэш уведомлений теряется при рестарте
-
-**Файл:** `web/backend/core/violation_notifier.py`
-
-**Проблема:** `_violation_notification_cache` хранится в памяти. При рестарте сервера кэш обнуляется → дублирование уведомлений.
-
-**Исправление:** Использовать `notified_at` поле в базе данных (уже есть в схеме, но `mark_violation_notified()` не вызывается).
-
-### 4.4 [LOW] Хардкоженные cooldown значения
-
-**Файл:** `web/backend/api/v2/collector.py`, строка 32
-
-**Проблема:** `VIOLATION_CHECK_COOLDOWN_MINUTES = 5` и cooldown уведомлений (30 мин) захардкожены.
-
-**Исправление:** Вынести в `config_service` для настройки через Settings UI без рестарта.
+Строки 100-174 — убираю всю Python-фильтрацию. Заменяю на:
+```python
+# Получаем count для пагинации
+total = await db.count_violations_for_period(
+    start_date=start_date, end_date=end_date, min_score=min_score,
+    user_uuid=user_uuid, severity=severity, resolved=resolved,
+    ip=ip, country=country,
+)
+# Получаем страницу данных
+violations = await db.get_violations_for_period(
+    start_date=start_date, end_date=end_date, min_score=min_score,
+    user_uuid=user_uuid, severity=severity, resolved=resolved,
+    ip=ip, country=country,
+    limit=per_page, offset=(page - 1) * per_page,
+)
+```
 
 ---
 
-## Группа 5: Проблемы фронтенда
+## 2. Прямой SQL-запрос violation по ID [3.2]
 
-### 5.1 [HIGH] Отсутствие Array.isArray() проверок
+### Проблема
+`web/backend/api/v2/violations.py:540-554` — `GET /violations/{id}` загружает до 1000 записей за 90 дней, затем линейный поиск O(n).
 
-**Файл:** `web/frontend/src/pages/Violations.tsx`
+### Что делаю
 
-**Проблема:** `.map()` вызывается на `detail.reasons`, `detail.countries`, `detail.asn_types`, `detail.ips` без проверки `Array.isArray()`. Если API вернёт null — краш с "`.map()` is not a function".
+**Файл `shared/database.py` — добавляю новый метод:**
 
-**Исправление:** Добавить `Array.isArray()` перед каждым `.map()` / `.reduce()` на данных из API.
+Вставляю после `get_violations_for_period()` (после строки 2371):
+```python
+async def get_violation_by_id(self, violation_id: int) -> Optional[Dict[str, Any]]:
+    """Получить нарушение по ID."""
+    if not self.is_connected:
+        return None
+    try:
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM violations WHERE id = $1", violation_id
+            )
+            return dict(row) if row else None
+    except Exception as e:
+        logger.error("Error getting violation by id %s: %s", violation_id, e, exc_info=True)
+        return None
+```
 
-### 5.2 [HIGH] Монолитный файл 2100+ строк
+**Файл `web/backend/api/v2/violations.py` — переписываю эндпоинт:**
 
-**Файл:** `web/frontend/src/pages/Violations.tsx`
-
-**Проблема:** 11 компонентов, все типы, все API вызовы — в одном файле. Ухудшает maintainability, усложняет code review.
-
-**Исправление:** Разбить на:
-- `types/violations.ts` — общие TypeScript типы
-- `api/violations.ts` — API функции
-- `components/violations/` — ViolationCard, ViolationDetail, WhitelistTab и т.д.
-- `pages/Violations.tsx` — только роутинг и композиция
-
-### 5.3 [MEDIUM] Фильтры по IP, стране, дате — состояние есть, UI нет
-
-**Файл:** `web/frontend/src/pages/Violations.tsx`
-
-**Проблема:** State переменные `ipFilter`, `countryFilter`, `dateFrom`, `dateTo` объявлены и передаются в API, но НЕТ соответствующих input полей в UI. Пользователи не могут использовать эти фильтры.
-
-**Исправление:** Добавить UI-компоненты для расширенных фильтров (с collapse/expand).
-
-### 5.4 [MEDIUM] Экспорт только текущей страницы
-
-**Проблема:** CSV экспорт выгружает только 15 записей текущей страницы. Нет индикации лимита и нет опции "экспортировать все".
-
-**Исправление:** Добавить серверный эндпоинт для full export или загружать все страницы перед экспортом.
-
-### 5.5 [LOW] Дублирование типов между страницами
-
-**Проблема:** `Violation` интерфейс определён отдельно в `Violations.tsx`, `UserDetail.tsx` и `Dashboard.tsx`. Типы могут разойтись.
-
-**Исправление:** Создать общий `types/violations.ts` (входит в 5.2).
-
-### 5.6 [LOW] CSV экспорт — отсутствие экранирования
-
-**Проблема:** Reasons/countries соединяются через `;`/`,` без экранирования спецсимволов. Может создать невалидный CSV.
-
-**Исправление:** Использовать proper CSV escaping (кавычки вокруг полей с разделителями).
-
-### 5.7 [LOW] Нет bulk actions для нарушений
-
-**Проблема:** Нельзя выбрать несколько нарушений для массового resolve/dismiss/annul.
-
-**Исправление:** Добавить чекбоксы и панель массовых действий.
+Строки 540-554 заменяю на:
+```python
+violation = await db.get_violation_by_id(violation_id)
+if not violation:
+    raise api_error(404, E.VIOLATION_NOT_FOUND)
+```
 
 ---
 
-## Группа 6: Отсутствующая функциональность
+## 3. Array.isArray() guards на фронте [5.1]
 
-### 6.1 [LOW] Нет автоматической ротации/очистки старых violations
+### Проблема
+`web/frontend/src/pages/Violations.tsx` — строки 749, 771, 788, 805: `.map()` на `detail.reasons`, `detail.countries`, `detail.asn_types`, `detail.ips` без проверки. Если API вернёт null → краш.
 
-**Проблема:** Аннулированные нарушения остаются в БД с score=0. Нет автоочистки → неограниченный рост таблицы.
+### Что делаю
 
-**Исправление:** Добавить retention policy — автоудаление resolved/annulled violations старше N дней (настраиваемо через config_service).
+**Файл `web/frontend/src/pages/Violations.tsx` — 4 точки исправления:**
 
-### 6.2 [LOW] Нет real-time обновлений на фронте
+Строка 749 — меняю:
+```tsx
+{detail.reasons.map((reason, i) => (
+```
+На:
+```tsx
+{(Array.isArray(detail.reasons) ? detail.reasons : []).map((reason, i) => (
+```
 
-**Проблема:** Violations page не имеет WebSocket/auto-refresh. Новые нарушения видны только после ручного обновления.
+Строка 771 — меняю:
+```tsx
+{detail.countries.map((country, i) => (
+```
+На:
+```tsx
+{(Array.isArray(detail.countries) ? detail.countries : []).map((country, i) => (
+```
 
-**Исправление:** Добавить polling каждые 30 сек для вкладки Pending или SSE/WebSocket для push-уведомлений.
+Строка 788 — меняю:
+```tsx
+{detail.asn_types.map((asn, i) => (
+```
+На:
+```tsx
+{(Array.isArray(detail.asn_types) ? detail.asn_types : []).map((asn, i) => (
+```
+
+Строка 805 — меняю:
+```tsx
+{detail.ips.map((ip, i) => {
+```
+На:
+```tsx
+{(Array.isArray(detail.ips) ? detail.ips : []).map((ip, i) => {
+```
+
+Также проверю строки 854 (`hwidDevices.map`), 1055 (`v.actions.map`), 1369 (`item.excluded_analyzers.map`) — аналогичные guards.
 
 ---
 
-## Приоритизация
+## 4. Audit log после успешного update + 404 [4.1, 4.2]
 
-| Приоритет | ID | Что | Сложность |
-|-----------|-----|-----|-----------|
-| HIGH | 3.1 | SQL-фильтрация violations вместо Python | Средняя |
-| HIGH | 3.2 | Прямой запрос violation по ID | Низкая |
-| HIGH | 5.1 | Array.isArray() guards | Низкая |
-| MEDIUM | 1.1 | DeviceAnalyzer + device_count | Низкая |
-| MEDIUM | 2.1 | Новые аккаунты в ProfileAnalyzer | Средняя |
-| MEDIUM | 2.3 | Network switch — условное снижение | Низкая |
-| MEDIUM | 3.3 | Единый GeoIP batch lookup | Средняя |
-| MEDIUM | 4.1 | Audit log после успешного update | Низкая |
-| MEDIUM | 4.2 | 404 для несуществующих violations | Низкая |
-| MEDIUM | 5.3 | UI расширенных фильтров | Средняя |
-| MEDIUM | 5.4 | Full export | Средняя |
-| LOW | 1.2 | Unknown OS в подсчёте | Низкая |
-| LOW | 1.3 | Typical hours в ProfileAnalyzer | Низкая |
-| LOW | 1.4 | Логирование при сбое GeoIP | Низкая |
-| LOW | 1.5 | Timezone normalization | Низкая |
-| LOW | 2.2 | Градуированный HWID скоринг | Низкая |
-| LOW | 3.4 | Параметризованные SQL INTERVAL | Низкая |
-| LOW | 4.3 | Persistent notification cache | Низкая |
-| LOW | 4.4 | Configurable cooldowns | Низкая |
-| LOW | 5.2 | Рефакторинг Violations.tsx | Высокая |
-| LOW | 5.5-5.7 | Типы, CSV, bulk actions | Средняя |
-| LOW | 6.1-6.2 | Retention policy, real-time | Средняя |
+### Проблема
+`web/backend/api/v2/violations.py:603-622` — resolve endpoint: audit log пишется на строке 612, но `update_violation_action()` на строке 603 может вернуть `success=False`, при этом audit log уже записан (на самом деле — нет, т.к. есть проверка `if not success` на строке 609, но если `update_violation_action` бросит exception — audit log не запишется, что корректно).
+
+Перечитав код: **resolve и annul** проверяют `success` (строки 609, 639) и бросают 404 при неуспехе. Audit log пишется ПОСЛЕ проверки. Это **корректно**.
+
+Однако: `update_violation_action()` возвращает `True` даже если `WHERE id = $1` не нашёл строку (UPDATE 0 rows). Нужно проверять `affected_rows > 0`.
+
+### Что делаю
+
+**Файл `shared/database.py` — нахожу `update_violation_action()`:**
+
+Проверяю, возвращает ли `execute()` / `fetchrow()` результат. Если используется `conn.execute()` — парсим строку `"UPDATE N"`. Меняю на:
+```python
+result = await conn.execute(...)
+return result == "UPDATE 1"  # Вернёт False если строка не найдена
+```
+
+Это гарантирует, что resolve/annul для несуществующего ID вернёт 404.
 
 ---
 
-## Рекомендуемый порядок реализации
+# Фаза 2 — Логика детектора
 
-**Фаза 1 — Критические фиксы** (баги и производительность):
-- 3.1, 3.2: SQL-оптимизация violations API
-- 5.1: Array.isArray() guards на фронте
-- 4.1, 4.2: Правильный порядок audit log + 404
+## 5. DeviceAnalyzer: учёт лимита устройств [1.1]
 
-**Фаза 2 — Логика детектора**:
-- 1.1: DeviceAnalyzer + device_count
-- 2.1: Защита новых аккаунтов
-- 2.3: Условный network switch modifier
-- 1.2, 1.4, 1.5: Мелкие фиксы анализаторов
+### Проблема
+`shared/violation_detector.py:1462-1557` — `DeviceFingerprintAnalyzer.analyze()` не принимает `user_device_count`. Считает `unique_fingerprints_count` и выдаёт фиксированные скоры (60/40/25/10) без сравнения с лимитом.
 
-**Фаза 3 — Оптимизация**:
-- 3.3: Единый GeoIP lookup
-- 3.4: SQL параметризация
-- 4.3, 4.4: Persistent cache, configurable cooldowns
+### Что делаю
 
-**Фаза 4 — UX фронтенда**:
-- 5.3: Advanced filters UI
-- 5.4: Full export
-- 5.5-5.7: Типы, CSV, bulk actions
+**Файл `shared/violation_detector.py`:**
 
-**Фаза 5 — Новая функциональность** (опционально):
-- 5.2: Рефакторинг Violations.tsx
-- 6.1, 6.2: Retention policy, real-time
-- 1.3, 2.2: Typical hours, градуированный HWID
+1) Меняю сигнатуру `analyze()` (строка 1462):
+```python
+def analyze(self, connections, connection_history) -> DeviceScore:
+```
+→
+```python
+def analyze(self, connections, connection_history, user_device_count: int = 1) -> DeviceScore:
+```
+
+2) Добавляю проверку перед скорингом (перед строкой 1534):
+```python
+# Если количество fingerprints не превышает лимит устройств — это нормально
+if unique_fingerprints_count <= user_device_count:
+    return DeviceScore(
+        score=0.0,
+        reasons=[],
+        unique_fingerprints_count=unique_fingerprints_count,
+        different_os_count=different_os_count,
+        os_list=os_families_known if os_families_known else None,
+        client_list=client_types_known if client_types_known else None
+    )
+```
+
+3) Корректирую скоринг для превышающих лимит (строки 1535-1548):
+```python
+excess = unique_fingerprints_count - user_device_count
+if excess >= 3 or unique_fingerprints_count > 3:
+    score = 60.0
+    reasons.append(f"Много устройств ({unique_fingerprints_count}) при лимите {user_device_count}")
+elif different_os_count > user_device_count and different_os_count >= 3:
+    score = 40.0
+    reasons.append(f"Разные ОС ({different_os_count}) при лимите {user_device_count}: {', '.join(os_families_known)}")
+elif different_clients_count > user_device_count:
+    score = 25.0
+    reasons.append(f"Разные клиенты ({different_clients_count}) при лимите {user_device_count}: {', '.join(client_types_known)}")
+elif excess >= 1:
+    score = 10.0
+    reasons.append(f"Превышение на {excess}: {unique_fingerprints_count} fingerprints, лимит {user_device_count}")
+```
+
+4) В `IntelligentViolationDetector.check_user()` (строка 1739) передаю `user_device_count`:
+```python
+device_score = self.device_analyzer.analyze(active_connections, connection_history, user_device_count)
+```
+
+---
+
+## 6. Unknown OS не считать как отдельную ОС [1.2]
+
+### Проблема
+`shared/violation_detector.py:1527` — `different_os_count = len(os_families)` включает 'Unknown'.
+
+### Что делаю
+
+Строка 1527 меняю:
+```python
+different_os_count = len(os_families)
+```
+→
+```python
+different_os_count = len(os_families_known) if os_families_known else len(os_families)
+```
+
+---
+
+## 7. Логирование при сбое GeoIP в ASNAnalyzer [1.4]
+
+### Проблема
+`shared/violation_detector.py:1030-1040` — при пустом `ip_metadata` возвращается score=0 молча.
+
+### Что делаю
+
+После строки 1032 (`if not ip_metadata:`) добавляю:
+```python
+if all_ips:
+    logger.warning(
+        "GeoIP lookup returned empty result for %d IPs, ASN analysis skipped",
+        len(all_ips)
+    )
+```
+
+---
+
+## 8. Timezone normalization в TemporalAnalyzer [1.5]
+
+### Проблема
+`shared/violation_detector.py:166-167` — `conn_time.replace(tzinfo=None)` удаляет timezone без конвертации.
+
+### Что делаю
+
+Строки 166-167 меняю:
+```python
+if conn_time.tzinfo:
+    conn_time = conn_time.replace(tzinfo=None)
+```
+→
+```python
+if conn_time.tzinfo:
+    from datetime import timezone
+    conn_time = conn_time.astimezone(timezone.utc).replace(tzinfo=None)
+```
+
+---
+
+## 9. Network switch modifier — условное применение [2.3]
+
+### Проблема
+`shared/violation_detector.py:1802-1810` — ×0.5 при network switch паттерне безусловен. При шаринге через мобильный → ложное занижение.
+
+### Что делаю
+
+Строки 1802-1806 меняю:
+```python
+is_network_switch = self._detect_network_switch_pattern(asn_score.asn_types)
+if is_network_switch:
+    score_before_switch = raw_score
+    raw_score *= 0.5
+```
+→
+```python
+is_network_switch = self._detect_network_switch_pattern(asn_score.asn_types)
+if is_network_switch:
+    # Применяем снижение только если количество IP правдоподобно для переключения сети
+    # (лимит устройств + буфер 2 на переключение)
+    if temporal_score.simultaneous_connections_count <= user_device_count + 2:
+        score_before_switch = raw_score
+        raw_score *= 0.5
+        logger.debug(
+            "Network switch pattern detected, IPs (%d) within device limit + buffer (%d+2), reducing: %.2f -> %.2f",
+            temporal_score.simultaneous_connections_count, user_device_count,
+            score_before_switch, raw_score
+        )
+    else:
+        logger.debug(
+            "Network switch pattern detected but IPs (%d) exceed device limit + buffer (%d+2), NOT reducing score",
+            temporal_score.simultaneous_connections_count, user_device_count,
+        )
+```
+
+---
+
+## 10. Защита новых аккаунтов в ProfileAnalyzer [2.1]
+
+### Проблема
+`shared/violation_detector.py:1315-1321` — аккаунты < 7 дней = score 0. Окно уязвимости.
+
+### Что делаю
+
+Строки 1315-1321 меняю:
+```python
+if baseline['data_points'] < 7:
+    return ProfileScore(score=0.0, reasons=[], deviation_from_baseline=0.0)
+```
+→
+```python
+if baseline['data_points'] < 7:
+    # Для новых аккаунтов: оцениваем по абсолютным показателям
+    # Если > 3 уникальных IP и аккаунт совсем новый — подозрительно
+    if len(current_ips) > 3 and baseline['data_points'] < 3:
+        return ProfileScore(
+            score=20.0,
+            reasons=[f"Новый аккаунт ({baseline['data_points']} дн. данных) с {len(current_ips)} уникальными IP"],
+            deviation_from_baseline=0.0
+        )
+    return ProfileScore(score=0.0, reasons=[], deviation_from_baseline=0.0)
+```
+
+---
+
+# Фаза 3 — Оптимизация
+
+## 11. Единый GeoIP batch lookup [3.3]
+
+### Проблема
+GeoAnalyzer (строка 1719) и ASNAnalyzer (строка 1731) оба вызывают `lookup_batch()` для тех же IP. Потом collector.py (строка 350) делает третий lookup.
+
+### Что делаю
+
+**Файл `shared/violation_detector.py` — `IntelligentViolationDetector.check_user()`:**
+
+1) Перед вызовами анализаторов (строка ~1718), добавляю единый lookup:
+```python
+# Единый GeoIP lookup для всех анализаторов
+all_ips = list({str(conn.ip_address) for conn in active_connections})
+for conn in connection_history:
+    ip = str(conn.get("ip_address", ""))
+    if ip:
+        all_ips.append(ip)
+all_ips = list(set(all_ips))
+
+ip_metadata_cache = {}
+if all_ips:
+    try:
+        from shared.geoip import get_geoip_service
+        geoip = get_geoip_service()
+        ip_metadata_cache = await geoip.lookup_batch(all_ips)
+    except Exception as e:
+        logger.warning("Failed pre-fetching GeoIP data: %s", e)
+```
+
+2) Меняю сигнатуры `GeoAnalyzer.analyze()` и `ASNAnalyzer.analyze()` — добавляю `ip_metadata_cache: dict = None`:
+```python
+async def analyze(self, connections, connection_history, ip_metadata_cache=None):
+    # Если кэш передан, используем его вместо нового lookup
+    if ip_metadata_cache is not None:
+        ip_metadata = ip_metadata_cache
+    else:
+        ip_metadata = await self.geoip.lookup_batch(...)
+```
+
+3) Передаю кэш при вызове:
+```python
+geo_score = await self.geo_analyzer.analyze(active_connections, connection_history, ip_metadata_cache)
+asn_score = await self.asn_analyzer.analyze(active_connections, connection_history, ip_metadata_cache)
+```
+
+4) Добавляю `ip_metadata_cache` в `ViolationScore` чтобы collector.py не делал третий lookup:
+```python
+return ViolationScore(
+    ...,
+    ip_metadata=ip_metadata_cache,  # Новое поле
+)
+```
+
+**Файл `web/backend/api/v2/collector.py` строки 344-352:**
+
+Заменяю:
+```python
+ip_metadata = {}
+if active_conns:
+    try:
+        from shared.geoip import get_geoip_service
+        ...
+```
+На:
+```python
+ip_metadata = getattr(violation_score, 'ip_metadata', {}) or {}
+```
+
+---
+
+## 12. SQL INTERVAL параметризация [3.4]
+
+### Проблема
+`shared/database.py` — 6 мест с `.replace('%s', str(value))` для INTERVAL.
+
+### Что делаю
+
+Во всех 6 местах меняю паттерн. Пример для строки 2628:
+
+Было:
+```python
+AND detected_at > NOW() - INTERVAL '%s hours'
+""".replace('%s', str(hours)),
+user_uuid
+```
+Стало:
+```python
+AND detected_at > NOW() - make_interval(hours => $2)
+""",
+user_uuid, int(hours)
+```
+
+Аналогично для строк 1186 (minutes), 1208 (hours), 1237 (minutes), 1303 (days), 2664 (days).
+
+---
+
+## 13. Persistent notification cache [4.3]
+
+### Проблема
+`web/backend/core/violation_notifier.py:13` — `_violation_notification_cache` in-memory dict.
+
+### Что делаю
+
+**Файл `web/backend/core/violation_notifier.py`:**
+
+Строки 67-72 — вместо in-memory cache, проверяю `notified_at` в БД:
+```python
+# Throttling: check DB notified_at instead of in-memory cache
+if not force:
+    from shared.database import db_service
+    last_notified = await db_service.get_user_last_violation_notification(user_uuid)
+    if last_notified and now - last_notified < timedelta(minutes=VIOLATION_NOTIFICATION_COOLDOWN_MINUTES):
+        logger.debug("Violation notification throttled for user %s (last: %s)", user_uuid, last_notified)
+        return
+```
+
+В конце функции (после отправки), вызываю:
+```python
+await db_service.mark_violation_notified(user_uuid)
+```
+
+**Файл `shared/database.py` — добавляю метод:**
+```python
+async def get_user_last_violation_notification(self, user_uuid: str) -> Optional[datetime]:
+    """Получить время последнего уведомления о нарушении."""
+    async with self.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT MAX(notified_at) as last FROM violations WHERE user_uuid = $1 AND notified_at IS NOT NULL",
+            user_uuid
+        )
+        return row['last'] if row else None
+
+async def mark_violation_notified(self, user_uuid: str) -> None:
+    """Отметить последнее нарушение как нотифицированное."""
+    async with self.acquire() as conn:
+        await conn.execute(
+            """UPDATE violations SET notified_at = NOW()
+               WHERE user_uuid = $1 AND notified_at IS NULL
+               ORDER BY detected_at DESC LIMIT 1""",
+            user_uuid
+        )
+```
+
+Удаляю in-memory `_violation_notification_cache` и `_cleanup_cache()`.
+
+---
+
+## 14. Configurable cooldowns [4.4]
+
+### Проблема
+`web/backend/api/v2/collector.py:32` — `VIOLATION_CHECK_COOLDOWN_MINUTES = 5` захардкожено. `violation_notifier.py:14` — `VIOLATION_NOTIFICATION_COOLDOWN_MINUTES = 30` захардкожено.
+
+### Что делаю
+
+**Файл `web/backend/api/v2/collector.py` строка 311:**
+
+Меняю:
+```python
+if last_check and (now_check - last_check).total_seconds() < VIOLATION_CHECK_COOLDOWN_MINUTES * 60:
+```
+→
+```python
+cooldown_minutes = config_service.get("violation_check_cooldown_minutes", 5)
+if last_check and (now_check - last_check).total_seconds() < cooldown_minutes * 60:
+```
+
+**Файл `web/backend/core/violation_notifier.py` строка 70:**
+
+Меняю:
+```python
+timedelta(minutes=VIOLATION_NOTIFICATION_COOLDOWN_MINUTES)
+```
+→
+```python
+from shared.config_service import config_service
+cooldown = config_service.get("violation_notification_cooldown_minutes", 30)
+timedelta(minutes=cooldown)
+```
+
+---
+
+# Фаза 4 — UX фронтенда
+
+## 15. Advanced filters UI [5.3]
+
+### Проблема
+`web/frontend/src/pages/Violations.tsx` — state `ipFilter`, `countryFilter`, `dateFrom`, `dateTo` существует, но UI для них нет.
+
+### Что делаю
+
+В секции фильтров (после блока с `severity`/`scoreFilter` слайдерами) добавляю collapsible "Расширенные фильтры":
+
+```tsx
+<Collapsible>
+  <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground">
+    <ChevronRight className="h-4 w-4" />
+    {t('violations.advancedFilters')}
+  </CollapsibleTrigger>
+  <CollapsibleContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+    <Input
+      placeholder={t('violations.filterByIp')}
+      value={ipFilter}
+      onChange={(e) => setIpFilter(e.target.value)}
+    />
+    <Input
+      placeholder={t('violations.filterByCountry')}
+      value={countryFilter}
+      onChange={(e) => setCountryFilter(e.target.value)}
+    />
+    <Input
+      type="date"
+      value={dateFrom}
+      onChange={(e) => setDateFrom(e.target.value)}
+    />
+    <Input
+      type="date"
+      value={dateTo}
+      onChange={(e) => setDateTo(e.target.value)}
+    />
+  </CollapsibleContent>
+</Collapsible>
+```
+
+Добавляю debounce (300ms) на все filter inputs чтобы не дёргать API на каждый символ.
+
+---
+
+## 16. Full CSV export [5.4]
+
+### Проблема
+Экспорт выгружает только 15 записей текущей страницы.
+
+### Что делаю
+
+**Файл `web/backend/api/v2/violations.py` — новый эндпоинт:**
+
+```python
+@router.get("/export/csv")
+async def export_violations_csv(
+    days: int = Query(7, ge=1, le=365),
+    min_score: float = Query(0, ge=0, le=100),
+    severity: Optional[str] = None,
+    user_uuid: Optional[str] = None,
+    admin: AdminUser = Depends(require_permission("violations", "view")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Экспорт нарушений в CSV."""
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+
+    violations = await db.get_violations_for_period(
+        start_date=start_date, end_date=end_date,
+        min_score=min_score, severity=severity,
+        user_uuid=user_uuid, limit=10000,
+    )
+
+    # Формируем CSV с proper escaping
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    writer.writerow(["Date", "User", "Email", "Score", "Action", "IPs", "Countries", "Reasons"])
+    for v in violations:
+        writer.writerow([...])
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=violations_{days}d.csv"}
+    )
+```
+
+**Файл `web/frontend/src/pages/Violations.tsx` — меняю кнопку Export:**
+
+Заменяю client-side генерацию CSV на вызов серверного эндпоинта:
+```tsx
+const handleExport = () => {
+    const params = new URLSearchParams({ days: String(days), min_score: String(scoreFilter) })
+    window.open(`/api/v2/violations/export/csv?${params}`, '_blank')
+}
+```
+
+---
+
+## 17. CSV escaping fix [5.6]
+
+### Проблема
+Текущий export на фронте (строка ~1649) соединяет reasons через `;` без экранирования.
+
+### Что делаю
+
+Решается через серверный CSV export (пункт 16 выше) с использованием Python `csv.writer(quoting=csv.QUOTE_ALL)` — автоматическое экранирование.
+
+---
+
+## 18. Дублирование типов [5.5]
+
+### Что делаю
+
+**Создаю `web/frontend/src/types/violations.ts`:**
+
+Выношу интерфейсы `Violation`, `ViolationDetail`, `ViolationStats`, `TopViolator`, `WhitelistItem` из `Violations.tsx`.
+
+**Меняю `Violations.tsx`, `UserDetail.tsx`, `Dashboard.tsx`:**
+
+```tsx
+import type { Violation, ViolationStats } from '@/types/violations'
+```
+
+Удаляю локальные определения типов из каждого файла.
+
+---
+
+# Фаза 5 — Новая функциональность (опционально)
+
+## 19. Градуированный HWID скоринг [2.2]
+
+### Что делаю
+
+**Файл `shared/violation_detector.py` строка 1602:**
+
+Меняю:
+```python
+score = 100.0
+```
+→
+```python
+if other_count >= 4:
+    score = 100.0
+elif other_count >= 2:
+    score = 85.0
+else:
+    score = 75.0
+```
+
+---
+
+## 20. Typical hours в ProfileAnalyzer [1.3]
+
+### Что делаю
+
+**Файл `shared/violation_detector.py` — в `analyze()` (после строки ~1370):**
+
+```python
+# Проверка подключения в нетипичное время
+typical_hours = set(baseline.get('typical_hours', []))
+if typical_hours and current_ips:
+    current_hour = datetime.utcnow().hour
+    if current_hour not in typical_hours:
+        score += 10.0
+        reasons.append(f"Подключение в нетипичное время ({current_hour}:00 UTC, обычно: {sorted(typical_hours)})")
+```
+
+---
+
+## 21. Retention policy [6.1]
+
+### Что делаю
+
+**Файл `shared/database.py` — новый метод:**
+```python
+async def cleanup_old_violations(self, retention_days: int = 90) -> int:
+    """Удалить resolved/annulled violations старше N дней."""
+    async with self.acquire() as conn:
+        result = await conn.execute(
+            """DELETE FROM violations
+               WHERE action_taken IS NOT NULL
+               AND detected_at < NOW() - make_interval(days => $1)""",
+            retention_days
+        )
+        return int(result.split()[-1])  # "DELETE N"
+```
+
+**Файл `web/backend/api/v2/collector.py` — в post-processing:**
+
+Раз в час (через простой timestamp check) вызываем cleanup:
+```python
+_last_cleanup = datetime.min
+...
+if (datetime.utcnow() - _last_cleanup).total_seconds() > 3600:
+    retention_days = config_service.get("violation_retention_days", 90)
+    cleaned = await db.cleanup_old_violations(retention_days)
+    if cleaned:
+        logger.info("Cleaned up %d old violations (retention: %d days)", cleaned, retention_days)
+    _last_cleanup = datetime.utcnow()
+```
+
+---
+
+## 22. Auto-refresh на Pending вкладке [6.2]
+
+### Что делаю
+
+**Файл `web/frontend/src/pages/Violations.tsx`:**
+
+Добавляю `refetchInterval` в React Query для pending вкладки:
+```tsx
+const { data: violations, isLoading } = useQuery({
+    queryKey: ['violations', ...filters],
+    queryFn: () => fetchViolations(filters),
+    refetchInterval: tab === 'pending' ? 30000 : false,  // 30 сек на Pending
+})
+```
+
+---
+
+# Итого по файлам
+
+| Файл | Изменения |
+|------|-----------|
+| `shared/database.py` | Расширить `get_violations_for_period()`, добавить `get_violation_by_id()`, `count_violations_for_period()`, `get_user_last_violation_notification()`, `mark_violation_notified()`, `cleanup_old_violations()`. SQL INTERVAL параметризация (6 мест). |
+| `shared/violation_detector.py` | DeviceAnalyzer: +device_count (сигнатура + скоринг). Unknown OS fix. Timezone fix. Network switch условие. ProfileAnalyzer: новые аккаунты, typical hours. HWID градуированный. GeoIP warning. Единый lookup + кэш. |
+| `web/backend/api/v2/violations.py` | SQL-фильтрация вместо Python. Прямой запрос по ID. CSV export эндпоинт. |
+| `web/backend/api/v2/collector.py` | Configurable cooldown. GeoIP из кэша. Retention cleanup. |
+| `web/backend/core/violation_notifier.py` | Persistent throttle (DB вместо memory). Configurable cooldown. |
+| `web/frontend/src/pages/Violations.tsx` | Array.isArray() guards (7 мест). Advanced filters UI. Server-side export. Auto-refresh. |
+| `web/frontend/src/types/violations.ts` | Новый файл — общие TypeScript типы. |
