@@ -96,10 +96,18 @@ class ViolationStats(BaseModel):
     by_country: Dict[str, int] = {}
 
 
+class ResolveAction(str, Enum):
+    """Допустимые действия при разрешении нарушения."""
+    IGNORE = "ignore"
+    WARN = "warn"
+    BLOCK = "block"
+    DISMISS = "dismiss"
+
+
 class ResolveViolationRequest(BaseModel):
     """Запрос на разрешение нарушения."""
-    action: str  # ignore, warn, block, etc.
-    comment: Optional[str] = None
+    action: ResolveAction
+    comment: Optional[str] = Field(None, max_length=2000)
 
 
 class ViolationUserSummary(BaseModel):

@@ -109,7 +109,8 @@ const fetchTopViolators = async (days: number): Promise<TopViolator[]> => {
 
 const fetchIPLookup = async (ips: string[]): Promise<Record<string, IPInfo>> => {
   if (!ips.length) return {}
-  const { data } = await client.post('/violations/ip-lookup', { ips })
+  const limitedIps = ips.slice(0, 50) // Ограничиваем до 50 IP за запрос
+  const { data } = await client.post('/violations/ip-lookup', { ips: limitedIps })
   return data.results || {}
 }
 
@@ -282,6 +283,7 @@ const ScoreCircle = memo(function ScoreCircle({ score, size = 'md' }: { score: n
 const ViolationCard = memo(function ViolationCard({
   violation,
   canResolve,
+  isResolving,
   onBlock,
   onWarn,
   onDismiss,
@@ -292,6 +294,7 @@ const ViolationCard = memo(function ViolationCard({
 }: {
   violation: Violation
   canResolve: boolean
+  isResolving?: boolean
   onBlock: () => void
   onWarn: () => void
   onDismiss: () => void
@@ -362,27 +365,27 @@ const ViolationCard = memo(function ViolationCard({
         {/* Actions for pending violations */}
         {canResolve && isPending && (
           <div className="mt-4 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
-            <Button variant="destructive" size="sm" onClick={onBlock} className="gap-1">
+            <Button variant="destructive" size="sm" onClick={onBlock} disabled={isResolving} aria-label={t('violations.actions.block')} className="gap-1">
               <Ban className="w-4 h-4" />
               <span className="hidden sm:inline">{t('violations.actions.block')}</span>
               <span className="sm:hidden">{t('violations.actions.blockShort')}</span>
             </Button>
-            <Button variant="secondary" size="sm" onClick={onWarn} className="gap-1">
+            <Button variant="secondary" size="sm" onClick={onWarn} disabled={isResolving} aria-label={t('violations.actions.warn')} className="gap-1">
               <AlertTriangle className="w-4 h-4" />
               <span className="hidden sm:inline">{t('violations.actions.warn')}</span>
               <span className="sm:hidden">{t('violations.actions.warnShort')}</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={onDismiss} className="gap-1">
+            <Button variant="ghost" size="sm" onClick={onDismiss} disabled={isResolving} aria-label={t('violations.actions.dismiss')} className="gap-1">
               <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
             </Button>
-            <Button variant="ghost" size="sm" onClick={onAnnul} className="gap-1 text-dark-300 hover:text-dark-100">
+            <Button variant="ghost" size="sm" onClick={onAnnul} disabled={isResolving} aria-label={t('violations.actions.annul')} className="gap-1 text-dark-300 hover:text-dark-100">
               <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
             </Button>
-            <Button variant="ghost" size="sm" onClick={onWhitelist} className="gap-1 text-dark-300 hover:text-primary-400" title={t('violations.whitelist.addButton')}>
+            <Button variant="ghost" size="sm" onClick={onWhitelist} disabled={isResolving} aria-label={t('violations.whitelist.addButton')} className="gap-1 text-dark-300 hover:text-primary-400" title={t('violations.whitelist.addButton')}>
               <ShieldOff className="w-4 h-4" />
               <span className="hidden sm:inline">{t('violations.whitelist.addButton')}</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={onViewDetail} className="gap-1 ml-auto">
+            <Button variant="ghost" size="sm" onClick={onViewDetail} aria-label={t('common.details')} className="gap-1 ml-auto">
               <Eye className="w-4 h-4" />
               <span className="hidden sm:inline">{t('common.details')}</span>
             </Button>
@@ -469,7 +472,7 @@ function ViolationDetailPanel({
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
 
-  const { data: detail, isLoading } = useQuery({
+  const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['violationDetail', violationId],
     queryFn: () => fetchViolationDetail(violationId),
   })
@@ -511,14 +514,16 @@ function ViolationDetailPanel({
     )
   }
 
-  if (!detail) {
+  if (isError || !detail) {
     return (
       <div className="space-y-4">
         <Button variant="ghost" onClick={onClose} className="gap-2">
           <ArrowLeft className="w-5 h-5" /> {t('common.back')}
         </Button>
         <Card>
-          <CardContent className="text-center py-8 text-dark-200">{t('violations.detail.notFound')}</CardContent>
+          <CardContent className="text-center py-8 text-dark-200">
+            {isError ? t('common.loadError', t('violations.detail.notFound')) : t('violations.detail.notFound')}
+          </CardContent>
         </Card>
       </div>
     )
@@ -532,7 +537,7 @@ function ViolationDetailPanel({
     <div className="space-y-4 animate-fade-in-up">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={onClose}>
+        <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('common.back')}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1 min-w-0">
@@ -653,7 +658,7 @@ function ViolationDetailPanel({
               {t('violations.detail.reasons')} ({detail.reasons.length})
             </h3>
             <ul className="space-y-2">
-              {(Array.isArray(detail.reasons) ? detail.reasons : []).map((reason, i) => (
+              {detail.reasons.map((reason, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm">
                   <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
                   <span className="text-dark-100">{reason}</span>
@@ -675,7 +680,7 @@ function ViolationDetailPanel({
                 {t('violations.detail.countriesTitle')}
               </h3>
               <div className="flex flex-wrap gap-2">
-                {(Array.isArray(detail.countries) ? detail.countries : []).map((country, i) => (
+                {detail.countries.map((country, i) => (
                   <Badge key={i} variant="default">{country}</Badge>
                 ))}
               </div>
@@ -692,7 +697,7 @@ function ViolationDetailPanel({
                 {t('violations.detail.providerTypes')}
               </h3>
               <div className="flex flex-wrap gap-2">
-                {(Array.isArray(detail.asn_types) ? detail.asn_types : []).map((asn, i) => (
+                {detail.asn_types.map((asn, i) => (
                   <Badge key={i} variant="secondary">{asn}</Badge>
                 ))}
               </div>
@@ -709,7 +714,7 @@ function ViolationDetailPanel({
               {t('violations.detail.ipTitle')} ({detail.ips.length})
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {(Array.isArray(detail.ips) ? detail.ips : []).map((ip, i) => {
+              {detail.ips.map((ip, i) => {
                 const info = ipInfo?.[ip]
                 const badge = info ? getConnectionTypeBadge(info, t) : null
                 return (
@@ -959,7 +964,7 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
               {/* Actions taken */}
               {Array.isArray(v.actions) && v.actions.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
-                  {(Array.isArray(v.actions) ? v.actions : []).map((action, j) => (
+                  {v.actions.map((action, j) => (
                     <ActionBadge key={j} action={action} />
                   ))}
                 </div>
@@ -1014,8 +1019,12 @@ function WhitelistAddDialog({
     })
   }
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const isValidUuid = UUID_RE.test(userUuid.trim())
+
   const handleSubmit = () => {
-    if (!userUuid.trim()) return
+    if (!userUuid.trim() || !isValidUuid) return
+    if (exclusionMode === 'partial' && selectedAnalyzers.size === 0) return
     const expiresInDays = duration === 'forever' ? undefined : parseInt(duration, 10)
     onSubmit({
       user_uuid: userUuid.trim(),
@@ -1146,7 +1155,11 @@ function WhitelistAddDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleSubmit} className="gap-2">
+          <Button
+            onClick={handleSubmit}
+            disabled={!userUuid.trim() || (!initialUserUuid && !isValidUuid) || (exclusionMode === 'partial' && selectedAnalyzers.size === 0)}
+            className="gap-2"
+          >
             <ShieldOff className="w-4 h-4" />
             {t('violations.whitelist.addButton')}
           </Button>
@@ -1549,6 +1562,9 @@ export default function Violations() {
 
   const canResolve = useHasPermission('violations', 'resolve')
 
+  // Derived filter for resolved status (must be before handleExportCSV which uses it)
+  const resolved = tab === 'pending' ? false : undefined
+
   // Export handlers — CSV uses server-side endpoint for full export with proper escaping
   const handleExportCSV = () => {
     const params = new URLSearchParams()
@@ -1590,11 +1606,8 @@ export default function Violations() {
     setPage(1)
   }
 
-  // Derived filter for resolved status
-  const resolved = tab === 'pending' ? false : undefined
-
   // Fetch violations list
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['violations', page, perPage, severity, days, resolved, minScore, ipFilter, countryFilter, dateFrom, dateTo],
     queryFn: () =>
       fetchViolations({
@@ -1640,17 +1653,18 @@ export default function Violations() {
   const total = data?.total ?? 0
   const pages = data?.pages ?? 1
 
+  const { mutate: resolveMutate, isPending: isResolvePending } = resolveViolation
   const handleBlock = useCallback(
-    (id: number) => resolveViolation.mutate({ id, action: 'block' }),
-    [resolveViolation],
+    (id: number) => resolveMutate({ id, action: 'block' }),
+    [resolveMutate],
   )
   const handleWarn = useCallback(
-    (id: number) => resolveViolation.mutate({ id, action: 'warn' }),
-    [resolveViolation],
+    (id: number) => resolveMutate({ id, action: 'warn' }),
+    [resolveMutate],
   )
   const handleDismiss = useCallback(
-    (id: number) => resolveViolation.mutate({ id, action: 'ignore' }),
-    [resolveViolation],
+    (id: number) => resolveMutate({ id, action: 'ignore' }),
+    [resolveMutate],
   )
 
   const annulViolation = useMutation({
@@ -1683,13 +1697,15 @@ export default function Violations() {
     },
   })
 
+  const { mutate: annulMutate } = annulViolation
   const handleAnnul = useCallback(
-    (id: number) => annulViolation.mutate(id),
-    [annulViolation],
+    (id: number) => annulMutate(id),
+    [annulMutate],
   )
+  const { mutate: annulAllMutate } = annulAllViolations
   const handleAnnulAll = useCallback(
-    (userUuid: string) => annulAllViolations.mutate(userUuid),
-    [annulAllViolations],
+    (userUuid: string) => annulAllMutate(userUuid),
+    [annulAllMutate],
   )
 
   // Whitelist
@@ -1973,6 +1989,14 @@ export default function Violations() {
           <div className="space-y-3">
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => <ViolationSkeleton key={i} />)
+            ) : isError ? (
+              <Card className="text-center py-12">
+                <CardContent>
+                  <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+                  <p className="text-dark-200 text-lg">{t('common.loadError', 'Failed to load data')}</p>
+                  <Button variant="ghost" onClick={() => refetch()} className="mt-3">{t('common.retry', 'Retry')}</Button>
+                </CardContent>
+              </Card>
             ) : violations.length === 0 ? (
               <Card className="text-center py-12">
                 <CardContent>
@@ -1997,6 +2021,7 @@ export default function Violations() {
                   <ViolationCard
                     violation={violation}
                     canResolve={canResolve}
+                    isResolving={isResolvePending}
                     onBlock={() => handleBlock(violation.id)}
                     onWarn={() => handleWarn(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}

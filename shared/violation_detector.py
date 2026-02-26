@@ -8,8 +8,11 @@ IntelligentViolationDetector — система многофакторного �
 - Исторического профиля пользователя
 - Fingerprint устройств
 """
+import json
+from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as tz
+from itertools import combinations
 from typing import List, Dict, Any, Optional, Set
 from enum import Enum
 
@@ -140,8 +143,8 @@ class TemporalAnalyzer:
         # Также учитываем роутинг в приложении - пользователь может периодически подключаться/отключаться
         if len(connections) > 1:
             simultaneous_window_seconds = 120  # Окно для определения одновременности (2 минуты)
-            reconnect_threshold_seconds = 600  # Порог для определения переподключения (10 минут)
-            # Если между подключениями больше 5 минут, это переподключение через роутинг, а не одновременное подключение
+            max_connection_age_seconds = 600   # Подключения старше этого считаются устаревшими (10 минут)
+            sequential_switch_threshold = 300  # Разрыв между подключениями, указывающий на переключение (5 минут)
             max_connection_age_hours = 24  # Максимальный возраст подключения для учёта
             # Учитываем количество устройств пользователя - если у пользователя несколько устройств,
             # то несколько одновременных подключений могут быть нормальными
@@ -164,7 +167,6 @@ class TemporalAnalyzer:
 
                 # Нормализуем timezone в UTC перед сравнением
                 if conn_time.tzinfo:
-                    from datetime import timezone as tz
                     conn_time = conn_time.astimezone(tz.utc).replace(tzinfo=None)
 
                 # Пропускаем слишком старые подключения (старше 24 часов)
@@ -176,7 +178,7 @@ class TemporalAnalyzer:
                 # Это устаревшие (зависшие) подключения или переподключения через роутинг
                 # Не считаем их одновременными
                 age_seconds = (now - conn_time).total_seconds()
-                if age_seconds > reconnect_threshold_seconds:
+                if age_seconds > max_connection_age_seconds:
                     continue
 
                 valid_connections.append((conn_time, str(conn.ip_address)))
@@ -197,9 +199,9 @@ class TemporalAnalyzer:
                     prev_conn_time = current_group[-1][0]
                     time_diff_seconds = (conn_time - prev_conn_time).total_seconds()
                     
-                    # Если разрыв больше порога переподключения (5 минут), это переподключение через роутинг
+                    # Если разрыв больше порога переключения (5 минут), это последовательное переподключение
                     # Не считаем это одновременным подключением
-                    if time_diff_seconds > reconnect_threshold_seconds:
+                    if time_diff_seconds > sequential_switch_threshold:
                         # Начинаем новую группу (это переподключение, а не одновременное подключение)
                         if len(current_group) > 1:
                             simultaneous_groups.append(current_group)
@@ -291,9 +293,14 @@ class TemporalAnalyzer:
                     # Длительное перекрытие (> 15 мин) — подозрительно
                     if simultaneous_groups and score > 0:
                         best_group = max(simultaneous_groups, key=lambda g: len(set(ip for _, ip in g)))
-                        # Перекрытие начинается когда последнее подключение в группе появилось
+                        # Длительность перекрытия = разница между самым ранним и самым поздним подключением в группе
+                        earliest_start = min(t for t, _ in best_group)
                         latest_start = max(t for t, _ in best_group)
+                        # Реальное перекрытие: от последнего подключения до текущего момента
+                        # (все подключения в группе активны одновременно с момента latest_start)
                         overlap_minutes = (now - latest_start).total_seconds() / 60
+                        # Но также учитываем разброс: если все подключились в одну секунду — это подозрительнее
+                        group_spread_minutes = (latest_start - earliest_start).total_seconds() / 60
 
                         if overlap_minutes < 2:
                             # Очень короткое перекрытие — переключение сети, сильно снижаем
@@ -392,8 +399,9 @@ class TemporalAnalyzer:
                     # Если старое подключение не отключено, но прошло достаточно времени (> 5 минут),
                     # считаем его устаревшим (зависшим), а не одновременным
                     now = datetime.utcnow()
+                    # Нормализуем timezone — приводим к naive UTC для корректного сравнения
                     if curr_time.tzinfo:
-                        curr_time_with_tz = curr_time.replace(tzinfo=now.tzinfo if now.tzinfo else None)
+                        curr_time_with_tz = curr_time.astimezone(tz.utc).replace(tzinfo=None)
                     else:
                         curr_time_with_tz = curr_time
                     time_since_switch = (now - curr_time_with_tz).total_seconds() / 60
@@ -553,7 +561,7 @@ class GeoAnalyzer:
         'yekaterinburg': [
             'yekaterinburg', 'ekaterinburg', 'sredneuralsk', 'verkhnyaya pyshma',
             'aramil', 'berezovsky', 'pervouralsk', 'revda', 'polevskoy',
-            'sredneuralsk', 'verkhniaya pyshma', 'koltsovo', 'sysert'
+            'verkhniaya pyshma', 'koltsovo', 'sysert'
         ],
         # Московская область
         'moscow': [
@@ -924,18 +932,15 @@ class GeoAnalyzer:
                             elif distance_km <= self.MIN_DISTANCE_FOR_DIFFERENT_CITIES:
                                 # Умеренно близко - минимальный скор
                                 score = max(score, 2.0)
-                                if not reasons:
-                                    reasons.append(f"Близкие города: {prev_city} → {curr_city} ({distance_km:.0f} км)")
+                                reasons.append(f"Близкие города: {prev_city} → {curr_city} ({distance_km:.0f} км)")
                             else:
                                 # Далеко - стандартный скор
                                 score = max(score, 5.0)
-                                if not reasons:
-                                    reasons.append(f"Разные города одной страны: {prev_city} → {curr_city} ({distance_km:.0f} км)")
+                                reasons.append(f"Разные города одной страны: {prev_city} → {curr_city} ({distance_km:.0f} км)")
                         else:
                             # Нет координат - добавляем минимальный скор на всякий случай
                             score = max(score, 3.0)
-                            if not reasons:
-                                reasons.append(f"Разные города одной страны: {prev_city} → {curr_city}")
+                            reasons.append(f"Разные города одной страны: {prev_city} → {curr_city}")
         
         return GeoScore(
             score=min(score, 100.0),
@@ -1201,7 +1206,6 @@ class UserProfileAnalyzer:
                 }
             
             # Группируем по дням
-            from collections import defaultdict
             daily_ips: Dict[str, Set[str]] = defaultdict(set)
             all_known_ips: Set[str] = set()  # Все IP, которые пользователь использовал
             countries: Set[str] = set()
@@ -1330,6 +1334,7 @@ class UserProfileAnalyzer:
         
         # Проверяем, сколько текущих IP уже известны пользователю
         known_ips = set(baseline.get('known_ips', []))
+        known_ratio = 0.0
         if current_ips and known_ips:
             known_current_ips = current_ips & known_ips
             known_ratio = len(known_current_ips) / len(current_ips) if current_ips else 0
@@ -1385,11 +1390,9 @@ class UserProfileAnalyzer:
                 score += 10.0
                 reasons.append(f"Подключение в нетипичное время ({current_hour}:00 UTC, обычно: {sorted(typical_hours)[:6]})")
 
-        # Если половина IP известны, снижаем скор
-        if current_ips and known_ips:
-            known_ratio = len(current_ips & known_ips) / len(current_ips)
-            if known_ratio >= 0.5:
-                score *= 0.5  # Снижаем на 50% если половина IP известны
+        # Если половина IP известны, снижаем скор (known_ratio уже вычислен выше)
+        if current_ips and known_ips and known_ratio >= 0.5:
+            score *= 0.5  # Снижаем на 50% если половина IP известны
 
         return ProfileScore(
             score=min(score, 100.0),
@@ -1467,7 +1470,6 @@ class DeviceFingerprintAnalyzer:
             elif isinstance(device_info, str):
                 # Пытаемся распарсить JSON строку
                 try:
-                    import json
                     device_dict = json.loads(device_info)
                     fingerprint.update(device_dict)
                 except (json.JSONDecodeError, TypeError):
@@ -1504,9 +1506,16 @@ class DeviceFingerprintAnalyzer:
                 'user_agent': getattr(conn, 'user_agent', None)
             })
         
+        now = datetime.utcnow()
         for conn in connection_history:
+            conn_time = conn.get('connected_at')
+            if isinstance(conn_time, datetime):
+                if conn_time.tzinfo:
+                    conn_time = conn_time.astimezone(tz.utc).replace(tzinfo=None)
+                if (now - conn_time).total_seconds() > 86400:  # > 24 часа
+                    continue
             all_connections.append(conn)
-        
+
         # Извлекаем fingerprint для каждого подключения
         fingerprints: List[Dict[str, str]] = []
         for conn in all_connections:
@@ -1730,8 +1739,8 @@ class IntelligentViolationDetector:
             # Это учитывает роутинг в приложении - старые подключения не считаются активными
             active_connections = await self.connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
 
-            # Получаем историю подключений
-            history_days = max(1, window_minutes // (24 * 60) + 1)
+            # Получаем историю подключений (минимум 1 день, максимум 7 дней)
+            history_days = max(1, min(7, window_minutes // 60 + 1))
             connection_history = await self.db.get_connection_history(user_uuid, days=history_days)
 
             # Добавляем debug-логирование для диагностики
@@ -1867,7 +1876,7 @@ class IntelligentViolationDetector:
 
             # Проверяем, от одного ли провайдера (ASN) все IP
             # Если да, это снижает вероятность шаринга
-            is_same_asn, asn_ratio = await self._check_same_asn_pattern(active_connections, connection_history)
+            is_same_asn, asn_ratio = await self._check_same_asn_pattern(active_connections, connection_history, ip_metadata_cache)
             if is_same_asn and asn_ratio >= 0.8:
                 # Все IP от одного провайдера - снижаем скор
                 score_before_asn = raw_score
@@ -1925,12 +1934,21 @@ class IntelligentViolationDetector:
             # HWID кросс-аккаунт — стопроцентное нарушение, минимум 80 (soft_block)
             if hwid_score.score >= 100.0 and hwid_score.other_accounts_count >= 1:
                 raw_score = max(raw_score, 80.0)
-            
+            # Промежуточные HWID скоры (65+) с подтверждёнными аккаунтами — минимум 50 (monitor)
+            elif hwid_score.score >= 65.0 and hwid_score.other_accounts_count >= 1:
+                raw_score = max(raw_score, 50.0)
+
             # Определяем рекомендуемое действие
             recommended_action = self._get_action(raw_score)
             
-            # Вычисляем уверенность (пока упрощённо)
-            confidence = min(1.0, raw_score / 100.0)
+            # Вычисляем уверенность на основе количества сработавших факторов и силы сигналов
+            active_factors = sum(1 for s in [
+                temporal_score.score, geo_score.score, asn_score.score,
+                profile_score.score, device_score.score, hwid_score.score
+            ] if s > 0)
+            data_quality = min(1.0, len(connection_history) / 10.0)  # Больше данных = выше уверенность
+            score_factor = min(1.0, raw_score / 100.0)
+            confidence = min(1.0, score_factor * (0.4 + 0.1 * active_factors) * (0.5 + 0.5 * data_quality))
             
             # Собираем все причины
             all_reasons = []
@@ -1992,7 +2010,8 @@ class IntelligentViolationDetector:
     async def _check_same_asn_pattern(
         self,
         connections: List[ActiveConnection],
-        connection_history: List[Dict[str, Any]]
+        connection_history: List[Dict[str, Any]],
+        ip_metadata_cache: Optional[Dict] = None
     ) -> tuple[bool, float]:
         """
         Проверить, принадлежат ли IP одному провайдеру (ASN).
@@ -2017,8 +2036,16 @@ class IntelligentViolationDetector:
         if len(all_ips) <= 1:
             return True, 1.0
 
-        # Получаем ASN для каждого IP
-        ip_metadata = await self.geo_analyzer.geoip.lookup_batch(list(all_ips))
+        # Получаем ASN для каждого IP (используем кэш если передан)
+        if ip_metadata_cache is not None:
+            ip_metadata = {ip: ip_metadata_cache[ip] for ip in all_ips if ip in ip_metadata_cache}
+            # Дозагружаем IP которых нет в кэше
+            missing_ips = all_ips - set(ip_metadata.keys())
+            if missing_ips:
+                extra = await self.geo_analyzer.geoip.lookup_batch(list(missing_ips))
+                ip_metadata.update(extra)
+        else:
+            ip_metadata = await self.geo_analyzer.geoip.lookup_batch(list(all_ips))
 
         asn_counts: Dict[Optional[int], int] = {}
         for ip, meta in ip_metadata.items():
@@ -2039,6 +2066,21 @@ class IntelligentViolationDetector:
 
         return is_same_asn, ratio
 
+    @staticmethod
+    def _is_private_ip(ip_str: str) -> bool:
+        """Проверка приватного IP-адреса (RFC 1918 + loopback)."""
+        if ip_str.startswith(('127.', '192.168.', '10.')):
+            return True
+        if ip_str.startswith('172.'):
+            parts = ip_str.split('.')
+            if len(parts) >= 2:
+                try:
+                    second_octet = int(parts[1])
+                    return 16 <= second_octet <= 31
+                except ValueError:
+                    pass
+        return False
+
     def _check_subnet_proximity(
         self,
         connections: List[ActiveConnection],
@@ -2058,11 +2100,11 @@ class IntelligentViolationDetector:
         all_ips = set()
         for conn in connections:
             ip_str = str(conn.ip_address)
-            if not ip_str.startswith(('127.', '192.168.', '10.', '172.16.')):
+            if not self._is_private_ip(ip_str):
                 all_ips.add(ip_str)
         for conn in connection_history[-10:]:
             ip_str = str(conn.get("ip_address", ""))
-            if ip_str and not ip_str.startswith(('127.', '192.168.', '10.', '172.16.')):
+            if ip_str and not self._is_private_ip(ip_str):
                 all_ips.add(ip_str)
 
         if len(all_ips) <= 1:
@@ -2157,7 +2199,6 @@ class IntelligentViolationDetector:
             return 1.0
 
         try:
-            from itertools import combinations
             from collections import Counter
 
             # Получаем историю подключений за 30 дней
@@ -2226,6 +2267,8 @@ class IntelligentViolationDetector:
         elif score < self.THRESHOLDS['soft_block']:
             return ViolationAction.SOFT_BLOCK
         elif score < self.THRESHOLDS['temp_block']:
+            return ViolationAction.TEMP_BLOCK
+        elif score < self.THRESHOLDS['hard_block']:
             return ViolationAction.TEMP_BLOCK
         else:
             return ViolationAction.HARD_BLOCK

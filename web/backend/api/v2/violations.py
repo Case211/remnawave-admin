@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from web.backend.api.deps import get_current_admin, get_db, AdminUser, require_permission, get_client_ip
 from web.backend.core.errors import api_error, E
 from web.backend.core.rbac import write_audit_log
+from web.backend.core.rate_limit import limiter, RATE_READ, RATE_EXPORT, RATE_MUTATIONS
 from web.backend.schemas.violation import (
     ViolationListItem,
     ViolationListResponse,
@@ -34,15 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_severity(score: float) -> ViolationSeverity:
-    """Определить серьёзность по скору."""
-    if score >= 80:
-        return ViolationSeverity.CRITICAL
-    elif score >= 60:
-        return ViolationSeverity.HIGH
-    elif score >= 40:
-        return ViolationSeverity.MEDIUM
-    return ViolationSeverity.LOW
+get_severity = ViolationListItem.get_severity
 
 
 def _row_to_list_item(v: dict) -> ViolationListItem:
@@ -130,6 +123,9 @@ async def list_violations(
         )
 
         # Подсчёт для пагинации
+        # KNOWN LIMITATION: count и data — два отдельных запроса без общей транзакции.
+        # При concurrent INSERT/DELETE возможен race condition: total=0 но items не пустой
+        # (или наоборот). Для admin-панели это приемлемо.
         total = await db.count_violations_for_period(**filter_kwargs)
 
         # Получаем страницу данных
@@ -158,7 +154,7 @@ async def list_violations(
         raise
     except Exception as e:
         logger.error("Error listing violations: %s", e, exc_info=True)
-        return ViolationListResponse(items=[], total=0, page=page, per_page=per_page, pages=1)
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.get("/stats", response_model=ViolationStats)
@@ -200,11 +196,10 @@ async def get_violation_stats(
             min_score=min_score,
         )
 
-        # DB returns 'warning'/'monitor' but schema expects 'high'/'medium'/'low'
         total = stats.get('total', 0)
         critical = stats.get('critical', 0)
-        high = stats.get('warning', stats.get('high', 0))
-        medium = stats.get('monitor', stats.get('medium', 0))
+        high = stats.get('high', 0)
+        medium = stats.get('medium', 0)
         low = max(0, total - critical - high - medium)
 
         return ViolationStats(
@@ -221,10 +216,7 @@ async def get_violation_stats(
         )
     except Exception as e:
         logger.error("Error getting violation stats: %s", e, exc_info=True)
-        return ViolationStats(
-            total=0, critical=0, high=0, medium=0, low=0,
-            unique_users=0, avg_score=0.0, max_score=0.0,
-        )
+        raise api_error(500, E.INTERNAL_ERROR)
 
 
 @router.get("/pending", response_model=ViolationListResponse)
@@ -284,7 +276,9 @@ async def get_top_violators(
 
 
 @router.post("/ip-lookup", response_model=IPLookupResponse)
+@limiter.limit(RATE_READ)
 async def lookup_ips(
+    request: Request,
     data: IPLookupRequest,
     admin: AdminUser = Depends(require_permission("violations", "view")),
 ):
@@ -451,8 +445,8 @@ async def remove_from_whitelist(
 
 @router.post("/user/{user_uuid}/annul-all")
 async def annul_user_violations(
-    user_uuid: str,
     request: Request,
+    user_uuid: str = Path(..., pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
     admin: AdminUser = Depends(require_permission("violations", "resolve")),
     db: DatabaseService = Depends(get_db),
 ):
@@ -477,7 +471,7 @@ async def annul_user_violations(
 
 @router.get("/user/{user_uuid}")
 async def get_user_violations(
-    user_uuid: str,
+    user_uuid: str = Path(..., pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
     days: int = Query(30, ge=1, le=365),
     admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
@@ -499,7 +493,9 @@ async def get_user_violations(
 
 
 @router.get("/export/csv")
+@limiter.limit(RATE_EXPORT)
 async def export_violations_csv(
+    request: Request,
     days: int = Query(7, ge=1, le=365),
     min_score: float = Query(0, ge=0, le=100),
     severity: Optional[str] = None,
@@ -601,14 +597,16 @@ async def resolve_violation(
     - warn: Предупредить пользователя
     - block: Заблокировать пользователя
     """
+    action_value = data.action.value if hasattr(data.action, 'value') else str(data.action)
+
     success = await db.update_violation_action(
         violation_id=violation_id,
-        action_taken=data.action,
+        action_taken=action_value,
         admin_telegram_id=admin.telegram_id,
     )
 
     if not success:
-        raise api_error(404, E.VIOLATION_UPDATE_FAILED)
+        raise api_error(409, E.VIOLATION_UPDATE_FAILED)
 
     await write_audit_log(
         admin_id=admin.account_id,
@@ -616,11 +614,11 @@ async def resolve_violation(
         action="violation.resolve",
         resource="violations",
         resource_id=str(violation_id),
-        details=json.dumps({"action": data.action}),
+        details=json.dumps({"action": action_value, "comment": data.comment}),
         ip_address=get_client_ip(request),
     )
 
-    return {"status": "ok", "action": data.action}
+    return {"status": "ok", "action": action_value}
 
 
 @router.post("/{violation_id}/annul")

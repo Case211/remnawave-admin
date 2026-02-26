@@ -159,6 +159,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_hwid_devices_user_hwid ON user_hwid_device
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_user_uuid ON user_hwid_devices(user_uuid);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_platform ON user_hwid_devices(platform);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_hwid ON user_hwid_devices(hwid);
+
+-- Индексы для violations (таблица создаётся через Alembic)
+CREATE INDEX IF NOT EXISTS idx_violations_user_detected ON violations(user_uuid, detected_at DESC);
+
+-- Индексы для violation_whitelist (таблица создаётся через Alembic)
+CREATE INDEX IF NOT EXISTS idx_violation_whitelist_user ON violation_whitelist(user_uuid);
 """
 
 
@@ -473,6 +479,9 @@ class DatabaseService:
             result = await conn.fetchval("SELECT COUNT(*) FROM users")
             return result or 0
     
+    # Allowlist для ORDER BY — защита от SQL-инъекции
+    ALLOWED_ORDER_BY = {"username", "created_at", "updated_at", "status", "expire_at", "email", "uuid"}
+
     async def get_all_users(
         self,
         limit: int = 100,
@@ -486,7 +495,10 @@ class DatabaseService:
         """
         if not self.is_connected:
             return []
-        
+
+        if order_by not in self.ALLOWED_ORDER_BY:
+            order_by = "username"
+
         async with self.acquire() as conn:
             if status:
                 rows = await conn.fetch(
@@ -538,75 +550,76 @@ class DatabaseService:
             )
             return [_db_row_to_api_format(row) for row in rows]
     
-    async def upsert_user(self, user_data: Dict[str, Any]) -> None:
-        """Insert or update a user."""
-        if not self.is_connected:
-            return
-        
-        # Extract data from API response
+    async def _upsert_user_with_conn(self, conn, user_data: Dict[str, Any]) -> None:
+        """Insert or update a user using provided connection (for batch operations)."""
         response = user_data.get("response", user_data)
-        
+
         uuid = response.get("uuid")
         if not uuid:
             logger.warning("Cannot upsert user without UUID")
             return
-        
-        # Extract traffic data from nested userTraffic object
+
         user_traffic = response.get("userTraffic") or {}
         used_traffic = user_traffic.get("usedTrafficBytes") or response.get("usedTrafficBytes")
 
+        await conn.execute(
+            """
+            INSERT INTO users (
+                uuid, short_uuid, username, subscription_uuid, telegram_id,
+                email, status, expire_at, traffic_limit_bytes, used_traffic_bytes,
+                hwid_device_limit, created_at, updated_at, raw_data
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13)
+            ON CONFLICT (uuid) DO UPDATE SET
+                short_uuid = EXCLUDED.short_uuid,
+                username = EXCLUDED.username,
+                subscription_uuid = EXCLUDED.subscription_uuid,
+                telegram_id = EXCLUDED.telegram_id,
+                email = EXCLUDED.email,
+                status = EXCLUDED.status,
+                expire_at = EXCLUDED.expire_at,
+                traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
+                used_traffic_bytes = EXCLUDED.used_traffic_bytes,
+                hwid_device_limit = EXCLUDED.hwid_device_limit,
+                updated_at = NOW(),
+                raw_data = EXCLUDED.raw_data
+            """,
+            uuid,
+            response.get("shortUuid"),
+            response.get("username"),
+            response.get("subscriptionUuid"),
+            response.get("telegramId"),
+            response.get("email"),
+            response.get("status"),
+            _parse_timestamp(response.get("expireAt")),
+            response.get("trafficLimitBytes"),
+            used_traffic,
+            response.get("hwidDeviceLimit"),
+            _parse_timestamp(response.get("createdAt")),
+            json.dumps(response),
+        )
+
+    async def upsert_user(self, user_data: Dict[str, Any]) -> None:
+        """Insert or update a user."""
+        if not self.is_connected:
+            return
         async with self.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO users (
-                    uuid, short_uuid, username, subscription_uuid, telegram_id,
-                    email, status, expire_at, traffic_limit_bytes, used_traffic_bytes,
-                    hwid_device_limit, created_at, updated_at, raw_data
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), $13)
-                ON CONFLICT (uuid) DO UPDATE SET
-                    short_uuid = EXCLUDED.short_uuid,
-                    username = EXCLUDED.username,
-                    subscription_uuid = EXCLUDED.subscription_uuid,
-                    telegram_id = EXCLUDED.telegram_id,
-                    email = EXCLUDED.email,
-                    status = EXCLUDED.status,
-                    expire_at = EXCLUDED.expire_at,
-                    traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
-                    used_traffic_bytes = EXCLUDED.used_traffic_bytes,
-                    hwid_device_limit = EXCLUDED.hwid_device_limit,
-                    updated_at = NOW(),
-                    raw_data = EXCLUDED.raw_data
-                """,
-                uuid,
-                response.get("shortUuid"),
-                response.get("username"),
-                response.get("subscriptionUuid"),
-                response.get("telegramId"),
-                response.get("email"),
-                response.get("status"),
-                _parse_timestamp(response.get("expireAt")),
-                response.get("trafficLimitBytes"),
-                used_traffic,
-                response.get("hwidDeviceLimit"),
-                _parse_timestamp(response.get("createdAt")),
-                json.dumps(response),
-            )
+            await self._upsert_user_with_conn(conn, user_data)
     
     async def bulk_upsert_users(self, users: List[Dict[str, Any]]) -> int:
         """Bulk insert or update users. Returns number of records processed."""
         if not self.is_connected or not users:
             return 0
-        
+
         count = 0
         async with self.acquire() as conn:
             async with conn.transaction():
                 for user_data in users:
                     try:
-                        await self.upsert_user(user_data)
+                        await self._upsert_user_with_conn(conn, user_data)
                         count += 1
                     except Exception as e:
                         logger.warning("Failed to upsert user: %s", e)
-        
+
         return count
     
     async def delete_user(self, uuid: str) -> bool:
@@ -644,6 +657,27 @@ class DatabaseService:
             )
             return _db_row_to_api_format(row) if row else None
     
+    async def get_nodes_by_uuids(self, uuids: list[str]) -> Dict[str, Dict[str, Any]]:
+        """Get multiple nodes by UUIDs in a single query.
+
+        Returns:
+            Dict mapping node UUID -> node info dict.
+        """
+        if not self.is_connected or not uuids:
+            return {}
+
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM nodes WHERE uuid = ANY($1::text[])",
+                list(uuids)
+            )
+            result = {}
+            for row in rows:
+                node = _db_row_to_api_format(row)
+                if node:
+                    result[str(row['uuid'])] = node
+            return result
+
     async def get_node_agent_token(self, uuid: str) -> Optional[str]:
         """Получить токен агента для ноды (если установлен)."""
         if not self.is_connected:
@@ -1054,67 +1088,77 @@ class DatabaseService:
             return None
         
         async with self.acquire() as conn:
-            # Проверяем, есть ли уже активное подключение с этим IP для этого пользователя
-            existing = await conn.fetchrow(
-                """
-                SELECT id FROM user_connections
-                WHERE user_uuid = $1 
-                AND ip_address = $2
-                AND disconnected_at IS NULL
-                ORDER BY connected_at DESC
-                LIMIT 1
-                """,
-                user_uuid, ip_address
-            )
-            
-            if existing:
-                # Обновляем время подключения существующей записи
-                # Используем самое позднее время (из нового подключения или существующего)
-                conn_id = existing['id']
-                # Получаем текущее время подключения из БД
-                existing_row = await conn.fetchrow(
-                    "SELECT connected_at FROM user_connections WHERE id = $1",
-                    conn_id
+            async with conn.transaction():
+                # Проверяем, есть ли уже активное подключение с этим IP для этого пользователя
+                # Включаем connected_at в SELECT чтобы избежать лишнего round-trip
+                existing = await conn.fetchrow(
+                    """
+                    SELECT id, connected_at FROM user_connections
+                    WHERE user_uuid = $1
+                    AND ip_address = $2
+                    AND disconnected_at IS NULL
+                    ORDER BY connected_at DESC
+                    LIMIT 1
+                    """,
+                    user_uuid, ip_address
                 )
-                existing_time = existing_row['connected_at'] if existing_row else None
-                
-                # Используем самое позднее время
-                if connected_at and existing_time:
-                    # Преобразуем existing_time в datetime если нужно
-                    if isinstance(existing_time, str):
-                        try:
-                            existing_time = datetime.fromisoformat(existing_time.replace('Z', '+00:00'))
-                        except ValueError:
-                            existing_time = None
-                    if isinstance(existing_time, datetime) and isinstance(connected_at, datetime):
-                        # Убираем timezone для сравнения
-                        if existing_time.tzinfo:
-                            existing_time = existing_time.replace(tzinfo=None)
-                        if connected_at.tzinfo:
-                            connected_at_naive = connected_at.replace(tzinfo=None)
-                        else:
-                            connected_at_naive = connected_at
-                        update_time = max(existing_time, connected_at_naive)
+
+                if existing:
+                    conn_id = existing['id']
+                    existing_time = existing['connected_at']
+
+                    # Нормализуем timezone — приводим к naive UTC для корректного сравнения
+                    def _to_naive_utc(dt):
+                        if dt is None:
+                            return None
+                        if isinstance(dt, str):
+                            try:
+                                dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+                            except ValueError:
+                                return None
+                        if not isinstance(dt, datetime):
+                            return None
+                        if dt.tzinfo:
+                            from datetime import timezone as tz
+                            dt = dt.astimezone(tz.utc).replace(tzinfo=None)
+                        return dt
+
+                    existing_utc = _to_naive_utc(existing_time)
+                    connected_utc = _to_naive_utc(connected_at)
+
+                    if existing_utc and connected_utc:
+                        update_time = max(existing_utc, connected_utc)
+                    elif connected_utc:
+                        update_time = connected_utc
+                    elif existing_utc:
+                        update_time = existing_utc
                     else:
-                        update_time = connected_at if connected_at else datetime.utcnow()
-                elif connected_at:
-                    update_time = connected_at
-                elif existing_time:
-                    update_time = existing_time
+                        update_time = datetime.utcnow()
+
+                    await conn.execute(
+                        """
+                        UPDATE user_connections
+                        SET connected_at = $1, node_uuid = COALESCE($2, node_uuid)
+                        WHERE id = $3
+                        """,
+                        update_time, node_uuid, conn_id
+                    )
+                    result_id = conn_id
                 else:
-                    update_time = datetime.utcnow()
-                
-                await conn.execute(
-                    """
-                    UPDATE user_connections
-                    SET connected_at = $1, node_uuid = COALESCE($2, node_uuid)
-                    WHERE id = $3
-                    """,
-                    update_time, node_uuid, conn_id
-                )
-                
-                # Если пользователь подключается с новым IP, закрываем старые подключения с другими IP
-                # Это учитывает роутинг в приложении - пользователь может переключаться между серверами
+                    # Создаём новую запись
+                    insert_time = connected_at if connected_at else datetime.utcnow()
+                    result_id = await conn.fetchval(
+                        """
+                        INSERT INTO user_connections (user_uuid, ip_address, node_uuid, device_info, connected_at)
+                        VALUES ($1, $2, $3, $4, $5)
+                        RETURNING id
+                        """,
+                        user_uuid, ip_address, node_uuid,
+                        json.dumps(device_info) if device_info else None,
+                        insert_time
+                    )
+
+                # Закрываем старые подключения с другими IP (общее для обоих веток)
                 await conn.execute(
                     """
                     UPDATE user_connections
@@ -1127,37 +1171,7 @@ class DatabaseService:
                     user_uuid, ip_address
                 )
 
-                return conn_id
-            else:
-                # Создаём новую запись
-                # Используем переданное время или текущее время
-                insert_time = connected_at if connected_at else datetime.utcnow()
-                result = await conn.fetchval(
-                    """
-                    INSERT INTO user_connections (user_uuid, ip_address, node_uuid, device_info, connected_at)
-                    VALUES ($1, $2, $3, $4, $5)
-                    RETURNING id
-                    """,
-                    user_uuid, ip_address, node_uuid,
-                    json.dumps(device_info) if device_info else None,
-                    insert_time
-                )
-                
-                # Если пользователь подключается с новым IP, закрываем старые подключения с другими IP
-                # Это учитывает роутинг в приложении - пользователь может переключаться между серверами
-                await conn.execute(
-                    """
-                    UPDATE user_connections
-                    SET disconnected_at = NOW()
-                    WHERE user_uuid = $1
-                    AND ip_address != $2
-                    AND disconnected_at IS NULL
-                    AND connected_at < NOW() - INTERVAL '2 minutes'
-                    """,
-                    user_uuid, ip_address
-                )
-
-                return result
+                return result_id
     
     async def get_user_active_connections(
         self,
@@ -1260,8 +1274,9 @@ class DatabaseService:
             result = await conn.fetchval(
                 """
                 SELECT COUNT(*) FROM user_connections
-                WHERE user_uuid = $1 
+                WHERE user_uuid = $1
                 AND disconnected_at IS NULL
+                AND connected_at > NOW() - INTERVAL '10 minutes'
                 """,
                 user_uuid
             )
@@ -1271,15 +1286,15 @@ class DatabaseService:
         self,
         user_uuid: str,
         days: int = 7,
-        limit: int = 1000
+        limit: int = 200
     ) -> List[Dict[str, Any]]:
         """
         Get connection history for a user.
-        
+
         Args:
             user_uuid: UUID пользователя
             days: Количество дней истории (по умолчанию 7)
-            limit: Максимальное количество записей (по умолчанию 1000)
+            limit: Максимальное количество записей (по умолчанию 200)
         
         Returns:
             Список подключений с информацией об IP, ноде, времени подключения/отключения
@@ -2230,11 +2245,12 @@ class DatabaseService:
         
         try:
             async with self.acquire() as conn:
-                # Обновляем время синхронизации для всех активных записей
+                # Обновляем время синхронизации для активных записей, которые давно не обновлялись
                 query = """
                     UPDATE asn_russia
                     SET last_synced_at = NOW()
                     WHERE is_active = true
+                    AND (last_synced_at IS NULL OR last_synced_at < NOW() - INTERVAL '1 hour')
                 """
                 await conn.execute(query)
             
@@ -2286,19 +2302,36 @@ class DatabaseService:
 
         try:
             async with self.acquire() as conn:
-                # Deduplication: skip if same user already has a violation within last 10 min
-                existing = await conn.fetchval(
-                    "SELECT id FROM violations WHERE user_uuid = $1 "
-                    "AND detected_at > NOW() - INTERVAL '10 minutes'",
-                    user_uuid,
-                )
-                if existing:
-                    logger.debug("Skipping duplicate violation for user %s (existing id=%d)", user_uuid, existing)
-                    return existing
+                async with conn.transaction():
+                    # Deduplication: skip if same user already has a violation within last 10 min
+                    existing = await conn.fetchval(
+                        "SELECT id FROM violations WHERE user_uuid = $1 "
+                        "AND detected_at > NOW() - INTERVAL '10 minutes'",
+                        user_uuid,
+                    )
+                    if existing:
+                        logger.debug("Skipping duplicate violation for user %s (existing id=%d)", user_uuid, existing)
+                        return existing
 
-                result = await conn.fetchval(
-                    """
-                    INSERT INTO violations (
+                    result = await conn.fetchval(
+                        """
+                        INSERT INTO violations (
+                            user_uuid, username, email, telegram_id,
+                            score, recommended_action, confidence,
+                            temporal_score, geo_score, asn_score, profile_score, device_score,
+                            hwid_score,
+                            ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
+                            simultaneous_connections, unique_ips_count, device_limit,
+                            impossible_travel, is_mobile, is_datacenter, is_vpn,
+                            raw_breakdown, detected_at
+                        )
+                        VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                            $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+                            $24, $25, $26, $27, $28, NOW()
+                        )
+                        RETURNING id
+                        """,
                         user_uuid, username, email, telegram_id,
                         score, recommended_action, confidence,
                         temporal_score, geo_score, asn_score, profile_score, device_score,
@@ -2306,25 +2339,9 @@ class DatabaseService:
                         ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                         simultaneous_connections, unique_ips_count, device_limit,
                         impossible_travel, is_mobile, is_datacenter, is_vpn,
-                        raw_breakdown, detected_at
+                        raw_breakdown
                     )
-                    VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
-                        $24, $25, $26, $27, $28, NOW()
-                    )
-                    RETURNING id
-                    """,
-                    user_uuid, username, email, telegram_id,
-                    score, recommended_action, confidence,
-                    temporal_score, geo_score, asn_score, profile_score, device_score,
-                    hwid_score,
-                    ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
-                    simultaneous_connections, unique_ips_count, device_limit,
-                    impossible_travel, is_mobile, is_datacenter, is_vpn,
-                    raw_breakdown
-                )
-                return result
+                    return result
 
         except Exception as e:
             logger.error("Error saving violation for user %s: %s", user_uuid, e, exc_info=True)
@@ -2525,8 +2542,8 @@ class DatabaseService:
             return {
                 'total': 0,
                 'critical': 0,
-                'warning': 0,
-                'monitor': 0,
+                'high': 0,
+                'medium': 0,
                 'unique_users': 0,
                 'avg_score': 0.0,
                 'max_score': 0.0
@@ -2539,8 +2556,8 @@ class DatabaseService:
                     SELECT
                         COUNT(*) as total,
                         COUNT(*) FILTER (WHERE score >= 80) as critical,
-                        COUNT(*) FILTER (WHERE score >= 50 AND score < 80) as warning,
-                        COUNT(*) FILTER (WHERE score >= 30 AND score < 50) as monitor,
+                        COUNT(*) FILTER (WHERE score >= 60 AND score < 80) as high,
+                        COUNT(*) FILTER (WHERE score >= 40 AND score < 60) as medium,
                         COUNT(DISTINCT user_uuid) as unique_users,
                         COALESCE(AVG(score), 0) as avg_score,
                         COALESCE(MAX(score), 0) as max_score
@@ -2567,8 +2584,8 @@ class DatabaseService:
             return {
                 'total': 0,
                 'critical': 0,
-                'warning': 0,
-                'monitor': 0,
+                'high': 0,
+                'medium': 0,
                 'unique_users': 0,
                 'avg_score': 0.0,
                 'max_score': 0.0
@@ -3018,7 +3035,7 @@ class DatabaseService:
         if len(self._whitelist_cache) > self._WHITELIST_CACHE_MAX_SIZE:
             expired = [k for k, (_, ts) in self._whitelist_cache.items() if (now - ts) >= self._WHITELIST_CACHE_TTL]
             for k in expired:
-                del self._whitelist_cache[k]
+                self._whitelist_cache.pop(k, None)
 
         if not self.is_connected:
             return (False, None)
@@ -3079,7 +3096,8 @@ class DatabaseService:
                 result = (row is not None, None) if row else (False, None)
                 self._whitelist_cache[user_uuid] = (result, now)
                 return result
-        except Exception:
+        except Exception as e:
+            logger.debug("Whitelist legacy check failed for user: %s", e)
             return (False, None)
 
     async def add_to_violation_whitelist(

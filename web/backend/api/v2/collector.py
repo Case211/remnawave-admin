@@ -30,6 +30,7 @@ violation_detector = IntelligentViolationDetector(db_service, connection_monitor
 # Per-user cooldown for violation checks (avoid re-checking every 30s batch)
 _violation_check_cooldown: dict[str, datetime] = {}
 VIOLATION_CHECK_COOLDOWN_MINUTES = 5
+MAX_COOLDOWN_SIZE = 10000
 
 # Periodic cleanup of old violations
 _last_violation_cleanup: datetime = datetime.min
@@ -158,7 +159,7 @@ async def receive_connections(
 
     if report.node_uuid != node_uuid:
         logger.warning("Node UUID mismatch: token=%s, report=%s", node_uuid, report.node_uuid)
-        raise HTTPException(status_code=403, detail=f"Token does not match node UUID. Expected: {node_uuid}")
+        raise HTTPException(status_code=403, detail="Token does not match the reported node UUID")
 
     # System metrics
     if report.system_metrics:
@@ -329,6 +330,12 @@ async def receive_connections(
                     violation_score = await violation_detector.check_user(
                         user_uuid, window_minutes=60, excluded_analyzers=excluded_analyzers
                     )
+
+                    # Evict oldest 20% entries if cooldown dict is too large
+                    if len(_violation_check_cooldown) > MAX_COOLDOWN_SIZE:
+                        sorted_keys = sorted(_violation_check_cooldown, key=_violation_check_cooldown.get)
+                        for k in sorted_keys[:len(sorted_keys) // 5]:
+                            _violation_check_cooldown.pop(k, None)
 
                     # Update cooldown regardless of score
                     _violation_check_cooldown[user_uuid] = datetime.utcnow()
