@@ -5,9 +5,14 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    # Host mode: позволяет выполнять скрипты и терминал на хосте.
+    # Включите AGENT_HOST_MODE=true в .env для активации.
+    pid: "host"
+    privileged: true
     volumes:
       - /var/log/remnanode:/var/log/remnanode:ro
       - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - remnawave-network
     deploy:

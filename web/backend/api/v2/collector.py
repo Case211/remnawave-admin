@@ -30,6 +30,7 @@ violation_detector = IntelligentViolationDetector(db_service, connection_monitor
 # Per-user cooldown for violation checks (avoid re-checking every 30s batch)
 _violation_check_cooldown: dict[str, datetime] = {}
 VIOLATION_CHECK_COOLDOWN_MINUTES = 5
+MAX_COOLDOWN_SIZE = 10000
 
 # Periodic cleanup of old violations
 _last_violation_cleanup: datetime = datetime.min
@@ -150,7 +151,7 @@ async def receive_connections(
     node_uuid: str = Depends(verify_agent_token),
 ):
     """Принимает батч подключений от Node Agent."""
-    logger.debug(
+    logger.info(
         "Batch received: node=%s connections=%d metrics=%s",
         node_uuid[:8], len(report.connections) if report.connections else 0,
         "yes" if report.system_metrics else "no",
@@ -158,7 +159,7 @@ async def receive_connections(
 
     if report.node_uuid != node_uuid:
         logger.warning("Node UUID mismatch: token=%s, report=%s", node_uuid, report.node_uuid)
-        raise HTTPException(status_code=403, detail=f"Token does not match node UUID. Expected: {node_uuid}")
+        raise HTTPException(status_code=403, detail="Token does not match the reported node UUID")
 
     # System metrics
     if report.system_metrics:
@@ -236,7 +237,7 @@ async def receive_connections(
         logger.warning("Batch processed with errors: node=%s total=%d processed=%d errors=%d",
                        node_uuid, len(report.connections), processed, errors)
     else:
-        logger.debug("Batch processed: node=%s total=%d processed=%d", node_uuid[:8], len(report.connections), processed)
+        logger.info("Batch processed: node=%s total=%d processed=%d", node_uuid[:8], len(report.connections), processed)
 
     # Post-processing: auto-close old connections + violation detection
     if processed > 0:
@@ -330,6 +331,12 @@ async def receive_connections(
                         user_uuid, window_minutes=60, excluded_analyzers=excluded_analyzers
                     )
 
+                    # Evict oldest 20% entries if cooldown dict is too large
+                    if len(_violation_check_cooldown) > MAX_COOLDOWN_SIZE:
+                        sorted_keys = sorted(_violation_check_cooldown, key=_violation_check_cooldown.get)
+                        for k in sorted_keys[:len(sorted_keys) // 5]:
+                            _violation_check_cooldown.pop(k, None)
+
                     # Update cooldown regardless of score
                     _violation_check_cooldown[user_uuid] = datetime.utcnow()
 
@@ -419,12 +426,12 @@ async def receive_connections(
                                 is_vpn=asn.is_vpn if asn else False,
                                 hwid_score=hwid.score if hwid else None,
                             )
-                            logger.debug("Violation saved to DB for user %s: score=%.1f", user_uuid, violation_score.total)
+                            logger.info("Violation saved to DB for user %s: score=%.1f", user_uuid, violation_score.total)
                         except Exception as save_error:
                             logger.warning("Failed to save violation to DB for user %s: %s", user_uuid, save_error)
                     else:
                         if violation_score:
-                            logger.debug("User %s: score=%.1f (below threshold)", user_uuid, violation_score.total)
+                            logger.info("User %s: score=%.1f (below threshold %.1f)", user_uuid, violation_score.total, min_score)
                 except Exception as e:
                     logger.warning("Error checking violations for user %s: %s", user_uuid, e)
         except Exception as e:

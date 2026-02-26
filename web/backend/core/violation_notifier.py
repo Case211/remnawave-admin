@@ -101,7 +101,7 @@ async def send_violation_notification(
             from shared.database import db_service
             user_info = await db_service.get_user_by_uuid(user_uuid)
 
-        info = user_info.get("response", user_info) if user_info else {}
+        info = user_info if user_info else {}
         username = info.get("username", "n/a")
         email = info.get("email", "")
         telegram_id = info.get("telegramId")
@@ -139,17 +139,18 @@ async def send_violation_notification(
                 if hasattr(conn, "node_uuid") and conn.node_uuid:
                     node_uuids.add(conn.node_uuid)
 
-        # Resolve node names
+        # Resolve node names (single batch query instead of N individual queries)
         nodes_used = set()
         if node_uuids:
             try:
                 from shared.database import db_service
-                for node_uuid in node_uuids:
-                    node_info = await db_service.get_node_by_uuid(node_uuid)
+                nodes_map = await db_service.get_nodes_by_uuids(list(node_uuids))
+                for n_uuid in node_uuids:
+                    node_info = nodes_map.get(n_uuid)
                     if node_info and node_info.get("name"):
                         nodes_used.add(node_info.get("name"))
                     else:
-                        nodes_used.add(node_uuid[:8])
+                        nodes_used.add(n_uuid[:8])
             except Exception:
                 nodes_used = {uuid[:8] for uuid in node_uuids}
 

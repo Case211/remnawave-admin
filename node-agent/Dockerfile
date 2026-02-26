@@ -3,8 +3,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# procps нужен для pgrep в healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends procps \
+# procps — pgrep для healthcheck
+# util-linux — nsenter для host mode (выполнение команд на хосте)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    procps util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

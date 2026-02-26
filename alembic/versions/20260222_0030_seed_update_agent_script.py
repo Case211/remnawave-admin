@@ -26,14 +26,39 @@ UPDATE_AGENT_SCRIPT = {
     "script_content": r"""#!/bin/bash
 set -e
 
-AGENT_DIR="${AGENT_DIR:-/opt/node-agent}"
 SERVICE_NAME="${SERVICE_NAME:-remnawave-agent}"
 
 echo "=== Updating Remnawave Node Agent ==="
 
+# Auto-detect agent directory if not explicitly set
+if [ -z "$AGENT_DIR" ]; then
+    SEARCH_PATHS=(
+        /opt/node-agent
+        /opt/remnawave-node
+        /opt/remnawave-agent
+        /root/node-agent
+        /root/remnawave-node
+        /home/*/node-agent
+        /home/*/remnawave-node
+    )
+    for candidate in "${SEARCH_PATHS[@]}"; do
+        # Expand globs
+        for expanded in $candidate; do
+            if [ -d "$expanded/.git" ]; then
+                AGENT_DIR="$expanded"
+                echo "Auto-detected agent at: $AGENT_DIR"
+                break 2
+            fi
+        done
+    done
+fi
+
+AGENT_DIR="${AGENT_DIR:-/opt/node-agent}"
+
 if [ ! -d "$AGENT_DIR" ]; then
     echo "ERROR: Agent directory not found: $AGENT_DIR"
-    echo "Set AGENT_DIR env var if installed elsewhere."
+    echo "Searched common paths but could not find agent installation."
+    echo "Specify AGENT_DIR parameter when running this script."
     exit 1
 fi
 

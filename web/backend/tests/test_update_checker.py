@@ -12,9 +12,11 @@ def _reset_cache():
     """Reset module-level cache between tests."""
     uc._cache = {}
     uc._cache_ts = 0
+    uc._local_version = None
     yield
     uc._cache = {}
     uc._cache_ts = 0
+    uc._local_version = None
 
 
 class TestFetchLatestRelease:
@@ -74,8 +76,9 @@ class TestCheckForUpdates:
     """Tests for check_for_updates."""
 
     @pytest.mark.asyncio
+    @patch("web.backend.core.update_checker._detect_local_version", return_value="1.0.0")
     @patch("web.backend.core.update_checker._fetch_latest_release", new_callable=AsyncMock)
-    async def test_parses_version(self, mock_fetch):
+    async def test_parses_version(self, mock_fetch, _mock_local):
         mock_fetch.return_value = {
             "tag_name": "v2.0.0",
             "html_url": "https://github.com/example/releases/tag/v2.0.0",
@@ -84,7 +87,8 @@ class TestCheckForUpdates:
         }
 
         result = await uc.check_for_updates()
-        assert result["current_version"] == "2.0.0"
+        assert result["current_version"] == "1.0.0"
+        assert result["latest_version"] == "2.0.0"
         assert result["release_url"] == "https://github.com/example/releases/tag/v2.0.0"
         assert result["changelog"] == "New release"
 
@@ -93,7 +97,7 @@ class TestCheckForUpdates:
     async def test_fetch_failure_returns_fallback(self, mock_fetch):
         mock_fetch.return_value = None
         result = await uc.check_for_updates()
-        assert result["current_version"] == "unknown"
+        assert result["latest_version"] is None
         assert result["update_available"] is False
 
     @pytest.mark.asyncio
@@ -124,14 +128,13 @@ class TestGetLatestVersion:
     """Tests for get_latest_version."""
 
     @pytest.mark.asyncio
-    @patch("web.backend.core.update_checker.check_for_updates", new_callable=AsyncMock)
-    async def test_returns_version_string(self, mock_check):
-        mock_check.return_value = {"current_version": "3.1.0"}
+    @patch("web.backend.core.update_checker._detect_local_version", return_value="3.1.0")
+    async def test_returns_version_string(self, _mock_local):
         version = await uc.get_latest_version()
         assert version == "3.1.0"
 
     @pytest.mark.asyncio
-    async def test_returns_cached_version(self):
-        uc._cache = {"current_version": "2.5.0"}
+    @patch("web.backend.core.update_checker._detect_local_version", return_value="2.5.0")
+    async def test_returns_cached_version(self, _mock_local):
         version = await uc.get_latest_version()
         assert version == "2.5.0"

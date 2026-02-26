@@ -6,7 +6,7 @@
  * - Channel settings (per-admin)
  * - SMTP config (superadmin only)
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -36,13 +36,9 @@ import {
   type SmtpConfig,
 } from '@/api/notifications'
 import { cn } from '@/lib/utils'
+import { useFormatters } from '@/lib/useFormatters'
 
 // ── Helpers ────────────────────────────────────────────────────
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleString()
-}
 
 const SEVERITY_BADGE: Record<string, string> = {
   info: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
@@ -120,6 +116,7 @@ export default function Notifications() {
 
 function NotificationsTab() {
   const { t } = useTranslation()
+  const { formatDate } = useFormatters()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [filterRead, setFilterRead] = useState<string>('all')
@@ -245,7 +242,7 @@ function NotificationsTab() {
                       )}
                     </div>
                     {n.body && <p className="text-xs text-dark-300 mt-0.5">{n.body}</p>}
-                    <p className="text-[10px] text-dark-400 mt-1">{formatDate(n.created_at)}</p>
+                    <p className="text-[10px] text-dark-400 mt-1">{n.created_at ? formatDate(n.created_at) : '\u2014'}</p>
                   </div>
                   <button
                     onClick={() => deleteOne.mutate(n.id)}
@@ -284,6 +281,7 @@ function NotificationsTab() {
 
 function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; canCreate: boolean; canDelete: boolean }) {
   const { t } = useTranslation()
+  const { formatDate } = useFormatters()
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null)
@@ -718,6 +716,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
 
 function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
   const { t } = useTranslation()
+  const { formatDate } = useFormatters()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [filterAcknowledged, setFilterAcknowledged] = useState<string>('all')
@@ -815,7 +814,7 @@ function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
                       {log.threshold_value !== null && (
                         <span>{t('notifications.alerts.threshold')}: {log.threshold_value?.toFixed(1)}</span>
                       )}
-                      <span>{formatDate(log.created_at)}</span>
+                      <span>{log.created_at ? formatDate(log.created_at) : '\u2014'}</span>
                     </div>
                   </div>
                   {canEdit && !log.acknowledged && (
@@ -1088,20 +1087,22 @@ function SmtpConfigSection() {
   })
 
   // Populate form when data loads
-  const populatedRef = useState(false)
-  if (smtp && !populatedRef[0]) {
-    setForm({
-      host: smtp.host,
-      port: smtp.port,
-      username: smtp.username || '',
-      from_email: smtp.from_email,
-      from_name: smtp.from_name,
-      use_tls: smtp.use_tls,
-      use_ssl: smtp.use_ssl,
-      is_enabled: smtp.is_enabled,
-    })
-    populatedRef[1](true)
-  }
+  const [populated, setPopulated] = useState(false)
+  useEffect(() => {
+    if (smtp && !populated) {
+      setForm({
+        host: smtp.host,
+        port: smtp.port,
+        username: smtp.username || '',
+        from_email: smtp.from_email,
+        from_name: smtp.from_name,
+        use_tls: smtp.use_tls,
+        use_ssl: smtp.use_ssl,
+        is_enabled: smtp.is_enabled,
+      })
+      setPopulated(true)
+    }
+  }, [smtp, populated])
 
   return (
     <div className="space-y-4">
