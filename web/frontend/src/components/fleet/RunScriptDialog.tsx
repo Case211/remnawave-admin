@@ -1,11 +1,12 @@
 /**
  * RunScriptDialog — Select a target node, preview script, execute, view live output.
+ * Automatically detects configurable parameters (${VAR:-default}) and shows input fields.
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Play, RefreshCw, CheckCircle, XCircle, Clock, Server } from 'lucide-react'
+import { Play, RefreshCw, CheckCircle, XCircle, Clock, Server, Settings2 } from 'lucide-react'
 import client from '@/api/client'
 import {
   Dialog,
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Input } from '@/components/ui/input'
 import { getFleetAgents } from '@/api/fleet'
 import type { Script } from './ScriptCatalog'
 
@@ -32,10 +34,32 @@ interface RunScriptDialogProps {
   script: Script | null
 }
 
+interface ScriptParam {
+  name: string
+  defaultValue: string
+}
+
+/** Parse ${VAR:-default} patterns from script content. */
+function parseScriptParams(content: string): ScriptParam[] {
+  const seen = new Set<string>()
+  const params: ScriptParam[] = []
+  const regex = /\$\{(\w+):-([^}]*)\}/g
+  let match
+  while ((match = regex.exec(content)) !== null) {
+    const name = match[1]
+    if (!seen.has(name)) {
+      seen.add(name)
+      params.push({ name, defaultValue: match[2] })
+    }
+  }
+  return params
+}
+
 export default function RunScriptDialog({ open, onOpenChange, script }: RunScriptDialogProps) {
   const { t } = useTranslation()
   const [selectedNode, setSelectedNode] = useState<string>('')
   const [execId, setExecId] = useState<number | null>(null)
+  const [envVars, setEnvVars] = useState<Record<string, string>>({})
 
   // Fetch connected agents
   const { data: agents } = useQuery({
@@ -54,6 +78,12 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
     },
     enabled: open && !!script,
   })
+
+  // Parse configurable parameters from script
+  const scriptParams = useMemo(() => {
+    if (!scriptDetail?.script_content) return []
+    return parseScriptParams(scriptDetail.script_content)
+  }, [scriptDetail?.script_content])
 
   // Poll execution status
   const { data: execStatus } = useQuery({
@@ -75,9 +105,18 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
   const execMutation = useMutation({
     mutationFn: async () => {
       if (!script || !selectedNode) return
+      // Only send env_vars that differ from defaults
+      const overrides: Record<string, string> = {}
+      for (const param of scriptParams) {
+        const val = envVars[param.name]
+        if (val && val !== param.defaultValue) {
+          overrides[param.name] = val
+        }
+      }
       const { data } = await client.post('/fleet/exec-script', {
         script_id: script.id,
         node_uuid: selectedNode,
+        ...(Object.keys(overrides).length > 0 ? { env_vars: overrides } : {}),
       })
       return data
     },
@@ -97,6 +136,7 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
   const handleClose = () => {
     setSelectedNode('')
     setExecId(null)
+    setEnvVars({})
     onOpenChange(false)
   }
 
@@ -137,6 +177,40 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
               </SelectContent>
             </Select>
           </div>
+
+          {/* Script parameters */}
+          {scriptParams.length > 0 && !execId && (
+            <div>
+              <label className="text-xs text-dark-200 mb-1.5 flex items-center gap-1.5">
+                <Settings2 className="w-3 h-3" />
+                {t('fleet.scripts.parameters', 'Parameters')}
+              </label>
+              <div className="space-y-2">
+                {scriptParams.map((param) => (
+                  <div key={param.name} className="flex items-center gap-2">
+                    <code className="text-xs text-teal-400 min-w-[120px] font-mono shrink-0">
+                      {param.name}
+                    </code>
+                    <Input
+                      className="h-8 text-xs font-mono"
+                      placeholder={param.defaultValue}
+                      value={envVars[param.name] || ''}
+                      onChange={(e) =>
+                        setEnvVars((prev) => ({
+                          ...prev,
+                          [param.name]: e.target.value,
+                        }))
+                      }
+                      disabled={isRunning}
+                    />
+                  </div>
+                ))}
+                <p className="text-[10px] text-dark-400">
+                  {t('fleet.scripts.parametersHint', 'Leave empty to use defaults shown as placeholders')}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Script preview */}
           {scriptDetail?.script_content && (

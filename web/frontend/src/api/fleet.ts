@@ -178,10 +178,15 @@ export async function deleteScript(id: number): Promise<void> {
   await client.delete(`/fleet/scripts/${id}`)
 }
 
-export async function execScript(scriptId: number, nodeUuid: string) {
+export async function execScript(
+  scriptId: number,
+  nodeUuid: string,
+  envVars?: Record<string, string>,
+) {
   const { data } = await client.post('/fleet/exec-script', {
     script_id: scriptId,
     node_uuid: nodeUuid,
+    ...(envVars && Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
   })
   return data
 }

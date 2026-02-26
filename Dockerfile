@@ -26,6 +26,10 @@ COPY alembic ./alembic
 COPY alembic.ini .
 COPY scripts ./scripts
 
+# Write version at build time (pass via --build-arg or auto-detect from git tag)
+ARG APP_VERSION=unknown
+RUN echo "${APP_VERSION}" > /app/VERSION
+
 RUN mkdir -p /app/logs /app/geoip
 
 CMD ["python", "-m", "src.main"]

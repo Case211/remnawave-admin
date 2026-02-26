@@ -73,6 +73,7 @@ class ScriptUpdate(BaseModel):
 class ExecScriptRequest(BaseModel):
     script_id: int
     node_uuid: str
+    env_vars: Optional[dict] = None
 
 
 class ExecScriptResponse(BaseModel):
@@ -300,15 +301,36 @@ async def exec_script(
             RETURNING id
             """,
             body.node_uuid, admin_id, admin_username,
-            f"script={script['name']}",
+            f"script={script['name']}" + (f" env={list(body.env_vars.keys())}" if body.env_vars else ""),
         )
         exec_id = cmd_row["id"]
+
+    # Prepend env vars as export statements if provided
+    script_content = script["script_content"]
+    if body.env_vars:
+        import shlex
+        exports = "\n".join(
+            f"export {k}={shlex.quote(str(v))}"
+            for k, v in body.env_vars.items()
+            if k.isidentifier()
+        )
+        if exports:
+            # Insert exports after shebang line if present
+            if script_content.startswith("#!"):
+                first_nl = script_content.index("\n")
+                script_content = (
+                    script_content[:first_nl + 1]
+                    + exports + "\n"
+                    + script_content[first_nl + 1:]
+                )
+            else:
+                script_content = exports + "\n" + script_content
 
     # Send command to agent
     cmd_payload = {
         "type": "exec_script",
         "command_id": exec_id,
-        "script_content": script["script_content"],
+        "script_content": script_content,
         "timeout": script["timeout_seconds"],
     }
     payload_with_ts, sig = sign_command_with_ts(cmd_payload, agent_token)
