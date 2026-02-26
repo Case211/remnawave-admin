@@ -151,7 +151,7 @@ async def receive_connections(
     node_uuid: str = Depends(verify_agent_token),
 ):
     """Принимает батч подключений от Node Agent."""
-    logger.debug(
+    logger.info(
         "Batch received: node=%s connections=%d metrics=%s",
         node_uuid[:8], len(report.connections) if report.connections else 0,
         "yes" if report.system_metrics else "no",
@@ -237,7 +237,7 @@ async def receive_connections(
         logger.warning("Batch processed with errors: node=%s total=%d processed=%d errors=%d",
                        node_uuid, len(report.connections), processed, errors)
     else:
-        logger.debug("Batch processed: node=%s total=%d processed=%d", node_uuid[:8], len(report.connections), processed)
+        logger.info("Batch processed: node=%s total=%d processed=%d", node_uuid[:8], len(report.connections), processed)
 
     # Post-processing: auto-close old connections + violation detection
     if processed > 0:
@@ -426,12 +426,12 @@ async def receive_connections(
                                 is_vpn=asn.is_vpn if asn else False,
                                 hwid_score=hwid.score if hwid else None,
                             )
-                            logger.debug("Violation saved to DB for user %s: score=%.1f", user_uuid, violation_score.total)
+                            logger.info("Violation saved to DB for user %s: score=%.1f", user_uuid, violation_score.total)
                         except Exception as save_error:
                             logger.warning("Failed to save violation to DB for user %s: %s", user_uuid, save_error)
                     else:
                         if violation_score:
-                            logger.debug("User %s: score=%.1f (below threshold)", user_uuid, violation_score.total)
+                            logger.info("User %s: score=%.1f (below threshold %.1f)", user_uuid, violation_score.total, min_score)
                 except Exception as e:
                     logger.warning("Error checking violations for user %s: %s", user_uuid, e)
         except Exception as e:

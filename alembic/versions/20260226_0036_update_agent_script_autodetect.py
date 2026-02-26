@@ -19,33 +19,29 @@ down_revision: Union[str, None] = '0035'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-NEW_SCRIPT_CONTENT = r"""#!/bin/bash
+NEW_SCRIPT_CONTENT = r"""#!/bin/sh
 set -e
 
 SERVICE_NAME="${SERVICE_NAME:-remnawave-agent}"
 
 echo "=== Updating Remnawave Node Agent ==="
 
-# Auto-detect agent directory if not explicitly set
+# Auto-detect agent directory if not explicitly set (POSIX-compatible)
 if [ -z "$AGENT_DIR" ]; then
-    SEARCH_PATHS=(
-        /opt/node-agent
-        /opt/remnawave-node
-        /opt/remnawave-agent
-        /root/node-agent
-        /root/remnawave-node
-        /home/*/node-agent
+    for candidate in \
+        /opt/node-agent \
+        /opt/remnawave-node \
+        /opt/remnawave-agent \
+        /root/node-agent \
+        /root/remnawave-node \
+        /home/*/node-agent \
         /home/*/remnawave-node
-    )
-    for candidate in "${SEARCH_PATHS[@]}"; do
-        # Expand globs
-        for expanded in $candidate; do
-            if [ -d "$expanded/.git" ]; then
-                AGENT_DIR="$expanded"
-                echo "Auto-detected agent at: $AGENT_DIR"
-                break 2
-            fi
-        done
+    do
+        if [ -d "$candidate/.git" ]; then
+            AGENT_DIR="$candidate"
+            echo "Auto-detected agent at: $AGENT_DIR"
+            break
+        fi
     done
 fi
 
