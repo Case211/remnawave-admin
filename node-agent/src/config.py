@@ -71,3 +71,9 @@ class Settings(BaseSettings):
     # Секретный ключ для проверки HMAC подписи команд
     # Должен совпадать с WEB_SECRET_KEY на бэкенде
     ws_secret_key: str = ""  # AGENT_WS_SECRET_KEY
+
+    # ── Host Mode ──────────────────────────────────────────────
+    # Выполнять скрипты и терминал на ХОСТЕ, а не внутри контейнера.
+    # Требует: pid: "host" + privileged: true в docker-compose.
+    # Использует nsenter для доступа к namespace хоста.
+    host_mode: bool = False  # AGENT_HOST_MODE

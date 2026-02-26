@@ -154,11 +154,22 @@ class CommandRunner:
             })
             return
 
-        logger.info("Executing script (cmd_id=%s, timeout=%ds)", command_id, timeout)
+        logger.info("Executing script (cmd_id=%s, timeout=%ds, host_mode=%s)",
+                    command_id, timeout, self._settings.host_mode)
 
         try:
+            if self._settings.host_mode:
+                # Execute on HOST via nsenter (requires pid:host + privileged)
+                import shlex
+                shell_cmd = (
+                    "nsenter --target 1 --mount --uts --ipc --net --pid -- "
+                    f"/bin/sh -c {shlex.quote(script_content)}"
+                )
+            else:
+                shell_cmd = script_content
+
             proc = await asyncio.create_subprocess_shell(
-                script_content,
+                shell_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
@@ -227,7 +238,10 @@ class CommandRunner:
             })
 
         try:
-            await pty_manager.create_session(session_id, on_pty_output, cols, rows)
+            await pty_manager.create_session(
+                session_id, on_pty_output, cols, rows,
+                host_mode=self._settings.host_mode,
+            )
             await self._send({
                 "type": "command_result",
                 "command_id": command_id,

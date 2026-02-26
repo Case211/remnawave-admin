@@ -46,14 +46,21 @@ _install_sigchld_handler()
 class PTYSession:
     """Manages a single pseudo-terminal session."""
 
-    def __init__(self, session_id: str, on_output: Callable[[str, bytes], Awaitable[None]]):
+    def __init__(
+        self,
+        session_id: str,
+        on_output: Callable[[str, bytes], Awaitable[None]],
+        host_mode: bool = False,
+    ):
         """
         Args:
             session_id: Unique session identifier.
             on_output: Async callback(session_id, data_bytes) for output streaming.
+            host_mode: If True, spawn shell on host via nsenter.
         """
         self._session_id = session_id
         self._on_output = on_output
+        self._host_mode = host_mode
         self._master_fd: Optional[int] = None
         self._pid: Optional[int] = None
         self._running = False
@@ -114,9 +121,22 @@ class PTYSession:
             for var in ("BASH_ENV", "ENV", "PROMPT_COMMAND", "CDPATH"):
                 env.pop(var, None)
 
-            # Execute bash — on success this never returns
+            # Execute shell — on success this never returns
             try:
-                os.execve("/bin/bash", ["bash", "--login"], env)
+                if self._host_mode:
+                    # Launch bash on HOST via nsenter
+                    os.execve(
+                        "/usr/bin/nsenter",
+                        [
+                            "nsenter",
+                            "--target", "1",
+                            "--mount", "--uts", "--ipc", "--net", "--pid",
+                            "--", "/bin/bash", "--login",
+                        ],
+                        env,
+                    )
+                else:
+                    os.execve("/bin/bash", ["bash", "--login"], env)
             except Exception:
                 os._exit(1)
 
@@ -271,6 +291,7 @@ class PTYManager:
         on_output: Callable[[str, bytes], Awaitable[None]],
         cols: int = 80,
         rows: int = 24,
+        host_mode: bool = False,
     ) -> PTYSession:
         """Create and start a new PTY session."""
         async with self._lock:
@@ -285,7 +306,7 @@ class PTYManager:
                 logger.debug("PTY rate-limit: waiting %.2fs before fork", wait)
                 await asyncio.sleep(wait)
 
-            session = PTYSession(session_id, on_output)
+            session = PTYSession(session_id, on_output, host_mode=host_mode)
             await session.start(cols, rows)
             self._last_fork_time = time.monotonic()
             self._sessions[session_id] = session
