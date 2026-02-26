@@ -65,16 +65,10 @@ class TestListViolations:
     async def test_list_violations_success(self, app, client):
         from web.backend.api.deps import get_db
 
-        mock_conn = AsyncMock()
-        mock_conn.fetch = AsyncMock(return_value=MOCK_VIOLATIONS)
-        mock_conn.fetchval = AsyncMock(return_value=2)
-        mock_cm = AsyncMock()
-        mock_cm.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_cm.__aexit__ = AsyncMock(return_value=False)
-
         mock_db = MagicMock()
-        mock_db.acquire = MagicMock(return_value=mock_cm)
         mock_db.is_connected = True
+        mock_db.count_violations_for_period = AsyncMock(return_value=2)
+        mock_db.get_violations_for_period = AsyncMock(return_value=MOCK_VIOLATIONS)
 
         app.dependency_overrides[get_db] = lambda: mock_db
 
@@ -89,13 +83,8 @@ class TestListViolations:
 
         mock_db = MagicMock()
         mock_db.is_connected = True
-        mock_cm = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_conn.fetch = AsyncMock(return_value=[])
-        mock_conn.fetchval = AsyncMock(return_value=0)
-        mock_cm.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_cm.__aexit__ = AsyncMock(return_value=False)
-        mock_db.acquire = MagicMock(return_value=mock_cm)
+        mock_db.count_violations_for_period = AsyncMock(return_value=0)
+        mock_db.get_violations_for_period = AsyncMock(return_value=[])
         app.dependency_overrides[_get_db] = lambda: mock_db
 
         from httpx import ASGITransport, AsyncClient
