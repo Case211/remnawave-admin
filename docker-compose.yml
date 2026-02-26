@@ -6,6 +6,7 @@ services:
   bot:
     image: ghcr.io/case211/remnawave-admin:latest
     restart: unless-stopped
+    init: true
     environment:
       PYTHONPATH: /app
       BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN is required}
@@ -42,6 +43,12 @@ services:
     depends_on:
       remnawave-admin-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python -m src.main' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   remnawave-admin-db:
     container_name: remnawave-admin-db
@@ -86,6 +93,7 @@ services:
     image: ghcr.io/case211/remnawave-admin-web-backend:latest
     container_name: remnawave-web-backend
     restart: unless-stopped
+    init: true
     environment:
       - WEB_DEBUG=${WEB_DEBUG:-false}
       - WEB_SECRET_KEY=${WEB_SECRET_KEY:?WEB_SECRET_KEY is required for web panel}
@@ -127,6 +135,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     profiles:
       - web
 
@@ -134,6 +143,7 @@ services:
     image: ghcr.io/case211/remnawave-admin-web-frontend:latest
     container_name: remnawave-web-frontend
     restart: unless-stopped
+    init: true
     environment:
       - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
     volumes:

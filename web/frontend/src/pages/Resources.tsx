@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTabParam } from '@/lib/useTabParam'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
@@ -24,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { QueryError } from '@/components/QueryError'
 import { useHasPermission } from '@/components/PermissionGate'
 import { cn } from '@/lib/utils'
 import { useFormatters } from '@/lib/useFormatters'
@@ -59,7 +61,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
   const canDelete = useHasPermission('resources', 'delete')
 
   // Tab state
-  const [activeTab, setActiveTab] = useState('tokens')
+  const [activeTab, setActiveTab] = useTabParam('tokens', ['tokens', 'templates', 'snippets', 'profiles'])
 
   // ── API Tokens ──────────────────────────────────────────────────
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
@@ -68,7 +70,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
   const [deleteTokenConfirm, setDeleteTokenConfirm] = useState<string | null>(null)
   const [revealedTokens, setRevealedTokens] = useState<Set<string>>(new Set())
 
-  const { data: tokens = [], isLoading: tokensLoading, refetch: refetchTokens } = useQuery({
+  const { data: tokens = [], isLoading: tokensLoading, isError: isTokensError, refetch: refetchTokens } = useQuery({
     queryKey: ['tokens'],
     queryFn: resourcesApi.getTokens,
   })
@@ -129,7 +131,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
   const [editTemplateForm, setEditTemplateForm] = useState({ name: '', templateJson: '' })
   const [deleteTemplateConfirm, setDeleteTemplateConfirm] = useState<string | null>(null)
 
-  const { data: templates = [], isLoading: templatesLoading, refetch: refetchTemplates } = useQuery({
+  const { data: templates = [], isLoading: templatesLoading, isError: isTemplatesError, refetch: refetchTemplates } = useQuery({
     queryKey: ['templates'],
     queryFn: resourcesApi.getTemplates,
   })
@@ -205,7 +207,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
   const [editSnippetForm, setEditSnippetForm] = useState({ name: '', snippet: '' })
   const [deleteSnippetConfirm, setDeleteSnippetConfirm] = useState<string | null>(null)
 
-  const { data: snippets = [], isLoading: snippetsLoading, refetch: refetchSnippets } = useQuery({
+  const { data: snippets = [], isLoading: snippetsLoading, isError: isSnippetsError, refetch: refetchSnippets } = useQuery({
     queryKey: ['snippets'],
     queryFn: resourcesApi.getSnippets,
   })
@@ -283,10 +285,13 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
   const [viewingProfile, setViewingProfile] = useState<ConfigProfile | null>(null)
   const [computedConfig, setComputedConfig] = useState<unknown>(null)
 
-  const { data: configProfiles = [], isLoading: profilesLoading, refetch: refetchProfiles } = useQuery({
+  const { data: configProfiles = [], isLoading: profilesLoading, isError: isProfilesError, refetch: refetchProfiles } = useQuery({
     queryKey: ['config-profiles'],
     queryFn: resourcesApi.getConfigProfiles,
   })
+
+  const hasError = isTokensError || isTemplatesError || isSnippetsError || isProfilesError
+  const handleRetry = () => { refetchTokens(); refetchTemplates(); refetchSnippets(); refetchProfiles() }
 
   const viewComputedConfig = async (profile: ConfigProfile) => {
     try {
@@ -297,6 +302,22 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
     } catch {
       toast.error(t('resources.profiles.loadError'))
     }
+  }
+
+  if (hasError) {
+    return (
+      <div className={embedded ? 'space-y-4' : 'space-y-6'}>
+        {!embedded && (
+          <div className="page-header">
+            <div>
+              <h1 className="page-header-title">{t('resources.title')}</h1>
+              <p className="text-dark-200 mt-1">{t('resources.subtitle')}</p>
+            </div>
+          </div>
+        )}
+        <QueryError onRetry={handleRetry} />
+      </div>
+    )
   }
 
   return (

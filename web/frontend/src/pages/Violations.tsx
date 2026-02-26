@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTabParam } from '@/lib/useTabParam'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -48,7 +49,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { cn } from '@/lib/utils'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
-import { exportCSV, exportJSON } from '@/lib/export'
+import { exportJSON } from '@/lib/export'
 import Reports from './Reports'
 import type {
   Violation,
@@ -1547,7 +1548,7 @@ export default function Violations() {
   const queryClient = useQueryClient()
 
   // State
-  const [tab, setTab] = useState<Tab>('all')
+  const [tab, setTab] = useTabParam<Tab>('all', ['all', 'pending', 'top', 'reports', 'whitelist'])
   const [page, setPage] = useState(1)
   const [perPage] = useState(15)
   const [severity, setSeverity] = useState('')

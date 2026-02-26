@@ -23,6 +23,7 @@
     "reset": "Reset",
     "loading": "Loading...",
     "error": "Error",
+    "loadError": "Failed to load data. Please try again.",
     "retry": "Retry",
     "total": "Total",
     "online": "Online",

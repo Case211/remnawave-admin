@@ -69,7 +69,6 @@ const radiusOptions: { value: BorderRadius; label: string; preview: string }[] =
   { value: 'sharp', label: 'Sharp', preview: 'rounded-none' },
   { value: 'default', label: 'Default', preview: 'rounded' },
   { value: 'rounded', label: 'Rounded', preview: 'rounded-xl' },
-  { value: 'pill', label: 'Pill', preview: 'rounded-full' },
 ]
 
 const fontSizeOptions: { value: FontSize; label: string }[] = [

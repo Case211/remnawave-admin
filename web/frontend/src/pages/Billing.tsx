@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTabParam } from '@/lib/useTabParam'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
@@ -26,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { QueryError } from '@/components/QueryError'
 import { useHasPermission } from '@/components/PermissionGate'
 import { useFormatters } from '@/lib/useFormatters'
 
@@ -46,7 +48,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
   const canDelete = useHasPermission('billing', 'delete')
 
   // Tab state
-  const [activeTab, setActiveTab] = useState('providers')
+  const [activeTab, setActiveTab] = useTabParam('providers', ['providers', 'history', 'nodes'])
 
   // ── Providers ───────────────────────────────────────────────────
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
@@ -54,7 +56,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
   const [providerFormData, setProviderFormData] = useState({ name: '', faviconLink: '', loginUrl: '' })
   const [deleteProviderConfirm, setDeleteProviderConfirm] = useState<string | null>(null)
 
-  const { data: providers = [], isLoading: providersLoading, refetch: refetchProviders } = useQuery({
+  const { data: providers = [], isLoading: providersLoading, isError: isProvidersError, refetch: refetchProviders } = useQuery({
     queryKey: ['billing-providers'],
     queryFn: billingApi.getProviders,
   })
@@ -138,7 +140,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
   const [historyFormData, setHistoryFormData] = useState({ providerUuid: '', amount: '', billedAt: '' })
   const [deleteHistoryConfirm, setDeleteHistoryConfirm] = useState<string | null>(null)
 
-  const { data: history = [], isLoading: historyLoading, refetch: refetchHistory } = useQuery({
+  const { data: history = [], isLoading: historyLoading, isError: isHistoryError, refetch: refetchHistory } = useQuery({
     queryKey: ['billing-history'],
     queryFn: billingApi.getHistory,
   })
@@ -188,7 +190,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
   const [nodeFormData, setNodeFormData] = useState({ providerUuid: '', nodeUuid: '', nextBillingAt: '' })
   const [deleteNodeConfirm, setDeleteNodeConfirm] = useState<string | null>(null)
 
-  const { data: nodesData, isLoading: nodesLoading, refetch: refetchNodes } = useQuery({
+  const { data: nodesData, isLoading: nodesLoading, isError: isNodesError, refetch: refetchNodes } = useQuery({
     queryKey: ['billing-nodes'],
     queryFn: billingApi.getNodes,
   })
@@ -239,6 +241,25 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
 
   const billingNodes = Array.isArray(nodesData?.billingNodes) ? nodesData.billingNodes : []
   const stats = nodesData?.stats
+
+  const hasError = isProvidersError || isHistoryError || isNodesError
+  const handleRetry = () => { refetchProviders(); refetchHistory(); refetchNodes() }
+
+  if (hasError) {
+    return (
+      <div className={embedded ? 'space-y-4' : 'space-y-6'}>
+        {!embedded && (
+          <div className="page-header">
+            <div>
+              <h1 className="page-header-title">{t('billing.title')}</h1>
+              <p className="text-dark-200 mt-1">{t('billing.subtitle')}</p>
+            </div>
+          </div>
+        )}
+        <QueryError onRetry={handleRetry} />
+      </div>
+    )
+  }
 
   return (
     <div className={embedded ? 'space-y-4' : 'space-y-6'}>

@@ -670,9 +670,6 @@
 [data-radius="rounded"] {
   --radius: 0.75rem;
 }
-[data-radius="pill"] {
-  --radius: 9999px;
-}
 
 /* --- Font Size --- */
 [data-font-size="small"] {

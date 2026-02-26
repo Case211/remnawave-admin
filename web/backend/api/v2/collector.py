@@ -129,8 +129,8 @@ async def verify_agent_token(
                 )
                 if row:
                     node_name_hint = f" (possible node: {row['name']} / {row['address']})"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to resolve node name by IP: %s", e)
         logger.warning(
             "Invalid agent token attempted: %s from %s%s",
             token[:8] + "...", client_ip, node_name_hint,

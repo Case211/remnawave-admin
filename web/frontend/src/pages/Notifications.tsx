@@ -36,6 +36,7 @@ import {
   type SmtpConfig,
 } from '@/api/notifications'
 import { cn } from '@/lib/utils'
+import { QueryError } from '@/components/QueryError'
 import { useFormatters } from '@/lib/useFormatters'
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -127,7 +128,7 @@ function NotificationsTab() {
   if (filterRead === 'read') params.is_read = true
   if (filterSeverity !== 'all') params.severity = filterSeverity
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['notifications', params],
     queryFn: () => notificationsApi.list(params as Parameters<typeof notificationsApi.list>[0]),
     refetchInterval: 15000,
@@ -215,6 +216,8 @@ function NotificationsTab() {
             <div className="p-4 space-y-3">
               {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
             </div>
+          ) : isError ? (
+            <div className="p-4"><QueryError onRetry={refetch} /></div>
           ) : items.length === 0 ? (
             <div className="py-16 text-center text-dark-300">
               <Bell className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -287,7 +290,7 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
-  const { data: rules = [], isLoading } = useQuery({
+  const { data: rules = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['alert-rules'],
     queryFn: () => notificationsApi.listAlertRules(),
   })
@@ -332,6 +335,8 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
         </div>
+      ) : isError ? (
+        <QueryError onRetry={refetch} />
       ) : rules.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-dark-300">
@@ -725,7 +730,7 @@ function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
   if (filterAcknowledged === 'unacked') params.acknowledged = false
   if (filterAcknowledged === 'acked') params.acknowledged = true
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['alert-logs', params],
     queryFn: () => notificationsApi.listAlertLogs(params as Parameters<typeof notificationsApi.listAlertLogs>[0]),
     refetchInterval: 15000,
@@ -781,6 +786,8 @@ function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
             <div className="p-4 space-y-3">
               {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
+          ) : isError ? (
+            <div className="p-4"><QueryError onRetry={refetch} /></div>
           ) : items.length === 0 ? (
             <div className="py-16 text-center text-dark-300">
               <CheckCircle2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -850,7 +857,7 @@ function ChannelsTab() {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const isSuperadmin = usePermissionStore((s) => s.role) === 'superadmin'
 
-  const { data: channels = [], isLoading } = useQuery({
+  const { data: channels = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['notification-channels'],
     queryFn: () => notificationsApi.listChannels(),
   })
@@ -895,6 +902,8 @@ function ChannelsTab() {
           <div className="space-y-3">
             {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
           </div>
+        ) : isError ? (
+          <QueryError onRetry={refetch} />
         ) : channels.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-dark-300">
@@ -1057,7 +1066,7 @@ function SmtpConfigSection() {
   const queryClient = useQueryClient()
   const [testEmail, setTestEmail] = useState('')
 
-  const { data: smtp } = useQuery({
+  const { data: smtp, isError: isSmtpError, refetch: refetchSmtp } = useQuery({
     queryKey: ['smtp-config'],
     queryFn: () => notificationsApi.getSmtpConfig(),
     retry: false,
@@ -1103,6 +1112,18 @@ function SmtpConfigSection() {
       setPopulated(true)
     }
   }, [smtp, populated])
+
+  if (isSmtpError) {
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Mail className="w-5 h-5 text-cyan-400" />
+          {t('notifications.smtp.title')}
+        </h3>
+        <QueryError onRetry={refetchSmtp} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

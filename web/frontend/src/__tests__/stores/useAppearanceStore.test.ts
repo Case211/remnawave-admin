@@ -57,8 +57,8 @@ describe('useAppearanceStore', () => {
 
   describe('setBorderRadius', () => {
     it('updates border radius', () => {
-      useAppearanceStore.getState().setBorderRadius('pill')
-      expect(useAppearanceStore.getState().borderRadius).toBe('pill')
+      useAppearanceStore.getState().setBorderRadius('rounded')
+      expect(useAppearanceStore.getState().borderRadius).toBe('rounded')
     })
   })
 
@@ -103,7 +103,7 @@ describe('useAppearanceStore', () => {
     it('resets all settings to defaults', () => {
       useAppearanceStore.getState().setTheme('rose')
       useAppearanceStore.getState().setDensity('spacious')
-      useAppearanceStore.getState().setBorderRadius('pill')
+      useAppearanceStore.getState().setBorderRadius('rounded')
       useAppearanceStore.getState().setFontSize('large')
       useAppearanceStore.getState().setAnimationsEnabled(false)
       useAppearanceStore.getState().setSidebarCollapsed(true)

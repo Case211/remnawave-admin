@@ -221,8 +221,8 @@ class DatabaseService:
             settings = get_settings()
             min_size = getattr(settings, 'db_pool_min_size', min_size)
             max_size = getattr(settings, 'db_pool_max_size', max_size)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Pool settings from config unavailable: %s", e)
 
         async with self._lock:
             if self._pool is not None:

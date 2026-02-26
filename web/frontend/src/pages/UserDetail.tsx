@@ -882,6 +882,16 @@ export default function UserDetail() {
   const { uuid } = useParams<{ uuid: string }>()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+
+  const goBack = () => {
+    // If we came from another page in the app, go back in history
+    // Otherwise fallback to /users
+    if (window.history.state?.idx > 0) {
+      navigate(-1)
+    } else {
+      navigate('/users')
+    }
+  }
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
@@ -1270,7 +1280,7 @@ export default function UserDetail() {
             <AlertTriangle className="h-5 w-5 text-red-400" />
             <p className="text-red-400 font-medium">{t('userDetail.notFound')}</p>
           </div>
-          <Button variant="link" onClick={() => navigate('/users')} className="px-0">
+          <Button variant="link" onClick={goBack} className="px-0">
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t('userDetail.backToList')}
           </Button>
@@ -1292,7 +1302,7 @@ export default function UserDetail() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate('/users')}
+            onClick={goBack}
             className="flex-shrink-0"
           >
             <ArrowLeft className="h-5 w-5" />

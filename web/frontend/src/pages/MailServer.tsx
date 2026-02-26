@@ -34,6 +34,7 @@ import {
   type InboxItem,
   type SmtpCredential,
 } from '@/api/mailserver'
+import { QueryError } from '@/components/QueryError'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ function DomainsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; can
   const [selectedDomain, setSelectedDomain] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
-  const { data: domains, isLoading } = useQuery({
+  const { data: domains, isLoading, isError, refetch } = useQuery({
     queryKey: ['mailserver-domains'],
     queryFn: mailserverApi.listDomains,
   })
@@ -162,6 +163,7 @@ function DomainsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; can
   })
 
   if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-32 w-full" />)}</div>
+  if (isError) return <QueryError onRetry={refetch} />
 
   return (
     <div className="space-y-4">
@@ -486,7 +488,7 @@ function QueueTab({ canEdit }: { canEdit: boolean; canDelete: boolean }) {
     refetchInterval: 10000,
   })
 
-  const { data: queue, isLoading } = useQuery({
+  const { data: queue, isLoading, isError, refetch } = useQuery({
     queryKey: ['mailserver-queue', statusFilter],
     queryFn: () => mailserverApi.listQueue({
       status: statusFilter === 'all' ? undefined : statusFilter,
@@ -553,6 +555,8 @@ function QueueTab({ canEdit }: { canEdit: boolean; canDelete: boolean }) {
       {/* Queue list */}
       {isLoading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
+      ) : isError ? (
+        <QueryError onRetry={refetch} />
       ) : !queue?.length ? (
         <Card className="bg-dark-700/50 border-dark-400/20">
           <CardContent className="py-12 text-center">
@@ -619,7 +623,7 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
-  const { data: inbox, isLoading } = useQuery({
+  const { data: inbox, isLoading, isError, refetch } = useQuery({
     queryKey: ['mailserver-inbox'],
     queryFn: () => mailserverApi.listInbox({ limit: 100 }),
     refetchInterval: 30000,
@@ -656,6 +660,7 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
   }
 
   if (isLoading) return <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
+  if (isError) return <QueryError onRetry={refetch} />
 
   return (
     <div className="space-y-4">
@@ -923,7 +928,7 @@ function CredentialsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean;
   const [formDomains, setFormDomains] = useState('')
   const [formMaxPerHour, setFormMaxPerHour] = useState(100)
 
-  const { data: credentials, isLoading } = useQuery({
+  const { data: credentials, isLoading, isError, refetch } = useQuery({
     queryKey: ['mailserver-smtp-credentials'],
     queryFn: mailserverApi.listSmtpCredentials,
   })
@@ -1004,6 +1009,7 @@ function CredentialsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean;
   })
 
   if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
+  if (isError) return <QueryError onRetry={refetch} />
 
   return (
     <div className="space-y-4">

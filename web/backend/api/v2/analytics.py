@@ -330,7 +330,7 @@ async def get_overview(
     try:
         return await _compute_overview()
     except Exception as e:
-        logger.error("Error getting overview stats: %s", e)
+        logger.error("Error getting overview stats: %s", e, exc_info=True)
         return OverviewStats()
 
 
@@ -443,7 +443,7 @@ async def get_traffic_stats(
     try:
         return await _compute_traffic()
     except Exception as e:
-        logger.error("Error getting traffic stats: %s", e)
+        logger.error("Error getting traffic stats: %s", e, exc_info=True)
         return TrafficStats()
 
 
@@ -578,7 +578,7 @@ async def get_timeseries(
             )
 
     except Exception as e:
-        logger.error("Error getting timeseries: %s", e)
+        logger.error("Error getting timeseries: %s", e, exc_info=True)
         return TimeseriesResponse(period=period, metric=metric)
 
 
@@ -722,7 +722,7 @@ async def get_delta_stats(
     try:
         return await _compute_deltas()
     except Exception as e:
-        logger.error("Error getting delta stats: %s", e)
+        logger.error("Error getting delta stats: %s", e, exc_info=True)
         return DeltaStats()
 
 
@@ -844,14 +844,16 @@ async def get_node_fleet(
             if last_seen and not isinstance(last_seen, str):
                 try:
                     last_seen = last_seen.isoformat()
-                except Exception:
+                except Exception as e:
+                    logger.debug("Date conversion failed: %s", e)
                     last_seen = str(last_seen)
 
             metrics_updated = n.get('metrics_updated_at')
             if metrics_updated and not isinstance(metrics_updated, str):
                 try:
                     metrics_updated = metrics_updated.isoformat()
-                except Exception:
+                except Exception as e:
+                    logger.debug("Date conversion failed: %s", e)
                     metrics_updated = str(metrics_updated)
 
             # Derive is_xray_running: Panel API doesn't provide this field,
@@ -910,7 +912,7 @@ async def get_node_fleet(
         )
 
     except Exception as e:
-        logger.error("Error getting node fleet: %s", e)
+        logger.error("Error getting node fleet: %s", e, exc_info=True)
         return NodeFleetResponse()
 
 
@@ -959,8 +961,8 @@ async def get_system_components(
             try:
                 users = await db_service.get_all_users(limit=1)
                 users_count = len(users) if users else 0
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("DB query failed: %s", e)
             pool_info = {}
             try:
                 pool = db_service._pool
@@ -971,8 +973,8 @@ async def get_system_components(
                         "min_size": pool.get_min_size(),
                         "max_size": pool.get_max_size(),
                     }
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to get system info: %s", e)
             components.append(SystemComponentStatus(
                 name="PostgreSQL",
                 status="online",
@@ -1017,7 +1019,8 @@ async def get_system_components(
             status="online",
             details={"active_connections": ws_count},
         ))
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to get system info: %s", e)
         components.append(SystemComponentStatus(
             name="WebSocket",
             status="unknown",
@@ -1030,8 +1033,8 @@ async def get_system_components(
         import psutil
         p = psutil.Process()
         uptime = int(time.time() - p.create_time())
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to get system info: %s", e)
 
     version = await get_latest_version()
 

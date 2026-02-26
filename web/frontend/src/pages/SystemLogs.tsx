@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTabParam } from '@/lib/useTabParam'
 import { useTranslation } from 'react-i18next'
 import {
   Search,
@@ -34,6 +35,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { QueryError } from '@/components/QueryError'
 import { logsApi, type LogEntry, type LogFile } from '@/api/logs'
 import { useAuthStore } from '@/store/authStore'
 
@@ -61,7 +63,7 @@ const LEVEL_BADGE_COLORS: Record<string, string> = {
 export default function SystemLogs() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<LogTab>('backend')
+  const [activeTab, setActiveTab] = useTabParam<LogTab>('backend', ['backend', 'bot', 'frontend', 'violations', 'postgres'])
   const [levelFilter, setLevelFilter] = useState<string>('all')
   const [searchText, setSearchText] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -81,7 +83,7 @@ export default function SystemLogs() {
   })
 
   // Fetch initial log lines
-  const { data: initialData, refetch } = useQuery({
+  const { data: initialData, isError, refetch } = useQuery({
     queryKey: ['logs-tail', activeTab, levelFilter, searchText],
     queryFn: () =>
       logsApi.tail({
@@ -303,6 +305,8 @@ export default function SystemLogs() {
           </Button>
         </div>
       </div>
+
+      {isError && <QueryError onRetry={refetch} />}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange}>
