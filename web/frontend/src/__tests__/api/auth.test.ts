@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import axios, { AxiosError } from 'axios'
+import { AxiosError } from 'axios'
 
 // Mock the client module
 vi.mock('@/api/client', () => ({

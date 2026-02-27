@@ -26,9 +26,11 @@ COPY alembic ./alembic
 COPY alembic.ini .
 COPY scripts ./scripts
 
-# Write version at build time (pass via --build-arg or auto-detect from git tag)
-ARG APP_VERSION=unknown
-RUN echo "${APP_VERSION}" > /app/VERSION
+# Copy VERSION file from repo (updated at release time)
+COPY VERSION .
+# Optional: override version at build time via --build-arg
+ARG APP_VERSION=""
+RUN if [ -n "${APP_VERSION}" ] && [ "${APP_VERSION}" != "unknown" ]; then echo "${APP_VERSION}" > /app/VERSION; fi
 
 RUN mkdir -p /app/logs /app/geoip
 

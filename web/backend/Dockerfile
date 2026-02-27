@@ -22,9 +22,11 @@ RUN pip install --no-cache-dir -r /app/web/backend/requirements.txt
 COPY shared/ /app/shared/
 COPY web/backend/ /app/web/backend/
 
-# Write version at build time (pass via --build-arg or auto-detect from git tag)
-ARG APP_VERSION=unknown
-RUN echo "${APP_VERSION}" > /app/VERSION
+# Copy VERSION file from repo (updated at release time)
+COPY VERSION /app/VERSION
+# Optional: override version at build time via --build-arg
+ARG APP_VERSION=""
+RUN if [ -n "${APP_VERSION}" ] && [ "${APP_VERSION}" != "unknown" ]; then echo "${APP_VERSION}" > /app/VERSION; fi
 
 # Copy Alembic migrations (auto-run on startup)
 COPY alembic/ /app/alembic/

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type UIDensity = 'compact' | 'comfortable' | 'spacious'
-export type BorderRadius = 'sharp' | 'default' | 'rounded' | 'pill'
+export type BorderRadius = 'sharp' | 'default' | 'rounded'
 export type FontSize = 'small' | 'default' | 'large'
 export type ThemePreset = 'cyan' | 'emerald' | 'violet' | 'rose' | 'amber' | 'blue' | 'light'
 

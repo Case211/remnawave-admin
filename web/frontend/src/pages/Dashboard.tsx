@@ -703,7 +703,7 @@ function UpdateCheckerCard() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-dark-200">{t('dashboard.currentVersion')}</p>
-            <p className="text-lg font-bold text-white">v{updateInfo.current_version}</p>
+            <p className="text-lg font-bold text-white">{updateInfo.current_version && updateInfo.current_version !== 'unknown' ? `v${updateInfo.current_version}` : updateInfo.current_version}</p>
           </div>
           {updateInfo.update_available && updateInfo.latest_version ? (
             <a

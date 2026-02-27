@@ -28,7 +28,8 @@ def _get_global_telegram_config(topic_type: str = "service") -> tuple:
         chat_id = settings.notifications_chat_id or None
         topic_id = settings.get_topic_for(topic_type)
         return bot_token, chat_id, topic_id
-    except Exception:
+    except Exception as e:
+        logger.debug("Telegram config not available: %s", e)
         return None, None, None
 
 
@@ -44,7 +45,7 @@ async def _get_smtp_config() -> Optional[Dict[str, Any]]:
             )
             return dict(row) if row else None
     except Exception as e:
-        logger.error("Failed to load SMTP config: %s", e)
+        logger.error("Failed to load SMTP config: %s", e, exc_info=True)
         return None
 
 
@@ -160,13 +161,13 @@ async def send_email(
             server.quit()
             return True
         except Exception as e:
-            logger.error("SMTP send failed to %s: %s", to_email, e)
+            logger.error("SMTP send failed to %s: %s", to_email, e, exc_info=True)
             return False
 
     try:
         return await asyncio.get_event_loop().run_in_executor(None, _send)
     except Exception as e:
-        logger.error("Email send error: %s", e)
+        logger.error("Email send error: %s", e, exc_info=True)
         return False
 
 
@@ -222,10 +223,10 @@ async def send_telegram(
             if resp.status_code == 200:
                 logger.info("Telegram notification sent to chat_id=%s", chat_id)
                 return True
-            logger.error("Telegram send failed (chat_id=%s): %s %s", chat_id, resp.status_code, resp.text)
+            logger.error("Telegram send failed (chat_id=%s): %s %s", chat_id, resp.status_code, resp.text, exc_info=True)
             return False
     except Exception as e:
-        logger.error("Telegram notification error (chat_id=%s): %s", chat_id, e)
+        logger.error("Telegram notification error (chat_id=%s): %s", chat_id, e, exc_info=True)
         return False
 
 
@@ -277,10 +278,10 @@ async def send_webhook(
 
             if resp.status_code < 300:
                 return True
-            logger.error("Webhook send failed: %s %s", resp.status_code, resp.text[:200])
+            logger.error("Webhook send failed: %s %s", resp.status_code, resp.text[:200], exc_info=True)
             return False
     except Exception as e:
-        logger.error("Webhook notification error: %s", e)
+        logger.error("Webhook notification error: %s", e, exc_info=True)
         return False
 
 
@@ -405,7 +406,7 @@ async def create_notification(
                 else:
                     logger.debug("No admin_accounts found for external dispatch")
             except Exception as e:
-                logger.error("Failed to dispatch to admin channels: %s", e)
+                logger.error("Failed to dispatch to admin channels: %s", e, exc_info=True)
 
         # Global channel fallback: send to NOTIFICATIONS_CHAT_ID for Telegram
         # This ensures alerts reach the configured Telegram chat even if
@@ -418,7 +419,7 @@ async def create_notification(
             )
 
     except Exception as e:
-        logger.error("Failed to create notification: %s", e)
+        logger.error("Failed to create notification: %s", e, exc_info=True)
 
     return notification_id
 
@@ -443,7 +444,7 @@ async def _send_to_global_telegram(title: str, body: str, severity: str, topic_t
         else:
             logger.warning("Global Telegram notification failed for chat_id=%s", chat_id)
     except Exception as e:
-        logger.error("Global Telegram dispatch error: %s", e)
+        logger.error("Global Telegram dispatch error: %s", e, exc_info=True)
 
 
 async def _dispatch_external(
@@ -507,7 +508,7 @@ async def _dispatch_external(
                     else:
                         logger.warning("Email channel for admin %s has no email in config", admin_id)
             except Exception as e:
-                logger.error("Channel dispatch error (%s, admin=%s): %s", ch_type, admin_id, e)
+                logger.error("Channel dispatch error (%s, admin=%s): %s", ch_type, admin_id, e, exc_info=True)
 
     except Exception as e:
-        logger.error("External dispatch failed for admin %s: %s", admin_id, e)
+        logger.error("External dispatch failed for admin %s: %s", admin_id, e, exc_info=True)

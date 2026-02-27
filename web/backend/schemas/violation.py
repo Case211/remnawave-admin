@@ -42,6 +42,7 @@ class ViolationListItem(ViolationBase):
     severity: ViolationSeverity = ViolationSeverity.LOW
     action_taken: Optional[str] = None
     notified: bool = False
+    reasons: List[str] = []
 
     @staticmethod
     def get_severity(score: float) -> ViolationSeverity:
@@ -119,6 +120,7 @@ class ViolationUserSummary(BaseModel):
     avg_score: float
     last_violation_at: datetime
     actions: List[str] = []
+    top_reasons: List[str] = []
 
 
 class IPLookupRequest(BaseModel):

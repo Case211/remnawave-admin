@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { InfoTooltip } from '@/components/InfoTooltip'
+import { QueryError } from '@/components/QueryError'
 import { cn } from '@/lib/utils'
 import { useChartTheme } from '@/lib/useChartTheme'
 import { useFormatters } from '@/lib/useFormatters'
@@ -138,7 +139,7 @@ function GeoMapCard() {
   const [geoPeriod, setGeoPeriod] = useState('7d')
   const chart = useChartTheme()
 
-  const { data: geoData, isLoading } = useQuery({
+  const { data: geoData, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-geo', geoPeriod],
     queryFn: () => advancedAnalyticsApi.geo(geoPeriod),
     staleTime: 60_000,
@@ -189,6 +190,8 @@ function GeoMapCard() {
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-[400px] w-full rounded-lg" />
+        ) : isError ? (
+          <QueryError onRetry={refetch} />
         ) : cities.length === 0 && countries.length === 0 ? (
           <div className="h-[400px] flex items-center justify-center text-muted-foreground">
             <div className="text-center">
@@ -522,7 +525,7 @@ function TopUsersCard() {
   const navigate = useNavigate()
   const [limit, setLimit] = useState(20)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-top-users', limit],
     queryFn: () => advancedAnalyticsApi.topUsers(limit),
     staleTime: 30_000,
@@ -560,6 +563,8 @@ function TopUsersCard() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
+        ) : isError ? (
+          <QueryError onRetry={refetch} />
         ) : items.length === 0 ? (
           <div className="h-48 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
@@ -672,7 +677,7 @@ function TrendsCard() {
   const [period, setPeriod] = useState('30d')
   const chart = useChartTheme()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-trends', metric, period],
     queryFn: () => advancedAnalyticsApi.trends(metric, period),
     staleTime: 60_000,
@@ -752,6 +757,8 @@ function TrendsCard() {
 
         {isLoading ? (
           <Skeleton className="h-64 w-full" />
+        ) : isError ? (
+          <QueryError onRetry={refetch} />
         ) : chartData.length === 0 ? (
           <div className="h-64 flex items-center justify-center text-muted-foreground">
             {t('analytics.trends.noData')}
@@ -816,7 +823,7 @@ function SharedHwidsCard() {
   const [search, setSearch] = useState('')
   const [expandedHwid, setExpandedHwid] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-shared-hwids'],
     queryFn: () => advancedAnalyticsApi.sharedHwids(),
     staleTime: 60_000,
@@ -883,6 +890,8 @@ function SharedHwidsCard() {
               <Skeleton key={i} className="h-14 w-full" />
             ))}
           </div>
+        ) : isError ? (
+          <QueryError onRetry={refetch} />
         ) : filtered.length === 0 ? (
           <div className="h-48 flex items-center justify-center text-muted-foreground">
             <div className="text-center">

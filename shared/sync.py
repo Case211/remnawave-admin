@@ -343,31 +343,49 @@ class SyncService:
     async def sync_hosts(self) -> int:
         """
         Sync all hosts from API to database.
+        Removes local hosts that no longer exist in API.
         Returns number of synced hosts.
         """
         if not db_service.is_connected:
             return 0
-        
+
         try:
             # Fetch all hosts from API
             response = await api_client.get_hosts(skip_cache=True)
             hosts = response.get("response", [])
-            
+
+            # Collect API host UUIDs for reconciliation
+            api_host_uuids = set()
+
             total_synced = 0
             for host in hosts:
+                host_uuid = host.get("uuid")
+                if host_uuid:
+                    api_host_uuids.add(host_uuid)
                 try:
                     await db_service.upsert_host({"response": host})
                     total_synced += 1
                 except Exception as e:
                     logger.warning("Failed to sync host %s: %s", host.get("uuid"), e)
-            
+
+            # Remove local hosts that no longer exist in API
+            try:
+                local_hosts = await db_service.get_all_hosts()
+                for local_host in local_hosts:
+                    local_uuid = local_host.get("uuid")
+                    if local_uuid and local_uuid not in api_host_uuids:
+                        await db_service.delete_host(local_uuid)
+                        logger.info("Removed stale host %s from local DB (not in API)", local_uuid)
+            except Exception as e:
+                logger.warning("Failed to reconcile stale hosts: %s", e)
+
             # Update sync metadata
             await db_service.update_sync_metadata(
                 key="hosts",
                 status="success",
                 records_synced=total_synced
             )
-            
+
             logger.debug("Synced %d hosts", total_synced)
             return total_synced
             

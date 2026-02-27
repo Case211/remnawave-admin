@@ -137,7 +137,7 @@ async def send_violation_notification(
             for conn in active_connections:
                 unique_ips.add(str(conn.ip_address))
                 if hasattr(conn, "node_uuid") and conn.node_uuid:
-                    node_uuids.add(conn.node_uuid)
+                    node_uuids.add(str(conn.node_uuid))
 
         # Resolve node names (single batch query instead of N individual queries)
         nodes_used = set()
@@ -150,9 +150,9 @@ async def send_violation_notification(
                     if node_info and node_info.get("name"):
                         nodes_used.add(node_info.get("name"))
                     else:
-                        nodes_used.add(n_uuid[:8])
+                        nodes_used.add(str(n_uuid)[:8])
             except Exception:
-                nodes_used = {uuid[:8] for uuid in node_uuids}
+                nodes_used = {str(u)[:8] for u in node_uuids}
 
         # Device info from breakdown
         os_list = []

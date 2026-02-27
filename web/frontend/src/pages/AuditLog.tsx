@@ -46,6 +46,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
+import { QueryError } from '@/components/QueryError'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { exportCSV, exportJSON } from '@/lib/export'
 import { auditApi, type AuditLogEntry, type AuditLogParams } from '@/api/audit'
@@ -229,19 +230,19 @@ export default function AuditLog() {
     return p
   }, [page, search, resourceFilter, actionFilter, periodFilter])
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError: isDataError, refetch } = useQuery({
     queryKey: ['audit-logs', params],
     queryFn: () => auditApi.list(params),
     refetchInterval: 15000,
   })
 
-  const { data: stats } = useQuery({
+  const { data: stats, isError: isStatsError, refetch: refetchStats } = useQuery({
     queryKey: ['audit-stats'],
     queryFn: () => auditApi.stats(),
     staleTime: 30000,
   })
 
-  const { data: actions } = useQuery({
+  const { data: actions, isError: isActionsError, refetch: refetchActions } = useQuery({
     queryKey: ['audit-actions'],
     queryFn: () => auditApi.actions(),
     staleTime: 60000,
@@ -308,6 +309,9 @@ export default function AuditLog() {
     [items, t],
   )
 
+  const hasError = isDataError || isStatsError || isActionsError
+  const handleRetry = () => { refetch(); refetchStats(); refetchActions() }
+
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
       {/* Header */}
@@ -324,6 +328,8 @@ export default function AuditLog() {
           disabled={items.length === 0}
         />
       </div>
+
+      {hasError && <QueryError onRetry={handleRetry} />}
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

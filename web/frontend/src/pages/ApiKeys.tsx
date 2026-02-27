@@ -103,7 +103,7 @@ function ApiKeysTab() {
           </Button>
         </PermissionGate>
         <a
-          href="/api/v3/docs"
+          href="/api/v2/docs"
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1"

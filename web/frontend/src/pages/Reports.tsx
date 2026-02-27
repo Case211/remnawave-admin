@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTabParam } from '@/lib/useTabParam'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
@@ -34,6 +35,7 @@ import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useHasPermission } from '@/components/PermissionGate'
+import { QueryError } from '@/components/QueryError'
 import { useFormatters } from '@/lib/useFormatters'
 
 export default function Reports({ embedded }: { embedded?: boolean } = {}) {
@@ -42,7 +44,7 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
 
   const canCreate = useHasPermission('reports', 'create')
 
-  const [activeTab, setActiveTab] = useState('reports')
+  const [activeTab, setActiveTab] = useTabParam('reports', ['reports', 'schedule', 'asn'])
   const [reportFilter, setReportFilter] = useState<string>('')
   const [expandedReport, setExpandedReport] = useState<number | null>(null)
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
@@ -54,7 +56,7 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
 
   // ── Reports ───────────────────────────────────────────────────
 
-  const { data: reports = [], isLoading: reportsLoading, refetch: refetchReports } = useQuery({
+  const { data: reports = [], isLoading: reportsLoading, isError: isReportsError, refetch: refetchReports } = useQuery({
     queryKey: ['violation-reports', reportFilter],
     queryFn: () => reportsApi.getReports(reportFilter || undefined),
   })
@@ -73,7 +75,7 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
 
   // ── ASN ───────────────────────────────────────────────────────
 
-  const { data: asnStats, isLoading: asnStatsLoading } = useQuery({
+  const { data: asnStats, isLoading: asnStatsLoading, isError: isAsnStatsError, refetch: refetchAsnStats } = useQuery({
     queryKey: ['asn-stats'],
     queryFn: asnApi.getStats,
     enabled: activeTab === 'asn',
@@ -118,6 +120,25 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
     'mobile', 'mobile_isp', 'fixed', 'isp', 'regional_isp',
     'hosting', 'datacenter', 'vpn', 'business', 'infrastructure',
   ]
+
+  const hasError = isReportsError || isAsnStatsError
+  const handleRetry = () => { refetchReports(); refetchAsnStats() }
+
+  if (hasError) {
+    return (
+      <div className={embedded ? 'space-y-4' : 'space-y-6'}>
+        {!embedded && (
+          <div className="page-header">
+            <div>
+              <h1 className="page-header-title">{t('reports.title')}</h1>
+              <p className="text-dark-200 mt-1">{t('reports.subtitle')}</p>
+            </div>
+          </div>
+        )}
+        <QueryError onRetry={handleRetry} />
+      </div>
+    )
+  }
 
   return (
     <div className={embedded ? 'space-y-4' : 'space-y-6'}>

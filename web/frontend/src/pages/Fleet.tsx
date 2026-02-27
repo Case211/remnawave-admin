@@ -1,5 +1,6 @@
 import { useState, useMemo, lazy, Suspense } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTabParam } from '@/lib/useTabParam'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { useFormatters } from '@/lib/useFormatters'
@@ -49,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { QueryError } from '@/components/QueryError'
 import NodeCard, { type FleetNode, getNodeStatus } from '@/components/fleet/NodeCard'
 import TerminalDialog from '@/components/fleet/TerminalDialog'
 import type { Script } from '@/components/fleet/ScriptCatalog'
@@ -361,7 +363,7 @@ export default function Fleet() {
   const canTerminal = hasPermission('fleet', 'terminal')
   const canScripts = hasPermission('fleet', 'scripts')
 
-  const [activeTab, setActiveTab] = useState('monitoring')
+  const [activeTab, setActiveTab] = useTabParam('monitoring', ['monitoring', 'scripts', 'history'])
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [expandedUuid, setExpandedUuid] = useState<string | null>(null)
@@ -376,7 +378,7 @@ export default function Fleet() {
 
   // ── Data ──────────────────────────────────────────────────────
 
-  const { data: fleet, isLoading, refetch } = useQuery({
+  const { data: fleet, isLoading, isError, refetch } = useQuery({
     queryKey: ['fleet'],
     queryFn: fetchFleet,
     refetchInterval: 15000,
@@ -538,6 +540,8 @@ export default function Fleet() {
           </Button>
         </div>
       </div>
+
+      {isError && <QueryError onRetry={refetch} />}
 
       {/* Overview cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">

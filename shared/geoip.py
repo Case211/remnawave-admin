@@ -200,8 +200,8 @@ class GeoIPService:
                 asn_resp = self._maxmind_asn.asn(ip_address)
                 asn = asn_resp.autonomous_system_number
                 asn_org = asn_resp.autonomous_system_organization
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("MaxMind ASN lookup failed for %s: %s", ip_address, e)
 
         # Базовая классификация по ASN (без флагов proxy/hosting — MaxMind City не даёт)
         connection_type = 'residential'
