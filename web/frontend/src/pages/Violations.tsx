@@ -76,6 +76,10 @@ const fetchViolations = async (params: {
   country?: string
   date_from?: string
   date_to?: string
+  sort_by?: string
+  order?: string
+  recommended_action?: string
+  user_uuid?: string
 }): Promise<PaginatedResponse> => {
   const p: Record<string, unknown> = {
     page: params.page,
@@ -89,6 +93,10 @@ const fetchViolations = async (params: {
   if (params.country) p.country = params.country
   if (params.date_from) p.date_from = params.date_from
   if (params.date_to) p.date_to = params.date_to
+  if (params.sort_by && params.sort_by !== 'detected_at') p.sort_by = params.sort_by
+  if (params.order && params.order !== 'desc') p.order = params.order
+  if (params.recommended_action) p.recommended_action = params.recommended_action
+  if (params.user_uuid) p.user_uuid = params.user_uuid
   const { data } = await client.get('/violations', { params: p })
   return data
 }
@@ -348,6 +356,18 @@ const ViolationCard = memo(function ViolationCard({
                 <span>{t('violations.confidence')}: {Math.round(violation.confidence * 100)}%</span>
               )}
             </div>
+
+            {/* Top reasons preview */}
+            {Array.isArray(violation.reasons) && violation.reasons.length > 0 && (
+              <div className="space-y-0.5 mb-1">
+                {violation.reasons.slice(0, 2).map((reason, i) => (
+                  <p key={i} className="text-xs text-dark-200 flex items-start gap-1">
+                    <AlertTriangle className="w-3 h-3 text-yellow-400/70 mt-0.5 flex-shrink-0" />
+                    <span className="line-clamp-1">{reason}</span>
+                  </p>
+                ))}
+              </div>
+            )}
 
             {violation.email && (
               <p className="text-xs text-dark-200 mb-0.5 truncate">{violation.email}</p>
@@ -870,7 +890,7 @@ function ViolationDetailPanel({
 
 // ── Top violators tab ────────────────────────────────────────────
 
-function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid: string) => void }) {
+function TopViolatorsTab({ days, onViewUser, onViewViolations }: { days: number; onViewUser: (uuid: string) => void; onViewViolations: (uuid: string) => void }) {
   const { t } = useTranslation()
   const { formatTimeAgo } = useFormatters()
 
@@ -962,14 +982,37 @@ function TopViolatorsTab({ days, onViewUser }: { days: number; onViewUser: (uuid
                 <ScoreCircle score={v.max_score} size="sm" />
               </div>
 
-              {/* Actions taken */}
-              {Array.isArray(v.actions) && v.actions.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-dark-400/10 flex flex-wrap gap-2">
-                  {v.actions.map((action, j) => (
+              {/* Top reasons */}
+              {Array.isArray(v.top_reasons) && v.top_reasons.length > 0 && (
+                <div className="mt-2.5 space-y-1">
+                  {v.top_reasons.slice(0, 3).map((reason, j) => (
+                    <div key={j} className="flex items-start gap-1.5 text-xs text-dark-200">
+                      <AlertTriangle className="w-3 h-3 text-yellow-400/70 mt-0.5 flex-shrink-0" />
+                      <span className="line-clamp-1">{reason}</span>
+                    </div>
+                  ))}
+                  {v.top_reasons.length > 3 && (
+                    <span className="text-xs text-dark-300 ml-4.5">
+                      +{v.top_reasons.length - 3} {t('common.more')}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Actions taken + details button */}
+              <div className="mt-3 pt-3 border-t border-dark-400/10 flex items-center justify-between">
+                <div className="flex flex-wrap gap-2">
+                  {Array.isArray(v.actions) && v.actions.map((action, j) => (
                     <ActionBadge key={j} action={action} />
                   ))}
                 </div>
-              )}
+                <button
+                  onClick={() => onViewViolations(v.user_uuid)}
+                  className="text-primary-400 hover:text-primary-300 flex items-center gap-1 text-xs transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5" /> {t('common.details')}
+                </button>
+              </div>
             </CardContent>
           </Card>
         )
@@ -1557,6 +1600,10 @@ export default function Violations() {
   const [minScore, setMinScore] = useState(0)
   const [ipFilter, setIpFilter] = useState('')
   const [countryFilter, setCountryFilter] = useState('')
+  const [sortBy, setSortBy] = useState('detected_at')
+  const [sortOrder, setSortOrder] = useState('desc')
+  const [actionFilter, setActionFilter] = useState('')
+  const [userUuidFilter, setUserUuidFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selectedViolationId, setSelectedViolationId] = useState<number | null>(null)
@@ -1593,6 +1640,9 @@ export default function Violations() {
     ...(countryFilter && { countryFilter }),
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
+    ...(sortBy !== 'detected_at' && { sortBy }),
+    ...(sortOrder !== 'desc' && { sortOrder }),
+    ...(actionFilter && { actionFilter }),
   }
   const hasActiveViolationFilters = Object.keys(currentViolationFilters).length > 0
   const handleLoadViolationFilter = (filters: Record<string, unknown>) => {
@@ -1603,13 +1653,16 @@ export default function Violations() {
     setCountryFilter((filters.countryFilter as string) || '')
     setDateFrom((filters.dateFrom as string) || '')
     setDateTo((filters.dateTo as string) || '')
+    setSortBy((filters.sortBy as string) || 'detected_at')
+    setSortOrder((filters.sortOrder as string) || 'desc')
+    setActionFilter((filters.actionFilter as string) || '')
     setShowFilters(true)
     setPage(1)
   }
 
   // Fetch violations list
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['violations', page, perPage, severity, days, resolved, minScore, ipFilter, countryFilter, dateFrom, dateTo],
+    queryKey: ['violations', page, perPage, severity, days, resolved, minScore, ipFilter, countryFilter, dateFrom, dateTo, sortBy, sortOrder, actionFilter, userUuidFilter],
     queryFn: () =>
       fetchViolations({
         page,
@@ -1618,10 +1671,14 @@ export default function Violations() {
         days,
         resolved,
         min_score: minScore,
+        sort_by: sortBy,
+        order: sortOrder,
         ...(ipFilter && { ip: ipFilter }),
         ...(countryFilter && { country: countryFilter }),
         ...(dateFrom && { date_from: dateFrom }),
         ...(dateTo && { date_to: dateTo }),
+        ...(actionFilter && { recommended_action: actionFilter }),
+        ...(userUuidFilter && { user_uuid: userUuidFilter }),
       }),
     enabled: tab !== 'top',
     refetchInterval: tab === 'pending' ? 30000 : false,
@@ -1740,6 +1797,7 @@ export default function Violations() {
     setTab(newTab)
     setPage(1)
     setSelectedViolationId(null)
+    setUserUuidFilter('')
   }
 
   // Detail view
@@ -1894,6 +1952,10 @@ export default function Violations() {
                     setCountryFilter('')
                     setDateFrom('')
                     setDateTo('')
+                    setSortBy('detected_at')
+                    setSortOrder('desc')
+                    setActionFilter('')
+                    setUserUuidFilter('')
                     setPage(1)
                   }}
                   className="w-full"
@@ -1943,6 +2005,60 @@ export default function Violations() {
                 />
               </div>
             </div>
+            {/* Sort & action filters */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4 mt-3 pt-3 border-t border-dark-400/10">
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.sortBy')}</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                >
+                  <option value="detected_at">{t('violations.filters.sortByDate')}</option>
+                  <option value="score">{t('violations.filters.sortByScore')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.order')}</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => { setSortOrder(e.target.value); setPage(1) }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                >
+                  <option value="desc">{t('violations.filters.orderDesc')}</option>
+                  <option value="asc">{t('violations.filters.orderAsc')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.recommendedAction')}</label>
+                <select
+                  value={actionFilter}
+                  onChange={(e) => { setActionFilter(e.target.value); setPage(1) }}
+                  className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                >
+                  <option value="">{t('common.all')}</option>
+                  <option value="no_action">{t('violations.recommendedActions.no_action')}</option>
+                  <option value="monitor">{t('violations.recommendedActions.monitor')}</option>
+                  <option value="warn">{t('violations.recommendedActions.warn')}</option>
+                  <option value="soft_block">{t('violations.recommendedActions.soft_block')}</option>
+                  <option value="temp_block">{t('violations.recommendedActions.temp_block')}</option>
+                  <option value="hard_block">{t('violations.recommendedActions.hard_block')}</option>
+                </select>
+              </div>
+              {userUuidFilter && (
+                <div className="flex items-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setUserUuidFilter(''); setPage(1) }}
+                    className="w-full gap-1 text-primary-400"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    {t('violations.filters.clearUserFilter')}
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -1978,7 +2094,16 @@ export default function Violations() {
       {tab === 'reports' ? (
         <Reports embedded />
       ) : tab === 'top' ? (
-        <TopViolatorsTab days={days} onViewUser={(uuid) => navigate(`/users/${uuid}`)} />
+        <TopViolatorsTab
+          days={days}
+          onViewUser={(uuid) => navigate(`/users/${uuid}`)}
+          onViewViolations={(uuid) => {
+            setUserUuidFilter(uuid)
+            setTab('all')
+            setShowFilters(true)
+            setPage(1)
+          }}
+        />
       ) : tab === 'whitelist' ? (
         <WhitelistTab />
       ) : (

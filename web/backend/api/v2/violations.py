@@ -54,6 +54,7 @@ def _row_to_list_item(v: dict) -> ViolationListItem:
         severity=get_severity(score),
         action_taken=v.get('action_taken'),
         notified=v.get('notified_at') is not None,
+        reasons=v.get('reasons') or [],
     )
 
 
@@ -70,6 +71,9 @@ async def list_violations(
     country: Optional[str] = Query(None, description="Filter by country code"),
     date_from: Optional[str] = Query(None, description="Filter from date (ISO format)"),
     date_to: Optional[str] = Query(None, description="Filter to date (ISO format)"),
+    sort_by: str = Query("detected_at", description="Sort field: detected_at or score"),
+    order: str = Query("desc", description="Sort order: asc or desc"),
+    recommended_action: Optional[str] = Query(None, description="Filter by recommended action"),
     admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
@@ -120,6 +124,7 @@ async def list_violations(
             resolved=resolved,
             ip=ip,
             country=country,
+            recommended_action=recommended_action,
         )
 
         # Подсчёт для пагинации
@@ -133,6 +138,8 @@ async def list_violations(
             **filter_kwargs,
             limit=per_page,
             offset=(page - 1) * per_page,
+            sort_by=sort_by,
+            order=order,
         )
 
         # Преобразуем в модели
@@ -258,17 +265,28 @@ async def get_top_violators(
         limit=limit,
     )
 
+    # Fetch top reasons for all violators in a single batch query
+    user_uuids = [str(v.get('user_uuid', '')) for v in violators if v.get('user_uuid')]
+    reasons_map = await db.get_top_violator_reasons(
+        user_uuids=user_uuids,
+        start_date=start_date,
+        end_date=end_date,
+        min_score=min_score,
+    ) if user_uuids else {}
+
     items = []
     for v in violators:
         try:
+            uuid_str = str(v.get('user_uuid', ''))
             items.append(ViolationUserSummary(
-                user_uuid=str(v.get('user_uuid', '')),
+                user_uuid=uuid_str,
                 username=v.get('username'),
                 violations_count=v.get('violations_count', 0),
                 max_score=float(v.get('max_score', 0) or 0),
                 avg_score=float(v.get('avg_score', 0) or 0),
                 last_violation_at=v.get('last_violation_at') or datetime.utcnow(),
                 actions=v.get('actions') or [],
+                top_reasons=reasons_map.get(uuid_str, []),
             ))
         except Exception as e:
             logger.warning("Skipping top violator row: %s", e)

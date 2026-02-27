@@ -668,8 +668,8 @@ class DatabaseService:
 
         async with self.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT * FROM nodes WHERE uuid = ANY($1::text[])",
-                list(uuids)
+                "SELECT * FROM nodes WHERE uuid::text = ANY($1)",
+                [str(u) for u in uuids]
             )
             result = {}
             for row in rows:
@@ -2359,6 +2359,9 @@ class DatabaseService:
         resolved: Optional[bool] = None,
         ip: Optional[str] = None,
         country: Optional[str] = None,
+        sort_by: str = 'detected_at',
+        order: str = 'desc',
+        recommended_action: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Получить нарушения за указанный период с фильтрацией на стороне БД.
@@ -2423,14 +2426,23 @@ class DatabaseService:
                     params.append(country)
                     idx += 1
 
+                if recommended_action:
+                    conditions.append(f"recommended_action = ${idx}")
+                    params.append(recommended_action)
+                    idx += 1
+
                 where = " AND ".join(conditions)
                 params.extend([limit, offset])
+
+                # Validate sort params (whitelist to prevent SQL injection)
+                valid_sort = sort_by if sort_by in ('detected_at', 'score') else 'detected_at'
+                valid_order = order if order in ('asc', 'desc') else 'desc'
 
                 rows = await conn.fetch(
                     f"""
                     SELECT * FROM violations
                     WHERE {where}
-                    ORDER BY detected_at DESC
+                    ORDER BY {valid_sort} {valid_order}
                     LIMIT ${idx} OFFSET ${idx + 1}
                     """,
                     *params
@@ -2451,6 +2463,7 @@ class DatabaseService:
         resolved: Optional[bool] = None,
         ip: Optional[str] = None,
         country: Optional[str] = None,
+        recommended_action: Optional[str] = None,
     ) -> int:
         """Подсчитать количество нарушений за период с фильтрами (для пагинации)."""
         if not self.is_connected:
@@ -2496,6 +2509,11 @@ class DatabaseService:
                 if country:
                     conditions.append(f"UPPER(${idx}) = ANY(SELECT UPPER(x) FROM UNNEST(countries) AS x)")
                     params.append(country)
+                    idx += 1
+
+                if recommended_action:
+                    conditions.append(f"recommended_action = ${idx}")
+                    params.append(recommended_action)
                     idx += 1
 
                 where = " AND ".join(conditions)
@@ -2637,6 +2655,45 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error getting top violators: %s", e, exc_info=True)
             return []
+
+    async def get_top_violator_reasons(
+        self,
+        user_uuids: List[str],
+        start_date: datetime,
+        end_date: datetime,
+        min_score: float = 30.0,
+        max_reasons: int = 5,
+    ) -> Dict[str, List[str]]:
+        """Получить топ причин нарушений для списка пользователей."""
+        if not self.is_connected or not user_uuids:
+            return {}
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT user_uuid::text, array_agg(DISTINCT reason) as reasons
+                    FROM (
+                        SELECT user_uuid, unnest(reasons) as reason
+                        FROM violations
+                        WHERE user_uuid::text = ANY($1)
+                        AND detected_at >= $2
+                        AND detected_at < $3
+                        AND score >= $4
+                        AND action_taken IS DISTINCT FROM 'annulled'
+                    ) sub
+                    GROUP BY user_uuid
+                    """,
+                    user_uuids, start_date, end_date, min_score
+                )
+                return {
+                    str(row['user_uuid']): (row['reasons'] or [])[:max_reasons]
+                    for row in rows
+                }
+
+        except Exception as e:
+            logger.error("Error getting top violator reasons: %s", e, exc_info=True)
+            return {}
 
     async def get_violations_by_country(
         self,

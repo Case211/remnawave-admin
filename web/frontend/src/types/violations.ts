@@ -72,6 +72,7 @@ export interface TopViolator {
   avg_score: number
   last_violation_at: string
   actions: string[]
+  top_reasons?: string[]
 }
 
 export interface IPInfo {
