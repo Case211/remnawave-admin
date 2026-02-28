@@ -123,20 +123,20 @@ const TrafficBar = memo(function TrafficBar({ used, limit }: { used: number; lim
   const isUnlimited = !limit
 
   const gradientClass = isUnlimited
-    ? 'from-primary-600/30 to-cyan-600/30 border-primary-500/20'
+    ? 'from-primary-600/40 to-cyan-600/40 border-primary-500/30'
     : percent >= 90
-    ? 'from-red-600/30 to-red-500/20 border-red-500/20'
+    ? 'from-red-600/40 to-red-500/30 border-red-500/30'
     : percent >= 70
-    ? 'from-yellow-600/30 to-yellow-500/20 border-yellow-500/20'
-    : 'from-primary-600/30 to-cyan-600/30 border-primary-500/20'
+    ? 'from-yellow-600/40 to-yellow-500/30 border-yellow-500/30'
+    : 'from-primary-600/40 to-cyan-600/40 border-primary-500/30'
 
   const textClass = isUnlimited
-    ? 'text-primary-200'
+    ? 'text-white'
     : percent >= 90
-    ? 'text-red-200'
+    ? 'text-white'
     : percent >= 70
-    ? 'text-yellow-200'
-    : 'text-primary-200'
+    ? 'text-white'
+    : 'text-white'
 
   return (
     <div className={`relative h-5 rounded-full overflow-hidden bg-gradient-to-r ${gradientClass} border`}>
@@ -144,13 +144,13 @@ const TrafficBar = memo(function TrafficBar({ used, limit }: { used: number; lim
         <div
           className={cn(
             "absolute inset-y-0 left-0 rounded-full transition-all",
-            percent >= 90 ? 'bg-red-500/20' : percent >= 70 ? 'bg-yellow-500/20' : 'bg-primary-500/20'
+            percent >= 90 ? 'bg-red-500/30' : percent >= 70 ? 'bg-yellow-500/30' : 'bg-primary-500/30'
           )}
           style={{ width: `${percent}%` }}
         />
       )}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`text-[11px] font-medium ${textClass}`}>
+        <span className={`text-[11px] font-medium drop-shadow-sm ${textClass}`}>
           {formatBytes(used)} / {isUnlimited ? '\u221E' : formatBytes(limit)}
         </span>
       </div>
