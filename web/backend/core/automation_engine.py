@@ -259,6 +259,7 @@ class AutomationEngine:
                 # Execute action — enrich context for notify actions
                 context: Dict[str, Any] = {
                     "trigger": "schedule", "cron": cron, "interval_minutes": interval,
+                    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                 }
                 if rule["action_type"] == "notify":
                     try:
@@ -273,6 +274,18 @@ class AutomationEngine:
                         context["traffic_today"] = f"{total_traffic / (1024 ** 3):.2f} GB"
                     except Exception:
                         pass
+                    # Violations count for today
+                    try:
+                        from shared.database import db_service
+                        if db_service.is_connected:
+                            now = datetime.now(timezone.utc)
+                            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                            today_count = await db_service.count_violations_for_period(
+                                start_date=today_start, end_date=now,
+                            )
+                            context["violations_today"] = today_count
+                    except Exception:
+                        context.setdefault("violations_today", 0)
                 result, details = await self._execute_action(rule, "system", None, context)
 
                 await write_automation_log(
@@ -639,10 +652,18 @@ class AutomationEngine:
         channel = config.get("channel", "telegram")
         message_template = config.get("message", "Automation triggered")
 
-        # Simple template substitution
-        message = message_template
-        for key, value in context.items():
-            message = message.replace(f"{{{key}}}", str(value))
+        # Template substitution — unknown tags become empty string
+        class _SafeDict(dict):
+            def __missing__(self, key: str) -> str:
+                return ""
+
+        try:
+            message = message_template.format_map(_SafeDict({k: str(v) for k, v in context.items()}))
+        except Exception:
+            # Fallback to naive replacement if format_map fails (e.g. malformed braces)
+            message = message_template
+            for key, value in context.items():
+                message = message.replace(f"{{{key}}}", str(value))
 
         if channel == "telegram":
             from web.backend.core.notifier import _send_telegram_message, _esc

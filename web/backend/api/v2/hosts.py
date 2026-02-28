@@ -68,19 +68,33 @@ def _map_host_detail(h: dict) -> dict:
 
 
 async def _get_hosts_list() -> List[dict]:
-    """Get hosts from DB first, fall back to API."""
+    """Get hosts from API first, fall back to DB.
+
+    Always prefer the API so that hosts deleted from the Remnawave panel
+    are immediately reflected in the admin UI.  The local DB is only used
+    when the API is unreachable.
+    """
+    from web.backend.core.api_helper import fetch_hosts_from_api
+    try:
+        hosts = await fetch_hosts_from_api()
+        if hosts:
+            logger.debug("Loaded %d hosts from API", len(hosts))
+            return hosts
+    except Exception as e:
+        logger.debug("API hosts fetch failed, falling back to DB: %s", e)
+
+    # Fallback: read from local DB cache
     try:
         from shared.database import db_service
         if db_service.is_connected:
             hosts = await db_service.get_all_hosts()
             if hosts:
-                logger.debug("Loaded %d hosts from database", len(hosts))
+                logger.debug("Loaded %d hosts from database (fallback)", len(hosts))
                 return hosts
     except Exception as e:
-        logger.debug("DB hosts fetch failed: %s", e)
+        logger.debug("DB hosts fetch also failed: %s", e)
 
-    from web.backend.core.api_helper import fetch_hosts_from_api
-    return await fetch_hosts_from_api()
+    return []
 
 
 @router.get("", response_model=HostListResponse)

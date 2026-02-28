@@ -1,6 +1,5 @@
-import { useState, useCallback, useEffect, memo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useTabParam } from '@/lib/useTabParam'
+import { useState, useCallback, useEffect, useRef, memo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -37,6 +36,7 @@ import {
   ShieldCheck,
   Plus,
   Calendar,
+  Search,
 } from 'lucide-react'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -80,6 +80,7 @@ const fetchViolations = async (params: {
   order?: string
   recommended_action?: string
   user_uuid?: string
+  username?: string
 }): Promise<PaginatedResponse> => {
   const p: Record<string, unknown> = {
     page: params.page,
@@ -97,6 +98,7 @@ const fetchViolations = async (params: {
   if (params.order && params.order !== 'desc') p.order = params.order
   if (params.recommended_action) p.recommended_action = params.recommended_action
   if (params.user_uuid) p.user_uuid = params.user_uuid
+  if (params.username) p.username = params.username
   const { data } = await client.get('/violations', { params: p })
   return data
 }
@@ -1590,23 +1592,64 @@ export default function Violations() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  // State
-  const [tab, setTab] = useTabParam<Tab>('all', ['all', 'pending', 'top', 'reports', 'whitelist'])
-  const [page, setPage] = useState(1)
-  const [perPage] = useState(15)
-  const [severity, setSeverity] = useState('')
-  const [days, setDays] = useState(7)
-  const [showFilters, setShowFilters] = useState(false)
-  const [minScore, setMinScore] = useState(0)
-  const [ipFilter, setIpFilter] = useState('')
-  const [countryFilter, setCountryFilter] = useState('')
-  const [sortBy, setSortBy] = useState('detected_at')
-  const [sortOrder, setSortOrder] = useState('desc')
-  const [actionFilter, setActionFilter] = useState('')
-  const [userUuidFilter, setUserUuidFilter] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [selectedViolationId, setSelectedViolationId] = useState<number | null>(null)
+  // ── URL-param-synced filter state ──
+  const [searchParams, setSearchParams] = useSearchParams()
+  const getP = (k: string, d: string) => searchParams.get(k) ?? d
+  const getN = (k: string, d: number) => { const v = searchParams.get(k); return v !== null ? (Number(v) || d) : d }
+
+  const validTabs: Tab[] = ['all', 'pending', 'top', 'reports', 'whitelist']
+  const rawTab = getP('tab', 'all') as Tab
+  const tab = validTabs.includes(rawTab) ? rawTab : 'all'
+  const page = getN('page', 1)
+  const perPage = 15
+  const severity = getP('severity', '')
+  const days = getN('days', 7)
+  const showFilters = getP('filters', '') === '1'
+  const minScore = getN('minScore', 0)
+  const ipFilter = getP('ip', '')
+  const countryFilter = getP('country', '')
+  const sortBy = getP('sortBy', 'detected_at')
+  const sortOrder = getP('order', 'desc')
+  const actionFilter = getP('action', '')
+  const userUuidFilter = getP('user', '')
+  const usernameFilter = getP('username', '')
+  const dateFrom = getP('dateFrom', '')
+  const dateTo = getP('dateTo', '')
+  const selectedViolationId = getN('vid', 0) || null
+
+  // Batch param update helper — atomic, no race conditions
+  const setParams = useCallback((updates: Record<string, string | null>) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === undefined || value === '') {
+          next.delete(key)
+        } else {
+          next.set(key, value)
+        }
+      }
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+
+  // Convenience setters (keep API compatible with existing JSX)
+  const setPage = useCallback((v: number) => setParams({ page: v > 1 ? String(v) : null }), [setParams])
+  const setSeverity = useCallback((v: string) => setParams({ severity: v || null, page: null }), [setParams])
+  const setDays = useCallback((v: number) => setParams({ days: v === 7 ? null : String(v), page: null }), [setParams])
+  const setShowFilters = useCallback((v: boolean) => setParams({ filters: v ? '1' : null }), [setParams])
+  const setMinScore = useCallback((v: number) => setParams({ minScore: v > 0 ? String(v) : null, page: null }), [setParams])
+  const setIpFilter = useCallback((v: string) => setParams({ ip: v || null, page: null }), [setParams])
+  const setCountryFilter = useCallback((v: string) => setParams({ country: v || null, page: null }), [setParams])
+  const setSortBy = useCallback((v: string) => setParams({ sortBy: v === 'detected_at' ? null : v, page: null }), [setParams])
+  const setSortOrder = useCallback((v: string) => setParams({ order: v === 'desc' ? null : v, page: null }), [setParams])
+  const setActionFilter = useCallback((v: string) => setParams({ action: v || null, page: null }), [setParams])
+  const setUsernameFilter = useCallback((v: string) => setParams({ username: v || null, page: null }), [setParams])
+  const setDateFrom = useCallback((v: string) => setParams({ dateFrom: v || null, page: null }), [setParams])
+  const setDateTo = useCallback((v: string) => setParams({ dateTo: v || null, page: null }), [setParams])
+  const setSelectedViolationId = useCallback((v: number | null) => setParams({ vid: v ? String(v) : null }), [setParams])
+
+  // Auto-select first violation when coming from Top Violators
+  const autoSelectRef = useRef(false)
 
   const canResolve = useHasPermission('violations', 'resolve')
 
@@ -1643,26 +1686,30 @@ export default function Violations() {
     ...(sortBy !== 'detected_at' && { sortBy }),
     ...(sortOrder !== 'desc' && { sortOrder }),
     ...(actionFilter && { actionFilter }),
+    ...(usernameFilter && { username: usernameFilter }),
   }
   const hasActiveViolationFilters = Object.keys(currentViolationFilters).length > 0
   const handleLoadViolationFilter = (filters: Record<string, unknown>) => {
-    setSeverity((filters.severity as string) || '')
-    setDays((filters.days as number) || 7)
-    setMinScore((filters.minScore as number) || 0)
-    setIpFilter((filters.ipFilter as string) || '')
-    setCountryFilter((filters.countryFilter as string) || '')
-    setDateFrom((filters.dateFrom as string) || '')
-    setDateTo((filters.dateTo as string) || '')
-    setSortBy((filters.sortBy as string) || 'detected_at')
-    setSortOrder((filters.sortOrder as string) || 'desc')
-    setActionFilter((filters.actionFilter as string) || '')
-    setShowFilters(true)
-    setPage(1)
+    setParams({
+      severity: (filters.severity as string) || null,
+      days: filters.days && filters.days !== 7 ? String(filters.days) : null,
+      minScore: filters.minScore && Number(filters.minScore) > 0 ? String(filters.minScore) : null,
+      ip: (filters.ipFilter as string) || null,
+      country: (filters.countryFilter as string) || null,
+      dateFrom: (filters.dateFrom as string) || null,
+      dateTo: (filters.dateTo as string) || null,
+      sortBy: filters.sortBy && filters.sortBy !== 'detected_at' ? (filters.sortBy as string) : null,
+      order: filters.sortOrder && filters.sortOrder !== 'desc' ? (filters.sortOrder as string) : null,
+      action: (filters.actionFilter as string) || null,
+      username: (filters.username as string) || null,
+      filters: '1',
+      page: null,
+    })
   }
 
   // Fetch violations list
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['violations', page, perPage, severity, days, resolved, minScore, ipFilter, countryFilter, dateFrom, dateTo, sortBy, sortOrder, actionFilter, userUuidFilter],
+    queryKey: ['violations', page, perPage, severity, days, resolved, minScore, ipFilter, countryFilter, dateFrom, dateTo, sortBy, sortOrder, actionFilter, userUuidFilter, usernameFilter],
     queryFn: () =>
       fetchViolations({
         page,
@@ -1679,10 +1726,19 @@ export default function Violations() {
         ...(dateTo && { date_to: dateTo }),
         ...(actionFilter && { recommended_action: actionFilter }),
         ...(userUuidFilter && { user_uuid: userUuidFilter }),
+        ...(usernameFilter && { username: usernameFilter }),
       }),
     enabled: tab !== 'top',
     refetchInterval: tab === 'pending' ? 30000 : false,
   })
+
+  // Auto-select first violation when coming from Top Violators "Details" button
+  useEffect(() => {
+    if (autoSelectRef.current && data?.items?.length) {
+      setSelectedViolationId(data.items[0].id)
+      autoSelectRef.current = false
+    }
+  }, [data?.items, setSelectedViolationId])
 
   // Fetch stats (always)
   const { data: stats } = useQuery({
@@ -1794,10 +1850,13 @@ export default function Violations() {
   )
 
   const handleTabChange = (newTab: Tab) => {
-    setTab(newTab)
-    setPage(1)
-    setSelectedViolationId(null)
-    setUserUuidFilter('')
+    setParams({
+      tab: newTab === 'all' ? null : newTab,
+      page: null,
+      vid: null,
+      user: null,
+      username: null,
+    })
   }
 
   // Detail view
@@ -1814,7 +1873,7 @@ export default function Violations() {
           onAnnul={handleAnnul}
           onAnnulAll={handleAnnulAll}
           onWhitelist={handleWhitelist}
-          onViewUser={(uuid) => navigate(`/users/${uuid}`)}
+          onViewUser={(uuid) => navigate(`/users/${uuid}?from=violations`)}
         />
         <WhitelistAddDialog
           open={whitelistDialogOpen}
@@ -1894,10 +1953,7 @@ export default function Violations() {
                 <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.level')}</label>
                 <select
                   value={severity}
-                  onChange={(e) => {
-                    setSeverity(e.target.value)
-                    setPage(1)
-                  }}
+                  onChange={(e) => setSeverity(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 >
                   <option value="">{t('common.all')}</option>
@@ -1911,10 +1967,7 @@ export default function Violations() {
                 <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.period')}</label>
                 <select
                   value={days}
-                  onChange={(e) => {
-                    setDays(Number(e.target.value))
-                    setPage(1)
-                  }}
+                  onChange={(e) => setDays(Number(e.target.value))}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 >
                   <option value={1}>{t('violations.filters.today')}</option>
@@ -1933,10 +1986,7 @@ export default function Violations() {
                   max={90}
                   step={10}
                   value={minScore}
-                  onChange={(e) => {
-                    setMinScore(Number(e.target.value))
-                    setPage(1)
-                  }}
+                  onChange={(e) => setMinScore(Number(e.target.value))}
                   className="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
                 />
               </div>
@@ -1945,18 +1995,11 @@ export default function Violations() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setSeverity('')
-                    setDays(7)
-                    setMinScore(0)
-                    setIpFilter('')
-                    setCountryFilter('')
-                    setDateFrom('')
-                    setDateTo('')
-                    setSortBy('detected_at')
-                    setSortOrder('desc')
-                    setActionFilter('')
-                    setUserUuidFilter('')
-                    setPage(1)
+                    setParams({
+                      severity: null, days: null, minScore: null, ip: null,
+                      country: null, dateFrom: null, dateTo: null, sortBy: null,
+                      order: null, action: null, user: null, username: null, page: null,
+                    })
                   }}
                   className="w-full"
                 >
@@ -1972,7 +2015,7 @@ export default function Violations() {
                   type="text"
                   placeholder="192.168.1.1"
                   value={ipFilter}
-                  onChange={(e) => { setIpFilter(e.target.value); setPage(1) }}
+                  onChange={(e) => setIpFilter(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 />
               </div>
@@ -1982,7 +2025,7 @@ export default function Violations() {
                   type="text"
                   placeholder="RU, US, DE..."
                   value={countryFilter}
-                  onChange={(e) => { setCountryFilter(e.target.value); setPage(1) }}
+                  onChange={(e) => setCountryFilter(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 />
               </div>
@@ -1991,7 +2034,7 @@ export default function Violations() {
                 <input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                  onChange={(e) => setDateFrom(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 />
               </div>
@@ -2000,7 +2043,7 @@ export default function Violations() {
                 <input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                  onChange={(e) => setDateTo(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 />
               </div>
@@ -2011,18 +2054,19 @@ export default function Violations() {
                 <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.sortBy')}</label>
                 <select
                   value={sortBy}
-                  onChange={(e) => { setSortBy(e.target.value); setPage(1) }}
+                  onChange={(e) => setSortBy(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 >
                   <option value="detected_at">{t('violations.filters.sortByDate')}</option>
                   <option value="score">{t('violations.filters.sortByScore')}</option>
+                  <option value="user_count">{t('violations.filters.sortByCount', 'По количеству')}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.order')}</label>
                 <select
                   value={sortOrder}
-                  onChange={(e) => { setSortOrder(e.target.value); setPage(1) }}
+                  onChange={(e) => setSortOrder(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 >
                   <option value="desc">{t('violations.filters.orderDesc')}</option>
@@ -2033,7 +2077,7 @@ export default function Violations() {
                 <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.recommendedAction')}</label>
                 <select
                   value={actionFilter}
-                  onChange={(e) => { setActionFilter(e.target.value); setPage(1) }}
+                  onChange={(e) => setActionFilter(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 px-3 py-2 text-sm text-white ring-offset-background focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
                 >
                   <option value="">{t('common.all')}</option>
@@ -2045,12 +2089,25 @@ export default function Violations() {
                   <option value="hard_block">{t('violations.recommendedActions.hard_block')}</option>
                 </select>
               </div>
-              {userUuidFilter && (
+              <div>
+                <label className="block text-xs text-dark-200 mb-1">{t('violations.filters.username', 'Имя пользователя')}</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-dark-300" />
+                  <input
+                    type="text"
+                    placeholder={t('violations.filters.usernamePlaceholder', 'Поиск...')}
+                    value={usernameFilter}
+                    onChange={(e) => setUsernameFilter(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-dark-400/20 bg-dark-800 pl-9 pr-3 py-2 text-sm text-white ring-offset-background placeholder:text-dark-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-offset-2 focus:ring-offset-dark-800"
+                  />
+                </div>
+              </div>
+              {(userUuidFilter || usernameFilter) && (
                 <div className="flex items-end">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setUserUuidFilter(''); setPage(1) }}
+                    onClick={() => setParams({ user: null, username: null, page: null })}
                     className="w-full gap-1 text-primary-400"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -2096,12 +2153,10 @@ export default function Violations() {
       ) : tab === 'top' ? (
         <TopViolatorsTab
           days={days}
-          onViewUser={(uuid) => navigate(`/users/${uuid}`)}
+          onViewUser={(uuid) => navigate(`/users/${uuid}?from=violations`)}
           onViewViolations={(uuid) => {
-            setUserUuidFilter(uuid)
-            setTab('all')
-            setShowFilters(true)
-            setPage(1)
+            setParams({ user: uuid, tab: null, filters: '1', page: null, vid: null })
+            autoSelectRef.current = true
           }}
         />
       ) : tab === 'whitelist' ? (
@@ -2154,7 +2209,7 @@ export default function Violations() {
                     onAnnul={() => handleAnnul(violation.id)}
                     onWhitelist={() => handleWhitelist(violation.user_uuid)}
                     onViewDetail={() => setSelectedViolationId(violation.id)}
-                    onViewUser={() => navigate(`/users/${violation.user_uuid}`)}
+                    onViewUser={() => navigate(`/users/${violation.user_uuid}?from=violations`)}
                   />
                 </div>
               ))

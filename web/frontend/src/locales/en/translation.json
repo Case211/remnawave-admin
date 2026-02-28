@@ -263,6 +263,7 @@
     "currentVersion": "Current version",
     "versionAvailable": "v{{version}} available",
     "upToDate": "Up to date",
+    "missedUpdates": "Missed updates ({{count}})",
     "traffic": "Traffic",
     "trafficTooltip": "Total traffic volume for all time",
     "trafficChartTooltip": "Traffic chart by node for the selected period",
@@ -2848,5 +2849,9 @@
     "lastTriggered": "Last triggered",
     "confirmDeleteWebhook": "Delete webhook?",
     "confirmDeleteWebhookDesc": "This will permanently delete this webhook subscription."
+  },
+  "forcePassword": {
+    "title": "Password change required",
+    "description": "Your password was set by an administrator. For security, please set your own password."
   }
 }

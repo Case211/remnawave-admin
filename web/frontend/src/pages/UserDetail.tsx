@@ -883,9 +883,16 @@ export default function UserDetail() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
+  // Capture source page on mount (immune to subsequent setSearchParams calls)
+  const [fromPage] = useState(() => searchParams.get('from'))
+
   const goBack = () => {
-    // If we came from another page in the app, go back in history
-    // Otherwise fallback to /users
+    // If navigated from violations, go back there
+    if (fromPage === 'violations') {
+      navigate('/violations')
+      return
+    }
+    // Otherwise use browser history or fallback to /users
     if (window.history.state?.idx > 0) {
       navigate(-1)
     } else {

@@ -121,6 +121,7 @@ async def create_admin(
         max_traffic_gb=data.max_traffic_gb,
         max_nodes=data.max_nodes,
         max_hosts=data.max_hosts,
+        is_generated_password=bool(pw_hash),
         created_by=admin.account_id,
     )
     if not account:

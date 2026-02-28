@@ -71,9 +71,10 @@ async def list_violations(
     country: Optional[str] = Query(None, description="Filter by country code"),
     date_from: Optional[str] = Query(None, description="Filter from date (ISO format)"),
     date_to: Optional[str] = Query(None, description="Filter to date (ISO format)"),
-    sort_by: str = Query("detected_at", description="Sort field: detected_at or score"),
+    sort_by: str = Query("detected_at", description="Sort field: detected_at, score, or user_count"),
     order: str = Query("desc", description="Sort order: asc or desc"),
     recommended_action: Optional[str] = Query(None, description="Filter by recommended action"),
+    username: Optional[str] = Query(None, description="Search by username (partial match)"),
     admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
@@ -125,6 +126,7 @@ async def list_violations(
             ip=ip,
             country=country,
             recommended_action=recommended_action,
+            username=username,
         )
 
         # Подсчёт для пагинации
