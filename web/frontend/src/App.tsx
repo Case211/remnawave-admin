@@ -5,6 +5,7 @@ import { usePermissionStore } from './store/permissionStore'
 import { AppearanceProvider } from './components/AppearanceProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { clientLogger } from './lib/clientLogger'
+import { ForcePasswordChange } from './components/ForcePasswordChange'
 
 // Layout
 import Layout from './components/layout/Layout'
@@ -38,7 +39,7 @@ const ApiKeys = lazy(() => import('./pages/ApiKeys'))
  */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
-  const { isLoaded, loadPermissions } = usePermissionStore()
+  const { isLoaded, loadPermissions, mustChangePassword } = usePermissionStore()
 
   useEffect(() => {
     if (isAuthenticated && !isLoaded) {
@@ -48,6 +49,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  if (isLoaded && mustChangePassword) {
+    return <ForcePasswordChange />
   }
 
   return <>{children}</>

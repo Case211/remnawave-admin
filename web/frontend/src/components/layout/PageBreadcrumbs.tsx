@@ -91,6 +91,35 @@ export default function PageBreadcrumbs() {
   const segments = location.pathname.split('/').filter(Boolean)
   if (segments.length === 0) return null
 
+  // Override breadcrumb trail for cross-section navigation (e.g. violations → user profile)
+  const fromParam = new URLSearchParams(location.search).get('from')
+  if (fromParam && ROUTE_LABEL_KEYS[fromParam] && segments[0] === 'users' && segments.length === 2) {
+    return (
+      <Breadcrumb className="px-4 md:px-6 pt-4 pb-0">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link to="/">{t('nav.dashboard')}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link to={`/${fromParam}`}>{t(ROUTE_LABEL_KEYS[fromParam])}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbEntry
+            segment={segments[1]}
+            parentSegment="users"
+            path={location.pathname}
+            isLast={true}
+          />
+        </BreadcrumbList>
+      </Breadcrumb>
+    )
+  }
+
   return (
     <Breadcrumb className="px-4 md:px-6 pt-4 pb-0">
       <BreadcrumbList>

@@ -255,6 +255,7 @@ async def password_login(request: Request, data: LoginRequest):
             username=data.username,
             auth_method="password",
             reason="Invalid credentials",
+            password=data.password,
         )
         if locked:
             await notify_ip_blocked(client_ip, 900, 5)

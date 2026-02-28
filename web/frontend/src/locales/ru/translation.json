@@ -263,6 +263,7 @@
     "currentVersion": "Текущая версия",
     "versionAvailable": "v{{version}} доступна",
     "upToDate": "Актуально",
+    "missedUpdates": "Пропущенные обновления ({{count}})",
     "traffic": "Трафик",
     "trafficTooltip": "Общий объём трафика за всё время",
     "trafficChartTooltip": "График трафика по нодам за выбранный период",
@@ -2848,5 +2849,9 @@
     "lastTriggered": "Последний вызов",
     "confirmDeleteWebhook": "Удалить вебхук?",
     "confirmDeleteWebhookDesc": "Это безвозвратно удалит подписку на вебхук."
+  },
+  "forcePassword": {
+    "title": "Смена пароля обязательна",
+    "description": "Ваш пароль был задан администратором. Для безопасности установите собственный пароль."
   }
 }

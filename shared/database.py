@@ -2362,6 +2362,7 @@ class DatabaseService:
         sort_by: str = 'detected_at',
         order: str = 'desc',
         recommended_action: Optional[str] = None,
+        username: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Получить нарушения за указанный период с фильтрацией на стороне БД.
@@ -2431,22 +2432,40 @@ class DatabaseService:
                     params.append(recommended_action)
                     idx += 1
 
+                if username:
+                    conditions.append(f"LOWER(username) LIKE LOWER(${idx})")
+                    params.append(f"%{username}%")
+                    idx += 1
+
                 where = " AND ".join(conditions)
                 params.extend([limit, offset])
 
                 # Validate sort params (whitelist to prevent SQL injection)
-                valid_sort = sort_by if sort_by in ('detected_at', 'score') else 'detected_at'
+                valid_sort = sort_by if sort_by in ('detected_at', 'score', 'user_count') else 'detected_at'
                 valid_order = order if order in ('asc', 'desc') else 'desc'
 
-                rows = await conn.fetch(
-                    f"""
-                    SELECT * FROM violations
-                    WHERE {where}
-                    ORDER BY {valid_sort} {valid_order}
-                    LIMIT ${idx} OFFSET ${idx + 1}
-                    """,
-                    *params
-                )
+                if valid_sort == 'user_count':
+                    # Sort by number of violations per user using window function
+                    rows = await conn.fetch(
+                        f"""
+                        SELECT *, COUNT(*) OVER (PARTITION BY user_uuid) AS _user_violation_count
+                        FROM violations
+                        WHERE {where}
+                        ORDER BY _user_violation_count {valid_order}, id ASC
+                        LIMIT ${idx} OFFSET ${idx + 1}
+                        """,
+                        *params
+                    )
+                else:
+                    rows = await conn.fetch(
+                        f"""
+                        SELECT * FROM violations
+                        WHERE {where}
+                        ORDER BY {valid_sort} {valid_order}, id ASC
+                        LIMIT ${idx} OFFSET ${idx + 1}
+                        """,
+                        *params
+                    )
                 return [dict(row) for row in rows]
 
         except Exception as e:
@@ -2464,6 +2483,7 @@ class DatabaseService:
         ip: Optional[str] = None,
         country: Optional[str] = None,
         recommended_action: Optional[str] = None,
+        username: Optional[str] = None,
     ) -> int:
         """Подсчитать количество нарушений за период с фильтрами (для пагинации)."""
         if not self.is_connected:
@@ -2514,6 +2534,11 @@ class DatabaseService:
                 if recommended_action:
                     conditions.append(f"recommended_action = ${idx}")
                     params.append(recommended_action)
+                    idx += 1
+
+                if username:
+                    conditions.append(f"LOWER(username) LIKE LOWER(${idx})")
+                    params.append(f"%{username}%")
                     idx += 1
 
                 where = " AND ".join(conditions)

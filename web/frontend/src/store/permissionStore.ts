@@ -11,11 +11,13 @@ interface PermissionState {
   role: string | null
   roleId: number | null
   isLoaded: boolean
+  mustChangePassword: boolean
 
   // Actions
   loadPermissions: () => Promise<void>
   hasPermission: (resource: string, action: string) => boolean
   clearPermissions: () => void
+  setMustChangePassword: (v: boolean) => void
 }
 
 export const usePermissionStore = create<PermissionState>((set, get) => ({
@@ -23,6 +25,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
   role: null,
   roleId: null,
   isLoaded: false,
+  mustChangePassword: false,
 
   loadPermissions: async () => {
     try {
@@ -32,6 +35,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
         role: info.role,
         roleId: info.role_id ?? null,
         isLoaded: true,
+        mustChangePassword: info.password_is_generated === true,
       })
     } catch {
       // If the endpoint fails (e.g. old backend), grant full access
@@ -40,6 +44,7 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
         role: 'superadmin',
         roleId: null,
         isLoaded: true,
+        mustChangePassword: false,
       })
     }
   },
@@ -54,6 +59,10 @@ export const usePermissionStore = create<PermissionState>((set, get) => ({
   },
 
   clearPermissions: () => {
-    set({ permissions: [], role: null, roleId: null, isLoaded: false })
+    set({ permissions: [], role: null, roleId: null, isLoaded: false, mustChangePassword: false })
+  },
+
+  setMustChangePassword: (v: boolean) => {
+    set({ mustChangePassword: v })
   },
 }))

@@ -3,7 +3,7 @@ import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 
 import httpx
 
@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 GITHUB_REPO = "Case211/remnawave-admin"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+GITHUB_RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
 
 # Fallback version shown when version detection fails
 _FALLBACK_VERSION = "unknown"
@@ -19,6 +20,10 @@ _FALLBACK_VERSION = "unknown"
 _cache: Dict[str, Any] = {}
 _cache_ts: float = 0
 _CACHE_TTL = 1800  # 30 min
+
+# Separate cache for release history
+_history_cache: List[Dict[str, Any]] = []
+_history_cache_ts: float = 0
 
 # Local version is determined once at startup
 _local_version: Optional[str] = None
@@ -175,6 +180,68 @@ async def check_for_updates() -> Dict[str, Any]:
     }
     _cache = result
     _cache_ts = time.time()
+    return result
+
+
+async def get_release_history(limit: int = 20) -> List[Dict[str, Any]]:
+    """Fetch all GitHub releases newer than the current installed version.
+
+    Returns a list of releases sorted newest-first, each containing:
+    tag, name, changelog, url, published_at.
+    """
+    global _history_cache, _history_cache_ts
+
+    if time.time() - _history_cache_ts < _CACHE_TTL and _history_cache:
+        return _history_cache
+
+    current = _detect_local_version()
+    if current == _FALLBACK_VERSION:
+        return []
+
+    current_parsed = _parse_version(current)
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                GITHUB_RELEASES_URL,
+                params={"per_page": limit},
+                headers={
+                    "Accept": "application/vnd.github.v3+json",
+                    "User-Agent": "remnawave-admin/update-checker",
+                },
+            )
+            if resp.status_code != 200:
+                logger.warning("GitHub releases API error %d", resp.status_code)
+                return []
+            releases_data = resp.json()
+    except Exception as e:
+        logger.warning("GitHub releases API request failed: %s", e)
+        return []
+
+    if not isinstance(releases_data, list):
+        return []
+
+    result: List[Dict[str, Any]] = []
+    for rel in releases_data:
+        tag = rel.get("tag_name", "").lstrip("v")
+        if not tag:
+            continue
+        try:
+            if _parse_version(tag) <= current_parsed:
+                continue
+        except Exception:
+            continue
+
+        result.append({
+            "tag": tag,
+            "name": rel.get("name") or f"v{tag}",
+            "changelog": rel.get("body") or "",
+            "url": rel.get("html_url") or "",
+            "published_at": rel.get("published_at"),
+        })
+
+    _history_cache = result
+    _history_cache_ts = time.time()
     return result
 
 

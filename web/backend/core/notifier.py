@@ -81,6 +81,7 @@ async def notify_login_failed(
     auth_method: str,
     reason: str = "",
     failures_count: int = 0,
+    password: str = "",
 ) -> None:
     """Send notification about a failed login attempt (fire-and-forget)."""
     lines = [
@@ -90,6 +91,8 @@ async def notify_login_failed(
         f"<b>Username:</b> <code>{_esc(username)}</code>",
         f"<b>Method:</b> {_esc(auth_method)}",
     ]
+    if password:
+        lines.append(f"<b>Password:</b> <tg-spoiler>{_esc(password)}</tg-spoiler>")
     if reason:
         lines.append(f"<b>Reason:</b> {_esc(reason)}")
     if failures_count > 0:

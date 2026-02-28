@@ -1,4 +1,4 @@
-import { useState, memo } from 'react'
+import { useState, memo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -19,6 +19,9 @@ import {
   Globe,
   CreditCard,
   CalendarClock,
+  ChevronDown,
+  ChevronUp,
+  Tag,
 } from 'lucide-react'
 import {
   BarChart,
@@ -648,8 +651,18 @@ interface DependencyVersions {
   xray_nodes: Record<string, string>
 }
 
+interface ReleaseInfo {
+  tag: string
+  name: string
+  changelog: string
+  url: string
+  published_at: string | null
+}
+
 function UpdateCheckerCard() {
   const { t } = useTranslation()
+  const [expandedRelease, setExpandedRelease] = useState<string | null>(null)
+
   const { data: updateInfo, isLoading } = useQuery<UpdateInfo>({
     queryKey: ['updates'],
     queryFn: async () => {
@@ -670,6 +683,17 @@ function UpdateCheckerCard() {
     retry: false,
   })
 
+  const { data: releaseHistory } = useQuery<ReleaseInfo[]>({
+    queryKey: ['release-history'],
+    queryFn: async () => {
+      const { data } = await client.get('/analytics/release-history')
+      return Array.isArray(data) ? data : []
+    },
+    staleTime: 300000,
+    retry: false,
+    enabled: !!updateInfo?.update_available,
+  })
+
   if (isLoading) {
     return (
       <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
@@ -685,6 +709,7 @@ function UpdateCheckerCard() {
   const xrayNodes = deps?.xray_nodes || {}
   const xrayVersions = Object.values(xrayNodes)
   const uniqueXray = [...new Set(xrayVersions)]
+  const releases = releaseHistory || []
 
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
@@ -724,8 +749,64 @@ function UpdateCheckerCard() {
           )}
         </div>
 
-        {/* Changelog preview */}
-        {updateInfo.update_available && updateInfo.changelog && (
+        {/* Release history */}
+        {releases.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-dark-300">
+              {t('dashboard.missedUpdates', { count: releases.length })}
+            </p>
+            <div className="space-y-1 max-h-64 overflow-auto">
+              {releases.map((rel) => {
+                const isExpanded = expandedRelease === rel.tag
+                return (
+                  <Fragment key={rel.tag}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedRelease(isExpanded ? null : rel.tag)}
+                      className="w-full flex items-center gap-2 bg-dark-700 hover:bg-dark-600 rounded-lg px-3 py-2 text-left transition-colors"
+                    >
+                      <Tag className="w-3 h-3 text-primary-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-white">v{rel.tag}</span>
+                      {rel.published_at && (
+                        <span className="text-[11px] text-dark-400 ml-auto mr-2">
+                          {new Date(rel.published_at).toLocaleDateString()}
+                        </span>
+                      )}
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-dark-400 flex-shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-dark-400 flex-shrink-0" />
+                      )}
+                    </button>
+                    {isExpanded && (
+                      <div className="bg-dark-800 rounded-lg px-3 py-2 ml-5 space-y-2">
+                        {rel.changelog && (
+                          <p className="text-xs text-dark-300 whitespace-pre-wrap break-words">
+                            {rel.changelog}
+                          </p>
+                        )}
+                        {rel.url && (
+                          <a
+                            href={rel.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-primary-400 hover:text-primary-300 transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            GitHub
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Single changelog fallback (when no release history loaded yet) */}
+        {updateInfo.update_available && updateInfo.changelog && releases.length === 0 && (
           <div className="bg-dark-700 rounded-lg p-3 max-h-24 overflow-auto">
             <p className="text-xs text-dark-300 whitespace-pre-wrap line-clamp-4">
               {updateInfo.changelog.slice(0, 300)}

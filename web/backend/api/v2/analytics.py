@@ -164,7 +164,15 @@ async def _get_nodes_data() -> List[Dict[str, Any]]:
 
 
 async def _get_hosts_data() -> List[Dict[str, Any]]:
-    """Get hosts from DB, fall back to API if DB is empty/unavailable."""
+    """Get hosts from API first, fall back to DB if API is unavailable."""
+    try:
+        hosts = await fetch_hosts_from_api()
+        if hosts:
+            return hosts
+    except Exception as e:
+        logger.debug("API hosts fetch failed, falling back to DB: %s", e)
+
+    # Fall back to local DB cache
     try:
         from shared.database import db_service
         if db_service.is_connected:
@@ -172,10 +180,9 @@ async def _get_hosts_data() -> List[Dict[str, Any]]:
             if hosts:
                 return hosts
     except Exception as e:
-        logger.debug("DB hosts fetch failed: %s", e)
+        logger.debug("DB hosts fetch also failed: %s", e)
 
-    # Fall back to Remnawave API
-    return await fetch_hosts_from_api()
+    return []
 
 
 async def _get_violation_counts() -> Dict[str, int]:
@@ -1063,3 +1070,12 @@ async def get_dependencies(
     """Get versions of key system dependencies."""
     from web.backend.core.update_checker import get_dependency_versions
     return await get_dependency_versions()
+
+
+@router.get("/release-history")
+async def release_history(
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get all GitHub releases newer than the currently installed version."""
+    from web.backend.core.update_checker import get_release_history
+    return await get_release_history()
