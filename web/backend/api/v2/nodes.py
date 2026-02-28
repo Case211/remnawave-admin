@@ -81,7 +81,7 @@ async def _get_nodes_list():
 @router.get("", response_model=PaginatedResponse[NodeListItem])
 async def list_nodes(
     page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
+    per_page: int = Query(20, ge=1, le=500),
     search: Optional[str] = Query(None, description="Search by name"),
     is_connected: Optional[bool] = Query(None, description="Filter by connection status"),
     admin: AdminUser = Depends(require_permission("nodes", "view")),

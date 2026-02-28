@@ -198,7 +198,7 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
   const { data: availableNodes = { items: [] } } = useQuery<{ items: Node[] }>({
     queryKey: ['nodes-list'],
     queryFn: async () => {
-      const { data } = await client.get('/nodes')
+      const { data } = await client.get('/nodes', { params: { per_page: 500 } })
       return data
     },
   })

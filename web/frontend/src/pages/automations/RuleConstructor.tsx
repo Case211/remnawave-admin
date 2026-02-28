@@ -141,7 +141,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
   const { data: nodesList, isLoading: nodesLoading } = useQuery({
     queryKey: ['automation-nodes'],
     queryFn: async () => {
-      const { data: resp } = await client.get('/nodes')
+      const { data: resp } = await client.get('/nodes', { params: { per_page: 500 } })
       return (resp.items || resp) as Array<{
         uuid: string
         name: string
