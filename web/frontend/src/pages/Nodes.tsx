@@ -77,7 +77,7 @@ interface NodeEditFormData {
 
 // API functions
 const fetchNodes = async (): Promise<Node[]> => {
-  const { data } = await client.get('/nodes')
+  const { data } = await client.get('/nodes', { params: { per_page: 500 } })
   return data.items || data
 }
 
