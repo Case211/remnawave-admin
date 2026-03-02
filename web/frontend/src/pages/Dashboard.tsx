@@ -1073,6 +1073,103 @@ function UpdateCheckerCard() {
 
 // ── ActivityFeedCard ─────────────────────────────────────────────
 
+/** Plurals→singular map for audit entity normalization */
+const ENTITY_SINGULAR: Record<string, string> = {
+  users: 'user', nodes: 'node', hosts: 'host',
+  admins: 'admin', roles: 'role', violations: 'violation',
+}
+
+/** Verb aliases for descriptions lookup */
+const VERB_ALIASES: Record<string, string> = {
+  generate_agent_token: 'generate_token',
+  revoke_agent_token: 'revoke_token',
+}
+
+/**
+ * Translate dotted audit action (e.g. "users.sync_hwid") into a human-readable string.
+ * Lookup chain: audit.feed.{action} → audit.descriptions.{verb}.{singular} → audit.actions.{verb} + audit.resources.{singular} → humanized raw
+ */
+function translateAuditAction(action: string, t: (key: string) => string): string {
+  // Try direct feed translation (handles any format)
+  const feedKey = `audit.feed.${action}`
+  const feedResult = t(feedKey)
+  if (feedResult !== feedKey) return feedResult
+
+  const dotIdx = action.indexOf('.')
+  if (dotIdx <= 0) {
+    const ak = `audit.actions.${action}`
+    const al = t(ak)
+    return al !== ak ? al : action.replace(/_/g, ' ')
+  }
+
+  const entity = action.slice(0, dotIdx)
+  const verb = action.slice(dotIdx + 1)
+  const singular = ENTITY_SINGULAR[entity] || entity
+
+  // Try audit.descriptions.{verb}.{singular}
+  const descKey = `audit.descriptions.${verb}.${singular}`
+  const desc = t(descKey)
+  if (desc !== descKey) return desc
+
+  // Try verb alias (generate_agent_token → generate_token)
+  const aliasVerb = VERB_ALIASES[verb]
+  if (aliasVerb) {
+    const aliasKey = `audit.descriptions.${aliasVerb}.${singular}`
+    const aliasResult = t(aliasKey)
+    if (aliasResult !== aliasKey) return aliasResult
+  }
+
+  // Compose from actions + resources
+  const actionLabel = t(`audit.actions.${verb}`)
+  const resourceLabel = t(`audit.resources.${singular}`)
+  if (actionLabel !== `audit.actions.${verb}` && resourceLabel !== `audit.resources.${singular}`) {
+    return `${actionLabel}: ${resourceLabel}`
+  }
+  if (actionLabel !== `audit.actions.${verb}`) return actionLabel
+
+  return verb.replace(/_/g, ' ')
+}
+
+/** Extract a short label from audit entry details JSON (username, name, setting key, etc.) */
+/** Extract a concise context string from audit entry details JSON. */
+function extractDetailLabel(details: string | null): string | null {
+  if (!details) return null
+  try {
+    const d = JSON.parse(details)
+    const parts: string[] = []
+
+    // Primary identifier: username / name / remark / title
+    const id = d.username || d.name || d.remark || d.title || null
+    if (id) parts.push(String(id))
+
+    // Setting key
+    if (d.setting) parts.push(String(d.setting))
+
+    // Address (nodes/hosts — if no name available)
+    if (!id && d.address) parts.push(String(d.address))
+
+    // Bulk operation count
+    if (d.count != null) {
+      let bulk = `×${d.count}`
+      if (d.failed > 0) bulk += ` (✗${d.failed})`
+      parts.push(bulk)
+    }
+
+    // Changed fields (for update actions)
+    if (Array.isArray(d.fields) && d.fields.length > 0) {
+      parts.push(d.fields.slice(0, 3).join(', ') + (d.fields.length > 3 ? '…' : ''))
+    }
+
+    // Status / value (if nothing else matched)
+    if (parts.length === 0 && d.status) parts.push(String(d.status))
+    if (parts.length === 0 && d.value != null) parts.push(String(d.value).slice(0, 30))
+
+    return parts.length > 0 ? parts.join(' · ') : null
+  } catch {
+    return null
+  }
+}
+
 const ActivityFeedCard = memo(function ActivityFeedCard({
   items, loading,
 }: {
@@ -1084,10 +1181,16 @@ const ActivityFeedCard = memo(function ActivityFeedCard({
   const { formatTimeAgo } = useFormatters()
 
   const actionIcon = (action: string) => {
-    if (action.includes('create')) return '+'
-    if (action.includes('delete')) return '×'
-    if (action.includes('update') || action.includes('edit')) return '✎'
+    if (action.includes('create') || action.includes('template_activate')) return '+'
+    if (action.includes('delete') || action.includes('remove') || action.includes('revoke')) return '×'
+    if (action.includes('update') || action.includes('edit') || action.includes('toggle')) return '✎'
     if (action.includes('login')) return '→'
+    if (action.includes('logout')) return '←'
+    if (action.includes('enable')) return '▶'
+    if (action.includes('disable')) return '■'
+    if (action.includes('sync') || action.includes('restart') || action.includes('trigger')) return '↻'
+    if (action.includes('resolve') || action.includes('annul')) return '✓'
+    if (action.includes('generate') || action.includes('reset')) return '⟳'
     return '•'
   }
 
@@ -1113,20 +1216,24 @@ const ActivityFeedCard = memo(function ActivityFeedCard({
           </div>
         ) : items.length > 0 ? (
           <div className="space-y-0.5 max-h-[200px] overflow-auto">
-            {items.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-2 py-1 text-xs">
-                <span className="text-muted-foreground shrink-0 w-14 text-[10px] font-mono">
-                  {entry.created_at ? formatTimeAgo(entry.created_at) : ''}
-                </span>
-                <span className="text-primary-400 w-3 text-center shrink-0 font-mono">
-                  {actionIcon(entry.action)}
-                </span>
-                <span className="text-muted-foreground truncate">
-                  <span className="text-white">{entry.admin_username}</span>{' '}
-                  {entry.action}{entry.resource ? ` ${entry.resource}` : ''}
-                </span>
-              </div>
-            ))}
+            {items.map((entry) => {
+              const label = translateAuditAction(entry.action, t)
+              const detail = extractDetailLabel(entry.details)
+              return (
+                <div key={entry.id} className="flex items-center gap-2 py-1 text-xs">
+                  <span className="text-muted-foreground shrink-0 w-14 text-[10px] font-mono">
+                    {entry.created_at ? formatTimeAgo(entry.created_at) : ''}
+                  </span>
+                  <span className="text-primary-400 w-3 text-center shrink-0 font-mono">
+                    {actionIcon(entry.action)}
+                  </span>
+                  <span className="text-muted-foreground truncate">
+                    <span className="text-white">{entry.admin_username}</span>{' '}
+                    {label}{detail ? <span className="opacity-60"> · {detail}</span> : null}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className="h-20 flex items-center justify-center">

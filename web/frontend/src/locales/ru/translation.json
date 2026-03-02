@@ -1484,6 +1484,71 @@
       "resolve": {
         "violation": "Нарушение обработано"
       }
+    },
+    "feed": {
+      "users": {
+        "sync_hwid": "Синхронизация HWID",
+        "revoke": "Отзыв подписки",
+        "bulk_enable": "Массовое включение",
+        "bulk_disable": "Массовое отключение",
+        "bulk_delete": "Массовое удаление",
+        "bulk_reset_traffic": "Массовый сброс трафика"
+      },
+      "user": {
+        "sync_hwid": "Синхронизация HWID",
+        "revoke": "Отзыв подписки",
+        "bulk_enable": "Массовое включение",
+        "bulk_disable": "Массовое отключение",
+        "bulk_delete": "Массовое удаление",
+        "bulk_reset_traffic": "Массовый сброс трафика"
+      },
+      "automation": {
+        "toggle": "Переключение автоматизации",
+        "template_activate": "Активация шаблона"
+      },
+      "setting": {
+        "ip_whitelist_update": "Обновление белого списка IP",
+        "sync_trigger": "Запуск синхронизации",
+        "maxmind_update": "Обновление базы GeoIP"
+      },
+      "settings": {
+        "update_ip_whitelist": "Обновление белого списка IP",
+        "trigger_sync": "Запуск синхронизации"
+      },
+      "violation": {
+        "annul": "Аннулирование нарушения",
+        "annul_bulk": "Массовое аннулирование",
+        "whitelist": {
+          "add": "Добавление в белый список",
+          "update": "Обновление белого списка",
+          "remove": "Удаление из белого списка"
+        }
+      },
+      "violations": {
+        "resolve": "Решение нарушения"
+      },
+      "node": {
+        "generate_agent_token": "Генерация токена агента",
+        "revoke_agent_token": "Отзыв токена агента"
+      },
+      "nodes": {
+        "generate_token": "Генерация токена агента",
+        "revoke_token": "Отзыв токена агента"
+      },
+      "auth": {
+        "login": "Вход в систему",
+        "login_telegram": "Вход через Telegram",
+        "logout": "Выход из системы",
+        "change_password": "Смена пароля"
+      },
+      "mailserver": {
+        "create_domain": "Создание почтового домена",
+        "update_domain": "Обновление почтового домена",
+        "delete_domain": "Удаление почтового домена",
+        "create_smtp_credential": "Создание SMTP",
+        "update_smtp_credential": "Обновление SMTP",
+        "delete_smtp_credential": "Удаление SMTP"
+      }
     }
   },
   "logs": {

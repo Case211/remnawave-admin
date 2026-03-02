@@ -1484,6 +1484,71 @@
       "resolve": {
         "violation": "Violation resolved"
       }
+    },
+    "feed": {
+      "users": {
+        "sync_hwid": "HWID sync",
+        "revoke": "Subscription revoked",
+        "bulk_enable": "Bulk enable",
+        "bulk_disable": "Bulk disable",
+        "bulk_delete": "Bulk delete",
+        "bulk_reset_traffic": "Bulk traffic reset"
+      },
+      "user": {
+        "sync_hwid": "HWID sync",
+        "revoke": "Subscription revoked",
+        "bulk_enable": "Bulk enable",
+        "bulk_disable": "Bulk disable",
+        "bulk_delete": "Bulk delete",
+        "bulk_reset_traffic": "Bulk traffic reset"
+      },
+      "automation": {
+        "toggle": "Automation toggled",
+        "template_activate": "Template activated"
+      },
+      "setting": {
+        "ip_whitelist_update": "IP whitelist updated",
+        "sync_trigger": "Sync triggered",
+        "maxmind_update": "GeoIP database updated"
+      },
+      "settings": {
+        "update_ip_whitelist": "IP whitelist updated",
+        "trigger_sync": "Sync triggered"
+      },
+      "violation": {
+        "annul": "Violation annulled",
+        "annul_bulk": "Bulk annulment",
+        "whitelist": {
+          "add": "Added to whitelist",
+          "update": "Whitelist updated",
+          "remove": "Removed from whitelist"
+        }
+      },
+      "violations": {
+        "resolve": "Violation resolved"
+      },
+      "node": {
+        "generate_agent_token": "Agent token generated",
+        "revoke_agent_token": "Agent token revoked"
+      },
+      "nodes": {
+        "generate_token": "Agent token generated",
+        "revoke_token": "Agent token revoked"
+      },
+      "auth": {
+        "login": "System login",
+        "login_telegram": "Telegram login",
+        "logout": "System logout",
+        "change_password": "Password changed"
+      },
+      "mailserver": {
+        "create_domain": "Mail domain created",
+        "update_domain": "Mail domain updated",
+        "delete_domain": "Mail domain deleted",
+        "create_smtp_credential": "SMTP credential created",
+        "update_smtp_credential": "SMTP credential updated",
+        "delete_smtp_credential": "SMTP credential deleted"
+      }
     }
   },
   "logs": {
