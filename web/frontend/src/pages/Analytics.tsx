@@ -37,6 +37,7 @@ const LazyGeoMap = lazy(() => import('@/components/LazyGeoMap'))
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -817,11 +818,14 @@ function TrendsCard() {
 
 // ── Shared HWIDs Card ───────────────────────────────────────────
 
+type HwidFilter = 'all' | 'has_trial' | 'has_expired' | 'has_active'
+
 function SharedHwidsCard() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [expandedHwid, setExpandedHwid] = useState<string | null>(null)
+  const [filter, setFilter] = useState<HwidFilter>('all')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-shared-hwids'],
@@ -832,14 +836,26 @@ function SharedHwidsCard() {
   const items: SharedHwidGroup[] = data?.items || []
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return items
-    const q = search.toLowerCase()
-    return items.filter(
-      (g) =>
-        g.hwid.toLowerCase().includes(q) ||
-        g.users.some((u) => u.username?.toLowerCase().includes(q))
-    )
-  }, [items, search])
+    let result = items
+    // Apply filter
+    if (filter === 'has_trial') {
+      result = result.filter((g) => g.users.some((u) => u.is_trial))
+    } else if (filter === 'has_expired') {
+      result = result.filter((g) => g.users.some((u) => !u.is_active && u.expire_date))
+    } else if (filter === 'has_active') {
+      result = result.filter((g) => g.users.some((u) => u.is_active))
+    }
+    // Apply search
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(
+        (g) =>
+          g.hwid.toLowerCase().includes(q) ||
+          g.users.some((u) => u.username?.toLowerCase().includes(q))
+      )
+    }
+    return result
+  }, [items, search, filter])
 
   const truncHwid = (hwid: string) =>
     hwid.length > 16 ? hwid.slice(0, 8) + '...' + hwid.slice(-4) : hwid
@@ -871,6 +887,21 @@ function SharedHwidsCard() {
                 {items.length}
               </Badge>
             )}
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            {(['all', 'has_trial', 'has_active', 'has_expired'] as HwidFilter[]).map((f) => (
+              <Button
+                key={f}
+                variant={filter === f ? 'default' : 'outline'}
+                size="sm"
+                className="h-7 text-xs px-2.5"
+                onClick={() => setFilter(f)}
+              >
+                {t(`analytics.sharedHwids.filter.${f}`, {
+                  defaultValue: f === 'all' ? 'All' : f === 'has_trial' ? 'Trial' : f === 'has_active' ? 'Active' : 'Expired',
+                })}
+              </Button>
+            ))}
           </div>
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -944,6 +975,9 @@ function SharedHwidsCard() {
                     )}
 
                     <div className="ml-auto flex items-center gap-1.5">
+                      {group.users.some((u) => u.is_trial) && (
+                        <Badge className="bg-yellow-500/20 text-yellow-300 text-[10px]">trial</Badge>
+                      )}
                       <Badge className="bg-red-500/20 text-red-300 text-xs">
                         {group.user_count} {t('analytics.sharedHwids.accounts')}
                       </Badge>
@@ -957,6 +991,7 @@ function SharedHwidsCard() {
                           <TableRow>
                             <TableHead className="text-xs">{t('analytics.topUsers.user')}</TableHead>
                             <TableHead className="text-xs hidden sm:table-cell">{t('analytics.topUsers.status')}</TableHead>
+                            <TableHead className="text-xs hidden sm:table-cell">{t('analytics.sharedHwids.subscription', 'Подписка')}</TableHead>
                             <TableHead className="text-xs hidden md:table-cell">{t('analytics.sharedHwids.createdAt')}</TableHead>
                             <TableHead className="text-xs hidden md:table-cell">{t('analytics.sharedHwids.firstSeen')}</TableHead>
                           </TableRow>
@@ -969,9 +1004,14 @@ function SharedHwidsCard() {
                               onClick={() => navigate(`/users/${user.uuid}`)}
                             >
                               <TableCell>
-                                <span className="font-medium text-white text-sm hover:text-primary-400 transition-colors">
-                                  {user.username || user.uuid.slice(0, 8)}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-medium text-white text-sm hover:text-primary-400 transition-colors">
+                                    {user.username || user.uuid.slice(0, 8)}
+                                  </span>
+                                  {user.is_trial && (
+                                    <Badge className="bg-yellow-500/20 text-yellow-300 text-[10px] px-1.5 py-0">trial</Badge>
+                                  )}
+                                </div>
                               </TableCell>
                               <TableCell className="hidden sm:table-cell">
                                 <Badge
@@ -980,6 +1020,20 @@ function SharedHwidsCard() {
                                 >
                                   {t(`analytics.status.${user.status}`, { defaultValue: user.status })}
                                 </Badge>
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell">
+                                {user.expire_date ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className={cn('text-xs', user.is_active ? 'bg-green-500/20 text-green-300' : 'bg-dark-600 text-dark-200')}
+                                  >
+                                    {user.is_active
+                                      ? t('analytics.sharedHwids.active', 'Активна')
+                                      : t('analytics.sharedHwids.expired', 'Истекла')}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-dark-300">-</span>
+                                )}
                               </TableCell>
                               <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
                                 {formatDate(user.created_at)}

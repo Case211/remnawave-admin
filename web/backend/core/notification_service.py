@@ -299,12 +299,15 @@ async def create_notification(
     group_key: Optional[str] = None,
     channels: Optional[List[str]] = None,
     topic_type: str = "service",
+    telegram_body: Optional[str] = None,
 ) -> Optional[int]:
     """Create in-app notification and dispatch to configured channels.
 
     If admin_id is None, creates notification for all admins.
     ``topic_type`` controls which Telegram topic the global fallback
     message is sent to ("nodes", "service", "users", "errors", …).
+    ``telegram_body`` if set, will be used for Telegram messages instead of ``body``
+    (useful for sending HTML-formatted messages to Telegram while storing plain text in DB).
     Returns the notification ID.
     """
     channels = channels or ["in_app"]
@@ -386,9 +389,12 @@ async def create_notification(
         except Exception as e:
             logger.warning("WebSocket broadcast failed: %s", e)
 
+        # Use telegram_body for Telegram channels if provided, otherwise fall back to body
+        tg_body = telegram_body or body
+
         # Dispatch to external channels (per-admin configured channels)
         if admin_id is not None:
-            asyncio.create_task(_dispatch_external(admin_id, title, body, severity, link, channels))
+            asyncio.create_task(_dispatch_external(admin_id, title, tg_body, severity, link, channels))
             # We can't easily track what was dispatched in the async task,
             # but we still send to global fallback below for broadcast safety
         else:
@@ -401,7 +407,7 @@ async def create_notification(
                     logger.debug("Broadcasting external channels to %d admin accounts", len(admin_ids_rows))
                     for row in admin_ids_rows:
                         asyncio.create_task(
-                            _dispatch_external(row["id"], title, body, severity, link, channels)
+                            _dispatch_external(row["id"], title, tg_body, severity, link, channels)
                         )
                 else:
                     logger.debug("No admin_accounts found for external dispatch")
@@ -415,7 +421,7 @@ async def create_notification(
         # (e.g. "nodes" → NOTIFICATIONS_TOPIC_NODES)
         if "telegram" in channels or "all" in channels:
             asyncio.create_task(
-                _send_to_global_telegram(title, body, severity, topic_type)
+                _send_to_global_telegram(title, tg_body, severity, topic_type)
             )
 
     except Exception as e:

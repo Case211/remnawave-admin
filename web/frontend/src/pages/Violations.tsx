@@ -359,10 +359,10 @@ const ViolationCard = memo(function ViolationCard({
               )}
             </div>
 
-            {/* Top reasons preview */}
+            {/* Top reasons preview (deduplicated) */}
             {Array.isArray(violation.reasons) && violation.reasons.length > 0 && (
               <div className="space-y-0.5 mb-1">
-                {violation.reasons.slice(0, 2).map((reason, i) => (
+                {[...new Set(violation.reasons)].slice(0, 2).map((reason, i) => (
                   <p key={i} className="text-xs text-dark-200 flex items-start gap-1">
                     <AlertTriangle className="w-3 h-3 text-yellow-400/70 mt-0.5 flex-shrink-0" />
                     <span className="line-clamp-1">{reason}</span>
@@ -673,24 +673,38 @@ function ViolationDetailPanel({
         </CardContent>
       </Card>
 
-      {/* Reasons */}
-      {Array.isArray(detail.reasons) && detail.reasons.length > 0 && (
-        <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <CardContent className="p-4">
-            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
-              {t('violations.detail.reasons')} ({detail.reasons.length})
-            </h3>
-            <ul className="space-y-2">
-              {detail.reasons.map((reason, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-                  <span className="text-dark-100">{reason}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      {/* Reasons (stacked by deduplication) */}
+      {Array.isArray(detail.reasons) && detail.reasons.length > 0 && (() => {
+        const reasonCounts = new Map<string, number>()
+        for (const r of detail.reasons) {
+          reasonCounts.set(r, (reasonCounts.get(r) || 0) + 1)
+        }
+        const uniqueReasons = Array.from(reasonCounts.entries())
+        return (
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+            <CardContent className="p-4">
+              <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+                {t('violations.detail.reasons')} ({uniqueReasons.length})
+              </h3>
+              <ul className="space-y-2">
+                {uniqueReasons.map(([reason, count], i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+                    <span className="text-dark-100">
+                      {reason}
+                      {count > 1 && (
+                        <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
+                          ×{count}
+                        </Badge>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {/* Geo & Network info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -984,18 +998,18 @@ function TopViolatorsTab({ days, onViewUser, onViewViolations }: { days: number;
                 <ScoreCircle score={v.max_score} size="sm" />
               </div>
 
-              {/* Top reasons */}
+              {/* Top reasons (deduplicated) */}
               {Array.isArray(v.top_reasons) && v.top_reasons.length > 0 && (
                 <div className="mt-2.5 space-y-1">
-                  {v.top_reasons.slice(0, 3).map((reason, j) => (
+                  {[...new Set(v.top_reasons)].slice(0, 3).map((reason, j) => (
                     <div key={j} className="flex items-start gap-1.5 text-xs text-dark-200">
                       <AlertTriangle className="w-3 h-3 text-yellow-400/70 mt-0.5 flex-shrink-0" />
                       <span className="line-clamp-1">{reason}</span>
                     </div>
                   ))}
-                  {v.top_reasons.length > 3 && (
+                  {[...new Set(v.top_reasons)].length > 3 && (
                     <span className="text-xs text-dark-300 ml-4.5">
-                      +{v.top_reasons.length - 3} {t('common.more')}
+                      +{[...new Set(v.top_reasons)].length - 3} {t('common.more')}
                     </span>
                   )}
                 </div>
@@ -1601,7 +1615,7 @@ export default function Violations() {
   const rawTab = getP('tab', 'all') as Tab
   const tab = validTabs.includes(rawTab) ? rawTab : 'all'
   const page = getN('page', 1)
-  const perPage = 15
+  const perPage = getN('perPage', 20)
   const severity = getP('severity', '')
   const days = getN('days', 7)
   const showFilters = getP('filters', '') === '1'
@@ -2219,10 +2233,23 @@ export default function Violations() {
           {/* Pagination */}
           {total > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-              <p className="text-sm text-dark-200 order-2 sm:order-1">
-                {t('common.shown')} {(page - 1) * perPage + 1}–
-                {Math.min(page * perPage, total)} {t('common.of')} {total}
-              </p>
+              <div className="flex items-center gap-3 order-2 sm:order-1">
+                <p className="text-sm text-dark-200">
+                  {t('common.shown')} {(page - 1) * perPage + 1}–
+                  {Math.min(page * perPage, total)} {t('common.of')} {total}
+                </p>
+                <select
+                  value={perPage}
+                  onChange={(e) => setParams({ perPage: e.target.value === '20' ? null : e.target.value, page: null })}
+                  className="h-8 rounded-md border border-dark-400/20 bg-dark-800 px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-primary-500/50"
+                >
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                  <option value="500">500</option>
+                </select>
+              </div>
               <div className="flex items-center gap-2 order-1 sm:order-2">
                 <Button
                   variant="secondary"

@@ -266,17 +266,51 @@ async def send_violation_notification(
         else:
             lines.append("\U0001f4f2 Устройства: \u2014")
 
+        # Reasons (deduplicated)
+        reasons = violation_score.get("reasons", [])
+        if reasons:
+            seen = set()
+            unique_reasons = []
+            for r in reasons:
+                if r not in seen:
+                    seen.add(r)
+                    unique_reasons.append(r)
+            lines.append("")
+            lines.append("\u2757 Причины:")
+            for r in unique_reasons[:8]:
+                lines.append(f"   \u2022 {_esc(r)}")
+            if len(unique_reasons) > 8:
+                lines.append(f"   ... и ещё {len(unique_reasons) - 8}")
+
+        # Recommended action
+        action = violation_score.get("recommended_action", "")
+        action_labels = {
+            "no_action": "Без действий",
+            "monitor": "\U0001f50d Мониторинг",
+            "warn": "\u26a0\ufe0f Предупреждение",
+            "soft_block": "\U0001f6ab Мягкая блокировка",
+            "temp_block": "\u23f3 Временная блокировка",
+            "hard_block": "\U0001f6d1 Жёсткая блокировка",
+        }
+        action_label = action_labels.get(action, action)
+        if action and action != "no_action":
+            lines.append(f"\U0001f3af Действие: <b>{action_label}</b>")
+
         lines.append(f"\U0001f4ca Скор: <code>{total_score:.1f}/100</code>")
         lines.append(f"\U0001f550 Время (МСК): <code>{moscow_time_str}</code>")
 
         body = "\n".join(lines)
+
+        # Plain text body for in-app notifications (strip HTML tags)
+        import re
+        plain_body = re.sub(r'<[^>]+>', '', body)
 
         # Send via notification_service
         from web.backend.core.notification_service import create_notification
 
         await create_notification(
             title="Нарушение лимита устройств",
-            body=body,
+            body=plain_body,
             type="violation",
             severity="warning" if total_score < 80 else "critical",
             source="collector",
@@ -284,6 +318,7 @@ async def send_violation_notification(
             group_key=f"violation:{user_uuid}",
             channels=["telegram", "in_app"],
             topic_type="violations",
+            telegram_body=body,
         )
 
         # Update throttling: persistent DB + in-memory fallback

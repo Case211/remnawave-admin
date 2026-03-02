@@ -34,6 +34,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import Resources from './Resources'
@@ -89,6 +90,16 @@ const resetSetting = async (key: string): Promise<void> => {
   await client.delete(`/settings/${key}`)
 }
 
+interface InternalSquad {
+  uuid: string
+  squadName: string
+  squadTag: string
+}
+
+const fetchInternalSquads = async (): Promise<InternalSquad[]> => {
+  const { data } = await client.get('/users/meta/internal-squads')
+  return Array.isArray(data) ? data : []
+}
 
 // Entity keys that can be synced manually (maps display key -> API trigger key)
 const SYNCABLE_ENTITIES: Record<string, string> = {
@@ -862,6 +873,13 @@ export default function Settings() {
     refetchInterval: 15000,
   })
 
+  // Fetch internal squads for trial squad selector
+  const { data: internalSquads } = useQuery({
+    queryKey: ['internalSquads'],
+    queryFn: fetchInternalSquads,
+    staleTime: 60_000,
+  })
+
   // Save mutation — auto-save individual setting
   const saveMutation = useMutation({
     mutationFn: updateSetting,
@@ -1099,6 +1117,68 @@ export default function Settings() {
       )
     }
 
+    // Custom: internal squad multi-select with checkboxes
+    if (item.key === 'violations_trial_squad_uuids' && internalSquads && internalSquads.length > 0) {
+      let selectedUuids: string[] = []
+      try {
+        const parsed = JSON.parse(displayValue || '[]')
+        if (Array.isArray(parsed)) selectedUuids = parsed
+      } catch { /* empty */ }
+
+      const toggleSquad = (uuid: string) => {
+        const next = selectedUuids.includes(uuid)
+          ? selectedUuids.filter((u) => u !== uuid)
+          : [...selectedUuids, uuid]
+        const val = JSON.stringify(next)
+        setPendingValues((prev) => ({ ...prev, [item.key]: val }))
+        saveImmediately(item.key, val)
+      }
+
+      return (
+        <div key={item.key} className="py-3 group">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <Label className="block text-sm text-dark-200">{label}</Label>
+            {item.is_readonly && <Lock className="w-3 h-3 text-dark-300" />}
+            <SourceBadge source={item.source} />
+            {statusIcon}
+            {canReset && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleReset(item.key)}
+                className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                title={t('settings.reset')}
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            )}
+          </div>
+          <div className="space-y-1.5 mt-1.5 max-h-48 overflow-y-auto">
+            {internalSquads.map((sq) => (
+              <label
+                key={sq.uuid}
+                className={cn(
+                  'flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer transition-colors',
+                  selectedUuids.includes(sq.uuid) ? 'bg-primary/10' : 'hover:bg-dark-700/40'
+                )}
+              >
+                <Checkbox
+                  checked={selectedUuids.includes(sq.uuid)}
+                  onCheckedChange={() => isEditable && toggleSquad(sq.uuid)}
+                  disabled={!isEditable || isSaving}
+                />
+                <span className="text-sm text-white">{sq.squadName || sq.squadTag}</span>
+                {sq.squadTag && sq.squadTag !== sq.squadName && (
+                  <span className="text-xs text-dark-300">{sq.squadTag}</span>
+                )}
+              </label>
+            ))}
+          </div>
+          {description && <p className="text-xs text-dark-200 mt-1">{description}</p>}
+        </div>
+      )
+    }
+
     // Default: string input
     return (
       <div key={item.key} className="py-3 group">
@@ -1223,6 +1303,10 @@ export default function Settings() {
 
         <TabsContent value="general" className="space-y-6 mt-4">
 
+      {/* Hidden inputs to trap Chrome autofill */}
+      <input type="text" name="trap-username" autoComplete="username" className="hidden" tabIndex={-1} aria-hidden="true" />
+      <input type="password" name="trap-password" autoComplete="current-password" className="hidden" tabIndex={-1} aria-hidden="true" />
+
       {/* Search */}
       <div className="relative animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-300 pointer-events-none" />
@@ -1232,6 +1316,8 @@ export default function Settings() {
           className="w-full pl-10 pr-10"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          autoComplete="off"
+          name="settings-search"
         />
         {search && (
           <Button

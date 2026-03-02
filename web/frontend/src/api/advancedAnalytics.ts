@@ -58,6 +58,9 @@ export interface SharedHwidUser {
   status: string
   created_at: string | null
   hwid_first_seen: string | null
+  expire_date: string | null
+  is_active: boolean
+  is_trial: boolean
 }
 
 export interface SharedHwidGroup {

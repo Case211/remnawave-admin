@@ -142,13 +142,15 @@ class TemporalAnalyzer:
         # (2 минуты) - это учитывает нормальное переключение между сетями (Wi-Fi <-> мобильная)
         # Также учитываем роутинг в приложении - пользователь может периодически подключаться/отключаться
         if len(connections) > 1:
+            from shared.config_service import config_service
             simultaneous_window_seconds = 120  # Окно для определения одновременности (2 минуты)
             max_connection_age_seconds = 600   # Подключения старше этого считаются устаревшими (10 минут)
             sequential_switch_threshold = 300  # Разрыв между подключениями, указывающий на переключение (5 минут)
             max_connection_age_hours = 24  # Максимальный возраст подключения для учёта
             # Учитываем количество устройств пользователя - если у пользователя несколько устройств,
             # то несколько одновременных подключений могут быть нормальными
-            max_allowed_simultaneous = max(1, user_device_count)
+            config_max_ips = config_service.get("violations_max_simultaneous_ips", 0)
+            max_allowed_simultaneous = config_max_ips if config_max_ips > 0 else max(1, user_device_count)
             
             # Собираем все валидные времена подключений
             valid_connections = []
@@ -632,9 +634,9 @@ class GeoAnalyzer:
         ],
     }
 
-    # Минимальное расстояние (км), при котором города считаются "далеко" друг от друга
-    MIN_DISTANCE_FOR_DIFFERENT_CITIES = 100
-    
+    # Минимальное расстояние (км), при котором города считаются "далеко" друг от друга (по умолчанию)
+    MIN_DISTANCE_FOR_DIFFERENT_CITIES_DEFAULT = 100
+
     def __init__(self, geoip_service: Optional[GeoIPService] = None):
         """
         Инициализирует GeoAnalyzer.
@@ -763,11 +765,14 @@ class GeoAnalyzer:
         Returns:
             GeoScore с оценкой и причинами
         """
+        from shared.config_service import config_service
         score = 0.0
         reasons = []
         countries: Set[str] = set()
         cities: Set[str] = set()
         impossible_travel = False
+        # Configurable city distance threshold
+        min_city_distance = config_service.get("violations_geo_max_city_distance_km", min_city_distance_DEFAULT)
 
         # Собираем уникальные IP из активных подключений и истории
         all_ips = set()
@@ -929,7 +934,7 @@ class GeoAnalyzer:
                             if distance_km <= 50:
                                 # Очень близко - игнорируем (возможно погрешность GeoIP)
                                 pass
-                            elif distance_km <= self.MIN_DISTANCE_FOR_DIFFERENT_CITIES:
+                            elif distance_km <= min_city_distance:
                                 # Умеренно близко - минимальный скор
                                 score = max(score, 2.0)
                                 reasons.append(f"Близкие города: {prev_city} → {curr_city} ({distance_km:.0f} км)")
@@ -1938,6 +1943,48 @@ class IntelligentViolationDetector:
             elif hwid_score.score >= 65.0 and hwid_score.other_accounts_count >= 1:
                 raw_score = max(raw_score, 50.0)
 
+            # --- Проверка экстремального абьюза (жёсткая блокировка) ---
+            extreme_abuse_reasons = []
+            hb_ips = config_service.get("violations_hard_block_ips", 50)
+            hb_sim = config_service.get("violations_hard_block_simultaneous", 20)
+            hb_dev = config_service.get("violations_hard_block_devices", 80)
+            hb_hwid = config_service.get("violations_hard_block_hwid_matches", 10)
+
+            # 1) Аномально много уникальных IP
+            if hb_ips > 0 and len(current_ips) >= hb_ips:
+                extreme_abuse_reasons.append(
+                    f"Экстремальное количество IP: {len(current_ips)} уникальных адресов (порог: {hb_ips})"
+                )
+
+            # 2) Много одновременных активных подключений
+            sim_count = getattr(temporal_score, 'simultaneous_connections_count', 0)
+            if hb_sim > 0 and sim_count >= hb_sim:
+                extreme_abuse_reasons.append(
+                    f"Экстремальное количество одновременных подключений: {sim_count} (порог: {hb_sim})"
+                )
+
+            # 3) Много устройств по fingerprint
+            if hb_dev > 0 and hasattr(device_score, 'unique_fingerprints_count') and device_score.unique_fingerprints_count >= hb_dev:
+                extreme_abuse_reasons.append(
+                    f"Экстремальное количество устройств: {device_score.unique_fingerprints_count} fingerprints (порог: {hb_dev})"
+                )
+
+            # 4) Много одинаковых устройств по HWID
+            if hb_hwid > 0 and hasattr(hwid_score, 'shared_hwids_count') and hwid_score.shared_hwids_count >= hb_hwid:
+                extreme_abuse_reasons.append(
+                    f"Массовый HWID абьюз: {hwid_score.shared_hwids_count} совпадающих HWID (порог: {hb_hwid})"
+                )
+
+            if extreme_abuse_reasons:
+                raw_score = 100.0
+                all_reasons_extra = extreme_abuse_reasons  # Will be added below
+                logger.warning(
+                    "Extreme abuse detected for %s: %s",
+                    user_uuid, "; ".join(extreme_abuse_reasons)
+                )
+            else:
+                all_reasons_extra = []
+
             # Определяем рекомендуемое действие
             recommended_action = self._get_action(raw_score)
             
@@ -1950,14 +1997,21 @@ class IntelligentViolationDetector:
             score_factor = min(1.0, raw_score / 100.0)
             confidence = min(1.0, score_factor * (0.4 + 0.1 * active_factors) * (0.5 + 0.5 * data_quality))
             
-            # Собираем все причины
+            # Собираем все причины (с дедупликацией)
             all_reasons = []
-            all_reasons.extend(temporal_score.reasons)
-            all_reasons.extend(geo_score.reasons)
-            all_reasons.extend(asn_score.reasons)
-            all_reasons.extend(profile_score.reasons)
-            all_reasons.extend(device_score.reasons)
-            all_reasons.extend(hwid_score.reasons)
+            seen_reasons: set = set()
+            for reason in (
+                all_reasons_extra +
+                temporal_score.reasons +
+                geo_score.reasons +
+                asn_score.reasons +
+                profile_score.reasons +
+                device_score.reasons +
+                hwid_score.reasons
+            ):
+                if reason not in seen_reasons:
+                    seen_reasons.add(reason)
+                    all_reasons.append(reason)
 
             return ViolationScore(
                 total=min(raw_score, 100.0),

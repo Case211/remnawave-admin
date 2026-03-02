@@ -1288,7 +1288,7 @@ export default function Dashboard() {
                       tick={{ fill: chart.tick }}
                     />
                     <RechartsTooltip contentStyle={chart.tooltipStyle} />
-                    <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={24}>
+                    <Bar dataKey="value" name={t('dashboard.quantity', 'Количество')} radius={[0, 6, 6, 0]} maxBarSize={24}>
                       {connectionsBarData.map((_entry, i) => (
                         <Cell key={i} fill={NODE_COLORS[i % NODE_COLORS.length]} />
                       ))}
@@ -1340,7 +1340,7 @@ export default function Dashboard() {
                     <XAxis type="number" stroke={chart.axis} fontSize={12} />
                     <YAxis dataKey="name" type="category" stroke={chart.axis} fontSize={12} width={100} />
                     <RechartsTooltip contentStyle={chart.tooltipStyle} />
-                    <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                    <Bar dataKey="value" name={t('dashboard.quantity', 'Количество')} radius={[0, 8, 8, 0]}>
                       {violationsChartData.map((entry) => (
                         <Cell key={entry.key} fill={SEVERITY_COLORS[entry.key] || '#fab005'} />
                       ))}

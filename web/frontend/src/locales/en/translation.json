@@ -288,6 +288,7 @@
     "noData": "No data",
     "noDataForPeriod": "No data for the selected period",
     "noConnectionData": "No connection data",
+    "quantity": "Quantity",
     "usersOnline": "{{count}} users online",
     "severityLow": "Low",
     "severityMedium": "Medium",
@@ -1579,7 +1580,16 @@
       "accounts": "accounts",
       "createdAt": "Created",
       "firstSeen": "First HWID",
-      "searchPlaceholder": "Search by HWID or username..."
+      "searchPlaceholder": "Search by HWID or username...",
+      "subscription": "Subscription",
+      "active": "Active",
+      "expired": "Expired",
+      "filter": {
+        "all": "All",
+        "has_trial": "With trial",
+        "has_active": "With active",
+        "has_expired": "With expired"
+      }
     }
   },
   "automations": {
@@ -2035,7 +2045,10 @@
     },
     "subcategories": {
       "topics": "Notification topics",
-      "weights": "Score component weights"
+      "weights": "Score component weights",
+      "thresholds": "Detection thresholds",
+      "hard_block": "Hard block",
+      "trial": "Trial user detection"
     },
     "sync": {
       "title": "Sync",

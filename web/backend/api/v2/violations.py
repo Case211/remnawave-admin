@@ -61,7 +61,7 @@ def _row_to_list_item(v: dict) -> ViolationListItem:
 @router.get("", response_model=ViolationListResponse)
 async def list_violations(
     page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
+    per_page: int = Query(20, ge=1, le=500),
     days: int = Query(7, ge=1, le=90),
     min_score: float = Query(0.0, ge=0.0, le=100.0),
     severity: Optional[str] = None,
@@ -231,7 +231,7 @@ async def get_violation_stats(
 @router.get("/pending", response_model=ViolationListResponse)
 async def get_pending_violations(
     page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
+    per_page: int = Query(20, ge=1, le=500),
     min_score: float = Query(40.0, ge=0.0, le=100.0),
     admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),

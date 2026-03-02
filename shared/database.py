@@ -2900,7 +2900,7 @@ class DatabaseService:
                     SELECT * FROM violations
                     WHERE user_uuid = $1
                     AND detected_at > NOW() - make_interval(days => $2)
-                    ORDER BY detected_at DESC
+                    ORDER BY detected_at DESC, id ASC
                     LIMIT $3
                     """,
                     user_uuid, int(days), limit
@@ -3831,6 +3831,21 @@ class DatabaseService:
         if not self.is_connected:
             return []
 
+        # Load trial detection settings
+        from shared.config_service import config_service
+        trial_tags_raw = config_service.get("violations_trial_tags", "trial")
+        trial_tags = [t.strip().lower() for t in trial_tags_raw.split(",") if t.strip()]
+
+        trial_squads_raw = config_service.get("violations_trial_squad_uuids", "[]")
+        trial_squads: list = []
+        try:
+            import json as _json
+            parsed = _json.loads(trial_squads_raw)
+            if isinstance(parsed, list):
+                trial_squads = [s.strip().lower() for s in parsed if isinstance(s, str) and s.strip()]
+        except (ValueError, TypeError):
+            pass
+
         try:
             async with self.acquire() as conn:
                 rows = await conn.fetch(
@@ -3846,7 +3861,10 @@ class DatabaseService:
                     SELECT h.hwid, h.platform, h.device_model, h.app_version,
                            h.created_at as hwid_first_seen,
                            u.uuid::text as user_uuid, u.username, u.status,
-                           u.created_at as user_created_at
+                           u.created_at as user_created_at,
+                           u.expire_at,
+                           u.tag,
+                           u.raw_data
                     FROM shared s
                     JOIN user_hwid_devices h ON h.hwid = s.hwid
                     JOIN users u ON h.user_uuid = u.uuid
@@ -3856,6 +3874,8 @@ class DatabaseService:
                 )
 
                 # Group by hwid
+                from datetime import timezone as _tz
+                now = datetime.now(_tz.utc)
                 groups: Dict[str, Dict[str, Any]] = {}
                 for r in rows:
                     hwid = r["hwid"]
@@ -3868,12 +3888,46 @@ class DatabaseService:
                             "users": [],
                         }
                     groups[hwid]["user_count"] += 1
+
+                    # Determine is_active from expire_at
+                    expire_at = r.get("expire_at")
+                    is_active = False
+                    if expire_at:
+                        if hasattr(expire_at, 'tzinfo') and expire_at.tzinfo is None:
+                            expire_at = expire_at.replace(tzinfo=_tz.utc)
+                        is_active = expire_at > now
+
+                    # Determine is_trial from tag and internal squads
+                    is_trial = False
+                    user_tag = (r.get("tag") or "").strip().lower()
+                    if user_tag and user_tag in trial_tags:
+                        is_trial = True
+
+                    if not is_trial and trial_squads:
+                        raw_data = r.get("raw_data")
+                        if raw_data:
+                            if isinstance(raw_data, str):
+                                try:
+                                    import json as _json2
+                                    raw_data = _json2.loads(raw_data)
+                                except (ValueError, TypeError):
+                                    raw_data = {}
+                            user_squads = raw_data.get("activeInternalSquads") or []
+                            if isinstance(user_squads, list):
+                                for sq in user_squads:
+                                    if isinstance(sq, str) and sq.strip().lower() in trial_squads:
+                                        is_trial = True
+                                        break
+
                     groups[hwid]["users"].append({
                         "uuid": r["user_uuid"],
                         "username": r["username"],
                         "status": r["status"],
                         "created_at": r["user_created_at"].isoformat() if r["user_created_at"] else None,
                         "hwid_first_seen": r["hwid_first_seen"].isoformat() if r["hwid_first_seen"] else None,
+                        "expire_date": expire_at.isoformat() if expire_at else None,
+                        "is_active": is_active,
+                        "is_trial": is_trial,
                     })
 
                 # Sort by user_count desc
