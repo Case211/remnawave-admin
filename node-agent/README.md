@@ -51,6 +51,7 @@ curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-ag
 | `--token` | Токен агента | **обязательно** |
 | `--interval` | Интервал отправки батчей (секунды) | `30` |
 | `--no-command` | Отключить WebSocket-канал команд | — |
+| `--no-host-mode` | Отключить host mode (выполнение внутри контейнера) | — |
 | `--ws-secret` | WEB_SECRET_KEY для подписи команд | — |
 | `--dir` | Директория установки | `/opt/remnawave-node-agent` |
 

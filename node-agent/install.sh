@@ -22,6 +22,7 @@ COLLECTOR_URL=""
 AUTH_TOKEN=""
 INTERVAL=30
 COMMAND_ENABLED="true"
+HOST_MODE="true"
 WS_SECRET=""
 
 while [[ $# -gt 0 ]]; do
@@ -31,6 +32,7 @@ while [[ $# -gt 0 ]]; do
         --token)      AUTH_TOKEN="$2";       shift 2 ;;
         --interval)   INTERVAL="$2";        shift 2 ;;
         --no-command) COMMAND_ENABLED="false"; shift ;;
+        --no-host-mode) HOST_MODE="false"; shift ;;
         --ws-secret)  WS_SECRET="$2";       shift 2 ;;
         --dir)        INSTALL_DIR="$2";     shift 2 ;;
         -h|--help)
@@ -46,6 +48,7 @@ while [[ $# -gt 0 ]]; do
             echo "Optional:"
             echo "  --interval   Batch send interval in seconds (default: 30)"
             echo "  --no-command Disable command channel (WebSocket)"
+            echo "  --no-host-mode Disable host mode (run inside container)"
             echo "  --ws-secret  WEB_SECRET_KEY for command signing"
             echo "  --dir        Install directory (default: /opt/remnawave-node-agent)"
             exit 0
@@ -106,6 +109,7 @@ AGENT_XRAY_LOG_PATH=/var/log/remnanode/access.log
 AGENT_LOG_LEVEL=INFO
 AGENT_MAX_UPTIME_HOURS=6
 AGENT_COMMAND_ENABLED=$COMMAND_ENABLED
+AGENT_HOST_MODE=$HOST_MODE
 AGENT_WS_URL=$WS_URL
 ENVEOF
 
