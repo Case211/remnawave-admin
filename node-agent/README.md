@@ -23,7 +23,44 @@
 
 ## Установка
 
-### Шаг 1: Получение токена агента
+### Быстрая установка (рекомендуется)
+
+Установите агент одной командой прямо из веб-панели:
+
+1. Откройте веб-панель → **Ноды** → выберите ноду → **Токен агента**
+2. Нажмите **«Установить агент»** — система автоматически сгенерирует токен и покажет готовую команду
+3. Скопируйте команду и выполните на ноде:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh | bash -s -- --uuid UUID --url URL --token TOKEN
+```
+
+Скрипт автоматически:
+- Создаст директорию `/opt/remnawave-node-agent/`
+- Скачает `docker-compose.yml`
+- Сгенерирует `.env` из переданных параметров
+- Запустит `docker compose up -d`
+- Проверит что контейнер стартовал
+
+Дополнительные параметры скрипта:
+
+| Параметр | Описание | По умолчанию |
+|----------|----------|-------------|
+| `--uuid` | UUID ноды | **обязательно** |
+| `--url` | URL админ-панели | **обязательно** |
+| `--token` | Токен агента | **обязательно** |
+| `--interval` | Интервал отправки батчей (секунды) | `30` |
+| `--no-command` | Отключить WebSocket-канал команд | — |
+| `--ws-secret` | WEB_SECRET_KEY для подписи команд | — |
+| `--dir` | Директория установки | `/opt/remnawave-node-agent` |
+
+---
+
+### Ручная установка
+
+Если нужен полный контроль над процессом:
+
+#### Шаг 1: Получение токена агента
 
 **Вариант А** — через веб-панель:
 1. Откройте веб-панель → **Ноды** → выберите ноду → **Токен агента** → **Сгенерировать**
@@ -33,11 +70,15 @@
 
 Скопируйте токен — он показывается только один раз.
 
-### Шаг 2: Настройка .env
+#### Шаг 2: Настройка .env
 
 ```bash
-cd node-agent
-cp .env.example .env
+mkdir -p /opt/remnawave-node-agent && cd /opt/remnawave-node-agent
+
+# Скачайте docker-compose.yml
+curl -sLO https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
+
+# Создайте .env
 nano .env
 ```
 
@@ -66,69 +107,16 @@ AGENT_XRAY_LOG_PATH=/var/log/remnanode/access.log
 | `AGENT_WS_URL` | WebSocket URL (по умолчанию = `AGENT_COLLECTOR_URL`) | — |
 | `AGENT_WS_SECRET_KEY` | Ключ для проверки HMAC-подписи команд (= `WEB_SECRET_KEY`) | — |
 
-### Шаг 3: Запуск
-
-#### Docker Compose (рекомендуется)
+#### Шаг 3: Запуск
 
 ```bash
-cd node-agent
 docker compose up -d
 docker compose logs -f
 ```
 
 Агент автоматически скачает готовый образ из GHCR (`ghcr.io/case211/remnawave-admin-node-agent:latest`).
 
-#### Docker напрямую
-
-```bash
-docker run -d \
-  --name remnawave-node-agent \
-  --restart unless-stopped \
-  --env-file node-agent/.env \
-  -v /var/log/remnanode:/var/log/remnanode:ro \
-  --network remnawave-network \
-  --memory 128m \
-  --stop-timeout 15 \
-  ghcr.io/case211/remnawave-admin-node-agent:latest
-```
-
-#### Локально (без Docker)
-
-```bash
-cd node-agent
-pip install -r requirements.txt
-python -m src.main
-```
-
-#### Systemd (автозапуск без Docker)
-
-Создай `/etc/systemd/system/remnawave-node-agent.service`:
-
-```ini
-[Unit]
-Description=Remnawave Node Agent
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/remnawave-node-agent/node-agent
-EnvironmentFile=/opt/remnawave-node-agent/node-agent/.env
-ExecStart=/usr/bin/python3 -m src.main
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now remnawave-node-agent
-sudo systemctl status remnawave-node-agent
-```
-
-### Шаг 4: Проверка
+### Проверка
 
 Ожидаемые логи при работе:
 ```

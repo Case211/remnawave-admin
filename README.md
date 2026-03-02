@@ -348,36 +348,27 @@ stream {
 
 Для работы Anti-Abuse системы необходимо установить **Node Agent** на каждую ноду. Агент собирает данные о подключениях из логов Xray и отправляет их в Web Backend.
 
-**1. Сгенерируйте токен агента** — в веб-панели: **Ноды** → выберите ноду → **Токен агента** → **Сгенерировать**. После генерации будут показаны готовые переменные для `.env`.
+**Быстрая установка (одна команда):**
 
-**2. Установите агент на ноду:**
+1. Откройте веб-панель → **Ноды** → выберите ноду → **Токен агента** → **Установить агент**
+2. Скопируйте готовую команду и выполните на ноде:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh | bash -s -- --uuid UUID --url URL --token TOKEN
+```
+
+Скрипт автоматически создаст директорию, скачает `docker-compose.yml`, сгенерирует `.env` и запустит агент.
+
+**Ручная установка:**
 
 ```bash
 mkdir -p /opt/remnawave-node-agent && cd /opt/remnawave-node-agent
-
-# Скачайте docker-compose.yml
-curl -sLO https://raw.githubusercontent.com/case211/remnawave-admin/main/node-agent/docker-compose.yml
-
-# Создайте .env и вставьте переменные из веб-панели
-nano .env
-```
-
-```env
-AGENT_NODE_UUID=uuid-ноды-из-панели
-AGENT_AUTH_TOKEN=сгенерированный-токен
-AGENT_COLLECTOR_URL=https://admin.yourdomain.com
-AGENT_INTERVAL_SECONDS=30
-AGENT_XRAY_LOG_PATH=/var/log/remnanode/access.log
-```
-
-**3. Запустите:**
-
-```bash
+curl -sLO https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
+nano .env  # Вставьте переменные из веб-панели
 docker compose up -d
-docker compose logs -f  # Проверьте: "Collector API OK" + "Node Agent started"
 ```
 
-> 📖 Подробная документация: [node-agent/README.md](node-agent/README.md) — режимы парсинга, Command Channel (терминал/скрипты), systemd, миграция, troubleshooting.
+> 📖 Подробная документация: [node-agent/README.md](node-agent/README.md) — режимы парсинга, Command Channel (терминал/скрипты), миграция, troubleshooting.
 
 ---
 
