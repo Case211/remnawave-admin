@@ -533,6 +533,38 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 31,
     },
 
+    # === TORRENT DETECTION ===
+    {
+        "key": "torrent_detection_enabled",
+        "value_type": "bool",
+        "category": "violations",
+        "subcategory": "torrent",
+        "display_name": "Обнаружение торрентов",
+        "description": "Включение/выключение обнаружения торрент-трафика через Xray routing",
+        "default_value": "true",
+        "sort_order": 40,
+    },
+    {
+        "key": "torrent_auto_action",
+        "value_type": "string",
+        "category": "violations",
+        "subcategory": "torrent",
+        "display_name": "Авто-действие при торренте",
+        "description": "Действие при обнаружении торрент-трафика: notify (только уведомление), block_user (блокировка)",
+        "default_value": "notify",
+        "sort_order": 41,
+    },
+    {
+        "key": "torrent_notification_cooldown_minutes",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "torrent",
+        "display_name": "Кулдаун торрент-уведомлений (мин)",
+        "description": "Минимальный интервал между уведомлениями о торрентах по одному пользователю",
+        "default_value": "30",
+        "sort_order": 42,
+    },
+
     # === MAILSERVER ===
     {
         "key": "mailserver_enabled",

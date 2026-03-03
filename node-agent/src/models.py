@@ -25,6 +25,18 @@ class ConnectionReport(BaseModel):
     bytes_received: int = 0
 
 
+class TorrentEvent(BaseModel):
+    """Событие обнаружения торрент-трафика."""
+
+    user_email: str
+    ip_address: str
+    destination: str       # e.g. "tracker.example.com:6881"
+    inbound_tag: str       # e.g. "vless_tls"
+    outbound_tag: str      # e.g. "TORRENT"
+    node_uuid: str
+    detected_at: datetime
+
+
 class SystemMetrics(BaseModel):
     """Системные метрики ноды (CPU, RAM, диск, uptime)."""
 
@@ -47,4 +59,5 @@ class BatchReport(BaseModel):
     node_uuid: str
     timestamp: datetime = Field(default_factory=_utcnow)
     connections: list[ConnectionReport] = Field(default_factory=list)
+    torrent_events: list[TorrentEvent] = Field(default_factory=list)
     system_metrics: Optional[SystemMetrics] = None

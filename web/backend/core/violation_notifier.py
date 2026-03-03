@@ -336,3 +336,101 @@ async def send_violation_notification(
 
     except Exception:
         logger.exception("Failed to send violation notification for user %s", user_uuid)
+
+
+async def send_torrent_notification(
+    user_uuid: str,
+    user_info: Optional[dict] = None,
+    torrent_events: Optional[list] = None,
+    destinations: Optional[List[str]] = None,
+    ips: Optional[List[str]] = None,
+) -> None:
+    """Send torrent-specific Telegram notification."""
+    now = datetime.utcnow()
+
+    try:
+        from shared.config_service import config_service
+        cooldown_minutes = config_service.get("torrent_notification_cooldown_minutes", 30)
+    except Exception:
+        cooldown_minutes = 30
+
+    # Throttle using shared cache
+    if user_uuid in _violation_notification_cache:
+        last = _violation_notification_cache[user_uuid]
+        if now - last < timedelta(minutes=cooldown_minutes):
+            logger.debug("Torrent notification throttled for user %s", user_uuid)
+            return
+
+    _cleanup_cache()
+
+    try:
+        info = user_info if user_info else {}
+        username = info.get("username", "n/a")
+        email = info.get("email", "")
+        telegram_id = info.get("telegramId")
+
+        moscow_time = now + timedelta(hours=3)
+        moscow_time_str = moscow_time.strftime("%d.%m.%Y %H:%M:%S")
+
+        event_count = len(torrent_events) if torrent_events else 0
+
+        lines = [
+            "\U0001f6a8 <b>\u0422\u041e\u0420\u0420\u0415\u041d\u0422 \u0422\u0420\u0410\u0424\u0418\u041a \u041e\u0411\u041d\u0410\u0420\u0423\u0416\u0415\u041d</b>",
+            "",
+        ]
+
+        if email:
+            lines.append(f"\U0001f4e7 Email: <code>{_esc(email)}</code>")
+        else:
+            lines.append(f"\U0001f4e7 Username: <code>{_esc(username)}</code>")
+
+        if telegram_id is not None:
+            lines.append(f"\U0001f4f1 TG ID: <code>{telegram_id}</code>")
+
+        lines.append("")
+        lines.append(f"\U0001f4ca \u0421\u043e\u0431\u044b\u0442\u0438\u0439: <b>{event_count}</b>")
+
+        if destinations:
+            lines.append(f"\U0001f310 \u041d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f:")
+            for dest in destinations[:10]:
+                lines.append(f"   <code>{_esc(dest)}</code>")
+            if len(destinations) > 10:
+                lines.append(f"   ... \u0438 \u0435\u0449\u0451 {len(destinations) - 10}")
+
+        if ips:
+            lines.append(f"\U0001f4cd IP: {', '.join(f'<code>{ip}</code>' for ip in ips[:5])}")
+
+        lines.append("")
+        lines.append(f"\U0001f6d1 \u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435: <b>\u0416\u0451\u0441\u0442\u043a\u0430\u044f \u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430</b>")
+        lines.append(f"\U0001f550 \u0412\u0440\u0435\u043c\u044f (\u041c\u0421\u041a): <code>{moscow_time_str}</code>")
+
+        body = "\n".join(lines)
+
+        import re
+        plain_body = re.sub(r'<[^>]+>', '', body)
+
+        from web.backend.core.notification_service import create_notification
+        await create_notification(
+            title="\u0422\u043e\u0440\u0440\u0435\u043d\u0442 \u0442\u0440\u0430\u0444\u0438\u043a \u043e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d",
+            body=plain_body,
+            type="torrent",
+            severity="critical",
+            source="collector",
+            source_id=user_uuid,
+            group_key=f"torrent:{user_uuid}",
+            channels=["telegram", "in_app"],
+            topic_type="violations",
+            telegram_body=body,
+        )
+
+        _violation_notification_cache[user_uuid] = datetime.utcnow()
+        try:
+            from shared.database import db_service
+            await db_service.mark_user_violations_notified(user_uuid)
+        except Exception:
+            pass
+
+        logger.info("Torrent notification sent: user=%s events=%d", user_uuid, event_count)
+
+    except Exception:
+        logger.exception("Failed to send torrent notification for user %s", user_uuid)

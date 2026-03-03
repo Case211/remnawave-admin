@@ -104,6 +104,18 @@ AUTOMATION_TEMPLATES = [
             "message": "Daily report: {users_total} users, {traffic_today} traffic today, {violations_today} violations",
         },
     },
+    {
+        "id": "auto_block_torrent",
+        "name": "Auto-block Torrent",
+        "description": "Автоматическая блокировка при обнаружении торрент-трафика",
+        "description_key": "automations.templates.auto_block_torrent.description",
+        "category": "violations",
+        "trigger_type": "event",
+        "trigger_config": {"event": "torrent.detected"},
+        "conditions": [],
+        "action_type": "block_user",
+        "action_config": {"reason": "Torrent traffic detected (auto)"},
+    },
 ]
 
 

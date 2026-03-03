@@ -15,15 +15,26 @@ from pathlib import Path
 from typing import Optional
 
 from ..config import Settings
-from ..models import ConnectionReport
+from ..models import ConnectionReport, TorrentEvent
 from .base import BaseCollector
 
 logger = logging.getLogger(__name__)
 
-# Формат: 2026/01/28 11:23:18.306521 from 188.170.87.33:20129 accepted tcp:... email: 154
-# Парсим: timestamp, client_ip, client_port, user_id
-# Поддержка IPv4 и IPv6 (в квадратных скобках или без)
-LOG_PATTERN = re.compile(
+# Расширенный формат: захватывает destination + routing tags
+# 2026/01/28 11:23:18 from 188.170.87.33:20129 accepted tcp:accounts.google.com:443 [Sweden1 >> DIRECT] email: 154
+# Группы: timestamp, client_ip, client_port, destination, inbound_tag, outbound_tag, user_id
+LOG_PATTERN_EXTENDED = re.compile(
+    r"(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+"
+    r"(?:\[?([0-9a-fA-F:\.]+)\]?)"       # IPv4 или IPv6
+    r":(\d+)\s+accepted\s+"
+    r"(?:tcp|udp):(\S+)\s+"               # destination (e.g. tracker.example.com:6881)
+    r"\[([^\]]*?)\s*>>\s*([^\]]*?)\]\s+"  # [inbound_tag >> outbound_tag]
+    r"email:\s*(\d+)",
+    re.IGNORECASE,
+)
+
+# Fallback: базовый паттерн для нестандартных строк (без routing brackets и т.п.)
+LOG_PATTERN_BASIC = re.compile(
     r"(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+"
     r"(?:\[?([0-9a-fA-F:\.]+)\]?)"  # IPv4 или IPv6
     r":(\d+)\s+accepted.*?email:\s*(\d+)",
@@ -54,17 +65,22 @@ def _parse_timestamp(s: str) -> datetime:
         return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _parse_lines(lines: list[str], node_uuid: str) -> tuple[list[ConnectionReport], int, int, int]:
+def _parse_lines(
+    lines: list[str],
+    node_uuid: str,
+    torrent_tag: str = "TORRENT",
+) -> tuple[list[ConnectionReport], list[TorrentEvent], int, int, int]:
     """
-    Парсит строки лога Xray и возвращает список подключений.
+    Парсит строки лога Xray и возвращает подключения + торрент-события.
 
     Общая логика парсинга для polling и realtime режимов.
-    Группирует по (user_email, ip) и использует самое позднее время подключения.
+    Подключения группируются по (user_email, ip); торрент-события сохраняются все.
 
     Returns:
-        (connections, lines_count, accepted_lines, matched_lines)
+        (connections, torrent_events, lines_count, accepted_lines, matched_lines)
     """
     connections_map: dict[tuple[str, str], tuple[datetime, str]] = {}
+    torrent_events: list[TorrentEvent] = []
 
     lines_count = 0
     accepted_lines = 0
@@ -78,7 +94,44 @@ def _parse_lines(lines: list[str], node_uuid: str) -> tuple[list[ConnectionRepor
         if "accepted" not in line.lower():
             continue
         accepted_lines += 1
-        match = LOG_PATTERN.search(line)
+
+        # Сначала пробуем расширенный regex (7 групп: с destination и routing tags)
+        match = LOG_PATTERN_EXTENDED.search(line)
+        if match:
+            matched_lines += 1
+            ts_str, client_ip, client_port, destination, inbound_tag, outbound_tag, user_id = match.groups()
+            user_identifier = f"user_{user_id}"
+
+            try:
+                detected_at = _parse_timestamp(ts_str)
+            except Exception:
+                detected_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+            # Проверяем торрент-тег
+            if outbound_tag.strip().upper() == torrent_tag.upper():
+                torrent_events.append(TorrentEvent(
+                    user_email=user_identifier,
+                    ip_address=client_ip,
+                    destination=destination,
+                    inbound_tag=inbound_tag.strip(),
+                    outbound_tag=outbound_tag.strip(),
+                    node_uuid=node_uuid,
+                    detected_at=detected_at,
+                ))
+                continue  # Торрент-подключения не добавляем в обычные connections
+
+            # Обычное подключение
+            key = (user_identifier, client_ip)
+            if key not in connections_map:
+                connections_map[key] = (detected_at, user_identifier)
+            else:
+                existing_time, _ = connections_map[key]
+                if detected_at > existing_time:
+                    connections_map[key] = (detected_at, user_identifier)
+            continue
+
+        # Fallback: базовый regex (4 группы, без destination/tags)
+        match = LOG_PATTERN_BASIC.search(line)
         if not match:
             logger.debug("Line matched 'accepted' but regex failed: %s", line[:100] if len(line) > 100 else line)
             continue
@@ -92,7 +145,6 @@ def _parse_lines(lines: list[str], node_uuid: str) -> tuple[list[ConnectionRepor
         except Exception:
             connected_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        # Сохраняем самое позднее время подключения для каждой пары (user, ip)
         if key not in connections_map:
             connections_map[key] = (connected_at, user_identifier)
         else:
@@ -114,7 +166,7 @@ def _parse_lines(lines: list[str], node_uuid: str) -> tuple[list[ConnectionRepor
         for (user_identifier, client_ip), (connected_at, _) in connections_map.items()
     ]
 
-    return connections, lines_count, accepted_lines, matched_lines
+    return connections, torrent_events, lines_count, accepted_lines, matched_lines
 
 
 class XrayLogCollector(BaseCollector):
@@ -125,9 +177,19 @@ class XrayLogCollector(BaseCollector):
         self._log_path = Path(settings.xray_log_path)
         self._buffer_size = settings.log_read_buffer_bytes
         self._node_uuid = settings.node_uuid
+        self._torrent_tag = settings.torrent_outbound_tag
+        self._torrent_enabled = settings.torrent_detection_enabled
+        self._last_torrent_events: list[TorrentEvent] = []
+
+    @property
+    def last_torrent_events(self) -> list[TorrentEvent]:
+        """Торрент-события из последнего вызова collect()."""
+        return self._last_torrent_events
 
     async def collect(self) -> list[ConnectionReport]:
         """Читает конец лог-файла и парсит строки с 'accepted'."""
+        self._last_torrent_events = []
+
         if not self._log_path.exists():
             logger.warning("Log file does not exist: %s", self._log_path)
             return []
@@ -152,16 +214,20 @@ class XrayLogCollector(BaseCollector):
             logger.warning("Cannot read log file %s: %s", self._log_path, e)
             return []
 
-        connections, lines_count, accepted_lines, matched_lines = _parse_lines(
-            content.splitlines(), self._node_uuid
+        tag = self._torrent_tag if self._torrent_enabled else "__DISABLED__"
+        connections, torrent_events, lines_count, accepted_lines, matched_lines = _parse_lines(
+            content.splitlines(), self._node_uuid, torrent_tag=tag
         )
+        self._last_torrent_events = torrent_events
 
+        torrent_info = f" torrent_events={len(torrent_events)}" if torrent_events else ""
         logger.info(
-            "Log parsing: total_lines=%d accepted_lines=%d matched_lines=%d connections=%d",
+            "Log parsing: total_lines=%d accepted_lines=%d matched_lines=%d connections=%d%s",
             lines_count,
             accepted_lines,
             matched_lines,
-            len(connections)
+            len(connections),
+            torrent_info,
         )
         return connections
 
@@ -189,9 +255,17 @@ class XrayLogRealtimeCollector(BaseCollector):
         self._log_path = Path(settings.xray_log_path)
         self._buffer_size = settings.log_read_buffer_bytes
         self._node_uuid = settings.node_uuid
+        self._torrent_tag = settings.torrent_outbound_tag
+        self._torrent_enabled = settings.torrent_detection_enabled
         self._file_position: int = 0  # Текущая позиция в файле
         self._file_inode: Optional[int] = None  # Inode файла для отслеживания ротации
         self._initialized: bool = False
+        self._last_torrent_events: list[TorrentEvent] = []
+
+    @property
+    def last_torrent_events(self) -> list[TorrentEvent]:
+        """Торрент-события из последнего вызова collect()."""
+        return self._last_torrent_events
     
     async def _initialize_position(self) -> None:
         """Инициализирует позицию чтения: читает последние N байт и устанавливает позицию в конец."""
@@ -326,6 +400,8 @@ class XrayLogRealtimeCollector(BaseCollector):
         При первом вызове инициализирует позицию (читает последние N байт).
         При последующих вызовах читает только новые данные.
         """
+        self._last_torrent_events = []
+
         # Инициализация при первом вызове
         if not self._initialized:
             await self._initialize_position()
@@ -337,17 +413,21 @@ class XrayLogRealtimeCollector(BaseCollector):
         if not new_lines:
             return []
 
-        connections, lines_count, accepted_lines, matched_lines = _parse_lines(
-            new_lines, self._node_uuid
+        tag = self._torrent_tag if self._torrent_enabled else "__DISABLED__"
+        connections, torrent_events, lines_count, accepted_lines, matched_lines = _parse_lines(
+            new_lines, self._node_uuid, torrent_tag=tag
         )
+        self._last_torrent_events = torrent_events
 
-        if connections:
+        if connections or torrent_events:
+            torrent_info = f" torrent_events={len(torrent_events)}" if torrent_events else ""
             logger.info(
-                "Real-time parsing: new_lines=%d accepted_lines=%d matched_lines=%d connections=%d",
+                "Real-time parsing: new_lines=%d accepted_lines=%d matched_lines=%d connections=%d%s",
                 lines_count,
                 accepted_lines,
                 matched_lines,
-                len(connections)
+                len(connections),
+                torrent_info,
             )
 
         return connections

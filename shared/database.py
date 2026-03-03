@@ -98,6 +98,20 @@ CREATE TABLE IF NOT EXISTS node_metrics_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_nms_node_created ON node_metrics_snapshots(node_uuid, created_at);
 
+-- Торрент-события
+CREATE TABLE IF NOT EXISTS torrent_events (
+    id BIGSERIAL PRIMARY KEY,
+    user_uuid UUID NOT NULL,
+    node_uuid UUID NOT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    destination VARCHAR(255) NOT NULL,
+    inbound_tag VARCHAR(100) DEFAULT '',
+    outbound_tag VARCHAR(100) DEFAULT 'TORRENT',
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_te_user_date ON torrent_events(user_uuid, detected_at);
+CREATE INDEX IF NOT EXISTS idx_te_detected ON torrent_events(detected_at);
+
 -- Хосты
 CREATE TABLE IF NOT EXISTS hosts (
     uuid UUID PRIMARY KEY,
@@ -1604,6 +1618,112 @@ class DatabaseService:
                 return int(result.split()[-1]) if result else 0
         except Exception as e:
             logger.error("cleanup_old_connections failed: %s", e)
+            return 0
+
+    # ==================== Torrent Events ====================
+
+    async def save_torrent_event(
+        self,
+        user_uuid: str,
+        node_uuid: str,
+        ip_address: str,
+        destination: str,
+        inbound_tag: str = "",
+        outbound_tag: str = "TORRENT",
+        detected_at=None,
+    ):
+        """Save a raw torrent event to the torrent_events table."""
+        if not self.is_connected:
+            return None
+        try:
+            async with self.acquire() as conn:
+                return await conn.fetchval(
+                    """
+                    INSERT INTO torrent_events (
+                        user_uuid, node_uuid, ip_address, destination,
+                        inbound_tag, outbound_tag, detected_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()))
+                    RETURNING id
+                    """,
+                    user_uuid, node_uuid, ip_address, destination,
+                    inbound_tag, outbound_tag, detected_at,
+                )
+        except Exception as e:
+            logger.error("save_torrent_event failed: %s", e, exc_info=True)
+            return None
+
+    async def get_recent_torrent_violation(self, user_uuid: str, minutes: int = 10):
+        """Check if a torrent-type violation exists for this user within the last N minutes."""
+        if not self.is_connected:
+            return None
+        try:
+            async with self.acquire() as conn:
+                return await conn.fetchval(
+                    """
+                    SELECT id FROM violations
+                    WHERE user_uuid = $1
+                      AND detected_at > NOW() - make_interval(mins => $2)
+                      AND reasons::text LIKE '%Torrent traffic detected%'
+                    """,
+                    user_uuid, minutes,
+                )
+        except Exception as e:
+            logger.error("get_recent_torrent_violation failed: %s", e)
+            return None
+
+    async def get_torrent_stats(self, days: int = 7) -> dict:
+        """Get torrent event statistics for the given period."""
+        if not self.is_connected:
+            return {}
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        COUNT(*) as total_events,
+                        COUNT(DISTINCT user_uuid) as unique_users,
+                        COUNT(DISTINCT destination) as unique_destinations,
+                        COUNT(DISTINCT node_uuid) as affected_nodes
+                    FROM torrent_events
+                    WHERE detected_at > NOW() - make_interval(days => $1)
+                    """,
+                    days,
+                )
+                top_users = await conn.fetch(
+                    """
+                    SELECT user_uuid, COUNT(*) as event_count
+                    FROM torrent_events
+                    WHERE detected_at > NOW() - make_interval(days => $1)
+                    GROUP BY user_uuid
+                    ORDER BY event_count DESC
+                    LIMIT 10
+                    """,
+                    days,
+                )
+                return {
+                    "total_events": row["total_events"] if row else 0,
+                    "unique_users": row["unique_users"] if row else 0,
+                    "unique_destinations": row["unique_destinations"] if row else 0,
+                    "affected_nodes": row["affected_nodes"] if row else 0,
+                    "top_users": [dict(r) for r in top_users],
+                }
+        except Exception as e:
+            logger.error("get_torrent_stats failed: %s", e)
+            return {}
+
+    async def cleanup_old_torrent_events(self, retention_days: int = 90) -> int:
+        """Delete torrent events older than retention_days."""
+        if not self.is_connected:
+            return 0
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    "DELETE FROM torrent_events WHERE detected_at < NOW() - make_interval(days => $1)",
+                    retention_days,
+                )
+                return int(result.split()[-1]) if result else 0
+        except Exception as e:
+            logger.error("cleanup_old_torrent_events failed: %s", e)
             return 0
 
     # ==================== User Node Traffic Methods ====================

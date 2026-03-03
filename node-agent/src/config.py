@@ -77,3 +77,11 @@ class Settings(BaseSettings):
     # Требует: pid: "host" + privileged: true в docker-compose.
     # Использует nsenter для доступа к namespace хоста.
     host_mode: bool = False  # AGENT_HOST_MODE
+
+    # ── Torrent Detection ─────────────────────────────────────
+    # Тег outbound в Xray routing для BitTorrent трафика.
+    # Должен совпадать с outboundTag в routing rules Xray.
+    torrent_outbound_tag: str = "TORRENT"  # AGENT_TORRENT_OUTBOUND_TAG
+
+    # Включение/выключение сбора торрент-событий
+    torrent_detection_enabled: bool = True  # AGENT_TORRENT_DETECTION_ENABLED

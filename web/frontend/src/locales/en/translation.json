@@ -1835,7 +1835,9 @@
       "node_went_offline": "Node went offline",
       "node_went_offlineDesc": "Triggers when a node loses connection and becomes unavailable",
       "user_traffic_exceeded": "Traffic exceeded",
-      "user_traffic_exceededDesc": "Triggers when a user exhausts their traffic limit"
+      "user_traffic_exceededDesc": "Triggers when a user exhausts their traffic limit",
+      "torrent_detected": "Torrent detected",
+      "torrent_detectedDesc": "Triggers when BitTorrent traffic is detected for a user"
     },
     "metrics": {
       "users_online": "Users online",
@@ -2041,6 +2043,9 @@
       },
       "daily_report": {
         "description": "Daily Telegram summary at 23:00"
+      },
+      "auto_block_torrent": {
+        "description": "Automatically block users when torrent traffic is detected"
       }
     },
     "templatesGallery": {

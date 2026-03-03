@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import httpx
 
 from .config import Settings
-from .models import BatchReport, ConnectionReport, SystemMetrics
+from .models import BatchReport, ConnectionReport, SystemMetrics, TorrentEvent
 
 logger = logging.getLogger(__name__)
 
@@ -54,16 +54,18 @@ class CollectorSender:
     async def send_batch(
         self,
         connections: list[ConnectionReport],
+        torrent_events: list[TorrentEvent] | None = None,
         system_metrics: SystemMetrics | None = None,
     ) -> bool:
-        """Отправить батч подключений и метрик. Возвращает True при успехе."""
-        if not connections and not system_metrics:
+        """Отправить батч подключений, торрент-событий и метрик. Возвращает True при успехе."""
+        if not connections and not system_metrics and not torrent_events:
             return True
 
         report = BatchReport(
             node_uuid=self.settings.node_uuid,
             timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
             connections=connections,
+            torrent_events=torrent_events or [],
             system_metrics=system_metrics,
         )
         payload = report.model_dump(mode="json")

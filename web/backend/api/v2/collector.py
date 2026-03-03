@@ -77,11 +77,23 @@ class SystemMetricsReport(BaseModel):
     uptime_seconds: int = 0
 
 
+class TorrentEventReport(BaseModel):
+    """Торрент-событие от агента."""
+    user_email: str
+    ip_address: str
+    destination: str
+    inbound_tag: str = ""
+    outbound_tag: str = "TORRENT"
+    node_uuid: str
+    detected_at: datetime
+
+
 class BatchReport(BaseModel):
     """Батч подключений от одной ноды."""
     node_uuid: str
     timestamp: datetime
     connections: list[ConnectionReport] = []
+    torrent_events: list[TorrentEventReport] = []
     system_metrics: Optional[SystemMetricsReport] = None
 
 
@@ -228,8 +240,14 @@ async def receive_connections(
                 logger.info("Cleaned up %d old connections", deleted)
         except Exception:
             pass
+        try:
+            deleted = await db_service.cleanup_old_torrent_events(90)
+            if deleted > 0:
+                logger.info("Cleaned up %d old torrent events", deleted)
+        except Exception:
+            pass
 
-    if not report.connections:
+    if not report.connections and not report.torrent_events:
         return JSONResponse(
             status_code=200,
             content={"status": "ok", "processed": 0, "message": "No connections to process",
@@ -343,10 +361,152 @@ async def receive_connections(
         except Exception as e:
             logger.warning("Error in post-processing: %s", e)
 
+    # ── Torrent events processing ──────────────────────────
+    torrent_processed = 0
+    if report.torrent_events:
+        torrent_enabled = config_service.get("torrent_detection_enabled", True)
+        if torrent_enabled:
+            for event in report.torrent_events:
+                try:
+                    user_uuid_t = await _cached_find_user(event.user_email)
+                    if not user_uuid_t:
+                        continue
+                    await db_service.save_torrent_event(
+                        user_uuid=user_uuid_t,
+                        node_uuid=event.node_uuid,
+                        ip_address=event.ip_address,
+                        destination=event.destination,
+                        inbound_tag=event.inbound_tag,
+                        outbound_tag=event.outbound_tag,
+                        detected_at=event.detected_at,
+                    )
+                    torrent_processed += 1
+                except Exception as e:
+                    logger.warning("Error saving torrent event for %s: %s", event.user_email, e)
+
+            if torrent_processed > 0:
+                logger.warning(
+                    "Torrent events: node=%s count=%d", node_uuid[:8], torrent_processed
+                )
+                asyncio.create_task(
+                    _process_torrent_violations(report.torrent_events, user_uuid_cache)
+                )
+
     return JSONResponse(
         status_code=200,
-        content={"status": "ok", "processed": processed, "errors": errors, "node_uuid": node_uuid},
+        content={
+            "status": "ok", "processed": processed, "errors": errors,
+            "torrent_events": torrent_processed, "node_uuid": node_uuid,
+        },
     )
+
+
+async def _process_torrent_violations(
+    events: list[TorrentEventReport],
+    user_uuid_cache: dict[str, Optional[str]],
+):
+    """Background: create violations and send notifications for torrent events."""
+    try:
+        # Group events by user
+        events_by_user: dict[str, list[TorrentEventReport]] = {}
+        for event in events:
+            user_uuid = user_uuid_cache.get(event.user_email)
+            if user_uuid:
+                events_by_user.setdefault(user_uuid, []).append(event)
+
+        auto_action = config_service.get("torrent_auto_action", "notify")
+
+        for user_uuid, user_events in events_by_user.items():
+            try:
+                # Dedup: skip if torrent violation exists within last 10 min
+                existing = await db_service.get_recent_torrent_violation(user_uuid, minutes=10)
+                if existing:
+                    continue
+
+                user_info = await db_service.get_user_by_uuid(user_uuid)
+                username = user_info.get("username", "n/a") if user_info else "n/a"
+                email = user_info.get("email") if user_info else None
+                telegram_id = user_info.get("telegramId") if user_info else None
+
+                destinations = list(set(e.destination for e in user_events))
+                ips = list(set(e.ip_address for e in user_events))
+
+                # Save as violation (score=100)
+                violation_id = await db_service.save_violation(
+                    user_uuid=user_uuid,
+                    score=100.0,
+                    recommended_action="hard_block",
+                    username=username,
+                    email=email,
+                    telegram_id=telegram_id,
+                    confidence=1.0,
+                    ip_addresses=ips,
+                    reasons=[
+                        f"Torrent traffic detected ({len(user_events)} events)",
+                        *[f"Destination: {d}" for d in destinations[:5]],
+                    ],
+                    simultaneous_connections=len(ips),
+                    unique_ips_count=len(ips),
+                )
+
+                # Notification
+                try:
+                    from web.backend.core.violation_notifier import send_torrent_notification
+                    await send_torrent_notification(
+                        user_uuid=user_uuid,
+                        user_info=user_info,
+                        torrent_events=user_events,
+                        destinations=destinations,
+                        ips=ips,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to send torrent notification: %s", e)
+
+                # Automation event
+                try:
+                    from web.backend.core.automation_engine import engine as automation_engine
+                    await automation_engine.handle_event("torrent.detected", {
+                        "user_uuid": user_uuid,
+                        "uuid": user_uuid,
+                        "username": username,
+                        "email": email,
+                        "destinations": destinations,
+                        "ips": ips,
+                        "event_count": len(user_events),
+                        "node_uuid": user_events[0].node_uuid,
+                        "score": 100.0,
+                    })
+                except Exception as e:
+                    logger.warning("Automation event failed: %s", e)
+
+                # WebSocket broadcast
+                try:
+                    from web.backend.api.v2.websocket import broadcast_violation
+                    await broadcast_violation({
+                        "type": "torrent",
+                        "user_uuid": user_uuid,
+                        "username": username,
+                        "score": 100.0,
+                        "destinations": destinations,
+                        "reasons": [f"Torrent traffic: {len(user_events)} events"],
+                    })
+                except Exception:
+                    pass
+
+                # Auto-block if configured
+                if auto_action == "block_user":
+                    try:
+                        from shared.api_client import api_client
+                        await api_client.disable_user(user_uuid)
+                        logger.info("Auto-blocked user %s for torrent usage", user_uuid)
+                    except Exception as e:
+                        logger.warning("Failed to auto-block user %s: %s", user_uuid, e)
+
+            except Exception as e:
+                logger.warning("Error processing torrent violation for user %s: %s", user_uuid, e)
+
+    except Exception as e:
+        logger.error("Background torrent violation processing failed: %s", e)
 
 
 async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Semaphore):

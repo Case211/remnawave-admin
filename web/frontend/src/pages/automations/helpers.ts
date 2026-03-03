@@ -362,6 +362,7 @@ export function getEventTypes() {
     { value: 'violation.detected', label: t('automations.events.violation_detected'), description: t('automations.events.violation_detectedDesc') },
     { value: 'node.went_offline', label: t('automations.events.node_went_offline'), description: t('automations.events.node_went_offlineDesc') },
     { value: 'user.traffic_exceeded', label: t('automations.events.user_traffic_exceeded'), description: t('automations.events.user_traffic_exceededDesc') },
+    { value: 'torrent.detected', label: t('automations.events.torrent_detected'), description: t('automations.events.torrent_detectedDesc') },
   ] as const
 }
 export const EVENT_TYPES = new Proxy([] as unknown as ReturnType<typeof getEventTypes>, {

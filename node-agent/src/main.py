@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .config import Settings
 from .collectors import XrayLogCollector, XrayLogRealtimeCollector, SystemMetricsCollector
-from .models import ConnectionReport
+from .models import ConnectionReport, TorrentEvent
 from .sender import CollectorSender
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -128,6 +128,7 @@ async def run_agent() -> None:
     send_interval = settings.interval_seconds
 
     accumulated_connections: list[ConnectionReport] = []
+    accumulated_torrent_events: list[TorrentEvent] = []
     last_send_time = time.monotonic()
     total_sent = 0  # общий счётчик отправленных подключений
 
@@ -176,33 +177,46 @@ async def run_agent() -> None:
 
             try:
                 connections = await collector.collect()
+                torrent_events = collector.last_torrent_events if hasattr(collector, 'last_torrent_events') else []
 
-                if connections:
+                if connections or torrent_events:
                     if settings.log_parsing_mode.lower() == "realtime":
                         accumulated_connections.extend(connections)
+                        accumulated_torrent_events.extend(torrent_events)
 
                         # Защита от утечки памяти
                         if len(accumulated_connections) > settings.max_buffer_size:
                             dropped = len(accumulated_connections) - settings.max_buffer_size
                             accumulated_connections = accumulated_connections[-settings.max_buffer_size:]
                             logger.warning("Buffer overflow: dropped %d connections", dropped)
+                        if len(accumulated_torrent_events) > settings.max_buffer_size:
+                            accumulated_torrent_events = accumulated_torrent_events[-settings.max_buffer_size:]
 
                         # Отправка по таймеру
                         current_time = time.monotonic()
-                        if accumulated_connections and (current_time - last_send_time >= send_interval):
+                        if (accumulated_connections or accumulated_torrent_events) and (current_time - last_send_time >= send_interval):
                             metrics = await system_metrics_collector.collect()
                             count = len(accumulated_connections)
-                            ok = await sender.send_batch(accumulated_connections, system_metrics=metrics)
+                            ok = await sender.send_batch(
+                                accumulated_connections,
+                                torrent_events=accumulated_torrent_events if accumulated_torrent_events else None,
+                                system_metrics=metrics,
+                            )
                             if ok:
                                 total_sent += count
                                 accumulated_connections.clear()
+                                accumulated_torrent_events.clear()
                                 last_send_time = current_time
                                 logger.debug("Batch sent: %d connections", count)
                     else:
                         # polling — отправляем сразу
                         metrics = await system_metrics_collector.collect()
                         count = len(connections)
-                        ok = await sender.send_batch(connections, system_metrics=metrics)
+                        ok = await sender.send_batch(
+                            connections,
+                            torrent_events=torrent_events if torrent_events else None,
+                            system_metrics=metrics,
+                        )
                         if ok:
                             total_sent += count
                             logger.debug("Batch sent: %d connections", count)
@@ -234,9 +248,15 @@ async def run_agent() -> None:
                 pass
 
         # Graceful shutdown: отправляем остаток
-        if accumulated_connections:
-            logger.info("Shutdown: sending remaining %d connections...", len(accumulated_connections))
-            ok = await sender.send_batch(accumulated_connections)
+        if accumulated_connections or accumulated_torrent_events:
+            logger.info(
+                "Shutdown: sending remaining %d connections, %d torrent events...",
+                len(accumulated_connections), len(accumulated_torrent_events),
+            )
+            ok = await sender.send_batch(
+                accumulated_connections,
+                torrent_events=accumulated_torrent_events if accumulated_torrent_events else None,
+            )
             if ok:
                 total_sent += len(accumulated_connections)
 

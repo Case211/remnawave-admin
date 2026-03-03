@@ -1835,7 +1835,9 @@
       "node_went_offline": "Нода ушла офлайн",
       "node_went_offlineDesc": "Сработает когда узел потеряет связь и станет недоступен для подключений",
       "user_traffic_exceeded": "Трафик превышен",
-      "user_traffic_exceededDesc": "Сработает когда пользователь исчерпает свой лимит трафика по тарифу"
+      "user_traffic_exceededDesc": "Сработает когда пользователь исчерпает свой лимит трафика по тарифу",
+      "torrent_detected": "Обнаружен торрент",
+      "torrent_detectedDesc": "Сработает при обнаружении BitTorrent трафика у пользователя"
     },
     "metrics": {
       "users_online": "Пользователей онлайн",
@@ -2041,6 +2043,9 @@
       },
       "daily_report": {
         "description": "Ежедневная Telegram-сводка в 23:00"
+      },
+      "auto_block_torrent": {
+        "description": "Автоматическая блокировка при обнаружении торрент-трафика"
       }
     },
     "templatesGallery": {

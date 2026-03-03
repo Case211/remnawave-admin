@@ -849,6 +849,7 @@ class AutomationEngine:
             "violation.detected": "Обнаружено нарушение",
             "node.went_offline": "Нода ушла офлайн",
             "user.traffic_exceeded": "Трафик превышен",
+            "torrent.detected": "Обнаружен торрент-трафик",
         }
         _METRIC_LABELS = {
             "users_online": "Пользователей онлайн",
@@ -978,6 +979,8 @@ class AutomationEngine:
         if event_type.startswith("node."):
             return "node"
         if event_type.startswith("violation."):
+            return "user"
+        if event_type.startswith("torrent."):
             return "user"
         return "system"
 
