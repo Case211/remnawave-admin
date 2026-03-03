@@ -254,107 +254,103 @@ async def receive_connections(
                      "metrics_updated": report.system_metrics is not None},
         )
 
-    # Per-batch UUID cache
+    # ── Batch resolve all user identifiers to UUIDs ──────────────
     user_uuid_cache: dict[str, Optional[str]] = {}
 
+    if report.connections or report.torrent_events:
+        all_identifiers = set()
+        for conn in report.connections:
+            all_identifiers.add(conn.user_email)
+        for event in (report.torrent_events or []):
+            all_identifiers.add(event.user_email)
+
+        # Classify identifiers
+        emails = []
+        short_uuids_raw = []
+        for ident in all_identifiers:
+            if ident.startswith("user_"):
+                short_uuids_raw.append(ident)
+            else:
+                emails.append(ident)
+
+        # Batch resolve emails and short_uuids (2 queries instead of N)
+        if emails:
+            email_map = await db_service.get_email_to_uuid_map(emails)
+            for email, uid in email_map.items():
+                user_uuid_cache[email] = uid
+
+        if short_uuids_raw:
+            short_uuids_clean = [s.replace("user_", "") for s in short_uuids_raw]
+            short_map = await db_service.get_short_uuid_to_uuid_map(short_uuids_clean)
+            for short, uid in short_map.items():
+                user_uuid_cache[f"user_{short}"] = uid
+
+        # Fallback for unresolved identifiers (individual lookup)
+        for ident in all_identifiers:
+            if ident not in user_uuid_cache:
+                uid = await _find_user_uuid_by_identifier(ident)
+                user_uuid_cache[ident] = uid
+
+    # Helper for torrent events (reuses the cache)
     async def _cached_find_user(identifier: str) -> Optional[str]:
         if identifier not in user_uuid_cache:
             user_uuid_cache[identifier] = await _find_user_uuid_by_identifier(identifier)
         return user_uuid_cache[identifier]
 
-    # Process connections
+    # ── Batch upsert connections (replaces per-connection loop) ─────
     processed = 0
     errors = 0
 
-    for conn in report.connections:
-        try:
-            user_uuid = await _cached_find_user(conn.user_email)
+    if report.connections:
+        batch_connections = []
+        for conn in report.connections:
+            user_uuid = user_uuid_cache.get(conn.user_email)
             if not user_uuid:
                 logger.warning("User not found for identifier=%s, skipping", conn.user_email)
                 errors += 1
                 continue
-
-            connection_id = await db_service.add_user_connection(
-                user_uuid=user_uuid,
-                ip_address=conn.ip_address,
-                node_uuid=conn.node_uuid,
-                device_info={
+            batch_connections.append({
+                "user_uuid": user_uuid,
+                "ip_address": conn.ip_address,
+                "node_uuid": conn.node_uuid,
+                "device_info": {
                     "user_email": conn.user_email,
                     "bytes_sent": conn.bytes_sent,
                     "bytes_received": conn.bytes_received,
                     "connected_at": conn.connected_at.isoformat() if conn.connected_at else None,
                     "disconnected_at": conn.disconnected_at.isoformat() if conn.disconnected_at else None,
                 },
-                connected_at=conn.connected_at,
-            )
+                "connected_at": conn.connected_at,
+            })
 
-            if connection_id:
-                logger.debug("Connection recorded: id=%d user=%s ip=%s", connection_id, conn.user_email, conn.ip_address)
-                processed += 1
-            else:
-                errors += 1
-
-        except Exception as e:
-            logger.error("Error processing connection for %s: %s", conn.user_email, e, exc_info=True)
-            errors += 1
+        if batch_connections:
+            try:
+                result = await db_service.batch_upsert_connections(
+                    batch_connections, stale_threshold_minutes=2
+                )
+                processed = result["upserted"]
+                logger.info(
+                    "Batch upserted: node=%s upserted=%d closed_stale=%d errors=%d",
+                    node_uuid[:8], result["upserted"], result["closed_stale"], errors,
+                )
+            except Exception as e:
+                logger.error("Batch upsert failed for node %s: %s", node_uuid[:8], e, exc_info=True)
+                errors += len(batch_connections)
 
     if errors > 0:
         logger.warning("Batch processed with errors: node=%s total=%d processed=%d errors=%d",
                        node_uuid, len(report.connections), processed, errors)
-    else:
-        logger.info("Batch processed: node=%s total=%d processed=%d", node_uuid[:8], len(report.connections), processed)
 
-    # Post-processing: auto-close old connections + violation detection
+    # Post-processing: violation detection in background
+    # Stale connection closing is now handled inside batch_upsert_connections
     if processed > 0:
         try:
-            affected_user_uuids = set()
-            new_connections_by_user: dict[str, set[str]] = {}
-
-            for conn in report.connections:
-                user_uuid = await _cached_find_user(conn.user_email)
-                if user_uuid:
-                    affected_user_uuids.add(user_uuid)
-                    if user_uuid not in new_connections_by_user:
-                        new_connections_by_user[user_uuid] = set()
-                    new_connections_by_user[user_uuid].add(str(conn.ip_address))
-
-            # Auto-close old connections (>5 min without activity) — batch UPDATE
-            ids_to_close = []
-            for user_uuid in affected_user_uuids:
-                try:
-                    active_connections = await db_service.get_user_active_connections(user_uuid, limit=1000, max_age_minutes=5)
-                    now = datetime.utcnow()
-                    new_ips = new_connections_by_user.get(user_uuid, set())
-
-                    for active_conn in active_connections:
-                        conn_time = active_conn.get("connected_at")
-                        if not conn_time:
-                            continue
-                        if isinstance(conn_time, str):
-                            try:
-                                conn_time = datetime.fromisoformat(conn_time.replace("Z", "+00:00"))
-                            except ValueError:
-                                continue
-                        if not isinstance(conn_time, datetime):
-                            continue
-                        if conn_time.tzinfo:
-                            conn_time = conn_time.replace(tzinfo=None)
-
-                        age_minutes = (now - conn_time).total_seconds() / 60
-                        if age_minutes > 5:
-                            conn_ip = str(active_conn.get("ip_address", ""))
-                            if conn_ip not in new_ips:
-                                conn_id = active_conn.get("id")
-                                if conn_id:
-                                    ids_to_close.append(conn_id)
-                except Exception as e:
-                    logger.warning("Error checking connections for user %s: %s", user_uuid, e, exc_info=True)
-
-            if ids_to_close:
-                closed = await db_service.close_user_connections_batch(ids_to_close)
-                logger.info("Auto-closed %d old connections in batch", closed)
-
-            # Fire-and-forget: violation detection runs in background
+            # Only include users that had connections in this batch (not torrent-only users)
+            affected_user_uuids = set(
+                user_uuid_cache[conn.user_email]
+                for conn in report.connections
+                if user_uuid_cache.get(conn.user_email)
+            )
             asyncio.create_task(
                 _run_violation_detection(affected_user_uuids)
             )

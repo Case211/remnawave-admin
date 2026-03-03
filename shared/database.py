@@ -173,6 +173,8 @@ CREATE TABLE IF NOT EXISTS user_connections (
 CREATE INDEX IF NOT EXISTS idx_user_connections_user ON user_connections(user_uuid, connected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_connections_ip ON user_connections(ip_address);
 CREATE INDEX IF NOT EXISTS idx_user_connections_node ON user_connections(node_uuid);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_connections_active_uq ON user_connections(user_uuid, ip_address) WHERE disconnected_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_connections_user_active ON user_connections(user_uuid, disconnected_at, connected_at DESC);
 
 -- HWID устройства пользователей
 CREATE TABLE IF NOT EXISTS user_hwid_devices (
@@ -405,7 +407,33 @@ class DatabaseService:
                 email
             )
             return str(row["uuid"]) if row else None
-    
+
+    async def get_email_to_uuid_map(self, emails: list) -> Dict[str, str]:
+        """Resolve multiple emails to user UUIDs in one query.
+        Returns: {email: uuid_string}
+        """
+        if not self.is_connected or not emails:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT email, uuid::text FROM users WHERE email = ANY($1::text[])",
+                emails,
+            )
+            return {r["email"]: r["uuid"] for r in rows}
+
+    async def get_short_uuid_to_uuid_map(self, short_uuids: list) -> Dict[str, str]:
+        """Resolve multiple short_uuids to user UUIDs in one query.
+        Returns: {short_uuid: uuid_string}
+        """
+        if not self.is_connected or not short_uuids:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT short_uuid, uuid::text FROM users WHERE short_uuid = ANY($1::text[])",
+                short_uuids,
+            )
+            return {r["short_uuid"]: r["uuid"] for r in rows}
+
     async def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user by username (case-insensitive) with raw_data in API format."""
         if not self.is_connected:
@@ -1357,7 +1385,101 @@ class DatabaseService:
                 )
 
                 return result_id
-    
+
+    async def batch_upsert_connections(
+        self,
+        connections: list,
+        stale_threshold_minutes: int = 2,
+    ) -> Dict[str, int]:
+        """
+        Batch upsert connections and close stale ones in a single transaction.
+        Replaces per-connection add_user_connection calls for collector batches.
+
+        Args:
+            connections: List of dicts with keys:
+                - user_uuid: str
+                - ip_address: str
+                - node_uuid: str | None
+                - device_info: dict | None
+                - connected_at: datetime | None
+            stale_threshold_minutes: Close other-IP connections older than this
+
+        Returns:
+            {"upserted": int, "closed_stale": int}
+        """
+        if not self.is_connected or not connections:
+            return {"upserted": 0, "closed_stale": 0}
+
+        # Deduplicate: keep latest connected_at per (user_uuid, ip_address)
+        # PostgreSQL raises error if ON CONFLICT targets same row twice in one INSERT
+        deduped: dict = {}
+        for c in connections:
+            key = (str(c["user_uuid"]), str(c["ip_address"]))
+            ca = c.get("connected_at")
+            existing = deduped.get(key)
+            if existing is None or (ca and ca > (existing.get("connected_at") or datetime.min)):
+                deduped[key] = c
+        connections = list(deduped.values())
+
+        user_uuids = []
+        ip_addresses = []
+        node_uuids = []
+        device_infos = []
+        connected_ats = []
+
+        for c in connections:
+            user_uuids.append(str(c["user_uuid"]))
+            ip_addresses.append(str(c["ip_address"]))
+            node_uuids.append(str(c["node_uuid"]) if c.get("node_uuid") else None)
+            device_infos.append(json.dumps(c["device_info"]) if c.get("device_info") else None)
+            ca = c.get("connected_at")
+            if ca and isinstance(ca, str):
+                try:
+                    ca = datetime.fromisoformat(ca.replace('Z', '+00:00'))
+                except ValueError:
+                    ca = None
+            connected_ats.append(ca or datetime.utcnow())
+
+        async with self.acquire() as conn:
+            async with conn.transaction():
+                # 1. Bulk upsert via UNNEST + ON CONFLICT on partial unique index
+                # ip_address is VARCHAR(45) — no ::inet cast
+                upsert_result = await conn.execute(
+                    """
+                    INSERT INTO user_connections (user_uuid, ip_address, node_uuid, device_info, connected_at)
+                    SELECT u::uuid, u_ip, n::uuid, d::jsonb, COALESCE(t, NOW())
+                    FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[])
+                        AS t(u, u_ip, n, d, t)
+                    ON CONFLICT (user_uuid, ip_address) WHERE disconnected_at IS NULL
+                    DO UPDATE SET
+                        connected_at = GREATEST(user_connections.connected_at, EXCLUDED.connected_at),
+                        node_uuid = COALESCE(EXCLUDED.node_uuid, user_connections.node_uuid),
+                        device_info = COALESCE(EXCLUDED.device_info, user_connections.device_info)
+                    """,
+                    user_uuids, ip_addresses, node_uuids, device_infos, connected_ats,
+                )
+                upserted = int(upsert_result.split()[-1]) if upsert_result else 0
+
+                # 2. Close stale connections — IPs not in this batch, older than threshold
+                close_result = await conn.execute(
+                    """
+                    UPDATE user_connections uc
+                    SET disconnected_at = NOW()
+                    FROM (
+                        SELECT DISTINCT u::uuid AS uid, i AS ip
+                        FROM UNNEST($1::text[], $2::text[]) AS t(u, i)
+                    ) batch
+                    WHERE uc.user_uuid = batch.uid
+                      AND uc.ip_address != batch.ip
+                      AND uc.disconnected_at IS NULL
+                      AND uc.connected_at < NOW() - make_interval(mins => $3)
+                    """,
+                    user_uuids, ip_addresses, stale_threshold_minutes,
+                )
+                closed = int(close_result.split()[-1]) if close_result else 0
+
+        return {"upserted": upserted, "closed_stale": closed}
+
     async def get_user_active_connections(
         self,
         user_uuid: str,
