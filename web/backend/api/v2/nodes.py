@@ -516,9 +516,13 @@ async def get_agent_install_command(
             base_url = f"{forwarded_proto}://{forwarded_host}"
 
         script_url = "https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh"
+        # Include WS secret key so agent can verify HMAC-signed commands
+        from web.backend.core.config import get_web_settings
+        ws_secret = get_web_settings().secret_key
         install_cmd = (
             f"curl -sSL {script_url} | "
-            f"bash -s -- --uuid {node_uuid} --url {base_url} --token {token}"
+            f"bash -s -- --uuid {node_uuid} --url {base_url} --token {token} "
+            f"--ws-secret {ws_secret}"
         )
 
         return {
