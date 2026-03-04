@@ -10,7 +10,8 @@ Root causes:
   2. raw_data JSONB lookups (id/userId/user_id) have no indexes
   3. LOWER(email) LIKE queries bypass idx_users_email
 
-Uses CONCURRENTLY (via autocommit) to avoid table locks on production.
+Note: not using CONCURRENTLY — table has only ~18K rows so lock is instant,
+and CONCURRENTLY cannot run inside Alembic's transaction context.
 """
 from typing import Sequence, Union
 
@@ -23,51 +24,44 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-    conn.execution_options(isolation_level="AUTOCOMMIT")
-
-    # 1. Функциональный индекс для LOWER(username)
-    #    WHERE LOWER(username) = LOWER($1) / WHERE LOWER(username) = ANY(...)
-    conn.execute(op.inline_literal("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_username_lower
+    # 1. Functional index for LOWER(username)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_username_lower
         ON users (LOWER(username))
-    """))
+    """)
 
-    # 2. Функциональный индекс для LOWER(email)
-    conn.execute(op.inline_literal("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email_lower
+    # 2. Functional index for LOWER(email)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_email_lower
         ON users (LOWER(email))
         WHERE email IS NOT NULL
-    """))
+    """)
 
-    # 3. raw_data->>'id' — числовой ID из Remnawave Panel
-    conn.execute(op.inline_literal("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_raw_data_id
+    # 3. raw_data->>'id'
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_raw_data_id
         ON users ((raw_data->>'id'))
         WHERE raw_data IS NOT NULL
-    """))
+    """)
 
-    # 4. raw_data->>'userId' — альтернативное поле ID
-    conn.execute(op.inline_literal("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_raw_data_userId
+    # 4. raw_data->>'userId'
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_raw_data_userId
         ON users ((raw_data->>'userId'))
         WHERE raw_data IS NOT NULL
-    """))
+    """)
 
-    # 5. raw_data->>'user_id' — альтернативное поле ID
-    conn.execute(op.inline_literal("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_raw_data_user_id
+    # 5. raw_data->>'user_id'
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_raw_data_user_id
         ON users ((raw_data->>'user_id'))
         WHERE raw_data IS NOT NULL
-    """))
+    """)
 
 
 def downgrade() -> None:
-    conn = op.get_bind()
-    conn.execution_options(isolation_level="AUTOCOMMIT")
-
-    conn.execute(op.inline_literal("DROP INDEX CONCURRENTLY IF EXISTS idx_users_username_lower"))
-    conn.execute(op.inline_literal("DROP INDEX CONCURRENTLY IF EXISTS idx_users_email_lower"))
-    conn.execute(op.inline_literal("DROP INDEX CONCURRENTLY IF EXISTS idx_users_raw_data_id"))
-    conn.execute(op.inline_literal("DROP INDEX CONCURRENTLY IF EXISTS idx_users_raw_data_userId"))
-    conn.execute(op.inline_literal("DROP INDEX CONCURRENTLY IF EXISTS idx_users_raw_data_user_id"))
+    op.execute("DROP INDEX IF EXISTS idx_users_username_lower")
+    op.execute("DROP INDEX IF EXISTS idx_users_email_lower")
+    op.execute("DROP INDEX IF EXISTS idx_users_raw_data_id")
+    op.execute("DROP INDEX IF EXISTS idx_users_raw_data_userId")
+    op.execute("DROP INDEX IF EXISTS idx_users_raw_data_user_id")
