@@ -45,6 +45,20 @@ CONNECTIONS_RETENTION_DAYS = 30
 # Semaphore: limit concurrent background violation detection batches
 _violation_semaphore = asyncio.Semaphore(3)
 
+# Кэш имён нод: {node_uuid: node_name}
+_node_name_cache: dict[str, str] = {}
+
+
+async def _get_node_name(node_uuid: str) -> str:
+    """Вернуть имя ноды по UUID (с кэшем). Fallback — первые 8 символов UUID."""
+    if node_uuid not in _node_name_cache:
+        try:
+            node = await db_service.get_node_by_uuid(node_uuid)
+            _node_name_cache[node_uuid] = node.get("name") or node_uuid[:8] if node else node_uuid[:8]
+        except Exception:
+            return node_uuid[:8]
+    return _node_name_cache[node_uuid]
+
 router = APIRouter()
 
 
@@ -173,9 +187,10 @@ async def receive_connections(
     node_uuid: str = Depends(verify_agent_token),
 ):
     """Принимает батч подключений от Node Agent."""
+    node_name = await _get_node_name(node_uuid)
     logger.info(
         "Batch received: node=%s connections=%d metrics=%s",
-        node_uuid[:8], len(report.connections) if report.connections else 0,
+        node_name, len(report.connections) if report.connections else 0,
         "yes" if report.system_metrics else "no",
     )
 
@@ -331,10 +346,10 @@ async def receive_connections(
                 processed = result["upserted"]
                 logger.info(
                     "Batch upserted: node=%s upserted=%d closed_stale=%d errors=%d",
-                    node_uuid[:8], result["upserted"], result["closed_stale"], errors,
+                    node_name, result["upserted"], result["closed_stale"], errors,
                 )
             except Exception as e:
-                logger.error("Batch upsert failed for node %s: %s", node_uuid[:8], e, exc_info=True)
+                logger.error("Batch upsert failed for node %s: %s", node_name, e, exc_info=True)
                 errors += len(batch_connections)
 
     if errors > 0:
@@ -386,7 +401,7 @@ async def receive_connections(
 
             if torrent_processed > 0:
                 logger.warning(
-                    "Torrent events: node=%s count=%d", node_uuid[:8], torrent_processed
+                    "Torrent events: node=%s count=%d", node_name, torrent_processed
                 )
                 asyncio.create_task(
                     _process_torrent_violations(report.torrent_events, user_uuid_cache)
