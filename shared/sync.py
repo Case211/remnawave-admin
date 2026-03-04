@@ -262,13 +262,13 @@ class SyncService:
             # Remove local users that no longer exist in API
             if api_user_uuids:
                 try:
-                    local_users = await db_service.get_all_users(limit=50000)
+                    # Используем lightweight запрос — только UUID, без raw_data
+                    local_uuids = await db_service.get_all_user_uuids()
+                    stale_uuids = local_uuids - api_user_uuids
                     removed = 0
-                    for local_user in local_users:
-                        local_uuid = local_user.get("uuid")
-                        if local_uuid and local_uuid not in api_user_uuids:
-                            await db_service.delete_user(local_uuid)
-                            removed += 1
+                    for local_uuid in stale_uuids:
+                        await db_service.delete_user(local_uuid)
+                        removed += 1
                     if removed:
                         logger.info("Removed %d stale users from local DB (not in API)", removed)
                 except Exception as e:

@@ -284,7 +284,7 @@ async def main() -> None:
         config_initialized = await config_service.initialize()
         if config_initialized:
             logger.info("✅ Dynamic config initialized")
-            config_service.start_auto_reload(interval_seconds=30)
+            config_service.start_auto_reload(interval_seconds=120)
 
         logger.info("🔄 Starting sync service...")
         await sync_service.start()

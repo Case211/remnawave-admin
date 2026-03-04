@@ -959,7 +959,15 @@ class DatabaseService:
                 uuid
             )
             return result == "DELETE 1"
-    
+
+    async def get_all_user_uuids(self) -> set[str]:
+        """Get set of all user UUIDs. Lightweight alternative to get_all_users() for reconciliation."""
+        if not self.is_connected:
+            return set()
+        async with self.acquire() as conn:
+            rows = await conn.fetch("SELECT uuid FROM users")
+            return {str(r["uuid"]) for r in rows}
+
     # ==================== Nodes ====================
     
     async def get_all_nodes(self) -> List[Dict[str, Any]]:
