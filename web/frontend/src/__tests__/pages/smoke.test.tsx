@@ -41,6 +41,7 @@ vi.mock('@/api/auth', () => ({
       permissions: [],
     }),
     getSetupStatus: vi.fn().mockResolvedValue({ needs_setup: false }),
+    getAuthMethods: vi.fn().mockResolvedValue({ telegram: true, password: true, totp_required: false }),
     telegramLogin: vi.fn(),
     passwordLogin: vi.fn(),
     register: vi.fn(),

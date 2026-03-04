@@ -11,6 +11,8 @@ pydantic-settings>=2.1.0
 # Security
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+pyotp>=2.9.0
+qrcode[pil]>=7.4
 
 # Database (uses same as bot)
 asyncpg>=0.29.0
