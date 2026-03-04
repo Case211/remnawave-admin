@@ -14,6 +14,11 @@ IMPROVEMENTS.md
 access.json
 logs_node_agent.json
 design-mockups/
+.claude/
+.coverage
+chroma_data/
+tmp_files.txt
+api-1.yaml
 
 # Node Agent
 node-agent/.env

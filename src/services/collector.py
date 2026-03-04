@@ -4,7 +4,7 @@ Collector API для приёма данных о подключениях от 
 Endpoint: POST /api/v1/connections/batch
 Аутентификация: Bearer token (токен агента из таблицы nodes.agent_token)
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
@@ -22,6 +22,12 @@ from src.utils.notifications import send_violation_notification
 # Инициализируем сервисы
 connection_monitor = ConnectionMonitor(db_service)
 violation_detector = IntelligentViolationDetector(db_service, connection_monitor)
+
+# Rate limiting: пропускаем проверку нарушений если предыдущая не нашла нарушений
+# Структура: {user_uuid: (last_checked_at, had_violation)}
+_violation_check_cache: dict[str, tuple[datetime, bool]] = {}
+# Не проверять повторно если нарушений не было — N минут
+VIOLATION_CHECK_COOLDOWN_MINUTES = 15
 
 
 router = APIRouter(prefix="/api/v1/connections", tags=["collector"])
@@ -360,8 +366,27 @@ async def receive_connections(
                             stats.simultaneous_connections
                         )
                     
+                    # Rate limiting: пропускаем проверку если недавно проверяли и нарушений не было
+                    now = datetime.utcnow()
+                    cached = _violation_check_cache.get(user_uuid)
+                    if cached:
+                        last_checked, had_violation = cached
+                        if not had_violation and now - last_checked < timedelta(minutes=VIOLATION_CHECK_COOLDOWN_MINUTES):
+                            logger.debug(
+                                "Skipping violation check for user %s (cooldown, last checked %ds ago)",
+                                user_uuid,
+                                int((now - last_checked).total_seconds()),
+                            )
+                            continue
+
                     # Проверяем нарушения
                     violation_score = await violation_detector.check_user(user_uuid, window_minutes=60)
+                    # Обновляем кэш: было ли нарушение
+                    had_violation = bool(
+                        violation_score and violation_score.total >= violation_detector.THRESHOLDS['monitor']
+                    )
+                    _violation_check_cache[user_uuid] = (datetime.utcnow(), had_violation)
+
                     if violation_score:
                         if violation_score.total >= violation_detector.THRESHOLDS['monitor']:
                             logger.warning(
