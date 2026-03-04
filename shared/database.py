@@ -281,6 +281,12 @@ class DatabaseService:
                         min_size=min_size,
                         max_size=max_size,
                         command_timeout=30,
+                        # Закрывать idle-соединения старше 5 минут — предотвращает
+                        # "connection lost" и последующие authentication-спайки в PostgreSQL
+                        max_inactive_connection_lifetime=300,
+                        # Увеличиваем кэш prepared statements (по умолчанию 100)
+                        # чтобы снизить PARSE-запросы при большом количестве разных SQL
+                        statement_cache_size=200,
                     )
 
                     # Initialize schema
