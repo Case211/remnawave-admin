@@ -218,6 +218,9 @@ class DatabaseService:
     Provides CRUD operations for users, nodes, hosts, and config profiles.
     """
     
+    _RAW_DATA_ID_CACHE_TTL = 60  # seconds
+    _RAW_DATA_ID_CACHE_MAX = 50_000  # max entries before eviction
+
     def __init__(self):
         self._pool: Optional[Pool] = None
         self._initialized: bool = False
@@ -225,6 +228,7 @@ class DatabaseService:
         self._whitelist_cache: Dict[str, tuple] = {}  # {user_uuid: ((bool, Optional[List[str]]), timestamp)}
         self._whitelist_table_available: Optional[bool] = None  # None = not checked yet
         self._whitelist_column_available: Optional[bool] = None  # excluded_analyzers column
+        self._raw_data_id_cache: Dict[str, tuple] = {}  # {user_id: (uuid_or_None, monotonic_ts)}
     
     @property
     def is_connected(self) -> bool:
@@ -658,23 +662,55 @@ class DatabaseService:
             return _db_row_to_api_format(row) if row else None
     
     async def get_user_uuid_by_id_from_raw_data(self, user_id: str) -> Optional[str]:
-        """Находит user_uuid по ID из raw_data (для Xray логов)."""
+        """Находит user_uuid по ID из raw_data (для Xray логов).
+
+        Uses UNION ALL instead of OR to allow PostgreSQL to use
+        individual functional indexes on each raw_data field.
+        Results are cached in-memory (TTL 60s) to reduce DB load
+        since this is called on every connection from node agents.
+        """
         if not self.is_connected or not user_id:
             return None
-        
+
+        # Check in-memory cache first
+        now = time.monotonic()
+        cached = self._raw_data_id_cache.get(user_id)
+        if cached is not None:
+            value, ts = cached
+            if now - ts < self._RAW_DATA_ID_CACHE_TTL:
+                return value
+            del self._raw_data_id_cache[user_id]
+
         async with self.acquire() as conn:
-            # Ищем по разным возможным полям в raw_data
+            # UNION ALL allows each branch to use its own functional index
+            # instead of a sequential scan caused by OR conditions
             row = await conn.fetchrow(
                 """
-                SELECT uuid FROM users 
-                WHERE raw_data->>'id' = $1 
-                   OR raw_data->>'userId' = $1
-                   OR raw_data->>'user_id' = $1
+                SELECT uuid FROM (
+                    SELECT uuid FROM users WHERE raw_data->>'id' = $1 AND raw_data IS NOT NULL
+                    UNION ALL
+                    SELECT uuid FROM users WHERE raw_data->>'userId' = $1 AND raw_data IS NOT NULL
+                    UNION ALL
+                    SELECT uuid FROM users WHERE raw_data->>'user_id' = $1 AND raw_data IS NOT NULL
+                ) sub
                 LIMIT 1
                 """,
                 user_id
             )
-            return str(row["uuid"]) if row else None
+            result = str(row["uuid"]) if row else None
+
+        # Populate cache (also cache misses to avoid repeated lookups)
+        if len(self._raw_data_id_cache) >= self._RAW_DATA_ID_CACHE_MAX:
+            # Evict oldest ~25% of entries
+            sorted_keys = sorted(
+                self._raw_data_id_cache,
+                key=lambda k: self._raw_data_id_cache[k][1]
+            )
+            for k in sorted_keys[:len(sorted_keys) // 4 + 1]:
+                del self._raw_data_id_cache[k]
+        self._raw_data_id_cache[user_id] = (result, now)
+
+        return result
     
     async def search_users(
         self,
