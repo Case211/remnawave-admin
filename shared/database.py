@@ -198,6 +198,7 @@ CREATE INDEX IF NOT EXISTS idx_hwid_devices_hwid ON user_hwid_devices(hwid);
 
 -- Индексы для violations (таблица создаётся через Alembic)
 CREATE INDEX IF NOT EXISTS idx_violations_user_detected ON violations(user_uuid, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_violations_reasons_gin ON violations USING GIN(reasons);
 
 -- Индексы для violation_whitelist (таблица создаётся через Alembic)
 CREATE INDEX IF NOT EXISTS idx_violation_whitelist_user ON violation_whitelist(user_uuid);
@@ -2066,6 +2067,59 @@ class DatabaseService:
             logger.error("save_torrent_event failed: %s", e, exc_info=True)
             return None
 
+    async def batch_save_torrent_events(self, events: list) -> int:
+        """
+        Batch INSERT торрент-событий через UNNEST (один round-trip вместо N).
+
+        Args:
+            events: Список словарей с ключами:
+                user_uuid, node_uuid, ip_address, destination,
+                inbound_tag (опц.), outbound_tag (опц.), detected_at (опц.)
+
+        Returns:
+            Количество вставленных записей.
+        """
+        if not self.is_connected or not events:
+            return 0
+        try:
+            user_uuids = []
+            node_uuids = []
+            ip_addresses = []
+            destinations = []
+            inbound_tags = []
+            outbound_tags = []
+            detected_ats = []
+
+            for ev in events:
+                user_uuids.append(ev["user_uuid"])
+                node_uuids.append(ev["node_uuid"])
+                ip_addresses.append(ev["ip_address"])
+                destinations.append(ev["destination"])
+                inbound_tags.append(ev.get("inbound_tag", ""))
+                outbound_tags.append(ev.get("outbound_tag", "TORRENT"))
+                detected_ats.append(ev.get("detected_at"))
+
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    INSERT INTO torrent_events (
+                        user_uuid, node_uuid, ip_address, destination,
+                        inbound_tag, outbound_tag, detected_at
+                    )
+                    SELECT u, n, ip, dst, itag, otag, COALESCE(da, NOW())
+                    FROM UNNEST(
+                        $1::text[], $2::text[], $3::text[], $4::text[],
+                        $5::text[], $6::text[], $7::timestamptz[]
+                    ) AS t(u, n, ip, dst, itag, otag, da)
+                    """,
+                    user_uuids, node_uuids, ip_addresses, destinations,
+                    inbound_tags, outbound_tags, detected_ats,
+                )
+                return int(result.split()[-1]) if result else 0
+        except Exception as e:
+            logger.error("batch_save_torrent_events failed: %s", e)
+            return 0
+
     async def get_recent_torrent_violation(self, user_uuid: str, minutes: int = 10):
         """Check if a torrent-type violation exists for this user within the last N minutes."""
         if not self.is_connected:
@@ -2077,7 +2131,7 @@ class DatabaseService:
                     SELECT id FROM violations
                     WHERE user_uuid = $1
                       AND detected_at > NOW() - make_interval(mins => $2)
-                      AND reasons::text LIKE '%Torrent traffic detected%'
+                      AND 'Torrent traffic detected' = ANY(reasons)
                     """,
                     user_uuid, minutes,
                 )

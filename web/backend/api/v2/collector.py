@@ -362,23 +362,27 @@ async def receive_connections(
     if report.torrent_events:
         torrent_enabled = config_service.get("torrent_detection_enabled", True)
         if torrent_enabled:
+            # Resolve user UUIDs and build batch
+            batch_events = []
             for event in report.torrent_events:
                 try:
                     user_uuid_t = await _cached_find_user(event.user_email)
                     if not user_uuid_t:
                         continue
-                    await db_service.save_torrent_event(
-                        user_uuid=user_uuid_t,
-                        node_uuid=event.node_uuid,
-                        ip_address=event.ip_address,
-                        destination=event.destination,
-                        inbound_tag=event.inbound_tag,
-                        outbound_tag=event.outbound_tag,
-                        detected_at=event.detected_at,
-                    )
-                    torrent_processed += 1
+                    batch_events.append({
+                        "user_uuid": user_uuid_t,
+                        "node_uuid": event.node_uuid,
+                        "ip_address": event.ip_address,
+                        "destination": event.destination,
+                        "inbound_tag": event.inbound_tag,
+                        "outbound_tag": event.outbound_tag,
+                        "detected_at": event.detected_at,
+                    })
                 except Exception as e:
-                    logger.warning("Error saving torrent event for %s: %s", event.user_email, e)
+                    logger.warning("Error resolving torrent event for %s: %s", event.user_email, e)
+
+            if batch_events:
+                torrent_processed = await db_service.batch_save_torrent_events(batch_events)
 
             if torrent_processed > 0:
                 logger.warning(

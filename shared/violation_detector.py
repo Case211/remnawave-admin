@@ -1189,7 +1189,7 @@ class UserProfileAnalyzer:
         self._baseline_cache: Dict[str, tuple] = {}  # {user_uuid: (baseline_dict, timestamp)}
         self._baseline_locks: Dict[str, asyncio.Lock] = {}  # per-user locks to prevent stampede
     
-    async def build_baseline(self, user_uuid: str, days: int = 30) -> Dict[str, Any]:
+    async def build_baseline(self, user_uuid: str, days: int = 30, connection_history: Optional[List] = None) -> Dict[str, Any]:
         """
         Строит baseline профиль пользователя на основе истории.
         Сначала проверяет materialized baseline в БД, затем вычисляет и сохраняет.
@@ -1197,6 +1197,7 @@ class UserProfileAnalyzer:
         Args:
             user_uuid: UUID пользователя
             days: Количество дней истории для анализа
+            connection_history: Опциональная предзагруженная история подключений
 
         Returns:
             Словарь с baseline данными
@@ -1206,7 +1207,7 @@ class UserProfileAnalyzer:
             db_baseline = await self.db.get_user_baseline(user_uuid, max_age_seconds=self._BASELINE_CACHE_TTL)
             if db_baseline and db_baseline.get('data_points', 0) > 0:
                 return db_baseline
-            history = await self.db.get_connection_history(user_uuid, days=days)
+            history = connection_history if connection_history is not None else await self.db.get_connection_history(user_uuid, days=days)
             
             if not history:
                 return {
@@ -1343,7 +1344,8 @@ class UserProfileAnalyzer:
         user_uuid: str,
         current_ips: Set[str],
         current_countries: Set[str],
-        baseline: Optional[Dict[str, Any]] = None
+        baseline: Optional[Dict[str, Any]] = None,
+        connection_history_30d: Optional[List] = None,
     ) -> ProfileScore:
         """
         Анализирует отклонения от baseline профиля.
@@ -1379,7 +1381,7 @@ class UserProfileAnalyzer:
                     if cached and (time.time() - cached[1]) < self._BASELINE_CACHE_TTL:
                         baseline = cached[0]
                     else:
-                        baseline = await self.build_baseline(user_uuid, days=30)
+                        baseline = await self.build_baseline(user_uuid, days=30, connection_history=connection_history_30d)
         
         # Проверяем, сколько текущих IP уже известны пользователю
         known_ips = set(baseline.get('known_ips', []))
@@ -1788,9 +1790,22 @@ class IntelligentViolationDetector:
             # Это учитывает роутинг в приложении - старые подключения не считаются активными
             active_connections = await self.connection_monitor.get_user_active_connections(user_uuid, max_age_minutes=5)
 
-            # Получаем историю подключений (минимум 1 день, максимум 7 дней)
+            # Получаем историю подключений за 30 дней (один запрос для всех анализаторов)
+            connection_history_30d = await self.db.get_connection_history(user_uuid, days=30)
+
+            # Нарезаем 7-дневную историю для анализаторов temporal/geo/asn/device
             history_days = max(1, min(7, window_minutes // 60 + 1))
-            connection_history = await self.db.get_connection_history(user_uuid, days=history_days)
+            if history_days < 30 and connection_history_30d:
+                from datetime import datetime, timedelta, timezone
+                cutoff = datetime.now(timezone.utc) - timedelta(days=history_days)
+                connection_history = [
+                    c for c in connection_history_30d
+                    if (ca := c.get("connected_at")) and (
+                        ca >= cutoff if isinstance(ca, datetime) else True
+                    )
+                ]
+            else:
+                connection_history = connection_history_30d
 
             # Добавляем debug-логирование для диагностики
             logger.debug(
@@ -1840,7 +1855,7 @@ class IntelligentViolationDetector:
             # Анализируем отклонения от профиля (async)
             current_ips = {str(conn.ip_address) for conn in active_connections}
             current_countries = geo_score.countries
-            profile_score = await self.profile_analyzer.analyze(user_uuid, current_ips, current_countries)
+            profile_score = await self.profile_analyzer.analyze(user_uuid, current_ips, current_countries, connection_history_30d=connection_history_30d)
             
             # Анализируем fingerprint устройств (с учётом лимита устройств)
             device_score = self.device_analyzer.analyze(active_connections, connection_history, user_device_count)
@@ -1963,7 +1978,7 @@ class IntelligentViolationDetector:
 
             # Проверка 3: Известные пары IP
             # Пары IP, которые пользователь регулярно использует (дом+работа) — не шаринг
-            known_pairs_modifier = await self._check_known_ip_pairs(user_uuid, current_ips)
+            known_pairs_modifier = await self._check_known_ip_pairs(user_uuid, current_ips, connection_history_30d=connection_history_30d)
             if known_pairs_modifier < 1.0:
                 score_before_pairs = raw_score
                 raw_score *= known_pairs_modifier
@@ -2276,7 +2291,7 @@ class IntelligentViolationDetector:
             logger.debug("Error checking violation consistency: %s", e)
             return 1.0  # При ошибке не снижаем
 
-    async def _check_known_ip_pairs(self, user_uuid: str, current_ips: Set[str]) -> float:
+    async def _check_known_ip_pairs(self, user_uuid: str, current_ips: Set[str], connection_history_30d: Optional[List] = None) -> float:
         """
         Проверить, являются ли текущие пары IP «знакомыми» для пользователя.
 
@@ -2286,6 +2301,7 @@ class IntelligentViolationDetector:
         Args:
             user_uuid: UUID пользователя
             current_ips: Текущие IP адреса пользователя
+            connection_history_30d: Опциональная предзагруженная 30-дневная история
 
         Returns:
             Множитель для скора:
@@ -2299,8 +2315,8 @@ class IntelligentViolationDetector:
         try:
             from collections import Counter
 
-            # Получаем историю подключений за 30 дней
-            history = await self.db.get_connection_history(user_uuid, days=30)
+            # Используем переданную историю или загружаем
+            history = connection_history_30d if connection_history_30d is not None else await self.db.get_connection_history(user_uuid, days=30)
             if not history or len(history) < 5:
                 return 1.0  # Недостаточно данных для оценки
 
