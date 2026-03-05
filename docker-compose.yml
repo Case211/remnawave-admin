@@ -146,8 +146,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    profiles:
-      - web
 
   web-frontend:
     image: ghcr.io/case211/remnawave-admin-web-frontend:latest
@@ -166,8 +164,6 @@ services:
     depends_on:
       web-backend:
         condition: service_healthy
-    profiles:
-      - web
 
   # ===========================================
   # Redis (опционально, раскомментировать при >1 инстансе web-backend
@@ -187,8 +183,6 @@ services:
   #     interval: 10s
   #     timeout: 5s
   #     retries: 3
-  #   profiles:
-  #     - web
 
 volumes:
   postgres_data:
