@@ -1,7 +1,6 @@
 # =============================================
 # Dev-окружение — использует образы с тегом :dev
 # Запуск:  docker compose -f docker-compose.dev.yml up -d
-# С веб-панелью: docker compose -f docker-compose.dev.yml up -d
 # =============================================
 
 services:
