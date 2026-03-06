@@ -3210,6 +3210,7 @@ class DatabaseService:
         is_vpn: bool = False,
         raw_breakdown: Optional[str] = None,
         hwid_score: Optional[float] = None,
+        hwid_matched_users: Optional[str] = None,
     ) -> Optional[int]:
         """
         Сохранить нарушение в базу данных.
@@ -3223,11 +3224,12 @@ class DatabaseService:
         try:
             async with self.acquire() as conn:
                 async with conn.transaction():
-                    # Deduplication: skip if same user already has a violation within last 10 min
+                    # Deduplication: skip if same user already has a similar violation within last 30 min
                     existing = await conn.fetchval(
                         "SELECT id FROM violations WHERE user_uuid = $1 "
-                        "AND detected_at > NOW() - INTERVAL '10 minutes'",
-                        user_uuid,
+                        "AND recommended_action = $2 "
+                        "AND detected_at > NOW() - INTERVAL '30 minutes'",
+                        user_uuid, recommended_action,
                     )
                     if existing:
                         logger.debug("Skipping duplicate violation for user %s (existing id=%d)", user_uuid, existing)
@@ -3243,12 +3245,12 @@ class DatabaseService:
                             ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                             simultaneous_connections, unique_ips_count, device_limit,
                             impossible_travel, is_mobile, is_datacenter, is_vpn,
-                            raw_breakdown, detected_at
+                            raw_breakdown, hwid_matched_users, detected_at
                         )
                         VALUES (
                             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
                             $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
-                            $24, $25, $26, $27, $28, NOW()
+                            $24, $25, $26, $27, $28, $29, NOW()
                         )
                         RETURNING id
                         """,
@@ -3259,7 +3261,7 @@ class DatabaseService:
                         ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                         simultaneous_connections, unique_ips_count, device_limit,
                         impossible_travel, is_mobile, is_datacenter, is_vpn,
-                        raw_breakdown
+                        raw_breakdown, hwid_matched_users
                     )
                     return result
 
@@ -3835,7 +3837,8 @@ class DatabaseService:
         self,
         violation_id: int,
         action_taken: str,
-        admin_telegram_id: int
+        admin_telegram_id: int,
+        admin_comment: Optional[str] = None,
     ) -> bool:
         """
         Обновить принятое действие по нарушению.
@@ -3844,6 +3847,7 @@ class DatabaseService:
             violation_id: ID нарушения
             action_taken: Принятое действие
             admin_telegram_id: Telegram ID администратора
+            admin_comment: Примечание администратора
 
         Returns:
             True если успешно
@@ -3861,6 +3865,7 @@ class DatabaseService:
                         SET action_taken = $1,
                             action_taken_at = NOW(),
                             action_taken_by = $2,
+                            admin_comment = $3,
                             score = 0,
                             temporal_score = 0,
                             geo_score = 0,
@@ -3868,9 +3873,9 @@ class DatabaseService:
                             profile_score = 0,
                             device_score = 0,
                             hwid_score = 0
-                        WHERE id = $3
+                        WHERE id = $4
                         """,
-                        action_taken, admin_telegram_id, violation_id
+                        action_taken, admin_telegram_id, admin_comment, violation_id
                     )
                 else:
                     result = await conn.execute(
@@ -3878,10 +3883,11 @@ class DatabaseService:
                         UPDATE violations
                         SET action_taken = $1,
                             action_taken_at = NOW(),
-                            action_taken_by = $2
-                        WHERE id = $3
+                            action_taken_by = $2,
+                            admin_comment = $3
+                        WHERE id = $4
                         """,
-                        action_taken, admin_telegram_id, violation_id
+                        action_taken, admin_telegram_id, admin_comment, violation_id
                     )
                 return result == "UPDATE 1"
 
@@ -3893,6 +3899,7 @@ class DatabaseService:
         self,
         user_uuid: str,
         admin_telegram_id: int,
+        admin_comment: Optional[str] = None,
     ) -> int:
         """
         Аннулировать все нерассмотренные нарушения пользователя.
@@ -3911,6 +3918,7 @@ class DatabaseService:
                     SET action_taken = 'annulled',
                         action_taken_at = NOW(),
                         action_taken_by = $1,
+                        admin_comment = $2,
                         score = 0,
                         temporal_score = 0,
                         geo_score = 0,
@@ -3918,10 +3926,10 @@ class DatabaseService:
                         profile_score = 0,
                         device_score = 0,
                         hwid_score = 0
-                    WHERE user_uuid = $2
+                    WHERE user_uuid = $3
                       AND action_taken IS NULL
                     """,
-                    admin_telegram_id, user_uuid,
+                    admin_telegram_id, admin_comment, user_uuid,
                 )
                 # result format: "UPDATE N"
                 count = int(result.split()[-1]) if result else 0

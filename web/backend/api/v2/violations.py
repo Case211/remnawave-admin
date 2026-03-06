@@ -19,6 +19,8 @@ from web.backend.schemas.violation import (
     ViolationStats,
     ViolationUserSummary,
     ResolveViolationRequest,
+    AnnulViolationRequest,
+    AnnulAllViolationsRequest,
     ViolationSeverity,
     IPLookupRequest,
     IPLookupResponse,
@@ -38,6 +40,20 @@ router = APIRouter()
 get_severity = ViolationListItem.get_severity
 
 
+def _parse_hwid_matched(raw) -> list | None:
+    """Parse hwid_matched_users from DB (JSONB or JSON string)."""
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
+
 def _row_to_list_item(v: dict) -> ViolationListItem:
     """Convert a DB row dict to ViolationListItem (handles UUID→str, None defaults)."""
     score = float(v.get('score', 0) or 0)
@@ -55,6 +71,7 @@ def _row_to_list_item(v: dict) -> ViolationListItem:
         action_taken=v.get('action_taken'),
         notified=v.get('notified_at') is not None,
         reasons=v.get('reasons') or [],
+        admin_comment=v.get('admin_comment'),
     )
 
 
@@ -467,13 +484,16 @@ async def remove_from_whitelist(
 async def annul_user_violations(
     request: Request,
     user_uuid: str = Path(..., pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
+    data: AnnulAllViolationsRequest = None,
     admin: AdminUser = Depends(require_permission("violations", "resolve")),
     db: DatabaseService = Depends(get_db),
 ):
     """Аннулировать все нерассмотренные нарушения пользователя."""
+    comment = data.comment if data else None
     count = await db.annul_pending_violations(
         user_uuid=user_uuid,
         admin_telegram_id=admin.telegram_id,
+        admin_comment=comment,
     )
 
     await write_audit_log(
@@ -482,7 +502,7 @@ async def annul_user_violations(
         action="violation.annul_bulk",
         resource="violations",
         resource_id=user_uuid,
-        details=json.dumps({"action": "annulled", "count": count}),
+        details=json.dumps({"action": "annulled", "count": count, "comment": comment}),
         ip_address=get_client_ip(request),
     )
 
@@ -598,6 +618,8 @@ async def get_violation(
         action_taken_by=violation.get('action_taken_by'),
         notified_at=violation.get('notified_at'),
         raw_data=violation.get('raw_breakdown') or violation.get('raw_data'),
+        hwid_matched_users=_parse_hwid_matched(violation.get('hwid_matched_users')),
+        admin_comment=violation.get('admin_comment'),
     )
 
 
@@ -643,6 +665,7 @@ async def resolve_violation(
         violation_id=violation_id,
         action_taken=action_value,
         admin_telegram_id=admin.telegram_id,
+        admin_comment=data.comment,
     )
 
     if not success:
@@ -665,14 +688,17 @@ async def resolve_violation(
 async def annul_violation(
     violation_id: int,
     request: Request,
+    data: AnnulViolationRequest = None,
     admin: AdminUser = Depends(require_permission("violations", "resolve")),
     db: DatabaseService = Depends(get_db),
 ):
     """Аннулировать нарушение (ложное срабатывание)."""
+    comment = data.comment if data else None
     success = await db.update_violation_action(
         violation_id=violation_id,
         action_taken="annulled",
         admin_telegram_id=admin.telegram_id,
+        admin_comment=comment,
     )
 
     if not success:
@@ -684,7 +710,7 @@ async def annul_violation(
         action="violation.annul",
         resource="violations",
         resource_id=str(violation_id),
-        details=json.dumps({"action": "annulled"}),
+        details=json.dumps({"action": "annulled", "comment": comment}),
         ip_address=get_client_ip(request),
     )
 

@@ -109,6 +109,9 @@ interface Violation {
   recommended_action: string
   detected_at: string
   severity: string
+  action_taken?: string | null
+  admin_comment?: string | null
+  reasons?: string[]
 }
 
 interface EditFormData {
@@ -1893,26 +1896,52 @@ export default function UserDetail() {
               animationDelay="0.2s"
             >
               <div className="space-y-3">
-                {violations.slice(0, 5).map((v) => {
+                {violations.slice(0, 10).map((v) => {
                   const sevBadge = getSeverityBadge(v.severity)
                   return (
                     <div
                       key={v.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-[var(--glass-bg)] rounded-lg"
+                      className="p-3 bg-[var(--glass-bg)] rounded-lg cursor-pointer hover:bg-[var(--glass-bg-hover)] transition-colors border border-transparent hover:border-border/50"
+                      onClick={() => navigate(`/violations?vid=${v.id}&user=${uuid}`)}
                     >
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <Badge variant={sevBadge.variant}>
-                          {v.severity}
-                        </Badge>
-                        <span className="text-white text-sm">Score: {v.score.toFixed(1)}</span>
-                        <span className="text-dark-200 text-sm">{v.recommended_action}</span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <Badge variant={sevBadge.variant}>
+                            {v.severity}
+                          </Badge>
+                          <span className="text-white text-sm">Score: {v.score.toFixed(1)}</span>
+                          <span className="text-dark-200 text-sm">{v.recommended_action}</span>
+                          {v.action_taken && (
+                            <Badge variant="outline" className="text-[10px]">{v.action_taken}</Badge>
+                          )}
+                        </div>
+                        <span className="text-dark-200 text-xs sm:text-sm flex-shrink-0">
+                          {formatDate(v.detected_at)}
+                        </span>
                       </div>
-                      <span className="text-dark-200 text-xs sm:text-sm flex-shrink-0">
-                        {formatDate(v.detected_at)}
-                      </span>
+                      {v.reasons && v.reasons.length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1.5 line-clamp-1">
+                          {v.reasons[0]}
+                        </p>
+                      )}
+                      {v.admin_comment && (
+                        <p className="text-xs text-muted-foreground italic mt-1 line-clamp-1">
+                          💬 {v.admin_comment}
+                        </p>
+                      )}
                     </div>
                   )
                 })}
+                {violations.length > 10 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-muted-foreground"
+                    onClick={() => navigate(`/violations?user=${uuid}`)}
+                  >
+                    {t('common.showAll')} ({violations.length})
+                  </Button>
+                )}
               </div>
             </CollapsibleSection>
           )}

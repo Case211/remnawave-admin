@@ -92,6 +92,7 @@ class HwidScore:
     shared_hwids_count: int = 0
     other_accounts_count: int = 0
     other_accounts: List[str] = None  # usernames других аккаунтов
+    matched_details: List[Dict[str, Any]] = None  # [{uuid, username, hwid, status}]
 
 
 @dataclass
@@ -1673,12 +1674,20 @@ class HwidCrossAccountAnalyzer:
         # Собираем уникальных чужих пользователей по всем совпавшим HWID
         all_other_uuids: set = set()
         all_other_usernames: List[str] = []
+        matched_details: List[Dict[str, Any]] = []
         for group in shared:
+            hwid_value = group.get("hwid", "")
             for user in group.get("other_users", []):
                 uid = user["uuid"]
                 if uid not in all_other_uuids:
                     all_other_uuids.add(uid)
                     all_other_usernames.append(user.get("username") or uid[:8])
+                    matched_details.append({
+                        "uuid": uid,
+                        "username": user.get("username") or uid[:8],
+                        "hwid": hwid_value,
+                        "status": user.get("status", "unknown"),
+                    })
 
         other_count = len(all_other_uuids)
         shared_hwid_count = len(shared)
@@ -1711,6 +1720,7 @@ class HwidCrossAccountAnalyzer:
             shared_hwids_count=shared_hwid_count,
             other_accounts_count=other_count,
             other_accounts=all_other_usernames[:10],
+            matched_details=matched_details[:20],
         )
 
 

@@ -214,7 +214,7 @@ class SyncService:
 
         total_synced = 0
         start = 0
-        page_size = 100
+        page_size = 500
         api_user_uuids: set[str] = set()
 
         try:
@@ -982,7 +982,7 @@ class SyncService:
 
         total_synced = 0
         start = 0
-        page_size = 100
+        page_size = 500
 
         try:
             while True:

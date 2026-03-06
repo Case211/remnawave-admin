@@ -1108,7 +1108,19 @@
       "annulTooltip": "Аннулировать как ложное срабатывание. Скор обнуляется.",
       "annulAll": "Аннулировать все",
       "whitelistTooltip": "Добавить в whitelist — нарушения по этому пользователю не будут фиксироваться.",
-      "resolve": "Принять решение"
+      "resolve": "Принять решение",
+      "commentPlaceholder": "Примечание (необязательно)",
+      "commentTitle": "Примечание к действию",
+      "confirmAction": "Подтвердить"
+    },
+    "hwidMatches": {
+      "title": "Совпадения HWID",
+      "matchedWith": "Совпадает с профилем",
+      "device": "Устройство",
+      "hwid": "HWID"
+    },
+    "adminComment": {
+      "label": "Примечание администратора"
     },
     "actionStatuses": {
       "pending": "Ожидает",

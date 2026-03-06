@@ -43,6 +43,7 @@ class ViolationListItem(ViolationBase):
     action_taken: Optional[str] = None
     notified: bool = False
     reasons: List[str] = []
+    admin_comment: Optional[str] = None
 
     @staticmethod
     def get_severity(score: float) -> ViolationSeverity:
@@ -72,6 +73,8 @@ class ViolationDetail(ViolationBase):
     action_taken_by: Optional[int] = None
     notified_at: Optional[datetime] = None
     raw_data: Optional[Dict[str, Any]] = None
+    hwid_matched_users: Optional[List[Dict[str, Any]]] = None
+    admin_comment: Optional[str] = None
 
 
 class ViolationListResponse(BaseModel):
@@ -107,6 +110,16 @@ class ResolveAction(str, Enum):
 class ResolveViolationRequest(BaseModel):
     """Запрос на разрешение нарушения."""
     action: ResolveAction
+    comment: Optional[str] = Field(None, max_length=2000)
+
+
+class AnnulViolationRequest(BaseModel):
+    """Запрос на аннулирование нарушения."""
+    comment: Optional[str] = Field(None, max_length=2000)
+
+
+class AnnulAllViolationsRequest(BaseModel):
+    """Запрос на аннулирование всех нарушений пользователя."""
     comment: Optional[str] = Field(None, max_length=2000)
 
 

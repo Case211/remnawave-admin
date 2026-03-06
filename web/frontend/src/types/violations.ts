@@ -14,6 +14,7 @@ export interface Violation {
   reasons?: string[]
   countries?: string[]
   status?: string
+  admin_comment?: string | null
 }
 
 export interface ViolationDetail {
@@ -41,6 +42,13 @@ export interface ViolationDetail {
   action_taken_by: number | null
   notified_at: string | null
   raw_data: Record<string, unknown> | null
+  admin_comment?: string | null
+  hwid_matched_users?: Array<{
+    uuid: string
+    username: string
+    hwid?: string
+    status?: string
+  }>
 }
 
 export interface ViolationStats {

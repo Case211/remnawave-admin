@@ -83,7 +83,7 @@ class RemnawaveApiClient:
         """Create a new httpx.AsyncClient instance."""
         timeout_config = httpx.Timeout(
             connect=15.0,
-            read=30.0,
+            read=60.0,
             write=15.0,
             pool=10.0,
         )

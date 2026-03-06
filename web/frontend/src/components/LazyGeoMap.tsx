@@ -96,7 +96,7 @@ const LazyGeoMap = memo(function LazyGeoMap({
                     )}
                   </p>
                   {users.length > 0 && (
-                    <div className="border-t border-border/50 pt-1.5 space-y-1">
+                    <div className="border-t border-border/50 pt-1.5 space-y-1 max-h-[200px] overflow-y-auto">
                       {users.map((u: GeoCityUser) => (
                         <div
                           key={u.uuid}

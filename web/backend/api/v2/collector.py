@@ -8,6 +8,7 @@ Endpoint: POST /batch
 перенося всю логику violation detection в web backend.
 """
 import asyncio
+import json
 import logging
 from datetime import datetime
 from typing import Optional
@@ -18,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from shared.database import db_service
 from shared.connection_monitor import ConnectionMonitor
-from shared.violation_detector import IntelligentViolationDetector
+from shared.violation_detector import IntelligentViolationDetector, ViolationAction
 from shared.agent_tokens import get_node_by_token
 from shared.config_service import config_service
 
@@ -648,8 +649,32 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
                         is_datacenter=asn.is_datacenter if asn else False,
                         is_vpn=asn.is_vpn if asn else False,
                         hwid_score=hwid.score if hwid else None,
+                        hwid_matched_users=json.dumps(hwid.matched_details) if hwid and hwid.matched_details else None,
                     )
                     logger.info("Violation saved to DB for user %s: score=%.1f", user_uuid, violation_score.total)
+
+                    # Auto-block in Remnawave Panel when hard_block is recommended
+                    if violation_score.recommended_action == ViolationAction.HARD_BLOCK:
+                        try:
+                            from shared.api_client import api_client
+                            await api_client.disable_user(user_uuid)
+                            logger.info("Auto-blocked user %s via Panel API (hard_block, score=%.1f)", user_uuid, violation_score.total)
+                        except Exception as block_error:
+                            logger.warning("Failed to auto-block user %s: %s", user_uuid, block_error)
+
+                    # WebSocket broadcast for real-time UI updates
+                    try:
+                        from web.backend.api.v2.websocket import broadcast_violation
+                        await broadcast_violation({
+                            "user_uuid": user_uuid,
+                            "username": username,
+                            "score": violation_score.total,
+                            "recommended_action": violation_score.recommended_action.value,
+                            "reasons": violation_score.reasons[:5],
+                        })
+                    except Exception:
+                        pass
+
                 except Exception as save_error:
                     logger.warning("Failed to save violation to DB for user %s: %s", user_uuid, save_error)
             else:

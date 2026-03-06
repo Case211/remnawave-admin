@@ -37,6 +37,8 @@ import {
   Plus,
   Calendar,
   Search,
+  MessageSquare,
+  ArrowUpRight,
 } from 'lucide-react'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -47,6 +49,7 @@ import { InfoTooltip } from '@/components/InfoTooltip'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { SavedFiltersDropdown } from '@/components/SavedFiltersDropdown'
@@ -370,6 +373,13 @@ const ViolationCard = memo(function ViolationCard({
               </div>
             )}
 
+            {violation.admin_comment && (
+              <div className="flex items-start gap-1.5 mt-1">
+                <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+                <span className="text-xs text-muted-foreground italic line-clamp-2">{violation.admin_comment}</span>
+              </div>
+            )}
+
             {violation.email && (
               <p className="text-xs text-dark-200 mb-0.5 truncate">{violation.email}</p>
             )}
@@ -506,6 +516,7 @@ function ViolationDetailPanel({
 }) {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
+  const navigate = useNavigate()
 
   const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['violationDetail', violationId],
@@ -860,6 +871,58 @@ function ViolationDetailPanel({
                   </div>
                 )
               })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* HWID Matches from violation data */}
+      {detail.hwid_matched_users && detail.hwid_matched_users.length > 0 && (
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.33s' }}>
+          <CardContent className="p-4">
+            <h4 className="text-sm font-medium flex items-center gap-1.5 text-dark-200 uppercase tracking-wider mb-3">
+              <Fingerprint className="w-4 h-4" />
+              {t('violations.hwidMatches.title')}
+            </h4>
+            <div className="space-y-1.5">
+              {detail.hwid_matched_users.map((match: any, idx: number) => (
+                <div
+                  key={match.uuid || idx}
+                  className="flex items-center gap-2 p-2 rounded-md bg-red-500/10 border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors"
+                  onClick={() => navigate(`/users/${match.uuid}`)}
+                >
+                  <Users className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium text-red-300 hover:underline">
+                      {match.username}
+                    </span>
+                    {match.hwid && (
+                      <span className="ml-2 text-[10px] text-muted-foreground font-mono">
+                        HWID: {match.hwid.slice(0, 12)}...
+                      </span>
+                    )}
+                  </div>
+                  <Badge variant="secondary" className="text-[10px] shrink-0">
+                    {match.status}
+                  </Badge>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Admin comment */}
+      {detail.admin_comment && (
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.34s' }}>
+          <CardContent className="p-4">
+            <div className="p-3 rounded-md bg-accent/30 border border-border/50">
+              <div className="flex items-center gap-1.5 mb-1">
+                <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">{t('violations.adminComment.label')}</span>
+              </div>
+              <p className="text-sm">{detail.admin_comment}</p>
             </div>
           </CardContent>
         </Card>
@@ -1796,8 +1859,8 @@ export default function Violations() {
 
   // Mutations
   const resolveViolation = useMutation({
-    mutationFn: ({ id, action }: { id: number; action: string }) =>
-      client.post(`/violations/${id}/resolve`, { action }),
+    mutationFn: ({ id, action, comment }: { id: number; action: string; comment?: string }) =>
+      client.post(`/violations/${id}/resolve`, { action, comment }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['violations'] })
       queryClient.invalidateQueries({ queryKey: ['violationStats'] })
@@ -1816,17 +1879,21 @@ export default function Violations() {
   const pages = data?.pages ?? 1
 
   const { mutate: resolveMutate, isPending: isResolvePending } = resolveViolation
-  const handleBlock = useCallback(
-    (id: number) => resolveMutate({ id, action: 'block' }),
-    [resolveMutate],
-  )
-  const handleDismiss = useCallback(
-    (id: number) => resolveMutate({ id, action: 'ignore' }),
-    [resolveMutate],
-  )
+
+  // Comment dialog state
+  const [commentDialog, setCommentDialog] = useState<{
+    open: boolean
+    violationId: number
+    action: 'block' | 'ignore' | 'annulled' | 'annul-all'
+    userUuid?: string
+  } | null>(null)
+  const [commentText, setCommentText] = useState('')
+
+  const handleBlock = (id: number) => setCommentDialog({ open: true, violationId: id, action: 'block' })
+  const handleDismiss = (id: number) => setCommentDialog({ open: true, violationId: id, action: 'ignore' })
 
   const annulViolation = useMutation({
-    mutationFn: (id: number) => client.post(`/violations/${id}/annul`),
+    mutationFn: ({ id, comment }: { id: number; comment?: string }) => client.post(`/violations/${id}/annul`, { comment }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['violations'] })
       queryClient.invalidateQueries({ queryKey: ['violationStats'] })
@@ -1841,8 +1908,8 @@ export default function Violations() {
   })
 
   const annulAllViolations = useMutation({
-    mutationFn: (userUuid: string) => client.post(`/violations/user/${userUuid}/annul-all`),
-    onSuccess: (_data, _userUuid) => {
+    mutationFn: ({ userUuid, comment }: { userUuid: string; comment?: string }) => client.post(`/violations/user/${userUuid}/annul-all`, { comment }),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['violations'] })
       queryClient.invalidateQueries({ queryKey: ['violationStats'] })
       queryClient.invalidateQueries({ queryKey: ['topViolators'] })
@@ -1856,15 +1923,23 @@ export default function Violations() {
   })
 
   const { mutate: annulMutate } = annulViolation
-  const handleAnnul = useCallback(
-    (id: number) => annulMutate(id),
-    [annulMutate],
-  )
+  const handleAnnul = (id: number) => setCommentDialog({ open: true, violationId: id, action: 'annulled' })
   const { mutate: annulAllMutate } = annulAllViolations
-  const handleAnnulAll = useCallback(
-    (userUuid: string) => annulAllMutate(userUuid),
-    [annulAllMutate],
-  )
+  const handleAnnulAll = (userUuid: string) => setCommentDialog({ open: true, violationId: 0, action: 'annul-all', userUuid })
+
+  const handleConfirmAction = () => {
+    if (!commentDialog) return
+    const comment = commentText.trim() || undefined
+    if (commentDialog.action === 'annul-all' && commentDialog.userUuid) {
+      annulAllMutate({ userUuid: commentDialog.userUuid, comment })
+    } else if (commentDialog.action === 'annulled') {
+      annulMutate({ id: commentDialog.violationId, comment })
+    } else {
+      resolveMutate({ id: commentDialog.violationId, action: commentDialog.action, comment })
+    }
+    setCommentDialog(null)
+    setCommentText('')
+  }
 
   // Whitelist
   const [whitelistDialogOpen, setWhitelistDialogOpen] = useState(false)
@@ -1924,6 +1999,29 @@ export default function Violations() {
           userUuid={whitelistUserUuid}
           onSubmit={(data) => addToWhitelist.mutate(data)}
         />
+        {/* Comment dialog for actions */}
+        <Dialog open={!!commentDialog} onOpenChange={(open) => { if (!open) { setCommentDialog(null); setCommentText('') } }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('violations.actions.commentTitle')}</DialogTitle>
+            </DialogHeader>
+            <Textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder={t('violations.actions.commentPlaceholder')}
+              className="min-h-[80px]"
+              maxLength={2000}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setCommentDialog(null); setCommentText('') }}>
+                {t('common.cancel')}
+              </Button>
+              <Button onClick={handleConfirmAction}>
+                {t('violations.actions.confirmAction')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
@@ -2312,6 +2410,30 @@ export default function Violations() {
         userUuid={whitelistUserUuid}
         onSubmit={(data) => addToWhitelist.mutate(data)}
       />
+
+      {/* Comment dialog for actions */}
+      <Dialog open={!!commentDialog} onOpenChange={(open) => { if (!open) { setCommentDialog(null); setCommentText('') } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('violations.actions.commentTitle')}</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            placeholder={t('violations.actions.commentPlaceholder')}
+            className="min-h-[80px]"
+            maxLength={2000}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCommentDialog(null); setCommentText('') }}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleConfirmAction}>
+              {t('violations.actions.confirmAction')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

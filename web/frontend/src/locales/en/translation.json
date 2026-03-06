@@ -1108,7 +1108,19 @@
       "annulTooltip": "Annul as false positive. Score will be reset to zero.",
       "annulAll": "Annul all",
       "whitelistTooltip": "Add to whitelist — violations for this user will not be recorded.",
-      "resolve": "Take action"
+      "resolve": "Take action",
+      "commentPlaceholder": "Comment (optional)",
+      "commentTitle": "Action comment",
+      "confirmAction": "Confirm"
+    },
+    "hwidMatches": {
+      "title": "HWID Matches",
+      "matchedWith": "Matched with profile",
+      "device": "Device",
+      "hwid": "HWID"
+    },
+    "adminComment": {
+      "label": "Admin comment"
     },
     "actionStatuses": {
       "pending": "Pending",
