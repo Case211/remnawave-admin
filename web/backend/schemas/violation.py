@@ -100,7 +100,6 @@ class ViolationStats(BaseModel):
 class ResolveAction(str, Enum):
     """Допустимые действия при разрешении нарушения."""
     IGNORE = "ignore"
-    WARN = "warn"
     BLOCK = "block"
     DISMISS = "dismiss"
 

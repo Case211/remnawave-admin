@@ -44,6 +44,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { InfoTooltip } from '@/components/InfoTooltip'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -296,7 +297,6 @@ const ViolationCard = memo(function ViolationCard({
   canResolve,
   isResolving,
   onBlock,
-  onWarn,
   onDismiss,
   onAnnul,
   onWhitelist,
@@ -307,7 +307,6 @@ const ViolationCard = memo(function ViolationCard({
   canResolve: boolean
   isResolving?: boolean
   onBlock: () => void
-  onWarn: () => void
   onDismiss: () => void
   onAnnul: () => void
   onWhitelist: () => void
@@ -388,26 +387,41 @@ const ViolationCard = memo(function ViolationCard({
         {/* Actions for pending violations */}
         {canResolve && isPending && (
           <div className="mt-4 pt-3 border-t border-[var(--glass-border)] flex flex-wrap gap-2">
-            <Button variant="destructive" size="sm" onClick={onBlock} disabled={isResolving} aria-label={t('violations.actions.block')} className="gap-1">
-              <Ban className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('violations.actions.block')}</span>
-              <span className="sm:hidden">{t('violations.actions.blockShort')}</span>
-            </Button>
-            <Button variant="secondary" size="sm" onClick={onWarn} disabled={isResolving} aria-label={t('violations.actions.warn')} className="gap-1">
-              <AlertTriangle className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('violations.actions.warn')}</span>
-              <span className="sm:hidden">{t('violations.actions.warnShort')}</span>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onDismiss} disabled={isResolving} aria-label={t('violations.actions.dismiss')} className="gap-1">
-              <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onAnnul} disabled={isResolving} aria-label={t('violations.actions.annul')} className="gap-1 text-dark-300 hover:text-dark-100">
-              <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onWhitelist} disabled={isResolving} aria-label={t('violations.whitelist.addButton')} className="gap-1 text-dark-300 hover:text-primary-400" title={t('violations.whitelist.addButton')}>
-              <ShieldOff className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('violations.whitelist.addButton')}</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="destructive" size="sm" onClick={onBlock} disabled={isResolving} aria-label={t('violations.actions.block')} className="gap-1">
+                  <Ban className="w-4 h-4" />
+                  <span className="hidden sm:inline">{t('violations.actions.block')}</span>
+                  <span className="sm:hidden">{t('violations.actions.blockShort')}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.blockTooltip')}</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onDismiss} disabled={isResolving} aria-label={t('violations.actions.dismiss')} className="gap-1">
+                  <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.dismissTooltip')}</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onAnnul} disabled={isResolving} aria-label={t('violations.actions.annul')} className="gap-1 text-dark-300 hover:text-dark-100">
+                  <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.annulTooltip')}</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onWhitelist} disabled={isResolving} aria-label={t('violations.whitelist.addButton')} className="gap-1 text-dark-300 hover:text-primary-400">
+                  <ShieldOff className="w-4 h-4" />
+                  <span className="hidden sm:inline">{t('violations.whitelist.addButton')}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.whitelistTooltip')}</p></TooltipContent>
+            </Tooltip>
             <Button variant="ghost" size="sm" onClick={onViewDetail} aria-label={t('common.details')} className="gap-1 ml-auto">
               <Eye className="w-4 h-4" />
               <span className="hidden sm:inline">{t('common.details')}</span>
@@ -474,7 +488,6 @@ function ViolationDetailPanel({
   canResolve,
   onClose,
   onBlock,
-  onWarn,
   onDismiss,
   onAnnul,
   onAnnulAll,
@@ -485,7 +498,6 @@ function ViolationDetailPanel({
   canResolve: boolean
   onClose: () => void
   onBlock: (id: number) => void
-  onWarn: (id: number) => void
   onDismiss: (id: number) => void
   onAnnul: (id: number) => void
   onAnnulAll: (userUuid: string) => void
@@ -878,24 +890,46 @@ function ViolationDetailPanel({
               {t('violations.actions.resolve')}
             </h3>
             <div className="flex flex-wrap gap-3">
-              <Button variant="destructive" onClick={() => onBlock(detail.id)} className="gap-2">
-                <Ban className="w-4 h-4" /> {t('violations.actions.block')}
-              </Button>
-              <Button variant="secondary" onClick={() => onWarn(detail.id)} className="gap-2">
-                <AlertTriangle className="w-4 h-4" /> {t('violations.actions.warn')}
-              </Button>
-              <Button variant="ghost" onClick={() => onDismiss(detail.id)} className="gap-2">
-                <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
-              </Button>
-              <Button variant="ghost" onClick={() => onAnnul(detail.id)} className="gap-2 text-dark-300 hover:text-dark-100">
-                <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
-              </Button>
-              <Button variant="ghost" onClick={() => onAnnulAll(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-dark-100">
-                <Trash2 className="w-4 h-4" /> {t('violations.actions.annulAll')}
-              </Button>
-              <Button variant="ghost" onClick={() => onWhitelist(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-primary-400">
-                <ShieldOff className="w-4 h-4" /> {t('violations.whitelist.addButton')}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="destructive" onClick={() => onBlock(detail.id)} className="gap-2">
+                    <Ban className="w-4 h-4" /> {t('violations.actions.block')}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.blockTooltip')}</p></TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" onClick={() => onDismiss(detail.id)} className="gap-2">
+                    <X className="w-4 h-4" /> {t('violations.actions.dismiss')}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.dismissTooltip')}</p></TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" onClick={() => onAnnul(detail.id)} className="gap-2 text-dark-300 hover:text-dark-100">
+                    <XCircle className="w-4 h-4" /> {t('violations.actions.annul')}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.annulTooltip')}</p></TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" onClick={() => onAnnulAll(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-dark-100">
+                    <Trash2 className="w-4 h-4" /> {t('violations.actions.annulAll')}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.annulTooltip')}</p></TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" onClick={() => onWhitelist(detail.user_uuid)} className="gap-2 text-dark-300 hover:text-primary-400">
+                    <ShieldOff className="w-4 h-4" /> {t('violations.whitelist.addButton')}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom"><p className="max-w-xs">{t('violations.actions.whitelistTooltip')}</p></TooltipContent>
+              </Tooltip>
             </div>
           </CardContent>
         </Card>
@@ -1786,10 +1820,6 @@ export default function Violations() {
     (id: number) => resolveMutate({ id, action: 'block' }),
     [resolveMutate],
   )
-  const handleWarn = useCallback(
-    (id: number) => resolveMutate({ id, action: 'warn' }),
-    [resolveMutate],
-  )
   const handleDismiss = useCallback(
     (id: number) => resolveMutate({ id, action: 'ignore' }),
     [resolveMutate],
@@ -1882,7 +1912,6 @@ export default function Violations() {
           canResolve={canResolve}
           onClose={() => setSelectedViolationId(null)}
           onBlock={handleBlock}
-          onWarn={handleWarn}
           onDismiss={handleDismiss}
           onAnnul={handleAnnul}
           onAnnulAll={handleAnnulAll}
@@ -2218,7 +2247,6 @@ export default function Violations() {
                     canResolve={canResolve}
                     isResolving={isResolvePending}
                     onBlock={() => handleBlock(violation.id)}
-                    onWarn={() => handleWarn(violation.id)}
                     onDismiss={() => handleDismiss(violation.id)}
                     onAnnul={() => handleAnnul(violation.id)}
                     onWhitelist={() => handleWhitelist(violation.user_uuid)}

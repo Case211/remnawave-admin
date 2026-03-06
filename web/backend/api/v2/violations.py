@@ -613,11 +613,31 @@ async def resolve_violation(
     Разрешить нарушение (принять действие).
 
     Возможные действия:
-    - ignore: Игнорировать
-    - warn: Предупредить пользователя
-    - block: Заблокировать пользователя
+    - ignore/dismiss: Игнорировать
+    - block: Заблокировать пользователя в панели Remnawave
     """
     action_value = data.action.value if hasattr(data.action, 'value') else str(data.action)
+
+    # При блокировке — реально отключаем пользователя через Panel API
+    if action_value == "block":
+        violation = await db.get_violation_by_id(violation_id)
+        if not violation:
+            raise api_error(404, E.VIOLATION_UPDATE_FAILED)
+
+        user_uuid = violation.get("user_uuid")
+        if user_uuid:
+            try:
+                from shared.api_client import api_client
+                await api_client.disable_user(user_uuid)
+                logger.info(
+                    "User %s disabled via violation resolve by admin '%s'",
+                    user_uuid, admin.username,
+                )
+            except ImportError:
+                raise api_error(503, E.API_SERVICE_UNAVAILABLE)
+            except Exception as e:
+                logger.error("Failed to disable user %s: %s", user_uuid, e)
+                raise api_error(502, E.API_SERVICE_UNAVAILABLE, f"Failed to disable user: {e}")
 
     success = await db.update_violation_action(
         violation_id=violation_id,

@@ -1101,11 +1101,13 @@
     "actions": {
       "block": "Block",
       "blockShort": "Block",
-      "warn": "Warn",
-      "warnShort": "Warn",
+      "blockTooltip": "Block user in the panel. VPN access will be disabled.",
       "dismiss": "Dismiss",
+      "dismissTooltip": "Dismiss violation. Score is preserved in statistics.",
       "annul": "Annul",
+      "annulTooltip": "Annul as false positive. Score will be reset to zero.",
       "annulAll": "Annul all",
+      "whitelistTooltip": "Add to whitelist — violations for this user will not be recorded.",
       "resolve": "Take action"
     },
     "actionStatuses": {
