@@ -8,12 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Play, RefreshCw, CheckCircle, XCircle, Clock, Server, Settings2 } from 'lucide-react'
 import client from '@/api/client'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -162,16 +157,19 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
         <div className="space-y-4">
           {/* Node selection */}
           <div>
-            <label className="text-xs text-dark-200 mb-1.5 block">{t('fleet.scripts.selectNode')}</label>
+            <label className="text-xs text-dark-200 mb-1.5 block">
+              {t('fleet.scripts.selectNode')}
+            </label>
             <Select
-  value={selectedNode}
-  onValueChange={(val) => {
-    setSelectedNode(val)
-    setExecId(null)
-    setEnvVars({})
-  }}
-  disabled={isRunning}
->              <SelectTrigger>
+              value={selectedNode}
+              onValueChange={(val) => {
+                setSelectedNode(val)
+                setExecId(null)
+                setEnvVars({})
+              }}
+              disabled={isRunning}
+            >
+              <SelectTrigger>
                 <SelectValue placeholder={t('fleet.scripts.selectNode')} />
               </SelectTrigger>
               <SelectContent>
@@ -221,7 +219,10 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
                   </div>
                 ))}
                 <p className="text-[10px] text-dark-400">
-                  {t('fleet.scripts.parametersHint', 'Leave empty to use defaults shown as placeholders')}
+                  {t(
+                    'fleet.scripts.parametersHint',
+                    'Leave empty to use defaults shown as placeholders',
+                  )}
                 </p>
               </div>
             </div>
@@ -230,7 +231,9 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
           {/* Script preview */}
           {scriptDetail?.script_content && (
             <div>
-              <label className="text-xs text-dark-200 mb-1.5 block">{t('fleet.scripts.scriptContent')}</label>
+              <label className="text-xs text-dark-200 mb-1.5 block">
+                {t('fleet.scripts.scriptContent')}
+              </label>
               <pre className="bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-md p-3 text-xs font-mono text-dark-100 max-h-[150px] overflow-auto whitespace-pre-wrap">
                 {scriptDetail.script_content}
               </pre>
