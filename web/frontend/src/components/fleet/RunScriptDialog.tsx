@@ -2,7 +2,7 @@
  * RunScriptDialog — Select a target node, preview script, execute, view live output.
  * Automatically detects configurable parameters (${VAR:-default}) and shows input fields.
  */
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -140,6 +140,14 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
     onOpenChange(false)
   }
 
+  useEffect(() => {
+    if (open) {
+      setSelectedNode('')
+      setExecId(null)
+      setEnvVars({})
+    }
+  }, [script?.id, open])
+
   const isRunning = execStatus?.status === 'running' || execMutation.isPending
 
   return (
@@ -155,8 +163,15 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
           {/* Node selection */}
           <div>
             <label className="text-xs text-dark-200 mb-1.5 block">{t('fleet.scripts.selectNode')}</label>
-            <Select value={selectedNode} onValueChange={setSelectedNode} disabled={isRunning}>
-              <SelectTrigger>
+            <Select
+  value={selectedNode}
+  onValueChange={(val) => {
+    setSelectedNode(val)
+    setExecId(null)
+    setEnvVars({})
+  }}
+  disabled={isRunning}
+>              <SelectTrigger>
                 <SelectValue placeholder={t('fleet.scripts.selectNode')} />
               </SelectTrigger>
               <SelectContent>
