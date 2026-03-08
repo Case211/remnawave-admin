@@ -823,16 +823,31 @@ function ViolationDetailPanel({
               {t('violations.detail.devicesTitle')} ({hwidDevices.length})
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {hwidDevices.map((device, idx) => {
+              {(() => {
+                const matchedHwids = new Set(
+                  (detail.hwid_matched_users || [])
+                    .map((m: any) => m.hwid)
+                    .filter(Boolean)
+                )
+                return hwidDevices.map((device, idx) => {
                 const pi = getPlatformInfo(device.platform, t('common.unknown'))
+                const isMatched = !!(device.hwid && matchedHwids.has(device.hwid))
                 return (
                   <div
                     key={device.hwid || idx}
-                    className="bg-[var(--glass-bg)]/80 rounded-lg p-3 border border-[var(--glass-border)]/20"
+                    className={isMatched
+                      ? "bg-red-500/10 rounded-lg p-3 border border-red-500/30"
+                      : "bg-[var(--glass-bg)]/80 rounded-lg p-3 border border-[var(--glass-border)]/20"
+                    }
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-base">{pi.icon}</span>
                       <span className="text-sm font-medium text-white">{pi.label}</span>
+                      {isMatched && (
+                        <Badge variant="destructive" className="text-[9px] px-1.5 py-0">
+                          {t('violations.detail.hwidMatch', 'HWID Match')}
+                        </Badge>
+                      )}
                       <span className="text-[10px] text-dark-400 bg-[var(--glass-bg)] px-1.5 py-0.5 rounded font-mono ml-auto">
                         #{idx + 1}
                       </span>
@@ -864,13 +879,14 @@ function ViolationDetailPanel({
                       )}
                     </div>
                     {device.hwid && (
-                      <p className="text-[10px] text-dark-400 font-mono mt-1.5 truncate" title={device.hwid}>
+                      <p className={`text-[10px] font-mono mt-1.5 truncate ${isMatched ? 'text-red-400' : 'text-dark-400'}`} title={device.hwid}>
                         HWID: {device.hwid}
                       </p>
                     )}
                   </div>
                 )
-              })}
+              })
+              })()}
             </div>
           </CardContent>
         </Card>
