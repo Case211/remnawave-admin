@@ -214,17 +214,30 @@ class SyncService:
 
         total_synced = 0
         start = 0
-        page_size = 500
+        page_size = 1000  # API max
         api_user_uuids: set[str] = set()
 
         try:
             while True:
-                # Fetch users from API with pagination
-                response = await api_client.get_users(
-                    start=start,
-                    size=page_size,
-                    skip_cache=True
-                )
+                # Fetch users from API with pagination (retry on timeout)
+                response = None
+                for attempt in range(3):
+                    try:
+                        response = await api_client.get_users(
+                            start=start,
+                            size=page_size,
+                            skip_cache=True
+                        )
+                        break
+                    except Exception as fetch_err:
+                        if attempt < 2:
+                            logger.warning(
+                                "User sync page fetch failed (start=%d, attempt %d/3): %s",
+                                start, attempt + 1, fetch_err,
+                            )
+                            await asyncio.sleep(2 * (attempt + 1))
+                        else:
+                            raise
 
                 # API returns: {"response": {"users": [...], "total": N}}
                 payload = response.get("response", response)

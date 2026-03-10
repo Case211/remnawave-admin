@@ -420,7 +420,7 @@ class RemnawaveApiClient:
     async def get_users(self, start: int = 0, size: int = 100, page: int | None = None, skip_cache: bool = False) -> dict:
         """
         Получает список пользователей с пагинацией.
-        
+
         Args:
             start: Начальный индекс (устаревший параметр, используйте page)
             size: Количество записей на странице
@@ -430,7 +430,13 @@ class RemnawaveApiClient:
         # Если указан page, вычисляем start
         if page is not None:
             start = (page - 1) * size
-        return await self._get("/api/users", params={"start": start, "size": size})
+        # Large offsets are slow in PostgreSQL — use extended timeout for sync
+        timeout = 120.0 if start >= 10000 else 60.0
+        return await self._get_with_timeout(
+            "/api/users",
+            timeout=timeout,
+            params={"start": start, "size": size},
+        )
 
     async def update_user(self, user_uuid: str, **fields) -> dict:
         payload = {"uuid": user_uuid}
@@ -470,7 +476,7 @@ class RemnawaveApiClient:
         """Получает список внешних squads с увеличенным таймаутом и retry."""
         return await self._get_with_timeout("/api/external-squads", timeout=30.0, max_retries=3)
 
-    async def _get_with_timeout(self, url: str, timeout: float = 30.0, max_retries: int = 3) -> dict:
+    async def _get_with_timeout(self, url: str, timeout: float = 30.0, max_retries: int = 3, params: dict | None = None) -> dict:
         """Выполняет GET запрос с кастомным таймаутом и retry для сетевых ошибок."""
         from shared.logger import log_api_call, log_api_error
         import time
@@ -482,7 +488,7 @@ class RemnawaveApiClient:
         for attempt in range(max_retries):
             try:
                 client = await self._ensure_client()
-                response = await client.get(url, timeout=custom_timeout)
+                response = await client.get(url, timeout=custom_timeout, params=params)
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call("GET", url, status_code=response.status_code, duration_ms=duration_ms)
