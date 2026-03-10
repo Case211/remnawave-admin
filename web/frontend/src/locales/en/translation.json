@@ -118,6 +118,7 @@
     "reports": "Reports",
     "backups": "Backups",
     "apiKeys": "API & Webhooks",
+    "squads": "Squads",
     "sections": {
       "core": "Core",
       "security": "Security",
@@ -3096,5 +3097,33 @@
   "forcePassword": {
     "title": "Password change required",
     "description": "Your password was set by an administrator. For security, please set your own password."
+  },
+  "squads": {
+    "title": "Squads",
+    "subtitle": "Manage internal and external squads for user grouping",
+    "internal": "Internal",
+    "external": "External",
+    "createInternal": "Create Internal Squad",
+    "createExternal": "Create External Squad",
+    "noInternal": "No internal squads",
+    "noExternal": "No external squads",
+    "name": "Squad name",
+    "created": "Squad created",
+    "deleted": "Squad deleted",
+    "deleteConfirm": "Delete squad?",
+    "deleteDescription": "This will remove the squad. Users will be unassigned.",
+    "members": "members"
+  },
+  "ipControl": {
+    "title": "IP Addresses",
+    "fetchIps": "Fetch IPs",
+    "starting": "Starting scan...",
+    "progress": "Scanning nodes...",
+    "failed": "Failed to fetch IPs",
+    "found": "Found",
+    "nodes": "nodes",
+    "drop": "Drop All",
+    "dropped": "Connections dropped",
+    "noIps": "No active connections found"
   }
 }
