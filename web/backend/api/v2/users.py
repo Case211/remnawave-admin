@@ -1157,11 +1157,11 @@ async def get_subscription_info(
     if not db_service.is_connected:
         raise api_error(503, E.DB_UNAVAILABLE)
 
-    user = await db_service.get_user(user_uuid)
+    user = await db_service.get_user_by_uuid(user_uuid)
     if not user:
         raise api_error(404, E.USER_NOT_FOUND)
 
-    short_uuid = user.get("short_uuid")
+    short_uuid = user.get("shortUuid") or user.get("short_uuid")
     if not short_uuid:
         raise api_error(404, E.USER_NOT_FOUND)
 
