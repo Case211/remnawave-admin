@@ -11,32 +11,12 @@ services:
   bot:
     image: ghcr.io/case211/remnawave-admin:dev
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       PYTHONPATH: /app
-      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN is required}
-      API_BASE_URL: ${API_BASE_URL:?API_BASE_URL is required}
-      API_TOKEN: ${API_TOKEN:-}
-      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ru}
-      ADMINS: ${ADMINS:-}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      NOTIFICATIONS_CHAT_ID: ${NOTIFICATIONS_CHAT_ID:-}
-      NOTIFICATIONS_TOPIC_ID: ${NOTIFICATIONS_TOPIC_ID:-}
-      NOTIFICATIONS_TOPIC_USERS: ${NOTIFICATIONS_TOPIC_USERS:-}
-      NOTIFICATIONS_TOPIC_NODES: ${NOTIFICATIONS_TOPIC_NODES:-}
-      NOTIFICATIONS_TOPIC_SERVICE: ${NOTIFICATIONS_TOPIC_SERVICE:-}
-      NOTIFICATIONS_TOPIC_HWID: ${NOTIFICATIONS_TOPIC_HWID:-}
-      NOTIFICATIONS_TOPIC_CRM: ${NOTIFICATIONS_TOPIC_CRM:-}
-      NOTIFICATIONS_TOPIC_ERRORS: ${NOTIFICATIONS_TOPIC_ERRORS:-}
-      NOTIFICATIONS_TOPIC_VIOLATIONS: ${NOTIFICATIONS_TOPIC_VIOLATIONS:-}
-      WEBHOOK_PORT: ${WEBHOOK_PORT:-8080}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
-      DATABASE_URL: ${DATABASE_URL:-}
-      DB_POOL_MIN_SIZE: ${DB_POOL_MIN_SIZE:-2}
-      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-10}
-      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-300}
-      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:-}
-      MAXMIND_CITY_DB: ${MAXMIND_CITY_DB:-/app/geoip/GeoLite2-City.mmdb}
-      MAXMIND_ASN_DB: ${MAXMIND_ASN_DB:-/app/geoip/GeoLite2-ASN.mmdb}
+      MAXMIND_CITY_DB: /app/geoip/GeoLite2-City.mmdb
+      MAXMIND_ASN_DB: /app/geoip/GeoLite2-ASN.mmdb
     volumes:
       - ./logs:/app/logs
       - geoip_data:/app/geoip
@@ -101,20 +81,13 @@ services:
     image: ghcr.io/case211/remnawave-admin-web-backend:dev
     container_name: remnawave-web-backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      - WEB_DEBUG=${WEB_DEBUG:-false}
-      - WEB_SECRET_KEY=${WEB_SECRET_KEY:?WEB_SECRET_KEY is required for web panel}
-      - WEB_HOST=0.0.0.0
-      - WEB_PORT=8081
-      - WEB_CORS_ORIGINS=${WEB_CORS_ORIGINS:-}
-      - BOT_TOKEN=${BOT_TOKEN}
-      - DATABASE_URL=${DATABASE_URL}
-      - API_BASE_URL=${API_BASE_URL}
-      - API_TOKEN=${API_TOKEN}
-      - ADMINS=${ADMINS}
-      - MAXMIND_LICENSE_KEY=${MAXMIND_LICENSE_KEY:-}
-      - MAXMIND_CITY_DB=${MAXMIND_CITY_DB:-/app/geoip/GeoLite2-City.mmdb}
-      - MAXMIND_ASN_DB=${MAXMIND_ASN_DB:-/app/geoip/GeoLite2-ASN.mmdb}
+      WEB_HOST: '0.0.0.0'
+      WEB_PORT: '8081'
+      MAXMIND_CITY_DB: /app/geoip/GeoLite2-City.mmdb
+      MAXMIND_ASN_DB: /app/geoip/GeoLite2-ASN.mmdb
     volumes:
       - ./logs:/app/logs
       - geoip_data:/app/geoip
@@ -135,8 +108,8 @@ services:
     image: ghcr.io/case211/remnawave-admin-web-frontend:dev
     container_name: remnawave-web-frontend
     restart: unless-stopped
-    environment:
-      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
+    env_file:
+      - .env
     volumes:
       - ./logs:/app/logs
     ports:
