@@ -146,6 +146,10 @@ async def agent_websocket(
                     # Terminal output — forward to frontend terminal WS
                     await _handle_pty_output(node_uuid, msg)
 
+                elif msg_type == "pty_close":
+                    # Agent closed PTY session — clean up and notify browser
+                    await _handle_pty_close(node_uuid, msg)
+
             except asyncio.TimeoutError:
                 # No ping received — assume agent disconnected
                 logger.warning("Agent %s ping timeout", node_uuid)
@@ -218,3 +222,33 @@ async def _handle_pty_output(node_uuid: str, msg: dict) -> None:
         await session.browser_ws.send_text(data_b64)
     except Exception as e:
         logger.debug("Failed to forward pty output: %s", e)
+
+
+async def _handle_pty_close(node_uuid: str, msg: dict) -> None:
+    """Handle PTY session close from agent (shell exited or PTY creation failed)."""
+    try:
+        from web.backend.core.terminal_sessions import terminal_manager
+
+        session_id = msg.get("session_id")
+        reason = msg.get("reason", "agent_pty_close")
+
+        if not session_id:
+            return
+
+        session = terminal_manager.get_session(session_id)
+        if not session or not session.browser_ws:
+            return
+
+        # Notify browser
+        try:
+            await session.browser_ws.send_json({
+                "type": "error",
+                "message": f"Shell closed: {reason}",
+            })
+        except Exception:
+            pass
+
+        await terminal_manager.close_session(session_id, reason=reason)
+        logger.info("PTY closed by agent: session=%s, reason=%s", session_id, reason)
+    except Exception as e:
+        logger.debug("Failed to handle pty close: %s", e)

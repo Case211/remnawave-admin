@@ -15,7 +15,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from web.backend.api.deps import get_current_admin_ws
 from web.backend.core.agent_manager import agent_manager
 from web.backend.core.agent_hmac import sign_command_with_ts
-from web.backend.core.terminal_sessions import terminal_manager
+from web.backend.core.terminal_sessions import terminal_manager, SESSION_COOLDOWN_SECONDS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -95,6 +95,15 @@ async def terminal_websocket(
         browser_ws=websocket,
     )
 
+    if not session:
+        # Might be cooldown — retry once after cooldown period
+        await asyncio.sleep(SESSION_COOLDOWN_SECONDS + 0.5)
+        session = await terminal_manager.create_session(
+            node_uuid=node_uuid,
+            admin_id=admin.id if hasattr(admin, 'id') else 0,
+            admin_username=admin.username or str(admin.telegram_id),
+            browser_ws=websocket,
+        )
     if not session:
         await websocket.send_json({"type": "error", "message": "A terminal session already exists for this node"})
         await websocket.close(code=4006, reason="session_exists")

@@ -34,10 +34,19 @@ class AgentConnectionManager:
         logger.info("Agent registered: %s (total: %d)", node_uuid, len(self._connections))
 
     async def unregister(self, node_uuid: str) -> None:
-        """Remove agent connection."""
+        """Remove agent connection and clean up terminal sessions."""
         async with self._lock:
             self._connections.pop(node_uuid, None)
         logger.info("Agent unregistered: %s (total: %d)", node_uuid, len(self._connections))
+
+        # Close any terminal session associated with this node
+        try:
+            from web.backend.core.terminal_sessions import terminal_manager
+            session = terminal_manager.get_session_for_node(node_uuid)
+            if session:
+                await terminal_manager.close_session(session.session_id, reason="agent_disconnect")
+        except Exception as e:
+            logger.debug("Failed to cleanup terminal session on agent unregister: %s", e)
 
     def is_connected(self, node_uuid: str) -> bool:
         """Check if an agent is connected."""
