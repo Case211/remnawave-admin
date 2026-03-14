@@ -74,6 +74,7 @@
     /* Glass system */
     --glass-bg: rgba(18, 22, 30, 0.55);
     --glass-bg-hover: rgba(18, 22, 30, 0.65);
+    --glass-bg-solid: #141820;
     --glass-border: rgba(255, 255, 255, 0.08);
     --glass-border-hover: rgba(255, 255, 255, 0.14);
     --glass-highlight: rgba(255, 255, 255, 0.05);
@@ -228,6 +229,7 @@
     /* Glass system — light mode */
     --glass-bg: rgba(255, 255, 255, 0.55);
     --glass-bg-hover: rgba(255, 255, 255, 0.68);
+    --glass-bg-solid: #ffffff;
     --glass-border: rgba(0, 0, 0, 0.06);
     --glass-border-hover: rgba(0, 0, 0, 0.10);
     --glass-highlight: rgba(255, 255, 255, 0.8);
