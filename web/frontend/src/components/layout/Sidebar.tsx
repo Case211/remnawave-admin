@@ -275,12 +275,18 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                               to={item.href}
                               onClick={handleNavClick}
                               className={cn(
-                                "sidebar-nav-item group flex items-center justify-center px-0 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                                "sidebar-nav-item group flex items-center justify-center px-0 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative",
                                 isActive
                                   ? "text-white bg-[var(--glass-bg-hover)] border border-[var(--glass-border-hover)] shadow-[0_0_10px_-4px_rgba(var(--glow-rgb),0.25)]"
                                   : "text-dark-200 hover:text-white hover:bg-[var(--glass-bg)]"
                               )}
                             >
+                              {isActive && (
+                                <span
+                                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full"
+                                  style={{ background: 'linear-gradient(180deg, var(--accent-from), var(--accent-to))' }}
+                                />
+                              )}
                               <item.icon
                                 className={cn(
                                   "w-5 h-5 flex-shrink-0 transition-transform duration-200",
@@ -343,12 +349,18 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                                 to={item.href}
                                 onClick={handleNavClick}
                                 className={cn(
-                                  "group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200",
+                                  "group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 relative overflow-hidden",
                                   isActive
                                     ? "text-white bg-[var(--glass-bg-hover)] border border-[var(--glass-border-hover)] shadow-[0_0_10px_-4px_rgba(var(--glow-rgb),0.2)]"
                                     : "text-dark-200 hover:text-white hover:bg-[var(--glass-bg)] hover:translate-x-0.5"
                                 )}
                               >
+                                {isActive && (
+                                  <span
+                                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-3.5 rounded-r-full"
+                                    style={{ background: 'linear-gradient(180deg, var(--accent-from), var(--accent-to))' }}
+                                  />
+                                )}
                                 <item.icon
                                   className={cn(
                                     "w-4 h-4 mr-2.5 flex-shrink-0 transition-transform duration-200",
@@ -379,13 +391,19 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                     to={item.href}
                     onClick={handleNavClick}
                     className={cn(
-                      "sidebar-nav-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                      "sidebar-nav-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative overflow-hidden",
                       isActive
                         ? "text-white bg-[var(--glass-bg-hover)] border border-[var(--glass-border-hover)] shadow-[0_0_12px_-4px_rgba(var(--glow-rgb),0.25)]"
                         : "text-dark-200 hover:text-white hover:bg-[var(--glass-bg)] hover:translate-x-0.5",
                       collapsed && "justify-center px-0"
                     )}
                   >
+                    {isActive && !collapsed && (
+                      <span
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full transition-all duration-300"
+                        style={{ background: 'linear-gradient(180deg, var(--accent-from), var(--accent-to))' }}
+                      />
+                    )}
                     <item.icon
                       className={cn(
                         "w-5 h-5 flex-shrink-0 transition-transform duration-200",

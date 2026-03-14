@@ -1586,115 +1586,144 @@ export default function UserDetail() {
     : 0
 
   const statusBadge = getStatusBadge(user.status, t)
+  const STATUS_COLORS: Record<string, { rgb: string; gradient: string }> = {
+    active: { rgb: '34, 197, 94', gradient: 'from-green-500/15 to-emerald-500/5' },
+    disabled: { rgb: '239, 68, 68', gradient: 'from-red-500/15 to-rose-500/5' },
+    expired: { rgb: '234, 179, 8', gradient: 'from-yellow-500/15 to-amber-500/5' },
+    limited: { rgb: '249, 115, 22', gradient: 'from-orange-500/15 to-amber-500/5' },
+  }
+  const statusColor = STATUS_COLORS[user.status.toLowerCase()] || STATUS_COLORS.active
+
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between animate-fade-in-up">
-        <div className="flex items-center gap-3 md:gap-4 min-w-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={goBack}
-            className="flex-shrink-0"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg md:text-2xl font-bold text-white truncate">
-                {user.username || user.email || user.short_uuid}
-              </h1>
-              <Badge variant={statusBadge.variant} className="flex-shrink-0">
-                <span className={cn('h-1.5 w-1.5 rounded-full mr-1.5', statusBadge.dotColor)} />
-                {statusBadge.label}
-              </Badge>
-              {user.tag && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
-              )}
-            </div>
-            <p className="text-xs md:text-sm text-dark-200 truncate font-mono">{user.uuid}</p>
-          </div>
-        </div>
+      {/* Hero Header */}
+      <div
+        className={cn(
+          "relative rounded-xl border border-[var(--glass-border)] overflow-hidden animate-fade-in-up",
+          "bg-gradient-to-r",
+          statusColor.gradient,
+        )}
+        style={{
+          boxShadow: `0 0 40px -10px rgba(${statusColor.rgb}, 0.15)`,
+        }}
+      >
+        {/* Top accent line */}
+        <div
+          className="absolute top-0 left-0 right-0 h-[2px]"
+          style={{
+            background: `linear-gradient(90deg, transparent 0%, rgba(${statusColor.rgb}, 0.6) 30%, rgba(${statusColor.rgb}, 0.6) 70%, transparent 100%)`,
+          }}
+        />
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {isEditing && canEdit ? (
-            <>
+        <div className="relative px-4 md:px-6 py-4 md:py-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 md:gap-4 min-w-0">
               <Button
-                onClick={handleSave}
-                disabled={updateUserMutation.isPending}
-                size="sm"
-                className="bg-green-600 hover:bg-green-500 text-white"
+                variant="ghost"
+                size="icon"
+                onClick={goBack}
+                className="flex-shrink-0"
               >
-                <Save className="h-4 w-4 mr-1.5" />
-                {updateUserMutation.isPending ? t('userDetail.actions.saving') : t('userDetail.actions.save')}
+                <ArrowLeft className="h-5 w-5" />
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCancelEdit}
-                disabled={updateUserMutation.isPending}
-              >
-                <X className="h-4 w-4 mr-1.5" />
-                {t('userDetail.actions.cancel')}
-              </Button>
-            </>
-          ) : (
-            <>
-              {canEdit && (
-                <Button size="sm" onClick={handleStartEdit}>
-                  <Pencil className="h-4 w-4 mr-1.5" />
-                  {t('userDetail.actions.edit')}
-                </Button>
-              )}
-              {canEdit && (
-                user.status === 'active' ? (
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg md:text-2xl font-bold truncate" style={{ color: 'var(--text-heading)' }}>
+                    {user.username || user.email || user.short_uuid}
+                  </h1>
+                  <Badge variant={statusBadge.variant} className="flex-shrink-0">
+                    <span className={cn('h-1.5 w-1.5 rounded-full mr-1.5', statusBadge.dotColor)} />
+                    {statusBadge.label}
+                  </Badge>
+                  {user.tag && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
+                  )}
+                </div>
+                <p className="text-xs md:text-sm text-muted-foreground truncate font-mono">{user.uuid}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {isEditing && canEdit ? (
+                <>
                   <Button
-                    variant="destructive"
+                    onClick={handleSave}
+                    disabled={updateUserMutation.isPending}
                     size="sm"
-                    onClick={() => disableMutation.mutate()}
-                    disabled={disableMutation.isPending}
-                  >
-                    <X className="h-4 w-4 mr-1.5" />
-                    {t('userDetail.actions.disable')}
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => enableMutation.mutate()}
-                    disabled={enableMutation.isPending}
                     className="bg-green-600 hover:bg-green-500 text-white"
                   >
-                    <Check className="h-4 w-4 mr-1.5" />
-                    {t('userDetail.actions.enable')}
+                    <Save className="h-4 w-4 mr-1.5" />
+                    {updateUserMutation.isPending ? t('userDetail.actions.saving') : t('userDetail.actions.save')}
                   </Button>
-                )
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelEdit}
+                    disabled={updateUserMutation.isPending}
+                  >
+                    <X className="h-4 w-4 mr-1.5" />
+                    {t('userDetail.actions.cancel')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {canEdit && (
+                    <Button size="sm" onClick={handleStartEdit}>
+                      <Pencil className="h-4 w-4 mr-1.5" />
+                      {t('userDetail.actions.edit')}
+                    </Button>
+                  )}
+                  {canEdit && (
+                    user.status === 'active' ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => disableMutation.mutate()}
+                        disabled={disableMutation.isPending}
+                      >
+                        <X className="h-4 w-4 mr-1.5" />
+                        {t('userDetail.actions.disable')}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => enableMutation.mutate()}
+                        disabled={enableMutation.isPending}
+                        className="bg-green-600 hover:bg-green-500 text-white"
+                      >
+                        <Check className="h-4 w-4 mr-1.5" />
+                        {t('userDetail.actions.enable')}
+                      </Button>
+                    )
+                  )}
+                  {canEdit && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => resetTrafficMutation.mutate()}
+                      disabled={resetTrafficMutation.isPending}
+                      className="text-primary-400"
+                    >
+                      <RefreshCw className={cn('h-4 w-4 mr-1.5', resetTrafficMutation.isPending && 'animate-spin')} />
+                      {t('userDetail.actions.resetTraffic')}
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      disabled={deleteMutation.isPending}
+                      className="text-red-400 hover:text-red-300"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1.5" />
+                      {t('userDetail.actions.delete')}
+                    </Button>
+                  )}
+                </>
               )}
-              {canEdit && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => resetTrafficMutation.mutate()}
-                  disabled={resetTrafficMutation.isPending}
-                  className="text-primary-400"
-                >
-                  <RefreshCw className={cn('h-4 w-4 mr-1.5', resetTrafficMutation.isPending && 'animate-spin')} />
-                  {t('userDetail.actions.resetTraffic')}
-                </Button>
-              )}
-              {canDelete && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  disabled={deleteMutation.isPending}
-                  className="text-red-400 hover:text-red-300"
-                >
-                  <Trash2 className="h-4 w-4 mr-1.5" />
-                  {t('userDetail.actions.delete')}
-                </Button>
-              )}
-            </>
-          )}
+            </div>
+          </div>
         </div>
       </div>
 

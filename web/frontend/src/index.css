@@ -425,6 +425,47 @@
   }
 }
 
+/* ============ LOGIN LOGO GLOW ============ */
+.login-logo-glow {
+  box-shadow: 0 0 40px -5px rgba(var(--glow-rgb), 0.35);
+  animation: logoGlowPulse 3s ease-in-out infinite;
+}
+
+@keyframes logoGlowPulse {
+  0%, 100% {
+    box-shadow: 0 0 40px -5px rgba(var(--glow-rgb), 0.35);
+  }
+  50% {
+    box-shadow: 0 0 60px -5px rgba(var(--glow-rgb), 0.55), 0 0 100px -10px rgba(var(--glow-rgb), 0.2);
+  }
+}
+
+[data-animations="false"] .login-logo-glow {
+  animation: none;
+}
+
+/* Sidebar nav item hover ripple */
+.sidebar-nav-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%), rgba(var(--glow-rgb), 0.08) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.sidebar-nav-item:hover::after {
+  opacity: 1;
+}
+
+/* Login input focus underline */
+.login-bg input:focus {
+  border-bottom-color: var(--accent-from) !important;
+  box-shadow: 0 2px 0 0 var(--accent-from), 0 0 0 1px transparent;
+}
+
 /* ============ MESH GRADIENT BACKGROUND ============ */
 .mesh-bg {
   position: fixed;

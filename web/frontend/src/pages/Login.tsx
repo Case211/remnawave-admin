@@ -507,10 +507,9 @@ export default function Login() {
           <CardHeader className="items-center pt-8 pb-2 px-8">
             <div className="flex flex-col items-center gap-4 mb-2">
               <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center relative"
+                className="w-16 h-16 rounded-2xl flex items-center justify-center relative login-logo-glow"
                 style={{
                   background: 'linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%)',
-                  boxShadow: '0 0 40px -5px rgba(var(--glow-rgb), 0.35)',
                 }}
               >
                 {needsSetup ? (
