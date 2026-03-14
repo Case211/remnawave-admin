@@ -738,6 +738,7 @@ export default function Users() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
   const [deleteConfirmUuid, setDeleteConfirmUuid] = useState<string | null>(null)
+  const [disableConfirmUuid, setDisableConfirmUuid] = useState<string | null>(null)
 
   // State
   const [page, setPage] = useState(1)
@@ -1295,7 +1296,7 @@ export default function Users() {
                 user={user}
                 onNavigate={() => navigate(`/users/${user.uuid}`)}
                 onEnable={() => enableUser.mutate(user.uuid)}
-                onDisable={() => disableUser.mutate(user.uuid)}
+                onDisable={() => setDisableConfirmUuid(user.uuid)}
                 onDelete={() => setDeleteConfirmUuid(user.uuid)}
               />
             </div>
@@ -1461,7 +1462,7 @@ export default function Users() {
                           <UserActions
                             user={user}
                             onEnable={() => enableUser.mutate(user.uuid)}
-                            onDisable={() => disableUser.mutate(user.uuid)}
+                            onDisable={() => setDisableConfirmUuid(user.uuid)}
                             onDelete={() => setDeleteConfirmUuid(user.uuid)}
                           />
                         </td>
@@ -1519,7 +1520,7 @@ export default function Users() {
                       <UserActions
                         user={user}
                         onEnable={() => enableUser.mutate(user.uuid)}
-                        onDisable={() => disableUser.mutate(user.uuid)}
+                        onDisable={() => setDisableConfirmUuid(user.uuid)}
                         onDelete={() => setDeleteConfirmUuid(user.uuid)}
                       />
                     </td>
@@ -1571,6 +1572,22 @@ export default function Users() {
           if (deleteConfirmUuid) {
             deleteUser.mutate(deleteConfirmUuid)
             setDeleteConfirmUuid(null)
+          }
+        }}
+      />
+
+      {/* Disable confirm dialog */}
+      <ConfirmDialog
+        open={disableConfirmUuid !== null}
+        onOpenChange={(open) => { if (!open) setDisableConfirmUuid(null) }}
+        title={t('users.disableConfirm.title', 'Disable user?')}
+        description={t('users.disableConfirm.description', 'The user will lose access to VPN connections. You can re-enable them later.')}
+        confirmLabel={t('users.disableConfirm.confirm', 'Disable')}
+        variant="destructive"
+        onConfirm={() => {
+          if (disableConfirmUuid) {
+            disableUser.mutate(disableConfirmUuid)
+            setDisableConfirmUuid(null)
           }
         }}
       />

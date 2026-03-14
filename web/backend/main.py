@@ -375,6 +375,8 @@ async def _run_migrations(database_url: str) -> bool:
 
 # ── FastAPI app ───────────────────────────────────────────────────
 
+_bg_tasks: list[asyncio.Task] = []  # Background tasks to cancel on shutdown
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
@@ -453,8 +455,8 @@ async def lifespan(app: FastAPI):
                             logger.warning("Baseline refresh failed: %s", exc)
                         await asyncio.sleep(1800)  # every 30 min
 
-                _bg_maintenance = asyncio.create_task(_maintenance_loop())
-                _bg_baseline = asyncio.create_task(_baseline_refresh_loop())
+                _bg_tasks.append(asyncio.create_task(_maintenance_loop()))
+                _bg_tasks.append(asyncio.create_task(_baseline_refresh_loop()))
             else:
                 logger.warning("Database connection failed")
         except Exception as e:
@@ -496,7 +498,16 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
+    # Shutdown — cancel background tasks first
+    for task in _bg_tasks:
+        task.cancel()
+    for task in _bg_tasks:
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+    _bg_tasks.clear()
+
     try:
         from web.backend.core.cache import cache
         await cache.close()
@@ -550,6 +561,24 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+    # Pydantic validation error handler — return structured JSON instead of raw errors
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        errors = exc.errors()
+        # Build human-readable summary
+        fields = []
+        for err in errors:
+            loc = " → ".join(str(x) for x in err.get("loc", []) if x != "body")
+            fields.append(f"{loc}: {err.get('msg', 'invalid')}")
+        detail = "; ".join(fields) if fields else "Validation error"
+        return JSONResponse(
+            status_code=422,
+            content={"detail": detail, "code": "VALIDATION_ERROR"},
+        )
+
     # CORS middleware (restricted methods and headers)
     # Prevent insecure "*" with allow_credentials=True
     cors_origins = [o for o in settings.cors_origins if o != "*"]
@@ -560,6 +589,17 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
+
+    # Request body size limit (10 MB)
+    MAX_BODY_SIZE = 10 * 1024 * 1024
+
+    @app.middleware("http")
+    async def limit_request_body(request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_BODY_SIZE:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "Request body too large", "code": "BODY_TOO_LARGE"}, status_code=413)
+        return await call_next(request)
 
     # Security headers middleware
     @app.middleware("http")

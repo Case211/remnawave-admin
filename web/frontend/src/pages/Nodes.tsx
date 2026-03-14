@@ -1024,7 +1024,7 @@ export default function Nodes() {
                 onRestart={() => restartNode.mutate(node.uuid)}
                 onEdit={() => { setEditingNode(node); setEditError('') }}
                 onEnable={() => enableNode.mutate(node.uuid)}
-                onDisable={() => disableNode.mutate(node.uuid)}
+                onDisable={() => setConfirmAction({ type: 'disable', uuid: node.uuid })}
                 onDelete={() => setConfirmAction({ type: 'delete', uuid: node.uuid })}
                 onTokenManage={() => setTokenNode(node)}
                 canEdit={canEdit}
@@ -1070,18 +1070,25 @@ export default function Nodes() {
         open={confirmAction !== null}
         onOpenChange={(open) => { if (!open) setConfirmAction(null) }}
         title={
-          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.title') : ''
+          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.title')
+          : confirmAction?.type === 'disable' ? t('nodes.disableConfirm.title', 'Disable node?')
+          : ''
         }
         description={
-          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.description') : ''
+          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.description')
+          : confirmAction?.type === 'disable' ? t('nodes.disableConfirm.description', 'The node will stop accepting connections. You can re-enable it later.')
+          : ''
         }
         confirmLabel={
-          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.confirm') : t('nodes.actions.confirm')
+          confirmAction?.type === 'delete' ? t('nodes.deleteConfirm.confirm')
+          : confirmAction?.type === 'disable' ? t('nodes.actions.disable')
+          : t('nodes.actions.confirm')
         }
         variant={confirmAction?.type === 'delete' ? 'destructive' : 'default'}
         onConfirm={() => {
           if (!confirmAction) return
           if (confirmAction.type === 'delete') deleteNode.mutate(confirmAction.uuid)
+          if (confirmAction.type === 'disable') disableNode.mutate(confirmAction.uuid)
           setConfirmAction(null)
         }}
       />

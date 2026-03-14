@@ -517,6 +517,11 @@
       "description": "User and all data will be deleted. This action cannot be undone.",
       "confirm": "Delete"
     },
+    "disableConfirm": {
+      "title": "Disable user?",
+      "description": "The user will lose access to VPN connections. You can re-enable them later.",
+      "confirm": "Disable"
+    },
     "perPage": "per page",
     "selected": "Selected",
     "bulkActions": "Bulk actions"
@@ -811,6 +816,10 @@
     "deleteConfirm": {
       "title": "Delete node?",
       "description": "Node will be deleted. This action cannot be undone."
+    },
+    "disableConfirm": {
+      "title": "Disable node?",
+      "description": "The node will stop accepting connections. You can re-enable it later."
     },
     "toast": {
       "restarted": "Node restarted",
