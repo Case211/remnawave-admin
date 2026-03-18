@@ -43,7 +43,7 @@ async def list_templates(
         return {"items": templates, "total": len(templates)}
     except Exception as e:
         logger.error("Failed to list templates: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.get("/{template_uuid}")
@@ -58,7 +58,7 @@ async def get_template(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to get template: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.post("")
@@ -73,7 +73,7 @@ async def create_template(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to create template: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.patch("/{template_uuid}")
@@ -93,7 +93,7 @@ async def update_template(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to update template: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.delete("/{template_uuid}")
@@ -108,7 +108,7 @@ async def delete_template(
         return {"status": "ok"}
     except Exception as e:
         logger.error("Failed to delete template: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.post("/reorder")
@@ -124,4 +124,4 @@ async def reorder_templates(
         return result.get("response", {"status": "ok"})
     except Exception as e:
         logger.error("Failed to reorder templates: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")

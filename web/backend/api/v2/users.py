@@ -531,7 +531,7 @@ async def create_user(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.patch("/{user_uuid}", response_model=UserDetail)
@@ -578,7 +578,7 @@ async def update_user(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.delete("/{user_uuid}", response_model=SuccessResponse)
@@ -617,7 +617,7 @@ async def delete_user(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.post("/{user_uuid}/enable", response_model=SuccessResponse)
@@ -643,7 +643,7 @@ async def enable_user(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.post("/{user_uuid}/disable", response_model=SuccessResponse)
@@ -669,7 +669,7 @@ async def disable_user(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.post("/{user_uuid}/reset-traffic", response_model=SuccessResponse)
@@ -695,7 +695,7 @@ async def reset_user_traffic(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.post("/{user_uuid}/revoke", response_model=SuccessResponse)
@@ -724,7 +724,7 @@ async def revoke_user_subscription(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.post("/hwid-device-counts")
@@ -995,7 +995,7 @@ async def delete_user_hwid_device(
         return {"success": True, "message": "Device deleted"}
     except Exception as e:
         logger.error("Error deleting HWID device %s for %s: %s", device_id, user_uuid, e)
-        raise HTTPException(status_code=500, detail=f"Failed to delete device: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/{user_uuid}/hwid-devices")
@@ -1021,7 +1021,7 @@ async def delete_all_user_hwid_devices(
         return {"success": True, "message": "All devices deleted"}
     except Exception as e:
         logger.error("Error deleting all HWID devices for %s: %s", user_uuid, e)
-        raise HTTPException(status_code=500, detail=f"Failed to delete all devices: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ── Bulk operations ──────────────────────────────────────────────

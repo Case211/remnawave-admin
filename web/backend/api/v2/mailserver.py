@@ -64,7 +64,7 @@ async def create_domain(
         return dict(updated)
     except Exception as e:
         logger.error("Domain creation failed: %s", e)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.get("/domains", response_model=List[DomainRead])
@@ -466,7 +466,7 @@ async def create_smtp_credential(
         return dict(row)
     except Exception as e:
         logger.error("SMTP credential creation failed: %s", e)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.get("/smtp-credentials", response_model=List[SmtpCredentialRead])

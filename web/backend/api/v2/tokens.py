@@ -47,7 +47,7 @@ async def create_token(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to create token: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.delete("/{token_uuid}")
@@ -62,4 +62,4 @@ async def delete_token(
         return {"status": "ok"}
     except Exception as e:
         logger.error("Failed to delete token: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")

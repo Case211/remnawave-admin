@@ -210,6 +210,9 @@ CREATE INDEX IF NOT EXISTS idx_violations_cleanup ON violations(detected_at) INC
 CREATE INDEX IF NOT EXISTS idx_nms_created_at ON node_metrics_snapshots(created_at);
 
 -- user_baselines table is managed by Alembic migration 0041
+
+-- admin_permissions table is managed by Alembic migration 0009
+CREATE INDEX IF NOT EXISTS idx_admin_permissions_role_id ON admin_permissions(role_id);
 """
 
 
@@ -265,7 +268,7 @@ class DatabaseService:
 
         # Get pool size settings
         min_size = int(os.environ.get('DB_POOL_MIN_SIZE', 5))
-        max_size = int(os.environ.get('DB_POOL_MAX_SIZE', 25))
+        max_size = int(os.environ.get('DB_POOL_MAX_SIZE', 50))
         try:
             settings = get_settings()
             min_size = getattr(settings, 'db_pool_min_size', min_size)
@@ -343,10 +346,18 @@ class DatabaseService:
             await self._run_migrations(conn)
             logger.debug("Database schema initialized")
 
+    # Whitelist of valid column names for ALTER TABLE migrations
+    _SAFE_HWID_COLUMNS = frozenset({"device_model", "user_agent"})
+    _SAFE_USER_COLUMNS = frozenset({"tag", "description", "traffic_limit_strategy", "external_squad_uuid"})
+    _SAFE_HOST_COLUMNS = frozenset({"is_hidden", "tag", "security_layer", "server_description", "view_position"})
+
     async def _run_migrations(self, conn) -> None:
         """Apply incremental migrations for existing tables."""
         # Add device_model and user_agent columns to user_hwid_devices if missing
         for col, col_type in [("device_model", "VARCHAR(255)"), ("user_agent", "TEXT")]:
+            if col not in self._SAFE_HWID_COLUMNS:
+                logger.warning("Skipping unknown column: %s", col)
+                continue
             exists = await conn.fetchval(
                 "SELECT 1 FROM information_schema.columns "
                 "WHERE table_name = 'user_hwid_devices' AND column_name = $1",
@@ -364,6 +375,9 @@ class DatabaseService:
             ("external_squad_uuid", "UUID"),
         ]
         for col, col_type in user_new_cols:
+            if col not in self._SAFE_USER_COLUMNS:
+                logger.warning("Skipping unknown column: %s", col)
+                continue
             exists = await conn.fetchval(
                 "SELECT 1 FROM information_schema.columns "
                 "WHERE table_name = 'users' AND column_name = $1",
@@ -382,6 +396,9 @@ class DatabaseService:
             ("view_position", "INTEGER DEFAULT 0"),
         ]
         for col, col_type in host_new_cols:
+            if col not in self._SAFE_HOST_COLUMNS:
+                logger.warning("Skipping unknown column: %s", col)
+                continue
             exists = await conn.fetchval(
                 "SELECT 1 FROM information_schema.columns "
                 "WHERE table_name = 'hosts' AND column_name = $1",
@@ -730,9 +747,9 @@ class DatabaseService:
         
         async with self.acquire() as conn:
             rows = await conn.fetch(
-                """
-                SELECT * FROM users 
-                WHERE 
+                f"""
+                SELECT {self._USER_LIST_COLUMNS} FROM users
+                WHERE
                     LOWER(username) LIKE LOWER($1) OR
                     LOWER(email) LIKE LOWER($1) OR
                     short_uuid LIKE $1 OR
@@ -756,6 +773,13 @@ class DatabaseService:
     # Allowlist для ORDER BY — защита от SQL-инъекции
     ALLOWED_ORDER_BY = {"username", "created_at", "updated_at", "status", "expire_at", "email", "uuid"}
 
+    # Explicit columns for list queries — excludes raw_data (JSONB) to reduce transfer size
+    _USER_LIST_COLUMNS = (
+        "uuid, username, status, email, expire_at, traffic_limit_bytes, used_traffic_bytes, "
+        "raw_used_traffic_bytes, hwid_device_limit, created_at, updated_at, short_uuid, "
+        "subscription_uuid, telegram_id"
+    )
+
     async def get_all_users(
         self,
         limit: int = 100,
@@ -776,12 +800,12 @@ class DatabaseService:
         async with self.acquire() as conn:
             if status:
                 rows = await conn.fetch(
-                    f"SELECT * FROM users WHERE status = $1 ORDER BY {order_by} LIMIT $2 OFFSET $3",
+                    f"SELECT {self._USER_LIST_COLUMNS} FROM users WHERE status = $1 ORDER BY {order_by} LIMIT $2 OFFSET $3",
                     status, limit, offset
                 )
             else:
                 rows = await conn.fetch(
-                    f"SELECT * FROM users ORDER BY {order_by} LIMIT $1 OFFSET $2",
+                    f"SELECT {self._USER_LIST_COLUMNS} FROM users ORDER BY {order_by} LIMIT $1 OFFSET $2",
                     limit, offset
                 )
             return [_db_row_to_api_format(row) for row in rows]
@@ -5125,6 +5149,7 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
         "expire_at": "expireAt",
         "traffic_limit_bytes": "trafficLimitBytes",
         "used_traffic_bytes": "usedTrafficBytes",
+        "raw_used_traffic_bytes": "rawUsedTrafficBytes",
         "hwid_device_limit": "hwidDeviceLimit",
         "created_at": "createdAt",
         "updated_at": "updatedAt",

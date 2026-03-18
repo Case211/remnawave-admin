@@ -41,7 +41,7 @@ async def list_reports(
         return {"items": reports, "total": len(reports)}
     except Exception as e:
         logger.error("Failed to list reports: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{report_id}")
@@ -70,7 +70,7 @@ async def get_report(
         raise
     except Exception as e:
         logger.error("Failed to get report: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/generate")
@@ -123,4 +123,4 @@ async def generate_report(
         raise
     except Exception as e:
         logger.error("Failed to generate report: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

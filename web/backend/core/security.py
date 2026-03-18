@@ -243,15 +243,16 @@ def create_refresh_token(subject: str) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
-def decode_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_token(token: str, token_type: str = "access") -> Optional[Dict[str, Any]]:
     """
     Decode and validate JWT token.
 
     Args:
         token: JWT token to decode
+        token_type: Expected token type (default "access"). Pass None to skip type check.
 
     Returns:
-        Token payload if valid, None otherwise
+        Token payload if valid and type matches, None otherwise
     """
     settings = get_web_settings()
 
@@ -261,6 +262,12 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
             settings.secret_key,
             algorithms=[settings.jwt_algorithm]
         )
+        if token_type is not None and payload.get("type") != token_type:
+            logger.warning(
+                "Token type mismatch: expected=%s, got=%s",
+                token_type, payload.get("type"),
+            )
+            return None
         return payload
     except JWTError as e:
         logger.debug(f"Token decode error: {e}")

@@ -298,6 +298,8 @@ export function useRealtimeUpdates() {
     return () => {
       isMounted.current = false
       clearTimeout(reconnectTimer.current)
+      pendingInvalidations.current.forEach(timeout => clearTimeout(timeout))
+      pendingInvalidations.current.clear()
       if (wsRef.current) {
         wsRef.current.onclose = null
         wsRef.current.close()

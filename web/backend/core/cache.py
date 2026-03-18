@@ -21,9 +21,10 @@ CACHE_TTL_LONG = 600       # geo, trends, top-users (was 300)
 class _InMemoryCache:
     """Simple in-memory TTL cache (fallback when Redis is unavailable)."""
 
-    def __init__(self):
+    def __init__(self, max_size: int = 5000):
         self._store: dict[str, tuple[float, str]] = {}
         self._lock = asyncio.Lock()
+        self._max_size = max_size
 
     async def get(self, key: str) -> Optional[str]:
         async with self._lock:
@@ -39,6 +40,11 @@ class _InMemoryCache:
     async def set(self, key: str, value: str, ex: int = 60) -> None:
         async with self._lock:
             self._store[key] = (time.monotonic() + ex, value)
+            # Evict oldest entries if cache exceeds max_size
+            if len(self._store) > self._max_size:
+                evict_count = len(self._store) - self._max_size
+                for old_key in list(self._store.keys())[:evict_count]:
+                    del self._store[old_key]
 
     async def delete(self, key: str) -> None:
         async with self._lock:

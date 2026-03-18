@@ -239,7 +239,7 @@ async def _write_audit_entry(
         admin_username = "unknown"
 
         if token:
-            payload = decode_token(token)
+            payload = decode_token(token, token_type=None)
             if payload:
                 subject = payload.get("sub", "")
                 admin_username = payload.get("username", subject)

@@ -22,7 +22,7 @@ async def list_config_profiles(
         return {"items": profiles, "total": len(profiles)}
     except Exception as e:
         logger.error("Failed to list config profiles: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.get("/inbounds")
@@ -36,7 +36,7 @@ async def list_inbounds(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to list inbounds: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.get("/{profile_uuid}")
@@ -51,7 +51,7 @@ async def get_config_profile(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to get config profile: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.get("/{profile_uuid}/computed-config")
@@ -66,4 +66,4 @@ async def get_computed_config(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to get computed config: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")

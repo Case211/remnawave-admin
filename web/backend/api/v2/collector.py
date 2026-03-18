@@ -10,6 +10,7 @@ Endpoint: POST /batch
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -50,6 +51,10 @@ _violation_semaphore = asyncio.Semaphore(3)
 # Кэш имён нод: {node_uuid: (node_name, cached_at)}
 _node_name_cache: dict[str, tuple[str, datetime]] = {}
 _NODE_NAME_TTL_MINUTES = 30
+
+# Rate limiter для /batch: не более одного запроса в секунду с одной ноды
+_node_last_batch: dict[str, float] = {}
+MIN_BATCH_INTERVAL = 1.0  # seconds
 
 
 async def _get_node_name(node_uuid: str) -> str:
@@ -194,6 +199,13 @@ async def receive_connections(
     node_uuid: str = Depends(verify_agent_token),
 ):
     """Принимает батч подключений от Node Agent."""
+    # Rate limit: reject if less than MIN_BATCH_INTERVAL seconds since last batch
+    now_ts = time.monotonic()
+    last_ts = _node_last_batch.get(node_uuid, 0.0)
+    if now_ts - last_ts < MIN_BATCH_INTERVAL:
+        raise HTTPException(status_code=429, detail="Too many requests: batch interval too short")
+    _node_last_batch[node_uuid] = now_ts
+
     node_name = await _get_node_name(node_uuid)
     logger.info(
         "Batch received: node=%s connections=%d metrics=%s",

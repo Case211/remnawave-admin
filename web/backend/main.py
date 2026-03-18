@@ -579,6 +579,11 @@ def create_app() -> FastAPI:
             content={"detail": detail, "code": "VALIDATION_ERROR"},
         )
 
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.error("Unhandled exception: %s", exc, exc_info=True)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
     # CORS middleware (restricted methods and headers)
     # Prevent insecure "*" with allow_credentials=True
     cors_origins = [o for o in settings.cors_origins if o != "*"]

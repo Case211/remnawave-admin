@@ -40,7 +40,7 @@ async def list_providers(
         return {"items": providers, "total": len(providers)}
     except Exception as e:
         logger.error("Failed to list providers: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.get("/providers/{provider_uuid}")
@@ -55,7 +55,7 @@ async def get_provider(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to get provider: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.post("/providers")
@@ -74,7 +74,7 @@ async def create_provider(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to create provider: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.patch("/providers")
@@ -94,7 +94,7 @@ async def update_provider(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to update provider: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.delete("/providers/{provider_uuid}")
@@ -109,7 +109,7 @@ async def delete_provider(
         return {"status": "ok"}
     except Exception as e:
         logger.error("Failed to delete provider: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 # ── Summary ────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ async def billing_summary(
         }
     except Exception as e:
         logger.error("Failed to get billing summary: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 # ── Billing History ────────────────────────────────────────────
@@ -183,7 +183,7 @@ async def list_billing_history(
         return {"items": records, "total": len(records)}
     except Exception as e:
         logger.error("Failed to list billing history: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.post("/history")
@@ -202,7 +202,7 @@ async def create_billing_record(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to create billing record: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.delete("/history/{record_uuid}")
@@ -217,7 +217,7 @@ async def delete_billing_record(
         return {"status": "ok"}
     except Exception as e:
         logger.error("Failed to delete billing record: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 # ── Billing Nodes ──────────────────────────────────────────────
@@ -246,7 +246,7 @@ async def list_billing_nodes(
         return data
     except Exception as e:
         logger.error("Failed to list billing nodes: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.post("/nodes")
@@ -265,7 +265,7 @@ async def create_billing_node(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to create billing node: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.patch("/nodes")
@@ -283,7 +283,7 @@ async def update_billing_nodes(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to update billing nodes: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.delete("/nodes/{record_uuid}")
@@ -298,4 +298,4 @@ async def delete_billing_node(
         return {"status": "ok"}
     except Exception as e:
         logger.error("Failed to delete billing node: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")

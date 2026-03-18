@@ -506,6 +506,12 @@ class AutomationEngine:
             stale = [u for u in self._node_offline_since if u not in current_connected]
             for u in stale:
                 del self._node_offline_since[u]
+            # Cap dict size to prevent unbounded growth
+            if len(self._node_offline_since) > 10000:
+                oldest = sorted(self._node_offline_since, key=self._node_offline_since.get)
+                for u in oldest[:len(self._node_offline_since) - 10000]:
+                    del self._node_offline_since[u]
+                logger.warning("_node_offline_since capped to 10000 entries")
 
         except Exception as e:
             logger.warning("Node event detection error: %s", e)
@@ -538,6 +544,11 @@ class AutomationEngine:
                             })
 
                 self._user_traffic_exceeded = current_exceeded
+                # Cap set size to prevent unbounded growth
+                if len(self._user_traffic_exceeded) > 50000:
+                    # Keep only the most recently added entries (arbitrary trim)
+                    self._user_traffic_exceeded = set(list(self._user_traffic_exceeded)[:50000])
+                    logger.warning("_user_traffic_exceeded capped to 50000 entries")
         except Exception as e:
             logger.warning("User traffic event detection error: %s", e)
 

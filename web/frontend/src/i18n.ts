@@ -15,7 +15,7 @@ i18n
     },
     fallbackLng: 'ru',
     interpolation: {
-      escapeValue: false,
+      escapeValue: true,
     },
     detection: {
       order: ['localStorage', 'navigator'],

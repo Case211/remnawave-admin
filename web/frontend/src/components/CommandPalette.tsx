@@ -43,11 +43,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   // Reset search when closing
   useEffect(() => {
-    if (!open) setSearch('')
+    if (!open) {
+      setSearch('')
+      setDebouncedSearch('')
+    }
   }, [open])
+
+  // Debounce search query (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const runCommand = useCallback(
     (command: () => void) => {
@@ -59,14 +69,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   // Search users when query is long enough
   const { data: userResults } = useQuery({
-    queryKey: ['command-search-users', search],
+    queryKey: ['command-search-users', debouncedSearch],
     queryFn: async () => {
       const { data } = await client.get('/users', {
-        params: { search, page: 1, per_page: 5 },
+        params: { search: debouncedSearch, page: 1, per_page: 5 },
       })
       return data.items as { uuid: string; username: string | null; email: string | null; status: string }[]
     },
-    enabled: open && search.length >= 2,
+    enabled: open && debouncedSearch.length >= 2,
     staleTime: 10_000,
   })
 

@@ -469,7 +469,7 @@ async def import_script_from_url(
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=400, detail=f"Failed to download: HTTP {e.response.status_code}")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to download: {e}")
+        raise HTTPException(status_code=400, detail="Failed to download script")
 
     admin_id = admin.id if hasattr(admin, 'id') else None
 
@@ -531,9 +531,9 @@ async def browse_github_repo(
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             raise api_error(404, E.REPO_NOT_FOUND)
-        raise HTTPException(status_code=400, detail=f"GitHub API error: {e.response.status_code}")
+        raise HTTPException(status_code=400, detail="GitHub API error")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"GitHub API error: {e}")
+        raise HTTPException(status_code=400, detail="GitHub API error")
 
     files = []
     for item in data.get("tree", []):

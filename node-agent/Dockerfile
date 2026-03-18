@@ -17,6 +17,10 @@ COPY src/ ./src/
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
+RUN useradd -m -r appuser && chown -R appuser:appuser /app
+
+USER appuser
+
 # SIGTERM для graceful shutdown
 STOPSIGNAL SIGTERM
 

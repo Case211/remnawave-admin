@@ -500,7 +500,7 @@ async def trigger_sync(
         raise
     except Exception as e:
         logger.error("Error triggering sync for %s: %s", entity, e)
-        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ── MaxMind GeoIP management ─────────────────────────────────────
@@ -584,4 +584,4 @@ async def trigger_maxmind_update(
 
     except Exception as e:
         logger.error("Error updating MaxMind databases: %s", e)
-        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -25,7 +25,7 @@ COPY index.html vite.config.ts tsconfig.json tsconfig.node.json postcss.config.j
 RUN npm run build
 
 # Production stage - minimal nginx image
-FROM nginx:alpine
+FROM nginx:1.27-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
@@ -33,6 +33,8 @@ COPY nginx-secret.conf.template /etc/nginx/nginx-secret.conf.template
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
+# NOTE: nginx requires root to bind port 80. To run as non-root, switch to port
+# 8080 and add "USER nginx" here. Skipped for now to avoid breaking the deployment.
 EXPOSE 80
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

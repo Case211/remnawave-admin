@@ -209,8 +209,8 @@ async def get_current_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = decode_token(token)
-    if not payload or payload.get("type") != "access":
+    payload = decode_token(token, token_type="access")
+    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -233,8 +233,8 @@ async def get_2fa_temp_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = decode_token(token)
-    if not payload or payload.get("type") != "2fa_temp":
+    payload = decode_token(token, token_type="2fa_temp")
+    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired 2FA token",
@@ -257,8 +257,8 @@ async def get_current_admin_ws(
         await websocket.close(code=4001, reason="Token revoked")
         raise HTTPException(status_code=401, detail="Token revoked")
 
-    payload = decode_token(token)
-    if not payload or payload.get("type") != "access":
+    payload = decode_token(token, token_type="access")
+    if not payload:
         await websocket.close(code=4001, reason="Invalid token")
         raise HTTPException(status_code=401, detail="Invalid token")
 

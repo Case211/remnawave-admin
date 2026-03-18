@@ -38,7 +38,7 @@ async def list_snippets(
         return {"items": snippets, "total": len(snippets)}
     except Exception as e:
         logger.error("Failed to list snippets: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.post("")
@@ -53,7 +53,7 @@ async def create_snippet(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to create snippet: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.patch("")
@@ -68,7 +68,7 @@ async def update_snippet(
         return result.get("response", result)
     except Exception as e:
         logger.error("Failed to update snippet: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")
 
 
 @router.delete("")
@@ -83,4 +83,4 @@ async def delete_snippet(
         return {"status": "ok"}
     except Exception as e:
         logger.error("Failed to delete snippet: %s", e)
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Service temporarily unavailable")

@@ -37,7 +37,7 @@ class TestJWTTokens:
 
     def test_decode_valid_refresh_token(self):
         token = create_refresh_token("12345")
-        payload = decode_token(token)
+        payload = decode_token(token, token_type="refresh")
         assert payload is not None
         assert payload["sub"] == "12345"
         assert payload["type"] == "refresh"
@@ -65,7 +65,7 @@ class TestJWTTokens:
 
     def test_refresh_token_has_no_username(self):
         token = create_refresh_token("pwd:admin")
-        payload = decode_token(token)
+        payload = decode_token(token, token_type="refresh")
         assert "username" not in payload
 
     def test_token_expiry_is_in_future(self):

@@ -8,7 +8,7 @@ i18n.changeLanguage('ru')
 // ── Mock window.__ENV ────────────────────────────────────────
 declare global {
   interface Window {
-    __ENV?: { API_URL?: string; TELEGRAM_BOT_USERNAME?: string }
+    __ENV?: { API_URL?: string; TELEGRAM_BOT_USERNAME?: string; SECRET_PATH?: string }
   }
 }
 

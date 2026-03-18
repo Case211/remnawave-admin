@@ -381,7 +381,7 @@ def _blacklist_temp_token(request: Request) -> None:
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
-        payload = decode_token(token)
+        payload = decode_token(token, token_type=None)
         if payload and "exp" in payload:
             token_blacklist.add(token, float(payload["exp"]))
         else:
@@ -591,9 +591,9 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
     if token_blacklist.is_blacklisted(data.refresh_token):
         raise api_error(401, E.TOKEN_ALREADY_USED)
 
-    payload = decode_token(data.refresh_token)
+    payload = decode_token(data.refresh_token, token_type="refresh")
 
-    if not payload or payload.get("type") != "refresh":
+    if not payload:
         raise api_error(401, E.INVALID_REFRESH_TOKEN)
 
     subject = payload["sub"]

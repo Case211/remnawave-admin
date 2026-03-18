@@ -256,7 +256,7 @@ class TestJwtTokens:
 
     def test_refresh_token_roundtrip(self):
         token = create_refresh_token("12345")
-        payload = decode_token(token)
+        payload = decode_token(token, token_type="refresh")
         assert payload is not None
         assert payload["sub"] == "12345"
         assert payload["type"] == "refresh"

@@ -61,6 +61,8 @@ describe('authStore', () => {
         refresh_token: 'ref-456',
         token_type: 'bearer',
         expires_in: 3600,
+        requires_2fa: false,
+        totp_enabled: false,
       })
 
       await useAuthStore.getState().login({
@@ -111,6 +113,8 @@ describe('authStore', () => {
         refresh_token: 'ref-pw',
         token_type: 'bearer',
         expires_in: 3600,
+        requires_2fa: false,
+        totp_enabled: false,
       })
 
       await useAuthStore.getState().loginWithPassword({

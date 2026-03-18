@@ -256,7 +256,7 @@ async def create_node(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.patch("/{node_uuid}", response_model=NodeDetail)
@@ -291,7 +291,7 @@ async def update_node(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.delete("/{node_uuid}", response_model=SuccessResponse)
@@ -329,7 +329,7 @@ async def delete_node(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.post("/{node_uuid}/restart", response_model=SuccessResponse)
@@ -359,7 +359,7 @@ async def restart_node(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.post("/{node_uuid}/enable", response_model=SuccessResponse)
@@ -389,7 +389,7 @@ async def enable_node(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")
 
 
 @router.get("/{node_uuid}/agent-token")
@@ -565,4 +565,4 @@ async def disable_node(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Internal server error")

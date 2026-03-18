@@ -31,7 +31,7 @@ async def search_asn(
         return {"items": records, "total": len(records)}
     except Exception as e:
         logger.error("Failed to search ASN: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-type/{provider_type}")
@@ -58,7 +58,7 @@ async def get_asn_by_type(
         return {"items": records, "total": len(records)}
     except Exception as e:
         logger.error("Failed to get ASN by type: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/stats")
@@ -92,7 +92,7 @@ async def get_asn_stats(
         }
     except Exception as e:
         logger.error("Failed to get ASN stats: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{asn}")
@@ -114,7 +114,7 @@ async def get_asn(
         raise
     except Exception as e:
         logger.error("Failed to get ASN: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/sync")
@@ -135,4 +135,4 @@ async def sync_asn_database(
         }
     except Exception as e:
         logger.error("Failed to sync ASN: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
