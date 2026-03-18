@@ -832,7 +832,8 @@ class SyncService:
             ]
 
             now = datetime.now(timezone.utc)
-            start_str = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d")
+            # Full range to get cumulative raw traffic (API sums nodes_user_usage_history)
+            start_str = "2020-01-01"
             end_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
             total_synced = 0
@@ -841,7 +842,7 @@ class SyncService:
                 node_uuid = str(node["uuid"])
                 try:
                     result = await api_client.get_node_users_usage(
-                        node_uuid, start=start_str, end=end_str, top_users_limit=500
+                        node_uuid, start=start_str, end=end_str, top_users_limit=5000
                     )
                     response = result.get("response", result) if isinstance(result, dict) else result
                     top_users = response.get("topUsers", []) if isinstance(response, dict) else []
