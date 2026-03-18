@@ -26,6 +26,8 @@ _ALLOWED_ACTION_KEYS: dict[str, set[str]] = {
     "block_user": {"reason"},
     "notify": {"channel", "webhook_url", "message", "topic_type"},
     "restart_node": {"node_uuid"},
+    "enable_node": {"node_uuid"},
+    "disable_node": {"node_uuid"},
     "cleanup_expired": {"older_than_days"},
     "reset_traffic": {"target_status"},
     "force_sync": {"node_uuid"},

@@ -279,7 +279,7 @@ export function describeAction(rule: { action_type: string; action_config: Recor
   if (rule.action_type === 'cleanup_expired' && cfg.older_than_days) {
     return `${base} > ${cfg.older_than_days} ${t('automations.constructor.daysShort')}`
   }
-  if (rule.action_type === 'restart_node' && cfg.node_uuid) {
+  if (['restart_node', 'enable_node', 'disable_node'].includes(rule.action_type) && cfg.node_uuid) {
     return `${base} (${t('automations.constructor.specificNode').toLowerCase()})`
   }
   return base
@@ -418,6 +418,8 @@ export function getActionTypes() {
     { value: 'block_user', label: t('automations.actionTypes.block_user'), category: 'users', description: t('automations.actionTypes.block_userDesc') },
     { value: 'notify', label: t('automations.actionTypes.notify'), category: 'system', description: t('automations.actionTypes.notifyDesc') },
     { value: 'restart_node', label: t('automations.actionTypes.restart_node'), category: 'nodes', description: t('automations.actionTypes.restart_nodeDesc') },
+    { value: 'enable_node', label: t('automations.actionTypes.enable_node'), category: 'nodes', description: t('automations.actionTypes.enable_nodeDesc') },
+    { value: 'disable_node', label: t('automations.actionTypes.disable_node'), category: 'nodes', description: t('automations.actionTypes.disable_nodeDesc') },
     { value: 'cleanup_expired', label: t('automations.actionTypes.cleanup_expired'), category: 'system', description: t('automations.actionTypes.cleanup_expiredDesc') },
     { value: 'reset_traffic', label: t('automations.actionTypes.reset_traffic'), category: 'users', description: t('automations.actionTypes.reset_trafficDesc') },
     { value: 'force_sync', label: t('automations.actionTypes.force_sync'), category: 'system', description: t('automations.actionTypes.force_syncDesc') },

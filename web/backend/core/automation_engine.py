@@ -603,6 +603,8 @@ class AutomationEngine:
                 "block_user": self._action_block_user,
                 "notify": self._action_notify,
                 "restart_node": self._action_restart_node,
+                "enable_node": self._action_enable_node,
+                "disable_node": self._action_disable_node,
                 "cleanup_expired": self._action_cleanup_expired,
                 "reset_traffic": self._action_reset_traffic,
                 "force_sync": self._action_force_sync,
@@ -762,6 +764,90 @@ class AutomationEngine:
             "action": "restart_node",
             "restarted_count": len(restarted),
             "restarted_nodes": restarted,
+            "errors": errors,
+        }
+
+    async def _action_enable_node(
+        self, config: dict, target_type: str, target_id: str, context: dict,
+    ) -> dict:
+        """Enable a node via Remnawave API."""
+        from web.backend.core.api_helper import _get_client, fetch_nodes_from_api
+
+        specific_node = config.get("node_uuid")
+        if specific_node:
+            target_id = specific_node
+
+        if target_id:
+            client = _get_client()
+            resp = await client.post(f"/api/nodes/{target_id}/actions/enable", json={})
+            resp.raise_for_status()
+            return {"action": "enable_node", "node_uuid": target_id, "status": resp.status_code}
+
+        # No specific target — enable all disabled nodes
+        nodes = await fetch_nodes_from_api()
+        client = _get_client()
+        enabled = []
+        errors = []
+        for node in nodes:
+            uuid = node.get("uuid", "")
+            if not uuid or not node.get("is_disabled", False):
+                continue
+            try:
+                resp = await client.post(f"/api/nodes/{uuid}/actions/enable", json={})
+                if resp.status_code < 400:
+                    enabled.append(uuid)
+                else:
+                    errors.append(uuid)
+            except Exception as e:
+                logger.warning("Failed to enable node %s: %s", uuid, e)
+                errors.append(uuid)
+
+        return {
+            "action": "enable_node",
+            "enabled_count": len(enabled),
+            "enabled_nodes": enabled,
+            "errors": errors,
+        }
+
+    async def _action_disable_node(
+        self, config: dict, target_type: str, target_id: str, context: dict,
+    ) -> dict:
+        """Disable a node via Remnawave API."""
+        from web.backend.core.api_helper import _get_client, fetch_nodes_from_api
+
+        specific_node = config.get("node_uuid")
+        if specific_node:
+            target_id = specific_node
+
+        if target_id:
+            client = _get_client()
+            resp = await client.post(f"/api/nodes/{target_id}/actions/disable", json={})
+            resp.raise_for_status()
+            return {"action": "disable_node", "node_uuid": target_id, "status": resp.status_code}
+
+        # No specific target — disable all connected nodes
+        nodes = await fetch_nodes_from_api()
+        client = _get_client()
+        disabled = []
+        errors = []
+        for node in nodes:
+            uuid = node.get("uuid", "")
+            if not uuid or not node.get("is_connected", False):
+                continue
+            try:
+                resp = await client.post(f"/api/nodes/{uuid}/actions/disable", json={})
+                if resp.status_code < 400:
+                    disabled.append(uuid)
+                else:
+                    errors.append(uuid)
+            except Exception as e:
+                logger.warning("Failed to disable node %s: %s", uuid, e)
+                errors.append(uuid)
+
+        return {
+            "action": "disable_node",
+            "disabled_count": len(disabled),
+            "disabled_nodes": disabled,
             "errors": errors,
         }
 

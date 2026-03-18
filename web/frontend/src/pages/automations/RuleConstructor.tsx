@@ -284,7 +284,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
     if (actionType === 'cleanup_expired') {
       return { older_than_days: parseInt(cleanupDays) || 30 }
     }
-    if (actionType === 'restart_node' && targetNodeUuid) {
+    if (['restart_node', 'enable_node', 'disable_node'].includes(actionType) && targetNodeUuid) {
       return { node_uuid: targetNodeUuid }
     }
     return {}
@@ -1053,8 +1053,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
               </div>
             )}
 
-            {/* Restart node config with target selector */}
-            {actionType === 'restart_node' && (
+            {/* Node action config with target selector */}
+            {['restart_node', 'enable_node', 'disable_node'].includes(actionType) && (
               <div className="p-4 rounded-lg bg-[var(--glass-bg)] border-2 border-[var(--glass-border)] space-y-3">
                 <div>
                   <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.restartNodeTitle')}</Label>
@@ -1140,8 +1140,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
                   <span className="text-[11px] text-yellow-300/80">
                     {targetNodeUuid && targetNodeUuid !== '_select'
-                      ? t('automations.constructor.restartSelectedWarn')
-                      : t('automations.constructor.restartAllWarn')}
+                      ? t(`automations.constructor.${actionType}SelectedWarn`, { defaultValue: t('automations.constructor.restartSelectedWarn') })
+                      : t(`automations.constructor.${actionType}AllWarn`, { defaultValue: t('automations.constructor.restartAllWarn') })}
                   </span>
                 </div>
               </div>
@@ -1277,7 +1277,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   </span>
                 </div>
                 {/* Target info */}
-                {actionType === 'restart_node' && (
+                {['restart_node', 'enable_node', 'disable_node'].includes(actionType) && (
                   <div className="flex items-center gap-2 mt-1">
                     <Server className="w-3 h-3 text-dark-400 flex-shrink-0" />
                     <span className="text-xs text-dark-300">
