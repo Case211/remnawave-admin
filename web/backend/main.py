@@ -457,6 +457,10 @@ async def lifespan(app: FastAPI):
 
                 _bg_tasks.append(asyncio.create_task(_maintenance_loop()))
                 _bg_tasks.append(asyncio.create_task(_baseline_refresh_loop()))
+
+                # Dashboard WS publisher — pushes stats to subscribed clients
+                from web.backend.api.v2.websocket import dashboard_publisher_loop
+                _bg_tasks.append(asyncio.create_task(dashboard_publisher_loop()))
             else:
                 logger.warning("Database connection failed")
         except Exception as e:

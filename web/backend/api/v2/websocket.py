@@ -14,10 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
-    """Менеджер WebSocket подключений."""
+    """Менеджер WebSocket подключений с topic-based подписками."""
 
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
+        self._subscriptions: Dict[WebSocket, Set[str]] = {}
         self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, admin: AdminUser):
@@ -25,6 +26,7 @@ class ConnectionManager:
         await websocket.accept()
         async with self._lock:
             self.active_connections.add(websocket)
+            self._subscriptions[websocket] = set()
         logger.info(f"WebSocket connected: admin {admin.telegram_id or admin.username} ({admin.auth_method})")
         logger.info(f"Active connections: {len(self.active_connections)}")
 
@@ -32,12 +34,31 @@ class ConnectionManager:
         """Отключить клиента."""
         async with self._lock:
             self.active_connections.discard(websocket)
+            self._subscriptions.pop(websocket, None)
         logger.info(f"WebSocket disconnected. Active: {len(self.active_connections)}")
 
-    async def broadcast(self, message: Dict[str, Any]):
-        """Отправить сообщение всем подключённым клиентам (параллельно)."""
+    def subscribe(self, websocket: WebSocket, topics: list):
+        """Подписать клиента на topics."""
+        if websocket in self._subscriptions:
+            self._subscriptions[websocket].update(topics)
+
+    def has_subscribers(self, topic: str) -> bool:
+        """Проверить есть ли подписчики на topic."""
+        return any(topic in subs for subs in self._subscriptions.values())
+
+    async def broadcast(self, message: Dict[str, Any], topic: str = None):
+        """Отправить сообщение клиентам (параллельно). Если topic указан — только подписчикам."""
         if not self.active_connections:
             return
+
+        # Filter by topic if specified
+        if topic:
+            targets = {ws for ws in self.active_connections
+                       if topic in self._subscriptions.get(ws, set())}
+            if not targets:
+                return
+        else:
+            targets = self.active_connections.copy()
 
         data = json.dumps(message, default=str)
 
@@ -48,13 +69,13 @@ class ConnectionManager:
             except Exception:
                 return ws
 
-        results = await asyncio.gather(
-            *(_send_one(c) for c in self.active_connections.copy()),
-        )
+        results = await asyncio.gather(*(_send_one(c) for c in targets))
         disconnected = {ws for ws in results if ws is not None}
         if disconnected:
             async with self._lock:
                 self.active_connections -= disconnected
+                for ws in disconnected:
+                    self._subscriptions.pop(ws, None)
 
     async def send_to(self, websocket: WebSocket, message: Dict[str, Any]):
         """Отправить сообщение конкретному клиенту."""
@@ -149,7 +170,8 @@ async def handle_client_message(
     if msg_type == "subscribe":
         # Подписка на определённые события
         topics = message.get("topics", [])
-        logger.debug(f"Admin {admin.telegram_id} subscribed to: {topics}")
+        manager.subscribe(websocket, topics)
+        logger.debug(f"Admin {admin.telegram_id or admin.username} subscribed to: {topics}")
         await manager.send_to(websocket, {
             "type": "subscribed",
             "data": {"topics": topics}
@@ -262,3 +284,51 @@ async def broadcast_audit_event(
         },
         "timestamp": datetime.utcnow().isoformat(),
     })
+
+
+async def broadcast_dashboard_stats(stats: Dict[str, Any]):
+    """Push dashboard overview stats to subscribed clients."""
+    await manager.broadcast({
+        "type": "dashboard_stats",
+        "data": stats,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, topic="dashboard")
+
+
+async def dashboard_publisher_loop():
+    """Background task: push dashboard stats every 15s to subscribed clients."""
+    await asyncio.sleep(5)  # initial delay for startup
+    while True:
+        try:
+            if manager.has_subscribers("dashboard"):
+                try:
+                    from shared.database import db_service
+                    if db_service.is_connected:
+                        async with db_service.acquire() as conn:
+                            user_row = await conn.fetchrow(
+                                "SELECT COUNT(*) AS total, "
+                                "COUNT(*) FILTER (WHERE LOWER(status) = 'active') AS active, "
+                                "COUNT(*) FILTER (WHERE LOWER(status) = 'disabled') AS disabled, "
+                                "COUNT(*) FILTER (WHERE LOWER(status) = 'expired') AS expired "
+                                "FROM users"
+                            )
+                            node_row = await conn.fetchrow(
+                                "SELECT COUNT(*) AS total, "
+                                "COUNT(*) FILTER (WHERE is_connected AND NOT is_disabled) AS online, "
+                                "COALESCE(SUM(users_online), 0) AS users_online "
+                                "FROM nodes"
+                            )
+                        await broadcast_dashboard_stats({
+                            "total_users": user_row["total"],
+                            "active_users": user_row["active"],
+                            "disabled_users": user_row["disabled"],
+                            "expired_users": user_row["expired"],
+                            "total_nodes": node_row["total"],
+                            "online_nodes": node_row["online"],
+                            "users_online": node_row["users_online"],
+                        })
+                except Exception as e:
+                    logger.debug("Dashboard publisher error: %s", e)
+        except Exception as e:
+            logger.debug("Dashboard publisher outer error: %s", e)
+        await asyncio.sleep(15)

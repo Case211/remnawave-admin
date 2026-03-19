@@ -69,7 +69,7 @@ function formatAuditAction(action: string, resource: string, t: (key: string) =>
 }
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000]
-const TOPICS = ['node_status', 'user_update', 'violation', 'connection', 'hwid_update', 'notification']
+const TOPICS = ['node_status', 'user_update', 'violation', 'connection', 'hwid_update', 'notification', 'dashboard']
 
 // Close code 4001 = auth failure from backend
 const AUTH_FAILURE_CODE = 4001
@@ -149,6 +149,14 @@ export function useRealtimeUpdates() {
           case 'agent_v2_status':
             debouncedInvalidate(['fleet'])
             debouncedInvalidate(['fleet-agents'])
+            break
+          case 'dashboard_stats':
+            // Live dashboard update — write directly to cache, no refetch
+            if (msg.data) {
+              queryClient.setQueryData(['overview'], (old: Record<string, unknown> | undefined) =>
+                old ? { ...old, ...msg.data } : msg.data,
+              )
+            }
             break
           case 'activity':
             debouncedInvalidate(['analytics'])

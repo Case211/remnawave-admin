@@ -475,6 +475,172 @@ async def test_smtp_endpoint(
 
 
 # ══════════════════════════════════════════════════════════════════
+# Alert Rule Templates
+# ══════════════════════════════════════════════════════════════════
+
+ALERT_TEMPLATES = [
+    {
+        "id": "cpu_critical",
+        "name": "CPU > 90% (critical)",
+        "description": "CPU любой ноды превышает 90% дольше 5 минут",
+        "metric": "cpu_usage_percent",
+        "operator": "gt",
+        "threshold": 90.0,
+        "duration_minutes": 5,
+        "cooldown_minutes": 15,
+        "severity": "critical",
+        "channels": ["telegram", "in_app"],
+        "title_template": "CPU Critical: {node_names}",
+        "body_template": "CPU: {value:.1f}% (порог {threshold}%) на {node_names}",
+    },
+    {
+        "id": "cpu_warning",
+        "name": "CPU > 75% (warning)",
+        "description": "CPU любой ноды превышает 75% дольше 10 минут",
+        "metric": "cpu_usage_percent",
+        "operator": "gt",
+        "threshold": 75.0,
+        "duration_minutes": 10,
+        "cooldown_minutes": 30,
+        "severity": "warning",
+        "channels": ["in_app"],
+        "title_template": "CPU Warning: {node_names}",
+        "body_template": "CPU: {value:.1f}% (порог {threshold}%) на {node_names}",
+    },
+    {
+        "id": "ram_critical",
+        "name": "RAM > 90% (critical)",
+        "description": "Использование памяти превышает 90%",
+        "metric": "ram_usage_percent",
+        "operator": "gt",
+        "threshold": 90.0,
+        "duration_minutes": 5,
+        "cooldown_minutes": 15,
+        "severity": "critical",
+        "channels": ["telegram", "in_app"],
+        "title_template": "RAM Critical: {node_names}",
+        "body_template": "RAM: {value:.1f}% (порог {threshold}%) на {node_names}",
+    },
+    {
+        "id": "disk_warning",
+        "name": "Disk > 85%",
+        "description": "Диск заполнен более чем на 85%",
+        "metric": "disk_usage_percent",
+        "operator": "gt",
+        "threshold": 85.0,
+        "duration_minutes": 0,
+        "cooldown_minutes": 60,
+        "severity": "warning",
+        "channels": ["telegram", "in_app"],
+        "title_template": "Disk Warning: {node_names}",
+        "body_template": "Disk: {value:.1f}% (порог {threshold}%) на {node_names}",
+    },
+    {
+        "id": "disk_critical",
+        "name": "Disk > 95%",
+        "description": "Диск заполнен более чем на 95% — критично",
+        "metric": "disk_usage_percent",
+        "operator": "gt",
+        "threshold": 95.0,
+        "duration_minutes": 0,
+        "cooldown_minutes": 30,
+        "severity": "critical",
+        "channels": ["telegram", "in_app"],
+        "title_template": "Disk Critical: {node_names}",
+        "body_template": "Disk: {value:.1f}% (порог {threshold}%) на {node_names}. Срочно освободите место!",
+    },
+    {
+        "id": "node_offline",
+        "name": "Нода офлайн > 5 мин",
+        "description": "Нода отключена более 5 минут",
+        "metric": "node_offline_minutes",
+        "operator": "gt",
+        "threshold": 5.0,
+        "duration_minutes": 0,
+        "cooldown_minutes": 15,
+        "severity": "critical",
+        "channels": ["telegram", "in_app"],
+        "title_template": "Node Offline: {node_names}",
+        "body_template": "Нода {node_names} офлайн уже {value:.0f} мин (порог {threshold:.0f} мин)",
+    },
+    {
+        "id": "node_offline_warning",
+        "name": "Нода офлайн > 2 мин",
+        "description": "Нода отключена более 2 минут — раннее предупреждение",
+        "metric": "node_offline_minutes",
+        "operator": "gt",
+        "threshold": 2.0,
+        "duration_minutes": 0,
+        "cooldown_minutes": 10,
+        "severity": "warning",
+        "channels": ["in_app"],
+        "title_template": "Node Warning: {node_names}",
+        "body_template": "Нода {node_names} офлайн уже {value:.0f} мин",
+    },
+]
+
+
+@router.get("/alert-templates")
+async def list_alert_templates(
+    admin: AdminUser = Depends(require_permission("notifications", "view")),
+):
+    """Get list of pre-built alert rule templates."""
+    from shared.database import db_service
+
+    # Check which templates are already activated (match by metric+operator+threshold)
+    activated = set()
+    if db_service.is_connected:
+        async with db_service.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT metric, operator, threshold FROM alert_rules"
+            )
+            for r in rows:
+                key = f"{r['metric']}_{r['operator']}_{r['threshold']}"
+                activated.add(key)
+
+    result = []
+    for t in ALERT_TEMPLATES:
+        key = f"{t['metric']}_{t['operator']}_{t['threshold']}"
+        result.append({**t, "is_activated": key in activated})
+    return result
+
+
+@router.post("/alert-templates/{template_id}/activate", response_model=AlertRuleItem, status_code=201)
+async def activate_alert_template(
+    template_id: str,
+    admin: AdminUser = Depends(require_permission("notifications", "create")),
+):
+    """Activate a pre-built alert template (creates an alert rule from it)."""
+    from shared.database import db_service
+
+    template = next((t for t in ALERT_TEMPLATES if t["id"] == template_id), None)
+    if not template:
+        raise api_error(404, "TEMPLATE_NOT_FOUND")
+
+    channels_json = json.dumps(template["channels"])
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "INSERT INTO alert_rules "
+            "(name, description, is_enabled, rule_type, metric, operator, threshold, "
+            "duration_minutes, channels, severity, cooldown_minutes, created_by, group_key, "
+            "title_template, body_template) "
+            "VALUES ($1, $2, TRUE, 'threshold', $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13) "
+            "RETURNING *",
+            template["name"], template["description"],
+            template["metric"], template["operator"], template["threshold"],
+            template.get("duration_minutes", 0), channels_json,
+            template["severity"], template["cooldown_minutes"],
+            admin.account_id, f"alert_{template['metric']}",
+            template["title_template"], template["body_template"],
+        )
+
+    d = dict(row)
+    if isinstance(d.get("channels"), str):
+        d["channels"] = json.loads(d["channels"])
+    return AlertRuleItem(**d)
+
+
+# ══════════════════════════════════════════════════════════════════
 # Alert Rules
 # ══════════════════════════════════════════════════════════════════
 
