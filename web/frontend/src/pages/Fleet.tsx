@@ -630,6 +630,16 @@ export default function Fleet() {
             <History className="w-3.5 h-3.5" />
             {t('fleet.tabs.history')}
           </TabsTrigger>
+          {canScripts && (
+            <TabsTrigger value="scheduled" className="text-xs gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              {t('fleet.tabs.scheduled', { defaultValue: 'Scheduled' })}
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="bulk" className="text-xs gap-1.5">
+            <Zap className="w-3.5 h-3.5" />
+            {t('fleet.tabs.bulk', { defaultValue: 'Bulk Ops' })}
+          </TabsTrigger>
         </TabsList>
 
         {/* ── Monitoring Tab ──────────────────────────────────────── */}
@@ -757,6 +767,18 @@ export default function Fleet() {
             <CommandHistory />
           </Suspense>
         </TabsContent>
+
+        {/* ── Scheduled Tasks Tab ────────────────────────────────────── */}
+        {canScripts && (
+          <TabsContent value="scheduled" className="mt-4">
+            <ScheduledTasksTab />
+          </TabsContent>
+        )}
+
+        {/* ── Bulk Operations Tab ─────────────────────────────────────── */}
+        <TabsContent value="bulk" className="mt-4">
+          <BulkNodeOpsTab />
+        </TabsContent>
       </Tabs>
 
       {/* Terminal Dialog */}
@@ -779,6 +801,194 @@ export default function Fleet() {
           />
         )}
       </Suspense>
+    </div>
+  )
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// Scheduled Tasks Tab
+// ══════════════════════════════════════════════════════════════════
+
+function ScheduledTasksTab() {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+  const queryClient = useQueryClient()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['scheduled-tasks'],
+    queryFn: async () => {
+      const { listScheduledTasks } = await import('@/api/fleet')
+      return listScheduledTasks()
+    },
+  })
+
+  const toggleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { toggleScheduledTask } = await import('@/api/fleet')
+      return toggleScheduledTask(id)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduled-tasks'] })
+      toast.success('Toggled')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { deleteScheduledTask } = await import('@/api/fleet')
+      return deleteScheduledTask(id)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduled-tasks'] })
+      toast.success('Deleted')
+    },
+  })
+
+  const tasks = Array.isArray(data?.items) ? data!.items : []
+
+  if (isLoading) return <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-14 bg-[var(--glass-bg)] rounded animate-pulse" />)}</div>
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        {t('fleet.scheduled.description', { defaultValue: 'Cron-based script execution on nodes. Scripts run automatically on schedule.' })}
+      </p>
+
+      {tasks.length === 0 ? (
+        <div className="h-32 flex items-center justify-center text-muted-foreground">
+          <p>{t('fleet.scheduled.noTasks', { defaultValue: 'No scheduled tasks' })}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {tasks.map((task) => (
+            <Card key={task.id}>
+              <CardContent className="p-3 flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn('w-2 h-2 rounded-full', task.is_enabled ? 'bg-green-400' : 'bg-gray-500')} />
+                    <span className="text-sm font-medium text-white truncate">{task.script_name || `Script #${task.script_id}`}</span>
+                    <span className="text-xs text-muted-foreground">→</span>
+                    <span className="text-xs text-muted-foreground truncate">{task.node_name || task.node_uuid.slice(0, 8)}</span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                    <span className="font-mono">{task.cron_expression}</span>
+                    {task.last_status && (
+                      <span className={cn(task.last_status === 'success' ? 'text-green-400' : 'text-red-400')}>
+                        {task.last_status}
+                      </span>
+                    )}
+                    {task.run_count > 0 && <span>runs: {task.run_count}</span>}
+                    {task.last_run_at && <span>{formatDate(task.last_run_at)}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => toggleMutation.mutate(task.id)}>
+                    {task.is_enabled ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteMutation.mutate(task.id)}>
+                    <span className="text-xs">×</span>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// Bulk Node Operations Tab
+// ══════════════════════════════════════════════════════════════════
+
+function BulkNodeOpsTab() {
+  const { t } = useTranslation()
+  const [result, setResult] = useState<Record<string, unknown> | null>(null)
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const { bulkGenerateTokens } = await import('@/api/fleet')
+      return bulkGenerateTokens()
+    },
+    onSuccess: (data) => {
+      setResult(data)
+      toast.success(`Generated ${data.success} tokens`)
+    },
+    onError: () => toast.error('Failed'),
+  })
+
+  const installMutation = useMutation({
+    mutationFn: async () => {
+      const { bulkInstallCommands } = await import('@/api/fleet')
+      return bulkInstallCommands()
+    },
+    onSuccess: (data) => {
+      setResult(data)
+      toast.success(`Generated ${data.success} install commands`)
+    },
+    onError: () => toast.error('Failed'),
+  })
+
+  const revokeMutation = useMutation({
+    mutationFn: async () => {
+      const { bulkRevokeTokens } = await import('@/api/fleet')
+      return bulkRevokeTokens()
+    },
+    onSuccess: (data) => {
+      setResult(data)
+      toast.success(`Revoked ${data.success} tokens`)
+    },
+    onError: () => toast.error('Failed'),
+  })
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        {t('fleet.bulk.description', { defaultValue: 'Mass operations on node agent tokens. Empty body = all applicable nodes.' })}
+      </p>
+
+      <div className="flex flex-wrap gap-3">
+        <Button
+          onClick={() => generateMutation.mutate()}
+          disabled={generateMutation.isPending}
+          className="gap-2"
+        >
+          <Zap className="w-4 h-4" />
+          {t('fleet.bulk.generateTokens', { defaultValue: 'Generate Tokens (all without)' })}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => installMutation.mutate()}
+          disabled={installMutation.isPending}
+          className="gap-2"
+        >
+          <Server className="w-4 h-4" />
+          {t('fleet.bulk.installCommands', { defaultValue: 'Install Commands (all)' })}
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={() => revokeMutation.mutate()}
+          disabled={revokeMutation.isPending}
+          className="gap-2"
+        >
+          <ShieldAlert className="w-4 h-4" />
+          {t('fleet.bulk.revokeTokens', { defaultValue: 'Revoke All Tokens' })}
+        </Button>
+      </div>
+
+      {/* Result */}
+      {result && (
+        <Card>
+          <CardContent className="p-4">
+            <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap max-h-96 overflow-y-auto">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

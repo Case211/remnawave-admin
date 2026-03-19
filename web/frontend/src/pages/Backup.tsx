@@ -176,6 +176,54 @@ function BackupsTab() {
             <Settings2 className="w-4 h-4" />
             {createConfigBackup.isPending ? t('backup.creating') : t('backup.createConfig')}
           </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                const config = await backupApi.exportFullConfig()
+                const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `remnawave-config-${new Date().toISOString().slice(0, 10)}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+                toast.success(t('backup.fullConfigExported', { defaultValue: 'Full config exported' }))
+              } catch {
+                toast.error(t('backup.fullConfigExportFailed', { defaultValue: 'Export failed' }))
+              }
+            }}
+            className="gap-2"
+          >
+            <Download className="w-4 h-4" />
+            {t('backup.exportFullConfig', { defaultValue: 'Export Full Config' })}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const input = document.createElement('input')
+              input.type = 'file'
+              input.accept = '.json'
+              input.onchange = async (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0]
+                if (!file) return
+                try {
+                  const text = await file.text()
+                  const config = JSON.parse(text)
+                  const result = await backupApi.importFullConfig(config, 'skip')
+                  toast.success(t('backup.fullConfigImported', { defaultValue: `Imported: ${JSON.stringify(result.imported)}` }))
+                  queryClient.invalidateQueries()
+                } catch {
+                  toast.error(t('backup.fullConfigImportFailed', { defaultValue: 'Import failed' }))
+                }
+              }
+              input.click()
+            }}
+            className="gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            {t('backup.importFullConfig', { defaultValue: 'Import Full Config' })}
+          </Button>
         </PermissionGate>
       </div>
 

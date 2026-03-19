@@ -92,6 +92,10 @@ export default function Notifications() {
             <Settings2 className="w-4 h-4 flex-shrink-0" />
             <span className="hidden sm:inline truncate">{t('notifications.tabs.channels')}</span>
           </TabsTrigger>
+          <TabsTrigger value="templates" className="gap-1.5 sm:gap-2 flex-1 min-w-0 px-2 sm:px-3">
+            <MonitorSmartphone className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline truncate">{t('notifications.tabs.templates', { defaultValue: 'Templates' })}</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="notifications">
@@ -106,10 +110,90 @@ export default function Notifications() {
         <TabsContent value="channels">
           <ChannelsTab />
         </TabsContent>
+        <TabsContent value="templates">
+          <AlertTemplatesTab canCreate={canCreate} />
+        </TabsContent>
       </Tabs>
     </div>
   )
 }
+
+// ══════════════════════════════════════════════════════════════════
+// Tab: Alert Templates
+// ══════════════════════════════════════════════════════════════════
+
+function AlertTemplatesTab({ canCreate }: { canCreate: boolean }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+
+  const { data: templates = [], isLoading } = useQuery({
+    queryKey: ['alert-templates'],
+    queryFn: () => notificationsApi.listAlertTemplates(),
+  })
+
+  const activateMutation = useMutation({
+    mutationFn: (templateId: string) => notificationsApi.activateAlertTemplate(templateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alert-templates'] })
+      queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
+      toast.success(t('notifications.templates.activated', { defaultValue: 'Template activated' }))
+    },
+    onError: () => toast.error(t('notifications.templates.activateError', { defaultValue: 'Failed to activate' })),
+  })
+
+  if (isLoading) return <div className="space-y-3 mt-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>
+
+  return (
+    <div className="space-y-4 mt-4">
+      <p className="text-sm text-muted-foreground">
+        {t('notifications.templates.description', { defaultValue: 'Pre-built alert rule templates. Activate to create a ready-to-use alert rule with one click.' })}
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {templates.map((tpl) => (
+          <Card key={tpl.id} className={cn('transition-all', tpl.is_activated && 'opacity-60')}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge className={cn('text-[10px]', SEVERITY_BADGE[tpl.severity] || SEVERITY_BADGE.info)}>
+                      {tpl.severity}
+                    </Badge>
+                    <span className="text-sm font-medium text-white truncate">{tpl.name}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{tpl.description}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--glass-bg-hover)]/50 text-muted-foreground">
+                      {tpl.metric} {tpl.operator} {tpl.threshold}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--glass-bg-hover)]/50 text-muted-foreground">
+                      cooldown: {tpl.cooldown_minutes}m
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--glass-bg-hover)]/50 text-muted-foreground">
+                      {tpl.channels.join(', ')}
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant={tpl.is_activated ? 'outline' : 'default'}
+                  disabled={tpl.is_activated || !canCreate || activateMutation.isPending}
+                  onClick={() => activateMutation.mutate(tpl.id)}
+                  className="shrink-0"
+                >
+                  {tpl.is_activated
+                    ? <><Check className="w-3 h-3 mr-1" />{t('notifications.templates.active', { defaultValue: 'Active' })}</>
+                    : <><Plus className="w-3 h-3 mr-1" />{t('notifications.templates.activate', { defaultValue: 'Activate' })}</>
+                  }
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 
 // ══════════════════════════════════════════════════════════════════
 // Tab: Notifications

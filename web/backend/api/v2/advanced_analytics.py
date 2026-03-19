@@ -944,11 +944,12 @@ async def _compute_geo_balance(days: int = 7):
         since = datetime.now(timezone.utc) - timedelta(days=days)
 
         async with db_service.acquire() as conn:
-            # Node load + metrics
+            # Node load + metrics (users_online is in raw_data, not a column)
             node_rows = await conn.fetch(
                 """
                 SELECT uuid::text, name, is_connected, is_disabled,
-                       cpu_usage, memory_usage, disk_usage, users_online,
+                       cpu_usage, memory_usage, disk_usage,
+                       COALESCE((raw_data->>'usersOnline')::int, 0) AS users_online,
                        traffic_used_bytes
                 FROM nodes ORDER BY name
                 """

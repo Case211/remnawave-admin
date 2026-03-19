@@ -14,6 +14,7 @@ import {
   Server,
   ExternalLink,
   Calendar,
+  BarChart3,
 } from 'lucide-react'
 import { billingApi, Provider } from '../api/billing'
 import client from '../api/client'
@@ -286,6 +287,10 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
           <TabsTrigger value="nodes">
             <Server className="w-4 h-4 mr-2" />
             {t('billing.tabs.nodes')}
+          </TabsTrigger>
+          <TabsTrigger value="analytics">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            {t('billing.tabs.analytics', { defaultValue: 'Analytics' })}
           </TabsTrigger>
         </TabsList>
 
@@ -631,6 +636,11 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
             </Card>
           )}
         </TabsContent>
+
+        {/* ── Tab 4: Analytics ──────────────────────────────────── */}
+        <TabsContent value="analytics" className="space-y-4">
+          <BillingAnalyticsTab />
+        </TabsContent>
       </Tabs>
 
       {/* ── Dialogs ────────────────────────────────────────────── */}
@@ -856,6 +866,108 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
         variant="destructive"
         onConfirm={() => deleteNodeConfirm && deleteNodeMutation.mutate(deleteNodeConfirm)}
       />
+    </div>
+  )
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// Billing Analytics Tab
+// ══════════════════════════════════════════════════════════════════
+
+function BillingAnalyticsTab() {
+  const { t } = useTranslation()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['billing-analytics'],
+    queryFn: () => billingApi.getAnalyticsOverview(),
+    staleTime: 120_000,
+  })
+
+  const { data: perNodeData } = useQuery({
+    queryKey: ['billing-analytics-per-node'],
+    queryFn: () => billingApi.getAnalyticsPerNode(),
+    staleTime: 120_000,
+  })
+
+  if (isLoading) return <div className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-40 w-full" /></div>
+
+  const items = Array.isArray(perNodeData?.items) ? perNodeData!.items : []
+
+  return (
+    <div className="space-y-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: t('billing.analytics.monthlySpend', { defaultValue: 'Monthly Spend' }), value: `$${data?.monthly_cost ?? 0}`, color: 'text-white' },
+          { label: t('billing.analytics.costPerUser', { defaultValue: 'Cost / Active User' }), value: `$${data?.cost_per_user ?? 0}`, color: 'text-primary-400' },
+          { label: t('billing.analytics.costPerGb', { defaultValue: 'Cost / GB' }), value: `$${data?.cost_per_gb ?? 0}`, color: 'text-cyan-400' },
+          { label: t('billing.analytics.costPerNode', { defaultValue: 'Cost / Node' }), value: `$${data?.cost_per_node ?? 0}`, color: 'text-yellow-400' },
+        ].map((kpi) => (
+          <Card key={kpi.label}>
+            <CardContent className="p-4 text-center">
+              <p className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</p>
+              <p className="text-xs text-muted-foreground mt-1">{kpi.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Monthly breakdown */}
+      {Array.isArray(data?.monthly_series) && data!.monthly_series.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-white mb-3">{t('billing.analytics.monthlySeries', { defaultValue: 'Monthly Spending' })}</h3>
+            <div className="space-y-1">
+              {data!.monthly_series.map((m: { month: string; amount: number }) => (
+                <div key={m.month} className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-muted-foreground w-16">{m.month}</span>
+                  <div className="flex-1 h-4 rounded bg-[var(--glass-bg-hover)]/30 overflow-hidden">
+                    <div
+                      className="h-full rounded bg-primary-400/60"
+                      style={{ width: `${Math.min(100, (m.amount / Math.max(...data!.monthly_series.map((s: { amount: number }) => s.amount))) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-white w-16 text-right">${m.amount}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Per-node table */}
+      {items.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-white mb-3">{t('billing.analytics.perNode', { defaultValue: 'Per Node' })}</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--glass-border)]">
+                    <th className="text-left text-xs text-muted-foreground py-2">{t('billing.analytics.nodeName', { defaultValue: 'Node' })}</th>
+                    <th className="text-left text-xs text-muted-foreground py-2">{t('billing.analytics.provider', { defaultValue: 'Provider' })}</th>
+                    <th className="text-center text-xs text-muted-foreground py-2">CPU</th>
+                    <th className="text-center text-xs text-muted-foreground py-2">RAM</th>
+                    <th className="text-right text-xs text-muted-foreground py-2">{t('billing.analytics.usersOnline', { defaultValue: 'Online' })}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((n: Record<string, unknown>) => (
+                    <tr key={n.node_uuid as string} className="border-b border-[var(--glass-border)]/50">
+                      <td className="py-2 text-white">{n.node_name as string}</td>
+                      <td className="py-2 text-muted-foreground">{n.provider as string}</td>
+                      <td className="py-2 text-center text-xs">{n.cpu_usage != null ? `${n.cpu_usage}%` : '-'}</td>
+                      <td className="py-2 text-center text-xs">{n.memory_usage != null ? `${n.memory_usage}%` : '-'}</td>
+                      <td className="py-2 text-right">{(n.users_online as number) || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
