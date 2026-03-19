@@ -677,3 +677,242 @@ async def _compute_torrent_stats(days: int = 7):
     except Exception as e:
         logger.error("get_torrent_stats failed: %s", e)
         return {"summary": {}, "timeseries": [], "top_users": [], "top_destinations": []}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Cohort Analysis — Retention Matrix & Churn
+# ══════════════════════════════════════════════════════════════════
+
+
+@router.get("/cohort-matrix")
+@limiter.limit(RATE_ANALYTICS)
+async def get_cohort_matrix(
+    request: Request,
+    granularity: str = Query("week", regex="^(week|month)$"),
+    months: int = Query(3, ge=1, le=12),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get cohort retention matrix — shows activity by cohort over time."""
+    return await _compute_cohort_matrix(granularity=granularity, months=months)
+
+
+@cached("analytics:cohort-matrix", ttl=CACHE_TTL_LONG, key_args=("granularity", "months"))
+async def _compute_cohort_matrix(granularity: str = "week", months: int = 3):
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"cohorts": [], "periods": []}
+
+        trunc = "week" if granularity == "week" else "month"
+        since = datetime.now(timezone.utc) - timedelta(days=months * 30)
+
+        async with db_service.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                WITH cohorts AS (
+                    SELECT uuid, DATE_TRUNC('{trunc}', created_at)::date AS cohort
+                    FROM users
+                    WHERE created_at >= $1
+                ),
+                activity AS (
+                    SELECT
+                        c.cohort,
+                        DATE_TRUNC('{trunc}', uc.connected_at)::date AS activity_period,
+                        COUNT(DISTINCT c.uuid) AS active_users
+                    FROM cohorts c
+                    JOIN user_connections uc ON uc.user_uuid = c.uuid
+                    WHERE uc.connected_at >= $1
+                    GROUP BY c.cohort, activity_period
+                ),
+                cohort_sizes AS (
+                    SELECT cohort, COUNT(*) AS total_users FROM cohorts GROUP BY cohort
+                )
+                SELECT
+                    cs.cohort,
+                    cs.total_users,
+                    a.activity_period,
+                    COALESCE(a.active_users, 0) AS active_users
+                FROM cohort_sizes cs
+                LEFT JOIN activity a ON a.cohort = cs.cohort
+                ORDER BY cs.cohort, a.activity_period
+                """,
+                since,
+            )
+
+        # Build matrix: {cohort: {period: active_users, ...}, ...}
+        cohort_data: Dict[str, Dict[str, Any]] = {}
+        periods_set = set()
+
+        for r in rows:
+            cohort = str(r["cohort"])
+            total = r["total_users"]
+            period = str(r["activity_period"]) if r["activity_period"] else None
+            active = r["active_users"]
+
+            if cohort not in cohort_data:
+                cohort_data[cohort] = {"cohort": cohort, "total_users": total, "periods": {}}
+
+            if period:
+                periods_set.add(period)
+                retention_pct = round(active / total * 100, 1) if total > 0 else 0
+                cohort_data[cohort]["periods"][period] = {
+                    "active_users": active,
+                    "retention_percent": retention_pct,
+                }
+
+        periods = sorted(periods_set)
+        cohorts = sorted(cohort_data.values(), key=lambda x: x["cohort"])
+
+        return {"cohorts": cohorts, "periods": periods, "granularity": granularity}
+    except Exception as e:
+        logger.error("Cohort matrix failed: %s", e)
+        return {"cohorts": [], "periods": [], "granularity": granularity}
+
+
+@router.get("/churn")
+@limiter.limit(RATE_ANALYTICS)
+async def get_churn_rate(
+    request: Request,
+    period: str = Query("month", regex="^(week|month)$"),
+    months: int = Query(6, ge=1, le=24),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get churn rate over time — users who stopped being active."""
+    return await _compute_churn(period=period, months=months)
+
+
+@cached("analytics:churn", ttl=CACHE_TTL_LONG, key_args=("period", "months"))
+async def _compute_churn(period: str = "month", months: int = 6):
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"series": [], "avg_churn": 0}
+
+        trunc = "week" if period == "week" else "month"
+        since = datetime.now(timezone.utc) - timedelta(days=months * 30)
+
+        async with db_service.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                WITH periods AS (
+                    SELECT
+                        DATE_TRUNC('{trunc}', connected_at)::date AS p,
+                        COUNT(DISTINCT user_uuid) AS active_users
+                    FROM user_connections
+                    WHERE connected_at >= $1
+                    GROUP BY p
+                    ORDER BY p
+                ),
+                total_by_period AS (
+                    SELECT
+                        DATE_TRUNC('{trunc}', created_at)::date AS p,
+                        COUNT(*) AS new_users
+                    FROM users
+                    WHERE created_at >= $1
+                    GROUP BY p
+                )
+                SELECT
+                    p.p AS period,
+                    p.active_users,
+                    COALESCE(t.new_users, 0) AS new_users,
+                    LAG(p.active_users) OVER (ORDER BY p.p) AS prev_active
+                FROM periods p
+                LEFT JOIN total_by_period t ON t.p = p.p
+                ORDER BY p.p
+                """,
+                since,
+            )
+
+        series = []
+        total_churn = 0
+        churn_count = 0
+
+        for r in rows:
+            active = r["active_users"]
+            prev = r["prev_active"]
+            new = r["new_users"]
+
+            churn_rate = 0
+            churned = 0
+            if prev and prev > 0:
+                # Churned = previous active + new - current active
+                churned = max(0, prev + new - active)
+                churn_rate = round(churned / prev * 100, 1)
+                total_churn += churn_rate
+                churn_count += 1
+
+            series.append({
+                "period": str(r["period"]),
+                "active_users": active,
+                "new_users": new,
+                "churned_users": churned,
+                "churn_rate": churn_rate,
+            })
+
+        avg_churn = round(total_churn / churn_count, 1) if churn_count > 0 else 0
+
+        return {"series": series, "avg_churn": avg_churn, "period": period}
+    except Exception as e:
+        logger.error("Churn rate failed: %s", e)
+        return {"series": [], "avg_churn": 0, "period": period}
+
+
+@router.get("/ltv")
+@limiter.limit(RATE_ANALYTICS)
+async def get_ltv_estimate(
+    request: Request,
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Estimate user Lifetime Value based on activity duration and billing data."""
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"avg_lifetime_days": 0, "estimated_ltv": 0}
+
+        async with db_service.acquire() as conn:
+            # Average user lifetime (days between created_at and last activity)
+            lifetime_row = await conn.fetchrow(
+                """
+                SELECT
+                    AVG(EXTRACT(EPOCH FROM (last_seen - created_at)) / 86400) AS avg_lifetime_days,
+                    COUNT(*) AS sample_size
+                FROM (
+                    SELECT
+                        u.created_at,
+                        MAX(uc.connected_at) AS last_seen
+                    FROM users u
+                    JOIN user_connections uc ON uc.user_uuid = u.uuid
+                    WHERE u.created_at >= NOW() - INTERVAL '6 months'
+                    GROUP BY u.uuid, u.created_at
+                    HAVING MAX(uc.connected_at) > u.created_at
+                ) sub
+                """
+            )
+
+        avg_days = float(lifetime_row["avg_lifetime_days"] or 0)
+        sample_size = lifetime_row["sample_size"] or 0
+
+        # Get cost per user from billing
+        ltv = 0
+        try:
+            from shared.api_client import api_client
+            nodes_result = await api_client.get_infra_billing_nodes()
+            nodes_resp = nodes_result.get("response", {})
+            stats = nodes_resp.get("stats", {}) if isinstance(nodes_resp, dict) else {}
+            monthly_cost = float(stats.get("currentMonthPayments", 0) or 0)
+
+            active_count = (await db_service.get_users_count_by_status()).get("active", 1) or 1
+            cost_per_user_month = monthly_cost / active_count if active_count > 0 else 0
+            avg_months = avg_days / 30
+            ltv = round(cost_per_user_month * avg_months, 2)
+        except Exception:
+            pass
+
+        return {
+            "avg_lifetime_days": round(avg_days, 1),
+            "sample_size": sample_size,
+            "estimated_ltv": ltv,
+        }
+    except Exception as e:
+        logger.error("LTV estimate failed: %s", e)
+        return {"avg_lifetime_days": 0, "sample_size": 0, "estimated_ltv": 0}
