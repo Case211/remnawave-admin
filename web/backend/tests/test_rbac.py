@@ -88,6 +88,11 @@ class TestRBACMatrix:
         ("backups", "view"), ("backups", "create"), ("backups", "delete"),
         ("api_keys", "view"), ("api_keys", "create"), ("api_keys", "edit"), ("api_keys", "delete"),
         ("bedolaga", "view"),
+        ("bedolaga_customers", "view"), ("bedolaga_customers", "edit"), ("bedolaga_customers", "create"),
+        ("bedolaga_promo", "view"), ("bedolaga_promo", "create"), ("bedolaga_promo", "edit"), ("bedolaga_promo", "delete"),
+        ("bedolaga_marketing", "view"), ("bedolaga_marketing", "create"), ("bedolaga_marketing", "edit"), ("bedolaga_marketing", "delete"),
+        ("bedolaga_support", "view"), ("bedolaga_support", "create"), ("bedolaga_support", "edit"),
+        ("bedolaga_config", "view"), ("bedolaga_config", "edit"),
     ]
 
     @pytest.mark.parametrize("resource,action", RESOURCES_ACTIONS)

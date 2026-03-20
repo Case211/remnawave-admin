@@ -127,7 +127,17 @@ const navigation: NavigationEntry[] = [
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   { name: 'nav.backups', href: '/backups', icon: HardDrive, permission: { resource: 'backups', action: 'view' } },
   { name: 'nav.apiKeys', href: '/api-keys', icon: Key, permission: { resource: 'api_keys', action: 'view' } },
-  { name: 'nav.bedolaga', href: '/bedolaga', icon: Bot, permission: { resource: 'bedolaga', action: 'view' } },
+  // Bedolaga
+  { type: 'section', name: 'nav.sections.bedolaga' },
+  {
+    type: 'group',
+    name: 'nav.bedolagaGroup',
+    icon: Bot,
+    items: [
+      { name: 'nav.bedolaga.dashboard', href: '/bedolaga', icon: BarChart3, permission: { resource: 'bedolaga', action: 'view' } },
+      { name: 'nav.bedolaga.customers', href: '/bedolaga/customers', icon: Users, permission: { resource: 'bedolaga_customers', action: 'view' } },
+    ],
+  },
   // Administration
   { type: 'section', name: 'nav.sections.admin' },
   {

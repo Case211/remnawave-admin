@@ -19,9 +19,6 @@ class BedolagaClient:
         """Configure the client with URL and token."""
         self._base_url = base_url.rstrip("/")
         self._api_token = api_token
-        # Recreate client with new settings
-        if self._client:
-            pass  # will be recreated on next request
         self._client = None
 
     @property
@@ -37,12 +34,33 @@ class BedolagaClient:
             )
         return self._client
 
+    # ── Base methods ──
+
     async def _get(self, path: str, params: dict = None) -> dict:
-        """Make a GET request to the Bedolaga API."""
         client = self._get_client()
         response = await client.get(path, params=params)
         response.raise_for_status()
         return response.json()
+
+    async def _post(self, path: str, json: dict = None, params: dict = None) -> dict:
+        client = self._get_client()
+        response = await client.post(path, json=json, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    async def _patch(self, path: str, json: dict = None) -> dict:
+        client = self._get_client()
+        response = await client.patch(path, json=json)
+        response.raise_for_status()
+        return response.json()
+
+    async def _delete(self, path: str, params: dict = None) -> dict:
+        client = self._get_client()
+        response = await client.delete(path, params=params)
+        response.raise_for_status()
+        return response.json()
+
+    # ── Stats ──
 
     async def get_overview(self) -> dict:
         return await self._get("/stats/overview")
@@ -53,13 +71,63 @@ class BedolagaClient:
     async def get_health(self) -> dict:
         return await self._get("/health")
 
-    async def get_transactions(self, limit: int = 20, offset: int = 0, **filters) -> dict:
-        params = {"limit": limit, "offset": offset, **filters}
+    # ── Users ──
+
+    async def list_users(self, limit: int = 20, offset: int = 0, **filters) -> dict:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return await self._get("/users", params=params)
+
+    async def get_user(self, user_id: int) -> dict:
+        return await self._get(f"/users/{user_id}")
+
+    async def get_user_by_telegram(self, telegram_id: int) -> dict:
+        return await self._get(f"/users/by-telegram-id/{telegram_id}")
+
+    async def update_user(self, user_id: int, data: dict) -> dict:
+        return await self._patch(f"/users/{user_id}", json=data)
+
+    async def modify_balance(self, user_id: int, data: dict) -> dict:
+        return await self._post(f"/users/{user_id}/balance", json=data)
+
+    # ── Subscriptions ──
+
+    async def list_subscriptions(self, limit: int = 20, offset: int = 0, **filters) -> dict:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return await self._get("/subscriptions", params=params)
+
+    async def get_subscription(self, sub_id: int) -> dict:
+        return await self._get(f"/subscriptions/{sub_id}")
+
+    async def create_subscription(self, user_id: int, data: dict) -> dict:
+        return await self._post(f"/users/{user_id}/subscription", json=data)
+
+    async def deactivate_subscription(self, user_id: int) -> dict:
+        return await self._delete(f"/users/{user_id}/subscription")
+
+    async def extend_subscription(self, sub_id: int, data: dict) -> dict:
+        return await self._post(f"/subscriptions/{sub_id}/extend", json=data)
+
+    async def add_traffic(self, sub_id: int, data: dict) -> dict:
+        return await self._post(f"/subscriptions/{sub_id}/traffic", json=data)
+
+    async def add_devices(self, sub_id: int, data: dict) -> dict:
+        return await self._post(f"/subscriptions/{sub_id}/devices", json=data)
+
+    # ── Transactions ──
+
+    async def list_transactions(self, limit: int = 20, offset: int = 0, **filters) -> dict:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
         return await self._get("/transactions", params=params)
 
-    async def get_subscriptions(self, limit: int = 20, offset: int = 0, **filters) -> dict:
-        params = {"limit": limit, "offset": offset, **filters}
-        return await self._get("/subscriptions", params=params)
+    # ── Subscription Events ──
+
+    async def list_subscription_events(self, limit: int = 20, offset: int = 0, **filters) -> dict:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return await self._get("/subscription-events", params=params)
 
 
 bedolaga_client = BedolagaClient()

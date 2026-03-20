@@ -51,6 +51,11 @@ AVAILABLE_RESOURCES = {
     "backups": ["view", "create", "delete"],
     "api_keys": ["view", "create", "edit", "delete"],
     "bedolaga": ["view"],
+    "bedolaga_customers": ["view", "edit", "create"],
+    "bedolaga_promo": ["view", "create", "edit", "delete"],
+    "bedolaga_marketing": ["view", "create", "edit", "delete"],
+    "bedolaga_support": ["view", "create", "edit"],
+    "bedolaga_config": ["view", "edit"],
 }
 
 
