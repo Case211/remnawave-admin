@@ -46,7 +46,12 @@ async def get_overview(
     admin: AdminUser = Depends(require_permission("bedolaga", "view")),
 ):
     """Общая статистика из Bedolaga Bot."""
-    return await _proxy_request(bedolaga_client.get_overview)
+    data = await _proxy_request(bedolaga_client.get_overview)
+    logger.info("Bedolaga overview keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
+    for k, v in (data.items() if isinstance(data, dict) else []):
+        if isinstance(v, dict):
+            logger.info("  %s keys: %s", k, list(v.keys()))
+    return data
 
 
 @router.get("/full")
@@ -62,7 +67,9 @@ async def get_health(
     admin: AdminUser = Depends(require_permission("bedolaga", "view")),
 ):
     """Статус здоровья Bedolaga Bot."""
-    return await _proxy_request(bedolaga_client.get_health)
+    data = await _proxy_request(bedolaga_client.get_health)
+    logger.info("Bedolaga health: %s", data)
+    return data
 
 
 @router.get("/status")
