@@ -342,7 +342,7 @@ async def billing_analytics_overview(
         cost_per_user_total = round(total_spent / active_users, 2) if active_users > 0 else 0
 
         # Cost per GB
-        total_traffic_gb = total_traffic / (1024 ** 3) if total_traffic else 0
+        total_traffic_gb = float(total_traffic) / (1024 ** 3) if total_traffic else 0
         cost_per_gb = round(total_spent / total_traffic_gb, 4) if total_traffic_gb > 1 else 0
 
         # Monthly breakdown from billing history
@@ -410,7 +410,7 @@ async def billing_per_node(
             async with db_service.acquire() as conn:
                 rows = await conn.fetch(
                     "SELECT uuid::text, name, is_connected, is_disabled, "
-                    "cpu_usage, memory_usage, disk_usage, users_online "
+                    "cpu_usage, memory_usage, disk_usage "
                     "FROM nodes"
                 )
                 node_metrics = {r["uuid"]: dict(r) for r in rows}
