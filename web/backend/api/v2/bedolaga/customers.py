@@ -51,11 +51,16 @@ async def list_users(
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     promo_group_id: Optional[int] = Query(None),
+    subscription_status: Optional[str] = Query(None),
+    sort: Optional[str] = Query(None),
+    order: Optional[str] = Query(None),
     admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
 ):
     """Список клиентов Bedolaga Bot."""
     return await proxy_request(lambda: bedolaga_client.list_users(
-        limit=limit, offset=offset, status=status, search=search, promo_group_id=promo_group_id,
+        limit=limit, offset=offset, status=status, search=search,
+        promo_group_id=promo_group_id, subscription_status=subscription_status,
+        sort=sort, order=order,
     ))
 
 

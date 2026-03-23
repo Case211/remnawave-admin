@@ -3316,7 +3316,14 @@
       "subscriptionExtended": "Подписка продлена",
       "days": "Дней",
       "recentTransactions": "Последние транзакции",
-      "noTransactions": "Нет транзакций"
+      "noTransactions": "Нет транзакций",
+      "events": "События подписки",
+      "editUser": "Редактировать",
+      "editUserTitle": "Редактировать клиента",
+      "firstName": "Имя",
+      "lastName": "Фамилия",
+      "userUpdated": "Данные обновлены",
+      "userUpdateError": "Ошибка обновления"
     },
     "trial": "Пробных",
     "conversions": "Конверсий",

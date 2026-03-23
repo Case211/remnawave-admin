@@ -3316,7 +3316,14 @@
       "subscriptionExtended": "Subscription extended",
       "days": "Days",
       "recentTransactions": "Recent transactions",
-      "noTransactions": "No transactions"
+      "noTransactions": "No transactions",
+      "events": "Subscription events",
+      "editUser": "Edit",
+      "editUserTitle": "Edit customer",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "userUpdated": "Customer updated",
+      "userUpdateError": "Update failed"
     },
     "trial": "Trial",
     "conversions": "Conversions",
