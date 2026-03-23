@@ -42,7 +42,11 @@ async def proxy_request(coro_fn):
 # Import routers AFTER defining helpers (avoids circular import)
 from .dashboard import router as dashboard_router  # noqa: E402
 from .customers import router as customers_router  # noqa: E402
+from .promo import router as promo_router  # noqa: E402
+from .marketing import router as marketing_router  # noqa: E402
 
 router = APIRouter()
 router.include_router(dashboard_router, tags=["bedolaga-dashboard"])
 router.include_router(customers_router, prefix="/customers", tags=["bedolaga-customers"])
+router.include_router(promo_router, prefix="/promo", tags=["bedolaga-promo"])
+router.include_router(marketing_router, prefix="/marketing", tags=["bedolaga-marketing"])

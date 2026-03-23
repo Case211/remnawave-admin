@@ -40,6 +40,8 @@ const Squads = lazy(() => import('./pages/Squads'))
 const BedolagaDashboard = lazy(() => import('./pages/bedolaga/BedolagaDashboard'))
 const BedolagaCustomers = lazy(() => import('./pages/bedolaga/BedolagaCustomers'))
 const BedolagaCustomerDetail = lazy(() => import('./pages/bedolaga/BedolagaCustomerDetail'))
+const BedolagaPromo = lazy(() => import('./pages/bedolaga/BedolagaPromo'))
+const BedolagaMarketing = lazy(() => import('./pages/bedolaga/BedolagaMarketing'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 /**
@@ -138,6 +140,8 @@ export default function App() {
                         <Route path="/bedolaga" element={<BedolagaDashboard />} />
                         <Route path="/bedolaga/customers" element={<BedolagaCustomers />} />
                         <Route path="/bedolaga/customers/:id" element={<BedolagaCustomerDetail />} />
+                        <Route path="/bedolaga/promo" element={<BedolagaPromo />} />
+                        <Route path="/bedolaga/marketing" element={<BedolagaMarketing />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="*" element={<NotFound />} />
                       </Routes>

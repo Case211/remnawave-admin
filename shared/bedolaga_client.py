@@ -129,5 +129,68 @@ class BedolagaClient:
         params.update({k: v for k, v in filters.items() if v is not None})
         return await self._get("/subscription-events", params=params)
 
+    # ── Promo codes ──
+
+    async def list_promos(self, limit: int = 20, offset: int = 0, **filters) -> dict:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return await self._get("/promos", params=params)
+
+    async def get_promo(self, promo_id: int) -> dict:
+        return await self._get(f"/promos/{promo_id}")
+
+    async def create_promo(self, data: dict) -> dict:
+        return await self._post("/promos", json=data)
+
+    async def update_promo(self, promo_id: int, data: dict) -> dict:
+        return await self._patch(f"/promos/{promo_id}", json=data)
+
+    async def delete_promo(self, promo_id: int) -> dict:
+        return await self._delete(f"/promos/{promo_id}")
+
+    async def get_promo_stats(self, promo_id: int) -> dict:
+        return await self._get(f"/promos/{promo_id}/stats")
+
+    # ── Marketing campaigns ──
+
+    async def list_campaigns(self, limit: int = 20, offset: int = 0, **filters) -> dict:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return await self._get("/campaigns", params=params)
+
+    async def get_campaign(self, campaign_id: int) -> dict:
+        return await self._get(f"/campaigns/{campaign_id}")
+
+    async def create_campaign(self, data: dict) -> dict:
+        return await self._post("/campaigns", json=data)
+
+    async def update_campaign(self, campaign_id: int, data: dict) -> dict:
+        return await self._patch(f"/campaigns/{campaign_id}", json=data)
+
+    async def delete_campaign(self, campaign_id: int) -> dict:
+        return await self._delete(f"/campaigns/{campaign_id}")
+
+    async def send_campaign(self, campaign_id: int) -> dict:
+        return await self._post(f"/campaigns/{campaign_id}/send")
+
+    async def get_campaign_stats(self, campaign_id: int) -> dict:
+        return await self._get(f"/campaigns/{campaign_id}/stats")
+
+    # ── Mailings (bulk messages) ──
+
+    async def list_mailings(self, limit: int = 20, offset: int = 0, **filters) -> dict:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return await self._get("/mailings", params=params)
+
+    async def get_mailing(self, mailing_id: int) -> dict:
+        return await self._get(f"/mailings/{mailing_id}")
+
+    async def create_mailing(self, data: dict) -> dict:
+        return await self._post("/mailings", json=data)
+
+    async def cancel_mailing(self, mailing_id: int) -> dict:
+        return await self._post(f"/mailings/{mailing_id}/cancel")
+
 
 bedolaga_client = BedolagaClient()

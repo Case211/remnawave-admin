@@ -31,6 +31,8 @@ import {
   Github,
   MessageCircle,
   Heart,
+  Ticket,
+  Megaphone,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -136,6 +138,8 @@ const navigation: NavigationEntry[] = [
     items: [
       { name: 'nav.bedolaga.dashboard', href: '/bedolaga', icon: BarChart3, permission: { resource: 'bedolaga', action: 'view' } },
       { name: 'nav.bedolaga.customers', href: '/bedolaga/customers', icon: Users, permission: { resource: 'bedolaga_customers', action: 'view' } },
+      { name: 'nav.bedolaga.promo', href: '/bedolaga/promo', icon: Ticket, permission: { resource: 'bedolaga_promo', action: 'view' } },
+      { name: 'nav.bedolaga.marketing', href: '/bedolaga/marketing', icon: Megaphone, permission: { resource: 'bedolaga_marketing', action: 'view' } },
     ],
   },
   // Administration
