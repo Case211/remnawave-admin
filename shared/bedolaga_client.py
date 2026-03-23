@@ -130,16 +130,16 @@ class BedolagaClient:
         return await self._get(f"/users/{user_id}/referral-tree", params={"depth": depth})
 
     async def get_referral_network(self) -> dict:
-        return await self._get("/cabinet/admin/referral-network/")
+        return await self._get("/referral-network")
 
     async def get_referral_network_user(self, user_id: int) -> dict:
-        return await self._get(f"/cabinet/admin/referral-network/user/{user_id}")
+        return await self._get(f"/referral-network/user/{user_id}")
 
     async def get_referral_network_campaign(self, campaign_id: int) -> dict:
-        return await self._get(f"/cabinet/admin/referral-network/campaign/{campaign_id}")
+        return await self._get(f"/referral-network/campaign/{campaign_id}")
 
     async def search_referral_network(self, query: str) -> dict:
-        return await self._get("/cabinet/admin/referral-network/search", params={"q": query})
+        return await self._get("/referral-network/search", params={"q": query})
 
     # ── Transactions ──
 
