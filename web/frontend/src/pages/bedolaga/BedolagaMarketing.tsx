@@ -9,7 +9,6 @@ import {
   Pencil,
   Trash2,
   Send,
-  BarChart3,
   Megaphone,
   Mail,
   XCircle,
@@ -44,13 +43,6 @@ interface Campaign {
   sent_at?: string
   promo_id?: number
   created_at?: string
-}
-
-interface CampaignStats {
-  sent?: number
-  delivered?: number
-  read?: number
-  clicked?: number
 }
 
 interface Mailing {
@@ -115,8 +107,7 @@ export default function BedolagaMarketing() {
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null)
   const [campaignForm, setCampaignForm] = useState(emptyCampaignForm)
   const [deleteCampaign, setDeleteCampaign] = useState<Campaign | null>(null)
-  const [sendCampaign, setSendCampaign] = useState<Campaign | null>(null)
-  const [statsCampaign, setStatsCampaign] = useState<Campaign | null>(null)
+  // send/stats campaign removed — not in webapi
 
   // Mailing dialogs
   const [mailingDialog, setMailingDialog] = useState(false)
@@ -139,19 +130,13 @@ export default function BedolagaMarketing() {
   const cTotal = cData?.total || 0
   const cTotalPages = Math.max(1, Math.ceil(cTotal / perPage))
 
-  const { data: campaignStatsData, isLoading: campaignStatsLoading } = useQuery({
-    queryKey: ['bedolaga-campaign-stats', statsCampaign?.id],
-    queryFn: () => client.get(`/bedolaga/marketing/campaigns/${statsCampaign!.id}/stats`).then((r) => r.data),
-    enabled: !!statsCampaign,
-  })
-
-  // ── Mailing queries ──
+  // ── Broadcast queries ──
 
   const { data: mData, isLoading: mLoading, refetch: mRefetch } = useQuery<{ items?: Mailing[]; total?: number }>({
-    queryKey: ['bedolaga-mailings', mPage, perPage],
+    queryKey: ['bedolaga-broadcasts', mPage, perPage],
     queryFn: () => {
       const params = new URLSearchParams({ limit: String(perPage), offset: String((mPage - 1) * perPage) })
-      return client.get(`/bedolaga/marketing/mailings?${params}`).then((r) => r.data)
+      return client.get(`/bedolaga/marketing/broadcasts?${params}`).then((r) => r.data)
     },
     staleTime: 30_000,
     placeholderData: (prev) => prev,
@@ -181,22 +166,18 @@ export default function BedolagaMarketing() {
     onError: () => toast.error(t('bedolaga.marketing.campaignDeleteError')),
   })
 
-  const sendCampaignMut = useMutation({
-    mutationFn: (id: number) => client.post(`/bedolaga/marketing/campaigns/${id}/send`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['bedolaga-campaigns'] }); setSendCampaign(null); toast.success(t('bedolaga.marketing.campaignSent')) },
-    onError: () => toast.error(t('bedolaga.marketing.campaignSendError')),
-  })
+  // send campaign removed — not supported by webapi
 
   // ── Mailing mutations ──
 
   const createMailingMut = useMutation({
-    mutationFn: (p: Record<string, unknown>) => client.post('/bedolaga/marketing/mailings', p),
+    mutationFn: (p: Record<string, unknown>) => client.post('/bedolaga/marketing/broadcasts', p),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['bedolaga-mailings'] }); setMailingDialog(false); toast.success(t('bedolaga.marketing.mailingCreated')) },
     onError: () => toast.error(t('bedolaga.marketing.mailingCreateError')),
   })
 
   const cancelMailingMut = useMutation({
-    mutationFn: (id: number) => client.post(`/bedolaga/marketing/mailings/${id}/cancel`),
+    mutationFn: (id: number) => client.post(`/bedolaga/marketing/broadcasts/${id}/stop`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['bedolaga-mailings'] }); setCancelMailing(null); toast.success(t('bedolaga.marketing.mailingCancelled')) },
     onError: () => toast.error(t('bedolaga.marketing.mailingCancelError')),
   })
@@ -349,14 +330,6 @@ export default function BedolagaMarketing() {
                         <td className="p-3 hidden lg:table-cell text-dark-300 text-xs">{formatDate(c.scheduled_at)}</td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setStatsCampaign(c)}>
-                              <BarChart3 className="w-4 h-4 text-dark-300 hover:text-white" />
-                            </Button>
-                            {(!c.status || c.status === 'draft') && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSendCampaign(c)}>
-                                <Send className="w-4 h-4 text-dark-300 hover:text-emerald-400" />
-                              </Button>
-                            )}
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditCampaign(c)}>
                               <Pencil className="w-4 h-4 text-dark-300 hover:text-white" />
                             </Button>
@@ -549,43 +522,6 @@ export default function BedolagaMarketing() {
         </DialogContent>
       </Dialog>
 
-      {/* Campaign send confirm */}
-      <Dialog open={!!sendCampaign} onOpenChange={() => setSendCampaign(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader><DialogTitle>{t('bedolaga.marketing.sendCampaignConfirm')}</DialogTitle></DialogHeader>
-          <p className="text-sm text-dark-200 py-2">{t('bedolaga.marketing.sendCampaignText', { name: sendCampaign?.name })}</p>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setSendCampaign(null)}>{t('common.cancel')}</Button>
-            <Button onClick={() => sendCampaign && sendCampaignMut.mutate(sendCampaign.id)} disabled={sendCampaignMut.isPending} className="gap-1.5">
-              <Send className="w-4 h-4" />
-              {t('bedolaga.marketing.send')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Campaign stats dialog */}
-      <Dialog open={!!statsCampaign} onOpenChange={() => setStatsCampaign(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t('bedolaga.marketing.campaignStats')}: {statsCampaign?.name}</DialogTitle>
-          </DialogHeader>
-          {campaignStatsLoading ? (
-            <div className="space-y-3 py-4"><Skeleton className="h-5 w-full" /><Skeleton className="h-5 w-3/4" /></div>
-          ) : campaignStatsData ? (
-            <div className="grid grid-cols-2 gap-3 py-4">
-              {['sent', 'delivered', 'read', 'clicked'].map((key) => (
-                <div key={key} className="p-3 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-                  <p className="text-xs text-dark-300">{t(`bedolaga.marketing.stat_${key}`)}</p>
-                  <p className="text-lg font-semibold">{(campaignStatsData as CampaignStats)[key as keyof CampaignStats] ?? 0}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-dark-300 py-4">{t('bedolaga.marketing.noStats')}</p>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* ── Mailing Create Dialog ── */}
       <Dialog open={mailingDialog} onOpenChange={setMailingDialog}>

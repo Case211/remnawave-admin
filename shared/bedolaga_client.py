@@ -181,27 +181,18 @@ class BedolagaClient:
     async def delete_campaign(self, campaign_id: int) -> dict:
         return await self._delete(f"/campaigns/{campaign_id}")
 
-    async def send_campaign(self, campaign_id: int) -> dict:
-        return await self._post(f"/campaigns/{campaign_id}/send")
+    # ── Broadcasts (bulk messages) ──
 
-    async def get_campaign_stats(self, campaign_id: int) -> dict:
-        return await self._get(f"/campaigns/{campaign_id}/stats")
-
-    # ── Mailings (bulk messages) ──
-
-    async def list_mailings(self, limit: int = 20, offset: int = 0, **filters) -> dict:
+    async def list_broadcasts(self, limit: int = 20, offset: int = 0, **filters) -> dict:
         params = {"limit": limit, "offset": offset}
         params.update({k: v for k, v in filters.items() if v is not None})
-        return await self._get("/mailings", params=params)
+        return await self._get("/broadcasts", params=params)
 
-    async def get_mailing(self, mailing_id: int) -> dict:
-        return await self._get(f"/mailings/{mailing_id}")
+    async def create_broadcast(self, data: dict) -> dict:
+        return await self._post("/broadcasts", json=data)
 
-    async def create_mailing(self, data: dict) -> dict:
-        return await self._post("/mailings", json=data)
-
-    async def cancel_mailing(self, mailing_id: int) -> dict:
-        return await self._post(f"/mailings/{mailing_id}/cancel")
+    async def stop_broadcast(self, broadcast_id: int) -> dict:
+        return await self._post(f"/broadcasts/{broadcast_id}/stop")
 
 
 bedolaga_client = BedolagaClient()

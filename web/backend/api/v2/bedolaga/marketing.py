@@ -1,4 +1,4 @@
-"""Bedolaga marketing — campaigns, mailings."""
+"""Bedolaga marketing — campaigns (ad campaigns), broadcasts (bulk messages)."""
 import json
 import logging
 from typing import Optional
@@ -20,26 +20,19 @@ router = APIRouter()
 
 class CampaignCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    message_text: str = Field(..., min_length=1, max_length=4096)
-    target_audience: Optional[str] = Field(None, max_length=100)
-    scheduled_at: Optional[str] = None
-    promo_id: Optional[int] = None
+    start_parameter: Optional[str] = None
+    is_active: bool = True
 
 
 class CampaignUpdateRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
-    message_text: Optional[str] = Field(None, min_length=1, max_length=4096)
-    target_audience: Optional[str] = Field(None, max_length=100)
-    scheduled_at: Optional[str] = None
-    promo_id: Optional[int] = None
+    start_parameter: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
-class MailingCreateRequest(BaseModel):
-    subject: str = Field(..., min_length=1, max_length=200)
-    message_text: str = Field(..., min_length=1, max_length=4096)
-    target_audience: Optional[str] = Field(None, max_length=100)
-    send_immediately: bool = False
-    scheduled_at: Optional[str] = None
+class BroadcastCreateRequest(BaseModel):
+    target: str = Field(..., min_length=1, max_length=100)
+    message_text: str = Field(..., min_length=1, max_length=4000)
 
 
 # ── Campaigns ──
@@ -48,12 +41,11 @@ class MailingCreateRequest(BaseModel):
 async def list_campaigns(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    status: Optional[str] = Query(None),
     admin: AdminUser = Depends(require_permission("bedolaga_marketing", "view")),
 ):
-    """Список кампаний."""
+    """Список рекламных кампаний."""
     return await proxy_request(lambda: bedolaga_client.list_campaigns(
-        limit=limit, offset=offset, status=status,
+        limit=limit, offset=offset,
     ))
 
 
@@ -64,15 +56,6 @@ async def get_campaign(
 ):
     """Детали кампании."""
     return await proxy_request(lambda: bedolaga_client.get_campaign(campaign_id))
-
-
-@router.get("/campaigns/{campaign_id}/stats")
-async def get_campaign_stats(
-    campaign_id: int = Path(...),
-    admin: AdminUser = Depends(require_permission("bedolaga_marketing", "view")),
-):
-    """Статистика кампании."""
-    return await proxy_request(lambda: bedolaga_client.get_campaign_stats(campaign_id))
 
 
 @router.post("/campaigns")
@@ -128,76 +111,49 @@ async def delete_campaign(
     return result
 
 
-@router.post("/campaigns/{campaign_id}/send")
-async def send_campaign(
-    request: Request,
-    campaign_id: int = Path(...),
-    admin: AdminUser = Depends(require_permission("bedolaga_marketing", "edit")),
-):
-    """Запустить отправку кампании."""
-    result = await proxy_request(lambda: bedolaga_client.send_campaign(campaign_id))
-    await write_audit_log(
-        admin_id=admin.account_id, admin_username=admin.username,
-        action="bedolaga.campaign.send", resource="bedolaga_marketing",
-        resource_id=str(campaign_id), details="{}",
-        ip_address=get_client_ip(request),
-    )
-    return result
+# ── Broadcasts ──
 
-
-# ── Mailings ──
-
-@router.get("/mailings")
-async def list_mailings(
+@router.get("/broadcasts")
+async def list_broadcasts(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    status: Optional[str] = Query(None),
     admin: AdminUser = Depends(require_permission("bedolaga_marketing", "view")),
 ):
     """Список рассылок."""
-    return await proxy_request(lambda: bedolaga_client.list_mailings(
-        limit=limit, offset=offset, status=status,
+    return await proxy_request(lambda: bedolaga_client.list_broadcasts(
+        limit=limit, offset=offset,
     ))
 
 
-@router.get("/mailings/{mailing_id}")
-async def get_mailing(
-    mailing_id: int = Path(...),
-    admin: AdminUser = Depends(require_permission("bedolaga_marketing", "view")),
-):
-    """Детали рассылки."""
-    return await proxy_request(lambda: bedolaga_client.get_mailing(mailing_id))
-
-
-@router.post("/mailings")
-async def create_mailing(
+@router.post("/broadcasts")
+async def create_broadcast(
     request: Request,
-    data: MailingCreateRequest,
+    data: BroadcastCreateRequest,
     admin: AdminUser = Depends(require_permission("bedolaga_marketing", "create")),
 ):
     """Создать рассылку."""
-    result = await proxy_request(lambda: bedolaga_client.create_mailing(data.model_dump(exclude_none=True)))
+    result = await proxy_request(lambda: bedolaga_client.create_broadcast(data.model_dump()))
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
-        action="bedolaga.mailing.create", resource="bedolaga_marketing",
-        resource_id=data.subject, details=json.dumps(data.model_dump(exclude_none=True)),
+        action="bedolaga.broadcast.create", resource="bedolaga_marketing",
+        resource_id=data.target, details=json.dumps(data.model_dump()),
         ip_address=get_client_ip(request),
     )
     return result
 
 
-@router.post("/mailings/{mailing_id}/cancel")
-async def cancel_mailing(
+@router.post("/broadcasts/{broadcast_id}/stop")
+async def stop_broadcast(
     request: Request,
-    mailing_id: int = Path(...),
+    broadcast_id: int = Path(...),
     admin: AdminUser = Depends(require_permission("bedolaga_marketing", "edit")),
 ):
-    """Отменить рассылку."""
-    result = await proxy_request(lambda: bedolaga_client.cancel_mailing(mailing_id))
+    """Остановить рассылку."""
+    result = await proxy_request(lambda: bedolaga_client.stop_broadcast(broadcast_id))
     await write_audit_log(
         admin_id=admin.account_id, admin_username=admin.username,
-        action="bedolaga.mailing.cancel", resource="bedolaga_marketing",
-        resource_id=str(mailing_id), details="{}",
+        action="bedolaga.broadcast.stop", resource="bedolaga_marketing",
+        resource_id=str(broadcast_id), details="{}",
         ip_address=get_client_ip(request),
     )
     return result
