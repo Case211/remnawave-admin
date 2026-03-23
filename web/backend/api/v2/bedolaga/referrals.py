@@ -1,5 +1,6 @@
-"""Bedolaga referrals — build network from users data."""
+"""Bedolaga referrals — build network from users data with caching."""
 import logging
+import time
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends
@@ -12,16 +13,23 @@ from web.backend.api.v2.bedolaga import proxy_request
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# In-memory cache for referral network (heavy endpoint)
+_network_cache: dict = {}
+_network_cache_ts: float = 0
+_NETWORK_CACHE_TTL = 300  # 5 minutes
+
 
 @router.get("/network")
 async def get_referral_network(
     admin: AdminUser = Depends(require_permission("bedolaga", "view")),
 ):
-    """Build referral network graph from all users.
+    """Build referral network graph from all users (cached 5 min)."""
+    global _network_cache, _network_cache_ts
 
-    Since webapi doesn't have a dedicated referral-network endpoint,
-    we fetch all users and build the graph from referred_by_id links.
-    """
+    now = time.time()
+    if _network_cache and (now - _network_cache_ts) < _NETWORK_CACHE_TTL:
+        return _network_cache
+
     # Fetch all users (paginated)
     all_users = []
     offset = 0
@@ -86,7 +94,7 @@ async def get_referral_network(
 
     total_referrers = sum(1 for u in users_with_refs if u["direct_referrals"] > 0)
 
-    return {
+    result = {
         "users": users_with_refs,
         "edges": edges,
         "total_users": len(all_users),
@@ -94,3 +102,7 @@ async def get_referral_network(
         "total_campaigns": 0,
         "total_earnings_kopeks": 0,
     }
+
+    _network_cache = result
+    _network_cache_ts = now
+    return result
