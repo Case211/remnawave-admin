@@ -216,35 +216,10 @@ async def get_user_by_telegram(
 
 
 # ── Referrals (sub-paths of /{user_id} but defined before GET /{user_id}) ──
+# Note: Bedolaga webapi doesn't have per-user referral endpoints.
+# We fetch all users and filter by referred_by_id on our side.
 
-@router.get("/{user_id}/referrals")
-async def get_user_referrals(
-    user_id: int = Path(...),
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
-):
-    """Список рефералов пользователя."""
-    return await proxy_request(lambda: bedolaga_client.get_user_referrals(user_id, limit=limit, offset=offset))
-
-
-@router.get("/{user_id}/referral-tree")
-async def get_user_referral_tree(
-    user_id: int = Path(...),
-    depth: int = Query(3, ge=1, le=5),
-    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
-):
-    """Дерево рефералов (рекурсивное, до N уровней)."""
-    return await proxy_request(lambda: bedolaga_client.get_user_referral_tree(user_id, depth=depth))
-
-
-@router.get("/{user_id}/referral-stats")
-async def get_user_referral_stats(
-    user_id: int = Path(...),
-    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
-):
-    """Реферальная статистика пользователя."""
-    return await proxy_request(lambda: bedolaga_client.get_user_referral_stats(user_id))
+# (referral endpoints removed — use /bedolaga/referrals/network for global graph)
 
 
 # ── User detail (dynamic /{user_id} — MUST be last) ──

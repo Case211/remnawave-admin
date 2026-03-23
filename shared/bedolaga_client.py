@@ -120,26 +120,9 @@ class BedolagaClient:
 
     # ── Referrals ──
 
-    async def get_user_referrals(self, user_id: int, limit: int = 20, offset: int = 0) -> dict:
-        return await self._get(f"/users/{user_id}/referrals", params={"limit": limit, "offset": offset})
-
-    async def get_user_referral_stats(self, user_id: int) -> dict:
-        return await self._get(f"/users/{user_id}/referral-stats")
-
-    async def get_user_referral_tree(self, user_id: int, depth: int = 3) -> dict:
-        return await self._get(f"/users/{user_id}/referral-tree", params={"depth": depth})
-
-    async def get_referral_network(self) -> dict:
-        return await self._get("/referral-network")
-
-    async def get_referral_network_user(self, user_id: int) -> dict:
-        return await self._get(f"/referral-network/user/{user_id}")
-
-    async def get_referral_network_campaign(self, campaign_id: int) -> dict:
-        return await self._get(f"/referral-network/campaign/{campaign_id}")
-
-    async def search_referral_network(self, query: str) -> dict:
-        return await self._get("/referral-network/search", params={"q": query})
+    async def get_all_users(self, limit: int = 500, offset: int = 0) -> dict:
+        """Fetch all users for referral network building."""
+        return await self._get("/users", params={"limit": limit, "offset": offset})
 
     # ── Transactions ──
 

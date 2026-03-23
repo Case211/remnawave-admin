@@ -46,7 +46,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import ReferralGraph from './ReferralGraph'
 
 // ── Helpers ──
 
@@ -143,7 +142,6 @@ export default function BedolagaCustomerDetail() {
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [editDialog, setEditDialog] = useState(false)
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', username: '' })
-  const [showGraph, setShowGraph] = useState(false)
 
   // ── Queries ──
 
@@ -168,24 +166,24 @@ export default function BedolagaCustomerDetail() {
     staleTime: 30_000,
   })
 
+  // Find users referred by this user — fetch all and filter by referred_by_id
   const { data: referralsData } = useQuery({
-    queryKey: ['bedolaga-customer-referrals', id],
-    queryFn: () => client.get(`/bedolaga/customers/${id}/referrals?limit=20`).then((r) => r.data),
-    enabled: !!id,
-    staleTime: 30_000,
-  })
-
-  const { data: refStatsData } = useQuery({
-    queryKey: ['bedolaga-customer-referral-stats', id],
-    queryFn: () => client.get(`/bedolaga/customers/${id}/referral-stats`).then((r) => r.data),
-    enabled: !!id,
-    staleTime: 30_000,
-  })
-
-  const { data: refTreeData } = useQuery({
-    queryKey: ['bedolaga-customer-referral-tree', id],
-    queryFn: () => client.get(`/bedolaga/customers/${id}/referral-tree?depth=3`).then((r) => r.data),
-    enabled: !!id && showGraph,
+    queryKey: ['bedolaga-customer-referrals', user?.id],
+    queryFn: async () => {
+      // Fetch users in batches, filter by referred_by_id
+      const result: any[] = []
+      let offset = 0
+      const limit = 200
+      while (true) {
+        const res = await client.get(`/bedolaga/customers?limit=${limit}&offset=${offset}`)
+        const items = res.data?.items || []
+        result.push(...items.filter((u: any) => u.referred_by_id === user.id))
+        if (items.length < limit) break
+        offset += limit
+      }
+      return { items: result }
+    },
+    enabled: !!user?.id && !!user?.referral_code,
     staleTime: 60_000,
   })
 
@@ -320,7 +318,6 @@ export default function BedolagaCustomerDetail() {
   const transactions = Array.isArray(txData?.items) ? txData.items : []
   const events = Array.isArray(eventsData?.items) ? eventsData.items : []
   const referrals = Array.isArray(referralsData?.items) ? referralsData.items : []
-  const refStats = refStatsData || {}
   const online = isOnline(user.last_activity)
   const balance = user.balance_rubles ?? 0
   const balancePositive = balance >= 0
@@ -684,28 +681,22 @@ export default function BedolagaCustomerDetail() {
       </div>
 
       {/* ── Referrals section ── */}
-      {(referrals.length > 0 || user.referral_code || user.referral_count > 0 || user.referrals_count > 0 || user.invited_count > 0 || (refStats as any).total_invited > 0) && (
+      {(referrals.length > 0 || user.referral_code) && (
         <div className="space-y-4">
-          {/* Referral stats */}
           <div className="flex items-center justify-between mt-2">
             <div className="flex items-center gap-2">
               <Share2 className="w-5 h-5 text-pink-400" />
               <h2 className="text-sm font-semibold">{t('bedolaga.customerDetail.referralProgram')}</h2>
             </div>
-            {referrals.length > 0 && (
-              <Button
-                variant={showGraph ? 'default' : 'secondary'}
-                size="sm"
-                className="gap-1.5 text-xs"
-                onClick={() => setShowGraph(!showGraph)}
-              >
+            <Link to="/bedolaga/referrals">
+              <Button variant="secondary" size="sm" className="gap-1.5 text-xs">
                 <Network className="w-4 h-4" />
                 <span className="hidden sm:inline">{t('bedolaga.customerDetail.refGraph')}</span>
               </Button>
-            )}
+            </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Card className="glass-card">
               <CardContent className="p-3">
                 <p className="text-xs text-dark-300">{t('bedolaga.customerDetail.refCode')}</p>
@@ -722,38 +713,10 @@ export default function BedolagaCustomerDetail() {
             <Card className="glass-card">
               <CardContent className="p-3">
                 <p className="text-xs text-dark-300">{t('bedolaga.customerDetail.refInvited')}</p>
-                <p className="text-xl font-bold mt-0.5">{(refStats as any).total_invited ?? user.referral_count ?? user.referrals_count ?? user.invited_count ?? referrals.length}</p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card">
-              <CardContent className="p-3">
-                <p className="text-xs text-dark-300">{t('bedolaga.customerDetail.refEarnings')}</p>
-                <p className="text-xl font-bold mt-0.5 text-emerald-400">
-                  {((refStats as any).total_earnings_rubles ?? 0).toLocaleString()} ₽
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card">
-              <CardContent className="p-3">
-                <p className="text-xs text-dark-300">{t('bedolaga.customerDetail.refLevel')}</p>
-                <p className="text-xl font-bold mt-0.5">{(refStats as any).level ?? '—'}</p>
+                <p className="text-xl font-bold mt-0.5">{referrals.length}</p>
               </CardContent>
             </Card>
           </div>
-
-          {/* Referral graph */}
-          {showGraph && (
-            refTreeData ? (
-              <ReferralGraph
-                rootUser={{ id: user.id, username: user.username, first_name: user.first_name, status: user.status, balance_rubles: user.balance_rubles }}
-                tree={Array.isArray(refTreeData?.children) ? refTreeData.children : Array.isArray(refTreeData) ? refTreeData : []}
-              />
-            ) : (
-              <div className="h-[420px] rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] flex items-center justify-center">
-                <RefreshCw className="w-6 h-6 text-dark-400 animate-spin" />
-              </div>
-            )
-          )}
 
           {/* Referral list */}
           {referrals.length > 0 && (
@@ -772,7 +735,7 @@ export default function BedolagaCustomerDetail() {
                       <tr className="border-b border-[var(--glass-border)] text-dark-300 text-xs uppercase tracking-wider">
                         <th className="text-left p-2 font-medium">{t('bedolaga.customers.user')}</th>
                         <th className="text-left p-2 font-medium hidden sm:table-cell">{t('bedolaga.customers.status')}</th>
-                        <th className="text-right p-2 font-medium hidden sm:table-cell">{t('bedolaga.customerDetail.refEarnings')}</th>
+                        <th className="text-right p-2 font-medium hidden sm:table-cell">{t('bedolaga.customers.balance')}</th>
                         <th className="text-left p-2 font-medium hidden md:table-cell">{t('bedolaga.customerDetail.registered')}</th>
                       </tr>
                     </thead>
@@ -796,9 +759,7 @@ export default function BedolagaCustomerDetail() {
                             </Badge>
                           </td>
                           <td className="p-2 text-right hidden sm:table-cell">
-                            <span className="text-emerald-400 text-xs">
-                              {ref.referral_earnings_rubles ? `+${ref.referral_earnings_rubles.toLocaleString()} ₽` : '—'}
-                            </span>
+                            <span className="text-xs">{(ref.balance_rubles ?? 0).toLocaleString()} ₽</span>
                           </td>
                           <td className="p-2 hidden md:table-cell text-dark-300 text-xs">
                             {formatDateShort(ref.created_at)}
