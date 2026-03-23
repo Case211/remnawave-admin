@@ -28,6 +28,8 @@ import {
   Copy,
   Check,
   Pencil,
+  Users,
+  Share2,
 } from 'lucide-react'
 import client from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -163,6 +165,20 @@ export default function BedolagaCustomerDetail() {
     staleTime: 30_000,
   })
 
+  const { data: referralsData } = useQuery({
+    queryKey: ['bedolaga-customer-referrals', id],
+    queryFn: () => client.get(`/bedolaga/customers/${id}/referrals?limit=20`).then((r) => r.data),
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+
+  const { data: refStatsData } = useQuery({
+    queryKey: ['bedolaga-customer-referral-stats', id],
+    queryFn: () => client.get(`/bedolaga/customers/${id}/referral-stats`).then((r) => r.data),
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+
   const { data: remnawaveUser } = useQuery({
     queryKey: ['remnawave-user-by-tg', user?.telegram_id],
     queryFn: () => client.get(`/users?search=${user.telegram_id}&limit=1`).then((r) => {
@@ -293,6 +309,8 @@ export default function BedolagaCustomerDetail() {
   const sub = user.subscription
   const transactions = Array.isArray(txData?.items) ? txData.items : []
   const events = Array.isArray(eventsData?.items) ? eventsData.items : []
+  const referrals = Array.isArray(referralsData?.items) ? referralsData.items : []
+  const refStats = refStatsData || {}
   const online = isOnline(user.last_activity)
   const balance = user.balance_rubles ?? 0
   const balancePositive = balance >= 0
@@ -654,6 +672,110 @@ export default function BedolagaCustomerDetail() {
           )}
         </div>
       </div>
+
+      {/* ── Referrals section ── */}
+      {(referrals.length > 0 || user.referral_code || (refStats as any).total_invited > 0) && (
+        <div className="space-y-4">
+          {/* Referral stats */}
+          <div className="flex items-center gap-2 mt-2">
+            <Share2 className="w-5 h-5 text-pink-400" />
+            <h2 className="text-sm font-semibold">{t('bedolaga.customerDetail.referralProgram')}</h2>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Card className="glass-card">
+              <CardContent className="p-3">
+                <p className="text-xs text-dark-300">{t('bedolaga.customerDetail.refCode')}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="font-mono text-sm font-medium truncate">{user.referral_code || '—'}</p>
+                  {user.referral_code && (
+                    <button onClick={() => copyToClipboard(user.referral_code, 'refcode')} className="text-dark-400 hover:text-white flex-shrink-0">
+                      {copiedField === 'refcode' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="glass-card">
+              <CardContent className="p-3">
+                <p className="text-xs text-dark-300">{t('bedolaga.customerDetail.refInvited')}</p>
+                <p className="text-xl font-bold mt-0.5">{(refStats as any).total_invited ?? referrals.length}</p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card">
+              <CardContent className="p-3">
+                <p className="text-xs text-dark-300">{t('bedolaga.customerDetail.refEarnings')}</p>
+                <p className="text-xl font-bold mt-0.5 text-emerald-400">
+                  {((refStats as any).total_earnings_rubles ?? 0).toLocaleString()} ₽
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card">
+              <CardContent className="p-3">
+                <p className="text-xs text-dark-300">{t('bedolaga.customerDetail.refLevel')}</p>
+                <p className="text-xl font-bold mt-0.5">{(refStats as any).level ?? '—'}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Referral list */}
+          {referrals.length > 0 && (
+            <Card className="glass-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Users className="w-4 h-4 text-pink-400" />
+                  {t('bedolaga.customerDetail.refList')}
+                  <span className="text-dark-400 text-xs font-normal">({referrals.length})</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--glass-border)] text-dark-300 text-xs uppercase tracking-wider">
+                        <th className="text-left p-2 font-medium">{t('bedolaga.customers.user')}</th>
+                        <th className="text-left p-2 font-medium hidden sm:table-cell">{t('bedolaga.customers.status')}</th>
+                        <th className="text-right p-2 font-medium hidden sm:table-cell">{t('bedolaga.customerDetail.refEarnings')}</th>
+                        <th className="text-left p-2 font-medium hidden md:table-cell">{t('bedolaga.customerDetail.registered')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {referrals.map((ref: any) => (
+                        <tr
+                          key={ref.id}
+                          className="border-b border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)] cursor-pointer transition-colors"
+                          onClick={() => navigate(`/bedolaga/customers/${ref.id}`)}
+                        >
+                          <td className="p-2">
+                            <span className="font-medium">{ref.username || ref.first_name || `#${ref.id}`}</span>
+                            {ref.telegram_id && <span className="text-dark-400 text-xs ml-1.5">TG:{ref.telegram_id}</span>}
+                          </td>
+                          <td className="p-2 hidden sm:table-cell">
+                            <Badge className={cn('text-[10px]',
+                              ref.status === 'active' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                              'bg-dark-500/20 text-dark-300 border-dark-500/30'
+                            )}>
+                              {ref.status || '—'}
+                            </Badge>
+                          </td>
+                          <td className="p-2 text-right hidden sm:table-cell">
+                            <span className="text-emerald-400 text-xs">
+                              {ref.referral_earnings_rubles ? `+${ref.referral_earnings_rubles.toLocaleString()} ₽` : '—'}
+                            </span>
+                          </td>
+                          <td className="p-2 hidden md:table-cell text-dark-300 text-xs">
+                            {formatDateShort(ref.created_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* ── Balance dialog ── */}
       <Dialog open={balanceDialog} onOpenChange={setBalanceDialog}>

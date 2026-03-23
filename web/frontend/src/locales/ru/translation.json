@@ -3326,7 +3326,13 @@
       "userUpdateError": "Ошибка обновления",
       "resetDevices": "Сбросить",
       "devicesReset": "Устройства сброшены",
-      "customDays": "Или введите вручную"
+      "customDays": "Или введите вручную",
+      "referralProgram": "Реферальная программа",
+      "refCode": "Реф. код",
+      "refInvited": "Приглашено",
+      "refEarnings": "Заработано",
+      "refLevel": "Уровень",
+      "refList": "Приглашённые пользователи"
     },
     "trial": "Пробных",
     "conversions": "Конверсий",

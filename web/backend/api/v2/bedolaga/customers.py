@@ -215,6 +215,28 @@ async def get_user_by_telegram(
     return await proxy_request(lambda: bedolaga_client.get_user_by_telegram(telegram_id))
 
 
+# ── Referrals (sub-paths of /{user_id} but defined before GET /{user_id}) ──
+
+@router.get("/{user_id}/referrals")
+async def get_user_referrals(
+    user_id: int = Path(...),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
+):
+    """Список рефералов пользователя."""
+    return await proxy_request(lambda: bedolaga_client.get_user_referrals(user_id, limit=limit, offset=offset))
+
+
+@router.get("/{user_id}/referral-stats")
+async def get_user_referral_stats(
+    user_id: int = Path(...),
+    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
+):
+    """Реферальная статистика пользователя."""
+    return await proxy_request(lambda: bedolaga_client.get_user_referral_stats(user_id))
+
+
 # ── User detail (dynamic /{user_id} — MUST be last) ──
 
 @router.get("/{user_id}")

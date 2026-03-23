@@ -3326,7 +3326,13 @@
       "userUpdateError": "Update failed",
       "resetDevices": "Reset",
       "devicesReset": "Devices reset",
-      "customDays": "Or enter manually"
+      "customDays": "Or enter manually",
+      "referralProgram": "Referral program",
+      "refCode": "Ref. code",
+      "refInvited": "Invited",
+      "refEarnings": "Earnings",
+      "refLevel": "Level",
+      "refList": "Invited users"
     },
     "trial": "Trial",
     "conversions": "Conversions",

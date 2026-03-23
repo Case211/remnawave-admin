@@ -118,6 +118,14 @@ class BedolagaClient:
     async def reset_devices(self, sub_id: int) -> dict:
         return await self._post(f"/subscriptions/{sub_id}/reset-devices")
 
+    # ── Referrals ──
+
+    async def get_user_referrals(self, user_id: int, limit: int = 20, offset: int = 0) -> dict:
+        return await self._get(f"/users/{user_id}/referrals", params={"limit": limit, "offset": offset})
+
+    async def get_user_referral_stats(self, user_id: int) -> dict:
+        return await self._get(f"/users/{user_id}/referral-stats")
+
     # ── Transactions ──
 
     async def list_transactions(self, limit: int = 20, offset: int = 0, **filters) -> dict:
