@@ -25,7 +25,7 @@ async def get_referral_network(
     # Fetch all users (paginated)
     all_users = []
     offset = 0
-    limit = 500
+    limit = 200
     while True:
         data = await proxy_request(lambda o=offset: bedolaga_client.get_all_users(limit=limit, offset=o))
         items = data.get("items", [])

@@ -120,7 +120,7 @@ class BedolagaClient:
 
     # ── Referrals ──
 
-    async def get_all_users(self, limit: int = 500, offset: int = 0) -> dict:
+    async def get_all_users(self, limit: int = 200, offset: int = 0) -> dict:
         """Fetch all users for referral network building."""
         return await self._get("/users", params={"limit": limit, "offset": offset})
 
