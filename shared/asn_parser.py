@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import httpx
 from shared.config import get_shared_settings as get_settings
-from shared.database import DatabaseService
+from shared.database import DatabaseService, db_service as _db_service
 from shared.logger import logger
 
 
@@ -530,3 +530,7 @@ class ASNParser:
             'failed': failed,
             'skipped': skipped
         }
+
+
+# Module-level singleton
+asn_parser = ASNParser(_db_service)
