@@ -19,27 +19,25 @@ router = APIRouter()
 # ── Schemas ──
 
 class PromoCreateRequest(BaseModel):
-    code: str = Field(..., min_length=2, max_length=50)
-    discount_percent: Optional[int] = Field(None, ge=1, le=100)
-    discount_amount_kopeks: Optional[int] = Field(None, ge=1)
-    bonus_days: Optional[int] = Field(None, ge=1)
-    bonus_traffic_gb: Optional[float] = Field(None, gt=0)
-    max_uses: Optional[int] = Field(None, ge=1)
-    expires_at: Optional[str] = None
+    code: str = Field(..., min_length=1, max_length=50)
+    type: str = "balance"
+    balance_bonus_kopeks: int = 0
+    subscription_days: int = 0
+    max_uses: int = Field(default=1, ge=0)
+    valid_from: Optional[str] = None
+    valid_until: Optional[str] = None
     is_active: bool = True
-    description: Optional[str] = Field(None, max_length=500)
 
 
 class PromoUpdateRequest(BaseModel):
-    code: Optional[str] = Field(None, min_length=2, max_length=50)
-    discount_percent: Optional[int] = Field(None, ge=0, le=100)
-    discount_amount_kopeks: Optional[int] = Field(None, ge=0)
-    bonus_days: Optional[int] = Field(None, ge=0)
-    bonus_traffic_gb: Optional[float] = Field(None, ge=0)
+    code: Optional[str] = Field(None, min_length=1, max_length=50)
+    type: Optional[str] = None
+    balance_bonus_kopeks: Optional[int] = None
+    subscription_days: Optional[int] = None
     max_uses: Optional[int] = Field(None, ge=0)
-    expires_at: Optional[str] = None
+    valid_from: Optional[str] = None
+    valid_until: Optional[str] = None
     is_active: Optional[bool] = None
-    description: Optional[str] = Field(None, max_length=500)
 
 
 # ── List / Get ──
