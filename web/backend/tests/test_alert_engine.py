@@ -435,3 +435,105 @@ class TestCheckRules:
             await engine._check_rules()
 
         mock_eval.assert_awaited_once()
+
+
+# ── max_offline_minutes filtering ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_evaluate_rule_max_offline_filters_old_nodes():
+    """max_offline_minutes should filter out nodes offline longer than threshold."""
+    engine = AlertEngine()
+    rule = {
+        "id": 1, "name": "test", "metric": "node_offline_minutes",
+        "operator": "gt", "threshold": 5, "cooldown_minutes": 0,
+        "last_triggered_at": None, "severity": "warning",
+        "channels": '["in_app"]', "title_template": None,
+        "body_template": None, "topic_type": None,
+        "group_key": None, "escalation_admin_id": None,
+        "escalation_minutes": 0,
+        "max_offline_minutes": 60,  # Ignore nodes offline > 60 min
+    }
+    metrics = {
+        "node_offline_minutes": 1440,  # 24 hours
+        "offline_nodes": [
+            {"uuid": "a", "name": "old-node", "address": "1.1.1.1", "offline_minutes": 1440},
+            {"uuid": "b", "name": "new-node", "address": "2.2.2.2", "offline_minutes": 10},
+        ],
+    }
+    # Should fire with filtered metrics (only new-node)
+    with patch.object(engine, '_fire_alert', new_callable=AsyncMock) as mock_fire:
+        await engine._evaluate_rule(rule, metrics)
+        assert mock_fire.called
+        call_metrics = mock_fire.call_args[0][2]
+        assert len(call_metrics["offline_nodes"]) == 1
+        assert call_metrics["offline_nodes"][0]["name"] == "new-node"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_rule_max_offline_all_filtered():
+    """If all offline nodes exceed max_offline_minutes, skip alert entirely."""
+    engine = AlertEngine()
+    rule = {
+        "id": 1, "name": "test", "metric": "node_offline_minutes",
+        "operator": "gt", "threshold": 5, "cooldown_minutes": 0,
+        "last_triggered_at": None, "severity": "warning",
+        "channels": '["in_app"]', "title_template": None,
+        "body_template": None, "topic_type": None,
+        "group_key": None, "escalation_admin_id": None,
+        "escalation_minutes": 0,
+        "max_offline_minutes": 60,
+    }
+    metrics = {
+        "node_offline_minutes": 1440,
+        "offline_nodes": [
+            {"uuid": "a", "name": "old-node", "address": "1.1.1.1", "offline_minutes": 1440},
+        ],
+    }
+    with patch.object(engine, '_fire_alert', new_callable=AsyncMock) as mock_fire:
+        await engine._evaluate_rule(rule, metrics)
+        assert not mock_fire.called  # Should NOT fire
+
+
+# ── Template variables (IP) ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_fire_alert_template_variables_include_ip():
+    """Template variables should include {ip} and {node_ips}."""
+    engine = AlertEngine()
+    rule = {
+        "id": 1, "name": "test-alert", "metric": "node_offline_minutes",
+        "operator": "gt", "threshold": 5, "severity": "warning",
+        "channels": '["in_app"]',
+        "title_template": "Alert: {rule_name}",
+        "body_template": "Nodes: {node_names} IPs: {ip}",
+        "topic_type": None, "group_key": None,
+        "escalation_admin_id": None, "escalation_minutes": 0,
+    }
+    metrics = {
+        "offline_nodes": [
+            {"uuid": "a", "name": "node-1", "address": "10.0.0.1", "offline_minutes": 15},
+            {"uuid": "b", "name": "node-2", "address": "10.0.0.2", "offline_minutes": 20},
+        ],
+        "nodes_total": 5, "nodes_online": 3, "nodes_offline": 2,
+    }
+
+    conn = AsyncMock()
+    conn.execute = AsyncMock()
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=conn)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    db = MagicMock()
+    db.acquire.return_value = cm
+
+    with patch("shared.database.db_service", db), \
+         patch("web.backend.core.notification_service.create_notification",
+               new_callable=AsyncMock, return_value=1) as mock_notify:
+        await engine._fire_alert(rule, 20.0, metrics)
+
+    mock_notify.assert_awaited_once()
+    call_kwargs = mock_notify.call_args.kwargs
+    # The body should contain IPs since template uses {ip}
+    assert "10.0.0.1" in call_kwargs["body"]
+    assert "10.0.0.2" in call_kwargs["body"]

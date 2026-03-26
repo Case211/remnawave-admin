@@ -175,3 +175,40 @@ class TestPasswordVerification:
             mock.return_value.admin_login = "Admin"
             mock.return_value.admin_password = "secret"
             assert verify_admin_password("admin", "secret")
+
+
+# ── Password reset token tests ──
+
+def test_create_password_reset_token():
+    from web.backend.core.security import create_password_reset_token, decode_token
+    token = create_password_reset_token(admin_id=42, username="testuser")
+    payload = decode_token(token, token_type="password_reset")
+    assert payload is not None
+    assert payload["sub"] == "42"
+    assert payload["username"] == "testuser"
+    assert payload["type"] == "password_reset"
+
+def test_password_reset_token_wrong_type():
+    from web.backend.core.security import create_password_reset_token, decode_token
+    token = create_password_reset_token(admin_id=1, username="admin")
+    # Should fail when checking as access token
+    payload = decode_token(token, token_type="access")
+    assert payload is None
+
+def test_password_reset_token_expired():
+    from web.backend.core.security import decode_token
+    from jose import jwt
+    from datetime import datetime, timezone, timedelta
+    from web.backend.core.config import get_web_settings
+    settings = get_web_settings()
+    # Create an already-expired token
+    payload = {
+        "sub": "1",
+        "username": "admin",
+        "exp": int((datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()),
+        "iat": int((datetime.now(timezone.utc) - timedelta(hours=2)).timestamp()),
+        "type": "password_reset",
+    }
+    token = jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+    result = decode_token(token, token_type="password_reset")
+    assert result is None

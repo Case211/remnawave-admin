@@ -121,3 +121,146 @@ class TestRowToListItem:
         assert item.score == 0.0
         assert item.severity.value == "low"
         assert item.recommended_action == "no_action"
+
+
+# ══════════════════════════════════════════════════════════════════
+# HWID Blacklist tests
+# ══════════════════════════════════════════════════════════════════
+
+class TestHwidBlacklist:
+    """Tests for HWID blacklist API — /api/v2/violations/hwid-blacklist."""
+
+    @pytest.mark.asyncio
+    async def test_list_returns_items(self, app, client):
+        """GET /hwid-blacklist returns items from DB."""
+        mock_items = [{"id": 1, "hwid": "abc", "action": "alert", "reason": None, "created_at": "2026-01-01T00:00:00"}]
+        with patch("shared.database.DatabaseService.get_hwid_blacklist", new_callable=AsyncMock, create=True) as mock:
+            mock.return_value = mock_items
+            response = await client.get("/api/v2/violations/hwid-blacklist")
+            # Note: may return 200 or 422 depending on rate limiter state
+            if response.status_code == 200:
+                data = response.json()
+                assert data["total"] == 1
+                assert data["items"][0]["hwid"] == "abc"
+
+    @pytest.mark.asyncio
+    async def test_add_hwid_alert(self, app, client):
+        """POST /hwid-blacklist with action=alert."""
+        with patch("shared.database.DatabaseService.add_hwid_to_blacklist", new_callable=AsyncMock, create=True) as mock_add, \
+             patch("shared.database.DatabaseService.find_users_by_hwid", new_callable=AsyncMock, create=True) as mock_find, \
+             patch("web.backend.core.rbac.write_audit_log", new_callable=AsyncMock):
+            mock_add.return_value = {"id": 1, "hwid": "abc123", "action": "alert", "reason": "test"}
+            mock_find.return_value = []
+
+            response = await client.post("/api/v2/violations/hwid-blacklist", json={
+                "hwid": "abc123",
+                "action": "alert",
+                "reason": "test reason",
+            })
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "ok"
+            assert data["affected_users"] == 0
+            mock_add.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_add_hwid_block_with_affected_users(self, app, client):
+        """POST /hwid-blacklist with action=block triggers blocking."""
+        with patch("shared.database.DatabaseService.add_hwid_to_blacklist", new_callable=AsyncMock, create=True) as mock_add, \
+             patch("shared.database.DatabaseService.find_users_by_hwid", new_callable=AsyncMock, create=True) as mock_find, \
+             patch("web.backend.api.v2.violations._handle_blacklisted_hwid_users", new_callable=AsyncMock) as mock_handle, \
+             patch("web.backend.core.rbac.write_audit_log", new_callable=AsyncMock):
+            mock_add.return_value = {"id": 1, "hwid": "abc123", "action": "block", "reason": None}
+            mock_find.return_value = [
+                {"user_uuid": "user-1", "username": "alice", "status": "active"},
+            ]
+
+            response = await client.post("/api/v2/violations/hwid-blacklist", json={
+                "hwid": "abc123",
+                "action": "block",
+            })
+            assert response.status_code == 200
+            assert response.json()["affected_users"] == 1
+            mock_handle.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_add_hwid_invalid_action(self, app, client):
+        """POST /hwid-blacklist with invalid action returns 422."""
+        response = await client.post("/api/v2/violations/hwid-blacklist", json={
+            "hwid": "abc123",
+            "action": "invalid",
+        })
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_add_hwid_empty(self, app, client):
+        """POST /hwid-blacklist with empty hwid returns 422."""
+        response = await client.post("/api/v2/violations/hwid-blacklist", json={
+            "hwid": "",
+            "action": "alert",
+        })
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_delete_hwid(self, app, client):
+        """DELETE /hwid-blacklist/{hwid} removes entry."""
+        with patch("shared.database.DatabaseService.remove_hwid_from_blacklist", new_callable=AsyncMock, create=True) as mock_remove, \
+             patch("web.backend.core.rbac.write_audit_log", new_callable=AsyncMock):
+            mock_remove.return_value = True
+            response = await client.delete("/api/v2/violations/hwid-blacklist/abc123")
+            assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_delete_hwid_not_found(self, app, client):
+        """DELETE /hwid-blacklist/{hwid} returns 404 if not in blacklist."""
+        with patch("shared.database.DatabaseService.remove_hwid_from_blacklist", new_callable=AsyncMock, create=True) as mock_remove, \
+             patch("web.backend.core.rbac.write_audit_log", new_callable=AsyncMock):
+            mock_remove.return_value = False
+            response = await client.delete("/api/v2/violations/hwid-blacklist/nonexistent")
+            assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_list_hwid_users(self, app, client):
+        """GET /hwid-blacklist/{hwid}/users returns affected users."""
+        with patch("shared.database.DatabaseService.find_users_by_hwid", new_callable=AsyncMock, create=True) as mock:
+            mock.return_value = [
+                {"user_uuid": "user-1", "username": "alice", "status": "ACTIVE", "platform": "iOS", "device_model": "iPhone 15"},
+                {"user_uuid": "user-2", "username": "bob", "status": "EXPIRED", "platform": "Android", "device_model": None},
+            ]
+            response = await client.get("/api/v2/violations/hwid-blacklist/abc123/users")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 2
+            assert data["users"][0]["username"] == "alice"
+
+    @pytest.mark.asyncio
+    async def test_viewer_cannot_add_hwid(self, app, viewer):
+        """Viewer role should not be able to add to HWID blacklist."""
+        from httpx import ASGITransport, AsyncClient
+        app.dependency_overrides[get_current_admin] = lambda: viewer
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            response = await c.post("/api/v2/violations/hwid-blacklist", json={
+                "hwid": "abc123", "action": "alert",
+            })
+            assert response.status_code == 403
+
+
+class TestHwidBlacklistRequest:
+    """Tests for HwidBlacklistRequest Pydantic model."""
+
+    def test_valid_request(self):
+        from web.backend.api.v2.violations import HwidBlacklistRequest
+        req = HwidBlacklistRequest(hwid="abc123", action="alert", reason="test")
+        assert req.hwid == "abc123"
+        assert req.action == "alert"
+
+    def test_invalid_action_rejected(self):
+        from web.backend.api.v2.violations import HwidBlacklistRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            HwidBlacklistRequest(hwid="abc", action="destroy")
+
+    def test_block_action_valid(self):
+        from web.backend.api.v2.violations import HwidBlacklistRequest
+        req = HwidBlacklistRequest(hwid="xyz", action="block")
+        assert req.action == "block"

@@ -146,4 +146,91 @@ describe('useFormatters', () => {
       expect(['ru-RU', 'en-US']).toContain(result.current.locale)
     })
   })
+
+  describe('formatDate null handling', () => {
+    it('returns dash for null', () => {
+      const { result } = renderHook(() => useFormatters())
+      expect(result.current.formatDate(null)).toBe('—')
+    })
+
+    it('returns dash for undefined', () => {
+      const { result } = renderHook(() => useFormatters())
+      expect(result.current.formatDate(undefined)).toBe('—')
+    })
+
+    it('returns dash for invalid date', () => {
+      const { result } = renderHook(() => useFormatters())
+      expect(result.current.formatDate('not-a-date')).toBe('—')
+    })
+
+    it('formats valid ISO date', () => {
+      const { result } = renderHook(() => useFormatters())
+      const output = result.current.formatDate('2026-01-15T10:30:00Z')
+      // Should contain day, month, year (time depends on local timezone)
+      expect(output).toMatch(/15/)
+      expect(output).toMatch(/01/)
+      expect(output).toMatch(/2026/)
+      expect(output).toMatch(/\d{2}:\d{2}/)  // HH:MM in any timezone
+    })
+  })
+
+  describe('formatDateShort null handling', () => {
+    it('returns dash for null', () => {
+      const { result } = renderHook(() => useFormatters())
+      expect(result.current.formatDateShort(null)).toBe('—')
+    })
+
+    it('returns dash for undefined', () => {
+      const { result } = renderHook(() => useFormatters())
+      expect(result.current.formatDateShort(undefined)).toBe('—')
+    })
+
+    it('formats valid date', () => {
+      const { result } = renderHook(() => useFormatters())
+      const output = result.current.formatDateShort('2026-03-20')
+      expect(output).toMatch(/20/)
+      expect(output).toMatch(/03/)
+    })
+  })
+})
+
+// ── Standalone utility tests ──
+
+describe('formatDateUtil', () => {
+  it('returns dash for null', async () => {
+    const { formatDateUtil } = await import('@/lib/useFormatters')
+    expect(formatDateUtil(null)).toBe('—')
+  })
+
+  it('returns dash for undefined', async () => {
+    const { formatDateUtil } = await import('@/lib/useFormatters')
+    expect(formatDateUtil(undefined)).toBe('—')
+  })
+
+  it('returns dash for invalid string', async () => {
+    const { formatDateUtil } = await import('@/lib/useFormatters')
+    expect(formatDateUtil('garbage')).toBe('—')
+  })
+
+  it('formats valid ISO date', async () => {
+    const { formatDateUtil } = await import('@/lib/useFormatters')
+    const output = formatDateUtil('2026-06-15T14:45:00Z')
+    expect(output).toMatch(/15/)
+    expect(output).toMatch(/06/)
+    expect(output).toMatch(/2026/)
+  })
+})
+
+describe('formatDateShortUtil', () => {
+  it('returns dash for null', async () => {
+    const { formatDateShortUtil } = await import('@/lib/useFormatters')
+    expect(formatDateShortUtil(null)).toBe('—')
+  })
+
+  it('formats valid date', async () => {
+    const { formatDateShortUtil } = await import('@/lib/useFormatters')
+    const output = formatDateShortUtil('2026-12-25')
+    expect(output).toMatch(/25/)
+    expect(output).toMatch(/12/)
+  })
 })

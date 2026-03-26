@@ -609,146 +609,6 @@ async def export_violations_csv(
     )
 
 
-@router.get("/{violation_id}", response_model=ViolationDetail)
-async def get_violation(
-    violation_id: int,
-    admin: AdminUser = Depends(require_permission("violations", "view")),
-    db: DatabaseService = Depends(get_db),
-):
-    """Детальная информация о нарушении."""
-    violation = await db.get_violation_by_id(violation_id)
-
-    if not violation:
-        raise api_error(404, E.VIOLATION_NOT_FOUND)
-
-    return ViolationDetail(
-        id=int(violation.get('id', 0)),
-        user_uuid=str(violation.get('user_uuid', '')),
-        username=violation.get('username'),
-        email=violation.get('email'),
-        telegram_id=violation.get('telegram_id'),
-        score=float(violation.get('score', 0) or 0),
-        recommended_action=violation.get('recommended_action') or 'no_action',
-        confidence=float(violation.get('confidence', 0) or 0),
-        detected_at=violation.get('detected_at') or datetime.utcnow(),
-        temporal_score=violation.get('temporal_score') or 0,
-        geo_score=violation.get('geo_score') or 0,
-        asn_score=violation.get('asn_score') or 0,
-        profile_score=violation.get('profile_score') or 0,
-        device_score=violation.get('device_score') or 0,
-        hwid_score=violation.get('hwid_score') or 0,
-        reasons=violation.get('reasons') or [],
-        countries=violation.get('countries') or [],
-        asn_types=violation.get('asn_types') or [],
-        ips=violation.get('ip_addresses') or violation.get('ips') or [],
-        action_taken=violation.get('action_taken'),
-        action_taken_at=violation.get('action_taken_at'),
-        action_taken_by=violation.get('action_taken_by'),
-        notified_at=violation.get('notified_at'),
-        raw_data=violation.get('raw_breakdown') or violation.get('raw_data'),
-        hwid_matched_users=_parse_hwid_matched(violation.get('hwid_matched_users')),
-        admin_comment=violation.get('admin_comment'),
-    )
-
-
-@router.post("/{violation_id}/resolve")
-async def resolve_violation(
-    violation_id: int,
-    data: ResolveViolationRequest,
-    request: Request,
-    admin: AdminUser = Depends(require_permission("violations", "resolve")),
-    db: DatabaseService = Depends(get_db),
-):
-    """
-    Разрешить нарушение (принять действие).
-
-    Возможные действия:
-    - ignore/dismiss: Игнорировать
-    - block: Заблокировать пользователя в панели Remnawave
-    """
-    action_value = data.action.value if hasattr(data.action, 'value') else str(data.action)
-
-    # При блокировке — реально отключаем пользователя через Panel API
-    if action_value == "block":
-        violation = await db.get_violation_by_id(violation_id)
-        if not violation:
-            raise api_error(404, E.VIOLATION_UPDATE_FAILED)
-
-        user_uuid = violation.get("user_uuid")
-        if user_uuid:
-            try:
-                from shared.api_client import api_client
-                await api_client.disable_user(user_uuid)
-                logger.info(
-                    "User %s disabled via violation resolve by admin '%s'",
-                    user_uuid, admin.username,
-                )
-            except ImportError:
-                raise api_error(503, E.API_SERVICE_UNAVAILABLE)
-            except Exception as e:
-                logger.error("Failed to disable user %s: %s", user_uuid, e)
-                raise api_error(502, E.API_SERVICE_UNAVAILABLE, f"Failed to disable user: {e}")
-
-    success = await db.update_violation_action(
-        violation_id=violation_id,
-        action_taken=action_value,
-        admin_telegram_id=admin.telegram_id,
-        admin_comment=data.comment,
-    )
-
-    if not success:
-        raise api_error(409, E.VIOLATION_UPDATE_FAILED)
-
-    await write_audit_log(
-        admin_id=admin.account_id,
-        admin_username=admin.username,
-        action="violation.resolve",
-        resource="violations",
-        resource_id=str(violation_id),
-        details=json.dumps({"action": action_value, "comment": data.comment}),
-        ip_address=get_client_ip(request),
-    )
-
-    return {"status": "ok", "action": action_value}
-
-
-@router.post("/{violation_id}/annul")
-async def annul_violation(
-    violation_id: int,
-    request: Request,
-    data: AnnulViolationRequest = None,
-    admin: AdminUser = Depends(require_permission("violations", "resolve")),
-    db: DatabaseService = Depends(get_db),
-):
-    """Аннулировать нарушение (ложное срабатывание)."""
-    comment = data.comment if data else None
-    success = await db.update_violation_action(
-        violation_id=violation_id,
-        action_taken="annulled",
-        admin_telegram_id=admin.telegram_id,
-        admin_comment=comment,
-    )
-
-    if not success:
-        raise api_error(404, E.VIOLATION_UPDATE_FAILED)
-
-    await write_audit_log(
-        admin_id=admin.account_id,
-        admin_username=admin.username,
-        action="violation.annul",
-        resource="violations",
-        resource_id=str(violation_id),
-        details=json.dumps({"action": "annulled", "comment": comment}),
-        ip_address=get_client_ip(request),
-    )
-
-    return {"status": "ok", "action": "annulled"}
-
-
-# ══════════════════════════════════════════════════════════════════
-# HWID Blacklist
-# ══════════════════════════════════════════════════════════════════
-
 
 @router.get("/hwid-blacklist")
 @limiter.limit(RATE_READ)
@@ -910,3 +770,144 @@ async def _handle_blacklisted_hwid_users(
             channels=["in_app", "telegram"],
             topic_type="violations",
         )
+
+
+@router.get("/{violation_id}", response_model=ViolationDetail)
+async def get_violation(
+    violation_id: int,
+    admin: AdminUser = Depends(require_permission("violations", "view")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Детальная информация о нарушении."""
+    violation = await db.get_violation_by_id(violation_id)
+
+    if not violation:
+        raise api_error(404, E.VIOLATION_NOT_FOUND)
+
+    return ViolationDetail(
+        id=int(violation.get('id', 0)),
+        user_uuid=str(violation.get('user_uuid', '')),
+        username=violation.get('username'),
+        email=violation.get('email'),
+        telegram_id=violation.get('telegram_id'),
+        score=float(violation.get('score', 0) or 0),
+        recommended_action=violation.get('recommended_action') or 'no_action',
+        confidence=float(violation.get('confidence', 0) or 0),
+        detected_at=violation.get('detected_at') or datetime.utcnow(),
+        temporal_score=violation.get('temporal_score') or 0,
+        geo_score=violation.get('geo_score') or 0,
+        asn_score=violation.get('asn_score') or 0,
+        profile_score=violation.get('profile_score') or 0,
+        device_score=violation.get('device_score') or 0,
+        hwid_score=violation.get('hwid_score') or 0,
+        reasons=violation.get('reasons') or [],
+        countries=violation.get('countries') or [],
+        asn_types=violation.get('asn_types') or [],
+        ips=violation.get('ip_addresses') or violation.get('ips') or [],
+        action_taken=violation.get('action_taken'),
+        action_taken_at=violation.get('action_taken_at'),
+        action_taken_by=violation.get('action_taken_by'),
+        notified_at=violation.get('notified_at'),
+        raw_data=violation.get('raw_breakdown') or violation.get('raw_data'),
+        hwid_matched_users=_parse_hwid_matched(violation.get('hwid_matched_users')),
+        admin_comment=violation.get('admin_comment'),
+    )
+
+
+@router.post("/{violation_id}/resolve")
+async def resolve_violation(
+    violation_id: int,
+    data: ResolveViolationRequest,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+    db: DatabaseService = Depends(get_db),
+):
+    """
+    Разрешить нарушение (принять действие).
+
+    Возможные действия:
+    - ignore/dismiss: Игнорировать
+    - block: Заблокировать пользователя в панели Remnawave
+    """
+    action_value = data.action.value if hasattr(data.action, 'value') else str(data.action)
+
+    # При блокировке — реально отключаем пользователя через Panel API
+    if action_value == "block":
+        violation = await db.get_violation_by_id(violation_id)
+        if not violation:
+            raise api_error(404, E.VIOLATION_UPDATE_FAILED)
+
+        user_uuid = violation.get("user_uuid")
+        if user_uuid:
+            try:
+                from shared.api_client import api_client
+                await api_client.disable_user(user_uuid)
+                logger.info(
+                    "User %s disabled via violation resolve by admin '%s'",
+                    user_uuid, admin.username,
+                )
+            except ImportError:
+                raise api_error(503, E.API_SERVICE_UNAVAILABLE)
+            except Exception as e:
+                logger.error("Failed to disable user %s: %s", user_uuid, e)
+                raise api_error(502, E.API_SERVICE_UNAVAILABLE, f"Failed to disable user: {e}")
+
+    success = await db.update_violation_action(
+        violation_id=violation_id,
+        action_taken=action_value,
+        admin_telegram_id=admin.telegram_id,
+        admin_comment=data.comment,
+    )
+
+    if not success:
+        raise api_error(409, E.VIOLATION_UPDATE_FAILED)
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violation.resolve",
+        resource="violations",
+        resource_id=str(violation_id),
+        details=json.dumps({"action": action_value, "comment": data.comment}),
+        ip_address=get_client_ip(request),
+    )
+
+    return {"status": "ok", "action": action_value}
+
+
+@router.post("/{violation_id}/annul")
+async def annul_violation(
+    violation_id: int,
+    request: Request,
+    data: AnnulViolationRequest = None,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Аннулировать нарушение (ложное срабатывание)."""
+    comment = data.comment if data else None
+    success = await db.update_violation_action(
+        violation_id=violation_id,
+        action_taken="annulled",
+        admin_telegram_id=admin.telegram_id,
+        admin_comment=comment,
+    )
+
+    if not success:
+        raise api_error(404, E.VIOLATION_UPDATE_FAILED)
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violation.annul",
+        resource="violations",
+        resource_id=str(violation_id),
+        details=json.dumps({"action": "annulled", "comment": comment}),
+        ip_address=get_client_ip(request),
+    )
+
+    return {"status": "ok", "action": "annulled"}
+
+
+# ══════════════════════════════════════════════════════════════════
+# HWID Blacklist
+

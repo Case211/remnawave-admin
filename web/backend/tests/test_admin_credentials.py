@@ -127,3 +127,45 @@ class TestPasswordHashing:
         # Empty password can still be hashed (policy check is separate)
         hashed = hash_password("")
         assert verify_password("", hashed)
+
+
+# ── Cyrillic normalization tests ──
+
+def test_normalize_password_cyrillic_to_latin():
+    """Cyrillic look-alikes (С, А, Е, etc.) are converted to Latin equivalents."""
+    from web.backend.core.admin_credentials import _normalize_password
+    # С (Cyrillic) → C (Latin), А → A, Е → E
+    assert _normalize_password("@С_XDWс5zААqgЕ7%") == "@C_XDWc5zAAqgE7%"
+
+def test_normalize_password_pure_latin_unchanged():
+    from web.backend.core.admin_credentials import _normalize_password
+    assert _normalize_password("MyP@ssw0rd!") == "MyP@ssw0rd!"
+
+def test_normalize_password_empty():
+    from web.backend.core.admin_credentials import _normalize_password
+    assert _normalize_password("") == ""
+
+def test_validate_rejects_cyrillic():
+    from web.backend.core.admin_credentials import validate_password_strength
+    valid, err = validate_password_strength("@С_XDWс5zААqgЕ7%")
+    assert not valid
+    assert "Cyrillic" in err
+
+def test_validate_accepts_latin_special():
+    from web.backend.core.admin_credentials import validate_password_strength
+    valid, err = validate_password_strength("@C_XDWc5zAAqgE7%")
+    assert valid
+    assert err == ""
+
+def test_hash_verify_with_normalization():
+    """Hash with Cyrillic, verify with Latin — should match after normalization."""
+    from web.backend.core.admin_credentials import hash_password, verify_password
+    h = hash_password("Тест@С_XDW5z")  # Contains Cyrillic
+    # Verify with Latin equivalents
+    assert verify_password("Тест@C_XDW5z", h)  # С→C normalized
+
+def test_hash_verify_pure_latin():
+    from web.backend.core.admin_credentials import hash_password, verify_password
+    h = hash_password("SecureP@ss123!")
+    assert verify_password("SecureP@ss123!", h)
+    assert not verify_password("WrongPassword1!", h)
