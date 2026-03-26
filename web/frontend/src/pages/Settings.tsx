@@ -1332,11 +1332,15 @@ export default function Settings() {
           </div>
         )}
         {Object.entries(subcategories).map(([sub, subItems]) => (
-          <div key={sub} className="mt-3">
-            <div className="text-xs font-medium text-dark-300 uppercase tracking-wider mb-1 px-1">
-              {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
+          <div key={sub} className="mt-4">
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <div className="h-4 w-1 rounded-full bg-gradient-to-b from-cyan-500 to-teal-500" />
+              <span className="text-xs font-semibold text-dark-200 tracking-wide">
+                {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
+              </span>
+              <div className="flex-1 h-px bg-gradient-to-r from-dark-700/50 to-transparent" />
             </div>
-            <div className="bg-[var(--glass-bg)]/30 rounded-lg px-3 divide-y divide-dark-700/30">
+            <div className="bg-[var(--glass-bg)]/30 rounded-lg px-3 divide-y divide-dark-700/30 border border-[var(--glass-border)]/10">
               {subItems.map((item) => renderConfigItem(item))}
             </div>
           </div>
