@@ -100,7 +100,7 @@ export default function BedolagaDashboard() {
           <CardContent className="p-8 text-center">
             <AlertCircle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
             <h2 className="text-lg font-semibold mb-2">{t('bedolaga.notConfigured')}</h2>
-            <p className="text-dark-300 text-sm max-w-md mx-auto">{t('bedolaga.notConfiguredDesc')}</p>
+            <p className="text-dark-300 text-sm max-w-md mx-auto whitespace-pre-line text-left">{t('bedolaga.notConfiguredDesc')}</p>
           </CardContent>
         </Card>
       </div>

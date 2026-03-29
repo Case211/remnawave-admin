@@ -92,6 +92,9 @@ services:
       MAXMIND_CITY_DB: /app/geoip/GeoLite2-City.mmdb
       MAXMIND_ASN_DB: /app/geoip/GeoLite2-ASN.mmdb
       BACKUP_DIR: /app/backups
+      # Bedolaga Bot (опционально — подключение бота Bedolaga к админ-панели)
+      # BEDOLAGA_API_URL: http://bedolaga:8000
+      # BEDOLAGA_API_TOKEN: ${BEDOLAGA_API_TOKEN:-}
       # Redis (опционально, нужен при >1 инстансе для общего кеша и rate limiting)
       # REDIS_URL: redis://redis:6379/0
     volumes:
