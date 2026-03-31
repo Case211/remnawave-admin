@@ -724,23 +724,28 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
                     except Exception as geo_error:
                         logger.warning("GeoIP lookup failed for user %s: %s", user_uuid, geo_error)
 
-                try:
-                    from web.backend.core.violation_notifier import send_violation_notification
-                    await send_violation_notification(
-                        user_uuid=user_uuid,
-                        violation_score={
-                            "total": violation_score.total,
-                            "recommended_action": violation_score.recommended_action,
-                            "reasons": violation_score.reasons,
-                            "breakdown": violation_score.breakdown,
-                            "confidence": violation_score.confidence,
-                        },
-                        user_info=user_info,
-                        active_connections=active_conns,
-                        ip_metadata=ip_metadata,
-                    )
-                except Exception as notify_error:
-                    logger.warning("Failed to send violation notification for user %s: %s", user_uuid, notify_error)
+                # Skip notification for whitelisted users (partial whitelist may still detect violations
+                # from non-excluded analyzers, but we don't want to notify about them)
+                if whitelisted:
+                    logger.debug("User %s is whitelisted, skipping violation notification", user_uuid)
+                else:
+                    try:
+                        from web.backend.core.violation_notifier import send_violation_notification
+                        await send_violation_notification(
+                            user_uuid=user_uuid,
+                            violation_score={
+                                "total": violation_score.total,
+                                "recommended_action": violation_score.recommended_action,
+                                "reasons": violation_score.reasons,
+                                "breakdown": violation_score.breakdown,
+                                "confidence": violation_score.confidence,
+                            },
+                            user_info=user_info,
+                            active_connections=active_conns,
+                            ip_metadata=ip_metadata,
+                        )
+                    except Exception as notify_error:
+                        logger.warning("Failed to send violation notification for user %s: %s", user_uuid, notify_error)
 
                 try:
                     breakdown = violation_score.breakdown

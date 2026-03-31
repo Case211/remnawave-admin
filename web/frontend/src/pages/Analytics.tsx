@@ -1563,8 +1563,7 @@ function NodesCard() {
                 {sorted.map((node) => (
                   <TableRow
                     key={node.uuid}
-                    className="cursor-pointer hover:bg-[var(--glass-bg-hover)]/30"
-                    onClick={() => navigate(`/nodes/${node.uuid}`)}
+                    className="hover:bg-[var(--glass-bg-hover)]/30"
                   >
                     <TableCell className="font-medium text-white text-sm max-w-[160px] truncate">
                       {node.name}
