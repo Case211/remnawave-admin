@@ -215,6 +215,9 @@ async def get_top_users_by_traffic(
 ):
     """Get top users by traffic consumption, optionally for a date range."""
     if date_from and date_to:
+        # Panel API expects YYYY-MM-DD, not full ISO 8601
+        date_from = date_from[:10]
+        date_to = date_to[:10]
         return await _compute_top_users_range(date_from, date_to, limit)
     return await _compute_top_users(limit=limit)
 
@@ -275,6 +278,9 @@ async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20
     try:
         from web.backend.core.api_helper import fetch_nodes_usage_by_range
         resp = await fetch_nodes_usage_by_range(date_from, date_to, top_nodes_limit=100)
+        logger.debug("top-users-range response keys: %s, topNodes count: %s",
+                     list(resp.keys()) if isinstance(resp, dict) else type(resp),
+                     len(resp.get("topNodes", [])) if isinstance(resp, dict) else "N/A")
         if not resp:
             return {"items": [], "period": {"from": date_from, "to": date_to}}
 
@@ -283,7 +289,7 @@ async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20
         from shared.database import db_service
 
         # Get per-node user usage and aggregate
-        nodes_data = resp.get("topNodes", [])
+        nodes_data = resp.get("topNodes") or resp.get("nodes") or []
         user_traffic: Dict[str, int] = {}
 
         for node in nodes_data[:20]:  # Limit to top 20 nodes to avoid too many API calls
@@ -295,33 +301,38 @@ async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20
                     node_uuid, date_from, date_to, top_users_limit=limit
                 )
                 payload = node_users.get("response", node_users) if isinstance(node_users, dict) else {}
-                for u in payload.get("topUsers", []):
-                    uid = u.get("uuid", "")
-                    traffic = int(u.get("total", 0) or 0)
-                    user_traffic[uid] = user_traffic.get(uid, 0) + traffic
+                users_list = payload.get("topUsers") or payload.get("users") or []
+                if isinstance(payload, list):
+                    users_list = payload
+                for u in users_list:
+                    # Panel returns {username, total, color} — no UUID
+                    uname = u.get("username") or ""
+                    traffic = int(u.get("total") or u.get("totalBytes") or 0)
+                    if uname and traffic > 0:
+                        user_traffic[uname] = user_traffic.get(uname, 0) + traffic
             except Exception as e:
-                logger.debug("Failed to get node %s users usage: %s", node_uuid, e)
+                logger.debug("Failed to get node %s users usage: %s", node_uuid[:8], e)
 
-        # Sort by traffic and enrich with user info from DB
+        # Sort by traffic and enrich with user info from DB (keyed by username)
         sorted_users = sorted(user_traffic.items(), key=lambda x: x[1], reverse=True)[:limit]
         items = []
 
         if db_service.is_connected and sorted_users:
-            uuids = [u[0] for u in sorted_users]
+            usernames = [u[0] for u in sorted_users]
             async with db_service.acquire() as conn:
                 rows = await conn.fetch(
-                    "SELECT uuid, username, status, traffic_limit_bytes FROM users WHERE uuid = ANY($1)",
-                    uuids,
+                    "SELECT uuid, username, status, traffic_limit_bytes FROM users WHERE username = ANY($1)",
+                    usernames,
                 )
-                user_map = {str(r["uuid"]): r for r in rows}
+                user_map = {r["username"]: r for r in rows}
 
-            for uid, traffic in sorted_users:
-                info = user_map.get(uid, {})
+            for uname, traffic in sorted_users:
+                info = user_map.get(uname, {})
                 limit_bytes = info.get("traffic_limit_bytes")
                 usage_pct = round((traffic / limit_bytes) * 100, 1) if limit_bytes and limit_bytes > 0 else None
                 items.append({
-                    "uuid": uid,
-                    "username": info.get("username") or uid[:8],
+                    "uuid": str(info["uuid"]) if info.get("uuid") else "",
+                    "username": uname,
                     "status": info.get("status", "unknown"),
                     "used_traffic_bytes": traffic,
                     "traffic_limit_bytes": limit_bytes,
@@ -329,9 +340,9 @@ async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20
                     "online_at": None,
                 })
         else:
-            for uid, traffic in sorted_users:
+            for uname, traffic in sorted_users:
                 items.append({
-                    "uuid": uid, "username": uid[:8], "status": "unknown",
+                    "uuid": "", "username": uname, "status": "unknown",
                     "used_traffic_bytes": traffic, "traffic_limit_bytes": None,
                     "usage_percent": None, "online_at": None,
                 })
@@ -351,13 +362,19 @@ async def get_nodes_traffic(
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Per-node traffic breakdown for a date range."""
+    # Panel API expects YYYY-MM-DD, not full ISO 8601
+    date_from = date_from[:10]
+    date_to = date_to[:10]
     try:
         from web.backend.core.api_helper import fetch_nodes_usage_by_range
         resp = await fetch_nodes_usage_by_range(date_from, date_to, top_nodes_limit=100)
+        logger.debug("nodes-traffic response keys: %s", list(resp.keys()) if isinstance(resp, dict) else type(resp))
         if not resp:
             return {"items": [], "total_bytes": 0, "period": {"from": date_from, "to": date_to}}
 
-        nodes_data = resp.get("topNodes", [])
+        nodes_data = resp.get("topNodes") or resp.get("nodes") or []
+        if not nodes_data and isinstance(resp, dict):
+            logger.debug("nodes-traffic full resp sample: %s", str(resp)[:500])
 
         # Enrich with node names from DB
         from shared.database import db_service

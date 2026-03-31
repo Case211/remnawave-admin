@@ -423,11 +423,9 @@ class TestFetchNodesUsageByRange:
 
 class TestFetchNodesRealtimeUsage:
 
-    @patch("web.backend.core.api_helper.api_get")
-    async def test_returns_list(self, mock_api_get):
-        nodes = [{"nodeUuid": "n1", "totalBytes": 1000}]
-        mock_api_get.return_value = {"response": nodes}
-        assert await fetch_nodes_realtime_usage() == nodes
+    async def test_returns_empty_list_deprecated(self):
+        """Panel 2.7 removed this endpoint — always returns empty list."""
+        assert await fetch_nodes_realtime_usage() == []
 
     @patch("web.backend.core.api_helper.api_get")
     async def test_api_error(self, mock_api_get):

@@ -1493,20 +1493,20 @@ function NodesTrafficCard() {
             {items.map((node) => (
               <div
                 key={node.uuid}
-                className="flex items-center justify-between bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)]"
+                className="bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)] space-y-1.5"
               >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className="text-sm text-white font-medium truncate max-w-[200px]">{node.name}</span>
-                  <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden hidden sm:block">
-                    <div
-                      className="h-full bg-primary-500/70 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.max(node.percent, 1)}%` }}
-                    />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-white font-medium truncate">{node.name}</span>
+                  <div className="flex items-center gap-3 ml-3 shrink-0">
+                    <span className="text-xs text-muted-foreground font-mono">{node.percent}%</span>
+                    <span className="text-sm text-white font-mono w-24 text-right">{formatBytes(node.traffic_bytes)}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 ml-3">
-                  <span className="text-xs text-muted-foreground font-mono">{node.percent}%</span>
-                  <span className="text-sm text-white font-mono w-24 text-right">{formatBytes(node.traffic_bytes)}</span>
+                <div className="w-full h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary-500/70 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.max(node.percent, 1)}%` }}
+                  />
                 </div>
               </div>
             ))}
@@ -2581,7 +2581,7 @@ function TorrentAnalyticsCard() {
 
 // ── Main Page ───────────────────────────────────────────────────
 
-const VALID_TABS = ['geography', 'users', 'trends', 'shared-hwids', 'providers', 'nodes', 'geo-balance', 'torrent', 'retention'] as const
+const VALID_TABS = ['geography', 'users', 'trends', 'shared-hwids', 'providers', 'nodes-traffic', 'nodes', 'geo-balance', 'torrent', 'retention'] as const
 
 export default function Analytics() {
   const { t } = useTranslation()
