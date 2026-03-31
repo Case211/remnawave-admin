@@ -33,9 +33,6 @@ import {
   XCircle,
   Trash2,
   ShieldOff,
-  ShieldCheck,
-  Plus,
-  Calendar,
   Search,
   MessageSquare,
   ArrowUpRight,
@@ -47,7 +44,6 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -62,7 +58,6 @@ import type {
   PaginatedResponse,
   TopViolator,
   IPInfo,
-  WhitelistItem,
 } from '@/types/violations'
 
 const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid'] as const
@@ -129,10 +124,6 @@ const fetchIPLookup = async (ips: string[]): Promise<Record<string, IPInfo>> => 
   return data.results || {}
 }
 
-const fetchWhitelist = async (limit: number, offset: number): Promise<{ items: WhitelistItem[]; total: number }> => {
-  const { data } = await client.get('/violations/whitelist', { params: { limit, offset } })
-  return data
-}
 
 // ── Utilities ────────────────────────────────────────────────────
 
@@ -1384,401 +1375,7 @@ function WhitelistAddDialog({
   )
 }
 
-// ── Whitelist tab ────────────────────────────────────────────────
-
-// ══════════════════════════════════════════════════════════════════
-// HWID Blacklist Tab
-// ══════════════════════════════════════════════════════════════════
-
-function HwidBlacklistTab() {
-  const { t } = useTranslation()
-  const { formatDate } = useFormatters()
-  const queryClient = useQueryClient()
-  const canEdit = useHasPermission('violations', 'create')
-  const [addOpen, setAddOpen] = useState(false)
-  const [newHwid, setNewHwid] = useState('')
-  const [newAction, setNewAction] = useState<'alert' | 'block'>('alert')
-  const [newReason, setNewReason] = useState('')
-  const [expandedHwid, setExpandedHwid] = useState<string | null>(null)
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['hwid-blacklist'],
-    queryFn: async () => {
-      const { data } = await client.get('/violations/hwid-blacklist')
-      return data as { items: Array<{ id: number; hwid: string; action: string; reason: string | null; added_by_username: string | null; created_at: string }>; total: number }
-    },
-  })
-
-  const { data: usersData } = useQuery({
-    queryKey: ['hwid-blacklist-users', expandedHwid],
-    queryFn: async () => {
-      const { data } = await client.get(`/violations/hwid-blacklist/${expandedHwid}/users`)
-      return data as { users: Array<{ user_uuid: string; username: string | null; status: string | null; platform: string | null; device_model: string | null }>; total: number }
-    },
-    enabled: !!expandedHwid,
-  })
-
-  const addMutation = useMutation({
-    mutationFn: () => client.post('/violations/hwid-blacklist', { hwid: newHwid.trim(), action: newAction, reason: newReason.trim() || null }),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['hwid-blacklist'] })
-      const affected = (res.data as { affected_users?: number })?.affected_users || 0
-      toast.success(t('violations.hwidBlacklist.added', { count: affected }))
-      setAddOpen(false)
-      setNewHwid('')
-      setNewAction('alert')
-      setNewReason('')
-    },
-    onError: () => toast.error(t('common.error')),
-  })
-
-  const removeMutation = useMutation({
-    mutationFn: (hwid: string) => client.delete(`/violations/hwid-blacklist/${hwid}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hwid-blacklist'] })
-      toast.success(t('violations.hwidBlacklist.removed'))
-    },
-    onError: () => toast.error(t('common.error')),
-  })
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-white">{t('violations.hwidBlacklist.title')}</h3>
-          <p className="text-xs text-dark-300 mt-0.5">{t('violations.hwidBlacklist.description')}</p>
-        </div>
-        {canEdit && (
-          <Button size="sm" onClick={() => setAddOpen(true)} className="gap-1">
-            <Plus className="w-4 h-4" /> {t('violations.hwidBlacklist.add')}
-          </Button>
-        )}
-      </div>
-
-      {/* Add dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="w-[95vw] max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t('violations.hwidBlacklist.addTitle')}</DialogTitle>
-            <DialogDescription>{t('violations.hwidBlacklist.addDescription')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <label className="text-xs font-medium text-dark-300 mb-1 block">HWID</label>
-              <input
-                value={newHwid}
-                onChange={(e) => setNewHwid(e.target.value)}
-                placeholder="a1b2c3d4e5f6..."
-                className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm font-mono text-white placeholder:text-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-dark-300 mb-1 block">{t('violations.hwidBlacklist.action')}</label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['alert', 'block'] as const).map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => setNewAction(a)}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors',
-                      newAction === a
-                        ? a === 'block' ? 'border-red-500/50 bg-red-500/10 text-red-400' : 'border-amber-500/50 bg-amber-500/10 text-amber-400'
-                        : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-dark-300',
-                    )}
-                  >
-                    {a === 'block' ? <Ban className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-                    {a === 'block' ? t('violations.hwidBlacklist.actionBlock') : t('violations.hwidBlacklist.actionAlert')}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-dark-400 mt-1">
-                {newAction === 'block' ? t('violations.hwidBlacklist.actionBlockHint') : t('violations.hwidBlacklist.actionAlertHint')}
-              </p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-dark-300 mb-1 block">{t('violations.hwidBlacklist.reason')}</label>
-              <input
-                value={newReason}
-                onChange={(e) => setNewReason(e.target.value)}
-                placeholder={t('violations.hwidBlacklist.reasonPlaceholder')}
-                className="flex h-10 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm text-white placeholder:text-dark-400 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>{t('common.cancel')}</Button>
-            <Button onClick={() => addMutation.mutate()} disabled={!newHwid.trim() || addMutation.isPending}>
-              {addMutation.isPending ? t('common.saving') : t('violations.hwidBlacklist.addButton')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* List */}
-      {isLoading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
-      ) : !data?.items?.length ? (
-        <Card><CardContent className="py-8 text-center text-dark-300 text-sm">{t('violations.hwidBlacklist.empty')}</CardContent></Card>
-      ) : (
-        <div className="space-y-2">
-          {data.items.map((item) => (
-            <Card key={item.id} className="p-0 overflow-hidden">
-              <div className="flex items-center justify-between p-3 sm:p-4">
-                <button
-                  onClick={() => setExpandedHwid(expandedHwid === item.hwid ? null : item.hwid)}
-                  className="flex-1 text-left flex items-center gap-3 min-w-0"
-                >
-                  <Fingerprint className="w-4 h-4 text-dark-300 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-mono text-white truncate">{item.hwid}</p>
-                    <p className="text-[11px] text-dark-400">
-                      {item.added_by_username && <span>{item.added_by_username} · </span>}
-                      {formatDate(item.created_at)}
-                      {item.reason && <span> · {item.reason}</span>}
-                    </p>
-                  </div>
-                </button>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Badge className={cn(
-                    'text-[10px]',
-                    item.action === 'block' ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-                  )}>
-                    {item.action === 'block' ? t('violations.hwidBlacklist.actionBlock') : t('violations.hwidBlacklist.actionAlert')}
-                  </Badge>
-                  {canEdit && (
-                    <Button variant="ghost" size="sm" onClick={() => removeMutation.mutate(item.hwid)} className="text-dark-400 hover:text-red-400 h-8 w-8 p-0">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-              {/* Expanded: show affected users */}
-              {expandedHwid === item.hwid && usersData && (
-                <div className="border-t border-[var(--glass-border)] px-4 py-3 bg-[var(--glass-bg)]/30">
-                  <p className="text-xs text-dark-400 mb-2">{t('violations.hwidBlacklist.affectedUsers', { count: usersData.total })}</p>
-                  {usersData.users.length === 0 ? (
-                    <p className="text-xs text-dark-400">{t('violations.hwidBlacklist.noUsers')}</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {usersData.users.map((u) => (
-                        <div key={u.user_uuid} className="flex items-center gap-2 text-xs">
-                          <User className="w-3 h-3 text-dark-400" />
-                          <span className="text-white">{u.username || u.user_uuid.slice(0, 8)}</span>
-                          {u.platform && <span className="text-dark-400">{u.platform}</span>}
-                          {u.device_model && <span className="text-dark-400">{u.device_model}</span>}
-                          {u.status && (
-                            <Badge className={cn('text-[9px] py-0', u.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400' : 'bg-dark-600 text-dark-300')}>
-                              {u.status}
-                            </Badge>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-
-function WhitelistTab() {
-  const { t } = useTranslation()
-  const { formatDate } = useFormatters()
-  const queryClient = useQueryClient()
-  const canResolve = useHasPermission('violations', 'resolve')
-  const [wlPage, setWlPage] = useState(1)
-  const perPage = 20
-  const [confirmRemoveUuid, setConfirmRemoveUuid] = useState<string | null>(null)
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [manualUuid, setManualUuid] = useState('')
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['violationWhitelist', wlPage],
-    queryFn: () => fetchWhitelist(perPage, (wlPage - 1) * perPage),
-  })
-
-  const addMutation = useMutation({
-    mutationFn: (body: { user_uuid: string; reason?: string; expires_in_days?: number; excluded_analyzers?: string[] }) =>
-      client.post('/violations/whitelist', body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })
-      queryClient.invalidateQueries({ queryKey: ['violations'] })
-      queryClient.invalidateQueries({ queryKey: ['violationStats'] })
-      toast.success(t('violations.toast.whitelistAdded'))
-      setAddDialogOpen(false)
-      setManualUuid('')
-    },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || t('common.error'))
-    },
-  })
-
-  const removeMutation = useMutation({
-    mutationFn: (userUuid: string) => client.delete(`/violations/whitelist/${userUuid}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })
-      toast.success(t('violations.toast.whitelistRemoved'))
-    },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || t('common.error'))
-    },
-  })
-
-  const items = data?.items || []
-  const total = data?.total || 0
-  const totalPages = Math.max(1, Math.ceil(total / perPage))
-
-  const isExpired = (expiresAt: string | null) => {
-    if (!expiresAt) return false
-    return new Date(expiresAt) < new Date()
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Header with add button */}
-      {canResolve && (
-        <div className="flex justify-end">
-          <Button onClick={() => setAddDialogOpen(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            {t('violations.whitelist.addButton')}
-          </Button>
-        </div>
-      )}
-
-      {/* List */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Card key={i}><CardContent className="p-4"><Skeleton className="h-12 w-full" /></CardContent></Card>
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <Card className="text-center py-12">
-          <CardContent>
-            <ShieldCheck className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-            <p className="text-dark-200 text-lg">{t('violations.whitelist.empty')}</p>
-            <p className="text-sm text-dark-200 mt-1">{t('violations.whitelist.emptyDesc')}</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {items.map((item, i) => (
-            <Card
-              key={item.id}
-              className={cn(
-                'hover:border-[var(--glass-border)]/40 transition-colors animate-fade-in-up',
-                isExpired(item.expires_at) && 'opacity-60'
-              )}
-              style={{ animationDelay: `${i * 0.04}s` }}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4">
-                  <div className="p-2.5 rounded-lg bg-primary/10 flex-shrink-0">
-                    <ShieldOff className="w-5 h-5 text-primary-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="font-semibold text-white">
-                        {item.username || item.email || item.user_uuid.slice(0, 8)}
-                      </span>
-                      {isExpired(item.expires_at) && (
-                        <Badge variant="secondary" className="text-xs">{t('violations.whitelist.expired')}</Badge>
-                      )}
-                      {item.excluded_analyzers ? (
-                        <Badge variant="outline" className="text-xs text-primary-400 border-primary/30">
-                          {t('violations.exclusions.partialExclusion')}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-xs text-primary-400 border-primary/30">
-                          {t('violations.exclusions.fullWhitelist')}
-                        </Badge>
-                      )}
-                    </div>
-                    {Array.isArray(item.excluded_analyzers) && item.excluded_analyzers.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-1">
-                        {item.excluded_analyzers.map(a => (
-                          <Badge key={a} variant="secondary" className="text-xs bg-primary/10 text-primary-400 border-primary/20">
-                            {t(`violations.analyzers.${a}`)}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dark-200">
-                      {item.reason && <span>{item.reason}</span>}
-                      <span>
-                        <Calendar className="w-3.5 h-3.5 inline mr-0.5" />
-                        {t('violations.whitelist.addedBy')}: {item.added_by_username || '—'}
-                      </span>
-                      <span>{formatDate(item.added_at)}</span>
-                      {item.expires_at ? (
-                        <span>
-                          {t('violations.whitelist.expiresAt')}: {formatDate(item.expires_at)}
-                        </span>
-                      ) : (
-                        <span className="text-primary-400">{t('violations.whitelist.noExpiration')}</span>
-                      )}
-                    </div>
-                  </div>
-                  {canResolve && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setConfirmRemoveUuid(item.user_uuid)}
-                      className="text-dark-300 hover:text-red-400 flex-shrink-0"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-2 pt-2">
-          <Button variant="ghost" size="sm" disabled={wlPage <= 1} onClick={() => setWlPage(wlPage - 1)}>
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <span className="text-sm text-dark-200">{wlPage} / {totalPages}</span>
-          <Button variant="ghost" size="sm" disabled={wlPage >= totalPages} onClick={() => setWlPage(wlPage + 1)}>
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
-
-      {/* Add dialog (manual UUID) */}
-      <WhitelistAddDialog
-        open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
-        userUuid={manualUuid}
-        onSubmit={(data) => addMutation.mutate(data)}
-      />
-
-      {/* Confirm remove dialog */}
-      <ConfirmDialog
-        open={confirmRemoveUuid !== null}
-        onOpenChange={(open) => { if (!open) setConfirmRemoveUuid(null) }}
-        title={t('violations.whitelist.confirmRemove')}
-        description={t('violations.whitelist.confirmRemoveDesc')}
-        variant="destructive"
-        onConfirm={() => {
-          if (confirmRemoveUuid) removeMutation.mutate(confirmRemoveUuid)
-          setConfirmRemoveUuid(null)
-        }}
-      />
-    </div>
-  )
-}
+// ── HwidBlacklistTab and WhitelistTab moved to Blocking.tsx ──
 
 // ── Stats overview ───────────────────────────────────────────────
 
@@ -1956,7 +1553,7 @@ function ViolationSkeleton() {
 
 // ── Main page component ──────────────────────────────────────────
 
-type Tab = 'all' | 'pending' | 'top' | 'reports' | 'whitelist' | 'hwid_blacklist'
+type Tab = 'all' | 'pending' | 'top' | 'reports'
 
 export default function Violations() {
   const { t } = useTranslation()
@@ -1968,7 +1565,7 @@ export default function Violations() {
   const getP = (k: string, d: string) => searchParams.get(k) ?? d
   const getN = (k: string, d: number) => { const v = searchParams.get(k); return v !== null ? (Number(v) || d) : d }
 
-  const validTabs: Tab[] = ['all', 'pending', 'top', 'reports', 'whitelist', 'hwid_blacklist']
+  const validTabs: Tab[] = ['all', 'pending', 'top', 'reports']
   const rawTab = getP('tab', 'all') as Tab
   const tab = validTabs.includes(rawTab) ? rawTab : 'all'
   const page = getN('page', 1)
@@ -2554,8 +2151,6 @@ export default function Violations() {
           { key: 'all' as Tab, label: t('violations.tabs.all'), count: stats?.total },
           { key: 'pending' as Tab, label: t('violations.tabs.pending'), count: undefined },
           { key: 'top' as Tab, label: t('violations.tabs.topViolators'), count: undefined },
-          { key: 'whitelist' as Tab, label: t('violations.whitelist.tab'), count: undefined },
-          { key: 'hwid_blacklist' as Tab, label: t('violations.hwidBlacklist.tab'), count: undefined },
           { key: 'reports' as Tab, label: t('violations.tabs.reports'), count: undefined },
         ]).map((tabItem) => (
           <button
@@ -2588,10 +2183,6 @@ export default function Violations() {
             autoSelectRef.current = true
           }}
         />
-      ) : tab === 'hwid_blacklist' ? (
-        <HwidBlacklistTab />
-      ) : tab === 'whitelist' ? (
-        <WhitelistTab />
       ) : (
         <>
         {/* Stats section */}

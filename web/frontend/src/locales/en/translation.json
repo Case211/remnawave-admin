@@ -104,7 +104,7 @@
     "fleet": "Fleet",
     "hosts": "Hosts",
     "violations": "Violations",
-    "blockedIPs": "Blocked IPs",
+    "blocking": "Blocking",
     "automations": "Automations",
     "notifications": "Notifications",
     "admins": "Admins & Roles",
@@ -1126,6 +1126,15 @@
       "created": "Host created",
       "saveError": "Save error",
       "createError": "Create error"
+    }
+  },
+  "blocking": {
+    "title": "Blocking",
+    "description": "Manage IP blocks, HWID blacklist and whitelist",
+    "tabs": {
+      "ip": "IP Blocking",
+      "hwid": "HWID Blacklist",
+      "whitelist": "Whitelist"
     }
   },
   "blockedIPs": {

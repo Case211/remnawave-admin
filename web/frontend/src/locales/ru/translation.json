@@ -104,7 +104,7 @@
     "fleet": "Fleet",
     "hosts": "Хосты",
     "violations": "Нарушения",
-    "blockedIPs": "Блокировка IP",
+    "blocking": "Блокировки",
     "automations": "Автоматизации",
     "notifications": "Уведомления",
     "admins": "Администраторы и роли",
@@ -1126,6 +1126,15 @@
       "created": "Хост создан",
       "saveError": "Ошибка сохранения",
       "createError": "Ошибка создания"
+    }
+  },
+  "blocking": {
+    "title": "Блокировки",
+    "description": "Управление блокировками IP, HWID и белым списком",
+    "tabs": {
+      "ip": "Блокировка IP",
+      "hwid": "HWID Blacklist",
+      "whitelist": "Белый список"
     }
   },
   "blockedIPs": {
