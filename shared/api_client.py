@@ -411,6 +411,20 @@ class RemnawaveApiClient:
     async def get_users_by_email(self, email: str) -> dict:
         return await self._get(f"/api/users/by-email/{email}")
 
+    async def resolve_user(self, *, uuid: str | None = None, id: int | None = None,
+                           short_uuid: str | None = None, username: str | None = None) -> dict:
+        """Универсальный поиск пользователя по любому идентификатору."""
+        body = {}
+        if uuid:
+            body["uuid"] = uuid
+        if id is not None:
+            body["id"] = id
+        if short_uuid:
+            body["shortUuid"] = short_uuid
+        if username:
+            body["username"] = username
+        return await self._post("/api/users/resolve", json=body)
+
     async def get_users_by_tag(self, tag: str) -> dict:
         return await self._get(f"/api/users/by-tag/{tag}")
 
@@ -634,6 +648,16 @@ class RemnawaveApiClient:
 
         data = await self._get("/api/system/stats/bandwidth")
         await cache.set(CacheKeys.BANDWIDTH_STATS, data, CacheManager.STATS_TTL)
+        return data
+
+    async def get_stats_recap(self, use_cache: bool = True) -> dict:
+        """Получает сводную статистику панели (версия, глобальные счётчики)."""
+        if use_cache:
+            cached = await cache.get(CacheKeys.STATS_RECAP)
+            if cached is not None:
+                return cached
+        data = await self._get("/api/system/stats/recap")
+        await cache.set(CacheKeys.STATS_RECAP, data, CacheManager.STATS_TTL)
         return data
 
     async def get_nodes_statistics(self) -> dict:
@@ -1190,6 +1214,14 @@ class RemnawaveApiClient:
     async def get_fetch_ips_result(self, job_id: str) -> dict:
         """Получает результат сбора IP-адресов по jobId."""
         return await self._get(f"/api/ip-control/fetch-ips/result/{job_id}")
+
+    async def fetch_users_ips_by_node(self, node_uuid: str) -> dict:
+        """Запускает сбор IP всех пользователей на ноде. Возвращает jobId."""
+        return await self._post(f"/api/ip-control/fetch-users-ips/{node_uuid}")
+
+    async def get_fetch_users_ips_result(self, job_id: str) -> dict:
+        """Получает результат сбора IP пользователей по jobId."""
+        return await self._get(f"/api/ip-control/fetch-users-ips/result/{job_id}")
 
     async def drop_connections(self, drop_by: dict, target_nodes: dict) -> dict:
         """Сбрасывает активные соединения пользователя."""

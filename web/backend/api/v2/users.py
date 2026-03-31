@@ -398,6 +398,40 @@ async def get_external_squads(
     return [_normalize_squad(sq) for sq in squads if isinstance(sq, dict)]
 
 
+@router.post("/resolve")
+@limiter.limit(RATE_BULK)
+async def resolve_user(
+    request: Request,
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Универсальный поиск пользователя по uuid/id/shortUuid/username."""
+    from shared.api_client import api_client
+
+    body = await request.json()
+    uuid = body.get("uuid")
+    user_id = body.get("id")
+    short_uuid = body.get("shortUuid")
+    username = body.get("username")
+
+    if not any([uuid, user_id is not None, short_uuid, username]):
+        raise api_error(400, E.VALIDATION_ERROR, "At least one identifier required")
+
+    try:
+        result = await api_client.resolve_user(
+            uuid=uuid, id=user_id,
+            short_uuid=short_uuid, username=username,
+        )
+        payload = result.get("response", result) if isinstance(result, dict) else result
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        if "404" in str(e) or "not found" in str(e).lower():
+            raise api_error(404, E.NOT_FOUND, "User not found")
+        logger.error("Failed to resolve user: %s", e)
+        raise api_error(502, E.API_SERVICE_UNAVAILABLE)
+
+
 @router.get("/{user_uuid}", response_model=UserDetail)
 async def get_user(
     user_uuid: str,
@@ -1254,4 +1288,40 @@ async def drop_user_connections(
         logger.error("Failed to drop connections for %s: %s", user_uuid, e)
         raise api_error(502, E.API_SERVICE_UNAVAILABLE)
 
+
+# ── Fetch Users IPs by Node ──────────────────────────────────────
+
+@router.post("/node/{node_uuid}/fetch-users-ips")
+async def fetch_users_ips_by_node(
+    node_uuid: str,
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Запускает сбор IP всех пользователей на ноде. Возвращает jobId."""
+    from shared.api_client import api_client
+
+    try:
+        result = await api_client.fetch_users_ips_by_node(node_uuid)
+        payload = result.get("response", result) if isinstance(result, dict) else result
+        return payload
+    except Exception as e:
+        logger.error("Failed to fetch users IPs for node %s: %s", node_uuid, e)
+        raise api_error(502, E.API_SERVICE_UNAVAILABLE)
+
+
+@router.get("/node/{node_uuid}/fetch-users-ips/result/{job_id}")
+async def get_fetch_users_ips_result(
+    node_uuid: str,
+    job_id: str,
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Получает результат сбора IP пользователей по jobId."""
+    from shared.api_client import api_client
+
+    try:
+        result = await api_client.get_fetch_users_ips_result(job_id)
+        payload = result.get("response", result) if isinstance(result, dict) else result
+        return payload
+    except Exception as e:
+        logger.error("Failed to get fetch users IPs result for job %s: %s", job_id, e)
+        raise api_error(502, E.API_SERVICE_UNAVAILABLE)
 

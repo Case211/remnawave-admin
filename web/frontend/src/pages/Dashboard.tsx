@@ -109,6 +109,13 @@ interface SystemComponentsResponse {
   version: string
 }
 
+interface PanelRecap {
+  thisMonth: { users: number; traffic: number }
+  total: { users: number; nodes: number; traffic: number; nodesRam: number; nodesCpuCores: number; distinctCountries: number }
+  version: string
+  initDate: string | null
+}
+
 // ── API functions ────────────────────────────────────────────────
 
 const fetchOverview = async (): Promise<OverviewStats> => {
@@ -135,6 +142,11 @@ const fetchTimeseries = async (period: string, metric: string): Promise<Timeseri
 
 const fetchSystemComponents = async (): Promise<SystemComponentsResponse> => {
   const { data } = await client.get('/analytics/system/components')
+  return data
+}
+
+const fetchPanelRecap = async (): Promise<PanelRecap> => {
+  const { data } = await client.get('/analytics/panel/recap')
   return data
 }
 
@@ -862,11 +874,13 @@ function SystemStatusCard({
   uptime,
   version,
   loading,
+  panelRecap,
 }: {
   components: SystemComponent[]
   uptime: number | null
   version: string
   loading: boolean
+  panelRecap?: PanelRecap
 }) {
   const { t } = useTranslation()
   const formatUptime = createFormatUptime(t)
@@ -895,6 +909,11 @@ function SystemStatusCard({
           <div className="flex items-center gap-2">
             {uptime != null && (
               <span className="text-[10px] text-muted-foreground font-mono">{formatUptime(uptime)}</span>
+            )}
+            {panelRecap?.version && (
+              <Badge variant="outline" className="text-[10px] font-mono">
+                Panel {panelRecap.version}
+              </Badge>
             )}
             {version && (
               <Badge variant="secondary" className="text-[10px] font-mono">
@@ -950,6 +969,19 @@ function SystemStatusCard({
                 </div>
               )
             })}
+          </div>
+        )}
+        {panelRecap && (panelRecap.total.distinctCountries > 0 || panelRecap.initDate) && (
+          <div className="mt-2 pt-2 border-t border-[var(--glass-border)] flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+            {panelRecap.total.distinctCountries > 0 && (
+              <span>{t('dashboard.countries')}: {panelRecap.total.distinctCountries}</span>
+            )}
+            {panelRecap.total.nodesCpuCores > 0 && (
+              <span>CPU: {panelRecap.total.nodesCpuCores} {t('dashboard.cores')}</span>
+            )}
+            {panelRecap.initDate && (
+              <span>{t('dashboard.panelSince')}: {new Date(panelRecap.initDate).toLocaleDateString()}</span>
+            )}
           </div>
         )}
       </CardContent>
@@ -1743,6 +1775,14 @@ export default function Dashboard() {
     enabled: canViewAnalytics,
   })
 
+  const { data: panelRecap } = useQuery({
+    queryKey: ['panelRecap'],
+    queryFn: fetchPanelRecap,
+    staleTime: 120_000,
+    refetchInterval: 300_000,
+    enabled: canViewAnalytics,
+  })
+
   const { data: topUsers, isLoading: topUsersLoading } = useQuery({
     queryKey: ['topUsers'],
     queryFn: () => fetchTopUsers(5),
@@ -2178,6 +2218,7 @@ export default function Dashboard() {
             uptime={systemComponents?.uptime_seconds ?? null}
             version={systemComponents?.version || ''}
             loading={componentsLoading}
+            panelRecap={panelRecap}
           />
         )}
 

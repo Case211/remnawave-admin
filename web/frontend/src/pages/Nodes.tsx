@@ -24,6 +24,8 @@ import {
   AlertTriangle,
   Zap,
   Terminal,
+  Scan,
+  Loader2,
 } from 'lucide-react'
 import client from '../api/client'
 import { resourcesApi } from '../api/resources'
@@ -675,6 +677,134 @@ function AgentTokenModal({
   )
 }
 
+// ── Node Users IPs Dialog ──────────────────────────────────────
+
+interface NodeUserIps {
+  userId: string
+  ips: ({ ip: string; lastSeen?: string } | string)[]
+}
+
+function NodeUsersIpsDialog({ node, open, onClose }: { node: Node; open: boolean; onClose: () => void }) {
+  const { t } = useTranslation()
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [polling, setPolling] = useState(false)
+  const [result, setResult] = useState<{
+    isCompleted: boolean; isFailed: boolean
+    progress?: { total: number; completed: number; percent: number }
+    result?: { success: boolean; nodeUuid: string; users: NodeUserIps[] } | null
+  } | null>(null)
+
+  useEffect(() => {
+    if (!open) { setJobId(null); setPolling(false); setResult(null); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data } = await client.post(`/users/node/${node.uuid}/fetch-users-ips`)
+        if (cancelled) return
+        setJobId(data.jobId || data.response?.jobId)
+        setPolling(true)
+      } catch { if (!cancelled) toast.error(t('nodes.fetchUsersIps.error')) }
+    })()
+    return () => { cancelled = true }
+  }, [open, node.uuid, t])
+
+  useEffect(() => {
+    if (!polling || !jobId) return
+    let cancelled = false
+    const poll = setInterval(async () => {
+      try {
+        const { data } = await client.get(`/users/node/${node.uuid}/fetch-users-ips/result/${jobId}`)
+        if (cancelled) return
+        setResult(data)
+        if (data.isCompleted || data.isFailed) { setPolling(false); clearInterval(poll) }
+      } catch { /* keep polling */ }
+    }, 1500)
+    return () => { cancelled = true; clearInterval(poll) }
+  }, [polling, jobId, node.uuid])
+
+  const users = result?.result?.users || []
+  const totalIps = users.reduce((sum, u) => sum + u.ips.length, 0)
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Scan className="w-5 h-5 text-primary-400" />
+            {t('nodes.fetchUsersIps.title')}
+          </DialogTitle>
+          <DialogDescription>
+            {node.name}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-3">
+          {!result?.isCompleted && !result?.isFailed && (
+            <div className="py-6 text-center space-y-3">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary-400" />
+              <p className="text-sm text-dark-200">
+                {result?.progress
+                  ? `${t('nodes.fetchUsersIps.scanning')} ${result.progress.percent}%`
+                  : t('nodes.fetchUsersIps.starting')}
+              </p>
+              {result?.progress && (
+                <div className="w-full h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                    style={{ width: `${result.progress.percent}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {result?.isFailed && (
+            <div className="py-6 text-center">
+              <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+              <p className="text-sm text-red-400">{t('nodes.fetchUsersIps.failed')}</p>
+            </div>
+          )}
+
+          {result?.isCompleted && users.length === 0 && (
+            <div className="py-6 text-center">
+              <p className="text-sm text-dark-200">{t('nodes.fetchUsersIps.noResults')}</p>
+            </div>
+          )}
+
+          {result?.isCompleted && users.length > 0 && (
+            <>
+              <p className="text-xs text-dark-300">
+                {t('nodes.fetchUsersIps.found')}: {users.length} {t('nodes.fetchUsersIps.users')}, {totalIps} IP
+              </p>
+              <div className="space-y-2">
+                {users.map((u) => (
+                  <div key={u.userId} className="bg-[var(--glass-bg)] rounded-lg border border-[var(--glass-border)] p-2.5">
+                    <p className="text-xs font-mono text-primary-300 mb-1.5 truncate">{u.userId}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {u.ips.map((ip, i) => {
+                        const addr = typeof ip === 'string' ? ip : ip.ip
+                        return (
+                          <Badge key={i} variant="secondary" className="text-[10px] font-mono">
+                            {addr}
+                          </Badge>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose}>{t('common.close')}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // Node card component
 function NodeCard({
   node,
@@ -684,6 +814,7 @@ function NodeCard({
   onDisable,
   onDelete,
   onTokenManage,
+  onFetchIps,
   canEdit,
   canDelete,
 }: {
@@ -694,6 +825,7 @@ function NodeCard({
   onDisable: () => void
   onDelete: () => void
   onTokenManage: () => void
+  onFetchIps: () => void
   canEdit: boolean
   canDelete: boolean
 }) {
@@ -797,6 +929,10 @@ function NodeCard({
                       {t('nodes.actions.agentToken')}
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuItem onClick={onFetchIps}>
+                    <Scan className="w-4 h-4 mr-2" />
+                    {t('nodes.actions.fetchUsersIps')}
+                  </DropdownMenuItem>
                   {(canEdit || canDelete) && <DropdownMenuSeparator />}
                   {canEdit && (
                     node.is_disabled ? (
@@ -925,6 +1061,7 @@ export default function Nodes() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
   const [tokenNode, setTokenNode] = useState<Node | null>(null)
+  const [ipsNode, setIpsNode] = useState<Node | null>(null)
   const [confirmAction, setConfirmAction] = useState<{ type: string; uuid: string } | null>(null)
 
   // Fetch nodes
@@ -1139,6 +1276,7 @@ export default function Nodes() {
                 onDisable={() => setConfirmAction({ type: 'disable', uuid: node.uuid })}
                 onDelete={() => setConfirmAction({ type: 'delete', uuid: node.uuid })}
                 onTokenManage={() => setTokenNode(node)}
+                onFetchIps={() => setIpsNode(node)}
                 canEdit={canEdit}
                 canDelete={canDelete}
               />
@@ -1204,6 +1342,15 @@ export default function Nodes() {
           setConfirmAction(null)
         }}
       />
+
+      {/* Node Users IPs dialog */}
+      {ipsNode && (
+        <NodeUsersIpsDialog
+          node={ipsNode}
+          open={!!ipsNode}
+          onClose={() => setIpsNode(null)}
+        />
+      )}
         </TabsContent>
       </Tabs>
     </div>

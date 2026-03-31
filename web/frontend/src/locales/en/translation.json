@@ -295,6 +295,9 @@
     "statusUnknown": "Unknown",
     "ms": "ms",
     "sessions": "sessions",
+    "countries": "Countries",
+    "cores": "cores",
+    "panelSince": "Running since",
     "uptime": "Uptime",
     "uptimeDH": "{{days}}d {{hours}}h",
     "uptimeHM": "{{hours}}h {{minutes}}m",
@@ -395,6 +398,8 @@
     "createdAt": "Created",
     "lastActive": "Last active",
     "searchPlaceholder": "Search by name, email or UUID...",
+    "resolveButton": "Find exact",
+    "resolveNotFound": "User not found",
     "noUsers": "No users",
     "usersNotFound": "Users not found",
     "createUser": "Create user",
@@ -854,7 +859,8 @@
       "creating": "Creating...",
       "add": "Add",
       "refresh": "Refresh",
-      "confirm": "Confirm"
+      "confirm": "Confirm",
+      "fetchUsersIps": "Users IPs"
     },
     "status": {
       "online": "Online",
@@ -884,6 +890,16 @@
       "tokenGenerated": "Token generated",
       "tokenRevoked": "Token revoked",
       "error": "Error"
+    },
+    "fetchUsersIps": {
+      "title": "Users IP Addresses",
+      "starting": "Starting scan...",
+      "scanning": "Scanning nodes...",
+      "failed": "Failed to fetch data",
+      "noResults": "No active connections found",
+      "found": "Found",
+      "users": "users",
+      "error": "Failed to start scan"
     }
   },
   "fleet": {

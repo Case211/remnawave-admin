@@ -1108,6 +1108,45 @@ async def get_dependencies(
     return await get_dependency_versions()
 
 
+class PanelRecapThisMonth(BaseModel):
+    users: int = 0
+    traffic: int = 0
+
+
+class PanelRecapTotal(BaseModel):
+    users: int = 0
+    nodes: int = 0
+    traffic: int = 0
+    nodesRam: int = 0
+    nodesCpuCores: int = 0
+    distinctCountries: int = 0
+
+
+class PanelRecapResponse(BaseModel):
+    thisMonth: PanelRecapThisMonth = PanelRecapThisMonth()
+    total: PanelRecapTotal = PanelRecapTotal()
+    version: str = ""
+    initDate: Optional[str] = None
+
+
+@router.get("/panel/recap", response_model=PanelRecapResponse)
+@limiter.limit(RATE_ANALYTICS)
+async def get_panel_recap(
+    request: Request,
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Сводная статистика Remnawave Panel (версия, глобальные счётчики)."""
+    from shared.api_client import api_client
+
+    try:
+        result = await api_client.get_stats_recap()
+        payload = result.get("response", result) if isinstance(result, dict) else result
+        return PanelRecapResponse(**payload) if isinstance(payload, dict) else PanelRecapResponse()
+    except Exception as e:
+        logger.warning("Failed to get panel recap: %s", e)
+        return PanelRecapResponse()
+
+
 @router.get("/release-history")
 async def release_history(
     admin: AdminUser = Depends(require_permission("analytics", "view")),

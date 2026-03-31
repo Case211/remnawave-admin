@@ -26,6 +26,7 @@ import {
   Wifi,
   Users as UsersIcon,
   Infinity,
+  Crosshair,
 } from 'lucide-react'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -845,6 +846,25 @@ export default function Users() {
     return () => clearTimeout(timer)
   }, [search])
 
+  // Resolve user — universal lookup
+  const resolveMutation = useMutation({
+    mutationFn: async (query: string) => {
+      const body: Record<string, unknown> = {}
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(query)) body.uuid = query
+      else if (/^\d+$/.test(query)) body.id = parseInt(query)
+      else if (/^[a-zA-Z0-9]{1,8}$/.test(query) && query.length <= 8) body.shortUuid = query
+      else body.username = query
+      const { data } = await client.post('/users/resolve', body)
+      return data
+    },
+    onSuccess: (data) => {
+      const uuid = data?.uuid || data?.response?.uuid
+      if (uuid) navigate(`/users/${uuid}`)
+      else toast.error(t('users.resolveNotFound'))
+    },
+    onError: () => toast.error(t('users.resolveNotFound')),
+  })
+
   // Fetch users
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['users', page, perPage, debouncedSearch, status, trafficType, expireFilter, onlineFilter, trafficUsage, sortBy, sortOrder],
@@ -1034,14 +1054,28 @@ export default function Users() {
         <CardContent className="p-4">
           <div className="flex flex-col gap-3">
             {/* Row 1: Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-200" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t('users.searchPlaceholder')}
-                className="pl-10"
-              />
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-200" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t('users.searchPlaceholder')}
+                  className="pl-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && search.trim()) resolveMutation.mutate(search.trim())
+                  }}
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="icon"
+                disabled={!search.trim() || resolveMutation.isPending}
+                onClick={() => resolveMutation.mutate(search.trim())}
+                title={t('users.resolveButton')}
+              >
+                <Crosshair className={cn("w-4 h-4", resolveMutation.isPending && "animate-spin")} />
+              </Button>
             </div>
 
             {/* Row 2: Filters | Sort | Refresh */}

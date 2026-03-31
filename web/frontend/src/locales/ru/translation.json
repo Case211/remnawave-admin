@@ -295,6 +295,9 @@
     "statusUnknown": "Неизвестно",
     "ms": "мс",
     "sessions": "сессий",
+    "countries": "Стран",
+    "cores": "ядер",
+    "panelSince": "Работает с",
     "uptime": "Аптайм",
     "uptimeDH": "{{days}}д {{hours}}ч",
     "uptimeHM": "{{hours}}ч {{minutes}}м",
@@ -395,6 +398,8 @@
     "createdAt": "Создан",
     "lastActive": "Последняя активность",
     "searchPlaceholder": "Поиск по имени, email или UUID...",
+    "resolveButton": "Найти точно",
+    "resolveNotFound": "Пользователь не найден",
     "noUsers": "Нет пользователей",
     "usersNotFound": "Пользователи не найдены",
     "createUser": "Создать пользователя",
@@ -854,7 +859,8 @@
       "creating": "Создание...",
       "add": "Добавить",
       "refresh": "Обновить",
-      "confirm": "Подтвердить"
+      "confirm": "Подтвердить",
+      "fetchUsersIps": "IP пользователей"
     },
     "status": {
       "online": "Онлайн",
@@ -884,6 +890,16 @@
       "tokenGenerated": "Токен сгенерирован",
       "tokenRevoked": "Токен отозван",
       "error": "Ошибка"
+    },
+    "fetchUsersIps": {
+      "title": "IP-адреса пользователей",
+      "starting": "Запуск сканирования...",
+      "scanning": "Сканирование нод...",
+      "failed": "Не удалось получить данные",
+      "noResults": "Активных подключений не найдено",
+      "found": "Найдено",
+      "users": "пользователей",
+      "error": "Ошибка запуска сканирования"
     }
   },
   "fleet": {

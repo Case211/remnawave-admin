@@ -195,7 +195,8 @@ class CacheKeys:
     BILLING_NODES = "billing_nodes"
     INTERNAL_SQUADS = "internal_squads"
     EXTERNAL_SQUADS = "external_squads"
-    
+    STATS_RECAP = "stats_recap"
+
     @staticmethod
     def node(uuid: str) -> str:
         """Ключ для конкретной ноды."""

@@ -1409,7 +1409,6 @@ type NodeSortField = 'name' | 'cpu' | 'ram' | 'disk' | 'users' | 'traffic' | 'sp
 function NodesCard() {
   const { t } = useTranslation()
   const { formatBytes, formatSpeed } = useFormatters()
-  const navigate = useNavigate()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
   const canViewFleet = hasPermission('fleet', 'view')
   const [sortField, setSortField] = useState<NodeSortField>('traffic')
