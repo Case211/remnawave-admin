@@ -39,13 +39,14 @@ class BedolagaClient:
 
     @staticmethod
     def _parse_json(response: httpx.Response) -> dict:
-        """Parse JSON from response, raising a clear error on empty or non-JSON body."""
+        """Parse JSON from response, returning {} on empty body."""
         body = response.text
         if not body or not body.strip():
-            raise ValueError(
-                f"Bedolaga API returned empty response "
-                f"(status={response.status_code}, url={response.url})"
+            logger.warning(
+                "Bedolaga API returned empty response (status=%s, url=%s)",
+                response.status_code, response.url,
             )
+            return {}
         try:
             return response.json()
         except json.JSONDecodeError:
