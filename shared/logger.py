@@ -384,4 +384,7 @@ def log_api_error(method: str, endpoint: str, error: Exception, status_code: Opt
     kwargs: dict[str, Any] = {"method": method, "endpoint": endpoint, "error": f"{type(error).__name__}: {error}"}
     if status_code:
         kwargs["status_code"] = status_code
-    log.error("api_error", **kwargs)
+    if status_code == 404:
+        log.debug("api_not_found", **kwargs)
+    else:
+        log.error("api_error", **kwargs)
