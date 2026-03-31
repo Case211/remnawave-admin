@@ -301,7 +301,7 @@ async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20
                     node_uuid, date_from, date_to, top_users_limit=limit
                 )
                 payload = node_users.get("response", node_users) if isinstance(node_users, dict) else {}
-                logger.debug("Node %s users usage keys: %s", node_uuid[:8], list(payload.keys()) if isinstance(payload, dict) else type(payload))
+                logger.info("Node %s users usage response sample: %s", node_uuid[:8], str(payload)[:300])
                 # Try different possible response structures
                 users_list = payload.get("topUsers") or payload.get("users") or []
                 if isinstance(payload, list):
