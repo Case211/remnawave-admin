@@ -1,4 +1,5 @@
 """HTTP client for Bedolaga Bot API."""
+import json
 import logging
 from typing import Optional
 
@@ -36,29 +37,47 @@ class BedolagaClient:
 
     # ── Base methods ──
 
+    @staticmethod
+    def _parse_json(response: httpx.Response) -> dict:
+        """Parse JSON from response, raising a clear error on empty or non-JSON body."""
+        body = response.text
+        if not body or not body.strip():
+            raise ValueError(
+                f"Bedolaga API returned empty response "
+                f"(status={response.status_code}, url={response.url})"
+            )
+        try:
+            return response.json()
+        except json.JSONDecodeError:
+            preview = body[:300]
+            raise ValueError(
+                f"Bedolaga API returned non-JSON response "
+                f"(status={response.status_code}, url={response.url}): {preview}"
+            )
+
     async def _get(self, path: str, params: dict = None) -> dict:
         client = self._get_client()
         response = await client.get(path, params=params)
         response.raise_for_status()
-        return response.json()
+        return self._parse_json(response)
 
     async def _post(self, path: str, json: dict = None, params: dict = None) -> dict:
         client = self._get_client()
         response = await client.post(path, json=json, params=params)
         response.raise_for_status()
-        return response.json()
+        return self._parse_json(response)
 
     async def _patch(self, path: str, json: dict = None) -> dict:
         client = self._get_client()
         response = await client.patch(path, json=json)
         response.raise_for_status()
-        return response.json()
+        return self._parse_json(response)
 
     async def _delete(self, path: str, params: dict = None) -> dict:
         client = self._get_client()
         response = await client.delete(path, params=params)
         response.raise_for_status()
-        return response.json()
+        return self._parse_json(response)
 
     # ── Stats ──
 

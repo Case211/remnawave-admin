@@ -34,6 +34,12 @@ async def proxy_request(coro_fn):
     except (ConnectError, TimeoutException) as e:
         logger.warning("Bedolaga API connection error: %s", e)
         raise HTTPException(status_code=502, detail="Cannot connect to Bedolaga API")
+    except ValueError as e:
+        logger.error("Bedolaga API bad response: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail=str(e),
+        )
     except Exception as e:
         logger.error("Bedolaga API unexpected error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error while contacting Bedolaga API")
