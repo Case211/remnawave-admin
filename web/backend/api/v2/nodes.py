@@ -48,6 +48,13 @@ def _ensure_node_snake_case(node: dict) -> dict:
         'downloadSpeedBps': 'download_speed_bps',
         'uploadSpeedBps': 'upload_speed_bps',
     }
+    # Panel 2.7+: extract versions.xray/node into flat fields
+    versions = result.get("versions")
+    if isinstance(versions, dict):
+        if "xrayVersion" not in result and versions.get("xray"):
+            result["xrayVersion"] = versions["xray"]
+        if "nodeVersion" not in result and versions.get("node"):
+            result["nodeVersion"] = versions["node"]
     for camel, snake in mappings.items():
         if camel in result and snake not in result:
             result[snake] = result[camel]

@@ -693,7 +693,7 @@ async def _handle_user_edit_input(message: Message, ctx: dict) -> None:
             return
     elif field == "strategy":
         strategy = text.upper()
-        if strategy not in {"NO_RESET", "DAY", "WEEK", "MONTH"}:
+        if strategy not in {"NO_RESET", "DAY", "WEEK", "MONTH", "MONTH_ROLLING"}:
             _set_retry("user.edit_invalid_strategy")
             return
         payload["trafficLimitStrategy"] = strategy

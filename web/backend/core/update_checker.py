@@ -300,7 +300,9 @@ async def get_dependency_versions() -> Dict[str, Any]:
                     xray_versions = {}
                     for r in rows:
                         rd = r["raw_data"] if isinstance(r["raw_data"], dict) else {}
-                        ver = rd.get("xray_version") or rd.get("xrayVersion")
+                        # Panel 2.7+: versions.xray replaces xrayVersion
+                        versions = rd.get("versions")
+                        ver = rd.get("xray_version") or rd.get("xrayVersion") or (versions.get("xray") if isinstance(versions, dict) else None)
                         if ver and r["name"]:
                             xray_versions[r["name"]] = ver
                     deps["xray_nodes"] = xray_versions

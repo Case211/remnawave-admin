@@ -79,6 +79,9 @@ def user_edit_strategy_keyboard(user_uuid: str, back_to: str = NavTarget.USERS_M
                 InlineKeyboardButton(text="WEEK", callback_data=f"uef:strategy:WEEK:{user_uuid}"),
                 InlineKeyboardButton(text="MONTH", callback_data=f"uef:strategy:MONTH:{user_uuid}"),
             ],
+            [
+                InlineKeyboardButton(text="MONTH_ROLLING", callback_data=f"uef:strategy:MONTH_ROLLING:{user_uuid}"),
+            ],
             nav_row(back_to),
         ]
     )

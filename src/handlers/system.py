@@ -32,20 +32,46 @@ def _system_nodes_profiles_keyboard(profiles: list[dict], prefix: str = "system:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _format_bytes(n: float) -> str:
+    """Format bytes to human-readable."""
+    if n < 1024:
+        return f"{n:.0f} B"
+    elif n < 1024 ** 2:
+        return f"{n / 1024:.1f} KB"
+    elif n < 1024 ** 3:
+        return f"{n / 1024 ** 2:.1f} MB"
+    return f"{n / 1024 ** 3:.2f} GB"
+
+
 async def _fetch_health_text() -> str:
     """Получает текст для отображения health check."""
     try:
         data = await api_client.get_health()
-        pm2 = data.get("response", {}).get("pm2Stats", [])
-        if not pm2:
+        resp = data.get("response", {})
+        # Panel 2.7+: runtimeMetrics replaces pm2Stats
+        metrics = resp.get("runtimeMetrics") or resp.get("pm2Stats", [])
+        if not metrics:
             return f"*{_('health.title')}*\n\n{_('health.empty')}"
         lines = [f"*{_('health.title')}*", ""]
-        for proc in pm2:
-            name = proc.get("name", "n/a")
-            cpu = proc.get("cpu", "—")
-            memory = proc.get("memory", "—")
-            lines.append(f"  • *{name}*")
-            lines.append(f"    CPU: `{cpu}%` | RAM: `{memory}`")
+        for proc in metrics:
+            # New format: runtimeMetrics
+            if "instanceId" in proc:
+                name = proc.get("instanceType", proc.get("instanceId", "n/a"))
+                rss = _format_bytes(proc.get("rss", 0))
+                heap = _format_bytes(proc.get("heapUsed", 0))
+                el_delay = proc.get("eventLoopDelayMs", 0)
+                uptime_s = proc.get("uptime", 0)
+                uptime_h = uptime_s / 3600
+                lines.append(f"  • *{name}* (PID {proc.get('pid', '?')})")
+                lines.append(f"    RSS: `{rss}` | Heap: `{heap}` | EL: `{el_delay:.1f}ms`")
+                lines.append(f"    Uptime: `{uptime_h:.1f}h`")
+            else:
+                # Legacy pm2Stats format
+                name = proc.get("name", "n/a")
+                cpu = proc.get("cpu", "—")
+                memory = proc.get("memory", "—")
+                lines.append(f"  • *{name}*")
+                lines.append(f"    CPU: `{cpu}%` | RAM: `{memory}`")
         return "\n".join(lines)
     except UnauthorizedError:
         return _("errors.unauthorized")
@@ -179,7 +205,7 @@ async def _fetch_server_stats_text() -> str:
             f"  {_('stats.uptime').format(uptime=format_uptime(uptime))}",
             "",
             f"*{_('stats.cpu_section')}*",
-            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('physicalCores', '—'))}",
+            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('physicalCores', cpu.get('cores', '—')))}",
         ]
 
         if cpu_usage is not None:
@@ -417,7 +443,7 @@ async def _fetch_stats_text() -> str:
             "",
             f"*{_('stats.system_section')}*",
             f"  {_('stats.uptime').format(uptime=format_uptime(res.get('uptime')))}",
-            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('physicalCores', '—'))}",
+            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('physicalCores', cpu.get('cores', '—')))}",
             f"  {_('stats.memory').format(used=format_bytes(mem.get('used')), total=format_bytes(mem.get('total')))}",
             "",
             f"*{_('stats.users_section')}*",

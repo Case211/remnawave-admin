@@ -28,6 +28,7 @@ _CAMEL_TO_SNAKE = {
     "createdAt": "created_at",
     "updatedAt": "updated_at",
     "onlineAt": "online_at",
+    # Panel 2.7: subLastUserAgent/subLastOpenedAt removed — kept for cached raw_data compat
     "subLastUserAgent": "sub_last_user_agent",
     "subLastOpenedAt": "sub_last_opened_at",
     "subRevokedAt": "sub_revoked_at",
@@ -43,6 +44,8 @@ _CAMEL_TO_SNAKE = {
     "isTrafficTrackingActive": "is_traffic_tracking_active",
     "usersOnline": "users_online",
     "isXrayRunning": "is_xray_running",
+    # xrayVersion/nodeVersion removed in Panel 2.7 — now under "versions" object
+    # Kept for backward compatibility with cached raw_data
     "xrayVersion": "xray_version",
     "nodeVersion": "node_version",
     "xrayUptime": "xray_uptime",
@@ -91,6 +94,13 @@ def _normalize(data: Dict[str, Any]) -> Dict[str, Any]:
                      "firstConnectedAt", "lastConnectedNodeUuid"):
             if key in user_traffic and key not in result:
                 result[key] = user_traffic[key]
+    # Panel 2.7+: extract versions.xray/node into flat fields
+    versions = result.get("versions")
+    if isinstance(versions, dict):
+        if "xrayVersion" not in result and versions.get("xray"):
+            result["xrayVersion"] = versions["xray"]
+        if "nodeVersion" not in result and versions.get("node"):
+            result["nodeVersion"] = versions["node"]
     for camel, snake in _CAMEL_TO_SNAKE.items():
         if camel in result and snake not in result:
             result[snake] = result[camel]
@@ -236,17 +246,10 @@ async def fetch_nodes_usage_by_range(
 
 
 async def fetch_nodes_realtime_usage() -> List[Dict[str, Any]]:
-    """Fetch real-time per-node bandwidth usage from the Remnawave API.
-
-    Returns list of dicts with nodeUuid, nodeName, totalBytes,
-    downloadBytes, uploadBytes, downloadSpeedBps, uploadSpeedBps, totalSpeedBps.
+    """DEPRECATED: Panel 2.7 removed /api/bandwidth-stats/nodes/realtime.
+    Kept for backward compatibility — always returns empty list.
+    Use trafficTodayBytes from node response or date-range API instead.
     """
-    data = await api_get("/api/bandwidth-stats/nodes/realtime")
-    if not data:
-        return []
-    response = data.get("response", data)
-    if isinstance(response, list):
-        return response
     return []
 
 
@@ -273,16 +276,10 @@ async def enrich_nodes_traffic_today(nodes: List[Dict[str, Any]]) -> None:
                             break
     except Exception:
         pass
-    try:
-        realtime = await fetch_nodes_realtime_usage()
-        rt_map = {r.get('nodeUuid'): r for r in realtime}
-        for n in nodes:
-            if not n.get('traffic_today_bytes'):
-                rt = rt_map.get(n.get('uuid'))
-                if rt:
-                    n['traffic_today_bytes'] = int(rt.get('totalBytes') or 0)
-    except Exception:
-        pass
+    # Panel 2.7: realtime endpoint removed — trafficTodayBytes is in node response directly
+    for n in nodes:
+        if not n.get('traffic_today_bytes') and n.get('trafficTodayBytes'):
+            n['traffic_today_bytes'] = int(n['trafficTodayBytes'] or 0)
 
 
 async def close_client():

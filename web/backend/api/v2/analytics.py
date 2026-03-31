@@ -899,7 +899,9 @@ async def get_node_fleet(
 
             # Derive is_xray_running: Panel API doesn't provide this field,
             # but if node is connected and has xray_version, xray is running
-            xray_version = n.get('xray_version') or n.get('xrayVersion')
+            # Panel 2.7+: versions.xray replaces xrayVersion
+            versions = n.get('versions')
+            xray_version = n.get('xray_version') or n.get('xrayVersion') or (versions.get('xray') if isinstance(versions, dict) else None)
             is_xray_running = bool(n.get('is_xray_running') or n.get('isXrayRunning'))
             if not is_xray_running and is_connected and xray_version:
                 is_xray_running = True

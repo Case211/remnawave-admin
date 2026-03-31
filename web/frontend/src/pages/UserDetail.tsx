@@ -986,7 +986,7 @@ interface IpNode {
   nodeUuid: string
   nodeName: string
   countryCode: string
-  ips: string[]
+  ips: (string | { ip: string; lastSeen?: string })[]
 }
 
 interface FetchIpsResult {
@@ -1137,16 +1137,20 @@ function IpControlDialog({
                     )}
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {node.ips.map((ip) => (
-                      <Badge
-                        key={ip}
-                        variant="secondary"
-                        className="text-xs font-mono cursor-pointer hover:bg-primary-600/20"
-                        onClick={() => { navigator.clipboard.writeText(ip); toast.success('Copied') }}
-                      >
-                        {ip}
-                      </Badge>
-                    ))}
+                    {node.ips.map((ipItem) => {
+                      // Panel 2.7+: ip items are {ip, lastSeen} objects; fallback to string
+                      const ipStr = typeof ipItem === 'string' ? ipItem : ipItem.ip
+                      return (
+                        <Badge
+                          key={ipStr}
+                          variant="secondary"
+                          className="text-xs font-mono cursor-pointer hover:bg-primary-600/20"
+                          onClick={() => { navigator.clipboard.writeText(ipStr); toast.success('Copied') }}
+                        >
+                          {ipStr}
+                        </Badge>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
@@ -1884,6 +1888,7 @@ export default function UserDetail() {
                         <SelectItem value="DAY">{t('userDetail.strategies.daily')}</SelectItem>
                         <SelectItem value="WEEK">{t('userDetail.strategies.weekly')}</SelectItem>
                         <SelectItem value="MONTH">{t('userDetail.strategies.monthly')}</SelectItem>
+                        <SelectItem value="MONTH_ROLLING">{t('userDetail.strategies.monthlyRolling')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2071,7 +2076,7 @@ export default function UserDetail() {
                     <div>
                       <p className="text-sm text-dark-200">{t('userDetail.fields.trafficReset')}</p>
                       <p className="text-white">
-                        {{ NO_RESET: t('userDetail.strategies.noReset'), DAY: t('userDetail.strategies.daily'), WEEK: t('userDetail.strategies.weekly'), MONTH: t('userDetail.strategies.monthly') }[user.traffic_limit_strategy || 'NO_RESET'] || user.traffic_limit_strategy || '\u2014'}
+                        {{ NO_RESET: t('userDetail.strategies.noReset'), DAY: t('userDetail.strategies.daily'), WEEK: t('userDetail.strategies.weekly'), MONTH: t('userDetail.strategies.monthly'), MONTH_ROLLING: t('userDetail.strategies.monthlyRolling') }[user.traffic_limit_strategy || 'NO_RESET'] || user.traffic_limit_strategy || '\u2014'}
                       </p>
                     </div>
                     <div>

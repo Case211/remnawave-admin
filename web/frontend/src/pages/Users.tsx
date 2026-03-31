@@ -612,6 +612,7 @@ function CreateUserModal({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="MONTH">{t('users.strategies.monthly')}</SelectItem>
+                      <SelectItem value="MONTH_ROLLING">{t('users.strategies.monthlyRolling')}</SelectItem>
                       <SelectItem value="WEEK">{t('users.strategies.weekly')}</SelectItem>
                       <SelectItem value="DAY">{t('users.strategies.daily')}</SelectItem>
                       <SelectItem value="NO_RESET">{t('users.strategies.noReset')}</SelectItem>

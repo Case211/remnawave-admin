@@ -509,6 +509,7 @@
     },
     "strategies": {
       "monthly": "Ежемесячно",
+      "monthlyRolling": "Месяц (скользящий)",
       "weekly": "Еженедельно",
       "daily": "Ежедневно",
       "noReset": "Без сброса"
@@ -556,6 +557,13 @@
     "bulkActions": "Массовые действия"
   },
   "userDetail": {
+    "strategies": {
+      "monthly": "Ежемесячно",
+      "monthlyRolling": "Месяц (скользящий)",
+      "weekly": "Еженедельно",
+      "daily": "Ежедневно",
+      "noReset": "Без сброса"
+    },
     "notFound": "Пользователь не найден",
     "backToList": "Вернуться к списку",
     "userNotFound": "Пользователь не найден",

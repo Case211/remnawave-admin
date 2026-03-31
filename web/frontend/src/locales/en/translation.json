@@ -509,6 +509,7 @@
     },
     "strategies": {
       "monthly": "Monthly",
+      "monthlyRolling": "Monthly (rolling)",
       "weekly": "Weekly",
       "daily": "Daily",
       "noReset": "No reset"
@@ -556,6 +557,13 @@
     "bulkActions": "Bulk actions"
   },
   "userDetail": {
+    "strategies": {
+      "monthly": "Monthly",
+      "monthlyRolling": "Monthly (rolling)",
+      "weekly": "Weekly",
+      "daily": "Daily",
+      "noReset": "No reset"
+    },
     "notFound": "User not found",
     "backToList": "Back to list",
     "userNotFound": "User not found",

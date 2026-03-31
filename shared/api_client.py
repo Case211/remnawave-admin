@@ -841,7 +841,8 @@ class RemnawaveApiClient:
         return result
 
     async def get_nodes_realtime_usage(self) -> dict:
-        return await self._get("/api/bandwidth-stats/nodes/realtime")
+        """DEPRECATED: Panel 2.7 removed this endpoint. Returns empty response."""
+        return {"response": []}
 
     async def get_nodes_usage_range(self, start: str, end: str, top_nodes_limit: int = 10) -> dict:
         return await self._get(
@@ -1440,7 +1441,8 @@ class RemnawaveApiClient:
         return await self._get("/api/auth/status")
 
     async def auth_telegram_callback(self, payload: dict) -> dict:
-        return await self._post("/api/auth/oauth2/tg/callback", json=payload)
+        """DEPRECATED: Panel 2.7 removed /api/auth/oauth2/tg/callback."""
+        raise NotImplementedError("Endpoint removed in Panel 2.7")
 
     async def auth_oauth2_authorize(self, payload: dict) -> dict:
         return await self._post("/api/auth/oauth2/authorize", json=payload)
