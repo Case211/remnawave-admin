@@ -215,6 +215,9 @@ async def get_top_users_by_traffic(
 ):
     """Get top users by traffic consumption, optionally for a date range."""
     if date_from and date_to:
+        # Panel API expects YYYY-MM-DD, not full ISO 8601
+        date_from = date_from[:10]
+        date_to = date_to[:10]
         return await _compute_top_users_range(date_from, date_to, limit)
     return await _compute_top_users(limit=limit)
 
@@ -360,6 +363,9 @@ async def get_nodes_traffic(
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Per-node traffic breakdown for a date range."""
+    # Panel API expects YYYY-MM-DD, not full ISO 8601
+    date_from = date_from[:10]
+    date_to = date_to[:10]
     try:
         from web.backend.core.api_helper import fetch_nodes_usage_by_range
         resp = await fetch_nodes_usage_by_range(date_from, date_to, top_nodes_limit=100)
