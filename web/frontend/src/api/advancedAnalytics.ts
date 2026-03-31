@@ -180,8 +180,22 @@ export const advancedAnalyticsApi = {
     return data
   },
 
-  topUsers: async (limit = 20): Promise<{ items: TopUser[] }> => {
-    const { data } = await client.get('/analytics/advanced/top-users', { params: { limit } })
+  topUsers: async (limit = 20, dateFrom?: string, dateTo?: string): Promise<{ items: TopUser[]; period?: { from: string; to: string } }> => {
+    const params: Record<string, string | number> = { limit }
+    if (dateFrom) params.date_from = dateFrom
+    if (dateTo) params.date_to = dateTo
+    const { data } = await client.get('/analytics/advanced/top-users', { params })
+    return data
+  },
+
+  nodesTraffic: async (dateFrom: string, dateTo: string): Promise<{
+    items: { uuid: string; name: string; traffic_bytes: number; percent: number }[]
+    total_bytes: number
+    period: { from: string; to: string }
+  }> => {
+    const { data } = await client.get('/analytics/advanced/nodes-traffic', {
+      params: { date_from: dateFrom, date_to: dateTo },
+    })
     return data
   },
 

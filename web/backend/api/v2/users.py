@@ -414,8 +414,9 @@ async def resolve_user(
     username = body.get("username")
 
     if not any([uuid, user_id is not None, short_uuid, username]):
-        raise api_error(400, E.VALIDATION_ERROR, "At least one identifier required")
+        raise HTTPException(status_code=400, detail="At least one identifier required")
 
+    # Try Panel API resolve endpoint first, fallback to individual lookups
     try:
         result = await api_client.resolve_user(
             uuid=uuid, id=user_id,
@@ -423,11 +424,29 @@ async def resolve_user(
         )
         payload = result.get("response", result) if isinstance(result, dict) else result
         return payload
+    except Exception:
+        pass  # Panel may not support /resolve — fallback below
+
+    # Fallback: use individual lookup methods
+    try:
+        if uuid:
+            result = await api_client.get_user_by_uuid(uuid)
+        elif user_id is not None:
+            result = await api_client.get_user_by_id(user_id)
+        elif short_uuid:
+            result = await api_client.get_user_by_short_uuid(short_uuid)
+        elif username:
+            result = await api_client.get_user_by_username(username)
+        else:
+            raise api_error(404, E.USER_NOT_FOUND, "User not found")
+
+        payload = result.get("response", result) if isinstance(result, dict) else result
+        return payload
     except HTTPException:
         raise
     except Exception as e:
         if "404" in str(e) or "not found" in str(e).lower():
-            raise api_error(404, E.NOT_FOUND, "User not found")
+            raise api_error(404, E.USER_NOT_FOUND, "User not found")
         logger.error("Failed to resolve user: %s", e)
         raise api_error(502, E.API_SERVICE_UNAVAILABLE)
 

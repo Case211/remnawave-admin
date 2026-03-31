@@ -610,12 +610,18 @@ function TopUsersCard() {
   const { formatBytes } = useFormatters()
   const navigate = useNavigate()
   const [limit, setLimit] = useState(20)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  const hasCustomDates = Boolean(dateFrom && dateTo)
+  const apiDateFrom = hasCustomDates ? new Date(dateFrom).toISOString() : undefined
+  const apiDateTo = hasCustomDates ? new Date(dateTo + 'T23:59:59').toISOString() : undefined
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['advanced-top-users', limit],
-    queryFn: () => advancedAnalyticsApi.topUsers(limit),
+    queryKey: ['advanced-top-users', limit, dateFrom, dateTo],
+    queryFn: () => advancedAnalyticsApi.topUsers(limit, apiDateFrom, apiDateTo),
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: hasCustomDates ? undefined : 60_000,
   })
 
   const items = data?.items || []
@@ -623,36 +629,44 @@ function TopUsersCard() {
   return (
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-primary-400" />
-            <CardTitle className="text-base">{t('analytics.topUsers.title')}</CardTitle>
-            <InfoTooltip
-              text={t('analytics.topUsers.tooltip')}
-              side="right"
-            />
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-primary-400" />
+              <CardTitle className="text-base">{t('analytics.topUsers.title')}</CardTitle>
+              <InfoTooltip
+                text={t('analytics.topUsers.tooltip')}
+                side="right"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <ExportDropdown
+                disabled={items.length === 0}
+                onExportCSV={() => exportCSV(items.map((u) => ({
+                  username: u.username, status: u.status,
+                  traffic: formatBytesForExport(u.used_traffic_bytes),
+                  limit: formatBytesForExport(u.traffic_limit_bytes),
+                  usage_percent: u.usage_percent ?? '',
+                })), 'top-users')}
+                onExportJSON={() => exportJSON(items, 'top-users')}
+              />
+              <PeriodSwitcher
+                value={String(limit)}
+                onChange={(v) => setLimit(Number(v))}
+                options={[
+                  { value: '10', label: t('analytics.topUsers.top10') },
+                  { value: '20', label: t('analytics.topUsers.top20') },
+                  { value: '50', label: t('analytics.topUsers.top50') },
+                ]}
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <ExportDropdown
-              disabled={items.length === 0}
-              onExportCSV={() => exportCSV(items.map((u) => ({
-                username: u.username, status: u.status,
-                traffic: formatBytesForExport(u.used_traffic_bytes),
-                limit: formatBytesForExport(u.traffic_limit_bytes),
-                usage_percent: u.usage_percent ?? '',
-              })), 'top-users')}
-              onExportJSON={() => exportJSON(items, 'top-users')}
-            />
-            <PeriodSwitcher
-              value={String(limit)}
-              onChange={(v) => setLimit(Number(v))}
-              options={[
-                { value: '10', label: t('analytics.topUsers.top10') },
-                { value: '20', label: t('analytics.topUsers.top20') },
-                { value: '50', label: t('analytics.topUsers.top50') },
-              ]}
-            />
-          </div>
+          <DateRangePicker
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onChange={(f, t2) => { setDateFrom(f); setDateTo(t2) }}
+            onClear={() => { setDateFrom(''); setDateTo('') }}
+          />
         </div>
       </CardHeader>
       <CardContent>
@@ -1405,6 +1419,104 @@ function ProvidersCard() {
 // ── Nodes Card (F1) ──────────────────────────────────────────────
 
 type NodeSortField = 'name' | 'cpu' | 'ram' | 'disk' | 'users' | 'traffic' | 'speed'
+
+function NodesTrafficCard() {
+  const { t } = useTranslation()
+  const { formatBytes } = useFormatters()
+
+  // Default to last 7 days
+  const today = new Date()
+  const weekAgo = new Date(today)
+  weekAgo.setDate(weekAgo.getDate() - 7)
+  const [dateFrom, setDateFrom] = useState(weekAgo.toISOString().slice(0, 10))
+  const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10))
+
+  const apiDateFrom = new Date(dateFrom).toISOString()
+  const apiDateTo = new Date(dateTo + 'T23:59:59').toISOString()
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['nodes-traffic', dateFrom, dateTo],
+    queryFn: () => advancedAnalyticsApi.nodesTraffic(apiDateFrom, apiDateTo),
+    staleTime: 60_000,
+    enabled: Boolean(dateFrom && dateTo),
+  })
+
+  const items = data?.items || []
+  const totalBytes = data?.total_bytes || 0
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+      <CardHeader className="pb-2">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Server className="w-5 h-5 text-primary-400" />
+              <CardTitle className="text-base">{t('analytics.nodesTraffic.title', { defaultValue: 'Traffic by Nodes' })}</CardTitle>
+            </div>
+            {totalBytes > 0 && (
+              <Badge variant="secondary" className="text-xs font-mono">
+                {formatBytes(totalBytes)}
+              </Badge>
+            )}
+          </div>
+          <DateRangePicker
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onChange={(f, t2) => { setDateFrom(f); setDateTo(t2) }}
+            onClear={() => {
+              const now = new Date()
+              const wa = new Date(now); wa.setDate(wa.getDate() - 7)
+              setDateFrom(wa.toISOString().slice(0, 10))
+              setDateTo(now.toISOString().slice(0, 10))
+            }}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : isError ? (
+          <QueryError onRetry={refetch} />
+        ) : items.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <Server className="w-12 h-12 mx-auto mb-2 opacity-30" />
+              <p>{t('analytics.nodesTraffic.noData', { defaultValue: 'No traffic data for this period' })}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.map((node) => (
+              <div
+                key={node.uuid}
+                className="flex items-center justify-between bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)]"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-sm text-white font-medium truncate max-w-[200px]">{node.name}</span>
+                  <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden hidden sm:block">
+                    <div
+                      className="h-full bg-primary-500/70 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.max(node.percent, 1)}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 ml-3">
+                  <span className="text-xs text-muted-foreground font-mono">{node.percent}%</span>
+                  <span className="text-sm text-white font-mono w-24 text-right">{formatBytes(node.traffic_bytes)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 
 function NodesCard() {
   const { t } = useTranslation()
@@ -2517,6 +2629,10 @@ export default function Analytics() {
             <Network className="w-4 h-4" />
             {t('analytics.tabs.providers', { defaultValue: 'Providers' })}
           </TabsTrigger>
+          <TabsTrigger value="nodes-traffic" className="gap-1.5">
+            <BarChart3 className="w-4 h-4" />
+            {t('analytics.tabs.nodesTraffic', { defaultValue: 'Node Traffic' })}
+          </TabsTrigger>
           <TabsTrigger value="nodes" className="gap-1.5">
             <Server className="w-4 h-4" />
             {t('analytics.tabs.nodes', { defaultValue: 'Nodes' })}
@@ -2553,6 +2669,10 @@ export default function Analytics() {
 
         <TabsContent value="providers">
           <ProvidersCard />
+        </TabsContent>
+
+        <TabsContent value="nodes-traffic">
+          <NodesTrafficCard />
         </TabsContent>
 
         <TabsContent value="nodes">

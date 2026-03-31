@@ -1809,8 +1809,13 @@
       "trends": "Тренды",
       "sharedHwids": "Общие HWID",
       "providers": "Провайдеры",
+      "nodesTraffic": "Трафик по нодам",
       "nodes": "Ноды",
       "retention": "Ретенция"
+    },
+    "nodesTraffic": {
+      "title": "Трафик по нодам",
+      "noData": "Нет данных о трафике за этот период"
     },
     "periods": {
       "day": "День",

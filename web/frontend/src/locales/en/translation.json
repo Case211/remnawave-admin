@@ -1809,8 +1809,13 @@
       "trends": "Trends",
       "sharedHwids": "Shared HWIDs",
       "providers": "Providers",
+      "nodesTraffic": "Node Traffic",
       "nodes": "Nodes",
       "retention": "Retention"
+    },
+    "nodesTraffic": {
+      "title": "Traffic by Nodes",
+      "noData": "No traffic data for this period"
     },
     "periods": {
       "day": "Day",

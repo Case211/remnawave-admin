@@ -209,15 +209,19 @@ async def _compute_geo(period: str = "7d", date_from: Optional[str] = None, date
 async def get_top_users_by_traffic(
     request: Request,
     limit: int = Query(20, ge=5, le=100),
+    date_from: Optional[str] = Query(None, description="Start date (ISO 8601)"),
+    date_to: Optional[str] = Query(None, description="End date (ISO 8601)"),
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
-    """Get top users by traffic consumption."""
+    """Get top users by traffic consumption, optionally for a date range."""
+    if date_from and date_to:
+        return await _compute_top_users_range(date_from, date_to, limit)
     return await _compute_top_users(limit=limit)
 
 
 @cached("analytics:top-users", ttl=CACHE_TTL_LONG, key_args=("limit",))
 async def _compute_top_users(limit: int = 20):
-    """Compute top users by traffic (cacheable)."""
+    """Compute top users by traffic (cacheable, cumulative)."""
     try:
         from shared.database import db_service
         if not db_service.is_connected:
@@ -264,6 +268,128 @@ async def _compute_top_users(limit: int = 20):
     except Exception as e:
         logger.error("get_top_users_by_traffic failed: %s", e)
         return {"items": []}
+
+
+async def _compute_top_users_range(date_from: str, date_to: str, limit: int = 20):
+    """Get top users by traffic for a specific date range via Panel API."""
+    try:
+        from web.backend.core.api_helper import fetch_nodes_usage_by_range
+        resp = await fetch_nodes_usage_by_range(date_from, date_to, top_nodes_limit=100)
+        if not resp:
+            return {"items": [], "period": {"from": date_from, "to": date_to}}
+
+        # Aggregate user traffic across all nodes for the period
+        from shared.api_client import api_client
+        from shared.database import db_service
+
+        # Get per-node user usage and aggregate
+        nodes_data = resp.get("topNodes", [])
+        user_traffic: Dict[str, int] = {}
+
+        for node in nodes_data[:20]:  # Limit to top 20 nodes to avoid too many API calls
+            node_uuid = node.get("uuid")
+            if not node_uuid:
+                continue
+            try:
+                node_users = await api_client.get_node_users_usage(
+                    node_uuid, date_from, date_to, top_users_limit=limit
+                )
+                payload = node_users.get("response", node_users) if isinstance(node_users, dict) else {}
+                for u in payload.get("topUsers", []):
+                    uid = u.get("uuid", "")
+                    traffic = int(u.get("total", 0) or 0)
+                    user_traffic[uid] = user_traffic.get(uid, 0) + traffic
+            except Exception as e:
+                logger.debug("Failed to get node %s users usage: %s", node_uuid, e)
+
+        # Sort by traffic and enrich with user info from DB
+        sorted_users = sorted(user_traffic.items(), key=lambda x: x[1], reverse=True)[:limit]
+        items = []
+
+        if db_service.is_connected and sorted_users:
+            uuids = [u[0] for u in sorted_users]
+            async with db_service.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT uuid, username, status, traffic_limit_bytes FROM users WHERE uuid = ANY($1)",
+                    uuids,
+                )
+                user_map = {str(r["uuid"]): r for r in rows}
+
+            for uid, traffic in sorted_users:
+                info = user_map.get(uid, {})
+                limit_bytes = info.get("traffic_limit_bytes")
+                usage_pct = round((traffic / limit_bytes) * 100, 1) if limit_bytes and limit_bytes > 0 else None
+                items.append({
+                    "uuid": uid,
+                    "username": info.get("username") or uid[:8],
+                    "status": info.get("status", "unknown"),
+                    "used_traffic_bytes": traffic,
+                    "traffic_limit_bytes": limit_bytes,
+                    "usage_percent": usage_pct,
+                    "online_at": None,
+                })
+        else:
+            for uid, traffic in sorted_users:
+                items.append({
+                    "uuid": uid, "username": uid[:8], "status": "unknown",
+                    "used_traffic_bytes": traffic, "traffic_limit_bytes": None,
+                    "usage_percent": None, "online_at": None,
+                })
+
+        return {"items": items, "period": {"from": date_from, "to": date_to}}
+    except Exception as e:
+        logger.error("_compute_top_users_range failed: %s", e)
+        return {"items": [], "period": {"from": date_from, "to": date_to}}
+
+
+@router.get("/nodes-traffic")
+@limiter.limit(RATE_ANALYTICS)
+async def get_nodes_traffic(
+    request: Request,
+    date_from: str = Query(..., description="Start date (ISO 8601)"),
+    date_to: str = Query(..., description="End date (ISO 8601)"),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Per-node traffic breakdown for a date range."""
+    try:
+        from web.backend.core.api_helper import fetch_nodes_usage_by_range
+        resp = await fetch_nodes_usage_by_range(date_from, date_to, top_nodes_limit=100)
+        if not resp:
+            return {"items": [], "total_bytes": 0, "period": {"from": date_from, "to": date_to}}
+
+        nodes_data = resp.get("topNodes", [])
+
+        # Enrich with node names from DB
+        from shared.database import db_service
+        node_names = {}
+        if db_service.is_connected:
+            try:
+                async with db_service.acquire() as conn:
+                    rows = await conn.fetch("SELECT uuid, name FROM nodes")
+                    node_names = {str(r["uuid"]): r["name"] for r in rows}
+            except Exception:
+                pass
+
+        items = []
+        total = 0
+        for n in nodes_data:
+            uid = n.get("uuid", "")
+            traffic = int(n.get("total", 0) or 0)
+            total += traffic
+            items.append({
+                "uuid": uid,
+                "name": node_names.get(uid, uid[:8]),
+                "traffic_bytes": traffic,
+            })
+
+        # Add percentage
+        for item in items:
+            item["percent"] = round((item["traffic_bytes"] / total) * 100, 1) if total > 0 else 0
+
+        return {"items": items, "total_bytes": total, "period": {"from": date_from, "to": date_to}}
+    except Exception as e:
+        logger.error("get_nodes_traffic failed: %s", e)
+        return {"items": [], "total_bytes": 0, "period": {"from": date_from, "to": date_to}}
 
 
 @router.get("/trends")
