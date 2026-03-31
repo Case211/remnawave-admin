@@ -826,7 +826,11 @@
       "confirmRevokeDesc": "Node Agent потеряет доступ.",
       "installAgent": "Установить агент",
       "installHint": "Выполните на сервере ноды:",
-      "copyCommand": "Копировать команду"
+      "copyCommand": "Копировать команду",
+      "installed": "Установлен",
+      "notInstalled": "Не установлен",
+      "copied": "Скопировано!",
+      "node": "Нода"
     },
     "stats": {
       "total": "Всего",
@@ -849,16 +853,20 @@
       "create": "Создать",
       "creating": "Создание...",
       "add": "Добавить",
-      "refresh": "Обновить"
+      "refresh": "Обновить",
+      "confirm": "Подтвердить"
     },
     "status": {
       "online": "Онлайн",
       "offline": "Офлайн",
-      "disabled": "Отключён"
+      "disabled": "Отключён",
+      "never": "Никогда",
+      "noNodes": "Нет добавленных нод"
     },
     "deleteConfirm": {
       "title": "Удалить ноду?",
-      "description": "Нода будет удалена. Это действие нельзя отменить."
+      "description": "Нода будет удалена. Это действие нельзя отменить.",
+      "confirm": "Удалить"
     },
     "disableConfirm": {
       "title": "Отключить ноду?",
@@ -874,7 +882,8 @@
       "saveError": "Ошибка сохранения",
       "createError": "Ошибка создания",
       "tokenGenerated": "Токен сгенерирован",
-      "tokenRevoked": "Токен отозван"
+      "tokenRevoked": "Токен отозван",
+      "error": "Ошибка"
     }
   },
   "fleet": {

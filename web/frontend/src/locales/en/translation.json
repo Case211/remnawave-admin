@@ -826,7 +826,11 @@
       "confirmRevokeDesc": "Node Agent will lose access.",
       "installAgent": "Install Agent",
       "installHint": "Run on the node server:",
-      "copyCommand": "Copy command"
+      "copyCommand": "Copy command",
+      "installed": "Installed",
+      "notInstalled": "Not installed",
+      "copied": "Copied!",
+      "node": "Node"
     },
     "stats": {
       "total": "Total",
@@ -849,16 +853,20 @@
       "create": "Create",
       "creating": "Creating...",
       "add": "Add",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "confirm": "Confirm"
     },
     "status": {
       "online": "Online",
       "offline": "Offline",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "never": "Never",
+      "noNodes": "No nodes added"
     },
     "deleteConfirm": {
       "title": "Delete node?",
-      "description": "Node will be deleted. This action cannot be undone."
+      "description": "Node will be deleted. This action cannot be undone.",
+      "confirm": "Delete"
     },
     "disableConfirm": {
       "title": "Disable node?",
@@ -874,7 +882,8 @@
       "saveError": "Save error",
       "createError": "Create error",
       "tokenGenerated": "Token generated",
-      "tokenRevoked": "Token revoked"
+      "tokenRevoked": "Token revoked",
+      "error": "Error"
     }
   },
   "fleet": {
