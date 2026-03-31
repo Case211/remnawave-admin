@@ -5451,6 +5451,83 @@ class DatabaseService:
             logger.error("Error cleaning up expired blocked IPs: %s", e)
             return 0
 
+    # ── HWID Blacklist ──────────────────────────────────────────
+
+    async def get_hwid_blacklist(self) -> List[Dict[str, Any]]:
+        """Get all blacklisted HWIDs."""
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM hwid_blacklist ORDER BY created_at DESC"
+            )
+            return [dict(r) for r in rows]
+
+    async def get_blacklisted_hwid(self, hwid: str) -> Optional[Dict[str, Any]]:
+        """Check if a specific HWID is blacklisted. Returns the entry or None."""
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM hwid_blacklist WHERE hwid = $1", hwid
+            )
+            return dict(row) if row else None
+
+    async def check_hwids_against_blacklist(self, hwids: List[str]) -> List[Dict[str, Any]]:
+        """Check multiple HWIDs against blacklist. Returns matching entries."""
+        if not hwids:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM hwid_blacklist WHERE hwid = ANY($1::text[])", hwids
+            )
+            return [dict(r) for r in rows]
+
+    async def add_hwid_to_blacklist(
+        self,
+        hwid: str,
+        action: str = "alert",
+        reason: Optional[str] = None,
+        admin_id: Optional[int] = None,
+        admin_username: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Add HWID to blacklist. Returns created entry or None if already exists."""
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO hwid_blacklist (hwid, action, reason, added_by_admin_id, added_by_username)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (hwid) DO UPDATE SET
+                    action = EXCLUDED.action,
+                    reason = EXCLUDED.reason,
+                    added_by_admin_id = EXCLUDED.added_by_admin_id,
+                    added_by_username = EXCLUDED.added_by_username
+                RETURNING *
+                """,
+                hwid, action, reason, admin_id, admin_username,
+            )
+            return dict(row) if row else None
+
+    async def remove_hwid_from_blacklist(self, hwid: str) -> bool:
+        """Remove HWID from blacklist. Returns True if deleted."""
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM hwid_blacklist WHERE hwid = $1", hwid
+            )
+            return "DELETE 1" in result
+
+    async def find_users_by_hwid(self, hwid: str) -> List[Dict[str, Any]]:
+        """Find all users that have a specific HWID."""
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT h.user_uuid, u.username, u.status, h.platform, h.device_model,
+                       h.created_at as hwid_first_seen, h.updated_at as hwid_last_seen
+                FROM user_hwid_devices h
+                LEFT JOIN users u ON u.uuid = h.user_uuid
+                WHERE h.hwid = $1
+                ORDER BY h.updated_at DESC
+                """,
+                hwid,
+            )
+            return [dict(r) for r in rows]
+
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:
     """
@@ -5565,83 +5642,6 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
     
     return None
 
-
-    # ── HWID Blacklist ──────────────────────────────────────────
-
-    async def get_hwid_blacklist(self) -> List[Dict[str, Any]]:
-        """Get all blacklisted HWIDs."""
-        async with self.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM hwid_blacklist ORDER BY created_at DESC"
-            )
-            return [dict(r) for r in rows]
-
-    async def get_blacklisted_hwid(self, hwid: str) -> Optional[Dict[str, Any]]:
-        """Check if a specific HWID is blacklisted. Returns the entry or None."""
-        async with self.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM hwid_blacklist WHERE hwid = $1", hwid
-            )
-            return dict(row) if row else None
-
-    async def check_hwids_against_blacklist(self, hwids: List[str]) -> List[Dict[str, Any]]:
-        """Check multiple HWIDs against blacklist. Returns matching entries."""
-        if not hwids:
-            return []
-        async with self.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM hwid_blacklist WHERE hwid = ANY($1::text[])", hwids
-            )
-            return [dict(r) for r in rows]
-
-    async def add_hwid_to_blacklist(
-        self,
-        hwid: str,
-        action: str = "alert",
-        reason: Optional[str] = None,
-        admin_id: Optional[int] = None,
-        admin_username: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
-        """Add HWID to blacklist. Returns created entry or None if already exists."""
-        async with self.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO hwid_blacklist (hwid, action, reason, added_by_admin_id, added_by_username)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (hwid) DO UPDATE SET
-                    action = EXCLUDED.action,
-                    reason = EXCLUDED.reason,
-                    added_by_admin_id = EXCLUDED.added_by_admin_id,
-                    added_by_username = EXCLUDED.added_by_username
-                RETURNING *
-                """,
-                hwid, action, reason, admin_id, admin_username,
-            )
-            return dict(row) if row else None
-
-    async def remove_hwid_from_blacklist(self, hwid: str) -> bool:
-        """Remove HWID from blacklist. Returns True if deleted."""
-        async with self.acquire() as conn:
-            result = await conn.execute(
-                "DELETE FROM hwid_blacklist WHERE hwid = $1", hwid
-            )
-            return "DELETE 1" in result
-
-    async def find_users_by_hwid(self, hwid: str) -> List[Dict[str, Any]]:
-        """Find all users that have a specific HWID."""
-        async with self.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT h.user_uuid, u.username, u.status, h.platform, h.device_model,
-                       h.created_at as hwid_first_seen, h.updated_at as hwid_last_seen
-                FROM user_hwid_devices h
-                LEFT JOIN users u ON u.uuid = h.user_uuid
-                WHERE h.hwid = $1
-                ORDER BY h.updated_at DESC
-                """,
-                hwid,
-            )
-            return [dict(r) for r in rows]
 
 
 # Global database service instance

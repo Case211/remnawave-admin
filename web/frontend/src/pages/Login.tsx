@@ -406,9 +406,20 @@ export default function Login() {
     script.setAttribute('data-request-access', 'write')
     script.async = true
 
+    script.onerror = () => {
+      if (authMethods.password) setShowPasswordForm(true)
+    }
+
+    const timeout = setTimeout(() => {
+      if (authMethods.password) setShowPasswordForm(true)
+    }, 5000)
+
+    script.onload = () => clearTimeout(timeout)
+
     containerRef.current?.appendChild(script)
 
     return () => {
+      clearTimeout(timeout)
       if (containerRef.current?.contains(script)) {
         containerRef.current.removeChild(script)
       }
