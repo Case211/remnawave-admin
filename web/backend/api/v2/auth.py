@@ -58,6 +58,47 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _is_setup_locked() -> bool:
+    """Check if initial setup has been completed (permanent lock).
+
+    Once the first admin is registered, we write a 'setup_completed' flag
+    into bot_config. Even if all admin accounts are later deleted (by an
+    attacker or by accident), the /register endpoint stays blocked.
+    Only a manual DB intervention can reset this flag.
+    """
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return False
+        async with db_service.acquire() as conn:
+            row = await conn.fetchval(
+                "SELECT value FROM bot_config WHERE key = '_setup_completed'"
+            )
+            return row == "true"
+    except Exception as e:
+        logger.debug("Setup lock check: %s", e)
+        return False
+
+
+async def _set_setup_locked() -> None:
+    """Permanently mark initial setup as completed."""
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return
+        async with db_service.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO bot_config (key, value, value_type, category, display_name, "
+                "description, is_secret, is_readonly, sort_order) "
+                "VALUES ('_setup_completed', 'true', 'bool', 'system', "
+                "'Setup completed', 'Internal flag: initial admin setup has been completed', "
+                "false, true, 0) "
+                "ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = NOW()"
+            )
+    except Exception as e:
+        logger.error("Failed to set setup lock: %s", e)
+
+
 @router.get("/methods")
 async def get_auth_methods():
     """Public endpoint — returns enabled auth methods for login page."""
@@ -69,13 +110,18 @@ async def get_auth_methods():
 
 
 @router.get("/setup-status", response_model=SetupStatusResponse)
+@limiter.limit("10/minute")
 async def get_setup_status(request: Request):
     """
     Check whether initial admin setup is needed.
 
-    Returns needs_setup=true when no admin account exists in the DB
-    and no .env credentials are configured.
+    Returns needs_setup=true when no admin account exists in the DB,
+    no .env credentials are configured, AND setup has never been completed before.
     """
+    # If setup was completed before, never allow re-registration
+    if await _is_setup_locked():
+        return SetupStatusResponse(needs_setup=False)
+
     settings = get_web_settings()
     has_env_auth = bool(settings.admin_login and settings.admin_password)
 
@@ -95,19 +141,30 @@ async def get_setup_status(request: Request):
         logger.debug("Non-critical: %s", e)
 
     needs_setup = not has_env_auth and not has_db_auth and not has_rbac_accounts
+
+    # Auto-lock for existing deployments: if admins exist, ensure lock is set
+    if not needs_setup:
+        await _set_setup_locked()
+
     return SetupStatusResponse(needs_setup=needs_setup)
 
 
 @router.post("/register", response_model=TokenResponse)
-@limiter.limit("3/minute")
+@limiter.limit("1/minute")
 async def register_admin(request: Request, data: RegisterRequest):
     """
-    Register the first admin account. Only works when no admin exists.
+    Register the first admin account. Only works when no admin exists
+    AND setup has never been completed before.
 
     This endpoint is only available during initial setup.
     """
     settings = get_web_settings()
     client_ip = get_client_ip(request)
+
+    # Permanent lock: if setup was completed before, block registration forever
+    if await _is_setup_locked():
+        logger.warning("Registration attempt after setup lock from %s", client_ip)
+        raise api_error(403, E.FORBIDDEN, "Initial setup has already been completed. Registration is permanently disabled.")
 
     # Check that no admin exists yet (guard against abuse)
     has_env_auth = bool(settings.admin_login and settings.admin_password)
@@ -150,6 +207,9 @@ async def register_admin(request: Request, data: RegisterRequest):
         raise api_error(500, E.ADMIN_CREATE_FAILED)
 
     logger.info("First admin registered: '%s' from %s", data.username, client_ip)
+
+    # Permanently lock setup to prevent re-registration
+    await _set_setup_locked()
 
     # Auto-login after registration
     subject = f"pwd:{data.username.strip()}"

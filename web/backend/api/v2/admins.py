@@ -187,6 +187,12 @@ async def update_admin(
     if data.max_hosts is not None:
         fields["max_hosts"] = data.max_hosts
     if data.is_active is not None:
+        # Prevent deactivating the last active admin
+        if not data.is_active:
+            all_accounts = await list_admin_accounts()
+            active_accounts = [a for a in all_accounts if a.get("is_active", True) and a["id"] != admin_id]
+            if not active_accounts:
+                raise api_error(400, E.FORBIDDEN, "Cannot deactivate the last active admin account")
         fields["is_active"] = data.is_active
     if data.email is not None:
         fields["email"] = data.email or None
@@ -229,6 +235,12 @@ async def delete_admin_endpoint(
     existing = await get_admin_account_by_id(admin_id)
     if not existing:
         raise api_error(404, E.ADMIN_NOT_FOUND)
+
+    # Prevent deleting the last admin — this would reset the system to setup mode
+    all_accounts = await list_admin_accounts()
+    active_accounts = [a for a in all_accounts if a.get("is_active", True)]
+    if len(active_accounts) <= 1:
+        raise api_error(400, E.FORBIDDEN, "Cannot delete the last admin account")
 
     success = await delete_admin_account(admin_id)
     if not success:
