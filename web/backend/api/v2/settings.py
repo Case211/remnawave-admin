@@ -147,12 +147,12 @@ async def get_all_settings(
                     has_env = True
                     env_display = env_val
 
-            # Mask secret values
+            # Mask secret values — never reveal any part of the actual value
             display_value = effective
             if row_dict.get('is_secret') and display_value:
-                display_value = display_value[:3] + '***' if len(display_value) > 3 else '***'
+                display_value = '••••••••'
                 if env_display:
-                    env_display = env_display[:3] + '***' if len(env_display) > 3 else '***'
+                    env_display = '••••••••'
 
             item = ConfigItemResponse(
                 key=row_dict['key'],
