@@ -206,12 +206,30 @@ class TrafficRateMonitor:
         """Send traffic rate violation notification."""
         try:
             from web.backend.core.notification_service import create_notification
+            from shared.database import db_service
 
             username = violator["username"]
+            user_uuid = violator["user_uuid"]
             delta_gb = violator["delta_gb"]
             elapsed = int(violator["elapsed_minutes"])
             rate = violator["rate_gb_per_hour"]
             threshold = cfg["threshold_gb"]
+
+            # Fetch node names for this user
+            nodes_str = ""
+            try:
+                async with db_service.acquire() as conn:
+                    rows = await conn.fetch(
+                        "SELECT n.name FROM user_node_traffic unt "
+                        "JOIN nodes n ON unt.node_uuid = n.uuid "
+                        "WHERE unt.user_uuid = $1::uuid AND unt.traffic_bytes > 0 "
+                        "ORDER BY unt.traffic_bytes DESC LIMIT 5",
+                        user_uuid,
+                    )
+                if rows:
+                    nodes_str = "\nНоды: " + ", ".join(f"<code>{_esc(r['name'])}</code>" for r in rows)
+            except Exception:
+                pass
 
             title = f"⚡ Высокое потребление трафика"
             body = (
@@ -219,9 +237,9 @@ class TrafficRateMonitor:
                 f"<b>{delta_gb} GB</b> за {elapsed} мин "
                 f"(~{rate} GB/ч)\n"
                 f"Порог: {threshold} GB / {cfg['window_minutes']} мин"
+                f"{nodes_str}"
             )
 
-            user_uuid = violator["user_uuid"]
             keyboard = {
                 "inline_keyboard": [
                     [
