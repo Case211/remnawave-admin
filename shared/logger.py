@@ -93,15 +93,19 @@ class ViolationLogFilter(logging.Filter):
         return any(kw in msg_lower for kw in self._KEYWORDS)
 
 
+_LOGGER_PAD = 14  # Longest: agent_manager (13) + 1
+
 def _shorten_logger_name(logger: object, method_name: str, event_dict: dict) -> dict:
-    """structlog processor: сокращает имена логгеров."""
+    """structlog processor: сокращает имена логгеров и паддит до фиксированной ширины."""
     name = event_dict.get("logger", "")
     for prefix, short in _LOGGER_NAME_MAP.items():
         if name == prefix or name.startswith(prefix + "."):
-            event_dict["logger"] = short
-            return event_dict
-    if "." in name:
-        event_dict["logger"] = name.rsplit(".", 1)[-1]
+            name = short
+            break
+    else:
+        if "." in name:
+            name = name.rsplit(".", 1)[-1]
+    event_dict["logger"] = name.ljust(_LOGGER_PAD)
     return event_dict
 
 
