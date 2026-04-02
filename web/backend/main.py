@@ -469,11 +469,10 @@ async def lifespan(app: FastAPI):
                 _bg_tasks.append(asyncio.create_task(task_scheduler_loop()))
 
                 # Start sync service (Panel API → local DB cache)
-                # In bot+web mode, bot starts sync first; is_running guard prevents double-start
+                # Sync service — единственный источник синхронизации Panel API → БД
                 try:
                     from shared.sync import sync_service
-                    if not sync_service.is_running:
-                        await sync_service.start()
+                    await sync_service.start()
                 except Exception as e:
                     logger.warning("Sync service start failed: %s", e)
             else:

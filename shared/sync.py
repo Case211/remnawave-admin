@@ -140,7 +140,7 @@ class SyncService:
             pass
         settings = get_settings()
         return settings.sync_interval_seconds
-    
+
     async def full_sync(self) -> Dict[str, int]:
         """
         Perform full synchronization of all data.

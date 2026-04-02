@@ -10,7 +10,6 @@ from src.config import get_settings
 from shared.api_client import api_client
 from shared.config_service import config_service
 from shared.database import db_service
-from shared.sync import sync_service
 from src.services.health_check import PanelHealthChecker
 from src.services.report_scheduler import init_report_scheduler
 from src.services.webhook import app as webhook_app
@@ -286,8 +285,7 @@ async def main() -> None:
             logger.info("✅ Dynamic config initialized")
             config_service.start_auto_reload(interval_seconds=120)
 
-        logger.info("🔄 Starting sync service...")
-        await sync_service.start()
+        # sync_service запускается только в web-backend (единый источник синхронизации)
 
         report_scheduler = init_report_scheduler(bot)
         await report_scheduler.start()
@@ -340,8 +338,6 @@ async def main() -> None:
     config_service.stop_auto_reload()
     if report_scheduler and report_scheduler.is_running:
         await report_scheduler.stop()
-    if sync_service.is_running:
-        await sync_service.stop()
     if webhook_task:
         webhook_task.cancel()
         try:
