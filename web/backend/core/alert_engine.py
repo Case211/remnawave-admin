@@ -6,8 +6,9 @@ every 60 seconds against current system metrics.
 import asyncio
 import json
 import logging
+from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Deque, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,12 @@ OPERATORS = {
     "eq": lambda v, t: v == t,
     "neq": lambda v, t: v != t,
 }
+
+# Metrics that support averaging over a duration window
+_SMOOTHABLE_METRICS = {"cpu_usage_percent", "ram_usage_percent", "disk_usage_percent"}
+
+# Max samples to keep per metric (at 60s interval, 60 samples = 1 hour)
+_MAX_SAMPLES = 60
 
 
 class _SafeDict(dict):
@@ -36,6 +43,8 @@ class AlertEngine:
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
         self._running = False
+        # Ring buffer: metric_name -> deque of (timestamp, value)
+        self._history: Dict[str, Deque[Tuple[float, float]]] = {}
 
     async def start(self):
         """Start the alert monitoring loop."""
@@ -84,8 +93,15 @@ class AlertEngine:
             if not rules:
                 return
 
-            # Collect metrics once
+            # Collect metrics once and record history for smoothable metrics
             metrics = await self._collect_metrics()
+            now = datetime.now(timezone.utc).timestamp()
+            for m in _SMOOTHABLE_METRICS:
+                val = metrics.get(m)
+                if val is not None:
+                    if m not in self._history:
+                        self._history[m] = deque(maxlen=_MAX_SAMPLES)
+                    self._history[m].append((now, float(val)))
 
             for rule in rules:
                 try:
@@ -203,6 +219,20 @@ class AlertEngine:
 
         return metrics
 
+    def _get_avg_value(self, metric_name: str, duration_minutes: int) -> Optional[float]:
+        """Get average value for a metric over the last duration_minutes.
+
+        Returns None if not enough data yet.
+        """
+        buf = self._history.get(metric_name)
+        if not buf:
+            return None
+        cutoff = datetime.now(timezone.utc).timestamp() - duration_minutes * 60
+        values = [v for ts, v in buf if ts >= cutoff]
+        if not values:
+            return None
+        return sum(values) / len(values)
+
     async def _evaluate_rule(self, rule: Dict[str, Any], metrics: Dict[str, Any]):
         """Evaluate a single alert rule against metrics."""
         metric_name = rule.get("metric")
@@ -228,7 +258,12 @@ class AlertEngine:
             else:
                 current_value = metrics.get(metric_name)
         else:
-            current_value = metrics.get(metric_name)
+            # For smoothable metrics with duration_minutes > 0, use average over window
+            duration = rule.get("duration_minutes") or 0
+            if duration > 0 and metric_name in _SMOOTHABLE_METRICS:
+                current_value = self._get_avg_value(metric_name, duration)
+            else:
+                current_value = metrics.get(metric_name)
 
         if current_value is None:
             return
