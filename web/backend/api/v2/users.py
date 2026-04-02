@@ -55,8 +55,6 @@ def _ensure_snake_case(user: dict) -> dict:
         'createdAt': 'created_at',
         'updatedAt': 'updated_at',
         'onlineAt': 'online_at',
-        'subLastUserAgent': 'sub_last_user_agent',
-        'subLastOpenedAt': 'sub_last_opened_at',
         'subRevokedAt': 'sub_revoked_at',
         'lastTrafficResetAt': 'last_traffic_reset_at',
         'trojanPassword': 'trojan_password',

@@ -77,8 +77,6 @@ interface UserDetailData {
   online_at: string | null
   subscription_uuid: string | null
   subscription_url: string | null
-  sub_last_user_agent: string | null
-  sub_last_opened_at: string | null
   sub_revoked_at: string | null
   last_traffic_reset_at: string | null
   trojan_password: string | null
@@ -2388,26 +2386,12 @@ export default function UserDetail() {
                     <p className="text-dark-100 text-xs font-mono break-all">{user.subscription_uuid}</p>
                   </div>
                 )}
-                {user.sub_last_opened_at && (
-                  <div>
-                    <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.lastOpened')}</p>
-                    <p className="text-dark-100 text-xs">
-                      {formatDate(user.sub_last_opened_at)}
-                    </p>
-                  </div>
-                )}
                 {user.sub_revoked_at && (
                   <div>
                     <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.revoked')}</p>
                     <p className="text-red-400 text-xs">
                       {formatDate(user.sub_revoked_at)}
                     </p>
-                  </div>
-                )}
-                {user.sub_last_user_agent && (
-                  <div>
-                    <p className="text-xs text-dark-200 mb-1">{t('userDetail.subscription.userAgent')}</p>
-                    <p className="text-dark-100 text-xs truncate" title={user.sub_last_user_agent}>{user.sub_last_user_agent}</p>
                   </div>
                 )}
                 {canEdit && (

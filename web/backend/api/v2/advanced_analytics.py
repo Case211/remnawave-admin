@@ -798,28 +798,89 @@ async def get_torrent_stats(
 async def _compute_torrent_stats(days: int = 7):
     from shared.database import db_service
 
-    try:
-        if not db_service.is_connected:
-            return {"summary": {}, "timeseries": [], "top_users": [], "top_destinations": []}
+    empty = {"summary": {}, "timeseries": [], "top_users": [], "top_destinations": []}
 
-        stats = await db_service.get_torrent_stats(days=days)
-        timeseries = await db_service.get_torrent_timeseries(days=days)
-        top_destinations = await db_service.get_torrent_top_destinations(days=days)
+    # 1. Try Panel API (torrent-blocker plugin) — primary source
+    panel_data = await _fetch_panel_torrent_stats()
+
+    # 2. Local DB (node-agent torrent events) — secondary source
+    local_data = None
+    try:
+        if db_service.is_connected:
+            stats = await db_service.get_torrent_stats(days=days)
+            timeseries = await db_service.get_torrent_timeseries(days=days)
+            top_destinations = await db_service.get_torrent_top_destinations(days=days)
+            local_data = {
+                "summary": {
+                    "total_events": stats.get("total_events", 0),
+                    "unique_users": stats.get("unique_users", 0),
+                    "unique_destinations": stats.get("unique_destinations", 0),
+                    "affected_nodes": stats.get("affected_nodes", 0),
+                },
+                "timeseries": timeseries,
+                "top_users": stats.get("top_users", []),
+                "top_destinations": top_destinations,
+            }
+    except Exception as e:
+        logger.debug("Local torrent stats failed: %s", e)
+
+    # 3. Merge: Panel API summary + local timeseries/destinations
+    if panel_data and local_data:
+        # Sum up totals from both sources
+        ps = panel_data["summary"]
+        ls = local_data["summary"]
+        return {
+            "summary": {
+                "total_events": ps.get("total_events", 0) + ls.get("total_events", 0),
+                "unique_users": ps.get("unique_users", 0) + ls.get("unique_users", 0),
+                "unique_destinations": ls.get("unique_destinations", 0),
+                "affected_nodes": ps.get("affected_nodes", 0) + ls.get("affected_nodes", 0),
+            },
+            "timeseries": local_data["timeseries"],
+            "top_users": panel_data["top_users"] + local_data["top_users"],
+            "top_destinations": local_data["top_destinations"],
+        }
+    if panel_data:
+        return panel_data
+    if local_data:
+        return local_data
+    return empty
+
+
+async def _fetch_panel_torrent_stats():
+    """Fetch torrent blocker stats from Panel API."""
+    try:
+        from shared.api_client import api_client
+        result = await api_client.get_torrent_blocker_stats()
+        resp = result.get("response", {})
+        stats = resp.get("stats", {})
+        top_users_raw = resp.get("topUsers", [])
+        top_nodes_raw = resp.get("topNodes", [])
+
+        top_users = [
+            {"user_uuid": u.get("uuid", ""), "username": u.get("username", ""), "event_count": u.get("total", 0)}
+            for u in top_users_raw
+        ]
 
         return {
             "summary": {
-                "total_events": stats.get("total_events", 0),
-                "unique_users": stats.get("unique_users", 0),
-                "unique_destinations": stats.get("unique_destinations", 0),
-                "affected_nodes": stats.get("affected_nodes", 0),
+                "total_events": stats.get("totalReports", 0),
+                "unique_users": stats.get("distinctUsers", 0),
+                "unique_destinations": 0,  # Panel API doesn't track destinations
+                "affected_nodes": stats.get("distinctNodes", 0),
+                "reports_last_24h": stats.get("reportsLast24Hours", 0),
             },
-            "timeseries": timeseries,
-            "top_users": stats.get("top_users", []),
-            "top_destinations": top_destinations,
+            "timeseries": [],  # Panel API doesn't provide timeseries
+            "top_users": top_users,
+            "top_destinations": [],
+            "top_nodes": [
+                {"name": n.get("name", ""), "uuid": n.get("uuid", ""), "country_code": n.get("countryCode", ""), "total": n.get("total", 0)}
+                for n in top_nodes_raw
+            ],
         }
     except Exception as e:
-        logger.error("get_torrent_stats failed: %s", e)
-        return {"summary": {}, "timeseries": [], "top_users": [], "top_destinations": []}
+        logger.debug("Panel torrent-blocker stats unavailable: %s", e)
+        return None
 
 
 # ══════════════════════════════════════════════════════════════════

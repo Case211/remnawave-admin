@@ -110,25 +110,37 @@ class SyncService:
     
     async def _periodic_sync_loop(self) -> None:
         """Periodic sync loop."""
-        settings = get_settings()
-        interval = settings.sync_interval_seconds
-        
         while self._running:
             try:
+                # Re-read interval each iteration so UI changes take effect without restart
+                interval = self._get_sync_interval()
                 await asyncio.sleep(interval)
-                
+
                 if not self._running:
                     break
-                
+
                 logger.debug("Running periodic sync...")
                 await self.full_sync()
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Error in periodic sync: %s", e)
                 # Continue running, will retry next interval
-    
+
+    @staticmethod
+    def _get_sync_interval() -> int:
+        """Get sync interval from config_service (DB) with fallback to .env/default."""
+        try:
+            from shared.config_service import config_service
+            val = config_service.get("sync_interval_seconds")
+            if val is not None:
+                return max(int(val), 10)  # minimum 10 seconds safety
+        except Exception:
+            pass
+        settings = get_settings()
+        return settings.sync_interval_seconds
+
     async def full_sync(self) -> Dict[str, int]:
         """
         Perform full synchronization of all data.
@@ -258,21 +270,28 @@ class SyncService:
                     batch_uuids = [u["uuid"] for u in users if u.get("uuid")]
                     if batch_uuids:
                         old_traffic = await db_service.get_used_traffic_map(batch_uuids)
+                        raw_traffic = await db_service.get_raw_traffic_for_uuids(batch_uuids)
                         reset_uuids = []
                         for u in users:
                             uid = u.get("uuid")
                             if not uid:
                                 continue
                             ut = u.get("userTraffic") or {}
-                            new_used = int(ut.get("usedTrafficBytes") or u.get("usedTrafficBytes") or 0)
+                            ut_val = ut.get("usedTrafficBytes")
+                            new_used = int(ut_val if ut_val is not None else (u.get("usedTrafficBytes") or 0))
                             old_used = old_traffic.get(uid, 0)
+                            raw_used = raw_traffic.get(uid, 0)
+                            # Primary: used_traffic dropped (normal reset detection)
                             if old_used > 0 and new_used < old_used:
+                                reset_uuids.append(uid)
+                            # Catch-up: raw >> used_traffic from API — missed reset
+                            elif raw_used > 0 and new_used < raw_used and (raw_used - new_used) > 1_073_741_824:
                                 reset_uuids.append(uid)
                         if reset_uuids:
                             await db_service.reset_raw_traffic(reset_uuids)
                             logger.info("Traffic reset detected for %d users, raw counters zeroed", len(reset_uuids))
                 except Exception as e:
-                    logger.debug("Failed to detect traffic resets: %s", e)
+                    logger.warning("Failed to detect traffic resets: %s", e)
 
                 # Batch upsert users (single INSERT with UNNEST)
                 try:
@@ -921,7 +940,7 @@ class SyncService:
                 status="success",
                 records_synced=total_synced,
             )
-            logger.info("Synced node traffic: %d records across %d nodes", total_synced, len(active_nodes))
+            logger.info("Synced node traffic  records=%-5d  nodes=%d", total_synced, len(active_nodes))
             return total_synced
 
         except Exception as e:

@@ -467,6 +467,21 @@ async def lifespan(app: FastAPI):
                 # Scheduled tasks (cron) — executes scripts on nodes by schedule
                 from web.backend.core.task_scheduler import task_scheduler_loop
                 _bg_tasks.append(asyncio.create_task(task_scheduler_loop()))
+
+                # Start sync service (Panel API → local DB cache)
+                # Sync service — единственный источник синхронизации Panel API → БД
+                try:
+                    from shared.sync import sync_service
+                    await sync_service.start()
+                except Exception as e:
+                    logger.warning("Sync service start failed: %s", e)
+
+                # Traffic rate monitor — alerts on high traffic consumption
+                try:
+                    from web.backend.core.traffic_rate_monitor import traffic_rate_monitor
+                    await traffic_rate_monitor.start()
+                except Exception as e:
+                    logger.warning("Traffic rate monitor start failed: %s", e)
             else:
                 logger.warning("Database connection failed")
         except Exception as e:
@@ -536,6 +551,17 @@ async def lifespan(app: FastAPI):
     try:
         from web.backend.core.automation_engine import engine as automation_engine
         await automation_engine.stop()
+    except Exception:
+        pass
+    try:
+        from shared.sync import sync_service
+        if sync_service.is_running:
+            await sync_service.stop()
+    except Exception:
+        pass
+    try:
+        from web.backend.core.traffic_rate_monitor import traffic_rate_monitor
+        await traffic_rate_monitor.stop()
     except Exception:
         pass
     try:

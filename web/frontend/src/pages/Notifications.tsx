@@ -452,7 +452,10 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
                     <div className="flex flex-wrap gap-4 text-xs text-dark-400">
                       <span>{t('notifications.alerts.metric')}: <span className="text-dark-200">{rule.metric}</span></span>
                       <span>{t('notifications.alerts.condition')}: <span className="text-dark-200">{rule.operator} {rule.threshold}</span></span>
-                      <span>{t('notifications.alerts.cooldown')}: <span className="text-dark-200">{rule.cooldown_minutes} {t('notifications.alerts.min')}</span></span>
+                      <span>{t('notifications.alerts.cooldown', { defaultValue: 'Задержка' })}: <span className="text-dark-200">{rule.cooldown_minutes} {t('notifications.alerts.min')}</span></span>
+                      {rule.duration_minutes > 0 && (
+                        <span>{t('notifications.alerts.durationMinutes', { defaultValue: 'Окно усреднения' })}: <span className="text-dark-200">{rule.duration_minutes} {t('notifications.alerts.min')}</span></span>
+                      )}
                       <span>{t('notifications.alerts.triggered')}: <span className="text-dark-200">{rule.trigger_count}x</span></span>
                       {rule.channels && rule.channels.length > 0 && (
                         <span>{t('notifications.alerts.channelsLabel')}: <span className="text-dark-200">{rule.channels.join(', ')}</span></span>
@@ -527,6 +530,7 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
     threshold: rule?.threshold ?? 90,
     severity: rule?.severity || 'warning',
     cooldown_minutes: rule?.cooldown_minutes ?? 30,
+    duration_minutes: rule?.duration_minutes ?? 0,
     channels: rule?.channels || ['in_app'],
     is_enabled: rule?.is_enabled ?? true,
     escalation_minutes: rule?.escalation_minutes ?? 0,
@@ -659,6 +663,19 @@ function AlertRuleDialog({ rule, open, onClose }: { rule: AlertRule | null; open
               />
             </div>
           </div>
+
+          {/* Duration window — average over N minutes instead of instant value */}
+          {['cpu_usage_percent', 'ram_usage_percent', 'disk_usage_percent'].includes(form.metric) && (
+            <div>
+              <Label>{t('notifications.alerts.durationMinutes', { defaultValue: 'Окно усреднения (мин)' })} (0 = {t('notifications.alerts.instant', { defaultValue: 'мгновенное' })})</Label>
+              <Input
+                type="number"
+                value={form.duration_minutes}
+                onChange={(e) => setForm({ ...form, duration_minutes: parseInt(e.target.value) || 0 })}
+              />
+              <p className="text-[10px] text-dark-400 mt-1">{t('notifications.alerts.durationMinutesHint', { defaultValue: 'Среднее значение за указанный период. 0 — срабатывает на пиковое значение.' })}</p>
+            </div>
+          )}
 
           {/* Max offline minutes — only for node_offline_minutes metric */}
           {form.metric === 'node_offline_minutes' && (

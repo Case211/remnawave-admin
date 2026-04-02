@@ -6,8 +6,9 @@ every 60 seconds against current system metrics.
 import asyncio
 import json
 import logging
+from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Deque, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,12 @@ OPERATORS = {
     "eq": lambda v, t: v == t,
     "neq": lambda v, t: v != t,
 }
+
+# Metrics that support averaging over a duration window
+_SMOOTHABLE_METRICS = {"cpu_usage_percent", "ram_usage_percent", "disk_usage_percent"}
+
+# Max samples to keep per metric (at 60s interval, 60 samples = 1 hour)
+_MAX_SAMPLES = 60
 
 
 class _SafeDict(dict):
@@ -36,6 +43,8 @@ class AlertEngine:
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
         self._running = False
+        # Ring buffer: metric_name -> deque of (timestamp, value)
+        self._history: Dict[str, Deque[Tuple[float, float]]] = {}
 
     async def start(self):
         """Start the alert monitoring loop."""
@@ -84,8 +93,15 @@ class AlertEngine:
             if not rules:
                 return
 
-            # Collect metrics once
+            # Collect metrics once and record history for smoothable metrics
             metrics = await self._collect_metrics()
+            now = datetime.now(timezone.utc).timestamp()
+            for m in _SMOOTHABLE_METRICS:
+                val = metrics.get(m)
+                if val is not None:
+                    if m not in self._history:
+                        self._history[m] = deque(maxlen=_MAX_SAMPLES)
+                    self._history[m].append((now, float(val)))
 
             for rule in rules:
                 try:
@@ -119,19 +135,29 @@ class AlertEngine:
                 max_cpu = 0.0
                 max_ram = 0.0
                 max_disk = 0.0
+                max_cpu_node = ""
+                max_ram_node = ""
+                max_disk_node = ""
                 total_nodes = 0
                 online_nodes_count = 0
                 offline_nodes: List[Dict[str, Any]] = []
 
                 for node in nodes:
                     total_nodes += 1
+                    node_name = node.get("name") or str(node.get("uuid", ""))
                     cpu = node.get("cpu_usage") or 0
                     ram = node.get("memory_usage") or 0
                     disk = node.get("disk_usage") or 0
 
-                    max_cpu = max(max_cpu, cpu)
-                    max_ram = max(max_ram, ram)
-                    max_disk = max(max_disk, disk)
+                    if cpu > max_cpu:
+                        max_cpu = cpu
+                        max_cpu_node = node_name
+                    if ram > max_ram:
+                        max_ram = ram
+                        max_ram_node = node_name
+                    if disk > max_disk:
+                        max_disk = disk
+                        max_disk_node = node_name
 
                     if not node.get("is_connected", True):
                         last_update = node.get("metrics_updated_at")
@@ -151,7 +177,6 @@ class AlertEngine:
                         online_nodes_count += 1
 
                     # Per-node metrics
-                    node_name = node["name"] or str(node["uuid"])
                     metrics[f"node_{node_name}_cpu"] = cpu
                     metrics[f"node_{node_name}_ram"] = ram
                     metrics[f"node_{node_name}_disk"] = disk
@@ -159,6 +184,9 @@ class AlertEngine:
                 metrics["cpu_usage_percent"] = max_cpu
                 metrics["ram_usage_percent"] = max_ram
                 metrics["disk_usage_percent"] = max_disk
+                metrics["max_cpu_node"] = max_cpu_node
+                metrics["max_ram_node"] = max_ram_node
+                metrics["max_disk_node"] = max_disk_node
                 metrics["offline_nodes"] = offline_nodes
                 metrics["nodes_total"] = total_nodes
                 metrics["nodes_online"] = online_nodes_count
@@ -191,6 +219,20 @@ class AlertEngine:
 
         return metrics
 
+    def _get_avg_value(self, metric_name: str, duration_minutes: int) -> Optional[float]:
+        """Get average value for a metric over the last duration_minutes.
+
+        Returns None if not enough data yet.
+        """
+        buf = self._history.get(metric_name)
+        if not buf:
+            return None
+        cutoff = datetime.now(timezone.utc).timestamp() - duration_minutes * 60
+        values = [v for ts, v in buf if ts >= cutoff]
+        if not values:
+            return None
+        return sum(values) / len(values)
+
     async def _evaluate_rule(self, rule: Dict[str, Any], metrics: Dict[str, Any]):
         """Evaluate a single alert rule against metrics."""
         metric_name = rule.get("metric")
@@ -216,7 +258,12 @@ class AlertEngine:
             else:
                 current_value = metrics.get(metric_name)
         else:
-            current_value = metrics.get(metric_name)
+            # For smoothable metrics with duration_minutes > 0, use average over window
+            duration = rule.get("duration_minutes") or 0
+            if duration > 0 and metric_name in _SMOOTHABLE_METRICS:
+                current_value = self._get_avg_value(metric_name, duration)
+            else:
+                current_value = metrics.get(metric_name)
 
         if current_value is None:
             return
@@ -275,9 +322,21 @@ class AlertEngine:
         OP_SYMBOLS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<=", "eq": "=", "neq": "!="}
         op_symbol = OP_SYMBOLS.get(rule.get("operator", "gt"), rule.get("operator", ">"))
 
-        # Gather offline node names and IPs
+        # Gather node names relevant to the triggered metric
         offline = metrics.get("offline_nodes") or []
-        node_names = ", ".join(n["name"] for n in offline[:5]) if offline else ""
+        # For resource metrics, show the node with the highest value
+        METRIC_NODE_MAP = {
+            "cpu_usage_percent": "max_cpu_node",
+            "ram_usage_percent": "max_ram_node",
+            "disk_usage_percent": "max_disk_node",
+        }
+        source_node = metrics.get(METRIC_NODE_MAP.get(metric, ""), "")
+        if source_node:
+            node_names = source_node
+        elif offline:
+            node_names = ", ".join(n["name"] for n in offline[:5])
+        else:
+            node_names = ""
         node_ips = ", ".join(n.get("address", "") for n in offline[:5] if n.get("address")) if offline else ""
 
         # Template variables available for substitution
@@ -299,7 +358,8 @@ class AlertEngine:
 
         # Render templates (with safe fallback if template has unknown keys)
         title_tpl = rule.get("title_template") or "Alert: {rule_name}"
-        body_tpl = rule.get("body_template") or "{metric}: {value} ({operator} {threshold})"
+        default_body = "{node_names}: нагрузка на {metric} {value} (порог {operator} {threshold})" if node_names else "{metric}: {value} ({operator} {threshold})"
+        body_tpl = rule.get("body_template") or default_body
         try:
             title = title_tpl.format_map(_SafeDict(tpl_vars))
         except Exception:

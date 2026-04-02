@@ -123,7 +123,7 @@
     "infrastructure_section": "🛰 Infrastructure",
     "resources_section": "🧰 Resources",
     "uptime": "⏱ Uptime: `{uptime}`",
-    "cpu": "🧠 Cores: `{cores}` (physical: `{physical}`)",
+    "cpu": "🧠 Cores: `{cores}`",
     "cpu_usage": "📊 Usage: `{usage}%`",
     "cpu_load": "⚖️ Load: {load}",
     "memory": "💾 Used: `{used}` / `{total}`",

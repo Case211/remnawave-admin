@@ -2465,6 +2465,7 @@ function TorrentAnalyticsCard() {
   const timeseries = Array.isArray(data?.timeseries) ? data!.timeseries : []
   const topUsers = Array.isArray(data?.top_users) ? data!.top_users : []
   const topDest = Array.isArray(data?.top_destinations) ? data!.top_destinations : []
+  const topNodes = Array.isArray(data?.top_nodes) ? data!.top_nodes : []
 
   const chartData = useMemo(
     () => timeseries.map((p) => ({ date: p.date?.slice(5, 10) ?? '', events: p.events, users: p.users })),
@@ -2506,8 +2507,8 @@ function TorrentAnalyticsCard() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: t('analytics.torrent.totalEvents', { defaultValue: 'Events' }), value: summary.total_events, color: 'text-red-400' },
+                ...(summary.reports_last_24h != null ? [{ label: t('analytics.torrent.last24h', { defaultValue: 'Last 24h' }), value: summary.reports_last_24h, color: 'text-red-300' }] : []),
                 { label: t('analytics.torrent.uniqueUsers', { defaultValue: 'Users' }), value: summary.unique_users, color: 'text-orange-400' },
-                { label: t('analytics.torrent.destinations', { defaultValue: 'Trackers' }), value: summary.unique_destinations, color: 'text-yellow-400' },
                 { label: t('analytics.torrent.affectedNodes', { defaultValue: 'Nodes' }), value: summary.affected_nodes, color: 'text-blue-400' },
               ].map((s) => (
                 <div key={s.label} className="bg-[var(--glass-bg)] rounded-lg p-3 text-center">
@@ -2564,8 +2565,25 @@ function TorrentAnalyticsCard() {
                   <div className="space-y-1.5 max-h-60 overflow-y-auto">
                     {topUsers.map((u, i) => (
                       <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
-                        <span className="text-white/80 font-mono truncate max-w-[200px]">{u.user_uuid.slice(0, 8)}...</span>
+                        <span className="text-white/80 font-mono truncate max-w-[200px]">{u.username || (u.user_uuid ? `${u.user_uuid.slice(0, 8)}...` : '?')}</span>
                         <Badge variant="destructive" className="text-[10px]">{u.event_count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Top nodes */}
+              {topNodes.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                    {t('analytics.torrent.topNodes', { defaultValue: 'Top Nodes' })}
+                  </h4>
+                  <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                    {topNodes.map((n, i) => (
+                      <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
+                        <span className="text-white/80 truncate max-w-[200px]">{n.country_code && <span className="mr-1">{n.country_code}</span>}{n.name}</span>
+                        <Badge variant="secondary" className="text-[10px]">{n.total}</Badge>
                       </div>
                     ))}
                   </div>

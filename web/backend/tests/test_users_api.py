@@ -24,7 +24,7 @@ MOCK_USERS = [
         "hwid_device_limit": 3,
         "hwid_device_count": 1,
         "note": "",
-        "sub_last_user_agent": None,
+
         "sub_revoked_at": None,
         "last_traffic_reset_at": None,
         "traffic_limit_strategy": "no_reset",
@@ -47,7 +47,7 @@ MOCK_USERS = [
         "hwid_device_limit": 0,
         "hwid_device_count": 0,
         "note": "test user",
-        "sub_last_user_agent": None,
+
         "sub_revoked_at": None,
         "last_traffic_reset_at": None,
         "traffic_limit_strategy": "no_reset",

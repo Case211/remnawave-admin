@@ -16,15 +16,66 @@ from shared.config import get_shared_settings as get_settings
 
 # Короткие имена для сторонних логгеров
 _LOGGER_NAME_MAP = {
+    # Bot / shared
     "remnawave-admin-bot": "bot",
+    "shared.sync": "sync",
+    "shared.database": "db",
+    "shared.api_client": "api",
+    "shared.config_service": "config",
+    "shared.violation_detector": "detector",
+    "shared.connection_monitor": "monitor",
+    "shared.geoip": "geoip",
+    # Web backend core
+    "web.backend.core.alert_engine": "alert",
+    "web.backend.core.automation_engine": "auto",
+    "web.backend.core.notification_service": "notify",
+    "web.backend.core.violation_notifier": "violat",
+    "web.backend.core.traffic_rate_monitor": "traffic",
+    "web.backend.core.api_helper": "api",
+    "web.backend.core.agent_manager": "agent",
+    "web.backend.core.task_scheduler": "sched",
+    "web.backend.core.update_checker": "update",
+    "web.backend.core.cache": "cache",
+    "web.backend.core.rbac": "rbac",
+    "web.backend.core.security": "auth",
+    "web.backend.core.audit_middleware": "audit",
+    "web.backend.core.backup_service": "backup",
+    "web.backend.core.terminal_sessions": "term",
+    "web.backend.core.ip_whitelist": "ipwl",
+    "web.backend.core.rate_limit": "rlimit",
+    # Mail
+    "web.backend.core.mail.mail_service": "mail",
+    "web.backend.core.mail.inbound_server": "mail-in",
+    "web.backend.core.mail.outbound_queue": "mail-out",
+    "web.backend.core.mail.submission_server": "mail-sub",
+    "web.backend.core.mail.dkim_manager": "dkim",
+    # Web backend API
+    "web.backend.api.v2.collector": "collect",
+    "web.backend.api.v2.users": "users",
+    "web.backend.api.v2.nodes": "nodes",
+    "web.backend.api.v2.hosts": "hosts",
+    "web.backend.api.v2.auth": "auth",
+    "web.backend.api.v2.analytics": "analyt",
+    "web.backend.api.v2.advanced_analytics": "analyt",
+    "web.backend.api.v2.settings": "settings",
+    "web.backend.api.v2.violations": "violat",
+    "web.backend.api.v2.notifications": "notify",
+    "web.backend.api.v2.webhooks": "webhook",
+    "web.backend.api.v2.blocked_ips": "ipblock",
+    "web.backend.api.v2.logs": "logs",
+    "web.backend.api.v2.agent_ws": "agent-ws",
+    "web.backend.api.v2.websocket": "ws",
+    "web.backend.api.v2.terminal": "term",
+    "web.backend.api.v2.backup": "backup",
+    "web.backend.api.deps": "web",
+    "web.backend.main": "web",
+    # Third-party
     "uvicorn.error": "uvicorn",
     "uvicorn.access": "uvicorn",
     "aiogram.event": "aiogram",
     "aiogram.dispatcher": "aiogram",
     "aiogram.middlewares": "aiogram",
     "aiogram.webhook": "aiogram",
-    "web.backend.api.deps": "web",
-    "web.backend.core.api_helper": "web",
     "httpx": "http",
     "httpcore": "http",
     "asyncpg": "db",
@@ -94,20 +145,32 @@ class ViolationLogFilter(logging.Filter):
 
 
 def _shorten_logger_name(logger: object, method_name: str, event_dict: dict) -> dict:
-    """structlog processor: сокращает имена логгеров."""
+    """structlog processor: сокращает имена логгеров до коротких алиасов."""
     name = event_dict.get("logger", "")
+    # Exact match first, then prefix match
+    if name in _LOGGER_NAME_MAP:
+        event_dict["logger"] = _LOGGER_NAME_MAP[name]
+        return event_dict
     for prefix, short in _LOGGER_NAME_MAP.items():
-        if name == prefix or name.startswith(prefix + "."):
+        if name.startswith(prefix + "."):
             event_dict["logger"] = short
             return event_dict
+    # Fallback: last segment of dotted name
     if "." in name:
         event_dict["logger"] = name.rsplit(".", 1)[-1]
     return event_dict
 
 
 def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
-    """structlog processor: компактный формат для api_call и api_error."""
+    """structlog processor: truncation + api_call/api_error compact format."""
     event = event_dict.get("event", "")
+
+    # Truncate very long event strings
+    if isinstance(event, str) and len(event) > 200:
+        event_dict["event"] = event[:197] + "..."
+        return event_dict
+
+    # API call / error — compact single-line format
     if event == "api_call":
         method = event_dict.pop("method", "")
         endpoint = event_dict.pop("endpoint", "")
@@ -151,11 +214,11 @@ _LEVEL_STYLES = {
 
 
 def _make_console_renderer() -> structlog.dev.ConsoleRenderer:
-    """Создаёт ConsoleRenderer с красивым форматированием."""
+    """Создаёт ConsoleRenderer с красивым форматированием для SSH терминала."""
     return structlog.dev.ConsoleRenderer(
         colors=True,
         force_colors=True,
-        pad_event_to=40,
+        pad_event_to=50,
         level_styles=_LEVEL_STYLES,
     )
 
@@ -257,7 +320,7 @@ def setup_logger() -> logging.Logger:
         )
 
     # Подавляем шумные сторонние логгеры
-    http_level = logging.DEBUG if level <= logging.DEBUG else logging.WARNING
+    http_level = logging.WARNING
     logging.getLogger("httpx").setLevel(http_level)
     logging.getLogger("httpcore").setLevel(http_level)
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
@@ -294,7 +357,7 @@ def set_log_level(level_name: str) -> None:
             if "violations" not in base:
                 handler.setLevel(level)
 
-    http_level = logging.DEBUG if level <= logging.DEBUG else logging.WARNING
+    http_level = logging.WARNING
     logging.getLogger("httpx").setLevel(http_level)
     logging.getLogger("httpcore").setLevel(http_level)
     logging.getLogger("aiogram").setLevel(level)

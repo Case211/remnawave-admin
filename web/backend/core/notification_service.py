@@ -206,10 +206,12 @@ async def send_telegram(
     body: str,
     topic_id: Optional[str] = None,
     bot_token: Optional[str] = None,
+    reply_markup: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Send notification to Telegram chat/group.
 
     Uses the provided bot_token, or falls back to the global BOT_TOKEN from settings.
+    ``reply_markup`` is an optional InlineKeyboardMarkup dict for quick action buttons.
     """
     try:
         if not bot_token:
@@ -229,6 +231,8 @@ async def send_telegram(
         }
         if topic_id and str(topic_id) != "0":
             payload["message_thread_id"] = int(topic_id)
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
 
         logger.debug("Sending Telegram notification to chat_id=%s", chat_id)
         async with httpx.AsyncClient(timeout=15) as client:
@@ -316,6 +320,8 @@ async def create_notification(
     channels: Optional[List[str]] = None,
     topic_type: str = "service",
     telegram_body: Optional[str] = None,
+    reply_markup: Optional[Dict[str, Any]] = None,
+    **kwargs,
 ) -> Optional[int]:
     """Create in-app notification and dispatch to configured channels.
 
@@ -414,7 +420,7 @@ async def create_notification(
         # Dispatch to external channels (per-admin configured channels)
         if admin_id is not None:
             per_admin_tg_chat_ids = await _collect_telegram_chat_ids(admin_id)
-            asyncio.create_task(_dispatch_external(admin_id, title, tg_body, severity, link, channels))
+            asyncio.create_task(_dispatch_external(admin_id, title, tg_body, severity, link, channels, reply_markup=reply_markup))
         else:
             # For broadcasts, dispatch to all admins' external channels
             try:
@@ -427,7 +433,7 @@ async def create_notification(
                         aid_chat_ids = await _collect_telegram_chat_ids(row["id"])
                         per_admin_tg_chat_ids.update(aid_chat_ids)
                         asyncio.create_task(
-                            _dispatch_external(row["id"], title, tg_body, severity, link, channels)
+                            _dispatch_external(row["id"], title, tg_body, severity, link, channels, reply_markup=reply_markup)
                         )
                 else:
                     logger.debug("No admin_accounts found for external dispatch")
@@ -441,7 +447,7 @@ async def create_notification(
             _, global_chat_id, _ = _get_global_telegram_config(topic_type)
             if global_chat_id and global_chat_id not in per_admin_tg_chat_ids:
                 asyncio.create_task(
-                    _send_to_global_telegram(title, tg_body, severity, topic_type)
+                    _send_to_global_telegram(title, tg_body, severity, topic_type, reply_markup=reply_markup)
                 )
             elif not global_chat_id:
                 logger.debug("No global NOTIFICATIONS_CHAT_ID, skipping global Telegram")
@@ -476,7 +482,10 @@ async def _collect_telegram_chat_ids(admin_id: int) -> set:
         return set()
 
 
-async def _send_to_global_telegram(title: str, body: str, severity: str, topic_type: str = "service"):
+async def _send_to_global_telegram(
+    title: str, body: str, severity: str, topic_type: str = "service",
+    reply_markup: Optional[Dict[str, Any]] = None,
+):
     """Send notification to the global NOTIFICATIONS_CHAT_ID.
 
     ``topic_type`` selects the Telegram topic ("nodes", "service", etc.).
@@ -490,7 +499,7 @@ async def _send_to_global_telegram(title: str, body: str, severity: str, topic_t
         severity_emoji = {"info": "\u2139\ufe0f", "warning": "\u26a0\ufe0f", "critical": "\ud83d\udea8", "success": "\u2705"}.get(severity, "")
         full_title = f"{severity_emoji} {title}" if severity_emoji else title
 
-        ok = await send_telegram(chat_id, full_title, body, topic_id, bot_token)
+        ok = await send_telegram(chat_id, full_title, body, topic_id, bot_token, reply_markup=reply_markup)
         if ok:
             logger.info("Global Telegram notification sent to chat_id=%s", chat_id)
         else:
@@ -506,6 +515,7 @@ async def _dispatch_external(
     severity: str,
     link: Optional[str],
     requested_channels: List[str],
+    reply_markup: Optional[Dict[str, Any]] = None,
 ):
     """Dispatch notification to external channels based on admin's channel config."""
     try:
@@ -540,7 +550,7 @@ async def _dispatch_external(
                     bot_token_override = config.get("bot_token")
                     if chat_id:
                         logger.info("Dispatching Telegram to chat_id=%s for admin_id=%s", chat_id, admin_id)
-                        await send_telegram(chat_id, title, body, topic_id, bot_token_override)
+                        await send_telegram(chat_id, title, body, topic_id, bot_token_override, reply_markup=reply_markup)
                     else:
                         logger.warning("Telegram channel for admin %s has no chat_id in config: %s", admin_id, config)
 

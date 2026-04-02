@@ -576,6 +576,58 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 42,
     },
 
+    # === TRAFFIC RATE MONITOR ===
+    {
+        "key": "traffic_rate_enabled",
+        "value_type": "bool",
+        "category": "violations",
+        "subcategory": "traffic_rate",
+        "display_name": "Монитор скорости трафика",
+        "description": "Отслеживание аномально высокого потребления трафика за период",
+        "default_value": "false",
+        "sort_order": 50,
+    },
+    {
+        "key": "traffic_rate_threshold_gb",
+        "value_type": "float",
+        "category": "violations",
+        "subcategory": "traffic_rate",
+        "display_name": "Порог (GB за период)",
+        "description": "Уведомление если пользователь потребил больше указанного объёма за период",
+        "default_value": "10.0",
+        "sort_order": 51,
+    },
+    {
+        "key": "traffic_rate_window_minutes",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "traffic_rate",
+        "display_name": "Окно проверки (мин)",
+        "description": "Период времени для подсчёта трафика (по умолчанию 60 = 1 час)",
+        "default_value": "60",
+        "sort_order": 52,
+    },
+    {
+        "key": "traffic_rate_check_interval_minutes",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "traffic_rate",
+        "display_name": "Интервал проверки (мин)",
+        "description": "Как часто проверять потребление трафика",
+        "default_value": "5",
+        "sort_order": 53,
+    },
+    {
+        "key": "traffic_rate_cooldown_minutes",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "traffic_rate",
+        "display_name": "Кулдаун уведомлений (мин)",
+        "description": "Минимальный интервал между повторными уведомлениями по одному пользователю",
+        "default_value": "60",
+        "sort_order": 54,
+    },
+
     # === MAILSERVER ===
     {
         "key": "mailserver_enabled",

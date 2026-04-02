@@ -344,8 +344,10 @@ export interface TorrentStatsResponse {
     unique_users: number
     unique_destinations: number
     affected_nodes: number
+    reports_last_24h?: number
   }
   timeseries: { date: string; events: number; users: number }[]
-  top_users: { user_uuid: string; event_count: number }[]
+  top_users: { user_uuid: string; username?: string; event_count: number }[]
   top_destinations: { destination: string; events: number; users: number }[]
+  top_nodes?: { name: string; uuid: string; country_code: string; total: number }[]
 }

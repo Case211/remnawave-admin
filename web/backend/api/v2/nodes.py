@@ -55,6 +55,37 @@ def _ensure_node_snake_case(node: dict) -> dict:
             result["xrayVersion"] = versions["xray"]
         if "nodeVersion" not in result and versions.get("node"):
             result["nodeVersion"] = versions["node"]
+    # Panel 2.7+: extract system.info/stats into flat metrics
+    system = result.get("system")
+    if isinstance(system, dict):
+        info = system.get("info") or {}
+        stats = system.get("stats") or {}
+        if info.get("cpus") is not None and "cpu_cores" not in result:
+            result["cpu_cores"] = info["cpus"]
+        if info.get("memoryTotal") is not None and "memory_total_bytes" not in result:
+            result["memory_total_bytes"] = int(info["memoryTotal"])
+        if stats.get("memoryUsed") is not None and "memory_used_bytes" not in result:
+            result["memory_used_bytes"] = int(stats["memoryUsed"])
+        if stats.get("uptime") is not None and "uptimeSeconds" not in result:
+            result["uptimeSeconds"] = int(stats["uptime"])
+        iface = stats.get("interface")
+        if isinstance(iface, dict):
+            if iface.get("rxBytesPerSec") is not None and "downloadSpeedBps" not in result:
+                result["downloadSpeedBps"] = int(iface["rxBytesPerSec"])
+            if iface.get("txBytesPerSec") is not None and "uploadSpeedBps" not in result:
+                result["uploadSpeedBps"] = int(iface["txBytesPerSec"])
+        # Derive cpu_usage from loadAvg if not set by node-agent
+        if "cpuUsage" not in result and "cpu_usage" not in result:
+            load = stats.get("loadAvg")
+            cpus = info.get("cpus")
+            if isinstance(load, list) and load and cpus and cpus > 0:
+                result["cpuUsage"] = round(load[0] / cpus * 100, 1)
+        # Derive memory_usage if not set
+        if "memoryUsage" not in result and "memory_usage" not in result:
+            mem_total = info.get("memoryTotal")
+            mem_used = stats.get("memoryUsed")
+            if mem_total and mem_used and mem_total > 0:
+                result["memoryUsage"] = round(mem_used / mem_total * 100, 1)
     for camel, snake in mappings.items():
         if camel in result and snake not in result:
             result[snake] = result[camel]

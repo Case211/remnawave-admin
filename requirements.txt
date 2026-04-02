@@ -7,6 +7,7 @@ ujson==5.10.0
 structlog>=24.1.0
 fastapi==0.115.0
 uvicorn==0.32.0
+websockets>=13.0
 # GeoIP
 geoip2>=4.8.0
 # Database

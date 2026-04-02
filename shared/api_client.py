@@ -1230,6 +1230,15 @@ class RemnawaveApiClient:
             "targetNodes": target_nodes,
         })
 
+    # --- Torrent Blocker (Panel Plugin) ---
+    async def get_torrent_blocker_reports(self, start: int = 0, size: int = 100) -> dict:
+        """Get torrent blocker reports (paginated)."""
+        return await self._get("/api/node-plugins/torrent-blocker", params={"start": start, "size": size})
+
+    async def get_torrent_blocker_stats(self) -> dict:
+        """Get torrent blocker stats (summary + topUsers + topNodes)."""
+        return await self._get("/api/node-plugins/torrent-blocker/stats")
+
     # --- API Tokens ---
     async def get_tokens(self) -> dict:
         return await self._get("/api/tokens")
