@@ -96,6 +96,8 @@ class AutomationEngine:
         # State tracking for event detection
         self._node_offline_since: Dict[str, datetime] = {}
         self._user_traffic_exceeded: set = set()
+        # Dedup for threshold rules: (rule_id, target_id) -> last notified value
+        self._threshold_notified: Dict[tuple, float] = {}
 
     async def start(self):
         """Start the scheduler, threshold, and event detection loops."""
@@ -423,13 +425,39 @@ class AutomationEngine:
                             ))
 
                 if not targets:
+                    # No targets exceeded threshold — clear notified state for this rule
+                    self._threshold_notified = {
+                        k: v for k, v in self._threshold_notified.items() if k[0] != rule["id"]
+                    }
+                    continue
+
+                # Filter out already-notified targets (same rule + target + similar value)
+                new_targets = []
+                for t in targets:
+                    target_type, target_id, ctx = t
+                    key = (rule["id"], target_id)
+                    prev_value = self._threshold_notified.get(key)
+                    # Notify if: never notified, or value changed by >5%
+                    cur_value = ctx.get("percent") or ctx.get("traffic_gb") or 0
+                    if prev_value is None or abs(cur_value - prev_value) > 5:
+                        new_targets.append(t)
+                        self._threshold_notified[key] = cur_value
+
+                # Clear notified state for targets that dropped below threshold
+                current_target_ids = {t[1] for t in targets}
+                self._threshold_notified = {
+                    k: v for k, v in self._threshold_notified.items()
+                    if k[0] != rule["id"] or k[1] in current_target_ids
+                }
+
+                if not new_targets:
                     continue
 
                 # Acquire trigger lock (5-min minimum between threshold triggers)
                 if not await try_acquire_trigger(rule["id"], min_interval_seconds=280):
                     continue
 
-                for target_type, target_id, ctx in targets:
+                for target_type, target_id, ctx in new_targets:
                     result, details = await self._execute_action(
                         rule, target_type, target_id, ctx,
                     )
