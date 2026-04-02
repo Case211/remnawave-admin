@@ -119,19 +119,29 @@ class AlertEngine:
                 max_cpu = 0.0
                 max_ram = 0.0
                 max_disk = 0.0
+                max_cpu_node = ""
+                max_ram_node = ""
+                max_disk_node = ""
                 total_nodes = 0
                 online_nodes_count = 0
                 offline_nodes: List[Dict[str, Any]] = []
 
                 for node in nodes:
                     total_nodes += 1
+                    node_name = node.get("name") or str(node.get("uuid", ""))
                     cpu = node.get("cpu_usage") or 0
                     ram = node.get("memory_usage") or 0
                     disk = node.get("disk_usage") or 0
 
-                    max_cpu = max(max_cpu, cpu)
-                    max_ram = max(max_ram, ram)
-                    max_disk = max(max_disk, disk)
+                    if cpu > max_cpu:
+                        max_cpu = cpu
+                        max_cpu_node = node_name
+                    if ram > max_ram:
+                        max_ram = ram
+                        max_ram_node = node_name
+                    if disk > max_disk:
+                        max_disk = disk
+                        max_disk_node = node_name
 
                     if not node.get("is_connected", True):
                         last_update = node.get("metrics_updated_at")
@@ -151,7 +161,6 @@ class AlertEngine:
                         online_nodes_count += 1
 
                     # Per-node metrics
-                    node_name = node["name"] or str(node["uuid"])
                     metrics[f"node_{node_name}_cpu"] = cpu
                     metrics[f"node_{node_name}_ram"] = ram
                     metrics[f"node_{node_name}_disk"] = disk
@@ -159,6 +168,9 @@ class AlertEngine:
                 metrics["cpu_usage_percent"] = max_cpu
                 metrics["ram_usage_percent"] = max_ram
                 metrics["disk_usage_percent"] = max_disk
+                metrics["max_cpu_node"] = max_cpu_node
+                metrics["max_ram_node"] = max_ram_node
+                metrics["max_disk_node"] = max_disk_node
                 metrics["offline_nodes"] = offline_nodes
                 metrics["nodes_total"] = total_nodes
                 metrics["nodes_online"] = online_nodes_count
@@ -275,9 +287,21 @@ class AlertEngine:
         OP_SYMBOLS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<=", "eq": "=", "neq": "!="}
         op_symbol = OP_SYMBOLS.get(rule.get("operator", "gt"), rule.get("operator", ">"))
 
-        # Gather offline node names and IPs
+        # Gather node names relevant to the triggered metric
         offline = metrics.get("offline_nodes") or []
-        node_names = ", ".join(n["name"] for n in offline[:5]) if offline else ""
+        # For resource metrics, show the node with the highest value
+        METRIC_NODE_MAP = {
+            "cpu_usage_percent": "max_cpu_node",
+            "ram_usage_percent": "max_ram_node",
+            "disk_usage_percent": "max_disk_node",
+        }
+        source_node = metrics.get(METRIC_NODE_MAP.get(metric, ""), "")
+        if source_node:
+            node_names = source_node
+        elif offline:
+            node_names = ", ".join(n["name"] for n in offline[:5])
+        else:
+            node_names = ""
         node_ips = ", ".join(n.get("address", "") for n in offline[:5] if n.get("address")) if offline else ""
 
         # Template variables available for substitution
@@ -299,7 +323,8 @@ class AlertEngine:
 
         # Render templates (with safe fallback if template has unknown keys)
         title_tpl = rule.get("title_template") or "Alert: {rule_name}"
-        body_tpl = rule.get("body_template") or "{metric}: {value} ({operator} {threshold})"
+        default_body = "{node_names}: нагрузка на {metric} {value} (порог {operator} {threshold})" if node_names else "{metric}: {value} ({operator} {threshold})"
+        body_tpl = rule.get("body_template") or default_body
         try:
             title = title_tpl.format_map(_SafeDict(tpl_vars))
         except Exception:
