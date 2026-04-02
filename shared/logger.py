@@ -16,15 +16,66 @@ from shared.config import get_shared_settings as get_settings
 
 # Короткие имена для сторонних логгеров
 _LOGGER_NAME_MAP = {
+    # Bot / shared
     "remnawave-admin-bot": "bot",
+    "shared.sync": "sync",
+    "shared.database": "db",
+    "shared.api_client": "api",
+    "shared.config_service": "config",
+    "shared.violation_detector": "detector",
+    "shared.connection_monitor": "monitor",
+    "shared.geoip": "geoip",
+    # Web backend core
+    "web.backend.core.alert_engine": "alert",
+    "web.backend.core.automation_engine": "auto",
+    "web.backend.core.notification_service": "notify",
+    "web.backend.core.violation_notifier": "violat",
+    "web.backend.core.traffic_rate_monitor": "traffic",
+    "web.backend.core.api_helper": "api",
+    "web.backend.core.agent_manager": "agent",
+    "web.backend.core.task_scheduler": "sched",
+    "web.backend.core.update_checker": "update",
+    "web.backend.core.cache": "cache",
+    "web.backend.core.rbac": "rbac",
+    "web.backend.core.security": "auth",
+    "web.backend.core.audit_middleware": "audit",
+    "web.backend.core.backup_service": "backup",
+    "web.backend.core.terminal_sessions": "term",
+    "web.backend.core.ip_whitelist": "ipwl",
+    "web.backend.core.rate_limit": "rlimit",
+    # Mail
+    "web.backend.core.mail.mail_service": "mail",
+    "web.backend.core.mail.inbound_server": "mail-in",
+    "web.backend.core.mail.outbound_queue": "mail-out",
+    "web.backend.core.mail.submission_server": "mail-sub",
+    "web.backend.core.mail.dkim_manager": "dkim",
+    # Web backend API
+    "web.backend.api.v2.collector": "collect",
+    "web.backend.api.v2.users": "users",
+    "web.backend.api.v2.nodes": "nodes",
+    "web.backend.api.v2.hosts": "hosts",
+    "web.backend.api.v2.auth": "auth",
+    "web.backend.api.v2.analytics": "analyt",
+    "web.backend.api.v2.advanced_analytics": "analyt",
+    "web.backend.api.v2.settings": "settings",
+    "web.backend.api.v2.violations": "violat",
+    "web.backend.api.v2.notifications": "notify",
+    "web.backend.api.v2.webhooks": "webhook",
+    "web.backend.api.v2.blocked_ips": "ipblock",
+    "web.backend.api.v2.logs": "logs",
+    "web.backend.api.v2.agent_ws": "agent-ws",
+    "web.backend.api.v2.websocket": "ws",
+    "web.backend.api.v2.terminal": "term",
+    "web.backend.api.v2.backup": "backup",
+    "web.backend.api.deps": "web",
+    "web.backend.main": "web",
+    # Third-party
     "uvicorn.error": "uvicorn",
     "uvicorn.access": "uvicorn",
     "aiogram.event": "aiogram",
     "aiogram.dispatcher": "aiogram",
     "aiogram.middlewares": "aiogram",
     "aiogram.webhook": "aiogram",
-    "web.backend.api.deps": "web",
-    "web.backend.core.api_helper": "web",
     "httpx": "http",
     "httpcore": "http",
     "asyncpg": "db",
@@ -93,33 +144,31 @@ class ViolationLogFilter(logging.Filter):
         return any(kw in msg_lower for kw in self._KEYWORDS)
 
 
-_LOGGER_PAD = 14  # Longest: agent_manager (13) + 1
-
 def _shorten_logger_name(logger: object, method_name: str, event_dict: dict) -> dict:
-    """structlog processor: сокращает имена логгеров и паддит до фиксированной ширины."""
+    """structlog processor: сокращает имена логгеров до коротких алиасов."""
     name = event_dict.get("logger", "")
+    # Exact match first, then prefix match
+    if name in _LOGGER_NAME_MAP:
+        event_dict["logger"] = _LOGGER_NAME_MAP[name]
+        return event_dict
     for prefix, short in _LOGGER_NAME_MAP.items():
-        if name == prefix or name.startswith(prefix + "."):
-            name = short
-            break
-    else:
-        if "." in name:
-            name = name.rsplit(".", 1)[-1]
-    event_dict["logger"] = name.ljust(_LOGGER_PAD)
+        if name.startswith(prefix + "."):
+            event_dict["logger"] = short
+            return event_dict
+    # Fallback: last segment of dotted name
+    if "." in name:
+        event_dict["logger"] = name.rsplit(".", 1)[-1]
     return event_dict
 
 
 def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
-    """structlog processor: форматирует key-value пары в фиксированные столбцы.
-
-    Результат: event string включает все параметры с фиксированной шириной,
-    а extra-ключи удаляются чтобы ConsoleRenderer не дублировал их.
-    """
+    """structlog processor: truncation + api_call/api_error compact format."""
     event = event_dict.get("event", "")
 
     # Truncate very long event strings
     if isinstance(event, str) and len(event) > 200:
-        event = event[:197] + "..."
+        event_dict["event"] = event[:197] + "..."
+        return event_dict
 
     # API call / error — compact single-line format
     if event == "api_call":
@@ -135,7 +184,6 @@ def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
         if duration:
             parts.append(f"({duration}ms)")
         event_dict["event"] = " ".join(parts) if parts else event
-        return event_dict
     elif event == "api_error":
         method = event_dict.pop("method", "")
         endpoint = event_dict.pop("endpoint", "")
@@ -149,28 +197,6 @@ def _compact_kv(logger: object, method_name: str, event_dict: dict) -> dict:
         if error:
             parts.append(f"| {error}")
         event_dict["event"] = " ".join(parts) if parts else event
-        return event_dict
-
-    # Collect all extra keys (not structlog internals)
-    _INTERNAL = {"event", "logger", "level", "timestamp", "_record", "_from_structlog"}
-    extras = {k: v for k, v in event_dict.items() if k not in _INTERNAL}
-
-    if not extras:
-        event_dict["event"] = event
-        return event_dict
-
-    # Build columnar output: event | key=value (padded)
-    COL_WIDTH = 18  # width per key=value column
-    cols = []
-    for k, v in extras.items():
-        cell = f"{k}={v}"
-        cols.append(cell.ljust(COL_WIDTH))
-
-    # Remove extras from event_dict so ConsoleRenderer won't re-print them
-    for k in extras:
-        del event_dict[k]
-
-    event_dict["event"] = f"{event.ljust(20)}  {'  '.join(cols)}"
     return event_dict
 
 
