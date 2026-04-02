@@ -372,18 +372,13 @@ def build_user_summary(user: dict, t: Callable[[str], str]) -> str:
     active_squads = info.get("activeInternalSquads", [])
     squad_display = t("user.not_set")
     if active_squads:
-        first_squad = active_squads[0]
-        # activeInternalSquads может быть списком словарей или списком строк UUID
-        if isinstance(first_squad, dict):
-            # Если это словарь, извлекаем имя сквада
-            squad_display = first_squad.get("name", first_squad.get("uuid", t("user.not_set")))
-        else:
-            # Если это строка UUID, пытаемся получить имя сквада
-            squad_info = info.get("internalSquads", [])
-            if squad_info and isinstance(squad_info, list) and len(squad_info) > 0:
-                squad_display = squad_info[0].get("name", first_squad)
+        names = []
+        for sq in active_squads:
+            if isinstance(sq, dict):
+                names.append(sq.get("name", sq.get("uuid", "?")))
             else:
-                squad_display = first_squad
+                names.append(str(sq))
+        squad_display = ", ".join(names) if names else t("user.not_set")
     
     # Форматируем информацию о пользователе с группировкой по секциям (как в меню редактирования)
     lines = [

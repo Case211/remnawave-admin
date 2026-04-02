@@ -42,16 +42,31 @@ async def _get_squad_name_by_uuid(squad_uuid: str) -> str:
         from shared.api_client import api_client
         squads_res = await api_client.get_internal_squads()
         all_squads = squads_res.get("response", {}).get("internalSquads", [])
-        # Ищем сквад по UUID
         for squad in all_squads:
             if squad.get("uuid") == squad_uuid:
                 return squad.get("name", squad_uuid[:8] + "...")
-        # Если не нашли, возвращаем короткий UUID
         return squad_uuid[:8] + "..."
     except Exception as exc:
         logger.debug("Failed to get squad name from API for uuid=%s: %s", squad_uuid, exc)
-        # Если не удалось получить из API, возвращаем короткий UUID
         return squad_uuid[:8] + "..."
+
+
+async def _resolve_squads_display(active_squads: list) -> str:
+    """Resolve all active internal squads to a comma-separated display string."""
+    if not active_squads:
+        return "—"
+    names = []
+    for sq in active_squads:
+        if isinstance(sq, dict):
+            name = sq.get("name")
+            if name:
+                names.append(name)
+            else:
+                uuid = sq.get("uuid", "")
+                names.append(await _get_squad_name_by_uuid(uuid) if uuid else "?")
+        else:
+            names.append(await _get_squad_name_by_uuid(str(sq)))
+    return ", ".join(names) if names else "—"
 
 
 async def send_user_notification(
@@ -211,49 +226,19 @@ async def send_user_notification(
         active_squads = info.get("activeInternalSquads", [])
         external_squad = info.get("externalSquadUuid")
         
-        squad_display = "—"
-        if active_squads:
-            first_squad = active_squads[0]
-            if isinstance(first_squad, dict):
-                squad_uuid = first_squad.get("uuid", "")
-                squad_name = first_squad.get("name")
-                if squad_name:
-                    squad_display = squad_name
-                elif squad_uuid:
-                    squad_display = await _get_squad_name_by_uuid(squad_uuid)
-            else:
-                squad_info = info.get("internalSquads", [])
-                if squad_info and isinstance(squad_info, list) and len(squad_info) > 0:
-                    squad_display = squad_info[0].get("name", first_squad)
-                else:
-                    squad_display = await _get_squad_name_by_uuid(first_squad)
-        elif external_squad:
+        squad_display = await _resolve_squads_display(active_squads)
+        if squad_display == "—" and external_squad:
             squad_display = f"External: {external_squad[:8]}..."
-        
+
         if action == "updated" and old_user_info:
             old_info = old_user_info.get("response", old_user_info)
             old_active_squads = old_info.get("activeInternalSquads", [])
             old_external_squad = old_info.get("externalSquadUuid")
-            
-            old_squad_display = "—"
-            if old_active_squads:
-                old_first_squad = old_active_squads[0]
-                if isinstance(old_first_squad, dict):
-                    old_squad_uuid = old_first_squad.get("uuid", "")
-                    old_squad_name = old_first_squad.get("name")
-                    if old_squad_name:
-                        old_squad_display = old_squad_name
-                    elif old_squad_uuid:
-                        old_squad_display = await _get_squad_name_by_uuid(old_squad_uuid)
-                else:
-                    old_squad_info = old_info.get("internalSquads", [])
-                    if old_squad_info and isinstance(old_squad_info, list) and len(old_squad_info) > 0:
-                        old_squad_display = old_squad_info[0].get("name", old_first_squad)
-                    else:
-                        old_squad_display = await _get_squad_name_by_uuid(old_first_squad)
-            elif old_external_squad:
+
+            old_squad_display = await _resolve_squads_display(old_active_squads)
+            if old_squad_display == "—" and old_external_squad:
                 old_squad_display = f"External: {old_external_squad[:8]}..."
-            
+
             if old_squad_display != squad_display:
                 lines.append(f"   Сквад: <code>{old_squad_display}</code> → <code>{squad_display}</code>")
             else:
