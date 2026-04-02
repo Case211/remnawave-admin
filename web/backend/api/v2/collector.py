@@ -302,9 +302,10 @@ async def receive_connections(
 
     node_name = await _get_node_name(node_uuid)
     logger.info(
-        "Batch received: node=%s connections=%d metrics=%s",
-        node_name, len(report.connections) if report.connections else 0,
-        "yes" if report.system_metrics else "no",
+        "Batch received",
+        node=node_name,
+        connections=len(report.connections) if report.connections else 0,
+        metrics="yes" if report.system_metrics else "no",
     )
 
     if report.node_uuid != node_uuid:
@@ -458,16 +459,24 @@ async def receive_connections(
                 )
                 processed = result["upserted"]
                 logger.info(
-                    "Batch upserted: node=%s upserted=%d closed_stale=%d errors=%d",
-                    node_name, result["upserted"], result["closed_stale"], errors,
+                    "Batch upserted",
+                    node=node_name,
+                    upserted=result["upserted"],
+                    stale=result["closed_stale"],
+                    errors=errors,
                 )
             except Exception as e:
                 logger.error("Batch upsert failed for node %s: %s", node_name, e, exc_info=True)
                 errors += len(batch_connections)
 
     if errors > 0:
-        logger.warning("Batch processed with errors: node=%s total=%d processed=%d errors=%d",
-                       node_uuid, len(report.connections), processed, errors)
+        logger.warning(
+            "Batch errors",
+            node=node_name,
+            total=len(report.connections),
+            processed=processed,
+            errors=errors,
+        )
 
     # Post-processing: violation detection in background
     # Stale connection closing is now handled inside batch_upsert_connections
@@ -792,14 +801,14 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
                         hwid_score=hwid.score if hwid else None,
                         hwid_matched_users=json.dumps(hwid.matched_details) if hwid and hwid.matched_details else None,
                     )
-                    logger.info("Violation saved to DB for user %s: score=%.1f", user_uuid, violation_score.total)
+                    logger.info("Violation saved", user=user_uuid[:8], score=round(violation_score.total, 1))
 
                     # Auto-block in Remnawave Panel when hard_block is recommended
                     if violation_score.recommended_action == ViolationAction.HARD_BLOCK:
                         try:
                             from shared.api_client import api_client
                             await api_client.disable_user(user_uuid)
-                            logger.info("Auto-blocked user %s via Panel API (hard_block, score=%.1f)", user_uuid, violation_score.total)
+                            logger.warning("Auto-blocked user", user=user_uuid[:8], score=round(violation_score.total, 1), action="hard_block")
                         except Exception as block_error:
                             logger.warning("Failed to auto-block user %s: %s", user_uuid, block_error)
 
@@ -820,7 +829,7 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
                     logger.warning("Failed to save violation to DB for user %s: %s", user_uuid, save_error)
             else:
                 if violation_score:
-                    logger.info("User %s: score=%.1f (below threshold %.1f)", user_uuid, violation_score.total, min_score)
+                    logger.debug("User %s below threshold: score=%.1f", user_uuid[:8], violation_score.total)
         except Exception as e:
             logger.warning("Error checking violations for user %s: %s", user_uuid, e)
 
