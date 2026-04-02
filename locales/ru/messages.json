@@ -123,7 +123,7 @@
     "infrastructure_section": "🛰 Инфраструктура",
     "resources_section": "🧰 Ресурсы",
     "uptime": "⏱ Аптайм: `{uptime}`",
-    "cpu": "🧠 Ядер: `{cores}` (физических: `{physical}`)",
+    "cpu": "🧠 Ядер: `{cores}`",
     "cpu_usage": "📊 Использование: `{usage}%`",
     "cpu_load": "⚖️ Нагрузка: {load}",
     "memory": "💾 Использовано: `{used}` / `{total}`",

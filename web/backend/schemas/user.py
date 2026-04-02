@@ -65,8 +65,6 @@ class UserDetail(UserListItem):
     subscription_uuid: Optional[str] = None
     subscription_url: Optional[str] = None
     online_at: Optional[datetime] = None
-    sub_last_user_agent: Optional[str] = None
-    sub_last_opened_at: Optional[datetime] = None
     sub_revoked_at: Optional[datetime] = None
     last_traffic_reset_at: Optional[datetime] = None
     trojan_password: Optional[str] = None

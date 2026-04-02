@@ -205,7 +205,7 @@ async def _fetch_server_stats_text() -> str:
             f"  {_('stats.uptime').format(uptime=format_uptime(uptime))}",
             "",
             f"*{_('stats.cpu_section')}*",
-            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('physicalCores', cpu.get('cores', '—')))}",
+            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('cores', '—'))}",
         ]
 
         if cpu_usage is not None:
@@ -443,7 +443,7 @@ async def _fetch_stats_text() -> str:
             "",
             f"*{_('stats.system_section')}*",
             f"  {_('stats.uptime').format(uptime=format_uptime(res.get('uptime')))}",
-            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('physicalCores', cpu.get('cores', '—')))}",
+            f"  {_('stats.cpu').format(cores=cpu.get('cores', '—'), physical=cpu.get('cores', '—'))}",
             f"  {_('stats.memory').format(used=format_bytes(mem.get('used')), total=format_bytes(mem.get('total')))}",
             "",
             f"*{_('stats.users_section')}*",

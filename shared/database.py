@@ -1065,7 +1065,8 @@ class DatabaseService:
             return
 
         user_traffic = response.get("userTraffic") or {}
-        used_traffic = user_traffic.get("usedTrafficBytes") or response.get("usedTrafficBytes")
+        ut_val = user_traffic.get("usedTrafficBytes")
+        used_traffic = ut_val if ut_val is not None else response.get("usedTrafficBytes")
 
         await conn.execute(
             """
@@ -1156,7 +1157,8 @@ class DatabaseService:
                 continue
 
             user_traffic = response.get("userTraffic") or {}
-            used_traffic = user_traffic.get("usedTrafficBytes") or response.get("usedTrafficBytes")
+            ut_val = user_traffic.get("usedTrafficBytes")
+            used_traffic = ut_val if ut_val is not None else response.get("usedTrafficBytes")
 
             uuids.append(uuid_val)
             short_uuids.append(response.get("shortUuid"))
