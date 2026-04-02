@@ -98,7 +98,7 @@ async def send_violation_notification(
         if user_uuid in _violation_notification_cache:
             last = _violation_notification_cache[user_uuid]
             if now - last < timedelta(minutes=cooldown_minutes):
-                logger.debug("Violation notification throttled for user %s (memory)", user_uuid)
+                logger.info("Violation notification throttled for user %s (cooldown)", user_uuid)
                 return
 
         # DB check (persistent across restarts)
@@ -106,7 +106,7 @@ async def send_violation_notification(
             from shared.database import db_service
             last_notified = await db_service.get_user_last_violation_notification(user_uuid)
             if last_notified and now - last_notified < timedelta(minutes=cooldown_minutes):
-                logger.debug("Violation notification throttled for user %s (DB: last=%s)", user_uuid, last_notified)
+                logger.info("Violation notification throttled for user %s (DB cooldown)", user_uuid)
                 _violation_notification_cache[user_uuid] = last_notified  # Sync to memory
                 return
         except Exception:
@@ -378,7 +378,7 @@ async def send_torrent_notification(
     if user_uuid in _violation_notification_cache:
         last = _violation_notification_cache[user_uuid]
         if now - last < timedelta(minutes=cooldown_minutes):
-            logger.debug("Torrent notification throttled for user %s", user_uuid)
+            logger.info("Torrent notification throttled for user %s (cooldown)", user_uuid)
             return
 
     _cleanup_cache()

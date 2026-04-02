@@ -30,6 +30,8 @@ async def handle_violation_action(callback: CallbackQuery) -> None:
         return
 
     _, action, user_uuid = parts
+    admin_name = callback.from_user.first_name or str(callback.from_user.id)
+    logger.info("Violation action: %s on user %s by %s", action, user_uuid[:8], admin_name)
 
     try:
         if action == "info":
@@ -95,9 +97,9 @@ async def _block_user(callback: CallbackQuery, user_uuid: str) -> None:
         except Exception:
             pass
 
+        logger.warning("User %s (%s) BLOCKED by %s via violation button", user_uuid, username, callback.from_user.first_name)
         await callback.answer(f"🔒 {username} заблокирован", show_alert=True)
 
-        # Update message to show action was taken
         try:
             old_text = callback.message.text or callback.message.html_text or ""
             await callback.message.edit_text(
@@ -107,6 +109,7 @@ async def _block_user(callback: CallbackQuery, user_uuid: str) -> None:
         except Exception:
             pass
     except Exception as e:
+        logger.error("Block user %s failed: %s", user_uuid, e)
         await callback.answer(f"❌ Ошибка блокировки: {e}", show_alert=True)
 
 
@@ -132,6 +135,7 @@ async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
         except Exception:
             pass
 
+        logger.warning("User %s (%s) KILLED (disabled + connections dropped) by %s", user_uuid, username, callback.from_user.first_name)
         await callback.answer(f"⛔ {username} отключён, соединения разорваны", show_alert=True)
 
         try:
@@ -143,6 +147,7 @@ async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
         except Exception:
             pass
     except Exception as e:
+        logger.error("Kill user %s failed: %s", user_uuid, e)
         await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
 
@@ -171,6 +176,7 @@ async def _reset_traffic(callback: CallbackQuery, user_uuid: str) -> None:
         except Exception:
             pass
 
+        logger.warning("Traffic RESET for user %s (%s) by %s via violation button", user_uuid, username, callback.from_user.first_name)
         await callback.answer(f"🔄 Трафик {username} сброшен", show_alert=True)
 
         try:

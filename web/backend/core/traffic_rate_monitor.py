@@ -133,6 +133,8 @@ class TrafficRateMonitor:
                 logger.warning("Failed to fetch user traffic from DB: %s", e2)
                 return
 
+        logger.debug("Traffic rate check: %d users fetched, threshold=%.1f GB", len(traffic_map), cfg["threshold_gb"])
+
         violators = []
 
         for user_uuid, current_bytes in traffic_map.items():

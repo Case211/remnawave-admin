@@ -256,8 +256,10 @@ class AutomationEngine:
                 # Acquire trigger lock
                 min_interval = max(55, (interval or 1) * 60 - 10) if interval else 55
                 if not await try_acquire_trigger(rule["id"], min_interval_seconds=min_interval):
+                    logger.debug("Schedule rule %d skipped (trigger lock)", rule["id"])
                     continue
 
+                logger.info("Schedule rule %d (%s) fired", rule["id"], rule.get("name", "?"))
                 # Execute action — enrich context for notify actions
                 context: Dict[str, Any] = {
                     "trigger": "schedule", "cron": cron, "interval_minutes": interval,
@@ -455,8 +457,10 @@ class AutomationEngine:
 
                 # Acquire trigger lock (5-min minimum between threshold triggers)
                 if not await try_acquire_trigger(rule["id"], min_interval_seconds=280):
+                    logger.info("Threshold rule %d skipped (trigger lock cooldown)", rule["id"])
                     continue
 
+                logger.info("Threshold rule %d (%s) fired: %d targets", rule["id"], rule.get("name", "?"), len(new_targets))
                 for target_type, target_id, ctx in new_targets:
                     result, details = await self._execute_action(
                         rule, target_type, target_id, ctx,

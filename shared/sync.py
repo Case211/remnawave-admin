@@ -291,7 +291,7 @@ class SyncService:
                             await db_service.reset_raw_traffic(reset_uuids)
                             logger.info("Traffic reset detected for %d users, raw counters zeroed", len(reset_uuids))
                 except Exception as e:
-                    logger.debug("Failed to detect traffic resets: %s", e)
+                    logger.warning("Failed to detect traffic resets: %s", e)
 
                 # Batch upsert users (single INSERT with UNNEST)
                 try:
