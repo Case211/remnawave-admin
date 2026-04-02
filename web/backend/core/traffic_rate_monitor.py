@@ -197,8 +197,11 @@ class TrafficRateMonitor:
                         {"text": "🔒 Заблокировать", "callback_data": f"vact:block:{user_uuid}"},
                     ],
                     [
-                        {"text": "✅ Пропустить", "callback_data": f"vact:dismiss:{user_uuid}"},
+                        {"text": "⛔ Откл + разорвать", "callback_data": f"vact:kill:{user_uuid}"},
                         {"text": "🔄 Сбросить трафик", "callback_data": f"vact:reset:{user_uuid}"},
+                    ],
+                    [
+                        {"text": "✅ Пропустить", "callback_data": f"vact:dismiss:{user_uuid}"},
                     ],
                 ]
             }

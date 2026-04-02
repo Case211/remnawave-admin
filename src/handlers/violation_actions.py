@@ -36,6 +36,8 @@ async def handle_violation_action(callback: CallbackQuery) -> None:
             await _show_user_info(callback, user_uuid)
         elif action == "block":
             await _block_user(callback, user_uuid)
+        elif action == "kill":
+            await _kill_user(callback, user_uuid)
         elif action == "dismiss":
             await _dismiss(callback)
         elif action == "reset":
@@ -106,6 +108,42 @@ async def _block_user(callback: CallbackQuery, user_uuid: str) -> None:
             pass
     except Exception as e:
         await callback.answer(f"❌ Ошибка блокировки: {e}", show_alert=True)
+
+
+async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
+    """Disable user AND drop all connections via Panel API."""
+    try:
+        # 1. Disable user
+        await api_client.disable_user(user_uuid)
+
+        # 2. Drop all connections
+        try:
+            await api_client.drop_connections(
+                drop_by={"dropByUuid": user_uuid},
+                target_nodes={"target": "allNodes"},
+            )
+        except Exception as e:
+            logger.warning("Drop connections failed for %s: %s", user_uuid, e)
+
+        username = user_uuid[:8]
+        try:
+            result = await api_client.get_user_by_uuid(user_uuid)
+            username = result.get("response", result).get("username", username)
+        except Exception:
+            pass
+
+        await callback.answer(f"⛔ {username} отключён, соединения разорваны", show_alert=True)
+
+        try:
+            old_text = callback.message.text or callback.message.html_text or ""
+            await callback.message.edit_text(
+                old_text + f"\n\n⛔ <i>Отключён + соединения разорваны ({callback.from_user.first_name})</i>",
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
 
 async def _dismiss(callback: CallbackQuery) -> None:
