@@ -110,24 +110,36 @@ class SyncService:
     
     async def _periodic_sync_loop(self) -> None:
         """Periodic sync loop."""
-        settings = get_settings()
-        interval = settings.sync_interval_seconds
-        
         while self._running:
             try:
+                # Re-read interval each iteration so UI changes take effect without restart
+                interval = self._get_sync_interval()
                 await asyncio.sleep(interval)
-                
+
                 if not self._running:
                     break
-                
+
                 logger.debug("Running periodic sync...")
                 await self.full_sync()
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Error in periodic sync: %s", e)
                 # Continue running, will retry next interval
+
+    @staticmethod
+    def _get_sync_interval() -> int:
+        """Get sync interval from config_service (DB) with fallback to .env/default."""
+        try:
+            from shared.config_service import config_service
+            val = config_service.get("sync_interval_seconds")
+            if val is not None:
+                return max(int(val), 10)  # minimum 10 seconds safety
+        except Exception:
+            pass
+        settings = get_settings()
+        return settings.sync_interval_seconds
     
     async def full_sync(self) -> Dict[str, int]:
         """

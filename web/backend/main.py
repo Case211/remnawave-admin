@@ -467,6 +467,15 @@ async def lifespan(app: FastAPI):
                 # Scheduled tasks (cron) — executes scripts on nodes by schedule
                 from web.backend.core.task_scheduler import task_scheduler_loop
                 _bg_tasks.append(asyncio.create_task(task_scheduler_loop()))
+
+                # Start sync service (Panel API → local DB cache)
+                # In bot+web mode, bot starts sync first; is_running guard prevents double-start
+                try:
+                    from shared.sync import sync_service
+                    if not sync_service.is_running:
+                        await sync_service.start()
+                except Exception as e:
+                    logger.warning("Sync service start failed: %s", e)
             else:
                 logger.warning("Database connection failed")
         except Exception as e:
@@ -536,6 +545,12 @@ async def lifespan(app: FastAPI):
     try:
         from web.backend.core.automation_engine import engine as automation_engine
         await automation_engine.stop()
+    except Exception:
+        pass
+    try:
+        from shared.sync import sync_service
+        if sync_service.is_running:
+            await sync_service.stop()
     except Exception:
         pass
     try:
