@@ -257,7 +257,7 @@ def setup_logger() -> logging.Logger:
         )
 
     # Подавляем шумные сторонние логгеры
-    http_level = logging.DEBUG if level <= logging.DEBUG else logging.WARNING
+    http_level = logging.WARNING
     logging.getLogger("httpx").setLevel(http_level)
     logging.getLogger("httpcore").setLevel(http_level)
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
@@ -294,7 +294,7 @@ def set_log_level(level_name: str) -> None:
             if "violations" not in base:
                 handler.setLevel(level)
 
-    http_level = logging.DEBUG if level <= logging.DEBUG else logging.WARNING
+    http_level = logging.WARNING
     logging.getLogger("httpx").setLevel(http_level)
     logging.getLogger("httpcore").setLevel(http_level)
     logging.getLogger("aiogram").setLevel(level)
