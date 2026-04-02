@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../store/authStore'
-import { authApi, TelegramUser, AuthMethods } from '../api/auth'
+import { authApi, AuthMethods } from '../api/auth'
+import { Send } from 'lucide-react'
 import {
   User,
   Lock,
@@ -24,14 +25,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-
-declare global {
-  interface Window {
-    TelegramLoginWidget: {
-      dataOnauth: (user: TelegramUser) => void
-    }
-  }
-}
 
 // Password generation
 const PW_LOWER = 'abcdefghjkmnpqrstuvwxyz'
@@ -290,7 +283,6 @@ function PasswordInput({
 
 export default function Login() {
   const { t } = useTranslation()
-  const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const {
     login,
@@ -373,58 +365,14 @@ export default function Login() {
     }
   }, [requires2fa, totpEnabled, totpSetupData, isLoading, totpSetup])
 
-  // Setup Telegram widget
-  useEffect(() => {
-    if (isAuthenticated || needsSetup || !authMethods.telegram) return
-
-    window.TelegramLoginWidget = {
-      dataOnauth: async (user: TelegramUser) => {
-        try {
-          await login(user)
-          if (!useAuthStore.getState().requires2fa) {
-            navigate('/')
-          }
-        } catch (err) {
-          console.error('Login failed:', err)
-        }
-      },
-    }
-
-    const botUsername =
-      window.__ENV?.TELEGRAM_BOT_USERNAME || import.meta.env.VITE_TELEGRAM_BOT_USERNAME
-    if (!botUsername) {
-      setShowPasswordForm(true)
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = 'https://telegram.org/js/telegram-widget.js?22'
-    script.setAttribute('data-telegram-login', botUsername)
-    script.setAttribute('data-size', 'large')
-    script.setAttribute('data-radius', '8')
-    script.setAttribute('data-onauth', 'TelegramLoginWidget.dataOnauth(user)')
-    script.setAttribute('data-request-access', 'write')
-    script.async = true
-
-    script.onerror = () => {
+  const handleTelegramLogin = async () => {
+    try {
+      const url = await authApi.oauth2Authorize()
+      window.location.href = url
+    } catch {
       if (authMethods.password) setShowPasswordForm(true)
     }
-
-    const timeout = setTimeout(() => {
-      if (authMethods.password) setShowPasswordForm(true)
-    }, 5000)
-
-    script.onload = () => clearTimeout(timeout)
-
-    containerRef.current?.appendChild(script)
-
-    return () => {
-      clearTimeout(timeout)
-      if (containerRef.current?.contains(script)) {
-        containerRef.current.removeChild(script)
-      }
-    }
-  }, [isAuthenticated, navigate, login, needsSetup, authMethods.telegram])
+  }
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -936,8 +884,21 @@ export default function Login() {
                         </div>
                       </form>
                     ) : (
-                      /* Telegram Login Widget */
-                      <div ref={containerRef} className="flex justify-center mb-5 min-h-[40px]" />
+                      /* Telegram OAuth2 login button */
+                      <div className="flex justify-center mb-5">
+                        <Button
+                          type="button"
+                          onClick={handleTelegramLogin}
+                          className={cn(
+                            'h-11 px-6 font-medium text-sm gap-2',
+                            'bg-[#2AABEE] hover:bg-[#1d96d4] text-white',
+                            'shadow-lg shadow-blue-900/20 transition-all duration-200'
+                          )}
+                        >
+                          <Send className="w-4 h-4" />
+                          {t('login.telegram')}
+                        </Button>
+                      </div>
                     )}
 
                     {/* Toggle auth method — only show if both methods are enabled */}

@@ -44,6 +44,8 @@ async def _validate_token_payload(payload: dict) -> AdminUser:
     if subject.startswith("pwd:"):
         username = subject[4:]
         return await _resolve_password_admin(username, settings)
+    elif subject.startswith("oauth:"):
+        return await _resolve_oauth_admin(subject, payload, settings)
     else:
         return await _resolve_telegram_admin(subject, payload, settings)
 
@@ -92,6 +94,52 @@ async def _resolve_password_admin(username: str, settings) -> AdminUser:
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Admin account disabled",
+    )
+
+
+async def _resolve_oauth_admin(subject: str, payload: dict, settings) -> AdminUser:
+    """Resolve an OAuth2 (Telegram OIDC via panel) authenticated admin.
+
+    Subject format: oauth:<panel-uuid>
+    Panel already validated the Telegram ID. Grant full superadmin access.
+    """
+    username = payload.get("username") or subject
+    # Try RBAC account by username if it exists
+    try:
+        from web.backend.core.rbac import (
+            get_admin_account_by_username,
+            get_all_permissions_for_role_id,
+        )
+        account = await get_admin_account_by_username(username)
+        if account:
+            if not account["is_active"]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Admin account disabled",
+                )
+            perms = set()
+            if account["role_id"]:
+                perms = await get_all_permissions_for_role_id(account["role_id"])
+            return AdminUser(
+                telegram_id=None,
+                username=account["username"],
+                role=account.get("role_name", "superadmin"),
+                role_id=account.get("role_id"),
+                auth_method="telegram",
+                account_id=account["id"],
+                permissions=perms,
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.debug("OAuth RBAC lookup failed: %s", e)
+
+    # No RBAC account - grant full superadmin access (panel validated identity)
+    return AdminUser(
+        telegram_id=None,
+        username=username,
+        role="superadmin",
+        auth_method="telegram",
     )
 
 

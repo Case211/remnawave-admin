@@ -316,7 +316,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setTokens: (accessToken: string, refreshToken: string) => {
-        set({ accessToken, refreshToken })
+        set({ accessToken, refreshToken, isAuthenticated: true })
       },
 
       clearError: () => {
