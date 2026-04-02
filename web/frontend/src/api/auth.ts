@@ -270,6 +270,14 @@ export const authApi = {
   },
 
   /**
+   * Get Telegram OAuth2 authorization URL
+   */
+  oauth2Authorize: async (): Promise<string> => {
+    const response = await client.post<{ authorizationUrl: string }>('/auth/oauth2/authorize')
+    return response.data.authorizationUrl
+  },
+
+  /**
    * Reset password using token from email
    */
   resetPassword: async (token: string, newPassword: string): Promise<void> => {

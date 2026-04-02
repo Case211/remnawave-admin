@@ -14,10 +14,11 @@ const routerBasename = rawSecretPath.startsWith('/') ? rawSecretPath : `/${rawSe
 // Layout
 import Layout from './components/layout/Layout'
 
-// Login, Dashboard, ResetPassword loaded eagerly (critical path)
+// Login, Dashboard, ResetPassword, TelegramCallback loaded eagerly (critical path)
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ResetPassword from './pages/ResetPassword'
+import TelegramAuthCallback from './pages/TelegramAuthCallback'
 
 // Lazy-loaded pages
 const Users = lazy(() => import('./pages/Users'))
@@ -114,6 +115,7 @@ export default function App() {
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/auth/callback/telegram" element={<TelegramAuthCallback />} />
 
             {/* Protected routes */}
             <Route
