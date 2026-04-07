@@ -70,8 +70,8 @@ class TrafficRateMonitor:
                 if not cfg["enabled"]:
                     continue
 
-                logger.debug("Traffic rate check: threshold=%.1f GB, window=%d min, users tracked=%d",
-                             cfg["threshold_gb"], cfg["window_minutes"], len(self._snapshots))
+                logger.info("Traffic rate check: threshold=%.1f GB, window=%d min, users tracked=%d",
+                            cfg["threshold_gb"], cfg["window_minutes"], len(self._snapshots))
                 await self._check_traffic_rates(cfg)
 
             except asyncio.CancelledError:
@@ -133,7 +133,7 @@ class TrafficRateMonitor:
                 logger.warning("Failed to fetch user traffic from DB: %s", e2)
                 return
 
-        logger.debug("Traffic rate check: %d users fetched, threshold=%.1f GB", len(traffic_map), cfg["threshold_gb"])
+        logger.info("Traffic rate check: %d users fetched, threshold=%.1f GB", len(traffic_map), cfg["threshold_gb"])
 
         violators = []
 
