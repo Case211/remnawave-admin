@@ -32,6 +32,7 @@ class ConfigCategory(str, Enum):
     VIOLATIONS = "violations"
     MAILSERVER = "mailserver"
     PERFORMANCE = "performance"
+    SECURITY = "security"
 
 
 @dataclass
