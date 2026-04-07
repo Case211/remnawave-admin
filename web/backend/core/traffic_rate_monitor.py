@@ -70,8 +70,8 @@ class TrafficRateMonitor:
                 if not cfg["enabled"]:
                     continue
 
-                logger.debug("Traffic rate check: threshold=%.1f GB, window=%d min, users tracked=%d",
-                             cfg["threshold_gb"], cfg["window_minutes"], len(self._snapshots))
+                logger.info("Traffic rate check: threshold=%.1f GB, window=%d min, users tracked=%d",
+                            cfg["threshold_gb"], cfg["window_minutes"], len(self._snapshots))
                 await self._check_traffic_rates(cfg)
 
             except asyncio.CancelledError:
@@ -133,7 +133,7 @@ class TrafficRateMonitor:
                 logger.warning("Failed to fetch user traffic from DB: %s", e2)
                 return
 
-        logger.debug("Traffic rate check: %d users fetched, threshold=%.1f GB", len(traffic_map), cfg["threshold_gb"])
+        logger.info("Traffic rate check: %d users fetched, threshold=%.1f GB", len(traffic_map), cfg["threshold_gb"])
 
         violators = []
 
@@ -217,6 +217,7 @@ class TrafficRateMonitor:
 
             # Fetch user details + node names
             extra_lines = []
+            node_rows = []
             try:
                 async with db_service.acquire() as conn:
                     user_row = await conn.fetchrow(
@@ -225,12 +226,15 @@ class TrafficRateMonitor:
                         "FROM users WHERE uuid = $1",
                         user_uuid,
                     )
+                    # Only show nodes the user connected to during the violation window
+                    window_minutes = cfg["window_minutes"]
                     node_rows = await conn.fetch(
-                        "SELECT n.name, unt.traffic_bytes FROM user_node_traffic unt "
-                        "JOIN nodes n ON unt.node_uuid = n.uuid "
-                        "WHERE unt.user_uuid = $1::uuid AND unt.traffic_bytes > 0 "
-                        "ORDER BY unt.traffic_bytes DESC LIMIT 5",
-                        user_uuid,
+                        "SELECT DISTINCT n.name FROM user_connections uc "
+                        "JOIN nodes n ON uc.node_uuid = n.uuid "
+                        "WHERE uc.user_uuid = $1::uuid "
+                        "AND uc.connected_at >= NOW() - make_interval(mins := $2) "
+                        "ORDER BY n.name LIMIT 10",
+                        user_uuid, window_minutes,
                     )
                 if user_row:
                     status = (user_row["status"] or "unknown").upper()
@@ -292,6 +296,24 @@ class TrafficRateMonitor:
                 topic_type="violations",
                 telegram_body=body,
                 reply_markup=keyboard,
+            )
+
+            # Save as violation so it appears on the Violations page
+            node_names = [r["name"] for r in node_rows] if node_rows else []
+            reason = (
+                f"Потребление {delta_gb} GB за {elapsed} мин (~{rate} GB/ч), "
+                f"порог {threshold} GB / {cfg['window_minutes']} мин"
+            )
+            if node_names:
+                reason += f" | Ноды: {', '.join(node_names)}"
+
+            await db_service.save_violation(
+                user_uuid=user_uuid,
+                username=username,
+                score=min(rate / 10, 10.0),  # normalize: 10 GB/h → 1.0, 100 GB/h → 10.0
+                recommended_action="monitor",
+                confidence=0.9,
+                reasons=[reason],
             )
         except Exception as e:
             logger.error("Failed to send traffic rate notification for %s: %s",

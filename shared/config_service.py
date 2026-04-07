@@ -32,6 +32,7 @@ class ConfigCategory(str, Enum):
     VIOLATIONS = "violations"
     MAILSERVER = "mailserver"
     PERFORMANCE = "performance"
+    SECURITY = "security"
 
 
 @dataclass
@@ -932,6 +933,57 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Максимальное количество одновременных фоновых задач. При превышении новые задачи отбрасываются.",
         "default_value": "20",
         "sort_order": 42,
+    },
+    {
+        "key": "violation_notification_cooldown_minutes",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "violation_pipeline",
+        "display_name": "Кулдаун уведомлений (минуты)",
+        "description": "Минимальный интервал между повторными уведомлениями по одному пользователю. Защита от спама.",
+        "default_value": "30",
+        "sort_order": 43,
+    },
+    # === USER BLACKLIST ===
+    {
+        "key": "user_blacklist_enabled",
+        "value_type": "bool",
+        "category": "security",
+        "subcategory": "user_blacklist",
+        "display_name": "Чёрный список пользователей",
+        "description": "Включить проверку Telegram ID пользователей по чёрному списку. При совпадении — автоматическая блокировка.",
+        "default_value": "false",
+        "sort_order": 20,
+    },
+    {
+        "key": "user_blacklist_urls",
+        "value_type": "string",
+        "category": "security",
+        "subcategory": "user_blacklist",
+        "display_name": "URL списков (по одному на строку)",
+        "description": "Ссылки на внешние blacklist-файлы. Формат файла: Telegram ID в начале каждой строки. Пример: https://raw.githubusercontent.com/BEDOLAGA-DEV/VPN-BLACKLIST/main/blacklist.txt",
+        "default_value": "",
+        "sort_order": 21,
+    },
+    {
+        "key": "user_blacklist_sync_hours",
+        "value_type": "int",
+        "category": "security",
+        "subcategory": "user_blacklist",
+        "display_name": "Интервал синхронизации (часы)",
+        "description": "Как часто обновлять чёрные списки с внешних URL.",
+        "default_value": "6",
+        "sort_order": 22,
+    },
+    {
+        "key": "user_blacklist_auto_block",
+        "value_type": "bool",
+        "category": "security",
+        "subcategory": "user_blacklist",
+        "display_name": "Автоблокировка",
+        "description": "Автоматически блокировать пользователей из чёрного списка через Panel API. Если выключено — только уведомление.",
+        "default_value": "false",
+        "sort_order": 23,
     },
 ]
 

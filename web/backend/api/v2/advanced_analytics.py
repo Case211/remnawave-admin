@@ -631,6 +631,120 @@ async def _compute_providers(period: str = "7d"):
         return {"connection_types": [], "top_asn": [], "flags": {}}
 
 
+@router.get("/providers/asn-all")
+@limiter.limit(RATE_ANALYTICS)
+async def get_providers_asn_all(
+    request: Request,
+    period: str = Query("7d", description="Period: 24h, 7d, 30d, all"),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get full ASN list (not just top 10) for export."""
+    return await _compute_asn_full(period=period)
+
+
+@router.get("/providers/flag-asn")
+@limiter.limit(RATE_ANALYTICS)
+async def get_providers_flag_asn(
+    request: Request,
+    flag: str = Query(..., description="Flag: vpn, proxy, tor, hosting"),
+    period: str = Query("7d", description="Period: 24h, 7d, 30d, all"),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Get ASN breakdown for a specific flag (VPN/Proxy/Tor/Hosting)."""
+    if flag not in ("vpn", "proxy", "tor", "hosting"):
+        from web.backend.core.errors import api_error, E
+        raise api_error(400, E.INVALID_INPUT, f"Invalid flag: {flag}")
+    return await _compute_flag_asn(flag=flag, period=period)
+
+
+@cached("analytics:asn_full", ttl=CACHE_TTL_LONG, key_args=("period",))
+async def _compute_asn_full(period: str = "7d"):
+    """Full ASN list for export."""
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"asn_list": [], "total": 0}
+
+        now = datetime.now(timezone.utc)
+        delta_map = {"24h": 1, "7d": 7, "30d": 30, "all": 3650}
+        days = delta_map.get(period, 7)
+        since = now - timedelta(days=days)
+
+        async with db_service.acquire() as conn:
+            total = await conn.fetchval(
+                "SELECT COUNT(*) FROM ip_metadata WHERE created_at >= $1 AND asn IS NOT NULL",
+                since,
+            ) or 1
+
+            rows = await conn.fetch(
+                """
+                SELECT asn, asn_org, COUNT(*) as count
+                FROM ip_metadata
+                WHERE created_at >= $1 AND asn IS NOT NULL
+                GROUP BY asn, asn_org
+                ORDER BY count DESC
+                """,
+                since,
+            )
+            return {
+                "asn_list": [
+                    {"asn": r["asn"], "org": r["asn_org"] or f"AS{r['asn']}",
+                     "count": r["count"], "percent": round(r["count"] / total * 100, 1)}
+                    for r in rows
+                ],
+                "total": total,
+            }
+    except Exception as e:
+        logger.error("get_asn_full failed: %s", e)
+        return {"asn_list": [], "total": 0}
+
+
+@cached("analytics:flag_asn", ttl=CACHE_TTL_LONG, key_args=("flag", "period"))
+async def _compute_flag_asn(flag: str = "vpn", period: str = "7d"):
+    """ASN breakdown for a specific flag."""
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return {"flag": flag, "asn_list": [], "total": 0}
+
+        now = datetime.now(timezone.utc)
+        delta_map = {"24h": 1, "7d": 7, "30d": 30, "all": 3650}
+        days = delta_map.get(period, 7)
+        since = now - timedelta(days=days)
+
+        col = f"is_{flag}"
+
+        async with db_service.acquire() as conn:
+            total = await conn.fetchval(
+                f"SELECT COUNT(*) FROM ip_metadata WHERE created_at >= $1 AND {col} = true",
+                since,
+            ) or 1
+
+            rows = await conn.fetch(
+                f"""
+                SELECT asn, asn_org, COUNT(*) as count
+                FROM ip_metadata
+                WHERE created_at >= $1 AND {col} = true AND asn IS NOT NULL
+                GROUP BY asn, asn_org
+                ORDER BY count DESC
+                LIMIT 20
+                """,
+                since,
+            )
+            return {
+                "flag": flag,
+                "asn_list": [
+                    {"asn": r["asn"], "org": r["asn_org"] or f"AS{r['asn']}",
+                     "count": r["count"], "percent": round(r["count"] / total * 100, 1)}
+                    for r in rows
+                ],
+                "total": total,
+            }
+    except Exception as e:
+        logger.error("get_flag_asn failed: %s", e)
+        return {"flag": flag, "asn_list": [], "total": 0}
+
+
 @router.get("/retention")
 @limiter.limit(RATE_ANALYTICS)
 async def get_retention(

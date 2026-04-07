@@ -1264,12 +1264,20 @@ function ProvidersCard() {
   const { t } = useTranslation()
   const chart = useChartTheme()
   const [period, setPeriod] = useState('7d')
+  const [activeFlag, setActiveFlag] = useState<string | null>(null)
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-providers', period],
     queryFn: () => advancedAnalyticsApi.providers(period),
     staleTime: 60_000,
     refetchInterval: 60_000,
+  })
+
+  const { data: flagAsnData, isLoading: flagAsnLoading } = useQuery({
+    queryKey: ['advanced-providers-flag-asn', activeFlag, period],
+    queryFn: () => advancedAnalyticsApi.providersFlagAsn(activeFlag!, period),
+    enabled: !!activeFlag,
+    staleTime: 60_000,
   })
 
   const connectionTypes = data?.connection_types || []
@@ -1288,11 +1296,17 @@ function ProvidersCard() {
           <div className="flex items-center gap-2">
             <ExportDropdown
               disabled={!data}
-              onExportCSV={() => exportCSV([
-                ...connectionTypes.map((ct) => ({ type: 'connection_type', name: ct.type, count: ct.count, percent: ct.percent })),
-                ...topAsn.map((a) => ({ type: 'asn', name: `AS${a.asn} ${a.org}`, count: a.count, percent: a.percent })),
-              ], 'providers')}
-              onExportJSON={() => exportJSON(data, 'providers')}
+              onExportCSV={async () => {
+                const full = await advancedAnalyticsApi.providersAsnAll(period)
+                exportCSV([
+                  ...connectionTypes.map((ct) => ({ type: 'connection_type', name: ct.type, count: ct.count, percent: ct.percent })),
+                  ...full.asn_list.map((a) => ({ type: 'asn', name: `AS${a.asn} ${a.org}`, count: a.count, percent: a.percent })),
+                ], 'providers')
+              }}
+              onExportJSON={async () => {
+                const full = await advancedAnalyticsApi.providersAsnAll(period)
+                exportJSON({ ...data, all_asn: full.asn_list }, 'providers')
+              }}
             />
             <PeriodSwitcher
               value={period}
@@ -1318,21 +1332,57 @@ function ProvidersCard() {
             {flags && (
               <div className="flex flex-wrap gap-2">
                 {([
-                  { key: 'vpn', label: 'VPN', icon: Shield, color: 'text-blue-400 bg-blue-500/20' },
-                  { key: 'proxy', label: 'Proxy', icon: Shield, color: 'text-yellow-400 bg-yellow-500/20' },
-                  { key: 'tor', label: 'Tor', icon: Shield, color: 'text-purple-400 bg-purple-500/20' },
-                  { key: 'hosting', label: 'Hosting', icon: Server, color: 'text-orange-400 bg-orange-500/20' },
+                  { key: 'vpn', label: 'VPN', icon: Shield, color: 'text-blue-400 bg-blue-500/20', activeColor: 'text-blue-300 bg-blue-500/40 ring-1 ring-blue-400/50' },
+                  { key: 'proxy', label: 'Proxy', icon: Shield, color: 'text-yellow-400 bg-yellow-500/20', activeColor: 'text-yellow-300 bg-yellow-500/40 ring-1 ring-yellow-400/50' },
+                  { key: 'tor', label: 'Tor', icon: Shield, color: 'text-purple-400 bg-purple-500/20', activeColor: 'text-purple-300 bg-purple-500/40 ring-1 ring-purple-400/50' },
+                  { key: 'hosting', label: 'Hosting', icon: Server, color: 'text-orange-400 bg-orange-500/20', activeColor: 'text-orange-300 bg-orange-500/40 ring-1 ring-orange-400/50' },
                 ] as const).map((f) => {
                   const d = flags[f.key]
+                  const isActive = activeFlag === f.key
                   return (
-                    <div key={f.key} className={cn('flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--glass-border)]', f.color)}>
+                    <button
+                      key={f.key}
+                      onClick={() => setActiveFlag(isActive ? null : f.key)}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--glass-border)] transition-all cursor-pointer',
+                        isActive ? f.activeColor : f.color,
+                        d.count === 0 && 'opacity-50',
+                      )}
+                      disabled={d.count === 0}
+                    >
                       <f.icon className="w-3.5 h-3.5" />
                       <span className="text-xs font-medium">{f.label}</span>
                       <span className="text-sm font-bold">{d.percent}%</span>
                       <span className="text-xs opacity-60">({d.count})</span>
-                    </div>
+                    </button>
                   )
                 })}
+              </div>
+
+            )}
+
+            {/* Flag ASN breakdown */}
+            {activeFlag && (
+              <div className="bg-[var(--glass-bg)]/50 rounded-lg p-4 border border-[var(--glass-border)]/30">
+                <h3 className="text-sm font-medium text-white mb-3">
+                  ASN — {activeFlag.toUpperCase()} ({flagAsnData?.total ?? '...'})
+                </h3>
+                {flagAsnLoading ? (
+                  <Skeleton className="h-32 w-full" />
+                ) : flagAsnData?.asn_list?.length ? (
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {flagAsnData.asn_list.map((asn) => (
+                      <div key={asn.asn} className="flex items-center gap-2 text-xs">
+                        <span className="text-muted-foreground w-16 shrink-0">AS{asn.asn}</span>
+                        <span className="text-white flex-1 truncate">{asn.org}</span>
+                        <span className="text-muted-foreground">{asn.count.toLocaleString()}</span>
+                        <span className="text-muted-foreground w-12 text-right">{asn.percent}%</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t('common.noData', { defaultValue: 'No data' })}</p>
+                )}
               </div>
             )}
 

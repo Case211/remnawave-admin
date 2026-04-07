@@ -137,6 +137,17 @@ export interface ProvidersData {
   total?: number
 }
 
+export interface FlagAsnData {
+  flag: string
+  asn_list: TopAsnItem[]
+  total: number
+}
+
+export interface AsnFullData {
+  asn_list: TopAsnItem[]
+  total: number
+}
+
 export interface RetentionCohort {
   week: string
   total_users: number
@@ -157,6 +168,18 @@ export const advancedAnalyticsApi = {
   /** Fetch provider/ASN analytics. */
   providers: async (period = '7d'): Promise<ProvidersData> => {
     const { data } = await client.get('/analytics/advanced/providers', { params: { period } })
+    return data
+  },
+
+  /** Full ASN list for export. */
+  providersAsnAll: async (period = '7d'): Promise<AsnFullData> => {
+    const { data } = await client.get('/analytics/advanced/providers/asn-all', { params: { period } })
+    return data
+  },
+
+  /** ASN breakdown for a specific flag. */
+  providersFlagAsn: async (flag: string, period = '7d'): Promise<FlagAsnData> => {
+    const { data } = await client.get('/analytics/advanced/providers/flag-asn', { params: { flag, period } })
     return data
   },
 
