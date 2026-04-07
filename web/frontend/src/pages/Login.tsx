@@ -317,6 +317,7 @@ export default function Login() {
   // Setup check
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
   const [setupChecked, setSetupChecked] = useState(false)
+  const [apiUnreachable, setApiUnreachable] = useState(false)
 
   // Login form state
   const [username, setUsername] = useState('')
@@ -341,12 +342,10 @@ export default function Login() {
   const canRegister =
     regUsername.trim().length >= 3 && regAllChecks && regPasswordsMatch && !isLoading
 
-  // Check setup status on mount
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/')
-      return
-    }
+  // Check setup status on mount (with retry on API failure)
+  const checkSetupStatus = useCallback(() => {
+    setApiUnreachable(false)
+    setSetupChecked(false)
 
     Promise.all([
       authApi.getSetupStatus(),
@@ -354,17 +353,24 @@ export default function Login() {
     ]).then(([status, methods]) => {
       setNeedsSetup(status.needs_setup)
       setAuthMethods(methods)
-      // If telegram is disabled, show password form by default
       if (!methods.telegram && methods.password) {
         setShowPasswordForm(true)
       }
+      setApiUnreachable(false)
       setSetupChecked(true)
     }).catch(() => {
-      // If API is unreachable, fall back to login form
-      setNeedsSetup(false)
+      setApiUnreachable(true)
       setSetupChecked(true)
     })
-  }, [isAuthenticated, navigate])
+  }, [])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/')
+      return
+    }
+    checkSetupStatus()
+  }, [isAuthenticated, navigate, checkSetupStatus])
 
   // Auto-trigger TOTP setup when 2FA is required but not yet configured
   useEffect(() => {
@@ -490,6 +496,37 @@ export default function Login() {
     return (
       <div className="login-bg min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+      </div>
+    )
+  }
+
+  // Backend unreachable — show retry screen
+  if (apiUnreachable) {
+    return (
+      <div className="login-bg min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="mesh-bg">
+          <div className="mesh-layer mesh-layer--1" />
+          <div className="mesh-layer mesh-layer--2" />
+        </div>
+        <div className="w-full max-w-[420px] relative z-10">
+          <Card className="rounded-2xl overflow-hidden glass-heavy p-8 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white mb-1">{t('login.backendUnavailable', 'Backend is starting up...')}</h2>
+                <p className="text-sm text-gray-400">{t('login.backendUnavailableHint', 'The server may still be initializing. This can take a minute on first launch.')}</p>
+              </div>
+              <button
+                onClick={checkSetupStatus}
+                className="mt-2 px-6 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium transition-colors"
+              >
+                {t('login.retry', 'Retry')}
+              </button>
+            </div>
+          </Card>
+        </div>
       </div>
     )
   }

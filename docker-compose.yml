@@ -129,7 +129,7 @@ services:
       - remnawave-network
     depends_on:
       web-backend:
-        condition: service_healthy
+        condition: service_started
 
   # ===========================================
   # Redis (опционально, раскомментировать при >1 инстансе web-backend
