@@ -470,9 +470,11 @@ async def lifespan(app: FastAPI):
 
                 # Start sync service (Panel API → local DB cache)
                 # Sync service — единственный источник синхронизации Panel API → БД
+                # background=True: initial sync runs in background so HTTP server
+                # can accept requests (healthcheck, login) during lengthy first sync
                 try:
                     from shared.sync import sync_service
-                    await sync_service.start()
+                    await sync_service.start(background=True)
                 except Exception as e:
                     logger.warning("Sync service start failed: %s", e)
 

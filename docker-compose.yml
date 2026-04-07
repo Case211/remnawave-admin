@@ -109,10 +109,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/api/v2/health')"]
-      interval: 15s
+      interval: 10s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 120s
 
   web-frontend:
     image: ghcr.io/case211/remnawave-admin-web-frontend:latest
@@ -129,7 +129,7 @@ services:
       - remnawave-network
     depends_on:
       web-backend:
-        condition: service_healthy
+        condition: service_started
 
   # ===========================================
   # Redis (опционально, раскомментировать при >1 инстансе web-backend

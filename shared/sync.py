@@ -38,30 +38,41 @@ class SyncService:
         """Check if initial sync has been completed."""
         return self._initial_sync_done
     
-    async def start(self) -> None:
-        """Start the sync service with periodic sync loop."""
+    async def start(self, *, background: bool = False) -> None:
+        """Start the sync service with periodic sync loop.
+
+        Args:
+            background: If True, run initial sync in a background task
+                        instead of blocking. Useful during app startup so
+                        the HTTP server can accept requests immediately.
+        """
         if self._running:
             logger.warning("Sync service is already running")
             return
-        
+
         settings = get_settings()
-        
+
         if not settings.database_enabled:
             logger.info("Database not configured, sync service disabled")
             return
-        
+
         if not db_service.is_connected:
             logger.warning("Database not connected, sync service cannot start")
             return
-        
+
         self._running = True
         logger.info("🔄 Sync service started (interval: %ds)", settings.sync_interval_seconds)
-        
-        # Run initial sync
-        await self._run_initial_sync()
-        
-        # Start periodic sync loop
-        self._sync_task = asyncio.create_task(self._periodic_sync_loop())
+
+        if background:
+            # Non-blocking: initial sync + periodic loop in background
+            async def _bg_start():
+                await self._run_initial_sync()
+                self._sync_task = asyncio.create_task(self._periodic_sync_loop())
+            asyncio.create_task(_bg_start())
+        else:
+            # Blocking: wait for initial sync before continuing
+            await self._run_initial_sync()
+            self._sync_task = asyncio.create_task(self._periodic_sync_loop())
     
     async def stop(self) -> None:
         """Stop the sync service."""
