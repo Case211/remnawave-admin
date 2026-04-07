@@ -685,6 +685,25 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
             except Exception as e:
                 logger.debug("HWID blacklist check failed for %s: %s", user_uuid, e)
 
+            # ── User Blacklist check (Telegram ID) ──
+            if config_service.get("user_blacklist_enabled", False):
+                try:
+                    user_info_bl = await db_service.get_user_by_uuid(user_uuid)
+                    tg_id = user_info_bl.get("telegram_id") if user_info_bl else None
+                    if tg_id:
+                        bl_entry = await db_service.is_telegram_id_blacklisted(int(tg_id))
+                        if bl_entry:
+                            logger.warning("User %s (tg_id=%d) is in blacklist: %s", user_uuid, tg_id, bl_entry.get("reason", ""))
+                            if config_service.get("user_blacklist_auto_block", False):
+                                try:
+                                    from shared.api_client import api_client
+                                    await api_client.disable_user(user_uuid)
+                                    logger.info("Auto-blocked blacklisted user: %s (tg_id=%d)", user_uuid, tg_id)
+                                except Exception:
+                                    pass
+                except Exception as e:
+                    logger.debug("User blacklist check failed for %s: %s", user_uuid, e)
+
             # Evict oldest 20% entries if cooldown dict is too large
             if len(_violation_check_cooldown) > MAX_COOLDOWN_SIZE:
                 sorted_keys = sorted(_violation_check_cooldown, key=_violation_check_cooldown.get)

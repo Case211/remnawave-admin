@@ -482,6 +482,24 @@ async def lifespan(app: FastAPI):
                     await traffic_rate_monitor.start()
                 except Exception as e:
                     logger.warning("Traffic rate monitor start failed: %s", e)
+
+                # User blacklist sync — periodically fetch external blacklists
+                async def _blacklist_sync_loop():
+                    await asyncio.sleep(60)  # initial delay 1 min
+                    while True:
+                        try:
+                            if config_service.get("user_blacklist_enabled", False):
+                                from web.backend.api.v2.user_blacklist import sync_external_blacklists
+                                result = await sync_external_blacklists()
+                                if result.get("synced", 0) > 0:
+                                    logger.info("Blacklist sync: %d entries from %d sources",
+                                                result["synced"], len(result["sources"]))
+                        except Exception as exc:
+                            logger.warning("Blacklist sync failed: %s", exc)
+                        interval_hours = config_service.get("user_blacklist_sync_hours", 6)
+                        await asyncio.sleep(int(interval_hours) * 3600)
+
+                _bg_tasks.append(asyncio.create_task(_blacklist_sync_loop()))
             else:
                 logger.warning("Database connection failed")
         except Exception as e:
@@ -731,6 +749,9 @@ def create_app() -> FastAPI:
     app.include_router(backup_api.router, prefix="/api/v2/backups", tags=["backups"])
     app.include_router(api_keys_api.router, prefix="/api/v2/api-keys", tags=["api-keys"])
     app.include_router(blocked_ips_api.router, prefix="/api/v2/blocked-ips", tags=["blocked-ips"])
+
+    from web.backend.api.v2 import user_blacklist as user_blacklist_api
+    app.include_router(user_blacklist_api.router, prefix="/api/v2/user-blacklist", tags=["user-blacklist"])
     app.include_router(webhooks_api.router, prefix="/api/v2/webhooks", tags=["webhooks"])
     app.include_router(squads_api.router, prefix="/api/v2/squads", tags=["squads"])
     app.include_router(bedolaga_router, prefix="/api/v2/bedolaga", tags=["bedolaga"])

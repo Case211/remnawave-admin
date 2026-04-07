@@ -5535,6 +5535,109 @@ class DatabaseService:
             )
             return [dict(r) for r in rows]
 
+    # ── User Blacklist ─────────────────────────────────────────────
+
+    async def get_user_blacklist(self, limit: int = 50, offset: int = 0, source: str = None):
+        """Get blacklisted Telegram user IDs with pagination."""
+        async with self.acquire() as conn:
+            if source:
+                rows = await conn.fetch(
+                    "SELECT * FROM user_blacklist WHERE source = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                    source, limit, offset,
+                )
+            else:
+                rows = await conn.fetch(
+                    "SELECT * FROM user_blacklist ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+                    limit, offset,
+                )
+            return [dict(r) for r in rows]
+
+    async def get_user_blacklist_count(self, source: str = None) -> int:
+        """Count blacklisted entries."""
+        async with self.acquire() as conn:
+            if source:
+                return await conn.fetchval(
+                    "SELECT COUNT(*) FROM user_blacklist WHERE source = $1", source
+                ) or 0
+            return await conn.fetchval("SELECT COUNT(*) FROM user_blacklist") or 0
+
+    async def is_telegram_id_blacklisted(self, telegram_id: int) -> dict | None:
+        """Check if a Telegram ID is in the blacklist. Returns entry or None."""
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM user_blacklist WHERE telegram_id = $1", telegram_id
+            )
+            return dict(row) if row else None
+
+    async def check_telegram_ids_blacklist(self, telegram_ids: list[int]) -> list[dict]:
+        """Batch check multiple Telegram IDs against blacklist."""
+        if not telegram_ids:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM user_blacklist WHERE telegram_id = ANY($1::bigint[])",
+                telegram_ids,
+            )
+            return [dict(r) for r in rows]
+
+    async def add_to_user_blacklist(self, telegram_id: int, reason: str = None,
+                                     source: str = "manual", added_by: str = None) -> bool:
+        """Add a Telegram ID to the blacklist. Returns True if added, False if already exists."""
+        async with self.acquire() as conn:
+            try:
+                await conn.execute(
+                    """INSERT INTO user_blacklist (telegram_id, reason, source, added_by_username)
+                       VALUES ($1, $2, $3, $4)
+                       ON CONFLICT (telegram_id) DO UPDATE SET reason = $2, source = $3""",
+                    telegram_id, reason, source, added_by,
+                )
+                return True
+            except Exception as e:
+                logger.error("Failed to add telegram_id %d to blacklist: %s", telegram_id, e)
+                return False
+
+    async def bulk_add_to_user_blacklist(self, entries: list[tuple[int, str, str]]) -> int:
+        """Bulk upsert entries: [(telegram_id, reason, source), ...]. Returns count."""
+        if not entries:
+            return 0
+        async with self.acquire() as conn:
+            result = await conn.executemany(
+                """INSERT INTO user_blacklist (telegram_id, reason, source)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (telegram_id) DO UPDATE SET reason = $2, source = $3""",
+                entries,
+            )
+            return len(entries)
+
+    async def remove_from_user_blacklist(self, telegram_id: int) -> bool:
+        """Remove a Telegram ID from the blacklist."""
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM user_blacklist WHERE telegram_id = $1", telegram_id
+            )
+            return "DELETE 1" in result
+
+    async def clear_user_blacklist_by_source(self, source: str) -> int:
+        """Remove all entries from a specific source. Returns count deleted."""
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM user_blacklist WHERE source = $1", source
+            )
+            # Extract count from "DELETE N"
+            try:
+                return int(result.split()[-1])
+            except (ValueError, IndexError):
+                return 0
+
+    async def get_user_blacklist_sources(self) -> list[dict]:
+        """Get distinct sources with entry counts."""
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT source, COUNT(*) as count, MAX(created_at) as last_updated
+                   FROM user_blacklist GROUP BY source ORDER BY count DESC"""
+            )
+            return [dict(r) for r in rows]
+
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:
     """

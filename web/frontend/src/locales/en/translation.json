@@ -2479,6 +2479,7 @@
       "hard_block": "🚫 Hard block",
       "trial": "🆓 Trial user detection",
       "auth_methods": "🔑 Auth Methods",
+      "user_blacklist": "🚫 User Blacklist",
       "brute_force": "🛡️ Brute-Force Protection",
       "database": "🗄️ Database",
       "intervals": "⏱️ Intervals",
