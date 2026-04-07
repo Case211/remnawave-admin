@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Dict
 
 from aiogram import Bot
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from src.config import get_settings
 from src.utils.formatters import format_bytes, format_datetime, format_provider_name
@@ -1033,10 +1033,25 @@ async def send_violation_notification(
 
         text = "\n".join(lines)
 
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="👤 Подробнее", callback_data=f"vact:info:{user_uuid}"),
+                InlineKeyboardButton(text="🔒 Заблокировать", callback_data=f"vact:block:{user_uuid}"),
+            ],
+            [
+                InlineKeyboardButton(text="⛔ Откл + разорвать", callback_data=f"vact:kill:{user_uuid}"),
+                InlineKeyboardButton(text="🔄 Сбросить трафик", callback_data=f"vact:reset:{user_uuid}"),
+            ],
+            [
+                InlineKeyboardButton(text="✅ Пропустить", callback_data=f"vact:dismiss:{user_uuid}"),
+            ],
+        ])
+
         message_kwargs = {
             "chat_id": settings.notifications_chat_id,
             "text": text,
             "parse_mode": "HTML",
+            "reply_markup": keyboard,
         }
 
         if topic_id is not None:
