@@ -1354,13 +1354,22 @@ class DatabaseService:
             except (ValueError, TypeError):
                 traffic_used = None
 
+        users_online = response.get("usersOnline")
+        if users_online is not None:
+            try:
+                users_online = int(users_online)
+            except (ValueError, TypeError):
+                users_online = 0
+        else:
+            users_online = 0
+
         async with self.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO nodes (
                     uuid, name, address, port, is_disabled, is_connected,
-                    traffic_limit_bytes, traffic_used_bytes, updated_at, raw_data
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
+                    traffic_limit_bytes, traffic_used_bytes, users_online, updated_at, raw_data
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
                 ON CONFLICT (uuid) DO UPDATE SET
                     name = EXCLUDED.name,
                     address = EXCLUDED.address,
@@ -1369,6 +1378,7 @@ class DatabaseService:
                     is_connected = EXCLUDED.is_connected,
                     traffic_limit_bytes = EXCLUDED.traffic_limit_bytes,
                     traffic_used_bytes = EXCLUDED.traffic_used_bytes,
+                    users_online = EXCLUDED.users_online,
                     updated_at = NOW(),
                     raw_data = EXCLUDED.raw_data
                     -- agent_token НЕ обновляем при синхронизации из API (сохраняем локальные настройки)
@@ -1381,6 +1391,7 @@ class DatabaseService:
                 bool(response.get("isConnected", False)),
                 traffic_limit,
                 traffic_used,
+                users_online,
                 json.dumps(response),
             )
     
