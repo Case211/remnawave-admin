@@ -273,6 +273,17 @@ export const advancedAnalyticsApi = {
     const { data } = await client.get('/analytics/advanced/ltv')
     return data
   },
+
+  exportIps: async (params: {
+    date_from: string
+    date_to: string
+    node_uuid?: string
+    username?: string
+    active_only?: boolean
+  }): Promise<IpExportResponse> => {
+    const { data } = await client.get('/analytics/advanced/export-ips', { params })
+    return data
+  },
 }
 
 export interface NodeMetricsHistoryItem {
@@ -359,6 +370,28 @@ export interface GeoBalanceData {
   regions: GeoBalanceRegion[]
   median_users_online: number
   overloaded_count: number
+}
+
+export interface IpExportItem {
+  ip: string
+  username?: string
+  node_name?: string
+  connected_at?: string
+  country_code?: string
+  country_name?: string
+  city?: string
+  asn?: number
+  asn_org?: string
+  connection_type?: string
+  is_vpn?: boolean
+  is_proxy?: boolean
+  is_tor?: boolean
+  is_hosting?: boolean
+}
+
+export interface IpExportResponse {
+  items: IpExportItem[]
+  total: number
 }
 
 export interface TorrentStatsResponse {

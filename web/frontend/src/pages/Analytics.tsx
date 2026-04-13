@@ -27,6 +27,7 @@ import {
   Network,
   GitCompare,
   CalendarDays,
+  Download,
 } from 'lucide-react'
 import {
   AreaChart,
@@ -44,8 +45,9 @@ import {
   Legend,
 } from 'recharts'
 import { toast } from 'sonner'
+import client from '@/api/client'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
-import type { GeoCity, GeoCityUser, TopUser, SharedHwidGroup, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation } from '@/api/advancedAnalytics'
+import type { GeoCity, GeoCityUser, TopUser, SharedHwidGroup, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation, IpExportItem } from '@/api/advancedAnalytics'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { exportCSV, exportJSON, formatBytesForExport } from '@/lib/export'
 
@@ -72,6 +74,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { QueryError } from '@/components/QueryError'
 import { cn } from '@/lib/utils'
@@ -1265,6 +1268,7 @@ function ProvidersCard() {
   const chart = useChartTheme()
   const [period, setPeriod] = useState('7d')
   const [activeFlag, setActiveFlag] = useState<string | null>(null)
+  const [ipExportOpen, setIpExportOpen] = useState(false)
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['advanced-providers', period],
@@ -1285,6 +1289,7 @@ function ProvidersCard() {
   const flags = data?.flags
 
   return (
+    <>
     <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1294,6 +1299,15 @@ function ProvidersCard() {
             <InfoTooltip text={t('analytics.providers.tooltip', { defaultValue: 'Connection types, ASN distribution, and security flags' })} side="right" />
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => setIpExportOpen(true)}
+            >
+              <Download className="w-3.5 h-3.5" />
+              {t('analytics.providers.exportIp', { defaultValue: 'Export IP' })}
+            </Button>
             <ExportDropdown
               disabled={!data}
               onExportCSV={async () => {
@@ -1463,8 +1477,187 @@ function ProvidersCard() {
         )}
       </CardContent>
     </Card>
+
+    <IpExportDialog open={ipExportOpen} onOpenChange={setIpExportOpen} />
+    </>
   )
 }
+
+
+// ── IP Export Dialog ────────────────────────────────────────────
+
+function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useTranslation()
+  const today = new Date().toISOString().slice(0, 10)
+  const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10)
+
+  const [dateFrom, setDateFrom] = useState(weekAgo)
+  const [dateTo, setDateTo] = useState(today)
+  const [nodeUuid, setNodeUuid] = useState('')
+  const [username, setUsername] = useState('')
+  const [activeOnly, setActiveOnly] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [preview, setPreview] = useState<IpExportItem[] | null>(null)
+  const [totalCount, setTotalCount] = useState(0)
+
+  const { data: nodesData } = useQuery<{ items?: { uuid: string; name: string }[] }>({
+    queryKey: ['nodes-list-for-export'],
+    queryFn: () => client.get('/nodes', { params: { per_page: 500 } }).then((r) => r.data),
+    staleTime: 120_000,
+    enabled: open,
+  })
+  const nodes = nodesData?.items || []
+
+  const handlePreview = async () => {
+    setLoading(true)
+    try {
+      const resp = await advancedAnalyticsApi.exportIps({
+        date_from: dateFrom,
+        date_to: dateTo,
+        node_uuid: nodeUuid || undefined,
+        username: username || undefined,
+        active_only: activeOnly,
+      })
+      setPreview(resp.items.slice(0, 50))
+      setTotalCount(resp.total)
+    } catch {
+      toast.error(t('common.error', { defaultValue: 'Error' }))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleExportCSV = async () => {
+    setLoading(true)
+    try {
+      const resp = await advancedAnalyticsApi.exportIps({
+        date_from: dateFrom,
+        date_to: dateTo,
+        node_uuid: nodeUuid || undefined,
+        username: username || undefined,
+        active_only: activeOnly,
+      })
+      exportCSV(resp.items.map((ip) => ({
+        ip: ip.ip,
+        username: ip.username || '',
+        node: ip.node_name || '',
+        country: ip.country_code || '',
+        city: ip.city || '',
+        asn: ip.asn ? `AS${ip.asn}` : '',
+        provider: ip.asn_org || '',
+        type: ip.connection_type || '',
+        vpn: ip.is_vpn ? 'yes' : '',
+        proxy: ip.is_proxy ? 'yes' : '',
+        tor: ip.is_tor ? 'yes' : '',
+        hosting: ip.is_hosting ? 'yes' : '',
+        connected_at: ip.connected_at || '',
+      })), `ips-${dateFrom}-${dateTo}`)
+      toast.success(`${t('common.exported', { defaultValue: 'Exported' })}: ${resp.total} IP`)
+    } catch {
+      toast.error(t('common.error', { defaultValue: 'Error' }))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{t('analytics.providers.exportIpTitle', { defaultValue: 'Export IP Addresses' })}</DialogTitle>
+        </DialogHeader>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">{t('common.dateFrom', { defaultValue: 'From' })}</label>
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">{t('common.dateTo', { defaultValue: 'To' })}</label>
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">{t('analytics.providers.node', { defaultValue: 'Node' })}</label>
+            <Select value={nodeUuid || '__all__'} onValueChange={(v) => setNodeUuid(v === '__all__' ? '' : v)}>
+              <SelectTrigger><SelectValue placeholder={t('common.all', { defaultValue: 'All' })} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{t('common.all', { defaultValue: 'All' })}</SelectItem>
+                {nodes.map((n) => <SelectItem key={n.uuid} value={n.uuid}>{n.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">{t('analytics.providers.username', { defaultValue: 'Username' })}</label>
+            <Input
+              placeholder={t('analytics.providers.usernamePlaceholder', { defaultValue: 'Filter by username' })}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 mt-1">
+          <input
+            type="checkbox"
+            id="ip-active-only"
+            checked={activeOnly}
+            onChange={(e) => setActiveOnly(e.target.checked)}
+            className="rounded border-[var(--glass-border)]"
+          />
+          <label htmlFor="ip-active-only" className="text-xs text-muted-foreground cursor-pointer">
+            {t('analytics.providers.activeOnly', { defaultValue: 'Active connections only' })}
+          </label>
+        </div>
+
+        {/* Preview */}
+        {preview && (
+          <div className="mt-2">
+            <p className="text-xs text-muted-foreground mb-2">
+              {t('analytics.providers.found', { defaultValue: 'Found' })}: <span className="text-white font-medium">{totalCount}</span> IP
+              {totalCount > 50 && ` (${t('analytics.providers.showing', { defaultValue: 'showing first' })} 50)`}
+            </p>
+            <div className="max-h-48 overflow-auto rounded border border-[var(--glass-border)]">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-[var(--glass-bg)]">
+                  <tr className="text-muted-foreground">
+                    <th className="text-left p-1.5 pl-2">IP</th>
+                    <th className="text-left p-1.5">User</th>
+                    <th className="text-left p-1.5">Node</th>
+                    <th className="text-left p-1.5">Country</th>
+                    <th className="text-left p-1.5">Provider</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.map((ip, i) => (
+                    <tr key={i} className="border-t border-[var(--glass-border)]/30 hover:bg-[var(--glass-bg-hover)]">
+                      <td className="p-1.5 pl-2 font-mono">{ip.ip}</td>
+                      <td className="p-1.5 truncate max-w-[120px]">{ip.username || '—'}</td>
+                      <td className="p-1.5 truncate max-w-[100px]">{ip.node_name || '—'}</td>
+                      <td className="p-1.5">{ip.country_code || '—'}</td>
+                      <td className="p-1.5 truncate max-w-[150px]">{ip.asn_org || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 mt-4">
+          <Button variant="outline" onClick={handlePreview} disabled={loading}>
+            <Search className="w-3.5 h-3.5 mr-1.5" />
+            {t('analytics.providers.preview', { defaultValue: 'Preview' })}
+          </Button>
+          <Button onClick={handleExportCSV} disabled={loading}>
+            <Download className="w-3.5 h-3.5 mr-1.5" />
+            {t('analytics.providers.downloadCsv', { defaultValue: 'Download CSV' })}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 
 // ── Nodes Card (F1) ──────────────────────────────────────────────
 
@@ -2701,7 +2894,7 @@ export default function Analytics() {
           </TabsTrigger>
           <TabsTrigger value="providers" className="gap-1.5">
             <Network className="w-4 h-4" />
-            {t('analytics.tabs.providers', { defaultValue: 'Providers' })}
+            {t('analytics.tabs.providers', { defaultValue: 'Providers / IP' })}
           </TabsTrigger>
           <TabsTrigger value="nodes-traffic" className="gap-1.5">
             <BarChart3 className="w-4 h-4" />

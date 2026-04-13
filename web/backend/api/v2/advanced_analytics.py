@@ -1397,3 +1397,93 @@ async def _compute_geo_balance(days: int = 7):
     except Exception as e:
         logger.error("Geo-balance failed: %s", e)
         return {"nodes": [], "recommendations": [], "regions": []}
+
+
+# ══════════════════════════════════════════════════════════════════
+# IP Export
+# ══════════════════════════════════════════════════════════════════
+
+
+@router.get("/export-ips")
+@limiter.limit(RATE_ANALYTICS)
+async def export_ips(
+    request: Request,
+    date_from: str = Query(..., description="Start date YYYY-MM-DD"),
+    date_to: str = Query(..., description="End date YYYY-MM-DD"),
+    node_uuid: Optional[str] = Query(None),
+    username: Optional[str] = Query(None),
+    active_only: bool = Query(False),
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Export unique IPs with metadata for the given period and filters."""
+    return await _compute_export_ips(
+        date_from=date_from, date_to=date_to,
+        node_uuid=node_uuid, username=username, active_only=active_only,
+    )
+
+
+async def _compute_export_ips(
+    date_from: str, date_to: str,
+    node_uuid: Optional[str] = None,
+    username: Optional[str] = None,
+    active_only: bool = False,
+):
+    from shared.database import db_service
+
+    try:
+        start = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end = datetime.strptime(date_to, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+    except ValueError:
+        return {"items": [], "total": 0, "error": "Invalid date format"}
+
+    if not db_service.is_connected:
+        return {"items": [], "total": 0}
+
+    async with db_service.acquire() as conn:
+        # Build query with filters
+        conditions = ["uc.connected_at >= $1", "uc.connected_at < $2"]
+        params: list = [start, end]
+        idx = 3
+
+        if node_uuid:
+            conditions.append(f"uc.node_uuid = ${idx}::uuid")
+            params.append(node_uuid)
+            idx += 1
+
+        if username:
+            conditions.append(f"LOWER(u.username) = LOWER(${idx})")
+            params.append(username)
+            idx += 1
+
+        if active_only:
+            conditions.append("uc.disconnected_at IS NULL")
+
+        where = " AND ".join(conditions)
+
+        rows = await conn.fetch(
+            f"""
+            SELECT DISTINCT ON (uc.ip_address::text)
+                uc.ip_address::text AS ip,
+                u.username,
+                n.name AS node_name,
+                uc.connected_at,
+                im.country_code, im.country_name, im.city,
+                im.asn, im.asn_org, im.connection_type,
+                im.is_vpn, im.is_proxy, im.is_tor, im.is_hosting
+            FROM user_connections uc
+            LEFT JOIN users u ON u.uuid = uc.user_uuid
+            LEFT JOIN nodes n ON n.uuid = uc.node_uuid
+            LEFT JOIN ip_metadata im ON im.ip_address = uc.ip_address::text
+            WHERE {where}
+            ORDER BY uc.ip_address::text, uc.connected_at DESC
+            """,
+            *params,
+        )
+
+        items = [dict(r) for r in rows]
+        # Serialize datetimes
+        for item in items:
+            if item.get("connected_at"):
+                item["connected_at"] = item["connected_at"].isoformat()
+
+        return {"items": items, "total": len(items)}
