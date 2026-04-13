@@ -2502,6 +2502,7 @@ function GeoBalanceCard() {
 
 function TorrentAnalyticsCard() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const chart = useChartTheme()
   const [days, setDays] = useState('7')
 
@@ -2615,7 +2616,12 @@ function TorrentAnalyticsCard() {
                   <div className="space-y-1.5 max-h-60 overflow-y-auto">
                     {topUsers.map((u, i) => (
                       <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
-                        <span className="text-white/80 font-mono truncate max-w-[200px]">{u.username || (u.user_uuid ? `${u.user_uuid.slice(0, 8)}...` : '?')}</span>
+                        <span
+                          className="text-white/80 font-mono truncate max-w-[200px] cursor-pointer hover:text-primary hover:underline transition-colors"
+                          onClick={() => u.user_uuid && navigate(`/users/${u.user_uuid}`)}
+                        >
+                          {u.username || (u.user_uuid ? `${u.user_uuid.slice(0, 8)}...` : '?')}
+                        </span>
                         <Badge variant="destructive" className="text-[10px]">{u.event_count}</Badge>
                       </div>
                     ))}

@@ -2468,10 +2468,11 @@ class DatabaseService:
                 )
                 top_users = await conn.fetch(
                     """
-                    SELECT user_uuid, COUNT(*) as event_count
-                    FROM torrent_events
-                    WHERE detected_at > NOW() - make_interval(days => $1)
-                    GROUP BY user_uuid
+                    SELECT te.user_uuid::text, u.username, COUNT(*) as event_count
+                    FROM torrent_events te
+                    LEFT JOIN users u ON u.uuid = te.user_uuid
+                    WHERE te.detected_at > NOW() - make_interval(days => $1)
+                    GROUP BY te.user_uuid, u.username
                     ORDER BY event_count DESC
                     LIMIT 10
                     """,
