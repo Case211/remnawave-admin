@@ -232,7 +232,8 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className={cn(
-        "sidebar-logo-area flex items-center justify-between h-16 px-6 border-b border-[var(--glass-border)]",
+        "sidebar-logo-area flex items-center justify-between h-16 px-6 border-b border-[var(--glass-border)] relative",
+        "[&::after]:content-[''] [&::after]:absolute [&::after]:bottom-0 [&::after]:inset-x-4 [&::after]:h-px [&::after]:bg-gradient-to-r [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.2)] [&::after]:to-transparent",
         collapsed && "px-0 justify-center"
       )}>
         <Link to="/" onClick={handleNavClick} className={cn(
@@ -297,7 +298,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                               className={cn(
                                 "sidebar-nav-item group flex items-center justify-center px-0 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative",
                                 isActive
-                                  ? "text-white bg-[var(--glass-bg-hover)] border border-[var(--glass-border-hover)] shadow-[0_0_10px_-4px_rgba(var(--glow-rgb),0.25)]"
+                                  ? "text-white bg-[var(--glass-bg-hover)] border border-[var(--glass-border-hover)] shadow-[0_0_15px_-4px_rgba(var(--glow-rgb),0.3)]"
                                   : "text-dark-200 hover:text-white hover:bg-[var(--glass-bg)]"
                               )}
                             >
@@ -413,7 +414,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                     className={cn(
                       "sidebar-nav-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative overflow-hidden",
                       isActive
-                        ? "text-white bg-[var(--glass-bg-hover)] border border-[var(--glass-border-hover)] shadow-[0_0_12px_-4px_rgba(var(--glow-rgb),0.25)]"
+                        ? "text-white bg-[var(--glass-bg-hover)] border border-[var(--glass-border-hover)] shadow-[0_0_15px_-4px_rgba(var(--glow-rgb),0.3)]"
                         : "text-dark-200 hover:text-white hover:bg-[var(--glass-bg)] hover:translate-x-0.5",
                       collapsed && "justify-center px-0"
                     )}
@@ -547,7 +548,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>
               <div
-                className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] shadow-[0_0_10px_-4px_rgba(var(--glow-rgb),0.2)] flex-shrink-0"
+                className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--glass-bg-hover)] border border-[var(--glass-border)] shadow-[0_0_15px_-4px_rgba(var(--glow-rgb),0.25)] flex-shrink-0 transition-shadow hover:shadow-[0_0_20px_-4px_rgba(var(--glow-rgb),0.4)]"
               >
                 <span className="text-sm font-medium text-primary-400">
                   {user?.username?.charAt(0).toUpperCase() || 'A'}
@@ -617,7 +618,9 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       <div
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex flex-col",
-          "glass-heavy border-r border-[var(--glass-border)] animate-fade-in",
+          "glass-heavy animate-fade-in",
+          "border-r border-[var(--glass-border)]",
+          "[&::after]:content-[''] [&::after]:absolute [&::after]:right-0 [&::after]:inset-y-0 [&::after]:w-px [&::after]:bg-gradient-to-b [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.3)] [&::after]:to-transparent",
           "transform transition-all duration-300 ease-in-out",
           "md:relative md:translate-x-0",
           collapsed ? "w-[4.5rem]" : "w-64",

@@ -82,7 +82,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
 
   return (
     <header
-      className="h-16 border-b border-[var(--glass-border)] flex items-center justify-between px-4 md:px-6 animate-fade-in glass-heavy relative z-30"
+      className="h-16 border-b border-[var(--glass-border)] flex items-center justify-between px-4 md:px-6 animate-fade-in glass-heavy relative z-30 [&::after]:content-[''] [&::after]:absolute [&::after]:bottom-0 [&::after]:inset-x-0 [&::after]:h-px [&::after]:bg-gradient-to-r [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.2)] [&::after]:to-transparent"
     >
       {/* Left side: hamburger + search */}
       <div className="flex items-center gap-3 flex-1">
@@ -99,11 +99,11 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
         {/* Search trigger — opens Command Palette */}
         <button
           onClick={onSearchClick}
-          className="header-search-bar flex-1 max-w-md hidden sm:flex items-center gap-2 h-10 rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] backdrop-blur-sm px-3 text-sm text-muted-foreground hover:border-[var(--glass-border-hover)] hover:text-foreground transition-colors cursor-pointer"
+          className="header-search-bar flex-1 max-w-md hidden sm:flex items-center gap-2 h-10 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] backdrop-blur-sm px-3.5 text-sm text-muted-foreground hover:border-[var(--glass-border-hover)] hover:text-foreground hover:shadow-[0_0_15px_-5px_rgba(var(--glow-rgb),0.15)] transition-all duration-200 cursor-pointer"
         >
           <Search className="w-4 h-4 flex-shrink-0" />
           <span className="flex-1 text-left">{t('header.searchPlaceholder')}</span>
-          <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border border-[var(--glass-border)] bg-[var(--glass-bg)] px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+          <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded-md border border-[var(--glass-border)] bg-white/5 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
             <span className="text-xs">&#x2318;</span>K
           </kbd>
         </button>
@@ -153,7 +153,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
 
           {/* Dropdown */}
           {dropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-96 max-w-[calc(100vw-2rem)] bg-[var(--glass-bg-solid)] backdrop-blur-[var(--glass-blur-heavy)] border border-[var(--glass-border)] rounded-xl shadow-2xl z-50 animate-fade-in overflow-hidden">
+            <div className="absolute right-0 top-full mt-2 w-96 max-w-[calc(100vw-2rem)] bg-[var(--glass-bg-solid)] backdrop-blur-[var(--glass-blur-heavy)] border border-[var(--glass-border)] rounded-2xl shadow-2xl z-50 animate-fade-in overflow-hidden shadow-[0_20px_60px_-15px_rgba(0,0,0,0.4)]">
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--glass-border)]">
                 <h3 className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>{t('notifications.title')}</h3>
@@ -230,7 +230,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
         </div>
 
         {/* Status indicator */}
-        <Badge variant="default" className="gap-2 px-3 py-1.5">
+        <Badge variant="default" className="gap-2 px-3 py-1.5 rounded-xl">
           <span
             className="w-2 h-2 rounded-full animate-pulse"
             style={{ backgroundColor: 'var(--accent-from)', boxShadow: '0 0 8px rgba(var(--glow-rgb), 0.5)' }}
