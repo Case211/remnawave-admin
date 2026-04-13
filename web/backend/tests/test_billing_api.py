@@ -27,7 +27,7 @@ MOCK_PROVIDER_DETAIL = {
 MOCK_BILLING_NODES_RESPONSE = {
     "response": {
         "billingNodes": [
-            {"uuid": "bn-1", "nodeUuid": "node-1", "providerUuid": "prov-1", "nextBillingAt": "2026-04-01T00:00:00Z"},
+            {"uuid": "bn-1", "nodeUuid": "node-1", "providerUuid": "prov-1", "nextBillingAt": "2099-01-01T00:00:00Z"},
         ],
         "stats": {
             "currentMonthPayments": 150.0,
