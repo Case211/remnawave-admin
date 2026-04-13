@@ -222,6 +222,14 @@ class SyncService:
             logger.error("Failed to sync node traffic: %s", e)
             results["node_traffic"] = -1
 
+        # Periodic cleanup of old traffic snapshots (keep 31 days)
+        try:
+            deleted = await db_service.cleanup_old_traffic_snapshots(keep_days=31)
+            if deleted:
+                logger.debug("Cleaned up %d old traffic snapshots", deleted)
+        except Exception as e:
+            logger.debug("Traffic snapshot cleanup failed: %s", e)
+
         logger.debug("Full sync completed: %s", results)
         return results
     
@@ -893,6 +901,8 @@ class SyncService:
             total_synced = 0
             # Accumulate deltas: {user_uuid: total_delta_bytes}
             raw_deltas: dict[str, int] = {}
+            # Accumulate per-node totals for traffic snapshots
+            node_totals: dict[str, int] = {}
 
             for node in active_nodes:
                 node_uuid = str(node["uuid"])
@@ -911,10 +921,12 @@ class SyncService:
                         node.get("name", node_uuid), len(top_users), len(username_map),
                     )
 
+                    node_traffic_sum = 0
                     for u in top_users:
                         username = u.get("username", "")
                         user_uuid = username_map.get(username.lower(), "")
                         new_bytes = int(u.get("total", 0) or 0)
+                        node_traffic_sum += new_bytes
                         if user_uuid and new_bytes > 0:
                             # Compute delta from previous snapshot
                             old_bytes = old_snapshot.get(user_uuid, {}).get(node_uuid, 0)
@@ -935,6 +947,8 @@ class SyncService:
                                 user_uuid, node_uuid, new_bytes
                             )
                             total_synced += 1
+
+                    node_totals[node_uuid] = node_traffic_sum
                 except Exception as e:
                     logger.warning(
                         "Failed to sync traffic for node %s: %s",
@@ -945,6 +959,11 @@ class SyncService:
             if raw_deltas:
                 await db_service.increment_raw_traffic(raw_deltas)
                 logger.debug("Accumulated raw traffic deltas for %d users", len(raw_deltas))
+
+            # Save per-node traffic snapshots for timeseries chart
+            if node_totals:
+                snapshots = [(nid, total) for nid, total in node_totals.items()]
+                await db_service.insert_node_traffic_snapshots(snapshots)
 
             await db_service.update_sync_metadata(
                 key="node_traffic",

@@ -514,67 +514,58 @@ async def get_timeseries(
             else:  # 30d
                 start_dt = now - timedelta(days=30)
 
-            start_str = start_dt.strftime('%Y-%m-%d')
-            end_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
-
-            resp = await fetch_nodes_usage_by_range(
-                start=start_str, end=end_str, top_nodes_limit=50,
-            )
-
             points: List[TimeseriesPoint] = []
             node_points: List[NodeTimeseriesPoint] = []
 
-            if resp:
-                logger.debug(
-                    "Timeseries raw response keys: %s",
-                    list(resp.keys()) if isinstance(resp, dict) else type(resp),
+            if period == "24h":
+                # Use local DB snapshots for granular (hourly) data
+                points, node_points, node_names = await _build_timeseries_from_snapshots(
+                    start_dt, now, bucket_minutes=60,
+                )
+            else:
+                # 7d / 30d — use Panel API daily data + supplement today with snapshots
+                start_str = start_dt.strftime('%Y-%m-%d')
+                end_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
+
+                resp = await fetch_nodes_usage_by_range(
+                    start=start_str, end=end_str, top_nodes_limit=50,
                 )
 
-                # Extract node names from topNodes
-                top_nodes = resp.get('topNodes', [])
-                for tn in top_nodes:
-                    uid = tn.get('uuid', '')
-                    name = tn.get('nodeName') or tn.get('name') or uid[:8]
-                    if uid:
-                        node_names[uid] = name
+                if resp:
+                    top_nodes = resp.get('topNodes', [])
+                    for tn in top_nodes:
+                        uid = tn.get('uuid', '')
+                        name = tn.get('nodeName') or tn.get('name') or uid[:8]
+                        if uid:
+                            node_names[uid] = name
 
-                # Extract series data
-                series = resp.get('series', [])
-                logger.debug(
-                    "Timeseries series: type=%s, len=%s, sample=%s",
-                    type(series).__name__,
-                    len(series) if isinstance(series, list) else 'N/A',
-                    series[:2] if isinstance(series, list) and series else 'empty',
-                )
-
-                if isinstance(series, list) and series:
-                    for entry in series:
-                        if not isinstance(entry, dict):
-                            continue
-                        ts = entry.get('date') or entry.get('timestamp') or ''
-                        total = 0
-                        per_node: Dict[str, int] = {}
-                        for key, val in entry.items():
-                            if key in ('date', 'timestamp'):
+                    series = resp.get('series', [])
+                    if isinstance(series, list) and series:
+                        for entry in series:
+                            if not isinstance(entry, dict):
                                 continue
-                            try:
-                                v = int(float(val))
-                            except (ValueError, TypeError):
-                                continue
-                            per_node[key] = v
-                            total += v
-                        if ts:
-                            points.append(TimeseriesPoint(timestamp=ts, value=total))
-                            node_points.append(NodeTimeseriesPoint(
-                                timestamp=ts, total=total, nodes=per_node,
-                            ))
+                            ts = entry.get('date') or entry.get('timestamp') or ''
+                            total = 0
+                            per_node: Dict[str, int] = {}
+                            for key, val in entry.items():
+                                if key in ('date', 'timestamp'):
+                                    continue
+                                try:
+                                    v = int(float(val))
+                                except (ValueError, TypeError):
+                                    continue
+                                per_node[key] = v
+                                total += v
+                            if ts:
+                                points.append(TimeseriesPoint(timestamp=ts, value=total))
+                                node_points.append(NodeTimeseriesPoint(
+                                    timestamp=ts, total=total, nodes=per_node,
+                                ))
 
-                # Fallback: if series is empty but topNodes has data,
-                # build daily points by querying each day individually
-                if not points and top_nodes:
-                    points, node_points = await _build_daily_points(
-                        start_dt, now, node_names, period,
-                    )
+                    if not points and top_nodes:
+                        points, node_points = await _build_daily_points(
+                            start_dt, now, node_names, period,
+                        )
 
             return TimeseriesResponse(
                 period=period,
@@ -621,6 +612,52 @@ async def get_timeseries(
     except Exception as e:
         logger.error("Error getting timeseries: %s", e, exc_info=True)
         return TimeseriesResponse(period=period, metric=metric)
+
+
+async def _build_timeseries_from_snapshots(
+    start_dt: datetime,
+    end_dt: datetime,
+    bucket_minutes: int = 60,
+) -> tuple:
+    """Build timeseries points from local node_traffic_snapshots table.
+
+    Returns (points, node_points, node_names).
+    """
+    from shared.database import db_service
+
+    rows = await db_service.get_node_traffic_timeseries(
+        since=start_dt, until=end_dt, bucket_minutes=bucket_minutes,
+    )
+
+    # Group rows by bucket timestamp
+    buckets: Dict[str, Dict[str, int]] = {}
+    node_uuids: set = set()
+    for r in rows:
+        ts = r["bucket"].strftime("%Y-%m-%dT%H:%M")
+        nid = r["node_uuid"]
+        node_uuids.add(nid)
+        if ts not in buckets:
+            buckets[ts] = {}
+        buckets[ts][nid] = r["traffic_bytes"]
+
+    # Build node_names from DB
+    node_names: Dict[str, str] = {}
+    if node_uuids:
+        nodes = await db_service.get_all_nodes()
+        for n in nodes:
+            uid = str(n.get("uuid", ""))
+            if uid in node_uuids:
+                node_names[uid] = n.get("name") or uid[:8]
+
+    points: List[TimeseriesPoint] = []
+    node_points: List[NodeTimeseriesPoint] = []
+    for ts in sorted(buckets.keys()):
+        per_node = buckets[ts]
+        total = sum(per_node.values())
+        points.append(TimeseriesPoint(timestamp=ts, value=total))
+        node_points.append(NodeTimeseriesPoint(timestamp=ts, total=total, nodes=per_node))
+
+    return points, node_points, node_names
 
 
 async def _build_daily_points(

@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -5648,6 +5648,71 @@ class DatabaseService:
                    FROM user_blacklist GROUP BY source ORDER BY count DESC"""
             )
             return [dict(r) for r in rows]
+
+    # ── Node traffic snapshots ──────────────────────────────
+
+    async def insert_node_traffic_snapshots(
+        self, snapshots: List[Tuple[str, int]]
+    ) -> None:
+        """Bulk-insert traffic snapshots for nodes.
+
+        Args:
+            snapshots: list of (node_uuid, traffic_bytes) tuples.
+        """
+        if not self.is_connected or not snapshots:
+            return
+        async with self.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO node_traffic_snapshots (node_uuid, traffic_bytes, created_at)
+                VALUES ($1::uuid, $2, NOW())
+                """,
+                snapshots,
+            )
+
+    async def get_node_traffic_timeseries(
+        self, since: datetime, until: datetime | None = None,
+        bucket_minutes: int = 60,
+    ) -> List[Dict[str, Any]]:
+        """Get per-node traffic timeseries aggregated into time buckets.
+
+        Returns list of dicts:
+            {bucket: datetime, node_uuid: str, traffic_bytes: int}
+        Aggregation: MAX(traffic_bytes) per bucket (snapshot values are totals,
+        not deltas — so max gives the latest reading in each bucket).
+        """
+        if not self.is_connected:
+            return []
+        until = until or datetime.now(timezone.utc)
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    date_trunc('hour', created_at)
+                        + INTERVAL '1 minute' * ($3 * FLOOR(
+                            EXTRACT(MINUTE FROM created_at) / $3
+                          )) AS bucket,
+                    node_uuid::text,
+                    MAX(traffic_bytes) AS traffic_bytes
+                FROM node_traffic_snapshots
+                WHERE created_at >= $1 AND created_at < $2
+                GROUP BY bucket, node_uuid
+                ORDER BY bucket
+                """,
+                since, until, bucket_minutes,
+            )
+            return [dict(r) for r in rows]
+
+    async def cleanup_old_traffic_snapshots(self, keep_days: int = 31) -> int:
+        """Delete traffic snapshots older than keep_days. Returns deleted count."""
+        if not self.is_connected:
+            return 0
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM node_traffic_snapshots WHERE created_at < NOW() - INTERVAL '1 day' * $1",
+                keep_days,
+            )
+            return int(result.split()[-1]) if result else 0
 
 
 def _db_row_to_api_format(row) -> Dict[str, Any]:

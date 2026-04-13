@@ -96,8 +96,8 @@ class AutomationEngine:
         # State tracking for event detection
         self._node_offline_since: Dict[str, datetime] = {}
         self._user_traffic_exceeded: set = set()
-        # Dedup for threshold rules: (rule_id, target_id) -> last notified value
-        self._threshold_notified: Dict[tuple, float] = {}
+        # Dedup for threshold rules: (rule_id, target_id) -> (value, timestamp)
+        self._threshold_notified: Dict[tuple, Tuple[float, datetime]] = {}
 
     async def start(self):
         """Start the scheduler, threshold, and event detection loops."""
@@ -427,29 +427,42 @@ class AutomationEngine:
                             ))
 
                 if not targets:
-                    # No targets exceeded threshold — clear notified state for this rule
+                    # No targets exceeded threshold — clear stale entries (>1h) for this rule
+                    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
                     self._threshold_notified = {
-                        k: v for k, v in self._threshold_notified.items() if k[0] != rule["id"]
+                        k: v for k, v in self._threshold_notified.items()
+                        if k[0] != rule["id"] or v[1] > cutoff
                     }
                     continue
 
                 # Filter out already-notified targets (same rule + target + similar value)
+                now = datetime.now(timezone.utc)
                 new_targets = []
                 for t in targets:
                     target_type, target_id, ctx = t
                     key = (rule["id"], target_id)
-                    prev_value = self._threshold_notified.get(key)
-                    # Notify if: never notified, or value changed by >5%
+                    prev = self._threshold_notified.get(key)
                     cur_value = ctx.get("percent") or ctx.get("traffic_gb") or 0
-                    if prev_value is None or abs(cur_value - prev_value) > 5:
+                    if prev is None:
                         new_targets.append(t)
-                        self._threshold_notified[key] = cur_value
+                        self._threshold_notified[key] = (cur_value, now)
+                    else:
+                        prev_value, prev_time = prev
+                        age_minutes = (now - prev_time).total_seconds() / 60
+                        value_changed = abs(cur_value - prev_value) > 5
+                        # Re-notify only if value changed significantly AND at least 30 min passed
+                        if value_changed and age_minutes >= 30:
+                            new_targets.append(t)
+                            self._threshold_notified[key] = (cur_value, now)
 
                 # Clear notified state for targets that dropped below threshold
+                # but keep entries for 1 hour grace period to prevent spam on flapping
                 current_target_ids = {t[1] for t in targets}
                 self._threshold_notified = {
                     k: v for k, v in self._threshold_notified.items()
-                    if k[0] != rule["id"] or k[1] in current_target_ids
+                    if k[0] != rule["id"]
+                    or k[1] in current_target_ids
+                    or (now - v[1]).total_seconds() < 3600
                 }
 
                 if not new_targets:
