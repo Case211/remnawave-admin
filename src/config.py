@@ -13,6 +13,7 @@ load_dotenv(BASE_DIR / ".env")
 
 class Settings(BaseSettings):
     bot_token: str = Field(..., alias="BOT_TOKEN")
+    bot_api_root: str = Field(default="https://api.telegram.org", alias="BOT_API_ROOT")
     api_base_url: AnyHttpUrl = Field(..., alias="API_BASE_URL")
     api_token: str | None = Field(default=None, alias="API_TOKEN")
     default_locale: str = Field("ru", alias="DEFAULT_LOCALE")

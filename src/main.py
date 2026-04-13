@@ -3,6 +3,8 @@ import signal
 import sys
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.fsm.storage.memory import MemoryStorage
 import uvicorn
 
@@ -242,7 +244,10 @@ async def main() -> None:
         logger.info("🗄️ Database not configured, running without cache")
 
     # parse_mode is left as default (None) to avoid HTML parsing issues with plain text translations
-    bot = Bot(token=settings.bot_token)
+    session = AiohttpSession(
+        api=TelegramAPIServer.from_base(settings.bot_api_root)
+    )
+    bot = Bot(token=settings.bot_token, session=session)
     dp = Dispatcher(storage=MemoryStorage())
 
     # middlewares
