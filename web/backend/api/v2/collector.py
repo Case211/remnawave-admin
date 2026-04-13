@@ -450,15 +450,21 @@ async def receive_connections(
             })
 
         if batch_connections:
-            try:
-                result = await db_service.batch_upsert_connections(
-                    batch_connections, stale_threshold_minutes=2
-                )
-                processed = result["upserted"]
-                logger.info("Batch upserted      node=%-20s  upserted=%-4d  stale=%-3d  errors=%d", node_name, result["upserted"], result["closed_stale"], errors)
-            except Exception as e:
-                logger.error("Batch upsert failed for node %s: %s", node_name, e, exc_info=True)
-                errors += len(batch_connections)
+            for attempt in range(3):
+                try:
+                    result = await db_service.batch_upsert_connections(
+                        batch_connections, stale_threshold_minutes=2
+                    )
+                    processed = result["upserted"]
+                    logger.info("Batch upserted      node=%-20s  upserted=%-4d  stale=%-3d  errors=%d", node_name, result["upserted"], result["closed_stale"], errors)
+                    break
+                except Exception as e:
+                    if "deadlock" in str(e).lower() and attempt < 2:
+                        logger.warning("Deadlock on batch upsert for %s, retry %d/2", node_name, attempt + 1)
+                        await asyncio.sleep(0.1 * (attempt + 1))
+                        continue
+                    logger.error("Batch upsert failed for node %s: %s", node_name, e, exc_info=True)
+                    errors += len(batch_connections)
 
     if errors > 0:
         logger.warning("Batch errors        node=%-20s  total=%-4d  processed=%-4d  errors=%d", node_name, len(report.connections), processed, errors)

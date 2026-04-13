@@ -1994,7 +1994,9 @@ class DatabaseService:
             existing = deduped.get(key)
             if existing is None or (ca and ca > (existing.get("connected_at") or datetime.min)):
                 deduped[key] = c
-        connections = list(deduped.values())
+        # Sort by (user_uuid, ip_address) to ensure consistent lock ordering
+        # and prevent deadlocks when concurrent batches touch the same rows
+        connections = [deduped[k] for k in sorted(deduped.keys())]
 
         user_uuids = []
         ip_addresses = []
