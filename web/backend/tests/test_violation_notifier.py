@@ -195,7 +195,7 @@ class TestSendViolationNotification:
         )
 
         body = mock_create.call_args.kwargs["body"]
-        assert "5/2" in body
+        assert "5 из 2" in body
 
     @patch("web.backend.core.notification_service.create_notification", new_callable=AsyncMock)
     async def test_device_limit_zero_shows_infinity(self, mock_create):

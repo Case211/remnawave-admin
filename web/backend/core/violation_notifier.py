@@ -46,6 +46,68 @@ def _short_provider(asn_org: Optional[str]) -> str:
     return asn_org
 
 
+def _detect_primary_reason(reasons: List[str], breakdown: dict) -> dict:
+    """Determine primary violation reason for notification title and subtitle."""
+    reasons_lower = " ".join(r.lower() for r in reasons)
+
+    if "hwid" in reasons_lower or "device overlap" in reasons_lower:
+        return {
+            "title": "Коллизия аккаунтов: общие устройства (device overlap)",
+            "subtitle": "Несколько аккаунтов используют одни и те же HWID",
+        }
+    if "torrent" in reasons_lower or "p2p" in reasons_lower:
+        return {
+            "title": "Обнаружен торрент-трафик (P2P)",
+            "subtitle": "Пользователь использует торрент через VPN",
+        }
+    if "impossible travel" in reasons_lower or "geo" in reasons_lower:
+        return {
+            "title": "Невозможное перемещение (geo anomaly)",
+            "subtitle": "Подключения из географически несовместимых локаций",
+        }
+    if "simultaneous" in reasons_lower or "temporal" in reasons_lower:
+        return {
+            "title": "Превышение лимита подключений (simultaneous)",
+            "subtitle": "Слишком много одновременных подключений с разных IP",
+        }
+    if "datacenter" in reasons_lower or "vpn" in reasons_lower or "proxy" in reasons_lower:
+        return {
+            "title": "Подозрительный провайдер (ASN anomaly)",
+            "subtitle": "Подключение через VPN/прокси/датацентр",
+        }
+    if "traffic" in reasons_lower or "bandwidth" in reasons_lower:
+        return {
+            "title": "Чрезмерное потребление трафика",
+            "subtitle": "Пользователь превысил порог скорости потребления",
+        }
+    if breakdown:
+        # Fallback: use highest-scoring analyzer
+        max_score = 0
+        max_key = ""
+        for key, val in breakdown.items():
+            s = val.get("score", 0) if isinstance(val, dict) else getattr(val, "score", 0)
+            if s > max_score:
+                max_score = s
+                max_key = key
+        labels = {
+            "temporal": "Временная аномалия подключений",
+            "geo": "Географическая аномалия",
+            "asn": "Аномалия провайдера",
+            "profile": "Отклонение профиля поведения",
+            "device": "Аномалия устройств",
+        }
+        if max_key:
+            return {
+                "title": labels.get(max_key, f"Нарушение ({max_key})"),
+                "subtitle": f"Анализатор {max_key} обнаружил аномалию (скор: {max_score:.0f})",
+            }
+
+    return {
+        "title": "Обнаружено нарушение",
+        "subtitle": "Система обнаружила подозрительную активность",
+    }
+
+
 def _violation_keyboard(user_uuid: str) -> Dict:
     """Build inline keyboard with quick actions for violation notifications."""
     return {
@@ -185,9 +247,16 @@ async def send_violation_notification(
                 os_list = device_data.os_list or []
                 client_list = getattr(device_data, "client_list", None) or []
 
-        # Build message
+        # Build message — determine primary violation reason for title
+        reasons = violation_score.get("reasons", [])
+        primary_reason = _detect_primary_reason(reasons, breakdown)
+        title_text = primary_reason["title"]
+        subtitle_text = primary_reason["subtitle"]
+
         lines = [
-            "\U0001f6a8 <b>НАРУШИТЕЛЬ ЛИМИТА</b>",
+            f"\u26a0\ufe0f <b>{_esc(title_text)}</b>",
+            "",
+            f"\U0001f4a1 {_esc(subtitle_text)}",
             "",
         ]
 
@@ -203,7 +272,7 @@ async def send_violation_notification(
             lines.append(f"\U0001f4dd Описание: <code>{_esc(description[:100])}</code>")
 
         lines.append("")
-        lines.append(f"\U0001f310 IP адресов: <b>{ip_count}/{device_limit}</b>")
+        lines.append(f"\U0001f310 IP адресов: <b>{ip_count} из {device_limit}</b>")
 
         if unique_ips:
             lines.append("\U0001f4cd IP (провайдеры):")
@@ -217,15 +286,12 @@ async def send_violation_notification(
                     if hasattr(meta, "country_code") and meta.country_code:
                         country_code = meta.country_code
 
-                if provider_info or country_code:
-                    suffix = ""
-                    if provider_info:
-                        suffix = f" - {_esc(provider_info)}"
-                    if country_code:
-                        suffix += f" ({country_code})"
-                    lines.append(f"   <code>{ip}</code>{suffix}")
-                else:
-                    lines.append(f"   <code>{ip}</code>")
+                suffix = ""
+                if provider_info:
+                    suffix = f" — {_esc(provider_info)}"
+                if country_code:
+                    suffix += f" ({country_code})"
+                lines.append(f"   <code>{ip}</code>{suffix}")
 
         if nodes_used:
             nodes_str = ", ".join(sorted(nodes_used))
@@ -261,9 +327,8 @@ async def send_violation_notification(
                 device_parts.append(device_str)
             if hwid_count > 5:
                 device_parts.append(f"... и ещё {hwid_count - 5}")
-            lines.append(f"\U0001f4f2 Устройства ({hwid_count}/{device_limit}):")
-            for part in device_parts:
-                lines.append(f"   {_esc(part)}")
+            lines.append(f"\U0001f4f2 Всего устройств в аккаунте: <b>{hwid_count} из {device_limit}</b>")
+            lines.append(f"(перечисление: {', '.join(_esc(p) for p in device_parts)})")
         elif os_list or client_list:
             device_parts = []
             if os_list and client_list and len(os_list) == len(client_list):
@@ -285,8 +350,7 @@ async def send_violation_notification(
         else:
             lines.append("\U0001f4f2 Устройства: \u2014")
 
-        # Reasons (deduplicated)
-        reasons = violation_score.get("reasons", [])
+        # Reasons (deduplicated) — as "Детали пересечения"
         if reasons:
             seen = set()
             unique_reasons = []
@@ -295,7 +359,7 @@ async def send_violation_notification(
                     seen.add(r)
                     unique_reasons.append(r)
             lines.append("")
-            lines.append("\u2757 Причины:")
+            lines.append("\U0001f50e Детали пересечения:")
             for r in unique_reasons[:8]:
                 lines.append(f"   \u2022 {_esc(r)}")
             if len(unique_reasons) > 8:
@@ -304,19 +368,18 @@ async def send_violation_notification(
         # Recommended action
         action = violation_score.get("recommended_action", "")
         action_labels = {
-            "no_action": "Без действий",
-            "monitor": "\U0001f50d Мониторинг",
-            "warn": "\u26a0\ufe0f Предупреждение",
-            "soft_block": "\U0001f6ab Мягкая блокировка",
-            "temp_block": "\u23f3 Временная блокировка",
-            "hard_block": "\U0001f6d1 Жёсткая блокировка",
+            "no_action": "без действий",
+            "monitor": "мониторинг",
+            "warn": "предупреждение",
+            "soft_block": "мягкая блокировка",
+            "temp_block": "временная блокировка",
+            "hard_block": "жёсткая блокировка",
         }
         action_label = action_labels.get(action, action)
-        if action and action != "no_action":
-            lines.append(f"\U0001f3af Действие: <b>{action_label}</b>")
-
-        lines.append(f"\U0001f4ca Скор: <code>{total_score:.1f}/100</code>")
-        lines.append(f"\U0001f550 Время (МСК): <code>{moscow_time_str}</code>")
+        lines.append("")
+        lines.append(f"\U0001f3af Действие: <b>{action_label.upper()}</b> ({action_label})")
+        lines.append(f"\U0001f4ca Скор: <b>{total_score:.1f}</b> / 100")
+        lines.append(f"\U0001f550 Время (МСК): {moscow_time_str}")
 
         body = "\n".join(lines)
 
@@ -328,7 +391,7 @@ async def send_violation_notification(
         from web.backend.core.notification_service import create_notification
 
         await create_notification(
-            title="Нарушение лимита устройств",
+            title=title_text,
             body=plain_body,
             type="violation",
             severity="warning" if total_score < 80 else "critical",
