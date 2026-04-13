@@ -40,7 +40,7 @@ import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
 import { useAppearanceStore } from '../../store/useAppearanceStore'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+// Separator removed — using gradient dividers instead
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Tooltip,
@@ -232,8 +232,8 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className={cn(
-        "sidebar-logo-area flex items-center justify-between h-16 px-6 border-b border-[var(--glass-border)] relative",
-        "[&::after]:content-[''] [&::after]:absolute [&::after]:bottom-0 [&::after]:inset-x-4 [&::after]:h-px [&::after]:bg-gradient-to-r [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.2)] [&::after]:to-transparent",
+        "sidebar-logo-area flex items-center justify-between h-16 px-6 relative",
+        "[&::after]:content-[''] [&::after]:absolute [&::after]:bottom-0 [&::after]:inset-x-4 [&::after]:h-px [&::after]:bg-gradient-to-r [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.15)] [&::after]:to-transparent",
         collapsed && "px-0 justify-center"
       )}>
         <Link to="/" onClick={handleNavClick} className={cn(
@@ -445,7 +445,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       </ScrollArea>
 
       {/* Collapse toggle — desktop only */}
-      <div className="hidden md:flex justify-center py-2 border-t border-[var(--glass-border)]">
+      <div className="hidden md:flex justify-center py-2">
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
             <Button
@@ -464,7 +464,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       </div>
 
       {/* Project links */}
-      <Separator className="bg-[var(--glass-border)]" />
+      <div className="mx-4 h-px bg-gradient-to-r from-transparent via-[rgba(var(--glow-rgb),0.12)] to-transparent" />
       <div className={cn("px-4 py-2 space-y-0.5", collapsed && "px-2")}>
         {collapsed ? (
           <>
@@ -542,7 +542,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       </div>
 
       {/* User info */}
-      <Separator className="bg-[var(--glass-border)]" />
+      <div className="mx-4 h-px bg-gradient-to-r from-transparent via-[rgba(var(--glow-rgb),0.12)] to-transparent" />
       <div className={cn("p-4", collapsed && "p-2")}>
         <div className={cn("sidebar-user-section flex items-center", collapsed && "justify-center")}>
           <Tooltip delayDuration={0}>
@@ -619,8 +619,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex flex-col",
           "glass-heavy animate-fade-in",
-          "border-r border-[var(--glass-border)]",
-          "[&::after]:content-[''] [&::after]:absolute [&::after]:right-0 [&::after]:inset-y-0 [&::after]:w-px [&::after]:bg-gradient-to-b [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.3)] [&::after]:to-transparent",
+          "[&::after]:content-[''] [&::after]:absolute [&::after]:right-0 [&::after]:inset-y-0 [&::after]:w-px [&::after]:bg-gradient-to-b [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.2)] [&::after]:to-transparent",
           "transform transition-all duration-300 ease-in-out",
           "md:relative md:translate-x-0",
           collapsed ? "w-[4.5rem]" : "w-64",
