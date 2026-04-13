@@ -636,18 +636,34 @@
     border: 1px solid var(--glass-border);
   }
 
-  /* Glass card — glass + floating shadow + rim + hover lift */
+  /* Glass card — glass + floating shadow + rim + hover lift + accent line */
   .glass-card {
+    position: relative;
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border: 1px solid var(--glass-border);
-    border-top-color: rgba(255, 255, 255, 0.08);
     border-radius: 16px;
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.15),
       0 1px 0 0 rgba(255, 255, 255, 0.04) inset;
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+    overflow: hidden;
+  }
+
+  .glass-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent 5%, rgba(var(--glow-rgb), 0.5) 50%, transparent 95%);
+    opacity: 0.3;
+    transition: opacity 0.3s ease;
+    z-index: 1;
+  }
+
+  .glass-card:hover::before {
+    opacity: 0.7;
   }
 
   .glass-card:hover {
