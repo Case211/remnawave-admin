@@ -484,16 +484,16 @@ function PeriodSwitcher({
   options: { value: string; label: string }[]
 }) {
   return (
-    <div className="flex items-center gap-1 bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-lg p-0.5">
+    <div className="flex items-center gap-0.5 bg-[var(--glass-bg)] border border-[var(--glass-border)] rounded-xl p-1 backdrop-blur-sm">
       {options.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
           className={cn(
-            "px-2.5 py-1 text-xs rounded-md transition-all duration-200",
+            "px-3 py-1 text-xs rounded-lg transition-all duration-250",
             value === opt.value
-              ? "bg-[var(--glass-bg-hover)] text-primary-400 font-medium border border-[var(--glass-border-hover)] shadow-[0_0_8px_-3px_rgba(var(--glow-rgb),0.2)]"
-              : "text-muted-foreground hover:text-white border border-transparent"
+              ? "bg-white/10 text-white font-medium shadow-[0_0_12px_-4px_rgba(var(--glow-rgb),0.3)]"
+              : "text-muted-foreground hover:text-white/80"
           )}
         >
           {opt.label}
@@ -519,12 +519,13 @@ function TrafficChartTooltip({ active, payload, label }: { active?: boolean; pay
   // Sort by value descending for readability; keep original color from stroke
   const sorted = [...payload].sort((a, b) => (b.value || 0) - (a.value || 0))
   return (
-    <div style={chart.tooltipStyle} className="px-3 py-2">
-      <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{label}</p>
+    <div className="px-3 py-2.5 rounded-xl border border-white/10 shadow-xl" style={{ ...chart.tooltipStyle, backdropFilter: 'blur(16px)' }}>
+      <p className={cn("text-[10px] uppercase tracking-wider mb-1.5", chart.tooltipMutedClass)}>{label}</p>
       {sorted.map((entry, i) => (
-        <p key={i} className="text-xs flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-          <span style={{ color: entry.color }}>{entry.name}: {formatBytesLocal(entry.value)}</span>
+        <p key={i} className="text-xs flex items-center gap-2 py-0.5">
+          <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color, boxShadow: `0 0 6px ${entry.color}40` }} />
+          <span className="text-white/70">{entry.name}:</span>
+          <span className="text-white font-medium ml-auto">{formatBytesLocal(entry.value)}</span>
         </p>
       ))}
     </div>
@@ -583,27 +584,27 @@ function GrowthTrendsCard({
               <AreaChart data={trends.series}>
                 <defs>
                   <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={chart.accentColor} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={chart.accentColor} stopOpacity={0.05} />
+                    <stop offset="0%" stopColor={chart.accentColor} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={chart.accentColor} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
-                <XAxis dataKey="date" stroke={chart.axis} fontSize={10} tickFormatter={(d) => { const p = d.split('-'); return `${p[2]}.${p[1]}` }} />
-                <YAxis stroke={chart.axis} fontSize={10} tickFormatter={(v) => metric === 'traffic' ? createFormatBytesShort(t)(v) : v} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                <XAxis dataKey="date" stroke={chart.axis} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(d) => { const p = d.split('-'); return `${p[2]}.${p[1]}` }} />
+                <YAxis stroke={chart.axis} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => metric === 'traffic' ? createFormatBytesShort(t)(v) : v} />
                 <RechartsTooltip content={(props: any) => {
                   if (!props.active || !props.payload?.length) return null
                   return (
-                    <div style={chart.tooltipStyle} className="px-3 py-2">
-                      <p className={cn("text-xs mb-1", chart.tooltipMutedClass)}>{props.label}</p>
+                    <div className="px-3 py-2.5 rounded-xl border border-white/10 shadow-xl" style={{ ...chart.tooltipStyle, backdropFilter: 'blur(16px)' }}>
+                      <p className={cn("text-[10px] uppercase tracking-wider mb-1", chart.tooltipMutedClass)}>{props.label}</p>
                       {props.payload.map((entry: any, i: number) => (
-                        <p key={i} className="text-xs" style={{ color: entry.color }}>
+                        <p key={i} className="text-xs font-medium" style={{ color: entry.color }}>
                           {entry.name}: {formatValue(entry.value)}
                         </p>
                       ))}
                     </div>
                   )
                 }} />
-                <Area type="monotone" dataKey="value" name={metricOptions.find((o) => o.value === metric)?.label || metric} stroke={chart.accentColor} fill="url(#trendGrad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="value" name={metricOptions.find((o) => o.value === metric)?.label || metric} stroke={chart.accentColor} fill="url(#trendGrad)" strokeWidth={1.5} />
               </AreaChart>
             </ResponsiveContainer>
           </>
@@ -2039,32 +2040,32 @@ export default function Dashboard() {
                       <defs>
                         {nodeUuids.map((uid, i) => (
                           <linearGradient key={uid} id={`grad-${i}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={chart.nodeColors[i % chart.nodeColors.length]} stopOpacity={0.3} />
-                            <stop offset="95%" stopColor={chart.nodeColors[i % chart.nodeColors.length]} stopOpacity={0.05} />
+                            <stop offset="0%" stopColor={chart.nodeColors[i % chart.nodeColors.length]} stopOpacity={0.35} />
+                            <stop offset="100%" stopColor={chart.nodeColors[i % chart.nodeColors.length]} stopOpacity={0.02} />
                           </linearGradient>
                         ))}
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
-                      <XAxis dataKey="name" stroke={chart.axis} fontSize={11} />
-                      <YAxis stroke={chart.axis} fontSize={11} tickFormatter={(v) => formatBytesShort(v)} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                      <XAxis dataKey="name" stroke={chart.axis} fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke={chart.axis} fontSize={10} tickFormatter={(v) => formatBytesShort(v)} tickLine={false} axisLine={false} />
                       <RechartsTooltip content={<TrafficChartTooltip />} />
                       {nodeUuids.map((uid, i) => (
-                        <Area key={uid} type="monotone" dataKey={uid} name={nodeNames[uid] || uid.substring(0, 8)} stackId="traffic" stroke={chart.nodeColors[i % chart.nodeColors.length]} fill={`url(#grad-${i})`} strokeWidth={2} />
+                        <Area key={uid} type="monotone" dataKey={uid} name={nodeNames[uid] || uid.substring(0, 8)} stackId="traffic" stroke={chart.nodeColors[i % chart.nodeColors.length]} fill={`url(#grad-${i})`} strokeWidth={1.5} />
                       ))}
                     </AreaChart>
                   ) : (
                     <LineChart data={trafficChartData}>
                       <defs>
                         <linearGradient id="trafficGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={chart.accentColor} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={chart.accentColor} stopOpacity={0.05} />
+                          <stop offset="0%" stopColor={chart.accentColor} stopOpacity={0.35} />
+                          <stop offset="100%" stopColor={chart.accentColor} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
-                      <XAxis dataKey="name" stroke={chart.axis} fontSize={11} />
-                      <YAxis stroke={chart.axis} fontSize={11} tickFormatter={(v) => formatBytesShort(v)} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                      <XAxis dataKey="name" stroke={chart.axis} fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke={chart.axis} fontSize={10} tickFormatter={(v) => formatBytesShort(v)} tickLine={false} axisLine={false} />
                       <RechartsTooltip content={<TrafficChartTooltip />} />
-                      <Line type="monotone" dataKey="value" name={t('dashboard.traffic')} stroke={chart.accentColor} strokeWidth={2} dot={false} activeDot={{ r: 4, fill: chart.accentColor }} />
+                      <Line type="monotone" dataKey="value" name={t('dashboard.traffic')} stroke={chart.accentColor} strokeWidth={2} dot={false} activeDot={{ r: 5, fill: chart.accentColor, stroke: 'rgba(255,255,255,0.3)', strokeWidth: 2 }} />
                     </LineChart>
                   )}
                 </ResponsiveContainer>
@@ -2099,11 +2100,11 @@ export default function Dashboard() {
               {connectionsBarData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={Math.max(connectionsBarData.length * 40 + 20, 120)}>
                   <BarChart data={connectionsBarData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
-                    <XAxis type="number" stroke={chart.axis} fontSize={11} />
-                    <YAxis dataKey="name" type="category" stroke={chart.axis} fontSize={11} width={120} tick={{ fill: chart.tick }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} horizontal={false} />
+                    <XAxis type="number" stroke={chart.axis} fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis dataKey="name" type="category" stroke={chart.axis} fontSize={10} width={120} tick={{ fill: chart.tick }} tickLine={false} axisLine={false} />
                     <RechartsTooltip contentStyle={chart.tooltipStyle} />
-                    <Bar dataKey="value" name={t('dashboard.quantity', 'Количество')} radius={[0, 6, 6, 0]} maxBarSize={24}>
+                    <Bar dataKey="value" name={t('dashboard.quantity', 'Количество')} radius={[0, 8, 8, 0]} maxBarSize={20}>
                       {connectionsBarData.map((_entry, i) => (
                         <Cell key={i} fill={chart.nodeColors[i % chart.nodeColors.length]} />
                       ))}
@@ -2171,22 +2172,24 @@ export default function Dashboard() {
                   {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-6 w-full" />)}
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {violationsChartData.map((entry) => {
                     const maxVal = Math.max(...violationsChartData.map((e) => e.value), 1)
+                    const color = SEVERITY_COLORS[entry.key] || '#fab005'
                     return (
                       <div key={entry.key} className="flex items-center gap-3">
                         <span className="text-xs text-muted-foreground w-20 shrink-0">{entry.name}</span>
-                        <div className="flex-1 h-2 bg-[var(--glass-bg-hover)] rounded-full overflow-hidden">
+                        <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
                           <div
-                            className="h-full rounded-full transition-all duration-500"
+                            className="h-full rounded-full transition-all duration-700 ease-out"
                             style={{
                               width: `${(entry.value / maxVal) * 100}%`,
-                              background: SEVERITY_COLORS[entry.key] || '#fab005',
+                              background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+                              boxShadow: `0 0 8px ${color}30`,
                             }}
                           />
                         </div>
-                        <span className="text-xs text-white font-mono w-8 text-right">{entry.value}</span>
+                        <span className="text-xs text-white font-mono w-8 text-right tabular-nums">{entry.value}</span>
                       </div>
                     )
                   })}
