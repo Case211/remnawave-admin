@@ -561,7 +561,7 @@ function GrowthTrendsCard({
   }
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s', '--card-accent-rgb': '34, 197, 94' } as React.CSSProperties}>
       <CardHeader className="pb-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -633,7 +633,7 @@ function TopUsersCard({
   const items = topUsers?.items || []
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s', '--card-accent-rgb': '6, 182, 212' } as React.CSSProperties}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -712,7 +712,7 @@ function TopViolatorsCard({
   }
 
   return (
-    <Card className="animate-fade-in-up cursor-pointer hover:shadow-[0_0_24px_-6px_rgba(var(--glow-rgb),0.2)] transition-all" style={{ animationDelay: '0.2s' }} onClick={() => navigate('/violations')}>
+    <Card className="animate-fade-in-up cursor-pointer transition-all" style={{ animationDelay: '0.2s', '--card-accent-rgb': '239, 68, 68' } as React.CSSProperties} onClick={() => navigate('/violations')}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -812,7 +812,7 @@ function CollectorQueueCard({ stats, loading }: { stats?: CollectorStats; loadin
   ]
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s', '--card-accent-rgb': '234, 179, 8' } as React.CSSProperties}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -897,7 +897,7 @@ function SystemStatusCard({
   }
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s', '--card-accent-rgb': '6, 182, 212' } as React.CSSProperties}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1155,7 +1155,7 @@ function UpdateCheckerCard() {
 
   if (isLoading) {
     return (
-      <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+      <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s', '--card-accent-rgb': '34, 197, 94' } as React.CSSProperties}>
         <CardContent className="p-4">
           <Skeleton className="h-20 w-full" />
         </CardContent>
@@ -1171,7 +1171,7 @@ function UpdateCheckerCard() {
   const releases = releaseHistory || []
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s' }}>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.35s', '--card-accent-rgb': '34, 197, 94' } as React.CSSProperties}>
       <CardHeader className="pb-2">
         <CardTitle className="text-base md:text-lg flex items-center gap-2">
           <Activity className="w-4 h-4 text-primary-400" />
@@ -1433,8 +1433,8 @@ const ActivityFeedCard = memo(function ActivityFeedCard({
 
   return (
     <Card
-      className="animate-fade-in-up cursor-pointer hover:shadow-[0_0_24px_-6px_rgba(var(--glow-rgb),0.2)] transition-all"
-      style={{ animationDelay: '0.25s' }}
+      className="animate-fade-in-up cursor-pointer transition-all"
+      style={{ animationDelay: '0.25s', '--card-accent-rgb': '139, 92, 246' } as React.CSSProperties}
       onClick={() => navigate('/audit')}
     >
       <CardHeader className="pb-2">
@@ -1513,8 +1513,8 @@ const NodeLoadCard = memo(function NodeLoadCard({
 
   return (
     <Card
-      className="animate-fade-in-up cursor-pointer hover:shadow-[0_0_24px_-6px_rgba(var(--glow-rgb),0.2)] transition-all"
-      style={{ animationDelay: '0.2s' }}
+      className="animate-fade-in-up cursor-pointer transition-all"
+      style={{ animationDelay: '0.2s', '--card-accent-rgb': '139, 92, 246' } as React.CSSProperties}
       onClick={() => navigate('/fleet')}
     >
       <CardHeader className="pb-2">
@@ -1572,7 +1572,7 @@ const ExpiryCountsCard = memo(function ExpiryCountsCard({
   return (
     <Card
       className="animate-fade-in-up"
-      style={{ animationDelay: '0.25s' }}
+      style={{ animationDelay: '0.25s', '--card-accent-rgb': '234, 179, 8' } as React.CSSProperties}
     >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -1637,7 +1637,7 @@ const TrafficAnomalyCard = memo(function TrafficAnomalyCard({
   const formatBytesLocal = createFormatBytes(t)
 
   return (
-    <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+    <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s', '--card-accent-rgb': '239, 68, 68' } as React.CSSProperties}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -2020,7 +2020,7 @@ export default function Dashboard() {
       {/* ── Row 2: Traffic Chart + Growth Trends ────────────────── */}
       {canViewAnalytics && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s', '--card-accent-rgb': '236, 72, 153' } as React.CSSProperties}>
             <CardHeader className="pb-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -2084,7 +2084,7 @@ export default function Dashboard() {
       {/* ── Row 3: Connections by Node + Top Users by Traffic ─────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {canViewAnalytics && (
-          <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s', '--card-accent-rgb': '139, 92, 246' } as React.CSSProperties}>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -2152,7 +2152,7 @@ export default function Dashboard() {
         )}
 
         {canViewViolations && (
-          <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s', '--card-accent-rgb': '239, 68, 68' } as React.CSSProperties}>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -2225,7 +2225,7 @@ export default function Dashboard() {
         {canViewAnalytics ? (
           <UpdateCheckerCard />
         ) : !canViewBilling ? (
-          <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s', '--card-accent-rgb': '139, 92, 246' } as React.CSSProperties}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm md:text-base">{t('dashboard.quickActions')}</CardTitle>
             </CardHeader>
