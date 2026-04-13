@@ -148,6 +148,14 @@ class TrafficRateMonitor:
             if len(buf) < 2:
                 continue
 
+            # Check whitelist — skip fully whitelisted or traffic_rate-excluded users
+            try:
+                whitelisted, excluded = await db_service.is_user_violation_whitelisted(user_uuid)
+                if whitelisted and (excluded is None or "traffic_rate" in excluded):
+                    continue
+            except Exception:
+                pass
+
             # Find oldest snapshot within the window
             cutoff = now - window_seconds
             oldest_in_window = None

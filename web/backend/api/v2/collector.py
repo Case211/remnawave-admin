@@ -544,6 +544,12 @@ async def _process_torrent_violations(
 
         for user_uuid, user_events in events_by_user.items():
             try:
+                # Check whitelist — skip fully whitelisted or torrent-excluded users
+                whitelisted, excluded = await db_service.is_user_violation_whitelisted(user_uuid)
+                if whitelisted and (excluded is None or "torrent" in excluded):
+                    logger.debug("User %s is whitelisted for torrent, skipping", user_uuid)
+                    continue
+
                 # Dedup: skip if torrent violation exists within last 10 min
                 existing = await db_service.get_recent_torrent_violation(user_uuid, minutes=10)
                 if existing:

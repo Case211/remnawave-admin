@@ -60,7 +60,7 @@ import type {
   IPInfo,
 } from '@/types/violations'
 
-const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid'] as const
+const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid', 'traffic_rate', 'torrent'] as const
 
 // ── API ──────────────────────────────────────────────────────────
 

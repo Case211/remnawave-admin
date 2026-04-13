@@ -416,9 +416,17 @@ class AutomationEngine:
                     for row in rows:
                         traffic_gb = row["traffic_bytes"] / (1024 ** 3)
                         if op_fn(traffic_gb, threshold_value):
+                            # Check whitelist
+                            uid = str(row["user_uuid"])
+                            try:
+                                wl, excl = await db_service.is_user_violation_whitelisted(uid)
+                                if wl and (excl is None or "traffic_rate" in excl):
+                                    continue
+                            except Exception:
+                                pass
                             targets.append((
                                 "user",
-                                str(row["user_uuid"]),
+                                uid,
                                 {
                                     "username": row.get("username", ""),
                                     "node_name": row.get("node_name", ""),
