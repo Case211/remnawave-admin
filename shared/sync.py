@@ -892,8 +892,9 @@ class SyncService:
             ]
 
             now = datetime.now(timezone.utc)
-            start_str = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d")
-            end_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+            start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            start_str = start_of_day.isoformat()
+            end_str = now.isoformat()
 
             # Get previous snapshot to compute deltas
             old_snapshot = await db_service.get_user_node_traffic_snapshot()
@@ -907,46 +908,46 @@ class SyncService:
             for node in active_nodes:
                 node_uuid = str(node["uuid"])
                 try:
-                    result = await api_client.get_node_users_usage(
-                        node_uuid, start=start_str, end=end_str, top_users_limit=500
+                    # Legacy endpoint returns daily data with userUuid
+                    result = await api_client.get_node_users_usage_legacy(
+                        node_uuid, start=start_str, end=end_str
                     )
                     response = result.get("response", result) if isinstance(result, dict) else result
-                    top_users = response.get("topUsers", []) if isinstance(response, dict) else []
-
-                    # API returns username, not uuid — build a mapping
-                    usernames = [u.get("username", "") for u in top_users if u.get("username")]
-                    username_map = await db_service.get_username_to_uuid_map(usernames) if usernames else {}
+                    entries = response if isinstance(response, list) else []
                     logger.debug(
-                        "Node %s: %d topUsers, %d usernames mapped",
-                        node.get("name", node_uuid), len(top_users), len(username_map),
+                        "Node %s: %d legacy traffic entries",
+                        node.get("name", node_uuid), len(entries),
                     )
 
+                    # Aggregate per-user totals (legacy may return multiple date entries)
+                    user_totals: dict[str, tuple[str, int]] = {}  # uuid -> (username, total)
                     node_traffic_sum = 0
-                    for u in top_users:
-                        username = u.get("username", "")
-                        user_uuid = username_map.get(username.lower(), "")
-                        new_bytes = int(u.get("total", 0) or 0)
-                        node_traffic_sum += new_bytes
-                        if user_uuid and new_bytes > 0:
-                            # Compute delta from previous snapshot
-                            old_bytes = old_snapshot.get(user_uuid, {}).get(node_uuid, 0)
-                            if new_bytes > old_bytes:
-                                # Same day, traffic grew — only count the difference
-                                delta = new_bytes - old_bytes
-                            elif new_bytes < old_bytes:
-                                # New day or counter reset — take full new value
-                                delta = new_bytes
-                            else:
-                                # No change — no delta
-                                delta = 0
+                    for entry in entries:
+                        user_uuid = str(entry.get("userUuid", ""))
+                        username = entry.get("username", "")
+                        total = int(entry.get("total", 0) or 0)
+                        if user_uuid and total > 0:
+                            prev_username, prev_total = user_totals.get(user_uuid, ("", 0))
+                            user_totals[user_uuid] = (username or prev_username, prev_total + total)
+                            node_traffic_sum += total
 
-                            if delta > 0:
-                                raw_deltas[user_uuid] = raw_deltas.get(user_uuid, 0) + delta
+                    for user_uuid, (username, new_bytes) in user_totals.items():
+                        # Compute delta from previous snapshot
+                        old_bytes = old_snapshot.get(user_uuid, {}).get(node_uuid, 0)
+                        if new_bytes > old_bytes:
+                            delta = new_bytes - old_bytes
+                        elif new_bytes < old_bytes:
+                            delta = new_bytes
+                        else:
+                            delta = 0
 
-                            await db_service.upsert_user_node_traffic(
-                                user_uuid, node_uuid, new_bytes
-                            )
-                            total_synced += 1
+                        if delta > 0:
+                            raw_deltas[user_uuid] = raw_deltas.get(user_uuid, 0) + delta
+
+                        await db_service.upsert_user_node_traffic(
+                            user_uuid, node_uuid, new_bytes
+                        )
+                        total_synced += 1
 
                     node_totals[node_uuid] = node_traffic_sum
                 except Exception as e:
