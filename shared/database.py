@@ -2613,7 +2613,9 @@ class DatabaseService:
             return {r["username"].lower(): r["uuid"] for r in rows}
 
     async def get_node_users_traffic(self, node_uuid: str) -> List[Dict[str, Any]]:
-        """Get all users' traffic on a specific node, joined with username."""
+        """Get all users' traffic on a specific node, joined with username.
+        Excludes expired/disabled users.
+        """
         if not self.is_connected:
             return []
         async with self.acquire() as conn:
@@ -2625,6 +2627,7 @@ class DatabaseService:
                 JOIN users u ON unt.user_uuid = u.uuid
                 JOIN nodes n ON unt.node_uuid = n.uuid
                 WHERE unt.node_uuid = $1::uuid
+                  AND u.status NOT IN ('EXPIRED', 'DISABLED', 'LIMITED')
                 ORDER BY unt.traffic_bytes DESC
                 """,
                 node_uuid,
@@ -2634,7 +2637,9 @@ class DatabaseService:
     async def get_all_user_node_traffic_above(
         self, threshold_bytes: int
     ) -> List[Dict[str, Any]]:
-        """Get all user-node pairs where traffic exceeds threshold."""
+        """Get all user-node pairs where traffic exceeds threshold.
+        Excludes expired/disabled users.
+        """
         if not self.is_connected:
             return []
         async with self.acquire() as conn:
@@ -2646,6 +2651,7 @@ class DatabaseService:
                 JOIN users u ON unt.user_uuid = u.uuid
                 JOIN nodes n ON unt.node_uuid = n.uuid
                 WHERE unt.traffic_bytes >= $1
+                  AND u.status NOT IN ('EXPIRED', 'DISABLED', 'LIMITED')
                 ORDER BY unt.traffic_bytes DESC
                 """,
                 threshold_bytes,
