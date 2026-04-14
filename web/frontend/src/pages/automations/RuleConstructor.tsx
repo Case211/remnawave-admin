@@ -921,13 +921,25 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                     placeholder={t('automations.constructor.messagePlaceholder')}
                   />
                   <div className="mt-1.5 p-2 rounded-md bg-[var(--glass-bg)] border border-[var(--glass-border)]">
-                    <p className="text-[11px] text-dark-400">
-                      {t('automations.constructor.availableVars')}{' '}
-                      <code className="text-accent-teal">{'{user}'}</code>,{' '}
-                      <code className="text-accent-teal">{'{node}'}</code>,{' '}
-                      <code className="text-accent-teal">{'{rule_name}'}</code>,{' '}
-                      <code className="text-accent-teal">{'{timestamp}'}</code>
+                    <p className="text-[11px] text-dark-400 mb-1">
+                      {t('automations.constructor.availableVars')}
                     </p>
+                    <div className="flex flex-wrap gap-1">
+                      {['{user}', '{user_code}', '{node}', '{node_code}', '{traffic_gb}', '{traffic}', '{over_gb}', '{over}', '{percent}', '{over_percent}', '{threshold}', '{rule_name}', '{timestamp}'].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(v)
+                            setNotifyMessage((prev) => prev + v)
+                          }}
+                          className="px-1.5 py-0.5 text-[11px] font-mono text-accent-teal bg-accent-teal/10 rounded border border-accent-teal/20 hover:bg-accent-teal/20 transition-colors cursor-pointer"
+                          title={t('automations.constructor.clickToInsert', 'Нажмите чтобы вставить')}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 {notifyChannel === 'telegram' && (

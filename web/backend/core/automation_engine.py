@@ -401,6 +401,8 @@ class AutomationEngine:
                                 {
                                     "username": user.get("username", ""),
                                     "percent": round(percent, 1),
+                                    "threshold": threshold_value,
+                                    "over_percent": round(percent - threshold_value, 1),
                                 },
                             ))
 
@@ -431,6 +433,8 @@ class AutomationEngine:
                                     "username": row.get("username", ""),
                                     "node_name": row.get("node_name", ""),
                                     "traffic_gb": round(traffic_gb, 2),
+                                    "threshold": threshold_value,
+                                    "over_gb": round(traffic_gb - threshold_value, 2),
                                 },
                             ))
 
@@ -659,7 +663,9 @@ class AutomationEngine:
 
         # Enrich context with rule metadata for downstream handlers (e.g. topic routing)
         context.setdefault("rule_id", rule.get("id"))
+        context.setdefault("rule_name", rule.get("name", ""))
         context.setdefault("category", rule.get("category", "system"))
+        context.setdefault("timestamp", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
 
         try:
             handler = {
@@ -738,6 +744,15 @@ class AutomationEngine:
         for short, full in _ALIASES.items():
             if short not in enriched and full in enriched:
                 enriched[short] = enriched[full]
+        # <code>-wrapped versions for Telegram HTML
+        if "username" in enriched:
+            enriched.setdefault("user_code", f"<code>{enriched['username']}</code>")
+        if "node_name" in enriched:
+            enriched.setdefault("node_code", f"<code>{enriched['node_name']}</code>")
+        if "traffic_gb" in enriched:
+            enriched.setdefault("traffic", f"{enriched['traffic_gb']} ГБ")
+        if "over_gb" in enriched:
+            enriched.setdefault("over", f"{enriched['over_gb']} ГБ")
 
         class _SafeDict(dict):
             def __missing__(self, key: str) -> str:
