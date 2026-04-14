@@ -2118,9 +2118,7 @@
       "user_traffic_percent": "Traffic usage (%)",
       "user_traffic_percentDesc": "Percentage of traffic used from the limit",
       "user_node_traffic_gb": "Node traffic (GB)",
-      "user_node_traffic_gbDesc": "Cumulative user traffic on a specific node in gigabytes",
-      "user_node_traffic_24h_gb": "Node traffic 24h (GB)",
-      "user_node_traffic_24h_gbDesc": "User traffic on a specific node over the last 24 hours"
+      "user_node_traffic_gbDesc": "User traffic on a specific node in gigabytes today"
     },
     "operators": {
       "eq": "equal (=)",

@@ -145,7 +145,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         is_disabled: boolean
       }>
     },
-    enabled: open && (actionType === 'restart_node' || thresholdMetric === 'user_node_traffic_gb' || thresholdMetric === 'user_node_traffic_24h_gb'),
+    enabled: open && (actionType === 'restart_node' || thresholdMetric === 'user_node_traffic_gb'),
     staleTime: 30_000,
   })
 
@@ -262,7 +262,7 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
         operator: thresholdOperator,
         value: parseFloat(thresholdValue) || 0,
       }
-      if ((thresholdMetric === 'user_node_traffic_gb' || thresholdMetric === 'user_node_traffic_24h_gb') && thresholdNodeUuid && thresholdNodeUuid !== '__all__') {
+      if (thresholdMetric === 'user_node_traffic_gb' && thresholdNodeUuid && thresholdNodeUuid !== '__all__') {
         cfg.node_uuid = thresholdNodeUuid
       }
       return cfg
@@ -646,8 +646,8 @@ export function RuleConstructor({ open, onOpenChange, editRule }: RuleConstructo
                   </div>
                 </div>
 
-                {/* Node selector for node-traffic metrics */}
-                {(thresholdMetric === 'user_node_traffic_gb' || thresholdMetric === 'user_node_traffic_24h_gb') && (
+                {/* Node selector for user_node_traffic_gb metric */}
+                {thresholdMetric === 'user_node_traffic_gb' && (
                   <div className="p-3 rounded-lg bg-[var(--glass-bg)] border-2 border-accent-teal/30 space-y-2">
                     <Label className="text-xs font-medium text-dark-300">{t('automations.constructor.selectNode')}</Label>
                     <Select value={thresholdNodeUuid} onValueChange={setThresholdNodeUuid}>

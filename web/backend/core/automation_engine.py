@@ -434,33 +434,6 @@ class AutomationEngine:
                                 },
                             ))
 
-                elif metric == "user_node_traffic_24h_gb":
-                    from shared.database import db_service
-                    node_uuid = trigger_config.get("node_uuid")
-                    rows = await db_service.get_user_node_traffic_24h(
-                        node_uuid=node_uuid,
-                        threshold_bytes=int(threshold_value * (1024 ** 3)),
-                    )
-                    for row in rows:
-                        traffic_gb = row["traffic_bytes"] / (1024 ** 3)
-                        if op_fn(traffic_gb, threshold_value):
-                            uid = str(row["user_uuid"])
-                            try:
-                                wl, excl = await db_service.is_user_violation_whitelisted(uid)
-                                if wl and (excl is None or "traffic_rate" in excl):
-                                    continue
-                            except Exception:
-                                pass
-                            targets.append((
-                                "user",
-                                uid,
-                                {
-                                    "username": row.get("username", ""),
-                                    "node_name": row.get("node_name", ""),
-                                    "traffic_gb": round(traffic_gb, 2),
-                                },
-                            ))
-
                 if not targets:
                     # No targets exceeded threshold — clear stale entries (>1h) for this rule
                     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -1073,7 +1046,6 @@ class AutomationEngine:
             "node_uptime_percent": "Аптайм ноды (%)",
             "user_traffic_percent": "Использование трафика (%)",
             "user_node_traffic_gb": "Трафик на ноде (ГБ)",
-            "user_node_traffic_24h_gb": "Трафик на ноде за 24ч (ГБ)",
         }
         _OPERATOR_LABELS = {
             "==": "=", "!=": "≠", ">": ">", ">=": "≥",
@@ -1160,23 +1132,6 @@ class AutomationEngine:
                     rows = await db_service.get_all_user_node_traffic_above(
                         int(threshold_value * (1024 ** 3))
                     )
-                for row in rows:
-                    traffic_gb = row["traffic_bytes"] / (1024 ** 3)
-                    if op_fn(traffic_gb, threshold_value):
-                        matching_targets.append({
-                            "type": "user",
-                            "id": str(row["user_uuid"]),
-                            "name": row.get("username", ""),
-                            "value": round(traffic_gb, 2),
-                        })
-
-            elif metric == "user_node_traffic_24h_gb" and op_fn:
-                from shared.database import db_service
-                node_uuid = trigger_config.get("node_uuid")
-                rows = await db_service.get_user_node_traffic_24h(
-                    node_uuid=node_uuid,
-                    threshold_bytes=int(threshold_value * (1024 ** 3)),
-                )
                 for row in rows:
                     traffic_gb = row["traffic_bytes"] / (1024 ** 3)
                     if op_fn(traffic_gb, threshold_value):
