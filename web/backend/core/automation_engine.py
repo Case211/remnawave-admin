@@ -728,16 +728,27 @@ class AutomationEngine:
         message_template = config.get("message", "Automation triggered")
 
         # Template substitution — unknown tags become empty string
+        # Add short aliases so UI placeholders {user},{node} work alongside
+        # the canonical keys {username},{node_name}.
+        _ALIASES = {
+            "user": "username",
+            "node": "node_name",
+        }
+        enriched = dict(context)
+        for short, full in _ALIASES.items():
+            if short not in enriched and full in enriched:
+                enriched[short] = enriched[full]
+
         class _SafeDict(dict):
             def __missing__(self, key: str) -> str:
                 return ""
 
         try:
-            message = message_template.format_map(_SafeDict({k: str(v) for k, v in context.items()}))
+            message = message_template.format_map(_SafeDict({k: str(v) for k, v in enriched.items()}))
         except Exception:
             # Fallback to naive replacement if format_map fails (e.g. malformed braces)
             message = message_template
-            for key, value in context.items():
+            for key, value in enriched.items():
                 message = message.replace(f"{{{key}}}", str(value))
 
         if channel == "telegram":

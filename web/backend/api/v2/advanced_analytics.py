@@ -1464,8 +1464,8 @@ async def _compute_export_ips(
 
         rows = await conn.fetch(
             f"""
-            SELECT DISTINCT ON (host(uc.ip_address))
-                host(uc.ip_address) AS ip,
+            SELECT DISTINCT ON (host(uc.ip_address::inet))
+                host(uc.ip_address::inet) AS ip,
                 u.username,
                 n.name AS node_name,
                 uc.connected_at,
@@ -1475,9 +1475,9 @@ async def _compute_export_ips(
             FROM user_connections uc
             LEFT JOIN users u ON u.uuid = uc.user_uuid
             LEFT JOIN nodes n ON n.uuid = uc.node_uuid
-            LEFT JOIN ip_metadata im ON im.ip_address = host(uc.ip_address)
+            LEFT JOIN ip_metadata im ON im.ip_address = host(uc.ip_address::inet)
             WHERE {where}
-            ORDER BY host(uc.ip_address), uc.connected_at DESC
+            ORDER BY host(uc.ip_address::inet), uc.connected_at DESC
             """,
             *params,
         )

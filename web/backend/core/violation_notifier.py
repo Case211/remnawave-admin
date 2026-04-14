@@ -375,7 +375,8 @@ async def send_violation_notification(
             "temp_block": "временная блокировка",
             "hard_block": "жёсткая блокировка",
         }
-        action_label = action_labels.get(action, action)
+        action_key = action.value if hasattr(action, "value") else str(action)
+        action_label = action_labels.get(action_key, action_key)
         lines.append("")
         lines.append(f"\U0001f3af Действие: <b>{action_label.upper()}</b> ({action_label})")
         lines.append(f"\U0001f4ca Скор: <b>{total_score:.1f}</b> / 100")
