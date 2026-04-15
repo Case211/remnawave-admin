@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useDeferredAction } from '@/lib/useDeferredAction'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -1063,6 +1064,7 @@ export default function Nodes() {
   const [tokenNode, setTokenNode] = useState<Node | null>(null)
   const [ipsNode, setIpsNode] = useState<Node | null>(null)
   const [confirmAction, setConfirmAction] = useState<{ type: string; uuid: string } | null>(null)
+  const { schedule: scheduleAction } = useDeferredAction()
 
   // Fetch nodes
   const { data: nodes = [], isLoading, refetch } = useQuery({
@@ -1338,7 +1340,14 @@ export default function Nodes() {
         onConfirm={() => {
           if (!confirmAction) return
           if (confirmAction.type === 'delete') deleteNode.mutate(confirmAction.uuid)
-          if (confirmAction.type === 'disable') disableNode.mutate(confirmAction.uuid)
+          if (confirmAction.type === 'disable') {
+            const uuid = confirmAction.uuid
+            scheduleAction(`node-disable-${uuid}`, {
+              message: t('nodes.deferred.disable', { defaultValue: 'Нода будет отключена через 5 сек' }),
+              undoLabel: t('common.undo', { defaultValue: 'Отменить' }),
+              onCommit: () => disableNode.mutate(uuid),
+            })
+          }
           setConfirmAction(null)
         }}
       />

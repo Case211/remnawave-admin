@@ -1016,6 +1016,14 @@ export default function Users() {
   const total = data?.total ?? 0
   const pages = data?.pages ?? 1
 
+  const scheduleEnable = useCallback((uuid: string) => {
+    scheduleAction(`enable-${uuid}`, {
+      message: t('users.deferred.enable', { defaultValue: 'Юзер разблокируется через 5 сек' }),
+      undoLabel: t('common.undo', { defaultValue: 'Отменить' }),
+      onCommit: () => enableUser.mutate(uuid),
+    })
+  }, [scheduleAction, t, enableUser])
+
   // Virtual scrolling for large page sizes (50+ rows)
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const useVirtual = users.length > 30
@@ -1360,7 +1368,7 @@ export default function Users() {
               <MobileUserCard
                 user={user}
                 onNavigate={() => navigate(`/users/${user.uuid}`)}
-                onEnable={() => enableUser.mutate(user.uuid)}
+                onEnable={() => scheduleEnable(user.uuid)}
                 onDisable={() => setDisableConfirmUuid(user.uuid)}
                 onDelete={() => setDeleteConfirmUuid(user.uuid)}
               />
@@ -1387,7 +1395,15 @@ export default function Users() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => bulkEnable.mutate([...selectedUuids])}
+              onClick={() => {
+                const uuids = [...selectedUuids]
+                clearSelection()
+                scheduleAction('bulk-enable', {
+                  message: t('users.deferred.bulkEnable', { count: uuids.length, defaultValue: `Разблокировка ${uuids.length} юзеров через 5 сек` }),
+                  undoLabel: t('common.undo', { defaultValue: 'Отменить' }),
+                  onCommit: () => bulkEnable.mutate(uuids),
+                })
+              }}
               disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
               className="text-green-400 border-green-500/30 hover:bg-green-500/10 gap-1.5"
             >
@@ -1539,7 +1555,7 @@ export default function Users() {
                         <td onClick={(e) => e.stopPropagation()}>
                           <UserActions
                             user={user}
-                            onEnable={() => enableUser.mutate(user.uuid)}
+                            onEnable={() => scheduleEnable(user.uuid)}
                             onDisable={() => setDisableConfirmUuid(user.uuid)}
                             onDelete={() => setDeleteConfirmUuid(user.uuid)}
                           />
@@ -1602,7 +1618,7 @@ export default function Users() {
                     <td onClick={(e) => e.stopPropagation()}>
                       <UserActions
                         user={user}
-                        onEnable={() => enableUser.mutate(user.uuid)}
+                        onEnable={() => scheduleEnable(user.uuid)}
                         onDisable={() => setDisableConfirmUuid(user.uuid)}
                         onDelete={() => setDeleteConfirmUuid(user.uuid)}
                       />
