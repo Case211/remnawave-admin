@@ -780,6 +780,7 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
                     profile = breakdown.get("profile")
                     device = breakdown.get("device")
                     hwid = breakdown.get("hwid")
+                    ua = breakdown.get("user_agent")
 
                     ip_addresses = list(set(str(c.ip_address) for c in active_conns)) if active_conns else None
                     username = user_info.get("username") if user_info else None
@@ -816,6 +817,17 @@ async def _check_single_user(user_uuid: str, min_score: float, sem: asyncio.Sema
                         is_vpn=asn.is_vpn if asn else False,
                         hwid_score=hwid.score if hwid else None,
                         hwid_matched_users=json.dumps(hwid.matched_details) if hwid and hwid.matched_details else None,
+                        user_agent_score=ua.score if ua else None,
+                        suspicious_user_agents=json.dumps([
+                            {
+                                "request_id": s.request_id,
+                                "user_agent": s.user_agent,
+                                "request_ip": s.request_ip,
+                                "request_at": s.request_at,
+                                "classification": s.classification,
+                            }
+                            for s in ua.suspicious_agents
+                        ]) if ua and ua.suspicious_agents else None,
                     )
                     logger.info("Violation saved      user=%-10s  score=%.1f", user_uuid[:8], violation_score.total)
 

@@ -50,6 +50,16 @@ def _detect_primary_reason(reasons: List[str], breakdown: dict) -> dict:
     """Determine primary violation reason for notification title and subtitle."""
     reasons_lower = " ".join(r.lower() for r in reasons)
 
+    if "двойной туннель" in reasons_lower or "ссылка в user-agent" in reasons_lower or "link_in_ua" in reasons_lower:
+        return {
+            "title": "Двойной туннель: подписка вставлена в чужой клиент",
+            "subtitle": "В User-Agent обнаружена подписочная ссылка (vless://, https://)",
+        }
+    if "http-библиотека" in reasons_lower or "bot_library" in reasons_lower or "go-http-client" in reasons_lower:
+        return {
+            "title": "Бот/скрипт в User-Agent",
+            "subtitle": "Подписка запрашивается curl/Go-http-client/python-requests — возможно автоматизация",
+        }
     if "hwid" in reasons_lower or "device overlap" in reasons_lower:
         return {
             "title": "Коллизия аккаунтов: общие устройства (device overlap)",
@@ -95,6 +105,7 @@ def _detect_primary_reason(reasons: List[str], breakdown: dict) -> dict:
             "asn": "Аномалия провайдера",
             "profile": "Отклонение профиля поведения",
             "device": "Аномалия устройств",
+            "user_agent": "Подозрительный User-Agent клиента",
         }
         if max_key:
             return {

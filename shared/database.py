@@ -3617,6 +3617,8 @@ class DatabaseService:
         raw_breakdown: Optional[str] = None,
         hwid_score: Optional[float] = None,
         hwid_matched_users: Optional[str] = None,
+        user_agent_score: Optional[float] = None,
+        suspicious_user_agents: Optional[str] = None,
     ) -> Optional[int]:
         """
         Сохранить нарушение в базу данных.
@@ -3647,27 +3649,27 @@ class DatabaseService:
                             user_uuid, username, email, telegram_id,
                             score, recommended_action, confidence,
                             temporal_score, geo_score, asn_score, profile_score, device_score,
-                            hwid_score,
+                            hwid_score, user_agent_score,
                             ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                             simultaneous_connections, unique_ips_count, device_limit,
                             impossible_travel, is_mobile, is_datacenter, is_vpn,
-                            raw_breakdown, hwid_matched_users, detected_at
+                            raw_breakdown, hwid_matched_users, suspicious_user_agents, detected_at
                         )
                         VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                            $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
-                            $24, $25, $26, $27, $28, $29, NOW()
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                            $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+                            $25, $26, $27, $28, $29, $30, $31, NOW()
                         )
                         RETURNING id
                         """,
                         user_uuid, username, email, telegram_id,
                         score, recommended_action, confidence,
                         temporal_score, geo_score, asn_score, profile_score, device_score,
-                        hwid_score,
+                        hwid_score, user_agent_score,
                         ip_addresses, countries, cities, asn_types, os_list, client_list, reasons,
                         simultaneous_connections, unique_ips_count, device_limit,
                         impossible_travel, is_mobile, is_datacenter, is_vpn,
-                        raw_breakdown, hwid_matched_users
+                        raw_breakdown, hwid_matched_users, suspicious_user_agents
                     )
                     return result
 
@@ -5054,6 +5056,116 @@ class DatabaseService:
 
         except Exception as e:
             logger.error("Error getting HWID devices count for user %s: %s", user_uuid, e, exc_info=True)
+            return 0
+
+    async def upsert_srh_records(self, records: List[Dict[str, Any]]) -> int:
+        """Сохранить записи Subscription Request History. Возвращает число новых/обновлённых."""
+        if not self.is_connected or not records:
+            return 0
+        rows = []
+        for r in records:
+            rid = r.get("id") or r.get("request_id")
+            uuid_val = r.get("userUuid") or r.get("user_uuid")
+            request_at = r.get("requestAt") or r.get("request_at")
+            if rid is None or not uuid_val or request_at is None:
+                continue
+            if isinstance(request_at, str):
+                try:
+                    request_at = datetime.fromisoformat(request_at.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            rows.append((
+                int(rid),
+                str(uuid_val),
+                r.get("requestIp") or r.get("request_ip"),
+                r.get("userAgent") or r.get("user_agent"),
+                request_at,
+            ))
+        if not rows:
+            return 0
+        try:
+            async with self.acquire() as conn:
+                await conn.executemany(
+                    """
+                    INSERT INTO subscription_request_history (id, user_uuid, request_ip, user_agent, request_at)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (id) DO UPDATE SET
+                        user_uuid = EXCLUDED.user_uuid,
+                        request_ip = EXCLUDED.request_ip,
+                        user_agent = EXCLUDED.user_agent,
+                        request_at = EXCLUDED.request_at,
+                        synced_at = NOW()
+                    """,
+                    rows,
+                )
+            return len(rows)
+        except Exception as e:
+            logger.warning("Failed to upsert SRH records: %s", e)
+            return 0
+
+    async def get_user_srh_records(
+        self,
+        user_uuid: str,
+        limit: int = 100,
+        max_age_days: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Получить историю запросов подписки юзера из локальной БД."""
+        if not self.is_connected:
+            return []
+        try:
+            async with self.acquire() as conn:
+                if max_age_days > 0:
+                    rows = await conn.fetch(
+                        """
+                        SELECT id, user_uuid, request_ip, user_agent, request_at
+                        FROM subscription_request_history
+                        WHERE user_uuid = $1 AND request_at >= NOW() - $2::interval
+                        ORDER BY request_at DESC
+                        LIMIT $3
+                        """,
+                        user_uuid, f"{max_age_days} days", limit,
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """
+                        SELECT id, user_uuid, request_ip, user_agent, request_at
+                        FROM subscription_request_history
+                        WHERE user_uuid = $1
+                        ORDER BY request_at DESC
+                        LIMIT $2
+                        """,
+                        user_uuid, limit,
+                    )
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.debug("Failed to get SRH records for %s: %s", user_uuid, e)
+            return []
+
+    async def get_srh_max_id(self) -> int:
+        """Максимальный id в локальном SRH — точка остановки инкрементального sync."""
+        if not self.is_connected:
+            return 0
+        try:
+            async with self.acquire() as conn:
+                val = await conn.fetchval("SELECT COALESCE(MAX(id), 0) FROM subscription_request_history")
+                return int(val or 0)
+        except Exception:
+            return 0
+
+    async def cleanup_old_srh(self, keep_days: int = 90) -> int:
+        """Удалить SRH записи старше keep_days. Возвращает число удалённых."""
+        if not self.is_connected or keep_days <= 0:
+            return 0
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    "DELETE FROM subscription_request_history WHERE request_at < NOW() - $1::interval",
+                    f"{keep_days} days",
+                )
+                deleted = int(result.split()[-1]) if result and result.split() else 0
+                return deleted
+        except Exception as e:
+            logger.debug("Failed to cleanup old SRH: %s", e)
             return 0
 
     async def get_hwid_device_counts_bulk(self) -> Dict[str, int]:

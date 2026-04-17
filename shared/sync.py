@@ -222,6 +222,13 @@ class SyncService:
             logger.error("Failed to sync node traffic: %s", e)
             results["node_traffic"] = -1
 
+        try:
+            # Sync Subscription Request History (incremental)
+            results["srh"] = await self.sync_subscription_request_history()
+        except Exception as e:
+            logger.error("Failed to sync SRH: %s", e)
+            results["srh"] = -1
+
         # Periodic cleanup of old traffic snapshots (keep 31 days)
         try:
             deleted = await db_service.cleanup_old_traffic_snapshots(keep_days=31)
@@ -1171,6 +1178,78 @@ class SyncService:
                 error_message=str(e)
             )
             logger.error("Failed to sync all HWID devices: %s", e)
+            return total_synced
+
+    async def sync_subscription_request_history(self) -> int:
+        """
+        Инкрементально синхронизировать SRH из Panel API в локальную БД.
+
+        Пагинированный запрос с остановкой на первом уже известном id
+        (инкрементальный pull — добавляются только новые записи с последней синхронизации).
+
+        Returns: количество новых/обновлённых записей.
+        """
+        if not db_service.is_connected:
+            return 0
+
+        max_local_id = await db_service.get_srh_max_id()
+        total_synced = 0
+        start = 0
+        page_size = 100
+        max_pages = 100  # safety: 100 pages × 100 записей = 10k записей за один прогон
+
+        try:
+            for _ in range(max_pages):
+                result = await api_client.get_subscription_request_history(start=start, size=page_size)
+                response = result.get("response", result) if isinstance(result, dict) else result
+                records = response.get("records", []) if isinstance(response, dict) else []
+                total = response.get("total", 0) if isinstance(response, dict) else 0
+
+                if not records:
+                    break
+
+                # Инкрементальный stop: если все записи страницы уже известны — останавливаемся
+                new_records = [r for r in records if int(r.get("id", 0)) > max_local_id]
+                if not new_records:
+                    break
+
+                synced = await db_service.upsert_srh_records(new_records)
+                total_synced += synced
+
+                # Если страница содержала известные записи — дальше идти нет смысла
+                if len(new_records) < len(records):
+                    break
+
+                start += page_size
+                if start >= total:
+                    break
+
+            # Retention cleanup
+            try:
+                from shared.config_service import config_service
+                retention_days = int(config_service.get("srh_retention_days", 90) or 90)
+            except Exception:
+                retention_days = 90
+            if retention_days > 0:
+                deleted = await db_service.cleanup_old_srh(keep_days=retention_days)
+                if deleted:
+                    logger.debug("Cleaned up %d old SRH records (retention: %d days)", deleted, retention_days)
+
+            await db_service.update_sync_metadata(
+                key="subscription_request_history",
+                status="success",
+                records_synced=total_synced,
+            )
+            logger.debug("Synced %d new SRH records", total_synced)
+            return total_synced
+
+        except Exception as e:
+            await db_service.update_sync_metadata(
+                key="subscription_request_history",
+                status="error",
+                error_message=str(e),
+            )
+            logger.warning("Failed to sync SRH: %s", e)
             return total_synced
 
 
