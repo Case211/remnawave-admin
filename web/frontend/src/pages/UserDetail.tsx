@@ -52,6 +52,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import { QRCodeSVG } from 'qrcode.react'
+import { classifyUserAgent, uaBadgeTone } from '@/utils/userAgentClassifier'
 
 const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid'] as const
 
@@ -593,12 +594,41 @@ function PaginatedDeviceList({
                     <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]">{device.app_version}</span>
                   </div>
                 )}
-                {device.user_agent && (
-                  <div className="flex justify-between">
-                    <span className="text-dark-300">{t('userDetail.devices.userAgent')}</span>
-                    <span className="text-dark-100 text-right truncate ml-2 max-w-[60%]" title={device.user_agent}>{device.user_agent}</span>
-                  </div>
-                )}
+                {device.user_agent && (() => {
+                  const cls = classifyUserAgent(device.user_agent)
+                  const tone = uaBadgeTone(cls)
+                  const badgeText = {
+                    link_in_ua: t('userDetail.devices.uaBadge.linkInUa'),
+                    bot_library: t('userDetail.devices.uaBadge.botLibrary'),
+                    stub: t('userDetail.devices.uaBadge.stub'),
+                    empty: t('userDetail.devices.uaBadge.empty'),
+                    unknown: t('userDetail.devices.uaBadge.unknown'),
+                    valid: '',
+                  }[cls]
+                  const toneClass = tone === 'red'
+                    ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                    : tone === 'yellow'
+                    ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+                    : tone === 'gray'
+                    ? 'bg-dark-400/30 text-dark-200 border-dark-400/50'
+                    : ''
+                  return (
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-dark-300 shrink-0">{t('userDetail.devices.userAgent')}</span>
+                      <div className="flex items-center gap-1.5 min-w-0 justify-end">
+                        {tone && (
+                          <span
+                            className={cn('text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap', toneClass)}
+                            title={t('userDetail.devices.uaBadge.tooltip')}
+                          >
+                            {badgeText}
+                          </span>
+                        )}
+                        <span className="text-dark-100 text-right truncate" title={device.user_agent}>{device.user_agent}</span>
+                      </div>
+                    </div>
+                  )
+                })()}
                 {device.created_at && (
                   <div className="flex justify-between">
                     <span className="text-dark-300">{t('userDetail.devices.added')}</span>

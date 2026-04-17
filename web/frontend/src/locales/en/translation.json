@@ -693,7 +693,15 @@
       "model": "Model",
       "app": "App",
       "userAgent": "User Agent",
-      "added": "Added"
+      "added": "Added",
+      "uaBadge": {
+        "linkInUa": "Double tunnel",
+        "botLibrary": "Bot/script",
+        "stub": "Truncated UA",
+        "empty": "Empty UA",
+        "unknown": "Unknown client",
+        "tooltip": "User-Agent does not match a known VPN client. Inspect this device"
+      }
     },
     "subscription": {
       "title": "Subscription",

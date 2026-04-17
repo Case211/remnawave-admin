@@ -693,7 +693,15 @@
       "model": "Модель",
       "app": "Приложение",
       "userAgent": "User Agent",
-      "added": "Добавлено"
+      "added": "Добавлено",
+      "uaBadge": {
+        "linkInUa": "Двойной туннель",
+        "botLibrary": "Бот/скрипт",
+        "stub": "Обрезанный UA",
+        "empty": "Пустой UA",
+        "unknown": "Неизвестный клиент",
+        "tooltip": "User-Agent не похож на легитимный VPN-клиент. Проверьте устройство"
+      }
     },
     "subscription": {
       "title": "Подписка",
