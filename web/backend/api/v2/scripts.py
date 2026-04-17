@@ -657,6 +657,19 @@ class ScheduledTaskItem(BaseModel):
     node_name: Optional[str] = None
 
 
+def _normalize_scheduled_task_row(row) -> dict:
+    """Normalize asyncpg row to dict compatible with ScheduledTaskItem.
+
+    asyncpg returns UUID columns as uuid.UUID and JSONB as str; Pydantic expects str/dict.
+    """
+    d = dict(row)
+    if d.get("node_uuid") is not None:
+        d["node_uuid"] = str(d["node_uuid"])
+    if isinstance(d.get("env_vars"), str):
+        d["env_vars"] = json.loads(d["env_vars"])
+    return d
+
+
 @router.get("/scheduled-tasks")
 async def list_scheduled_tasks(
     admin: AdminUser = Depends(require_permission("fleet", "view")),
@@ -673,12 +686,7 @@ async def list_scheduled_tasks(
             ORDER BY st.created_at DESC
             """
         )
-    items = []
-    for r in rows:
-        d = dict(r)
-        if isinstance(d.get("env_vars"), str):
-            d["env_vars"] = json.loads(d["env_vars"])
-        items.append(ScheduledTaskItem(**d))
+    items = [ScheduledTaskItem(**_normalize_scheduled_task_row(r)) for r in rows]
     return {"items": items, "total": len(items)}
 
 
@@ -709,10 +717,7 @@ async def create_scheduled_task(
             body.script_id, body.node_uuid, body.cron_expression,
             body.is_enabled, env_json, admin.account_id,
         )
-    d = dict(row)
-    if isinstance(d.get("env_vars"), str):
-        d["env_vars"] = json.loads(d["env_vars"])
-    return ScheduledTaskItem(**d)
+    return ScheduledTaskItem(**_normalize_scheduled_task_row(row))
 
 
 @router.patch("/scheduled-tasks/{task_id}")
@@ -758,10 +763,7 @@ async def update_scheduled_task(
     if not row:
         raise api_error(404, "NOT_FOUND")
 
-    d = dict(row)
-    if isinstance(d.get("env_vars"), str):
-        d["env_vars"] = json.loads(d["env_vars"])
-    return ScheduledTaskItem(**d)
+    return ScheduledTaskItem(**_normalize_scheduled_task_row(row))
 
 
 @router.delete("/scheduled-tasks/{task_id}")
@@ -795,7 +797,4 @@ async def toggle_scheduled_task(
         )
     if not row:
         raise api_error(404, "NOT_FOUND")
-    d = dict(row)
-    if isinstance(d.get("env_vars"), str):
-        d["env_vars"] = json.loads(d["env_vars"])
-    return ScheduledTaskItem(**d)
+    return ScheduledTaskItem(**_normalize_scheduled_task_row(row))
