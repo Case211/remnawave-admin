@@ -477,7 +477,6 @@
     "sort": {
       "createdAt": "Created date",
       "trafficCurrent": "Traffic (current)",
-      "trafficRaw": "Traffic (actual)",
       "trafficLifetime": "Traffic (lifetime)",
       "hwidDevices": "HWID devices",
       "lastActivity": "Last activity",
@@ -492,8 +491,6 @@
       "user": "User",
       "status": "Status",
       "traffic": "Traffic",
-      "rawTrafficPrefix": "actual: ",
-      "rawTrafficHint": "Actual traffic without node multipliers",
       "hwid": "HWID",
       "activity": "Activity",
       "expires": "Expires",

@@ -477,7 +477,6 @@
     "sort": {
       "createdAt": "Дата создания",
       "trafficCurrent": "Трафик (текущий)",
-      "trafficRaw": "Трафик (фактический)",
       "trafficLifetime": "Трафик (за всё время)",
       "hwidDevices": "HWID устройства",
       "lastActivity": "Последняя активность",
@@ -492,8 +491,6 @@
       "user": "Пользователь",
       "status": "Статус",
       "traffic": "Трафик",
-      "rawTrafficPrefix": "факт: ",
-      "rawTrafficHint": "Фактический трафик без учёта множителей нод",
       "hwid": "HWID",
       "activity": "Активность",
       "expires": "Истекает",
