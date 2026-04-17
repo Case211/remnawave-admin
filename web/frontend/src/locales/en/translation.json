@@ -1094,7 +1094,47 @@
     },
     "scheduled": {
       "description": "Cron-based script execution on nodes. Scripts run automatically on schedule.",
-      "noTasks": "No scheduled tasks"
+      "noTasks": "No scheduled tasks",
+      "create": "Create task",
+      "createFirst": "Create first task",
+      "edit": "Edit task",
+      "formHint": "Pick a script, node and schedule. Environment variables are optional.",
+      "script": "Script",
+      "scriptPlaceholder": "Select a script",
+      "noScripts": "No scripts available. Add some on the Scripts tab.",
+      "builtin": "Built-in",
+      "node": "Node",
+      "nodePlaceholder": "Select a node",
+      "preset": "Quick presets",
+      "cron": "Cron expression",
+      "cronInvalid": "Invalid cron expression (5 fields required)",
+      "cronCustom": "Custom schedule: {{expr}}",
+      "envVars": "Environment variables",
+      "addEnv": "Add",
+      "noEnvVars": "No variables set",
+      "enable": "Enable immediately",
+      "enableHint": "Task will start running on schedule right after creation",
+      "pause": "Pause",
+      "resume": "Resume",
+      "runs": "runs: {{count}}",
+      "deleteConfirmTitle": "Delete task?",
+      "deleteConfirmDescription": "Task \"{{name}}\" will be removed. The script itself and run history are preserved.",
+      "toast": {
+        "created": "Task created",
+        "updated": "Task updated",
+        "toggled": "Status toggled",
+        "deleted": "Task deleted"
+      },
+      "presets": {
+        "every5m": "Every 5 minutes",
+        "every15m": "Every 15 minutes",
+        "everyHour": "Every hour",
+        "every6h": "Every 6 hours",
+        "dailyMidnight": "Daily at 00:00",
+        "daily3am": "Daily at 03:00",
+        "weeklyMonday": "Mondays at 00:00",
+        "monthlyFirst": "1st of each month"
+      }
     },
     "bulk": {
       "description": "Mass operations on node agent tokens. Empty body = all applicable nodes.",

@@ -29,6 +29,8 @@ import {
   ArrowUpDown,
   FileCode,
   History,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import client from '../api/client'
 import { usePermissionStore } from '../store/permissionStore'
@@ -54,10 +56,13 @@ import { QueryError } from '@/components/QueryError'
 import NodeCard, { type FleetNode, getNodeStatus } from '@/components/fleet/NodeCard'
 import TerminalDialog from '@/components/fleet/TerminalDialog'
 import type { Script } from '@/components/fleet/ScriptCatalog'
+import type { ScheduledTask as FleetScheduledTask } from '@/api/fleet'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 const ScriptCatalog = lazy(() => import('@/components/fleet/ScriptCatalog'))
 const RunScriptDialog = lazy(() => import('@/components/fleet/RunScriptDialog'))
 const CommandHistory = lazy(() => import('@/components/fleet/CommandHistory'))
+const ScheduleFormDialog = lazy(() => import('@/components/fleet/ScheduleFormDialog'))
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -771,7 +776,7 @@ export default function Fleet() {
         {/* ── Scheduled Tasks Tab ────────────────────────────────────── */}
         {canScripts && (
           <TabsContent value="scheduled" className="mt-4">
-            <ScheduledTasksTab />
+            <ScheduledTasksTab nodes={fleet?.nodes ?? []} />
           </TabsContent>
         )}
 
@@ -810,10 +815,14 @@ export default function Fleet() {
 // Scheduled Tasks Tab
 // ══════════════════════════════════════════════════════════════════
 
-function ScheduledTasksTab() {
+function ScheduledTasksTab({ nodes }: { nodes: FleetNode[] }) {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
   const queryClient = useQueryClient()
+
+  const [formOpen, setFormOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<FleetScheduledTask | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<FleetScheduledTask | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['scheduled-tasks'],
@@ -830,7 +839,7 @@ function ScheduledTasksTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-tasks'] })
-      toast.success('Toggled')
+      toast.success(t('fleet.scheduled.toast.toggled'))
     },
   })
 
@@ -841,35 +850,86 @@ function ScheduledTasksTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-tasks'] })
-      toast.success('Deleted')
+      toast.success(t('fleet.scheduled.toast.deleted'))
+      setDeleteTarget(null)
     },
   })
 
   const tasks = Array.isArray(data?.items) ? data!.items : []
-
-  if (isLoading) return <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-14 bg-[var(--glass-bg)] rounded animate-pulse" />)}</div>
+  const nodeOptions = useMemo(
+    () => nodes.map((n) => ({ uuid: n.uuid, name: n.name })),
+    [nodes],
+  )
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        {t('fleet.scheduled.description')}
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {t('fleet.scheduled.description')}
+        </p>
+        <Button
+          size="sm"
+          onClick={() => {
+            setEditingTask(null)
+            setFormOpen(true)
+          }}
+          className="shrink-0"
+        >
+          <Plus className="w-4 h-4 mr-1.5" />
+          {t('fleet.scheduled.create')}
+        </Button>
+      </div>
 
-      {tasks.length === 0 ? (
-        <div className="h-32 flex items-center justify-center text-muted-foreground">
-          <p>{t('fleet.scheduled.noTasks')}</p>
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-14 bg-[var(--glass-bg)] rounded animate-pulse" />
+          ))}
         </div>
+      ) : tasks.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <Clock className="w-10 h-10 mx-auto mb-3 text-dark-300" />
+            <p className="text-sm text-muted-foreground mb-3">{t('fleet.scheduled.noTasks')}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setEditingTask(null)
+                setFormOpen(true)
+              }}
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              {t('fleet.scheduled.createFirst')}
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-2">
           {tasks.map((task) => (
-            <Card key={task.id}>
+            <Card key={task.id} className="transition-colors hover:bg-[var(--glass-bg)]/30">
               <CardContent className="p-3 flex items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
+                <button
+                  onClick={() => {
+                    setEditingTask(task)
+                    setFormOpen(true)
+                  }}
+                  className="flex-1 min-w-0 text-left"
+                >
                   <div className="flex items-center gap-2">
-                    <span className={cn('w-2 h-2 rounded-full', task.is_enabled ? 'bg-green-400' : 'bg-gray-500')} />
-                    <span className="text-sm font-medium text-white truncate">{task.script_name || `Script #${task.script_id}`}</span>
+                    <span
+                      className={cn(
+                        'w-2 h-2 rounded-full shrink-0',
+                        task.is_enabled ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]' : 'bg-gray-500',
+                      )}
+                    />
+                    <span className="text-sm font-medium text-white truncate">
+                      {task.script_name || `Script #${task.script_id}`}
+                    </span>
                     <span className="text-xs text-muted-foreground">→</span>
-                    <span className="text-xs text-muted-foreground truncate">{task.node_name || task.node_uuid.slice(0, 8)}</span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {task.node_name || task.node_uuid.slice(0, 8)}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                     <span className="font-mono">{task.cron_expression}</span>
@@ -878,23 +938,68 @@ function ScheduledTasksTab() {
                         {task.last_status}
                       </span>
                     )}
-                    {task.run_count > 0 && <span>runs: {task.run_count}</span>}
+                    {task.run_count > 0 && (
+                      <span>{t('fleet.scheduled.runs', { count: task.run_count })}</span>
+                    )}
                     {task.last_run_at && <span>{formatDate(task.last_run_at)}</span>}
                   </div>
-                </div>
+                </button>
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => toggleMutation.mutate(task.id)}>
-                    {task.is_enabled ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                  </Button>
-                  <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteMutation.mutate(task.id)}>
-                    <span className="text-xs">×</span>
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button size="sm" variant="ghost" onClick={() => toggleMutation.mutate(task.id)}>
+                        {task.is_enabled ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {task.is_enabled ? t('fleet.scheduled.pause') : t('fleet.scheduled.resume')}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-400 hover:text-red-300"
+                        onClick={() => setDeleteTarget(task)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('common.delete')}</TooltipContent>
+                  </Tooltip>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <Suspense fallback={null}>
+        {formOpen && (
+          <ScheduleFormDialog
+            open={formOpen}
+            onOpenChange={(open) => {
+              setFormOpen(open)
+              if (!open) setEditingTask(null)
+            }}
+            nodes={nodeOptions}
+            existingTask={editingTask}
+          />
+        )}
+      </Suspense>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title={t('fleet.scheduled.deleteConfirmTitle')}
+        description={t('fleet.scheduled.deleteConfirmDescription', {
+          name: deleteTarget?.script_name || '',
+        })}
+        confirmLabel={t('common.delete')}
+        variant="destructive"
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
     </div>
   )
 }
