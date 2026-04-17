@@ -233,7 +233,7 @@ export interface ScheduledTask {
 }
 
 export async function listScheduledTasks(): Promise<{ items: ScheduledTask[]; total: number }> {
-  const { data } = await client.get('/fleet/scripts/scheduled-tasks')
+  const { data } = await client.get('/fleet/scheduled-tasks')
   return data
 }
 
@@ -244,7 +244,7 @@ export async function createScheduledTask(body: {
   is_enabled?: boolean
   env_vars?: Record<string, string>
 }): Promise<ScheduledTask> {
-  const { data } = await client.post('/fleet/scripts/scheduled-tasks', body)
+  const { data } = await client.post('/fleet/scheduled-tasks', body)
   return data
 }
 
@@ -253,16 +253,16 @@ export async function updateScheduledTask(id: number, body: {
   is_enabled?: boolean
   env_vars?: Record<string, string>
 }): Promise<ScheduledTask> {
-  const { data } = await client.patch(`/fleet/scripts/scheduled-tasks/${id}`, body)
+  const { data } = await client.patch(`/fleet/scheduled-tasks/${id}`, body)
   return data
 }
 
 export async function deleteScheduledTask(id: number): Promise<void> {
-  await client.delete(`/fleet/scripts/scheduled-tasks/${id}`)
+  await client.delete(`/fleet/scheduled-tasks/${id}`)
 }
 
 export async function toggleScheduledTask(id: number): Promise<ScheduledTask> {
-  const { data } = await client.post(`/fleet/scripts/scheduled-tasks/${id}/toggle`)
+  const { data } = await client.post(`/fleet/scheduled-tasks/${id}/toggle`)
   return data
 }
 
