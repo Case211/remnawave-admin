@@ -33,7 +33,6 @@
     "loading": "Загрузка...",
     "error": "Ошибка",
     "loadError": "Не удалось загрузить данные. Попробуйте ещё раз.",
-    "retry": "Повторить",
     "total": "Всего",
     "online": "Онлайн",
     "offline": "Офлайн",
@@ -2061,7 +2060,32 @@
     "status": "Статус",
     "logs": "Логи",
     "test": "Тестировать",
-    "templates": "Шаблоны",
+    "templates": {
+      "auto_block_sharing": {
+        "description": "Автоматическая блокировка пользователей с score нарушения > 80"
+      },
+      "node_monitoring": {
+        "description": "Telegram-уведомление когда нода офлайн > 5 минут"
+      },
+      "cleanup_expired": {
+        "description": "Ежедневная очистка пользователей с истёкшей подпиской > 30 дней"
+      },
+      "traffic_notification": {
+        "description": "Уведомление администратора когда трафик пользователя > 90%"
+      },
+      "auto_restart_node": {
+        "description": "Автоматический перезапуск ноды офлайн > 15 минут"
+      },
+      "node_traffic_alert": {
+        "description": "Telegram-уведомление когда пользователь использует > N ГБ на ноде"
+      },
+      "daily_report": {
+        "description": "Ежедневная Telegram-сводка в 23:00"
+      },
+      "auto_block_torrent": {
+        "description": "Автоматическая блокировка при обнаружении торрент-трафика"
+      }
+    },
     "enabled": "включено",
     "disabled": "отключено",
     "toggleError": "Ошибка переключения",
@@ -2218,9 +2242,39 @@
       "min": "мин",
       "via": "через"
     },
-    "dayNames": ["воскресенье", "понедельник", "вторник", "среду", "четверг", "пятницу", "субботу"],
-    "dayNamesShort": ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"],
-    "monthNames": ["", "января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"],
+    "dayNames": [
+      "воскресенье",
+      "понедельник",
+      "вторник",
+      "среду",
+      "четверг",
+      "пятницу",
+      "субботу"
+    ],
+    "dayNamesShort": [
+      "Вс",
+      "Пн",
+      "Вт",
+      "Ср",
+      "Чт",
+      "Пт",
+      "Сб"
+    ],
+    "monthNames": [
+      "",
+      "января",
+      "февраля",
+      "марта",
+      "апреля",
+      "мая",
+      "июня",
+      "июля",
+      "августа",
+      "сентября",
+      "октября",
+      "ноября",
+      "декабря"
+    ],
     "cronPresets": {
       "every_5min": "Каждые 5 минут",
       "every_15min": "Каждые 15 минут",
@@ -2296,13 +2350,34 @@
       "cronHelp": "= любое, = каждые N, = диапазон, = список",
       "dayOrdinal": "{{day}}-е число",
       "daysOfWeek": {
-        "1": { "long": "Понедельник", "short": "Пн" },
-        "2": { "long": "Вторник", "short": "Вт" },
-        "3": { "long": "Среда", "short": "Ср" },
-        "4": { "long": "Четверг", "short": "Чт" },
-        "5": { "long": "Пятница", "short": "Пт" },
-        "6": { "long": "Суббота", "short": "Сб" },
-        "0": { "long": "Воскресенье", "short": "Вс" }
+        "1": {
+          "long": "Понедельник",
+          "short": "Пн"
+        },
+        "2": {
+          "long": "Вторник",
+          "short": "Вт"
+        },
+        "3": {
+          "long": "Среда",
+          "short": "Ср"
+        },
+        "4": {
+          "long": "Четверг",
+          "short": "Чт"
+        },
+        "5": {
+          "long": "Пятница",
+          "short": "Пт"
+        },
+        "6": {
+          "long": "Суббота",
+          "short": "Сб"
+        },
+        "0": {
+          "long": "Воскресенье",
+          "short": "Вс"
+        }
       }
     },
     "intervalPicker": {
@@ -2315,32 +2390,6 @@
       "every24Hours": "Каждые 24 часа (раз в сутки)",
       "everyNHours": "Каждые {{n}} ч.",
       "everyNHoursNMin": "Каждые {{h}} ч. {{m}} мин."
-    },
-    "templates": {
-      "auto_block_sharing": {
-        "description": "Автоматическая блокировка пользователей с score нарушения > 80"
-      },
-      "node_monitoring": {
-        "description": "Telegram-уведомление когда нода офлайн > 5 минут"
-      },
-      "cleanup_expired": {
-        "description": "Ежедневная очистка пользователей с истёкшей подпиской > 30 дней"
-      },
-      "traffic_notification": {
-        "description": "Уведомление администратора когда трафик пользователя > 90%"
-      },
-      "auto_restart_node": {
-        "description": "Автоматический перезапуск ноды офлайн > 15 минут"
-      },
-      "node_traffic_alert": {
-        "description": "Telegram-уведомление когда пользователь использует > N ГБ на ноде"
-      },
-      "daily_report": {
-        "description": "Ежедневная Telegram-сводка в 23:00"
-      },
-      "auto_block_torrent": {
-        "description": "Автоматическая блокировка при обнаружении торрент-трафика"
-      }
     },
     "templatesGallery": {
       "noTemplates": "Нет доступных шаблонов",
@@ -2356,8 +2405,18 @@
       "newTitle": "Новое правило автоматизации",
       "editSubtitle": "Измените параметры правила автоматизации",
       "newSubtitle": "Создайте правило, которое будет автоматически выполнять действия при наступлении определённых событий",
-      "steps": { "trigger": "Триггер", "conditions": "Условия", "action": "Действие", "review": "Обзор" },
-      "stepDescs": { "trigger": "Выберите, что запускает правило", "conditions": "Добавьте фильтры (необязательно)", "action": "Настройте действие при срабатывании", "review": "Проверьте и сохраните правило" },
+      "steps": {
+        "trigger": "Триггер",
+        "conditions": "Условия",
+        "action": "Действие",
+        "review": "Обзор"
+      },
+      "stepDescs": {
+        "trigger": "Выберите, что запускает правило",
+        "conditions": "Добавьте фильтры (необязательно)",
+        "action": "Настройте действие при срабатывании",
+        "review": "Проверьте и сохраните правило"
+      },
       "triggerQuestion": "Когда запускать правило?",
       "triggerHint": "Определите условие запуска. Правило сработает автоматически при наступлении выбранного события.",
       "eventHint": "Событийный триггер реагирует на конкретные действия в системе в реальном времени. Правило сработает сразу после возникновения события.",
@@ -2505,17 +2564,16 @@
       "sync": "🔄 Синхронизация",
       "violations": "🛡️ Обнаружение нарушений",
       "reports": "📊 Отчёты",
-      "collector": "📡 Коллектор данных",
-      "limits": "📏 Лимиты",
-      "appearance": "🎨 Внешний вид",
       "mailserver": "📧 Почтовый сервер",
       "security": "🔒 Безопасность",
       "performance": "⚡ Производительность"
     },
     "subcategories": {
       "topics": "💬 Топики уведомлений",
-      "weights": "⚖️ Веса компонентов скора",
       "thresholds": "📐 Пороги детекции",
+      "patterns": "🔤 Паттерны User-Agent",
+      "torrent": "🧲 Торрент-блокировщик",
+      "traffic_rate": "📈 Скорость трафика",
       "hard_block": "🚫 Жёсткая блокировка",
       "trial": "🆓 Определение триальных пользователей",
       "auth_methods": "🔑 Методы авторизации",
@@ -2661,132 +2719,396 @@
     "reset": "Сбросить",
     "configItems": {
       "bot_language": {
-        "label": "Язык бота",
+        "label": "🌐 Язык бота",
         "description": "Язык интерфейса бота"
       },
       "log_level": {
-        "label": "Уровень логирования",
+        "label": "📝 Уровень логирования",
         "description": "Уровень детализации логов (требует перезапуск)"
       },
       "notifications_chat_id": {
-        "label": "ID чата уведомлений",
+        "label": "💬 ID чата уведомлений",
         "description": "Telegram ID чата/группы для уведомлений"
       },
       "notifications_topic_users": {
-        "label": "Топик: Пользователи",
+        "label": "👤 Топик: Пользователи",
         "description": "ID топика для уведомлений о пользователях"
       },
       "notifications_topic_nodes": {
-        "label": "Топик: Ноды",
+        "label": "🖥️ Топик: Ноды",
         "description": "ID топика для уведомлений о нодах"
       },
       "notifications_topic_service": {
-        "label": "Топик: Сервис",
+        "label": "🔧 Топик: Сервис",
         "description": "ID топика для сервисных уведомлений"
       },
       "notifications_topic_hwid": {
-        "label": "Топик: HWID",
+        "label": "🔑 Топик: HWID",
         "description": "ID топика для HWID уведомлений"
       },
       "notifications_topic_violations": {
-        "label": "Топик: Нарушения",
+        "label": "🛡️ Топик: Нарушения",
         "description": "ID топика для уведомлений о нарушениях"
       },
       "notifications_topic_errors": {
-        "label": "Топик: Ошибки",
+        "label": "❗ Топик: Ошибки",
         "description": "ID топика для уведомлений об ошибках"
       },
       "sync_interval_seconds": {
-        "label": "Интервал синхронизации",
+        "label": "🔄 Интервал синхронизации",
         "description": "Интервал синхронизации данных с API (секунды, требует перезапуск)"
       },
       "reports_enabled": {
-        "label": "Отчёты включены",
+        "label": "📊 Отчёты включены",
         "description": "Глобальное включение/выключение автоматических отчётов"
       },
       "reports_daily_enabled": {
-        "label": "Ежедневные отчёты",
+        "label": "📅 Ежедневные отчёты",
         "description": "Включить ежедневные отчёты по нарушениям"
       },
       "reports_daily_time": {
-        "label": "Время дневного отчёта",
+        "label": "🕐 Время дневного отчёта",
         "description": "Время отправки ежедневного отчёта (HH:MM по UTC)"
       },
       "reports_weekly_enabled": {
-        "label": "Еженедельные отчёты",
+        "label": "📆 Еженедельные отчёты",
         "description": "Включить еженедельные отчёты по нарушениям"
       },
       "reports_weekly_day": {
-        "label": "День недельного отчёта",
+        "label": "📅 День недельного отчёта",
         "description": "День недели для еженедельного отчёта (0=Пн, 6=Вс)"
       },
       "reports_weekly_time": {
-        "label": "Время недельного отчёта",
+        "label": "🕐 Время недельного отчёта",
         "description": "Время отправки еженедельного отчёта (HH:MM по UTC)"
       },
       "reports_monthly_enabled": {
-        "label": "Ежемесячные отчёты",
+        "label": "🗓️ Ежемесячные отчёты",
         "description": "Включить ежемесячные отчёты по нарушениям"
       },
       "reports_monthly_day": {
-        "label": "День месячного отчёта",
+        "label": "📅 День месячного отчёта",
         "description": "День месяца для ежемесячного отчёта (1-28)"
       },
       "reports_monthly_time": {
-        "label": "Время месячного отчёта",
+        "label": "🕐 Время месячного отчёта",
         "description": "Время отправки ежемесячного отчёта (HH:MM по UTC)"
       },
       "reports_min_score": {
-        "label": "Минимальный скор",
+        "label": "📐 Минимальный скор",
         "description": "Минимальный скор нарушения для включения в отчёт"
       },
       "reports_top_violators_count": {
-        "label": "Топ нарушителей",
+        "label": "🏆 Топ нарушителей",
         "description": "Количество пользователей в топе нарушителей"
       },
       "reports_send_empty": {
-        "label": "Отправлять пустые",
+        "label": "📭 Отправлять пустые",
         "description": "Отправлять отчёт если нет нарушений за период"
       },
       "reports_topic_id": {
-        "label": "Топик отчётов",
+        "label": "💬 Топик отчётов",
         "description": "ID топика для отправки отчётов (0 = основной чат)"
       },
       "panel_name": {
-        "label": "Название панели",
+        "label": "🏷️ Название панели",
         "description": "Отображаемое название проекта в боковом меню (рядом с логотипом)"
       },
       "auth_telegram_enabled": {
-        "label": "Авторизация через Telegram",
+        "label": "✈️ Авторизация через Telegram",
         "description": "Разрешить вход через Telegram Login Widget"
       },
       "auth_password_enabled": {
-        "label": "Авторизация по паролю",
+        "label": "🔒 Авторизация по паролю",
         "description": "Разрешить вход по логину и паролю"
       },
       "auth_totp_required": {
-        "label": "Обязательная 2FA (TOTP)",
+        "label": "🔐 Обязательная 2FA (TOTP)",
         "description": "Требовать настройку TOTP для всех аккаунтов"
       },
       "auth_max_attempts": {
-        "label": "Макс. попыток до блокировки",
+        "label": "🚫 Макс. попыток до блокировки",
         "description": "Количество неудачных попыток входа до блокировки IP-адреса"
       },
       "auth_lockout_minutes": {
-        "label": "Длительность блокировки (мин)",
+        "label": "⏳ Длительность блокировки (мин)",
         "description": "На сколько минут блокируется IP после превышения лимита попыток"
       },
       "auth_fail2ban_logging": {
-        "label": "Fail2ban логирование",
+        "label": "📋 Fail2ban логирование",
         "description": "Записывать неудачные попытки входа в auth_failures.log"
       },
       "auth_notify_on_block": {
-        "label": "Уведомление при блокировке IP",
+        "label": "🔔 Уведомление при блокировке IP",
         "description": "Отправлять уведомление в Telegram при блокировке IP-адреса"
       },
       "auth_notify_on_failure": {
-        "label": "Уведомление при неудачном входе",
+        "label": "⚠️ Уведомление при неудачном входе",
         "description": "Отправлять уведомление в Telegram при каждой неудачной попытке входа"
+      },
+      "log_max_size_mb": {
+        "label": "📦 Макс. размер лог-файла (MB)",
+        "description": "Максимальный размер одного лог-файла перед ротацией"
+      },
+      "log_backup_count": {
+        "label": "🗂️ Кол-во бэкапов логов",
+        "description": "Количество сжатых бэкап-файлов при ротации"
+      },
+      "maxmind_source": {
+        "label": "🌍 Источник MaxMind GeoIP",
+        "description": "auto — GitHub (ltsdev/maxmind) затем MaxMind; github — только GitHub (без ключа); maxmind — только официальный (нужен ключ)"
+      },
+      "notifications_topic_id": {
+        "label": "💬 Топик: Общий (fallback)",
+        "description": "ID топика по умолчанию, используется если специфический топик не задан"
+      },
+      "violations_enabled": {
+        "label": "🛡️ Детектирование нарушений",
+        "description": "Глобальное включение/выключение детектирования нарушений"
+      },
+      "violations_min_score": {
+        "label": "📐 Минимальный скор уведомления",
+        "description": "Минимальный скор нарушения для отправки уведомления (по умолчанию 50)"
+      },
+      "violations_analyzer_temporal": {
+        "label": "⏱️ Временной анализатор",
+        "description": "Анализ одновременных подключений и паттернов переключения"
+      },
+      "violations_analyzer_geo": {
+        "label": "🌍 Гео-анализатор",
+        "description": "Определение невозможных перемещений и подозрительной географии"
+      },
+      "violations_analyzer_asn": {
+        "label": "🏢 ASN-анализатор",
+        "description": "Классификация провайдеров (VPN, датацентр, мобильный оператор)"
+      },
+      "violations_analyzer_profile": {
+        "label": "👤 Профильный анализатор",
+        "description": "Анализ отклонений от обычного поведения пользователя"
+      },
+      "violations_analyzer_device": {
+        "label": "📱 Анализатор устройств",
+        "description": "Определение уникальных fingerprint устройств (ОС, клиент)"
+      },
+      "violations_analyzer_hwid": {
+        "label": "🔑 HWID кросс-аккаунт анализатор",
+        "description": "Обнаружение одного HWID на нескольких аккаунтах (триальный абьюз)"
+      },
+      "violations_analyzer_user_agent": {
+        "label": "🔤 User-Agent анализатор",
+        "description": "Детекция двойных туннелей (vless:// в UA), ботов (curl, Go-http-client) и неизвестных клиентов"
+      },
+      "violation_ua_max_age_days": {
+        "label": "📅 Макс. возраст SRH записей (дней)",
+        "description": "Игнорировать запросы подписки старше указанного количества дней. 0 = анализировать все записи"
+      },
+      "violation_ua_link_floor": {
+        "label": "🔗 Мин. скор при ссылке в UA",
+        "description": "Минимальный score нарушения при обнаружении подписочной ссылки (vless://) в User-Agent. 70 = warn, 80 = soft_block"
+      },
+      "violation_ua_bot_floor": {
+        "label": "🤖 Мин. скор при bot-UA",
+        "description": "Минимальный score нарушения при curl/Go-http-client/python-requests в User-Agent"
+      },
+      "violation_ua_whitelist_extra": {
+        "label": "✅ Дополнительный whitelist UA (regex)",
+        "description": "JSON массив regex для новых VPN-клиентов. Пример: [\"^NewClash/\", \"^MyClient/\"]"
+      },
+      "violation_ua_blacklist_extra": {
+        "label": "🚫 Дополнительный blacklist UA (regex)",
+        "description": "JSON массив regex для подозрительных UA. Пример: [\"^SuspiciousBot/\"]"
+      },
+      "srh_retention_days": {
+        "label": "🗑️ Хранение SRH (дней)",
+        "description": "Удалять синхронизированные записи Subscription Request History старше указанного количества дней. 0 = хранить всё"
+      },
+      "violations_max_simultaneous_ips": {
+        "label": "🌐 Макс. одновременных IP",
+        "description": "Максимальное количество одновременных IP сверх лимита устройств для срабатывания (0 = авто по кол-ву устройств)"
+      },
+      "violations_geo_max_city_distance_km": {
+        "label": "📏 Макс. расстояние между городами (км)",
+        "description": "Расстояние между городами ниже которого не считается подозрительным"
+      },
+      "violations_hwid_max_accounts": {
+        "label": "👥 Макс. аккаунтов на один HWID",
+        "description": "Количество аккаунтов на одном HWID для срабатывания (по умолчанию 2)"
+      },
+      "violations_max_unique_ips_per_day": {
+        "label": "📊 Макс. уникальных IP в день",
+        "description": "Превышение этого количества уникальных IP за день вызывает предупреждение (0 = авто по профилю)"
+      },
+      "violations_notification_cooldown_minutes": {
+        "label": "🔕 Кулдаун уведомлений (мин)",
+        "description": "Минимальный интервал между уведомлениями по одному пользователю"
+      },
+      "violations_hard_block_ips": {
+        "label": "🚫 Жёсткая блокировка: макс. IP",
+        "description": "Количество уникальных IP для автоматической жёсткой блокировки"
+      },
+      "violations_hard_block_simultaneous": {
+        "label": "🚫 Жёсткая блокировка: макс. одновременных",
+        "description": "Количество одновременных подключений для жёсткой блокировки"
+      },
+      "violations_hard_block_devices": {
+        "label": "🚫 Жёсткая блокировка: макс. устройств",
+        "description": "Количество уникальных fingerprint устройств для жёсткой блокировки"
+      },
+      "violations_hard_block_hwid_matches": {
+        "label": "🚫 Жёсткая блокировка: макс. совпадений HWID",
+        "description": "Количество совпадающих HWID (одна модель) для жёсткой блокировки"
+      },
+      "violations_trial_tags": {
+        "label": "🏷️ Теги триальных пользователей",
+        "description": "Теги через запятую, при наличии которых пользователь считается триальным (например: trial,test,free)"
+      },
+      "violations_trial_squad_uuids": {
+        "label": "👥 Internal squad триальных",
+        "description": "Выберите internal squad, пользователи которых считаются триальными"
+      },
+      "torrent_detection_enabled": {
+        "label": "🧲 Обнаружение торрентов",
+        "description": "Включение/выключение обнаружения торрент-трафика через Xray routing"
+      },
+      "torrent_auto_action": {
+        "label": "⚡ Авто-действие при торренте",
+        "description": "Действие при обнаружении торрент-трафика: notify (только уведомление), block_user (блокировка)"
+      },
+      "torrent_notification_cooldown_minutes": {
+        "label": "🔕 Кулдаун торрент-уведомлений (мин)",
+        "description": "Минимальный интервал между уведомлениями о торрентах по одному пользователю"
+      },
+      "traffic_rate_enabled": {
+        "label": "📈 Монитор скорости трафика",
+        "description": "Отслеживание аномально высокого потребления трафика за период"
+      },
+      "traffic_rate_threshold_gb": {
+        "label": "📊 Порог (GB за период)",
+        "description": "Уведомление если пользователь потребил больше указанного объёма за период"
+      },
+      "traffic_rate_window_minutes": {
+        "label": "⏱️ Окно проверки (мин)",
+        "description": "Период времени для подсчёта трафика (по умолчанию 60 = 1 час)"
+      },
+      "traffic_rate_check_interval_minutes": {
+        "label": "🔁 Интервал проверки (мин)",
+        "description": "Как часто проверять потребление трафика"
+      },
+      "traffic_rate_cooldown_minutes": {
+        "label": "🔕 Кулдаун уведомлений (мин)",
+        "description": "Минимальный интервал между повторными уведомлениями по одному пользователю"
+      },
+      "traffic_rate_auto_action": {
+        "label": "⚡ Авто-действие при превышении",
+        "description": "Действие при чрезмерном потреблении трафика: только уведомление или автоблокировка"
+      },
+      "traffic_rate_auto_block_gb": {
+        "label": "🚫 Порог автоблокировки (GB)",
+        "description": "Автоблокировка если трафик за период превышает это значение. Работает только при авто-действии = block_user"
+      },
+      "mailserver_enabled": {
+        "label": "📧 Почтовый сервер включён",
+        "description": "Включить встроенный почтовый сервер (отправка/приём писем)"
+      },
+      "mailserver_hostname": {
+        "label": "🖥️ Хост SMTP-сервера",
+        "description": "IP-адрес для входящего SMTP-сервера (0.0.0.0 = все интерфейсы)"
+      },
+      "mailserver_inbound_port": {
+        "label": "📥 Порт входящего SMTP",
+        "description": "Порт для приёма входящих писем (по умолчанию 2525, в продакшене 25)"
+      },
+      "mailserver_max_send_per_hour": {
+        "label": "🚦 Лимит отправки в час",
+        "description": "Максимальное количество писем с одного домена в час"
+      },
+      "mailserver_queue_poll_interval": {
+        "label": "⏱️ Интервал опроса очереди",
+        "description": "Как часто проверять очередь писем на отправку (секунды)"
+      },
+      "mailserver_max_retries": {
+        "label": "🔁 Макс. попыток отправки",
+        "description": "Максимальное количество попыток отправки одного письма"
+      },
+      "mailserver_submission_enabled": {
+        "label": "📤 SMTP Submission включён",
+        "description": "Включить SMTP Submission сервер (порт 587) для отправки писем через логин/пароль"
+      },
+      "mailserver_submission_port": {
+        "label": "🔌 Порт SMTP Submission",
+        "description": "Порт для SMTP Submission сервера (стандарт — 587)"
+      },
+      "db_pool_min_size": {
+        "label": "🗄️ DB Pool: минимум соединений",
+        "description": "Минимальное количество соединений в пуле PostgreSQL. Требуется перезапуск."
+      },
+      "db_pool_max_size": {
+        "label": "🗄️ DB Pool: максимум соединений",
+        "description": "Максимальное количество соединений в пуле PostgreSQL. Увеличьте при высокой нагрузке. Требуется перезапуск."
+      },
+      "db_statement_timeout": {
+        "label": "⏱️ DB: таймаут запросов (сек)",
+        "description": "Максимальное время выполнения SQL-запроса в секундах. 0 = без ограничений. Требуется перезапуск."
+      },
+      "db_idle_connection_lifetime": {
+        "label": "💤 DB: время жизни простаивающего соединения (сек)",
+        "description": "Через сколько секунд закрывать неиспользуемое соединение в пуле. Требуется перезапуск."
+      },
+      "alert_check_interval": {
+        "label": "🔔 Интервал проверки алертов (сек)",
+        "description": "Как часто проверять правила алертов. Меньше = быстрее реакция, но выше нагрузка на БД."
+      },
+      "config_auto_reload_interval": {
+        "label": "🔄 Автообновление конфига (сек)",
+        "description": "Как часто перезагружать конфигурацию из БД. Влияет на скорость применения настроек."
+      },
+      "api_rate_limit_per_minute": {
+        "label": "🚦 API: лимит запросов/мин (общий)",
+        "description": "Максимальное количество API-запросов в минуту на один IP. 0 = без ограничений."
+      },
+      "collector_rate_limit": {
+        "label": "📡 Collector: лимит запросов",
+        "description": "Rate limit для эндпоинта сбора метрик от нод-агентов (формат: '1/second')."
+      },
+      "cache_max_entries": {
+        "label": "💾 Кэш: максимум записей",
+        "description": "Максимальное количество записей в in-memory кэше. При превышении используется LRU-вытеснение."
+      },
+      "cache_default_ttl": {
+        "label": "⏱️ Кэш: TTL по умолчанию (сек)",
+        "description": "Время жизни записей в кэше по умолчанию. Меньше = актуальнее данные, но больше запросов к БД."
+      },
+      "violation_drain_interval": {
+        "label": "⏱️ Очередь нарушений: интервал обработки (сек)",
+        "description": "Как часто worker забирает порцию пользователей из очереди. Меньше = быстрее реакция, но выше нагрузка."
+      },
+      "violation_chunk_size": {
+        "label": "📦 Очередь нарушений: размер порции",
+        "description": "Сколько пользователей обрабатывать за один цикл. Больше = быстрее разгребается очередь, но пиковая нагрузка выше."
+      },
+      "violation_max_background_tasks": {
+        "label": "🔀 Макс. фоновых задач",
+        "description": "Максимальное количество одновременных фоновых задач (торренты и пр.). При превышении новые задачи отбрасываются."
+      },
+      "violation_notification_cooldown_minutes": {
+        "label": "🔕 Кулдаун уведомлений (мин)",
+        "description": "Минимальный интервал между повторными уведомлениями по одному пользователю. Защита от спама."
+      },
+      "user_blacklist_enabled": {
+        "label": "🚫 Чёрный список пользователей",
+        "description": "Включить проверку Telegram ID пользователей по чёрному списку. При совпадении — автоматическая блокировка."
+      },
+      "user_blacklist_urls": {
+        "label": "🔗 URL списков (по одному на строку)",
+        "description": "Ссылки на внешние blacklist-файлы. Формат: Telegram ID в начале каждой строки."
+      },
+      "user_blacklist_sync_hours": {
+        "label": "🔄 Интервал синхронизации (часы)",
+        "description": "Как часто обновлять чёрные списки с внешних URL."
+      },
+      "user_blacklist_auto_block": {
+        "label": "⚡ Автоблокировка",
+        "description": "Автоматически блокировать пользователей из чёрного списка через Panel API. Если выключено — только уведомление."
       }
     },
     "inDb": "В БД",
@@ -3276,7 +3598,6 @@
       "showingOf": "Показано {{shown}} из {{total}} записей"
     }
   },
-
   "errors": {
     "INVALID_AUTH_HEADER": "Некорректный заголовок авторизации",
     "TOKEN_REQUIRED": "Требуется токен аутентификации",
@@ -3292,13 +3613,11 @@
     "FORBIDDEN": "Доступ запрещён",
     "EMAIL_NOT_CONFIGURED": "Email не настроен для отправки",
     "RESET_TOKEN_INVALID": "Ссылка для сброса пароля недействительна или истекла",
-
     "USERNAME_EXISTS": "Имя пользователя уже занято",
     "CANNOT_MODIFY_SELF": "Нельзя изменить свой собственный аккаунт",
     "ADMIN_CREATE_FAILED": "Не удалось создать администратора",
     "ADMIN_UPDATE_FAILED": "Не удалось обновить администратора",
     "ADMIN_DELETE_FAILED": "Не удалось удалить администратора",
-
     "ROLE_NOT_FOUND": "Роль не найдена",
     "ROLE_NAME_EXISTS": "Название роли уже существует",
     "ROLE_CREATE_FAILED": "Не удалось создать роль",
@@ -3307,26 +3626,21 @@
     "SYSTEM_ROLE_PROTECTED": "Системная роль защищена от изменений",
     "UNKNOWN_RESOURCE": "Неизвестный тип ресурса",
     "INVALID_ACTION": "Недопустимое действие",
-
     "USER_NOT_FOUND": "Пользователь не найден",
     "SYNC_FAILED": "Ошибка синхронизации",
-
     "NODE_NOT_FOUND": "Нода не найдена",
     "TOKEN_GENERATE_FAILED": "Не удалось сгенерировать токен",
     "TOKEN_REVOKE_FAILED": "Не удалось отозвать токен",
-
     "HOST_NOT_FOUND": "Хост не найден",
     "HOST_CREATE_FAILED": "Не удалось создать хост",
     "HOST_UPDATE_FAILED": "Не удалось обновить хост",
     "HOST_DELETE_FAILED": "Не удалось удалить хост",
     "HOST_ENABLE_FAILED": "Не удалось включить хост",
     "HOST_DISABLE_FAILED": "Не удалось отключить хост",
-
     "VIOLATION_NOT_FOUND": "Нарушение не найдено",
     "VIOLATION_UPDATE_FAILED": "Не удалось обновить нарушение",
     "WHITELIST_ADD_FAILED": "Не удалось добавить в белый список",
     "WHITELIST_USER_NOT_FOUND": "Пользователь белого списка не найден",
-
     "AUTOMATION_NOT_FOUND": "Правило автоматизации не найдено",
     "AUTOMATION_CREATE_FAILED": "Не удалось создать правило автоматизации",
     "AUTOMATION_UPDATE_FAILED": "Не удалось обновить правило автоматизации",
@@ -3334,10 +3648,8 @@
     "AUTOMATION_DELETE_FAILED": "Не удалось удалить правило автоматизации",
     "AUTOMATION_ACTIVATE_FAILED": "Не удалось активировать правило автоматизации",
     "TEMPLATE_NOT_FOUND": "Шаблон автоматизации не найден",
-
     "SETTING_NOT_FOUND": "Настройка не найдена",
     "SETTING_READONLY": "Эта настройка доступна только для чтения",
-
     "SCRIPT_NOT_FOUND": "Скрипт не найден",
     "BUILTIN_SCRIPT_PROTECTED": "Встроенный скрипт нельзя изменить",
     "AGENT_NOT_CONNECTED": "Агент ноды не подключён",
@@ -3347,29 +3659,24 @@
     "INVALID_GITHUB_URL": "Некорректный URL GitHub",
     "CONTENT_TOO_LARGE": "Содержимое слишком большое",
     "REPO_NOT_FOUND": "Репозиторий не найден",
-
     "NOTIFICATION_NOT_FOUND": "Уведомление не найдено",
     "CHANNEL_NOT_FOUND": "Канал уведомлений не найден",
     "ALERT_RULE_NOT_FOUND": "Правило оповещения не найдено",
     "SMTP_NOT_CONFIGURED": "SMTP не настроен",
     "SMTP_UPDATE_FAILED": "Не удалось обновить настройки SMTP",
     "SMTP_CREDENTIAL_NOT_FOUND": "Учётные данные SMTP не найдены",
-
     "DOMAIN_NOT_FOUND": "Почтовый домен не найден",
     "NO_OUTBOUND_DOMAIN": "Исходящий почтовый домен не настроен",
     "QUEUE_ITEM_NOT_FOUND": "Элемент очереди не найден",
     "MESSAGE_NOT_FOUND": "Сообщение не найдено",
-
     "REPORT_NOT_FOUND": "Отчёт не найден",
     "ASN_NOT_FOUND": "Запись ASN не найдена",
-
     "BACKUP_NOT_FOUND": "Файл резервной копии не найден",
     "BACKUP_CREATE_FAILED": "Не удалось создать резервную копию",
     "BACKUP_RESTORE_FAILED": "Не удалось восстановить базу данных",
     "BACKUP_DELETE_FAILED": "Не удалось удалить резервную копию",
     "IMPORT_FAILED": "Ошибка импорта",
     "INVALID_FILENAME": "Недопустимое имя файла",
-
     "NO_FIELDS_TO_UPDATE": "Нет полей для обновления",
     "API_SERVICE_UNAVAILABLE": "Сервис API недоступен",
     "DB_UNAVAILABLE": "База данных недоступна",
@@ -3632,8 +3939,20 @@
     "trial": "Пробных",
     "conversions": "Конверсий",
     "referrals": {
+      "title": "Реферальная сеть",
+      "subtitle": "Визуальная карта реферальных связей",
+      "totalUsers": "Пользователей",
       "totalReferrers": "Рефереров",
-      "top": "Топ рефереры"
+      "totalCampaigns": "Кампаний",
+      "totalEarnings": "Реф. доход",
+      "searchPlaceholder": "Поиск по имени...",
+      "noData": "Нет данных о рефералах",
+      "openProfile": "Открыть профиль",
+      "directReferrals": "Прямых рефералов",
+      "branchUsers": "В ветке",
+      "branchRevenue": "Доход ветки",
+      "personalRevenue": "Личный доход",
+      "referredBy": "Приглашён"
     },
     "promo": {
       "title": "Промокоды",
@@ -3746,22 +4065,6 @@
       "targetNoSub": "Без подписки",
       "targetExpired": "Истёкшие",
       "targetExpiring": "Истекающие"
-    },
-    "referrals": {
-      "title": "Реферальная сеть",
-      "subtitle": "Визуальная карта реферальных связей",
-      "totalUsers": "Пользователей",
-      "totalReferrers": "Рефереров",
-      "totalCampaigns": "Кампаний",
-      "totalEarnings": "Реф. доход",
-      "searchPlaceholder": "Поиск по имени...",
-      "noData": "Нет данных о рефералах",
-      "openProfile": "Открыть профиль",
-      "directReferrals": "Прямых рефералов",
-      "branchUsers": "В ветке",
-      "branchRevenue": "Доход ветки",
-      "personalRevenue": "Личный доход",
-      "referredBy": "Приглашён"
     }
   },
   "notFound": {

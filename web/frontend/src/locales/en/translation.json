@@ -33,7 +33,6 @@
     "loading": "Loading...",
     "error": "Error",
     "loadError": "Failed to load data. Please try again.",
-    "retry": "Retry",
     "total": "Total",
     "online": "Online",
     "offline": "Offline",
@@ -2061,7 +2060,32 @@
     "status": "Status",
     "logs": "Logs",
     "test": "Test",
-    "templates": "Templates",
+    "templates": {
+      "auto_block_sharing": {
+        "description": "Automatically block users with violation score > 80"
+      },
+      "node_monitoring": {
+        "description": "Telegram notification when a node is offline for > 5 minutes"
+      },
+      "cleanup_expired": {
+        "description": "Daily cleanup of users with subscriptions expired > 30 days"
+      },
+      "traffic_notification": {
+        "description": "Notify admin when user traffic exceeds 90%"
+      },
+      "auto_restart_node": {
+        "description": "Automatically restart a node offline for > 15 minutes"
+      },
+      "node_traffic_alert": {
+        "description": "Telegram notification when user uses > N GB on a node"
+      },
+      "daily_report": {
+        "description": "Daily Telegram summary at 23:00"
+      },
+      "auto_block_torrent": {
+        "description": "Automatically block users when torrent traffic is detected"
+      }
+    },
     "enabled": "enabled",
     "disabled": "disabled",
     "toggleError": "Toggle error",
@@ -2218,9 +2242,39 @@
       "min": "min",
       "via": "via"
     },
-    "dayNames": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-    "dayNamesShort": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-    "monthNames": ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+    "dayNames": [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday"
+    ],
+    "dayNamesShort": [
+      "Sun",
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+    ],
+    "monthNames": [
+      "",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ],
     "cronPresets": {
       "every_5min": "Every 5 minutes",
       "every_15min": "Every 15 minutes",
@@ -2296,13 +2350,34 @@
       "cronHelp": "= any, = every N, = range, = list",
       "dayOrdinal": "{{day}}",
       "daysOfWeek": {
-        "1": { "long": "Monday", "short": "Mon" },
-        "2": { "long": "Tuesday", "short": "Tue" },
-        "3": { "long": "Wednesday", "short": "Wed" },
-        "4": { "long": "Thursday", "short": "Thu" },
-        "5": { "long": "Friday", "short": "Fri" },
-        "6": { "long": "Saturday", "short": "Sat" },
-        "0": { "long": "Sunday", "short": "Sun" }
+        "1": {
+          "long": "Monday",
+          "short": "Mon"
+        },
+        "2": {
+          "long": "Tuesday",
+          "short": "Tue"
+        },
+        "3": {
+          "long": "Wednesday",
+          "short": "Wed"
+        },
+        "4": {
+          "long": "Thursday",
+          "short": "Thu"
+        },
+        "5": {
+          "long": "Friday",
+          "short": "Fri"
+        },
+        "6": {
+          "long": "Saturday",
+          "short": "Sat"
+        },
+        "0": {
+          "long": "Sunday",
+          "short": "Sun"
+        }
       }
     },
     "intervalPicker": {
@@ -2315,32 +2390,6 @@
       "every24Hours": "Every 24 hours (once a day)",
       "everyNHours": "Every {{n}} h.",
       "everyNHoursNMin": "Every {{h}} h. {{m}} min."
-    },
-    "templates": {
-      "auto_block_sharing": {
-        "description": "Automatically block users with violation score > 80"
-      },
-      "node_monitoring": {
-        "description": "Telegram notification when a node is offline for > 5 minutes"
-      },
-      "cleanup_expired": {
-        "description": "Daily cleanup of users with subscriptions expired > 30 days"
-      },
-      "traffic_notification": {
-        "description": "Notify admin when user traffic exceeds 90%"
-      },
-      "auto_restart_node": {
-        "description": "Automatically restart a node offline for > 15 minutes"
-      },
-      "node_traffic_alert": {
-        "description": "Telegram notification when user uses > N GB on a node"
-      },
-      "daily_report": {
-        "description": "Daily Telegram summary at 23:00"
-      },
-      "auto_block_torrent": {
-        "description": "Automatically block users when torrent traffic is detected"
-      }
     },
     "templatesGallery": {
       "noTemplates": "No available templates",
@@ -2356,8 +2405,18 @@
       "newTitle": "New automation rule",
       "editSubtitle": "Edit automation rule parameters",
       "newSubtitle": "Create a rule that will automatically perform actions when certain events occur",
-      "steps": { "trigger": "Trigger", "conditions": "Conditions", "action": "Action", "review": "Review" },
-      "stepDescs": { "trigger": "Choose what triggers the rule", "conditions": "Add filters (optional)", "action": "Configure the action on trigger", "review": "Review and save the rule" },
+      "steps": {
+        "trigger": "Trigger",
+        "conditions": "Conditions",
+        "action": "Action",
+        "review": "Review"
+      },
+      "stepDescs": {
+        "trigger": "Choose what triggers the rule",
+        "conditions": "Add filters (optional)",
+        "action": "Configure the action on trigger",
+        "review": "Review and save the rule"
+      },
       "triggerQuestion": "When should the rule run?",
       "triggerHint": "Define the trigger condition. The rule will fire automatically when the selected event occurs.",
       "eventHint": "Event trigger responds to specific real-time system actions. The rule fires immediately after the event occurs.",
@@ -2505,27 +2564,26 @@
       "sync": "🔄 Sync",
       "violations": "🛡️ Violation Detection",
       "reports": "📊 Reports",
-      "collector": "📡 Data Collector",
-      "limits": "📏 Limits",
-      "appearance": "🎨 Appearance",
       "mailserver": "📧 Mail Server",
       "security": "🔒 Security",
       "performance": "⚡ Performance"
     },
     "subcategories": {
       "topics": "💬 Notification topics",
-      "weights": "⚖️ Score component weights",
       "thresholds": "📐 Detection thresholds",
+      "patterns": "🔤 User-Agent patterns",
+      "torrent": "🧲 Torrent blocker",
+      "traffic_rate": "📈 Traffic rate",
       "hard_block": "🚫 Hard block",
       "trial": "🆓 Trial user detection",
-      "auth_methods": "🔑 Auth Methods",
-      "user_blacklist": "🚫 User Blacklist",
-      "brute_force": "🛡️ Brute-Force Protection",
+      "auth_methods": "🔑 Auth methods",
+      "user_blacklist": "🚫 User blacklist",
+      "brute_force": "🛡️ Brute-force protection",
       "database": "🗄️ Database",
       "intervals": "⏱️ Intervals",
-      "rate_limits": "🚦 Rate Limits",
+      "rate_limits": "🚦 Rate limits",
       "cache": "💾 Cache",
-      "violation_pipeline": "🔍 Violation Detection Pipeline"
+      "violation_pipeline": "🔍 Violation detection pipeline"
     },
     "faq": {
       "description": "Frequently asked questions and solutions to common problems",
@@ -2661,132 +2719,396 @@
     "reset": "Reset",
     "configItems": {
       "bot_language": {
-        "label": "Bot language",
+        "label": "🌐 Bot language",
         "description": "Bot interface language"
       },
       "log_level": {
-        "label": "Log level",
+        "label": "📝 Log level",
         "description": "Log detail level (requires restart)"
       },
       "notifications_chat_id": {
-        "label": "Notifications chat ID",
+        "label": "💬 Notifications chat ID",
         "description": "Telegram chat/group ID for notifications"
       },
       "notifications_topic_users": {
-        "label": "Topic: Users",
+        "label": "👤 Topic: Users",
         "description": "Topic ID for user notifications"
       },
       "notifications_topic_nodes": {
-        "label": "Topic: Nodes",
+        "label": "🖥️ Topic: Nodes",
         "description": "Topic ID for node notifications"
       },
       "notifications_topic_service": {
-        "label": "Topic: Service",
+        "label": "🔧 Topic: Service",
         "description": "Topic ID for service notifications"
       },
       "notifications_topic_hwid": {
-        "label": "Topic: HWID",
+        "label": "🔑 Topic: HWID",
         "description": "Topic ID for HWID notifications"
       },
       "notifications_topic_violations": {
-        "label": "Topic: Violations",
+        "label": "🛡️ Topic: Violations",
         "description": "Topic ID for violation notifications"
       },
       "notifications_topic_errors": {
-        "label": "Topic: Errors",
+        "label": "❗ Topic: Errors",
         "description": "Topic ID for error notifications"
       },
       "sync_interval_seconds": {
-        "label": "Sync interval",
+        "label": "🔄 Sync interval",
         "description": "Data sync interval with API (seconds, requires restart)"
       },
       "reports_enabled": {
-        "label": "Reports enabled",
+        "label": "📊 Reports enabled",
         "description": "Global toggle for automatic reports"
       },
       "reports_daily_enabled": {
-        "label": "Daily reports",
+        "label": "📅 Daily reports",
         "description": "Enable daily violation reports"
       },
       "reports_daily_time": {
-        "label": "Daily report time",
+        "label": "🕐 Daily report time",
         "description": "Daily report send time (HH:MM UTC)"
       },
       "reports_weekly_enabled": {
-        "label": "Weekly reports",
+        "label": "📆 Weekly reports",
         "description": "Enable weekly violation reports"
       },
       "reports_weekly_day": {
-        "label": "Weekly report day",
+        "label": "📅 Weekly report day",
         "description": "Day of week for weekly report (0=Mon, 6=Sun)"
       },
       "reports_weekly_time": {
-        "label": "Weekly report time",
+        "label": "🕐 Weekly report time",
         "description": "Weekly report send time (HH:MM UTC)"
       },
       "reports_monthly_enabled": {
-        "label": "Monthly reports",
+        "label": "🗓️ Monthly reports",
         "description": "Enable monthly violation reports"
       },
       "reports_monthly_day": {
-        "label": "Monthly report day",
+        "label": "📅 Monthly report day",
         "description": "Day of month for monthly report (1-28)"
       },
       "reports_monthly_time": {
-        "label": "Monthly report time",
+        "label": "🕐 Monthly report time",
         "description": "Monthly report send time (HH:MM UTC)"
       },
       "reports_min_score": {
-        "label": "Minimum score",
+        "label": "📐 Minimum score",
         "description": "Minimum violation score to include in report"
       },
       "reports_top_violators_count": {
-        "label": "Top violators",
+        "label": "🏆 Top violators",
         "description": "Number of users in top violators list"
       },
       "reports_send_empty": {
-        "label": "Send empty reports",
+        "label": "📭 Send empty reports",
         "description": "Send report when there are no violations for the period"
       },
       "reports_topic_id": {
-        "label": "Reports topic",
+        "label": "💬 Reports topic",
         "description": "Topic ID for sending reports (0 = main chat)"
       },
       "panel_name": {
-        "label": "Panel name",
+        "label": "🏷️ Panel name",
         "description": "Project name displayed in the sidebar (next to the logo)"
       },
       "auth_telegram_enabled": {
-        "label": "Telegram Authentication",
+        "label": "✈️ Telegram Authentication",
         "description": "Allow login via Telegram Login Widget"
       },
       "auth_password_enabled": {
-        "label": "Password Authentication",
+        "label": "🔒 Password Authentication",
         "description": "Allow login with username and password"
       },
       "auth_totp_required": {
-        "label": "Mandatory 2FA (TOTP)",
+        "label": "🔐 Mandatory 2FA (TOTP)",
         "description": "Require TOTP setup for all accounts"
       },
       "auth_max_attempts": {
-        "label": "Max attempts before lockout",
+        "label": "🚫 Max attempts before lockout",
         "description": "Number of failed login attempts before IP is blocked"
       },
       "auth_lockout_minutes": {
-        "label": "Lockout duration (min)",
+        "label": "⏳ Lockout duration (min)",
         "description": "How long an IP is blocked after exceeding the attempt limit"
       },
       "auth_fail2ban_logging": {
-        "label": "Fail2ban logging",
+        "label": "📋 Fail2ban logging",
         "description": "Log failed login attempts to auth_failures.log"
       },
       "auth_notify_on_block": {
-        "label": "Notify on IP block",
+        "label": "🔔 Notify on IP block",
         "description": "Send Telegram notification when an IP is blocked"
       },
       "auth_notify_on_failure": {
-        "label": "Notify on failed login",
+        "label": "⚠️ Notify on failed login",
         "description": "Send Telegram notification on every failed login attempt"
+      },
+      "log_max_size_mb": {
+        "label": "📦 Max log file size (MB)",
+        "description": "Maximum size of a single log file before rotation"
+      },
+      "log_backup_count": {
+        "label": "🗂️ Log backup count",
+        "description": "Number of compressed backup files kept after rotation"
+      },
+      "maxmind_source": {
+        "label": "🌍 MaxMind GeoIP source",
+        "description": "auto — GitHub (ltsdev/maxmind) then MaxMind; github — GitHub only (no key); maxmind — official only (key required)"
+      },
+      "notifications_topic_id": {
+        "label": "💬 Topic: Default (fallback)",
+        "description": "Default topic ID, used when a specific topic is not set"
+      },
+      "violations_enabled": {
+        "label": "🛡️ Violation detection",
+        "description": "Global on/off switch for the violation detector"
+      },
+      "violations_min_score": {
+        "label": "📐 Min notification score",
+        "description": "Minimum violation score to trigger a notification (default 50)"
+      },
+      "violations_analyzer_temporal": {
+        "label": "⏱️ Temporal analyzer",
+        "description": "Analyses simultaneous connections and rapid-switch patterns"
+      },
+      "violations_analyzer_geo": {
+        "label": "🌍 Geo analyzer",
+        "description": "Detects impossible travel and suspicious geolocation"
+      },
+      "violations_analyzer_asn": {
+        "label": "🏢 ASN analyzer",
+        "description": "Provider classification (VPN, datacenter, mobile carrier)"
+      },
+      "violations_analyzer_profile": {
+        "label": "👤 Profile analyzer",
+        "description": "Detects deviations from the user's usual behaviour"
+      },
+      "violations_analyzer_device": {
+        "label": "📱 Device analyzer",
+        "description": "Detects unique device fingerprints (OS, client)"
+      },
+      "violations_analyzer_hwid": {
+        "label": "🔑 HWID cross-account analyzer",
+        "description": "Detects the same HWID used across multiple accounts (trial abuse)"
+      },
+      "violations_analyzer_user_agent": {
+        "label": "🔤 User-Agent analyzer",
+        "description": "Detects double tunnels (vless:// in UA), bots (curl, Go-http-client), and unknown clients"
+      },
+      "violation_ua_max_age_days": {
+        "label": "📅 Max SRH record age (days)",
+        "description": "Ignore subscription requests older than N days. 0 = analyse all records"
+      },
+      "violation_ua_link_floor": {
+        "label": "🔗 Min score for link in UA",
+        "description": "Minimum violation score when a subscription link (vless://) is detected in User-Agent. 70 = warn, 80 = soft_block"
+      },
+      "violation_ua_bot_floor": {
+        "label": "🤖 Min score for bot UA",
+        "description": "Minimum violation score for curl/Go-http-client/python-requests User-Agents"
+      },
+      "violation_ua_whitelist_extra": {
+        "label": "✅ Extra whitelist UA (regex)",
+        "description": "JSON array of regex patterns for new VPN clients. Example: [\"^NewClash/\", \"^MyClient/\"]"
+      },
+      "violation_ua_blacklist_extra": {
+        "label": "🚫 Extra blacklist UA (regex)",
+        "description": "JSON array of regex patterns for suspicious UAs. Example: [\"^SuspiciousBot/\"]"
+      },
+      "srh_retention_days": {
+        "label": "🗑️ SRH retention (days)",
+        "description": "Delete synced Subscription Request History records older than N days. 0 = keep forever"
+      },
+      "violations_max_simultaneous_ips": {
+        "label": "🌐 Max simultaneous IPs",
+        "description": "Max simultaneous IPs above the device limit to trigger a violation (0 = auto from device count)"
+      },
+      "violations_geo_max_city_distance_km": {
+        "label": "📏 Max inter-city distance (km)",
+        "description": "Distance between cities below which movement is not considered suspicious"
+      },
+      "violations_hwid_max_accounts": {
+        "label": "👥 Max accounts per HWID",
+        "description": "Number of accounts sharing one HWID that triggers a violation (default 2)"
+      },
+      "violations_max_unique_ips_per_day": {
+        "label": "📊 Max unique IPs per day",
+        "description": "Exceeding this many unique IPs in a day raises a warning (0 = auto from profile)"
+      },
+      "violations_notification_cooldown_minutes": {
+        "label": "🔕 Notification cooldown (min)",
+        "description": "Minimum interval between notifications for the same user"
+      },
+      "violations_hard_block_ips": {
+        "label": "🚫 Hard block: max IPs",
+        "description": "Number of unique IPs to trigger an automatic hard block"
+      },
+      "violations_hard_block_simultaneous": {
+        "label": "🚫 Hard block: max simultaneous",
+        "description": "Number of simultaneous connections to trigger a hard block"
+      },
+      "violations_hard_block_devices": {
+        "label": "🚫 Hard block: max devices",
+        "description": "Number of unique device fingerprints to trigger a hard block"
+      },
+      "violations_hard_block_hwid_matches": {
+        "label": "🚫 Hard block: max HWID matches",
+        "description": "Number of matching HWIDs (same model) to trigger a hard block"
+      },
+      "violations_trial_tags": {
+        "label": "🏷️ Trial user tags",
+        "description": "Comma-separated tags that mark a user as trial (e.g. trial,test,free)"
+      },
+      "violations_trial_squad_uuids": {
+        "label": "👥 Trial internal squads",
+        "description": "Select internal squads whose users are considered trial"
+      },
+      "torrent_detection_enabled": {
+        "label": "🧲 Torrent detection",
+        "description": "Enable/disable torrent traffic detection via Xray routing"
+      },
+      "torrent_auto_action": {
+        "label": "⚡ Auto-action on torrent",
+        "description": "Action on torrent traffic: notify (alert only), block_user (block)"
+      },
+      "torrent_notification_cooldown_minutes": {
+        "label": "🔕 Torrent notification cooldown (min)",
+        "description": "Minimum interval between torrent notifications for the same user"
+      },
+      "traffic_rate_enabled": {
+        "label": "📈 Traffic rate monitor",
+        "description": "Tracks abnormally high traffic consumption over a period"
+      },
+      "traffic_rate_threshold_gb": {
+        "label": "📊 Threshold (GB per window)",
+        "description": "Notify when a user consumes more than this amount in the window"
+      },
+      "traffic_rate_window_minutes": {
+        "label": "⏱️ Check window (min)",
+        "description": "Time window for traffic accounting (default 60 = 1 hour)"
+      },
+      "traffic_rate_check_interval_minutes": {
+        "label": "🔁 Check interval (min)",
+        "description": "How often to check traffic consumption"
+      },
+      "traffic_rate_cooldown_minutes": {
+        "label": "🔕 Notification cooldown (min)",
+        "description": "Minimum interval between repeated notifications for the same user"
+      },
+      "traffic_rate_auto_action": {
+        "label": "⚡ Auto-action on breach",
+        "description": "Action on excessive traffic: notify only or auto-block"
+      },
+      "traffic_rate_auto_block_gb": {
+        "label": "🚫 Auto-block threshold (GB)",
+        "description": "Auto-block when traffic in the window exceeds this value. Only takes effect when auto-action = block_user"
+      },
+      "mailserver_enabled": {
+        "label": "📧 Mail server enabled",
+        "description": "Enable the built-in mail server (inbound/outbound)"
+      },
+      "mailserver_hostname": {
+        "label": "🖥️ SMTP hostname",
+        "description": "IP address for the inbound SMTP server (0.0.0.0 = all interfaces)"
+      },
+      "mailserver_inbound_port": {
+        "label": "📥 Inbound SMTP port",
+        "description": "Port for inbound mail (default 2525, 25 in production)"
+      },
+      "mailserver_max_send_per_hour": {
+        "label": "🚦 Send limit per hour",
+        "description": "Max messages sent per domain per hour"
+      },
+      "mailserver_queue_poll_interval": {
+        "label": "⏱️ Queue poll interval",
+        "description": "How often to poll the outbound queue (seconds)"
+      },
+      "mailserver_max_retries": {
+        "label": "🔁 Max delivery retries",
+        "description": "Maximum number of delivery attempts per message"
+      },
+      "mailserver_submission_enabled": {
+        "label": "📤 SMTP Submission enabled",
+        "description": "Enable SMTP Submission (port 587) for sending mail via login/password"
+      },
+      "mailserver_submission_port": {
+        "label": "🔌 SMTP Submission port",
+        "description": "Port for the SMTP Submission server (standard — 587)"
+      },
+      "db_pool_min_size": {
+        "label": "🗄️ DB Pool: min connections",
+        "description": "Minimum number of connections in the PostgreSQL pool. Requires restart."
+      },
+      "db_pool_max_size": {
+        "label": "🗄️ DB Pool: max connections",
+        "description": "Maximum number of connections in the PostgreSQL pool. Increase under heavy load. Requires restart."
+      },
+      "db_statement_timeout": {
+        "label": "⏱️ DB: statement timeout (sec)",
+        "description": "Maximum SQL statement execution time in seconds. 0 = unlimited. Requires restart."
+      },
+      "db_idle_connection_lifetime": {
+        "label": "💤 DB: idle connection lifetime (sec)",
+        "description": "How long idle connections stay in the pool before being closed. Requires restart."
+      },
+      "alert_check_interval": {
+        "label": "🔔 Alert check interval (sec)",
+        "description": "How often to evaluate alert rules. Lower = faster reaction, higher DB load."
+      },
+      "config_auto_reload_interval": {
+        "label": "🔄 Config auto-reload (sec)",
+        "description": "How often to reload configuration from the DB. Affects how quickly setting changes take effect."
+      },
+      "api_rate_limit_per_minute": {
+        "label": "🚦 API: requests/min (global)",
+        "description": "Maximum API requests per minute per IP. 0 = unlimited."
+      },
+      "collector_rate_limit": {
+        "label": "📡 Collector: rate limit",
+        "description": "Rate limit for the node-agent metrics endpoint (format: '1/second')."
+      },
+      "cache_max_entries": {
+        "label": "💾 Cache: max entries",
+        "description": "Maximum entries in the in-memory cache. LRU eviction kicks in when exceeded."
+      },
+      "cache_default_ttl": {
+        "label": "⏱️ Cache: default TTL (sec)",
+        "description": "Default entry TTL. Lower = fresher data, more DB queries."
+      },
+      "violation_drain_interval": {
+        "label": "⏱️ Violation queue: drain interval (sec)",
+        "description": "How often the worker pulls a chunk of users from the queue. Lower = faster reaction, higher load."
+      },
+      "violation_chunk_size": {
+        "label": "📦 Violation queue: chunk size",
+        "description": "Users processed per cycle. Higher = queue drains faster, but peak load rises."
+      },
+      "violation_max_background_tasks": {
+        "label": "🔀 Max background tasks",
+        "description": "Maximum concurrent background tasks (torrents, etc.). New tasks are dropped when exceeded."
+      },
+      "violation_notification_cooldown_minutes": {
+        "label": "🔕 Notification cooldown (min)",
+        "description": "Minimum interval between repeated notifications for the same user. Spam protection."
+      },
+      "user_blacklist_enabled": {
+        "label": "🚫 User blacklist",
+        "description": "Enable Telegram ID blacklist lookup. Matching users are auto-blocked."
+      },
+      "user_blacklist_urls": {
+        "label": "🔗 Blacklist URLs (one per line)",
+        "description": "External blacklist file URLs. Format: Telegram ID at the start of each line."
+      },
+      "user_blacklist_sync_hours": {
+        "label": "🔄 Sync interval (hours)",
+        "description": "How often to refresh blacklists from external URLs."
+      },
+      "user_blacklist_auto_block": {
+        "label": "⚡ Auto-block",
+        "description": "Automatically block blacklisted users via Panel API. When disabled — notification only."
       }
     },
     "inDb": "In DB",
@@ -3276,7 +3598,6 @@
       "showingOf": "Showing {{shown}} of {{total}} records"
     }
   },
-
   "errors": {
     "INVALID_AUTH_HEADER": "Invalid authorization header",
     "TOKEN_REQUIRED": "Authentication token required",
@@ -3292,13 +3613,11 @@
     "FORBIDDEN": "Access denied",
     "EMAIL_NOT_CONFIGURED": "Email sending is not configured",
     "RESET_TOKEN_INVALID": "Invalid or expired password reset link",
-
     "USERNAME_EXISTS": "Username already exists",
     "CANNOT_MODIFY_SELF": "Cannot modify your own account",
     "ADMIN_CREATE_FAILED": "Failed to create administrator",
     "ADMIN_UPDATE_FAILED": "Failed to update administrator",
     "ADMIN_DELETE_FAILED": "Failed to delete administrator",
-
     "ROLE_NOT_FOUND": "Role not found",
     "ROLE_NAME_EXISTS": "Role name already exists",
     "ROLE_CREATE_FAILED": "Failed to create role",
@@ -3307,26 +3626,21 @@
     "SYSTEM_ROLE_PROTECTED": "System role cannot be modified",
     "UNKNOWN_RESOURCE": "Unknown resource type",
     "INVALID_ACTION": "Invalid action",
-
     "USER_NOT_FOUND": "User not found",
     "SYNC_FAILED": "Synchronization failed",
-
     "NODE_NOT_FOUND": "Node not found",
     "TOKEN_GENERATE_FAILED": "Failed to generate token",
     "TOKEN_REVOKE_FAILED": "Failed to revoke token",
-
     "HOST_NOT_FOUND": "Host not found",
     "HOST_CREATE_FAILED": "Failed to create host",
     "HOST_UPDATE_FAILED": "Failed to update host",
     "HOST_DELETE_FAILED": "Failed to delete host",
     "HOST_ENABLE_FAILED": "Failed to enable host",
     "HOST_DISABLE_FAILED": "Failed to disable host",
-
     "VIOLATION_NOT_FOUND": "Violation not found",
     "VIOLATION_UPDATE_FAILED": "Failed to update violation",
     "WHITELIST_ADD_FAILED": "Failed to add to whitelist",
     "WHITELIST_USER_NOT_FOUND": "Whitelisted user not found",
-
     "AUTOMATION_NOT_FOUND": "Automation rule not found",
     "AUTOMATION_CREATE_FAILED": "Failed to create automation rule",
     "AUTOMATION_UPDATE_FAILED": "Failed to update automation rule",
@@ -3334,10 +3648,8 @@
     "AUTOMATION_DELETE_FAILED": "Failed to delete automation rule",
     "AUTOMATION_ACTIVATE_FAILED": "Failed to activate automation rule",
     "TEMPLATE_NOT_FOUND": "Automation template not found",
-
     "SETTING_NOT_FOUND": "Setting not found",
     "SETTING_READONLY": "This setting is read-only",
-
     "SCRIPT_NOT_FOUND": "Script not found",
     "BUILTIN_SCRIPT_PROTECTED": "Built-in script cannot be modified",
     "AGENT_NOT_CONNECTED": "Node agent is not connected",
@@ -3347,29 +3659,24 @@
     "INVALID_GITHUB_URL": "Invalid GitHub URL",
     "CONTENT_TOO_LARGE": "Content is too large",
     "REPO_NOT_FOUND": "Repository not found",
-
     "NOTIFICATION_NOT_FOUND": "Notification not found",
     "CHANNEL_NOT_FOUND": "Notification channel not found",
     "ALERT_RULE_NOT_FOUND": "Alert rule not found",
     "SMTP_NOT_CONFIGURED": "SMTP is not configured",
     "SMTP_UPDATE_FAILED": "Failed to update SMTP configuration",
     "SMTP_CREDENTIAL_NOT_FOUND": "SMTP credential not found",
-
     "DOMAIN_NOT_FOUND": "Mail domain not found",
     "NO_OUTBOUND_DOMAIN": "No outbound mail domain configured",
     "QUEUE_ITEM_NOT_FOUND": "Mail queue item not found",
     "MESSAGE_NOT_FOUND": "Mail message not found",
-
     "REPORT_NOT_FOUND": "Report not found",
     "ASN_NOT_FOUND": "ASN record not found",
-
     "BACKUP_NOT_FOUND": "Backup file not found",
     "BACKUP_CREATE_FAILED": "Failed to create backup",
     "BACKUP_RESTORE_FAILED": "Failed to restore backup",
     "BACKUP_DELETE_FAILED": "Failed to delete backup",
     "IMPORT_FAILED": "Import failed",
     "INVALID_FILENAME": "Invalid filename",
-
     "NO_FIELDS_TO_UPDATE": "No fields to update",
     "API_SERVICE_UNAVAILABLE": "API service is unavailable",
     "DB_UNAVAILABLE": "Database is unavailable",
@@ -3632,8 +3939,20 @@
     "trial": "Trial",
     "conversions": "Conversions",
     "referrals": {
+      "title": "Referral Network",
+      "subtitle": "Visual map of referral connections",
+      "totalUsers": "Users",
       "totalReferrers": "Referrers",
-      "top": "Top referrers"
+      "totalCampaigns": "Campaigns",
+      "totalEarnings": "Ref. earnings",
+      "searchPlaceholder": "Search by name...",
+      "noData": "No referral data",
+      "openProfile": "Open profile",
+      "directReferrals": "Direct referrals",
+      "branchUsers": "In branch",
+      "branchRevenue": "Branch revenue",
+      "personalRevenue": "Personal revenue",
+      "referredBy": "Referred by"
     },
     "promo": {
       "title": "Promo Codes",
@@ -3746,22 +4065,6 @@
       "targetNoSub": "No subscription",
       "targetExpired": "Expired",
       "targetExpiring": "Expiring"
-    },
-    "referrals": {
-      "title": "Referral Network",
-      "subtitle": "Visual map of referral connections",
-      "totalUsers": "Users",
-      "totalReferrers": "Referrers",
-      "totalCampaigns": "Campaigns",
-      "totalEarnings": "Ref. earnings",
-      "searchPlaceholder": "Search by name...",
-      "noData": "No referral data",
-      "openProfile": "Open profile",
-      "directReferrals": "Direct referrals",
-      "branchUsers": "In branch",
-      "branchRevenue": "Branch revenue",
-      "personalRevenue": "Personal revenue",
-      "referredBy": "Referred by"
     }
   },
   "notFound": {
