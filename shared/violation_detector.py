@@ -1787,8 +1787,9 @@ class UserAgentAnalyzer:
         r"^Hiddify/", r"^HiddifyNext/",
         # Clash/Mihomo family (cross-platform)
         r"^FlClash(?:\s?X)?/", r"^ClashX(?:\s?Pro)?/",
-        r"^Clash(?:\s?Verge)?(?:\s?Rev)?/", r"^ClashMeta/",
+        r"^Clash[-\s]?(?:Verge)?(?:[-\s]?Rev)?/", r"^ClashMeta(?:ForAndroid)?/",
         r"^Mihomo(?:\s?Party)?/", r"^koala[-\s]?clash/", r"^Throne/",
+        r"^prizrak[-\s]?box/",
         # v2ray core-based
         r"^v2rayN/", r"^Nekoray(?:NG)?/",
         # Core engines

@@ -39,6 +39,22 @@ class TestClassifyWhitelist:
     def test_clash_verge(self, analyzer):
         assert analyzer.classify("Clash Verge/1.5.0") == UserAgentClassification.VALID
 
+    def test_clash_verge_lowercase_hyphen(self, analyzer):
+        assert analyzer.classify("clash-verge/2.0.0") == UserAgentClassification.VALID
+
+    def test_clash_verge_rev(self, analyzer):
+        assert analyzer.classify("Clash Verge Rev/1.0.0") == UserAgentClassification.VALID
+
+    def test_clash_meta_for_android(self, analyzer):
+        assert analyzer.classify("ClashMetaForAndroid/2.11.14") == UserAgentClassification.VALID
+
+    def test_clash_meta_bare(self, analyzer):
+        assert analyzer.classify("ClashMeta/1.0") == UserAgentClassification.VALID
+
+    def test_prizrak_box(self, analyzer):
+        assert analyzer.classify("prizrak-box/0.5.0") == UserAgentClassification.VALID
+        assert analyzer.classify("Prizrak Box/1.0") == UserAgentClassification.VALID
+
     def test_singbox(self, analyzer):
         assert analyzer.classify("sing-box/1.8.0") == UserAgentClassification.VALID
         assert analyzer.classify("singbox/1.8.0") == UserAgentClassification.VALID
