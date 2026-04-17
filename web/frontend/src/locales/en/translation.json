@@ -159,7 +159,9 @@
     "telegramChat": "Telegram Chat",
     "support": "Support the author",
     "administrator": "Administrator",
-    "logout": "Logout"
+    "logout": "Logout",
+    "logoutConfirmTitle": "Log out of the panel?",
+    "logoutConfirmDescription": "You'll need to sign in again. Any unsaved changes will be lost."
   },
   "commandPalette": {
     "placeholder": "Search pages, users, actions...",

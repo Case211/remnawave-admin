@@ -159,7 +159,9 @@
     "telegramChat": "Чат в Telegram",
     "support": "Поддержать автора",
     "administrator": "Администратор",
-    "logout": "Выход"
+    "logout": "Выход",
+    "logoutConfirmTitle": "Выйти из панели?",
+    "logoutConfirmDescription": "Потребуется повторная авторизация. Все несохранённые изменения будут потеряны."
   },
   "commandPalette": {
     "placeholder": "Поиск страниц, пользователей, действий...",

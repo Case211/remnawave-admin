@@ -409,14 +409,20 @@
   }
 
   .login-bg {
-    background: linear-gradient(135deg, #0a0e14 0%, #0d1117 25%, #111820 50%, #0d1117 75%, #0a0e14 100%);
+    background-color: #0a0e14;
+    background-image: linear-gradient(135deg, #0a0e14 0%, #0d1117 25%, #111820 50%, #0d1117 75%, #0a0e14 100%);
     background-size: 200% 200%;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     animation: login-gradient 15s ease infinite;
   }
 
   [data-mode="light"] .login-bg {
-    background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%, #f0f4f8 100%);
+    background-color: #f0f4f8;
+    background-image: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%, #f0f4f8 100%);
     background-size: 200% 200%;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     animation: login-gradient 15s ease infinite;
   }
 

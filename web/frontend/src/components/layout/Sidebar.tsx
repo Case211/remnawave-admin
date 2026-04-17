@@ -48,38 +48,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-
-function RemnawaveLogo({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="logoBg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#0a1628" />
-          <stop offset="100%" stopColor="#0d1f3c" />
-        </linearGradient>
-        <linearGradient id="logoRing" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{ stopColor: 'var(--accent-to-light)' }} />
-          <stop offset="100%" style={{ stopColor: 'var(--accent-to)' }} />
-        </linearGradient>
-        <linearGradient id="logoWave" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" style={{ stopColor: 'var(--accent-to-light)' }} />
-          <stop offset="50%" style={{ stopColor: 'var(--accent-from-light)' }} />
-          <stop offset="100%" style={{ stopColor: 'var(--accent-from)' }} />
-        </linearGradient>
-      </defs>
-      <circle cx="32" cy="32" r="31" fill="url(#logoBg)" />
-      <circle cx="32" cy="32" r="26" fill="none" stroke="url(#logoRing)" strokeWidth="1.5" opacity="0.8" />
-      <path
-        d="M12,32 L19,32 L23,22 L28,44 L32,16 L36,46 L40,22 L44,32 L52,32"
-        fill="none"
-        stroke="url(#logoWave)"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
+import { BrandLogo } from '@/components/brand/BrandLogo'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 interface NavItem {
   type?: 'item'
@@ -175,6 +145,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const collapsed = useAppearanceStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useAppearanceStore((s) => s.toggleSidebar)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
 
   const { data: panelNameData } = useQuery({
     queryKey: ['panel-name'],
@@ -240,7 +211,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           "flex items-center gap-2.5 hover:opacity-90 transition-opacity duration-200",
           collapsed && "gap-0"
         )}>
-          <RemnawaveLogo className="w-8 h-8 flex-shrink-0" />
+          <BrandLogo className="w-8 h-8 flex-shrink-0" />
           {!collapsed && panelName && (
             <span className="text-sm font-semibold text-white truncate max-w-[140px]">
               {panelName}
@@ -574,7 +545,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={logout}
+                    onClick={() => setLogoutConfirmOpen(true)}
                     className="h-9 w-9 text-dark-200 hover:text-red-400"
                   >
                     <LogOut className="w-5 h-5" />
@@ -590,7 +561,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={logout}
+                  onClick={() => setLogoutConfirmOpen(true)}
                   className="h-8 w-8 text-dark-200 hover:text-red-400 mt-2"
                 >
                   <LogOut className="w-4 h-4" />
@@ -628,6 +599,19 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       >
         {sidebarContent}
       </div>
+
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        onOpenChange={setLogoutConfirmOpen}
+        title={t('sidebar.logoutConfirmTitle')}
+        description={t('sidebar.logoutConfirmDescription')}
+        confirmLabel={t('sidebar.logout')}
+        variant="destructive"
+        onConfirm={() => {
+          setLogoutConfirmOpen(false)
+          logout()
+        }}
+      />
     </>
   )
 }
