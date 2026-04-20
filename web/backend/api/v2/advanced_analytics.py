@@ -475,14 +475,22 @@ async def _compute_trends(metric: str = "users", period: str = "30d", date_from:
                 growth = sum(s["value"] for s in series)
 
             elif metric == "traffic":
-                # Approximate: sum of used_traffic_bytes from users created in each day
+                # Daily network traffic from node_traffic_snapshots.
+                # Snapshots are cumulative per-day totals per node (sync writes
+                # them every 5 min) — MAX per (node, day) gives that day's
+                # traffic for the node; sum across nodes is the daily total.
                 rows = await conn.fetch(
                     """
-                    SELECT DATE(created_at) as day,
-                           SUM(used_traffic_bytes) as total_bytes
-                    FROM users
-                    WHERE created_at >= $1
-                    GROUP BY DATE(created_at)
+                    SELECT day, SUM(per_node) AS total_bytes
+                    FROM (
+                        SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
+                               node_uuid,
+                               MAX(traffic_bytes) AS per_node
+                        FROM node_traffic_snapshots
+                        WHERE created_at >= $1
+                        GROUP BY DATE(created_at AT TIME ZONE 'UTC'), node_uuid
+                    ) t
+                    GROUP BY day
                     ORDER BY day
                     """,
                     since,
