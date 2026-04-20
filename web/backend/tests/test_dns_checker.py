@@ -42,24 +42,32 @@ class TestResolve:
     def test_returns_string_list(self):
         rdata1 = MagicMock(__str__=lambda self: "10 mail.example.com.")
         rdata2 = MagicMock(__str__=lambda self: "20 backup.example.com.")
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = [rdata1, rdata2]
-        mock_dns = MagicMock()
-        mock_dns.resolver = mock_resolver
+        fake_resolver = MagicMock()
+        fake_resolver.resolve.return_value = [rdata1, rdata2]
 
-        with patch.dict("sys.modules", {"dns": mock_dns, "dns.resolver": mock_resolver}):
+        with patch(f"{MODULE}._get_resolver", return_value=fake_resolver):
             result = _resolve("example.com", "MX")
         assert result == ["10 mail.example.com.", "20 backup.example.com."]
 
     def test_returns_empty_on_error(self):
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.side_effect = Exception("NXDOMAIN")
-        mock_dns = MagicMock()
-        mock_dns.resolver = mock_resolver
+        fake_resolver = MagicMock()
+        fake_resolver.resolve.side_effect = Exception("NXDOMAIN")
 
-        with patch.dict("sys.modules", {"dns": mock_dns, "dns.resolver": mock_resolver}):
+        with patch(f"{MODULE}._get_resolver", return_value=fake_resolver):
             result = _resolve("nonexistent.example.com", "TXT")
         assert result == []
+
+    def test_uses_public_nameservers(self):
+        from web.backend.core.mail.dns_checker import _get_resolver, PUBLIC_NAMESERVERS
+        fake_resolver_cls = MagicMock()
+        fake_resolver_instance = MagicMock()
+        fake_resolver_cls.return_value = fake_resolver_instance
+        mock_dns_resolver = MagicMock(Resolver=fake_resolver_cls)
+        mock_dns = MagicMock(resolver=mock_dns_resolver)
+        with patch.dict("sys.modules", {"dns": mock_dns, "dns.resolver": mock_dns_resolver}):
+            _get_resolver()
+        fake_resolver_cls.assert_called_once_with(configure=False)
+        assert fake_resolver_instance.nameservers == PUBLIC_NAMESERVERS
 
 
 # ── check_mx_records ─────────────────────────────────────────
@@ -161,52 +169,34 @@ class TestCheckDmarcRecord:
 
 
 class TestCheckPtrRecord:
-    def test_ptr_matches_domain(self):
-        rdata = MagicMock(__str__=lambda self: "example.com.")
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = [rdata]
+    def _setup(self, ptr_value: str):
+        rdata = MagicMock(__str__=lambda self: ptr_value)
+        fake_resolver = MagicMock()
+        fake_resolver.resolve.return_value = [rdata]
         mock_reversename = MagicMock()
         mock_reversename.from_address.return_value = "4.3.2.1.in-addr.arpa."
-        mock_dns = MagicMock()
-        mock_dns.resolver = mock_resolver
-        mock_dns.reversename = mock_reversename
+        mock_dns = MagicMock(reversename=mock_reversename)
+        return fake_resolver, mock_dns, mock_reversename
 
-        with patch.dict("sys.modules", {
-            "dns": mock_dns, "dns.resolver": mock_resolver, "dns.reversename": mock_reversename,
-        }):
+    def test_ptr_matches_domain(self):
+        fake_resolver, mock_dns, mock_reversename = self._setup("example.com.")
+        with patch(f"{MODULE}._get_resolver", return_value=fake_resolver), \
+             patch.dict("sys.modules", {"dns": mock_dns, "dns.reversename": mock_reversename}):
             ok, val = check_ptr_record("1.2.3.4", "example.com")
         assert ok is True
         assert val == "example.com"
 
     def test_ptr_matches_subdomain(self):
-        rdata = MagicMock(__str__=lambda self: "mail.example.com.")
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = [rdata]
-        mock_reversename = MagicMock()
-        mock_reversename.from_address.return_value = "4.3.2.1.in-addr.arpa."
-        mock_dns = MagicMock()
-        mock_dns.resolver = mock_resolver
-        mock_dns.reversename = mock_reversename
-
-        with patch.dict("sys.modules", {
-            "dns": mock_dns, "dns.resolver": mock_resolver, "dns.reversename": mock_reversename,
-        }):
+        fake_resolver, mock_dns, mock_reversename = self._setup("mail.example.com.")
+        with patch(f"{MODULE}._get_resolver", return_value=fake_resolver), \
+             patch.dict("sys.modules", {"dns": mock_dns, "dns.reversename": mock_reversename}):
             ok, val = check_ptr_record("1.2.3.4", "example.com")
         assert ok is True
 
     def test_ptr_no_match(self):
-        rdata = MagicMock(__str__=lambda self: "other.domain.com.")
-        mock_resolver = MagicMock()
-        mock_resolver.resolve.return_value = [rdata]
-        mock_reversename = MagicMock()
-        mock_reversename.from_address.return_value = "4.3.2.1.in-addr.arpa."
-        mock_dns = MagicMock()
-        mock_dns.resolver = mock_resolver
-        mock_dns.reversename = mock_reversename
-
-        with patch.dict("sys.modules", {
-            "dns": mock_dns, "dns.resolver": mock_resolver, "dns.reversename": mock_reversename,
-        }):
+        fake_resolver, mock_dns, mock_reversename = self._setup("other.domain.com.")
+        with patch(f"{MODULE}._get_resolver", return_value=fake_resolver), \
+             patch.dict("sys.modules", {"dns": mock_dns, "dns.reversename": mock_reversename}):
             ok, val = check_ptr_record("1.2.3.4", "example.com")
         assert ok is False
 

@@ -6,6 +6,31 @@ from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Public recursive resolvers — bypass local DNS cache so admin panel always sees
+# authoritative current records instead of stale values cached for hours/days.
+PUBLIC_NAMESERVERS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
+
+
+def _get_resolver():
+    """Return a dnspython Resolver configured to query public nameservers directly."""
+    import dns.resolver
+    r = dns.resolver.Resolver(configure=False)
+    r.nameservers = PUBLIC_NAMESERVERS
+    r.timeout = 3.0
+    r.lifetime = 5.0
+    r.cache = None
+    return r
+
+
+def _resolve(qname: str, rdtype: str) -> List[str]:
+    """Resolve DNS records via public recursive resolvers (no local cache)."""
+    try:
+        resolver = _get_resolver()
+        answers = resolver.resolve(qname, rdtype)
+        return [str(rdata) for rdata in answers]
+    except Exception:
+        return []
+
 
 @dataclass
 class DnsRecord:
@@ -15,16 +40,6 @@ class DnsRecord:
     purpose: str  # MX, SPF, DKIM, DMARC
     is_configured: bool = False
     current_value: Optional[str] = None
-
-
-def _resolve(qname: str, rdtype: str) -> List[str]:
-    """Resolve DNS records using dnspython."""
-    try:
-        import dns.resolver
-        answers = dns.resolver.resolve(qname, rdtype)
-        return [str(rdata) for rdata in answers]
-    except Exception:
-        return []
 
 
 def check_mx_records(domain: str) -> Tuple[bool, List[str]]:
@@ -69,10 +84,10 @@ def check_dmarc_record(domain: str) -> Tuple[bool, Optional[str]]:
 def check_ptr_record(server_ip: str, expected_domain: str) -> Tuple[bool, Optional[str]]:
     """Check if the server IP has a PTR record pointing to the expected domain."""
     try:
-        import dns.resolver
         import dns.reversename
         rev_name = dns.reversename.from_address(server_ip)
-        answers = dns.resolver.resolve(rev_name, "PTR")
+        resolver = _get_resolver()
+        answers = resolver.resolve(rev_name, "PTR")
         ptr_values = [str(rdata).rstrip(".") for rdata in answers]
         # Check if any PTR record matches or is a subdomain of the expected domain
         for ptr in ptr_values:
