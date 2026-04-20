@@ -881,10 +881,19 @@ async def get_scope(
             _scope_cache.setdefault(cache_key, {})[(resource_type, action)] = set()
             return set()
 
-        # Collect UUIDs from rules that cover the requested action
+        # Collect UUIDs from rules that cover the requested action.
+        # edit/delete imply view — if the admin can edit a node, they can
+        # obviously see it in the list too. Otherwise granting "edit only"
+        # would hide the resource entirely and make editing impossible.
+        def _rule_covers(rule_actions: List[str]) -> bool:
+            if action == "view":
+                # any action implies view
+                return bool(rule_actions)
+            return action in rule_actions
+
         allowed: Set[str] = set()
         for r in relevant:
-            if action not in (r.get("actions") or []):
+            if not _rule_covers(r.get("actions") or []):
                 continue
             scope_type = r.get("scope_type")
             scope_value = r.get("scope_value", "")
