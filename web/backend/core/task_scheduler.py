@@ -45,10 +45,15 @@ async def task_scheduler_loop():
                         task_id, script_name, node_uuid,
                     )
 
-                    # Execute script via agent WebSocket
+                    status = "failed"
                     try:
                         from web.backend.core.agent_manager import agent_manager
                         from web.backend.core.agent_hmac import sign_command_with_ts
+
+                        if not agent_manager.is_connected(node_uuid):
+                            logger.warning("Agent %s not connected, task %d skipped", node_uuid, task_id)
+                            await _update_task_status(db_service, task_id, "failed")
+                            continue
 
                         agent_token = None
                         async with db_service.acquire() as conn:
@@ -67,27 +72,59 @@ async def task_scheduler_loop():
                         if isinstance(env_vars, str):
                             env_vars = json.loads(env_vars)
 
+                        # Prepend env vars as export statements (same as exec-script endpoint)
+                        script_content = task["script_content"]
+                        if env_vars:
+                            import shlex
+                            exports = "\n".join(
+                                f"export {k}={shlex.quote(str(v))}"
+                                for k, v in env_vars.items()
+                                if k.isidentifier()
+                            )
+                            if exports:
+                                if script_content.startswith("#!"):
+                                    first_nl = script_content.index("\n")
+                                    script_content = (
+                                        script_content[:first_nl + 1]
+                                        + exports + "\n"
+                                        + script_content[first_nl + 1:]
+                                    )
+                                else:
+                                    script_content = exports + "\n" + script_content
+
+                        # Log command for result tracking (agent sends command_result by command_id)
+                        async with db_service.acquire() as conn:
+                            cmd_row = await conn.fetchrow(
+                                """
+                                INSERT INTO node_command_log
+                                    (node_uuid, admin_id, admin_username, command_type,
+                                     command_data, status)
+                                VALUES ($1, NULL, 'scheduler', 'exec_script', $2, 'running')
+                                RETURNING id
+                                """,
+                                node_uuid,
+                                f"script={script_name} task_id={task_id}" + (
+                                    f" env={list(env_vars.keys())}" if env_vars else ""
+                                ),
+                            )
+                            exec_id = cmd_row["id"]
+
                         cmd_payload = {
                             "type": "exec_script",
-                            "script": task["script_content"],
+                            "command_id": exec_id,
+                            "script_content": script_content,
                             "timeout": task["timeout_seconds"] or 300,
-                            "as_root": task["requires_root"] or False,
-                            "env": env_vars or {},
                         }
-
                         payload_with_ts, sig = sign_command_with_ts(cmd_payload, agent_token)
-                        sent = await agent_manager.send_to_node(node_uuid, {
-                            "type": "command",
-                            "payload": payload_with_ts,
-                            "signature": sig,
-                        })
+                        payload_with_ts["_sig"] = sig
 
+                        sent = await agent_manager.send_command(node_uuid, payload_with_ts)
                         status = "success" if sent else "failed"
                         if not sent:
-                            logger.warning("Agent not connected for node %s, task %d", node_uuid, task_id)
+                            logger.warning("Failed to send to agent %s, task %d", node_uuid, task_id)
 
                     except Exception as e:
-                        logger.error("Failed to execute scheduled task %d: %s", task_id, e)
+                        logger.error("Failed to execute scheduled task %d: %s", task_id, e, exc_info=True)
                         status = "failed"
 
                     await _update_task_status(db_service, task_id, status)
