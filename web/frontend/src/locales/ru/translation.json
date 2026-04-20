@@ -2122,7 +2122,7 @@
         "description": "Telegram-уведомление когда пользователь использует > N ГБ на ноде"
       },
       "daily_report": {
-        "description": "Ежедневная Telegram-сводка в 23:00"
+        "description": "Ежедневная Telegram-сводка в 00:00 UTC за прошедшие сутки"
       },
       "auto_block_torrent": {
         "description": "Автоматическая блокировка при обнаружении торрент-трафика"

@@ -2122,7 +2122,7 @@
         "description": "Telegram notification when user uses > N GB on a node"
       },
       "daily_report": {
-        "description": "Daily Telegram summary at 23:00"
+        "description": "Daily Telegram summary at 00:00 UTC for the previous day"
       },
       "auto_block_torrent": {
         "description": "Automatically block users when torrent traffic is detected"
