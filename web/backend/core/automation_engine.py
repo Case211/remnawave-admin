@@ -266,10 +266,14 @@ class AutomationEngine:
                     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
                 }
                 if rule["action_type"] == "notify":
+                    from shared.database import db_service
+                    now = datetime.now(timezone.utc)
+                    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    yesterday_start = today_start - timedelta(days=1)
+
                     try:
                         from web.backend.core.api_helper import (
                             fetch_users_from_api, fetch_nodes_from_api,
-                            enrich_nodes_traffic_today,
                         )
                         users = await fetch_users_from_api()
                         nodes = await fetch_nodes_from_api()
@@ -277,23 +281,67 @@ class AutomationEngine:
                         context["users_online"] = sum(1 for u in users if u.get("online_at"))
                         context["nodes_total"] = len(nodes)
                         context["nodes_online"] = sum(1 for n in nodes if n.get("is_connected"))
-                        await enrich_nodes_traffic_today(nodes)
-                        total_traffic = sum(n.get("traffic_today_bytes", 0) for n in nodes)
-                        context["traffic_today"] = f"{total_traffic / (1024 ** 3):.2f} GB"
                     except Exception:
                         pass
-                    # Violations count for today
+
+                    # Traffic today (snapshots, since 00:00 UTC) — reliable source
                     try:
-                        from shared.database import db_service
                         if db_service.is_connected:
-                            now = datetime.now(timezone.utc)
-                            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                            today_count = await db_service.count_violations_for_period(
+                            today_map = await db_service.get_nodes_traffic_for_period(
+                                today_start, now,
+                            )
+                            total_today = sum(today_map.values())
+                            context["traffic_today"] = f"{total_today / (1024 ** 3):.2f} GB"
+                    except Exception:
+                        context.setdefault("traffic_today", "0.00 GB")
+
+                    # Yesterday's full-day stats (for Daily Report at 00:00 UTC)
+                    try:
+                        if db_service.is_connected:
+                            yday_map = await db_service.get_nodes_traffic_for_period(
+                                yesterday_start, today_start,
+                            )
+                            total_yday = sum(yday_map.values())
+                            context["traffic_yesterday"] = f"{total_yday / (1024 ** 3):.2f} GB"
+                            context["report_date"] = yesterday_start.strftime("%Y-%m-%d")
+
+                            top_nodes = await db_service.get_top_nodes_traffic_for_period(
+                                yesterday_start, today_start, limit=3,
+                            )
+                            if top_nodes:
+                                medals = ["🥇", "🥈", "🥉"]
+                                context["top_nodes_yesterday"] = "\n".join(
+                                    f"{medals[i]} {name} — <b>{bytes_ / (1024 ** 3):.2f} GB</b>"
+                                    for i, (name, bytes_) in enumerate(top_nodes)
+                                )
+                            else:
+                                context["top_nodes_yesterday"] = "  <i>(нет данных)</i>"
+
+                            context["users_new_yesterday"] = await db_service.count_users_created_for_period(
+                                yesterday_start, today_start,
+                            )
+                            context["users_expired_yesterday"] = await db_service.count_users_expired_for_period(
+                                yesterday_start, today_start,
+                            )
+                    except Exception:
+                        context.setdefault("traffic_yesterday", "0.00 GB")
+                        context.setdefault("report_date", yesterday_start.strftime("%Y-%m-%d"))
+                        context.setdefault("top_nodes_yesterday", "  (нет данных)")
+                        context.setdefault("users_new_yesterday", 0)
+                        context.setdefault("users_expired_yesterday", 0)
+
+                    # Violations today / yesterday
+                    try:
+                        if db_service.is_connected:
+                            context["violations_today"] = await db_service.count_violations_for_period(
                                 start_date=today_start, end_date=now,
                             )
-                            context["violations_today"] = today_count
+                            context["violations_yesterday"] = await db_service.count_violations_for_period(
+                                start_date=yesterday_start, end_date=today_start,
+                            )
                     except Exception:
                         context.setdefault("violations_today", 0)
+                        context.setdefault("violations_yesterday", 0)
                 result, details = await self._execute_action(rule, "system", None, context)
 
                 await write_automation_log(

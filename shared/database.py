@@ -5835,6 +5835,78 @@ class DatabaseService:
             )
             return int(result.split()[-1]) if result else 0
 
+    async def get_nodes_traffic_for_period(
+        self, start: datetime, end: datetime,
+    ) -> Dict[str, int]:
+        """Per-node traffic for a time period, from snapshots.
+
+        Snapshots are cumulative per-day totals written by sync_node_traffic,
+        so MAX(traffic_bytes) in the window gives the node's traffic for the day.
+        Returns {node_uuid: bytes}.
+        """
+        if not self.is_connected:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT node_uuid::text AS node_uuid,
+                       MAX(traffic_bytes) AS traffic_bytes
+                FROM node_traffic_snapshots
+                WHERE created_at >= $1 AND created_at < $2
+                GROUP BY node_uuid
+                """,
+                start, end,
+            )
+            return {r["node_uuid"]: int(r["traffic_bytes"] or 0) for r in rows}
+
+    async def get_top_nodes_traffic_for_period(
+        self, start: datetime, end: datetime, limit: int = 3,
+    ) -> List[Tuple[str, int]]:
+        """Top-N nodes by traffic in a period. Returns [(node_name, bytes)]."""
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT COALESCE(n.name, s.node_uuid::text) AS name,
+                       MAX(s.traffic_bytes) AS traffic_bytes
+                FROM node_traffic_snapshots s
+                LEFT JOIN nodes n ON n.uuid = s.node_uuid
+                WHERE s.created_at >= $1 AND s.created_at < $2
+                GROUP BY s.node_uuid, n.name
+                ORDER BY traffic_bytes DESC
+                LIMIT $3
+                """,
+                start, end, limit,
+            )
+            return [(r["name"], int(r["traffic_bytes"] or 0)) for r in rows]
+
+    async def count_users_created_for_period(
+        self, start: datetime, end: datetime,
+    ) -> int:
+        """Count users created within [start, end)."""
+        if not self.is_connected:
+            return 0
+        async with self.acquire() as conn:
+            val = await conn.fetchval(
+                "SELECT COUNT(*) FROM users WHERE created_at >= $1 AND created_at < $2",
+                start, end,
+            )
+            return int(val or 0)
+
+    async def count_users_expired_for_period(
+        self, start: datetime, end: datetime,
+    ) -> int:
+        """Count users whose subscription expired within [start, end)."""
+        if not self.is_connected:
+            return 0
+        async with self.acquire() as conn:
+            val = await conn.fetchval(
+                "SELECT COUNT(*) FROM users WHERE expire_at >= $1 AND expire_at < $2",
+                start, end,
+            )
+            return int(val or 0)
+
     # ── User-node traffic history (deltas) ─────────────────
 
     async def insert_user_node_traffic_deltas(

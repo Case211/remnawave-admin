@@ -36,7 +36,7 @@ AUTOMATION_TEMPLATES = [
         "trigger_config": {"event": "node.went_offline", "offline_minutes": 5},
         "conditions": [],
         "action_type": "notify",
-        "action_config": {"channel": "telegram", "message": "Node {node_name} is offline for over 5 minutes"},
+        "action_config": {"channel": "telegram", "message": "🔴 Нода <b>{node_name}</b> офлайн более 5 минут"},
     },
     {
         "id": "cleanup_expired",
@@ -60,7 +60,7 @@ AUTOMATION_TEMPLATES = [
         "trigger_config": {"metric": "user_traffic_percent", "operator": ">=", "value": 90},
         "conditions": [],
         "action_type": "notify",
-        "action_config": {"channel": "telegram", "message": "User {username} has used {percent}% of traffic limit"},
+        "action_config": {"channel": "telegram", "message": "⚠️ <b>{username}</b> использовал <b>{percent}%</b> лимита трафика"},
     },
     {
         "id": "auto_restart_node",
@@ -86,22 +86,35 @@ AUTOMATION_TEMPLATES = [
         "action_type": "notify",
         "action_config": {
             "channel": "telegram",
-            "message": "User {username} used {traffic_gb} GB on node {node_name}",
+            "message": "📈 <b>{username}</b> использовал <b>{traffic_gb} ГБ</b> на ноде <b>{node_name}</b>",
         },
     },
     {
         "id": "daily_report",
         "name": "Daily Report",
-        "description": "Ежедневная Telegram-сводка в 23:00",
+        "description": "Ежедневная Telegram-сводка в 00:00 UTC за прошедшие сутки",
         "description_key": "automations.templates.daily_report.description",
         "category": "system",
         "trigger_type": "schedule",
-        "trigger_config": {"cron": "0 23 * * *"},
+        "trigger_config": {"cron": "0 0 * * *"},
         "conditions": [],
         "action_type": "notify",
         "action_config": {
             "channel": "telegram",
-            "message": "Daily report: {users_total} users, {traffic_today} traffic today, {violations_today} violations",
+            "message": (
+                "📊 <b>Дневной отчёт за {report_date}</b>\n"
+                "\n"
+                "👥 Пользователи: <b>{users_total}</b> всего"
+                " (+{users_new_yesterday} новых, {users_expired_yesterday} истекло)\n"
+                "🟢 Онлайн сейчас: <b>{users_online}</b>\n"
+                "🖥 Ноды: <b>{nodes_online}/{nodes_total}</b> онлайн\n"
+                "📡 Трафик: <b>{traffic_yesterday}</b>\n"
+                "\n"
+                "🏆 Топ нод по трафику:\n"
+                "{top_nodes_yesterday}\n"
+                "\n"
+                "⚠️ Нарушений: <b>{violations_yesterday}</b>"
+            ),
         },
     },
     {
