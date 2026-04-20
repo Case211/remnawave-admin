@@ -45,11 +45,11 @@ def _update(cron: str, message: str, description: str) -> None:
         text(
             """
             UPDATE automation_rules
-            SET trigger_config = (:cron)::jsonb,
+            SET trigger_config = CAST(:cron AS jsonb),
                 action_config = jsonb_set(
-                    COALESCE(action_config, '{}'::jsonb),
+                    COALESCE(action_config, CAST('{}' AS jsonb)),
                     '{message}',
-                    to_jsonb(:message::text)
+                    to_jsonb(CAST(:message AS text))
                 ),
                 description = :description,
                 updated_at = NOW()
