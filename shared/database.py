@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from contextlib import asynccontextmanager
 
 import asyncpg
@@ -892,10 +892,15 @@ class DatabaseService:
         traffic_usage: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
+        uuid_whitelist: Optional[List[str]] = None,
     ) -> tuple:
         """
         Get paginated users with server-side filtering and sorting.
         Returns (users_list, total_count).
+
+        If `uuid_whitelist` is provided (access-policy scope), only users
+        with matching UUID are returned. An empty list means no access —
+        returns ([], 0).
         """
         if not self.is_connected:
             return [], 0
@@ -903,6 +908,14 @@ class DatabaseService:
         conditions = []
         args = []
         param_idx = 0
+
+        # Access-policy scope filter
+        if uuid_whitelist is not None:
+            if not uuid_whitelist:
+                return [], 0
+            param_idx += 1
+            args.append(uuid_whitelist)
+            conditions.append(f"uuid::text = ANY(${param_idx})")
 
         # Filter: search
         if search:
@@ -3693,6 +3706,7 @@ class DatabaseService:
         order: str = 'desc',
         recommended_action: Optional[str] = None,
         username: Optional[str] = None,
+        user_uuid_whitelist: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Получить нарушения за указанный период с фильтрацией на стороне БД.
@@ -3715,6 +3729,10 @@ class DatabaseService:
         if not self.is_connected:
             return []
 
+        # Access-policy short-circuit: empty whitelist means no access
+        if user_uuid_whitelist is not None and not user_uuid_whitelist:
+            return []
+
         try:
             async with self.acquire() as conn:
                 conditions = [
@@ -3724,6 +3742,11 @@ class DatabaseService:
                 ]
                 params: list = [start_date, end_date, min_score]
                 idx = 4
+
+                if user_uuid_whitelist is not None:
+                    conditions.append(f"user_uuid::text = ANY(${idx})")
+                    params.append(user_uuid_whitelist)
+                    idx += 1
 
                 if user_uuid:
                     conditions.append(f"user_uuid::text = ${idx}")
@@ -3814,9 +3837,14 @@ class DatabaseService:
         country: Optional[str] = None,
         recommended_action: Optional[str] = None,
         username: Optional[str] = None,
+        user_uuid_whitelist: Optional[List[str]] = None,
     ) -> int:
         """Подсчитать количество нарушений за период с фильтрами (для пагинации)."""
         if not self.is_connected:
+            return 0
+
+        # Access-policy short-circuit
+        if user_uuid_whitelist is not None and not user_uuid_whitelist:
             return 0
 
         try:
@@ -3828,6 +3856,11 @@ class DatabaseService:
                 ]
                 params: list = [start_date, end_date, min_score]
                 idx = 4
+
+                if user_uuid_whitelist is not None:
+                    conditions.append(f"user_uuid::text = ANY(${idx})")
+                    params.append(user_uuid_whitelist)
+                    idx += 1
 
                 if user_uuid:
                     conditions.append(f"user_uuid::text = ${idx}")
@@ -6084,6 +6117,71 @@ class DatabaseService:
                 role_id, admin_id,
             )
             return [dict(r) for r in rows]
+
+    async def get_user_uuids_by_nodes(self, node_uuids: List[str]) -> Set[str]:
+        """User UUIDs that have any activity on the given nodes.
+
+        Uses user_node_traffic table — users who ever accumulated traffic
+        on one of the nodes. Returns lowercase str UUIDs.
+        """
+        if not self.is_connected or not node_uuids:
+            return set()
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT DISTINCT user_uuid::text AS uuid
+                    FROM user_node_traffic
+                    WHERE node_uuid = ANY($1::uuid[])
+                    """,
+                    node_uuids,
+                )
+                return {r["uuid"].lower() for r in rows if r["uuid"]}
+        except Exception as e:
+            logger.debug("get_user_uuids_by_nodes failed: %s", e)
+            return set()
+
+    async def get_user_uuids_by_squads(self, squad_uuids: List[str]) -> Set[str]:
+        """User UUIDs that belong to any of the given internal squads.
+
+        Parses users.raw_data -> activeInternalSquads (list of uuid strings
+        or dicts with uuid field). Case-insensitive comparison.
+        """
+        if not self.is_connected or not squad_uuids:
+            return set()
+        squad_lower = {s.lower() for s in squad_uuids}
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT uuid::text AS uuid, raw_data FROM users WHERE raw_data IS NOT NULL"
+                )
+        except Exception as e:
+            logger.debug("get_user_uuids_by_squads fetch failed: %s", e)
+            return set()
+        result: Set[str] = set()
+        for r in rows:
+            raw = r["raw_data"]
+            if isinstance(raw, str):
+                try:
+                    import json as _json
+                    raw = _json.loads(raw)
+                except (ValueError, TypeError):
+                    continue
+            if not isinstance(raw, dict):
+                continue
+            sqs = raw.get("activeInternalSquads") or []
+            if not isinstance(sqs, list):
+                continue
+            for sq in sqs:
+                sq_uuid = None
+                if isinstance(sq, str):
+                    sq_uuid = sq
+                elif isinstance(sq, dict):
+                    sq_uuid = sq.get("uuid") or sq.get("squadUuid")
+                if sq_uuid and str(sq_uuid).lower() in squad_lower:
+                    result.add(str(r["uuid"]).lower())
+                    break
+        return result
 
     async def get_uuids_by_tag(self, resource_type: str, tag: str) -> List[str]:
         """Return UUIDs of nodes/hosts of a given type whose tags include the tag.

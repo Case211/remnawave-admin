@@ -930,6 +930,48 @@ def filter_by_scope(items: List[dict], scope: Optional[Set[str]], uuid_key: str 
     return [it for it in items if str(it.get(uuid_key, "")).lower() in scope]
 
 
+async def get_visible_user_uuids(admin) -> Optional[Set[str]]:
+    """Resolve which user UUIDs an admin can see based on node+squad scopes.
+
+    Returns:
+        None — no restrictions (superadmin, legacy admin, or no policies)
+        set[str] — whitelist of user UUIDs (lowercase)
+
+    A user is visible if they have activity on an allowed node
+    (via user_node_traffic) OR belong to an allowed internal squad
+    (via raw_data.activeInternalSquads).
+
+    Union — if either condition is met the user is visible.
+    """
+    if admin is None:
+        return None
+    role = getattr(admin, "role", None)
+    account_id = getattr(admin, "account_id", None)
+    if role == "superadmin" or account_id is None:
+        return None
+
+    node_scope = await get_scope(admin, "node", "view")
+    squad_scope = await get_scope(admin, "squad", "view")
+
+    # If both are None — no user restriction
+    if node_scope is None and squad_scope is None:
+        return None
+
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return None
+        allowed: Set[str] = set()
+        if node_scope is not None and node_scope:
+            allowed.update(await db_service.get_user_uuids_by_nodes(list(node_scope)))
+        if squad_scope is not None and squad_scope:
+            allowed.update(await db_service.get_user_uuids_by_squads(list(squad_scope)))
+        return allowed
+    except Exception as e:
+        logger.warning("get_visible_user_uuids failed: %s", e)
+        return None  # fail-open
+
+
 async def resolve_allowed_actions_map(
     admin, resource_type: str, uuids: List[str],
 ) -> Dict[str, Optional[List[str]]]:

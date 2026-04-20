@@ -215,11 +215,21 @@ async def get_top_users_by_traffic(
 ):
     """Get top users by traffic consumption, optionally for a date range."""
     if date_from and date_to:
-        # Panel API expects YYYY-MM-DD, not full ISO 8601
         date_from = date_from[:10]
         date_to = date_to[:10]
-        return await _compute_top_users_range(date_from, date_to, limit)
-    return await _compute_top_users(limit=limit)
+        result = await _compute_top_users_range(date_from, date_to, limit)
+    else:
+        result = await _compute_top_users(limit=limit)
+
+    # Access-policy: filter items by visible users
+    from web.backend.core.rbac import get_visible_user_uuids
+    visible = await get_visible_user_uuids(admin)
+    if visible is not None and isinstance(result, dict):
+        items = result.get("items") or []
+        result = {**result, "items": [
+            it for it in items if str(it.get("uuid", "")).lower() in visible
+        ]}
+    return result
 
 
 @cached("analytics:top-users", ttl=CACHE_TTL_LONG, key_args=("limit",))
@@ -387,10 +397,16 @@ async def get_nodes_traffic(
             except Exception:
                 pass
 
+        # Access-policy: filter nodes by admin's scope
+        from web.backend.core.rbac import get_scope
+        node_scope = await get_scope(admin, "node", "view")
+
         items = []
         total = 0
         for n in nodes_data:
             uid = n.get("uuid", "")
+            if node_scope is not None and uid.lower() not in node_scope:
+                continue
             traffic = int(n.get("total", 0) or 0)
             total += traffic
             items.append({
@@ -420,12 +436,33 @@ async def get_trends(
     admin: AdminUser = Depends(require_permission("analytics", "view")),
 ):
     """Get trend data — growth of users, traffic, violations over time."""
+    # If admin has an access-policy scope, compute fresh (cache is shared
+    # across admins). For unrestricted admins (most cases) use cached path.
+    from web.backend.core.rbac import get_visible_user_uuids, get_scope
+    visible = await get_visible_user_uuids(admin)
+    if visible is not None and metric in ("users", "violations"):
+        return await _compute_trends(
+            metric=metric, period=period, date_from=date_from, date_to=date_to,
+            user_uuid_whitelist=list(visible),
+        )
+    if metric == "traffic":
+        node_scope = await get_scope(admin, "node", "view")
+        if node_scope is not None:
+            return await _compute_trends(
+                metric=metric, period=period, date_from=date_from, date_to=date_to,
+                node_uuid_whitelist=list(node_scope),
+            )
     return await _compute_trends(metric=metric, period=period, date_from=date_from, date_to=date_to)
 
 
 @cached("analytics:trends", ttl=CACHE_TTL_LONG, key_args=("metric", "period", "date_from", "date_to"))
-async def _compute_trends(metric: str = "users", period: str = "30d", date_from: Optional[str] = None, date_to: Optional[str] = None):
-    """Compute trends (cacheable)."""
+async def _compute_trends(
+    metric: str = "users", period: str = "30d",
+    date_from: Optional[str] = None, date_to: Optional[str] = None,
+    user_uuid_whitelist: Optional[List[str]] = None,
+    node_uuid_whitelist: Optional[List[str]] = None,
+):
+    """Compute trends (cacheable when no whitelist; whitelist bypasses cache via extra params)."""
     try:
         from shared.database import db_service
         if not db_service.is_connected:
@@ -441,36 +478,60 @@ async def _compute_trends(metric: str = "users", period: str = "30d", date_from:
 
         async with db_service.acquire() as conn:
             if metric == "users":
-                rows = await conn.fetch(
-                    """
-                    SELECT DATE(created_at) as day, COUNT(*) as count
-                    FROM users
-                    WHERE created_at >= $1
-                    GROUP BY DATE(created_at)
-                    ORDER BY day
-                    """,
-                    since,
-                )
+                if user_uuid_whitelist is not None:
+                    rows = await conn.fetch(
+                        """
+                        SELECT DATE(created_at) as day, COUNT(*) as count
+                        FROM users
+                        WHERE created_at >= $1 AND uuid::text = ANY($2)
+                        GROUP BY DATE(created_at) ORDER BY day
+                        """,
+                        since, user_uuid_whitelist,
+                    )
+                    total_before = await conn.fetchval(
+                        "SELECT COUNT(*) FROM users WHERE created_at < $1 AND uuid::text = ANY($2)",
+                        since, user_uuid_whitelist,
+                    )
+                    total_now = await conn.fetchval(
+                        "SELECT COUNT(*) FROM users WHERE uuid::text = ANY($1)",
+                        user_uuid_whitelist,
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """
+                        SELECT DATE(created_at) as day, COUNT(*) as count
+                        FROM users WHERE created_at >= $1
+                        GROUP BY DATE(created_at) ORDER BY day
+                        """,
+                        since,
+                    )
+                    total_before = await conn.fetchval(
+                        "SELECT COUNT(*) FROM users WHERE created_at < $1", since
+                    )
+                    total_now = await conn.fetchval("SELECT COUNT(*) FROM users")
                 series = [{"date": str(r["day"]), "value": r["count"]} for r in rows]
-
-                # Total growth
-                total_before = await conn.fetchval(
-                    "SELECT COUNT(*) FROM users WHERE created_at < $1", since
-                )
-                total_now = await conn.fetchval("SELECT COUNT(*) FROM users")
                 growth = total_now - (total_before or 0)
 
             elif metric == "violations":
-                rows = await conn.fetch(
-                    """
-                    SELECT DATE(detected_at) as day, COUNT(*) as count
-                    FROM violations
-                    WHERE detected_at >= $1
-                    GROUP BY DATE(detected_at)
-                    ORDER BY day
-                    """,
-                    since,
-                )
+                if user_uuid_whitelist is not None:
+                    rows = await conn.fetch(
+                        """
+                        SELECT DATE(detected_at) as day, COUNT(*) as count
+                        FROM violations
+                        WHERE detected_at >= $1 AND user_uuid::text = ANY($2)
+                        GROUP BY DATE(detected_at) ORDER BY day
+                        """,
+                        since, user_uuid_whitelist,
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """
+                        SELECT DATE(detected_at) as day, COUNT(*) as count
+                        FROM violations WHERE detected_at >= $1
+                        GROUP BY DATE(detected_at) ORDER BY day
+                        """,
+                        since,
+                    )
                 series = [{"date": str(r["day"]), "value": r["count"]} for r in rows]
                 growth = sum(s["value"] for s in series)
 
@@ -481,22 +542,38 @@ async def _compute_trends(metric: str = "users", period: str = "30d", date_from:
                 # the daily total. Chart value = today_total - yesterday_total
                 # so users see the direction of change (up/down) rather than
                 # duplicating the absolute-traffic chart on the dashboard.
-                rows = await conn.fetch(
-                    """
-                    SELECT day, SUM(per_node) AS total_bytes
-                    FROM (
-                        SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
-                               node_uuid,
-                               MAX(traffic_bytes) AS per_node
-                        FROM node_traffic_snapshots
-                        WHERE created_at >= $1
-                        GROUP BY DATE(created_at AT TIME ZONE 'UTC'), node_uuid
-                    ) t
-                    GROUP BY day
-                    ORDER BY day
-                    """,
-                    since,
-                )
+                if node_uuid_whitelist is not None:
+                    rows = await conn.fetch(
+                        """
+                        SELECT day, SUM(per_node) AS total_bytes
+                        FROM (
+                            SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
+                                   node_uuid,
+                                   MAX(traffic_bytes) AS per_node
+                            FROM node_traffic_snapshots
+                            WHERE created_at >= $1 AND node_uuid::text = ANY($2)
+                            GROUP BY DATE(created_at AT TIME ZONE 'UTC'), node_uuid
+                        ) t
+                        GROUP BY day ORDER BY day
+                        """,
+                        since, node_uuid_whitelist,
+                    )
+                else:
+                    rows = await conn.fetch(
+                        """
+                        SELECT day, SUM(per_node) AS total_bytes
+                        FROM (
+                            SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
+                                   node_uuid,
+                                   MAX(traffic_bytes) AS per_node
+                            FROM node_traffic_snapshots
+                            WHERE created_at >= $1
+                            GROUP BY DATE(created_at AT TIME ZONE 'UTC'), node_uuid
+                        ) t
+                        GROUP BY day ORDER BY day
+                        """,
+                        since,
+                    )
                 daily_totals = [(str(r["day"]), int(r["total_bytes"] or 0)) for r in rows]
                 series = []
                 prev_total: Optional[int] = None

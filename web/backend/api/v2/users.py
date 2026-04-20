@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, require_permission, require_quota, AdminUser, get_client_ip
 from web.backend.core.api_helper import fetch_users_from_api
-from web.backend.core.rbac import write_audit_log
+from web.backend.core.rbac import write_audit_log, get_visible_user_uuids
 from web.backend.schemas.user import UserListItem, UserDetail, UserCreate, UserUpdate, HwidDevice
 from web.backend.schemas.common import PaginatedResponse, SuccessResponse
 from web.backend.schemas.bulk import BulkUserRequest, BulkOperationResult, BulkOperationError
@@ -24,6 +24,13 @@ from web.backend.core.rate_limit import limiter, RATE_BULK
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _ensure_user_visible(admin: AdminUser, user_uuid: str) -> None:
+    """Raise 403 if the admin's access-policy scope hides this user."""
+    visible = await get_visible_user_uuids(admin)
+    if visible is not None and user_uuid.lower() not in visible:
+        raise api_error(403, E.FORBIDDEN)
 
 
 def _ensure_snake_case(user: dict) -> dict:
@@ -237,6 +244,10 @@ async def list_users(
         total = 0
         db_available = False
 
+        # Access-policy scope: only users tied to allowed nodes/squads
+        visible_uuids = await get_visible_user_uuids(admin)
+        uuid_whitelist = list(visible_uuids) if visible_uuids is not None else None
+
         # Primary path: SQL pagination in database
         try:
             from shared.database import db_service
@@ -249,6 +260,7 @@ async def list_users(
                     online_filter=online_filter,
                     traffic_usage=traffic_usage,
                     sort_by=sort_by, sort_order=sort_order,
+                    uuid_whitelist=uuid_whitelist,
                 )
                 db_available = True
         except Exception as e:
@@ -258,6 +270,9 @@ async def list_users(
             # Fallback: API with in-memory filtering (old behavior)
             users = await _get_users_list()
             users = [_ensure_snake_case(u) for u in users]
+            if uuid_whitelist is not None:
+                wh = {u.lower() for u in uuid_whitelist}
+                users = [u for u in users if str(u.get("uuid", "")).lower() in wh]
             users, total = _filter_users_in_memory(
                 users, search=search, status=status,
                 traffic_type=traffic_type, expire_filter=expire_filter,
@@ -478,6 +493,7 @@ async def get_user(
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """Get detailed user information with anti-abuse data from DB."""
+    await _ensure_user_visible(admin, user_uuid)
     try:
         # Try to get user from DB first, then API
         user_data = None
@@ -613,6 +629,7 @@ async def update_user(
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Update user fields."""
+    await _ensure_user_visible(admin, user_uuid)
     try:
         from shared.api_client import api_client
 
@@ -659,6 +676,7 @@ async def delete_user(
     admin: AdminUser = Depends(require_permission("users", "delete")),
 ):
     """Delete a user."""
+    await _ensure_user_visible(admin, user_uuid)
     try:
         from shared.api_client import api_client
 
@@ -698,6 +716,7 @@ async def enable_user(
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Enable a disabled user."""
+    await _ensure_user_visible(admin, user_uuid)
     try:
         from shared.api_client import api_client
 
@@ -724,6 +743,7 @@ async def disable_user(
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Disable a user."""
+    await _ensure_user_visible(admin, user_uuid)
     try:
         from shared.api_client import api_client
 
@@ -750,6 +770,7 @@ async def reset_user_traffic(
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Reset user's traffic usage."""
+    await _ensure_user_visible(admin, user_uuid)
     try:
         from shared.api_client import api_client
 
@@ -777,6 +798,7 @@ async def revoke_user_subscription(
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Revoke user's subscription. passwords_only=true regenerates only connection passwords."""
+    await _ensure_user_visible(admin, user_uuid)
     try:
         from shared.api_client import api_client
 

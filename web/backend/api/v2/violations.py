@@ -134,6 +134,11 @@ async def list_violations(
                     detail="Invalid date_to format. Use ISO format (e.g. 2024-01-15T23:59:59)",
                 )
 
+        # Access-policy scope: filter violations to visible users
+        from web.backend.core.rbac import get_visible_user_uuids
+        visible = await get_visible_user_uuids(admin)
+        user_uuid_whitelist = list(visible) if visible is not None else None
+
         filter_kwargs = dict(
             start_date=start_date,
             end_date=end_date,
@@ -145,6 +150,7 @@ async def list_violations(
             country=country,
             recommended_action=recommended_action,
             username=username,
+            user_uuid_whitelist=user_uuid_whitelist,
         )
 
         # Подсчёт для пагинации
@@ -517,6 +523,10 @@ async def annul_user_violations(
     db: DatabaseService = Depends(get_db),
 ):
     """Аннулировать все нерассмотренные нарушения пользователя."""
+    from web.backend.core.rbac import get_visible_user_uuids
+    visible = await get_visible_user_uuids(admin)
+    if visible is not None and user_uuid.lower() not in visible:
+        raise api_error(403, E.FORBIDDEN)
     comment = data.comment if data else None
     count = await db.annul_pending_violations(
         user_uuid=user_uuid,
@@ -545,6 +555,10 @@ async def get_user_violations(
     db: DatabaseService = Depends(get_db),
 ):
     """Нарушения конкретного пользователя."""
+    from web.backend.core.rbac import get_visible_user_uuids
+    visible = await get_visible_user_uuids(admin)
+    if visible is not None and user_uuid.lower() not in visible:
+        raise api_error(403, E.FORBIDDEN)
     violations = await db.get_user_violations(
         user_uuid=user_uuid,
         days=days,
@@ -576,6 +590,10 @@ async def export_violations_csv(
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
 
+    from web.backend.core.rbac import get_visible_user_uuids
+    visible = await get_visible_user_uuids(admin)
+    user_uuid_whitelist = list(visible) if visible is not None else None
+
     violations = await db.get_violations_for_period(
         start_date=start_date,
         end_date=end_date,
@@ -584,6 +602,7 @@ async def export_violations_csv(
         user_uuid=user_uuid,
         resolved=resolved,
         limit=10000,
+        user_uuid_whitelist=user_uuid_whitelist,
     )
 
     output = io.StringIO()
@@ -784,6 +803,14 @@ async def get_violation(
     if not violation:
         raise api_error(404, E.VIOLATION_NOT_FOUND)
 
+    # Access-policy: hide if violation's user is not in admin's scope
+    from web.backend.core.rbac import get_visible_user_uuids
+    visible = await get_visible_user_uuids(admin)
+    if visible is not None:
+        uuser = str(violation.get("user_uuid", "")).lower()
+        if uuser not in visible:
+            raise api_error(404, E.VIOLATION_NOT_FOUND)
+
     return ViolationDetail(
         id=int(violation.get('id', 0)),
         user_uuid=str(violation.get('user_uuid', '')),
@@ -830,6 +857,16 @@ async def resolve_violation(
     - block: Заблокировать пользователя в панели Remnawave
     """
     action_value = data.action.value if hasattr(data.action, 'value') else str(data.action)
+
+    # Access-policy: refuse if violation's user is not in admin's scope
+    violation_check = await db.get_violation_by_id(violation_id)
+    if violation_check:
+        from web.backend.core.rbac import get_visible_user_uuids
+        visible = await get_visible_user_uuids(admin)
+        if visible is not None:
+            uuser = str(violation_check.get("user_uuid", "")).lower()
+            if uuser not in visible:
+                raise api_error(403, E.FORBIDDEN)
 
     # При блокировке — реально отключаем пользователя через Panel API
     if action_value == "block":
