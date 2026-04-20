@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota, get_client_ip
 from web.backend.core.errors import api_error, E
-from web.backend.core.rbac import write_audit_log
+from web.backend.core.rbac import write_audit_log, get_scope, check_access
 from web.backend.core.api_helper import (
     fetch_nodes_from_api, fetch_nodes_realtime_usage,
     fetch_nodes_usage_by_range, _normalize,
@@ -172,6 +172,11 @@ async def list_nodes(
         except Exception as e:
             logger.debug("Realtime bandwidth fetch failed: %s", e)
 
+        # Apply access-policy scope (whitelist by UUID/tag)
+        scope = await get_scope(admin, "node", "view")
+        if scope is not None:
+            nodes = [n for n in nodes if str(n.get("uuid", "")).lower() in scope]
+
         # Filter
         if search:
             search_lower = search.lower()
@@ -229,6 +234,8 @@ async def get_node(
     admin: AdminUser = Depends(require_permission("nodes", "view")),
 ):
     """Get detailed node information."""
+    if not await check_access(admin, "node", node_uuid, "view"):
+        raise api_error(403, E.FORBIDDEN)
     try:
         node_data = None
         try:
@@ -307,6 +314,8 @@ async def update_node(
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Update node fields."""
+    if not await check_access(admin, "node", node_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     try:
         from shared.api_client import api_client
 
@@ -341,6 +350,8 @@ async def delete_node(
     admin: AdminUser = Depends(require_permission("nodes", "delete")),
 ):
     """Delete a node."""
+    if not await check_access(admin, "node", node_uuid, "delete"):
+        raise api_error(403, E.FORBIDDEN)
     try:
         from shared.api_client import api_client
 
@@ -379,6 +390,8 @@ async def restart_node(
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Restart a node."""
+    if not await check_access(admin, "node", node_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     try:
         from shared.api_client import api_client
 
@@ -409,6 +422,8 @@ async def enable_node(
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Enable a disabled node."""
+    if not await check_access(admin, "node", node_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     try:
         from shared.api_client import api_client
 
@@ -818,6 +833,8 @@ async def disable_node(
     admin: AdminUser = Depends(require_permission("nodes", "edit")),
 ):
     """Disable a node."""
+    if not await check_access(admin, "node", node_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     try:
         from shared.api_client import api_client
 

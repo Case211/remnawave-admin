@@ -6,7 +6,7 @@ from typing import List
 
 from web.backend.api.deps import get_current_admin, get_api_client, AdminUser, require_permission, require_quota, get_client_ip
 from web.backend.core.errors import api_error, E
-from web.backend.core.rbac import write_audit_log
+from web.backend.core.rbac import write_audit_log, get_scope, check_access
 from web.backend.schemas.host import (
     HostListItem,
     HostListResponse,
@@ -104,6 +104,10 @@ async def list_hosts(
     """Список всех хостов."""
     hosts = await _get_hosts_list()
 
+    scope = await get_scope(admin, "host", "view")
+    if scope is not None:
+        hosts = [h for h in hosts if str(h.get("uuid", "")).lower() in scope]
+
     items = [HostListItem(**_map_host(h)) for h in hosts]
 
     return HostListResponse(
@@ -119,6 +123,8 @@ async def get_host(
     api_client=Depends(get_api_client),
 ):
     """Получить информацию о хосте."""
+    if not await check_access(admin, "host", host_uuid, "view"):
+        raise api_error(403, E.FORBIDDEN)
     data = await api_client.get_host(host_uuid)
 
     if not data:
@@ -233,6 +239,8 @@ async def update_host(
     api_client=Depends(get_api_client),
 ):
     """Обновить хост."""
+    if not await check_access(admin, "host", host_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     payload = {'uuid': host_uuid}
 
     if data.remark is not None:
@@ -318,6 +326,8 @@ async def delete_host(
     api_client=Depends(get_api_client),
 ):
     """Удалить хост."""
+    if not await check_access(admin, "host", host_uuid, "delete"):
+        raise api_error(403, E.FORBIDDEN)
     result = await api_client.delete_host(host_uuid)
 
     if not result:
@@ -344,6 +354,8 @@ async def enable_host(
     api_client=Depends(get_api_client),
 ):
     """Включить хост."""
+    if not await check_access(admin, "host", host_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     result = await api_client.enable_hosts([host_uuid])
 
     if not result:
@@ -370,6 +382,8 @@ async def disable_host(
     api_client=Depends(get_api_client),
 ):
     """Отключить хост."""
+    if not await check_access(admin, "host", host_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     result = await api_client.disable_hosts([host_uuid])
 
     if not result:

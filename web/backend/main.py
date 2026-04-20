@@ -33,6 +33,7 @@ from web.backend.core.update_checker import get_latest_version
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 from web.backend.api.v2 import settings as settings_api
 from web.backend.api.v2 import admins as admins_api, roles as roles_api
+from web.backend.api.v2 import access_policies as access_policies_api
 from web.backend.api.v2 import audit as audit_api
 from web.backend.api.v2 import logs as logs_api
 from web.backend.api.v2 import advanced_analytics
@@ -753,6 +754,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_api.router, prefix="/api/v2/settings", tags=["settings"])
     app.include_router(admins_api.router, prefix="/api/v2/admins", tags=["admins"])
     app.include_router(roles_api.router, prefix="/api/v2/roles", tags=["roles"])
+    app.include_router(access_policies_api.router, prefix="/api/v2/access-policies", tags=["access-policies"])
     app.include_router(audit_api.router, prefix="/api/v2/audit", tags=["audit"])
     app.include_router(logs_api.router, prefix="/api/v2/logs", tags=["logs"])
     app.include_router(advanced_analytics.router, prefix="/api/v2/analytics/advanced", tags=["advanced-analytics"])

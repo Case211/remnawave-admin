@@ -34,6 +34,7 @@ import { PermissionGate } from '@/components/PermissionGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import { useFormatters } from '@/lib/useFormatters'
+import AccessPoliciesTab from './AccessPoliciesTab'
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -936,12 +937,16 @@ export default function Admins() {
         <TabsList>
           <TabsTrigger value="admins">{t('admins.adminsTab')}</TabsTrigger>
           <TabsTrigger value="roles">{t('admins.rolesTab')}</TabsTrigger>
+          <TabsTrigger value="access-policies">{t('admins.accessPoliciesTab')}</TabsTrigger>
         </TabsList>
         <TabsContent value="admins">
           <AdminsTab roles={roles} />
         </TabsContent>
         <TabsContent value="roles">
           <RolesTab resources={resources} />
+        </TabsContent>
+        <TabsContent value="access-policies">
+          <AccessPoliciesTab roles={roles} />
         </TabsContent>
       </Tabs>
     </div>

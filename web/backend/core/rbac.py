@@ -813,3 +813,109 @@ async def sync_superadmin_permissions() -> None:
 
     except Exception as e:
         logger.warning("sync_superadmin_permissions failed: %s", e)
+
+
+# ── Access policies — scope resolver ─────────────────────────────
+
+# Cache: (admin_id, role_id) -> {(resource_type, action): allowed_uuids_or_None}
+# None means "full access" (no policies attached), set[uuid] means whitelist.
+_scope_cache: Dict[Tuple[Optional[int], Optional[int]], Dict[Tuple[str, str], Optional[Set[str]]]] = {}
+_scope_cache_ts: float = 0
+_SCOPE_CACHE_TTL = 30  # seconds
+
+
+def invalidate_scope_cache() -> None:
+    """Force scope cache reset (call after policy changes)."""
+    global _scope_cache_ts, _scope_cache
+    _scope_cache.clear()
+    _scope_cache_ts = 0
+
+
+async def get_scope(
+    admin, resource_type: str, action: str = "view",
+) -> Optional[Set[str]]:
+    """Resolve allowed resource UUIDs for an admin on (resource_type, action).
+
+    Returns:
+        None — full access (superadmin, legacy admin, or no policies attached)
+        set[str] — whitelist of UUIDs (may be empty -> no access)
+
+    Resource types: 'node', 'host', 'squad'.
+    Actions: 'view', 'edit', 'delete' (view is implied by edit/delete).
+    """
+    # Superadmin and legacy admins (no account_id) bypass policy checks
+    if admin is None:
+        return None
+    role = getattr(admin, "role", None)
+    account_id = getattr(admin, "account_id", None)
+    role_id = getattr(admin, "role_id", None)
+    if role == "superadmin" or account_id is None:
+        return None
+
+    global _scope_cache_ts, _scope_cache
+    if time.time() - _scope_cache_ts > _SCOPE_CACHE_TTL:
+        _scope_cache.clear()
+        _scope_cache_ts = time.time()
+
+    cache_key = (account_id, role_id)
+    per_admin = _scope_cache.get(cache_key)
+    if per_admin is not None:
+        cached = per_admin.get((resource_type, action), "MISS")
+        if cached != "MISS":
+            return cached
+
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return None
+
+        rules = await db_service.get_effective_policy_rules(account_id, role_id)
+        # If no policies at all -> full access (backwards compatible)
+        if not rules:
+            _scope_cache.setdefault(cache_key, {})[(resource_type, action)] = None
+            return None
+
+        # Admin has policies, but maybe none for this resource_type
+        relevant = [r for r in rules if r["resource_type"] == resource_type]
+        if not relevant:
+            _scope_cache.setdefault(cache_key, {})[(resource_type, action)] = set()
+            return set()
+
+        # Collect UUIDs from rules that cover the requested action
+        allowed: Set[str] = set()
+        for r in relevant:
+            if action not in (r.get("actions") or []):
+                continue
+            scope_type = r.get("scope_type")
+            scope_value = r.get("scope_value", "")
+            if scope_type == "uuid":
+                allowed.add(scope_value.lower())
+            elif scope_type == "tag":
+                uuids = await db_service.get_uuids_by_tag(resource_type, scope_value)
+                allowed.update(u.lower() for u in uuids)
+
+        _scope_cache.setdefault(cache_key, {})[(resource_type, action)] = allowed
+        return allowed
+    except Exception as e:
+        logger.warning("get_scope failed for admin=%s rt=%s: %s", account_id, resource_type, e)
+        return None  # fail-open to avoid locking out admins on DB glitches
+
+
+async def check_access(
+    admin, resource_type: str, resource_uuid: str, action: str = "view",
+) -> bool:
+    """Single-UUID access check. True = allowed."""
+    scope = await get_scope(admin, resource_type, action)
+    if scope is None:
+        return True
+    return resource_uuid.lower() in scope
+
+
+def filter_by_scope(items: List[dict], scope: Optional[Set[str]], uuid_key: str = "uuid") -> List[dict]:
+    """Filter a list of dicts (e.g. nodes) by an allowed-UUID scope.
+
+    If scope is None -> return items unchanged (full access).
+    """
+    if scope is None:
+        return items
+    return [it for it in items if str(it.get(uuid_key, "")).lower() in scope]

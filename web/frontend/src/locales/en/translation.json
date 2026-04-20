@@ -1518,6 +1518,7 @@
     "subtitle": "Admin account management",
     "adminsTab": "Admins",
     "rolesTab": "Roles",
+    "accessPoliciesTab": "Access Scopes",
     "name": "Name",
     "admin": "Admin",
     "role": "Role",
@@ -4132,5 +4133,48 @@
     "successDescription": "Your password has been reset successfully. You can now log in with your new password.",
     "goToLogin": "Go to Login",
     "error": "An error occurred. Please try again later."
+  },
+  "accessPolicies": {
+    "listTitle": "Scope Templates",
+    "create": "Create",
+    "empty": "No templates yet",
+    "selectHint": "Pick a template on the left or create a new one",
+    "editorTitle": "Template Editor",
+    "name": "Name",
+    "description": "Description",
+    "rules": "Access Rules",
+    "addRule": "Add rule",
+    "noRules": "No rules — this template is empty and doesn't restrict anything. Add a rule to define a whitelist.",
+    "resourceType": "Resource type",
+    "scopeType": "Scope",
+    "scopeValue": "Value",
+    "actions": "Allowed actions",
+    "attachedRoles": "Attached to roles",
+    "roleHint": "All admins with these roles inherit the template's rules. If no role is selected, the template is inactive.",
+    "pickResource": "Pick...",
+    "promptName": "Template name",
+    "confirmDelete": "Delete this template? Admins who inherited it will lose these rights.",
+    "createdOk": "Template created",
+    "savedOk": "Saved",
+    "deletedOk": "Template deleted",
+    "createFailed": "Failed to create",
+    "saveFailed": "Failed to save",
+    "roleAttachFailed": "Failed to sync role attachments",
+    "errNoScopeValue": "Fill in scope value for every rule",
+    "errNoAction": "Select at least one action in every rule",
+    "resource": {
+      "node": "Node",
+      "host": "Host",
+      "squad": "Squad"
+    },
+    "scope": {
+      "uuid": "By UUID",
+      "tag": "By Tag"
+    },
+    "action": {
+      "view": "View",
+      "edit": "Edit",
+      "delete": "Delete"
+    }
   }
 }

@@ -5907,6 +5907,213 @@ class DatabaseService:
             )
             return int(val or 0)
 
+    # ── Access policies (scoping admin rights to specific resources) ──────
+
+    async def list_access_policies(self) -> List[Dict[str, Any]]:
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT p.id, p.name, p.description, p.created_by, p.created_at, p.updated_at,
+                       COALESCE(rc.cnt, 0) AS rules_count,
+                       COALESCE(rl.cnt, 0) AS roles_count,
+                       COALESCE(ad.cnt, 0) AS admins_count
+                FROM access_policies p
+                LEFT JOIN (SELECT policy_id, COUNT(*) cnt FROM access_policy_rules GROUP BY policy_id) rc
+                       ON rc.policy_id = p.id
+                LEFT JOIN (SELECT policy_id, COUNT(*) cnt FROM role_access_policies GROUP BY policy_id) rl
+                       ON rl.policy_id = p.id
+                LEFT JOIN (SELECT policy_id, COUNT(*) cnt FROM admin_access_policies GROUP BY policy_id) ad
+                       ON ad.policy_id = p.id
+                ORDER BY p.name
+                """
+            )
+            return [dict(r) for r in rows]
+
+    async def get_access_policy(self, policy_id: int) -> Optional[Dict[str, Any]]:
+        if not self.is_connected:
+            return None
+        async with self.acquire() as conn:
+            policy = await conn.fetchrow(
+                "SELECT * FROM access_policies WHERE id = $1", policy_id,
+            )
+            if not policy:
+                return None
+            rules = await conn.fetch(
+                """
+                SELECT id, resource_type, scope_type, scope_value, actions
+                FROM access_policy_rules WHERE policy_id = $1 ORDER BY id
+                """,
+                policy_id,
+            )
+            roles = await conn.fetch(
+                "SELECT role_id FROM role_access_policies WHERE policy_id = $1", policy_id,
+            )
+            admins = await conn.fetch(
+                "SELECT admin_id FROM admin_access_policies WHERE policy_id = $1", policy_id,
+            )
+            return {
+                **dict(policy),
+                "rules": [dict(r) for r in rules],
+                "role_ids": [r["role_id"] for r in roles],
+                "admin_ids": [r["admin_id"] for r in admins],
+            }
+
+    async def create_access_policy(
+        self, name: str, description: Optional[str],
+        created_by: Optional[int], rules: List[Dict[str, Any]],
+    ) -> int:
+        async with self.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO access_policies (name, description, created_by)
+                    VALUES ($1, $2, $3) RETURNING id
+                    """,
+                    name, description, created_by,
+                )
+                policy_id = int(row["id"])
+                for rule in rules:
+                    await conn.execute(
+                        """
+                        INSERT INTO access_policy_rules
+                            (policy_id, resource_type, scope_type, scope_value, actions)
+                        VALUES ($1, $2, $3, $4, $5)
+                        """,
+                        policy_id,
+                        rule["resource_type"], rule["scope_type"],
+                        rule["scope_value"], rule["actions"],
+                    )
+                return policy_id
+
+    async def update_access_policy(
+        self, policy_id: int, name: Optional[str] = None,
+        description: Optional[str] = None,
+        rules: Optional[List[Dict[str, Any]]] = None,
+    ) -> bool:
+        async with self.acquire() as conn:
+            async with conn.transaction():
+                if name is not None or description is not None:
+                    await conn.execute(
+                        """
+                        UPDATE access_policies
+                        SET name = COALESCE($2, name),
+                            description = COALESCE($3, description),
+                            updated_at = NOW()
+                        WHERE id = $1
+                        """,
+                        policy_id, name, description,
+                    )
+                if rules is not None:
+                    await conn.execute(
+                        "DELETE FROM access_policy_rules WHERE policy_id = $1", policy_id,
+                    )
+                    for rule in rules:
+                        await conn.execute(
+                            """
+                            INSERT INTO access_policy_rules
+                                (policy_id, resource_type, scope_type, scope_value, actions)
+                            VALUES ($1, $2, $3, $4, $5)
+                            """,
+                            policy_id,
+                            rule["resource_type"], rule["scope_type"],
+                            rule["scope_value"], rule["actions"],
+                        )
+                return True
+
+    async def delete_access_policy(self, policy_id: int) -> bool:
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM access_policies WHERE id = $1", policy_id,
+            )
+            return "DELETE 1" in (result or "")
+
+    async def set_role_policies(self, role_id: int, policy_ids: List[int]) -> None:
+        async with self.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "DELETE FROM role_access_policies WHERE role_id = $1", role_id,
+                )
+                for pid in policy_ids:
+                    await conn.execute(
+                        """
+                        INSERT INTO role_access_policies (role_id, policy_id)
+                        VALUES ($1, $2) ON CONFLICT DO NOTHING
+                        """,
+                        role_id, pid,
+                    )
+
+    async def set_admin_policies(self, admin_id: int, policy_ids: List[int]) -> None:
+        async with self.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "DELETE FROM admin_access_policies WHERE admin_id = $1", admin_id,
+                )
+                for pid in policy_ids:
+                    await conn.execute(
+                        """
+                        INSERT INTO admin_access_policies (admin_id, policy_id)
+                        VALUES ($1, $2) ON CONFLICT DO NOTHING
+                        """,
+                        admin_id, pid,
+                    )
+
+    async def get_effective_policy_rules(
+        self, admin_id: Optional[int], role_id: Optional[int],
+    ) -> List[Dict[str, Any]]:
+        """Return all policy rules that apply to the given admin/role.
+
+        Union of rules from: policies attached to the role + policies
+        attached directly to the admin. Empty result = no policies => full access.
+        """
+        if not self.is_connected or (admin_id is None and role_id is None):
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                WITH effective AS (
+                    SELECT policy_id FROM role_access_policies WHERE role_id = $1
+                    UNION
+                    SELECT policy_id FROM admin_access_policies WHERE admin_id = $2
+                )
+                SELECT r.resource_type, r.scope_type, r.scope_value, r.actions
+                FROM access_policy_rules r
+                JOIN effective e ON e.policy_id = r.policy_id
+                """,
+                role_id, admin_id,
+            )
+            return [dict(r) for r in rows]
+
+    async def get_uuids_by_tag(self, resource_type: str, tag: str) -> List[str]:
+        """Return UUIDs of nodes/hosts of a given type whose tags include the tag.
+
+        Tags are stored in raw_data JSON (Panel API payload). We cast to jsonb
+        for the containment check. Squads have no tags yet -> empty result.
+        """
+        if not self.is_connected:
+            return []
+        if resource_type == "node":
+            table = "nodes"
+        elif resource_type == "host":
+            table = "hosts"
+        else:
+            return []
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT uuid::text AS uuid
+                    FROM {table}
+                    WHERE (raw_data::jsonb)->'tags' ? $1
+                    """,
+                    tag,
+                )
+                return [r["uuid"] for r in rows]
+        except Exception as e:
+            logger.debug("get_uuids_by_tag failed: %s", e)
+            return []
+
     # ── User-node traffic history (deltas) ─────────────────
 
     async def insert_user_node_traffic_deltas(

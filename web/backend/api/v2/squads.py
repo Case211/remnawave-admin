@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from web.backend.api.deps import require_permission, AdminUser
 from web.backend.core.errors import api_error, E
 from web.backend.core.rate_limit import limiter, RATE_BULK
+from web.backend.core.rbac import get_scope, check_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -45,7 +46,11 @@ async def list_internal_squads(
         result = await api_client.get_internal_squads()
         payload = result.get("response", result) if isinstance(result, dict) else result
         squads = payload.get("internalSquads", []) if isinstance(payload, dict) else payload
-        return squads if isinstance(squads, list) else []
+        squads = squads if isinstance(squads, list) else []
+        scope = await get_scope(admin, "squad", "view")
+        if scope is not None:
+            squads = [s for s in squads if str(s.get("uuid", "")).lower() in scope]
+        return squads
     except Exception as e:
         logger.error("Failed to list internal squads: %s", e)
         raise api_error(502, E.API_SERVICE_UNAVAILABLE)
@@ -76,6 +81,8 @@ async def update_internal_squad(
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Update an internal squad via Panel API."""
+    if not await check_access(admin, "squad", squad_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     from shared.api_client import api_client
     try:
         result = await api_client.update_internal_squad(
@@ -94,6 +101,8 @@ async def delete_internal_squad(
     admin: AdminUser = Depends(require_permission("users", "delete")),
 ):
     """Delete an internal squad via Panel API."""
+    if not await check_access(admin, "squad", squad_uuid, "delete"):
+        raise api_error(403, E.FORBIDDEN)
     from shared.api_client import api_client
     try:
         await api_client.delete_internal_squad(squad_uuid)
@@ -115,7 +124,11 @@ async def list_external_squads(
         result = await api_client.get_external_squads()
         payload = result.get("response", result) if isinstance(result, dict) else result
         squads = payload.get("externalSquads", []) if isinstance(payload, dict) else payload
-        return squads if isinstance(squads, list) else []
+        squads = squads if isinstance(squads, list) else []
+        scope = await get_scope(admin, "squad", "view")
+        if scope is not None:
+            squads = [s for s in squads if str(s.get("uuid", "")).lower() in scope]
+        return squads
     except Exception as e:
         logger.error("Failed to list external squads: %s", e)
         raise api_error(502, E.API_SERVICE_UNAVAILABLE)
@@ -146,6 +159,8 @@ async def update_external_squad(
     admin: AdminUser = Depends(require_permission("users", "edit")),
 ):
     """Update an external squad via Panel API."""
+    if not await check_access(admin, "squad", squad_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
     from shared.api_client import api_client
     try:
         payload = {"uuid": squad_uuid}
@@ -165,6 +180,8 @@ async def delete_external_squad(
     admin: AdminUser = Depends(require_permission("users", "delete")),
 ):
     """Delete an external squad via Panel API."""
+    if not await check_access(admin, "squad", squad_uuid, "delete"):
+        raise api_error(403, E.FORBIDDEN)
     from shared.api_client import api_client
     try:
         await api_client.delete_external_squad(squad_uuid)
