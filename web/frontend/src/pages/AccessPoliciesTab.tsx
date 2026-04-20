@@ -11,6 +11,7 @@ import {
   type PolicyAction,
 } from '@/api/accessPolicies'
 import { squadsApi } from '@/api/squads'
+import { adminsApi, type AdminAccount } from '@/api/admins'
 import client from '@/api/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -40,30 +41,32 @@ const SCOPE_TYPES: ScopeType[] = ['uuid', 'tag']
 const ALL_ACTIONS: PolicyAction[] = ['view', 'edit', 'delete']
 
 
-function useResourceOptions() {
+function useResourceOptions(enabled: boolean = true) {
   const nodesQ = useQuery({
-    queryKey: ['nodes-options'],
+    queryKey: ['policy-options', 'nodes'],
     queryFn: async () => {
       const { data } = await client.get('/nodes', { params: { per_page: 500 } })
-      const items = Array.isArray(data?.items) ? data.items : []
+      const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
       return items.map((n: any) => ({ uuid: n.uuid, label: n.name || n.uuid })) as ResourceOption[]
     },
+    enabled,
     staleTime: 60_000,
   })
   const hostsQ = useQuery({
-    queryKey: ['hosts-options'],
+    queryKey: ['policy-options', 'hosts'],
     queryFn: async () => {
       const { data } = await client.get('/hosts')
-      const items = Array.isArray(data?.items) ? data.items : []
+      const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : [])
       return items.map((h: any) => ({
         uuid: h.uuid,
         label: h.remark || h.address || h.uuid,
       })) as ResourceOption[]
     },
+    enabled,
     staleTime: 60_000,
   })
   const squadsQ = useQuery({
-    queryKey: ['squads-options'],
+    queryKey: ['policy-options', 'squads'],
     queryFn: async () => {
       const [internal, external] = await Promise.all([
         squadsApi.listInternal().catch(() => []),
@@ -74,6 +77,7 @@ function useResourceOptions() {
         ...external.map((s: any) => ({ uuid: s.uuid, label: `${s.name} (external)` })),
       ] as ResourceOption[]
     },
+    enabled,
     staleTime: 60_000,
   })
   return {
@@ -89,6 +93,10 @@ export default function AccessPoliciesTab({ roles }: { roles: Role[] }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const [selectedId, setSelectedId] = useState<number | null>(null)
+
+  // Kick off resource options fetches early so that dropdowns are ready
+  // by the time the user opens the editor.
+  useResourceOptions(true)
 
   const listQ = useQuery({
     queryKey: ['access-policies'],
@@ -207,6 +215,10 @@ export default function AccessPoliciesTab({ roles }: { roles: Role[] }) {
             onSave={(body) => update.mutate({ id: detailQ.data!.id, body })}
             onDelete={handleDelete}
             saving={update.isPending}
+            onAttachmentsChanged={() => {
+              qc.invalidateQueries({ queryKey: ['access-policies'] })
+              qc.invalidateQueries({ queryKey: ['access-policy', selectedId] })
+            }}
           />
         )}
       </div>
@@ -221,24 +233,35 @@ function PolicyEditor({
   onSave,
   onDelete,
   saving,
+  onAttachmentsChanged,
 }: {
   policy: PolicyDetail
   roles: Role[]
   onSave: (body: any) => void
   onDelete: () => void
   saving: boolean
+  onAttachmentsChanged?: () => void
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState(policy.name)
   const [description, setDescription] = useState(policy.description || '')
   const [rules, setRules] = useState<PolicyRule[]>(policy.rules)
   const [selectedRoles, setSelectedRoles] = useState<Set<number>>(new Set(policy.role_ids))
+  const [selectedAdmins, setSelectedAdmins] = useState<Set<number>>(new Set(policy.admin_ids))
+
+  const adminsQ = useQuery({
+    queryKey: ['admins-for-policies'],
+    queryFn: adminsApi.list,
+    staleTime: 60_000,
+  })
+  const admins: AdminAccount[] = adminsQ.data?.items || []
 
   useEffect(() => {
     setName(policy.name)
     setDescription(policy.description || '')
     setRules(policy.rules)
     setSelectedRoles(new Set(policy.role_ids))
+    setSelectedAdmins(new Set(policy.admin_ids))
   }, [policy.id])
 
   const options = useResourceOptions()
@@ -264,6 +287,13 @@ function PolicyEditor({
     setSelectedRoles(next)
   }
 
+  const toggleAdmin = (id: number) => {
+    const next = new Set(selectedAdmins)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedAdmins(next)
+  }
+
   const handleSave = async () => {
     for (const r of rules) {
       if (!r.scope_value.trim()) {
@@ -276,24 +306,37 @@ function PolicyEditor({
       }
     }
 
-    // Save policy itself (name/description/rules)
     onSave({ name: name.trim(), description, rules })
 
-    // Sync role attachments: update each role that was added or removed
-    const originalRoles = new Set(policy.role_ids)
+    // Sync role attachments
+    const origRoles = new Set(policy.role_ids)
     const changedRoles = new Set<number>()
-    for (const rid of selectedRoles) if (!originalRoles.has(rid)) changedRoles.add(rid)
-    for (const rid of originalRoles) if (!selectedRoles.has(rid)) changedRoles.add(rid)
-    if (changedRoles.size === 0) return
+    for (const rid of selectedRoles) if (!origRoles.has(rid)) changedRoles.add(rid)
+    for (const rid of origRoles) if (!selectedRoles.has(rid)) changedRoles.add(rid)
+
+    // Sync admin attachments
+    const origAdmins = new Set(policy.admin_ids)
+    const changedAdmins = new Set<number>()
+    for (const aid of selectedAdmins) if (!origAdmins.has(aid)) changedAdmins.add(aid)
+    for (const aid of origAdmins) if (!selectedAdmins.has(aid)) changedAdmins.add(aid)
+
+    if (changedRoles.size === 0 && changedAdmins.size === 0) return
 
     try {
-      const attachments = await getRolePoliciesMap()
+      const { roleMap, adminMap } = await getPolicyAttachmentsMap()
       for (const rid of changedRoles) {
-        const current = new Set(attachments[rid] || [])
+        const current = new Set(roleMap[rid] || [])
         if (selectedRoles.has(rid)) current.add(policy.id)
         else current.delete(policy.id)
         await accessPoliciesApi.attachToRole(rid, [...current])
       }
+      for (const aid of changedAdmins) {
+        const current = new Set(adminMap[aid] || [])
+        if (selectedAdmins.has(aid)) current.add(policy.id)
+        else current.delete(policy.id)
+        await accessPoliciesApi.attachToAdmin(aid, [...current])
+      }
+      onAttachmentsChanged?.()
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || t('accessPolicies.roleAttachFailed'))
     }
@@ -380,12 +423,24 @@ function PolicyEditor({
                         onValueChange={(v) => updateRule(i, { scope_value: v })}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder={t('accessPolicies.pickResource') || 'Pick...'} />
+                          <SelectValue placeholder={
+                            options.loading
+                              ? t('accessPolicies.loading') || 'Loading...'
+                              : resOptions.length === 0
+                                ? t('accessPolicies.noResources') || 'No resources'
+                                : t('accessPolicies.pickResource') || 'Pick...'
+                          } />
                         </SelectTrigger>
                         <SelectContent>
-                          {resOptions.map((o) => (
-                            <SelectItem key={o.uuid} value={o.uuid}>{o.label}</SelectItem>
-                          ))}
+                          {resOptions.length === 0 && !options.loading ? (
+                            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                              {t('accessPolicies.noResources')}
+                            </div>
+                          ) : (
+                            resOptions.map((o) => (
+                              <SelectItem key={o.uuid} value={o.uuid}>{o.label}</SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     ) : (
@@ -446,25 +501,68 @@ function PolicyEditor({
             {t('accessPolicies.roleHint')}
           </p>
         </div>
+
+        {/* Admin attachments */}
+        <div>
+          <Label className="mb-2 block flex items-center gap-1">
+            <Users className="w-4 h-4" /> {t('accessPolicies.attachedAdmins')}
+          </Label>
+          {adminsQ.isLoading ? (
+            <Skeleton className="h-8 w-full" />
+          ) : admins.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">
+              {t('accessPolicies.noAdmins')}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {admins.map((a) => (
+                <Badge
+                  key={a.id}
+                  variant={selectedAdmins.has(a.id) ? 'default' : 'outline'}
+                  className="cursor-pointer"
+                  onClick={() => toggleAdmin(a.id)}
+                >
+                  {a.username}
+                  {a.role_name && (
+                    <span className="ml-1 opacity-60 text-[10px]">
+                      [{a.role_display_name || a.role_name}]
+                    </span>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {t('accessPolicies.adminHint')}
+          </p>
+        </div>
       </CardContent>
     </Card>
   )
 }
 
 
-async function getRolePoliciesMap(): Promise<Record<number, number[]>> {
-  // Build {role_id -> [policy_id,...]} by walking all policies.
-  // Backend has no bulk endpoint for this, but it's fine for a handful of policies.
+async function getPolicyAttachmentsMap(): Promise<{
+  roleMap: Record<number, number[]>
+  adminMap: Record<number, number[]>
+}> {
+  // Build {role_id -> [policy_id,...]} and {admin_id -> [...]} by walking
+  // all policies. No bulk endpoint yet, but fine for a handful of policies.
   const all = await accessPoliciesApi.list()
-  const map: Record<number, number[]> = {}
+  const roleMap: Record<number, number[]> = {}
+  const adminMap: Record<number, number[]> = {}
   for (const p of all) {
     try {
       const detail = await accessPoliciesApi.get(p.id)
       for (const rid of detail.role_ids) {
-        if (!map[rid]) map[rid] = []
-        map[rid].push(detail.id)
+        if (!roleMap[rid]) roleMap[rid] = []
+        roleMap[rid].push(detail.id)
+      }
+      for (const aid of detail.admin_ids) {
+        if (!adminMap[aid]) adminMap[aid] = []
+        adminMap[aid].push(detail.id)
       }
     } catch { /* skip */ }
   }
-  return map
+  return { roleMap, adminMap }
 }
