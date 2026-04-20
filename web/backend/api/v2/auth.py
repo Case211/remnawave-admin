@@ -22,6 +22,7 @@ from web.backend.core.security import (
     create_temp_2fa_token,
     create_password_reset_token,
     decode_token,
+    get_access_ttl_minutes,
 )
 from web.backend.core.token_blacklist import token_blacklist
 from web.backend.core.totp import (
@@ -159,7 +160,7 @@ async def register_admin(request: Request, data: RegisterRequest):
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=settings.jwt_expire_minutes * 60,
+        expires_in=get_access_ttl_minutes() * 60,
     )
 
 
@@ -282,7 +283,7 @@ async def telegram_login(request: Request, data: TelegramAuthData):
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=settings.jwt_expire_minutes * 60,
+        expires_in=get_access_ttl_minutes() * 60,
     )
 
 
@@ -375,7 +376,7 @@ async def password_login(request: Request, data: LoginRequest):
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=settings.jwt_expire_minutes * 60,
+        expires_in=get_access_ttl_minutes() * 60,
     )
 
 
@@ -507,7 +508,7 @@ async def totp_confirm_setup(
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=settings.jwt_expire_minutes * 60,
+        expires_in=get_access_ttl_minutes() * 60,
     )
 
 
@@ -545,7 +546,7 @@ async def totp_verify(
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            expires_in=settings.jwt_expire_minutes * 60,
+            expires_in=get_access_ttl_minutes() * 60,
         )
 
     # Try backup code (already encrypted in DB)
@@ -565,7 +566,7 @@ async def totp_verify(
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            expires_in=settings.jwt_expire_minutes * 60,
+            expires_in=get_access_ttl_minutes() * 60,
         )
 
     # Both TOTP and backup failed
@@ -640,7 +641,7 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=settings.jwt_expire_minutes * 60,
+        expires_in=get_access_ttl_minutes() * 60,
     )
 
 

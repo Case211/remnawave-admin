@@ -135,6 +135,26 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "default_value": "",
         "sort_order": 6,
     },
+    {
+        "key": "web_session_access_minutes",
+        "value_type": "int",
+        "category": "general",
+        "display_name": "Срок access-токена (минут)",
+        "description": "Время жизни access-токена веб-админки. Применяется к новым логинам и refresh. Рекомендация: 30-120 мин",
+        "default_value": "30",
+        "env_var_name": "WEB_JWT_EXPIRE_MINUTES",
+        "sort_order": 10,
+    },
+    {
+        "key": "web_session_refresh_hours",
+        "value_type": "int",
+        "category": "general",
+        "display_name": "Срок сессии (часов)",
+        "description": "Общее время жизни сессии (refresh-токен). Пока валиден — юзер не выходит. После истечения нужен повторный вход с 2FA. Рекомендация: 12-24ч",
+        "default_value": "6",
+        "env_var_name": "WEB_JWT_REFRESH_HOURS",
+        "sort_order": 11,
+    },
 
     # === GEOIP ===
     {

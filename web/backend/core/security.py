@@ -13,6 +13,30 @@ from web.backend.core.config import get_web_settings
 logger = logging.getLogger(__name__)
 
 
+def get_access_ttl_minutes() -> int:
+    """Resolve access-token TTL: DB setting > env > default."""
+    try:
+        from shared.config_service import config_service
+        val = config_service.get("web_session_access_minutes")
+        if val is not None and str(val).strip():
+            return int(val)
+    except Exception:
+        pass
+    return get_web_settings().jwt_expire_minutes
+
+
+def get_refresh_ttl_hours() -> int:
+    """Resolve refresh-token TTL: DB setting > env > default."""
+    try:
+        from shared.config_service import config_service
+        val = config_service.get("web_session_refresh_hours")
+        if val is not None and str(val).strip():
+            return int(val)
+    except Exception:
+        pass
+    return get_web_settings().jwt_refresh_hours
+
+
 def verify_telegram_auth(auth_data: Dict[str, Any]) -> Tuple[bool, str]:
     """
     Verify Telegram Login Widget authentication data.
@@ -191,7 +215,7 @@ def create_access_token(
         Encoded JWT token
     """
     settings = get_web_settings()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=get_access_ttl_minutes())
 
     payload = {
         "sub": subject,
@@ -251,7 +275,7 @@ def create_refresh_token(subject: str) -> str:
         Encoded JWT refresh token
     """
     settings = get_web_settings()
-    expire = datetime.now(timezone.utc) + timedelta(hours=settings.jwt_refresh_hours)
+    expire = datetime.now(timezone.utc) + timedelta(hours=get_refresh_ttl_hours())
 
     payload = {
         "sub": subject,
