@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from web.backend.api.deps import require_permission, AdminUser
 from web.backend.core.errors import api_error, E
 from web.backend.core.rate_limit import limiter, RATE_BULK
-from web.backend.core.rbac import get_scope, check_access
+from web.backend.core.rbac import get_scope, check_access, resolve_allowed_actions_map
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -50,6 +50,13 @@ async def list_internal_squads(
         scope = await get_scope(admin, "squad", "view")
         if scope is not None:
             squads = [s for s in squads if str(s.get("uuid", "")).lower() in scope]
+        actions_map = await resolve_allowed_actions_map(
+            admin, "squad", [str(s.get("uuid", "")) for s in squads if s.get("uuid")],
+        )
+        for s in squads:
+            uid = str(s.get("uuid", "")).lower()
+            if uid in actions_map:
+                s["allowed_actions"] = actions_map[uid]
         return squads
     except Exception as e:
         logger.error("Failed to list internal squads: %s", e)
@@ -128,6 +135,13 @@ async def list_external_squads(
         scope = await get_scope(admin, "squad", "view")
         if scope is not None:
             squads = [s for s in squads if str(s.get("uuid", "")).lower() in scope]
+        actions_map = await resolve_allowed_actions_map(
+            admin, "squad", [str(s.get("uuid", "")) for s in squads if s.get("uuid")],
+        )
+        for s in squads:
+            uid = str(s.get("uuid", "")).lower()
+            if uid in actions_map:
+                s["allowed_actions"] = actions_map[uid]
         return squads
     except Exception as e:
         logger.error("Failed to list external squads: %s", e)

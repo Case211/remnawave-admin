@@ -6,7 +6,7 @@ from typing import List
 
 from web.backend.api.deps import get_current_admin, get_api_client, AdminUser, require_permission, require_quota, get_client_ip
 from web.backend.core.errors import api_error, E
-from web.backend.core.rbac import write_audit_log, get_scope, check_access
+from web.backend.core.rbac import write_audit_log, get_scope, check_access, resolve_allowed_actions_map
 from web.backend.schemas.host import (
     HostListItem,
     HostListResponse,
@@ -108,7 +108,16 @@ async def list_hosts(
     if scope is not None:
         hosts = [h for h in hosts if str(h.get("uuid", "")).lower() in scope]
 
-    items = [HostListItem(**_map_host(h)) for h in hosts]
+    actions_map = await resolve_allowed_actions_map(
+        admin, "host", [str(h.get("uuid", "")) for h in hosts if h.get("uuid")],
+    )
+    items = []
+    for h in hosts:
+        mapped = _map_host(h)
+        uid = str(mapped.get("uuid", "")).lower()
+        if uid in actions_map:
+            mapped["allowed_actions"] = actions_map[uid]
+        items.append(HostListItem(**mapped))
 
     return HostListResponse(
         items=items,
@@ -132,7 +141,10 @@ async def get_host(
 
     h = data.get('response', data) if isinstance(data, dict) else data
 
-    return HostDetail(**_map_host_detail(h))
+    h_dict = _map_host_detail(h)
+    actions_map = await resolve_allowed_actions_map(admin, "host", [host_uuid])
+    h_dict["allowed_actions"] = actions_map.get(host_uuid.lower())
+    return HostDetail(**h_dict)
 
 
 @router.post("", response_model=HostDetail)

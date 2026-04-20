@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 from web.backend.api.deps import get_current_admin, AdminUser, require_permission, require_quota, get_client_ip
 from web.backend.core.errors import api_error, E
-from web.backend.core.rbac import write_audit_log, get_scope, check_access
+from web.backend.core.rbac import write_audit_log, get_scope, check_access, resolve_allowed_actions_map
 from web.backend.core.api_helper import (
     fetch_nodes_from_api, fetch_nodes_realtime_usage,
     fetch_nodes_usage_by_range, _normalize,
@@ -177,6 +177,15 @@ async def list_nodes(
         if scope is not None:
             nodes = [n for n in nodes if str(n.get("uuid", "")).lower() in scope]
 
+        # Annotate each node with allowed actions so UI can gate buttons
+        actions_map = await resolve_allowed_actions_map(
+            admin, "node", [str(n.get("uuid", "")) for n in nodes if n.get("uuid")],
+        )
+        for n in nodes:
+            uid = str(n.get("uuid", "")).lower()
+            if uid in actions_map:
+                n["allowed_actions"] = actions_map[uid]
+
         # Filter
         if search:
             search_lower = search.lower()
@@ -253,7 +262,10 @@ async def get_node(
         if not node_data:
             raise api_error(404, E.NODE_NOT_FOUND)
 
-        return NodeDetail(**_ensure_node_snake_case(node_data))
+        node_dict = _ensure_node_snake_case(node_data)
+        actions_map = await resolve_allowed_actions_map(admin, "node", [node_uuid])
+        node_dict["allowed_actions"] = actions_map.get(node_uuid.lower())
+        return NodeDetail(**node_dict)
 
     except HTTPException:
         raise

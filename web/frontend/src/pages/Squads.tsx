@@ -115,7 +115,12 @@ function InternalSquadsTab() {
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {squads.map((sq) => (
+          {squads.map((sq) => {
+            const scopeAllowsEdit = sq.allowed_actions == null || sq.allowed_actions.includes('edit')
+            const scopeAllowsDelete = sq.allowed_actions == null || sq.allowed_actions.includes('delete')
+            const effectiveCanEdit = canEdit && scopeAllowsEdit
+            const effectiveCanDelete = canDelete && scopeAllowsDelete
+            return (
             <Card key={sq.uuid} className="animate-fade-in-up">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -124,7 +129,7 @@ function InternalSquadsTab() {
                     <span className="font-medium text-white truncate">{sq.name}</span>
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
-                    {canEdit && (
+                    {effectiveCanEdit && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -134,7 +139,7 @@ function InternalSquadsTab() {
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
                     )}
-                    {canDelete && (
+                    {effectiveCanDelete && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -171,7 +176,7 @@ function InternalSquadsTab() {
                 )}
               </CardContent>
             </Card>
-          ))}
+          )})}
         </div>
       )}
 
@@ -364,7 +369,12 @@ function ExternalSquadsTab() {
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {squads.map((sq) => (
+          {squads.map((sq) => {
+            const scopeAllowsEdit = sq.allowed_actions == null || sq.allowed_actions.includes('edit')
+            const scopeAllowsDelete = sq.allowed_actions == null || sq.allowed_actions.includes('delete')
+            const effectiveCanEdit = canEdit && scopeAllowsEdit
+            const effectiveCanDelete = canDelete && scopeAllowsDelete
+            return (
             <Card key={sq.uuid} className="animate-fade-in-up">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -373,7 +383,7 @@ function ExternalSquadsTab() {
                     <span className="font-medium text-white truncate">{sq.name}</span>
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
-                    {canEdit && (
+                    {effectiveCanEdit && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -383,7 +393,7 @@ function ExternalSquadsTab() {
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
                     )}
-                    {canDelete && (
+                    {effectiveCanDelete && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -405,7 +415,7 @@ function ExternalSquadsTab() {
                 )}
               </CardContent>
             </Card>
-          ))}
+          )})}
         </div>
       )}
 

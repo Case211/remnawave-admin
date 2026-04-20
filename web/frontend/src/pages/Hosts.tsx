@@ -74,6 +74,7 @@ interface Host {
   mihomo_x25519: string | null
   nodes: { uuid: string; name: string }[] | null
   excluded_internal_squads: { uuid: string; name: string }[] | null
+  allowed_actions?: string[] | null
 }
 
 interface HostListResponse {
@@ -578,6 +579,10 @@ function HostCard({
   canDelete: boolean
 }) {
   const { t } = useTranslation()
+  const scopeAllowsEdit = host.allowed_actions == null || host.allowed_actions.includes('edit')
+  const scopeAllowsDelete = host.allowed_actions == null || host.allowed_actions.includes('delete')
+  const effectiveCanEdit = canEdit && scopeAllowsEdit
+  const effectiveCanDelete = canDelete && scopeAllowsDelete
 
   const getSecurityLabel = (h: Host): string => {
     const sec = h.security_layer || h.security
@@ -642,7 +647,7 @@ function HostCard({
             </Badge>
 
             {/* Actions menu */}
-            {(canEdit || canDelete) && (
+            {(effectiveCanEdit || effectiveCanDelete) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -650,14 +655,14 @@ function HostCard({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {canEdit && (
+                  {effectiveCanEdit && (
                     <DropdownMenuItem onSelect={onEdit}>
                       <Pencil className="w-4 h-4 mr-2" />
                       {t('hosts.actions.edit')}
                     </DropdownMenuItem>
                   )}
-                  {canEdit && <DropdownMenuSeparator />}
-                  {canEdit && (
+                  {effectiveCanEdit && <DropdownMenuSeparator />}
+                  {effectiveCanEdit && (
                     host.is_disabled ? (
                       <DropdownMenuItem
                         onSelect={onEnable}
@@ -676,7 +681,7 @@ function HostCard({
                       </DropdownMenuItem>
                     )
                   )}
-                  {canDelete && (
+                  {effectiveCanDelete && (
                     <DropdownMenuItem
                       onSelect={onDelete}
                       className="text-red-400 focus:text-red-400"

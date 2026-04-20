@@ -34,6 +34,8 @@ class HostListItem(HostBase):
     # Node associations
     nodes: Optional[list] = None
     excluded_internal_squads: Optional[list] = None
+    # Access-policy scope for the current admin
+    allowed_actions: Optional[List[str]] = None
 
     @field_validator('alpn', mode='before')
     @classmethod

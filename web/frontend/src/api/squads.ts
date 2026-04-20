@@ -8,6 +8,7 @@ export interface InternalSquad {
   inbounds?: { uuid: string; tag: string; type: string }[]
   createdAt?: string
   updatedAt?: string
+  allowed_actions?: string[] | null
 }
 
 export interface ExternalSquad {
@@ -17,6 +18,7 @@ export interface ExternalSquad {
   info?: { membersCount: number }
   createdAt?: string
   updatedAt?: string
+  allowed_actions?: string[] | null
 }
 
 export const squadsApi = {

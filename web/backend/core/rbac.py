@@ -928,3 +928,32 @@ def filter_by_scope(items: List[dict], scope: Optional[Set[str]], uuid_key: str 
     if scope is None:
         return items
     return [it for it in items if str(it.get(uuid_key, "")).lower() in scope]
+
+
+async def resolve_allowed_actions_map(
+    admin, resource_type: str, uuids: List[str],
+) -> Dict[str, Optional[List[str]]]:
+    """For a list of resource UUIDs, resolve which actions each one allows.
+
+    Returns {uuid_lower: [actions] or None}.
+    None = no restriction (superadmin or no policies). Empty list = hidden.
+    Used to annotate list responses so the frontend can gate UI buttons.
+    """
+    view_scope = await get_scope(admin, resource_type, "view")
+    if view_scope is None:
+        # No restrictions — full access to all actions
+        return {u.lower(): None for u in uuids}
+    edit_scope = await get_scope(admin, resource_type, "edit")
+    delete_scope = await get_scope(admin, resource_type, "delete")
+    result: Dict[str, Optional[List[str]]] = {}
+    for u in uuids:
+        key = u.lower()
+        actions: List[str] = []
+        if key in view_scope:
+            actions.append("view")
+        if edit_scope is not None and key in edit_scope:
+            actions.append("edit")
+        if delete_scope is not None and key in delete_scope:
+            actions.append("delete")
+        result[key] = actions
+    return result

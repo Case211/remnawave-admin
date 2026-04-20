@@ -39,6 +39,9 @@ class NodeListItem(NodeBase):
     upload_speed_bps: int = 0
     disk_read_speed_bps: int = 0
     disk_write_speed_bps: int = 0
+    # Access-policy scope for the current admin:
+    # None = no restriction, list = allowed actions (e.g. ["view","edit"])
+    allowed_actions: Optional[List[str]] = None
 
     class Config:
         from_attributes = True

@@ -75,6 +75,8 @@ interface Node {
   traffic_today_bytes: number
   created_at: string
   last_seen_at: string | null
+  // null/undefined = no access-policy restriction
+  allowed_actions?: string[] | null
 }
 
 interface NodeEditFormData {
@@ -835,6 +837,13 @@ function NodeCard({
   const { formatBytes, formatTimeAgo } = useFormatters()
   const isOnline = node.is_connected && !node.is_disabled
 
+  // Intersect role permission with per-node access-policy scope.
+  // If allowed_actions is null/undefined — no scope restriction (full access).
+  const scopeAllowsEdit = node.allowed_actions == null || node.allowed_actions.includes('edit')
+  const scopeAllowsDelete = node.allowed_actions == null || node.allowed_actions.includes('delete')
+  const effectiveCanEdit = canEdit && scopeAllowsEdit
+  const effectiveCanDelete = canDelete && scopeAllowsDelete
+
   const statusVariant = node.is_disabled
     ? 'secondary'
     : node.is_connected
@@ -905,7 +914,7 @@ function NodeCard({
             </Badge>
 
             {/* Actions menu */}
-            {(canEdit || canDelete) && (
+            {(effectiveCanEdit || effectiveCanDelete) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -913,19 +922,19 @@ function NodeCard({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {canEdit && (
+                  {effectiveCanEdit && (
                     <DropdownMenuItem onClick={onRestart}>
                       <RefreshCw className="w-4 h-4 mr-2" />
                       {t('nodes.actions.restart')}
                     </DropdownMenuItem>
                   )}
-                  {canEdit && (
+                  {effectiveCanEdit && (
                     <DropdownMenuItem onClick={onEdit}>
                       <Pencil className="w-4 h-4 mr-2" />
                       {t('nodes.actions.edit')}
                     </DropdownMenuItem>
                   )}
-                  {canEdit && (
+                  {effectiveCanEdit && (
                     <DropdownMenuItem onClick={onTokenManage}>
                       <Key className="w-4 h-4 mr-2" />
                       {t('nodes.actions.agentToken')}
@@ -935,8 +944,8 @@ function NodeCard({
                     <Scan className="w-4 h-4 mr-2" />
                     {t('nodes.actions.fetchUsersIps')}
                   </DropdownMenuItem>
-                  {(canEdit || canDelete) && <DropdownMenuSeparator />}
-                  {canEdit && (
+                  {(effectiveCanEdit || effectiveCanDelete) && <DropdownMenuSeparator />}
+                  {effectiveCanEdit && (
                     node.is_disabled ? (
                       <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
                         <Play className="w-4 h-4 mr-2" />
@@ -949,7 +958,7 @@ function NodeCard({
                       </DropdownMenuItem>
                     )
                   )}
-                  {canDelete && (
+                  {effectiveCanDelete && (
                     <DropdownMenuItem
                       onClick={onDelete}
                       className="text-red-400 focus:text-red-400"
