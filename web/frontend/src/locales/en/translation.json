@@ -369,7 +369,7 @@
     "billingTotalSpent": "Total spent",
     "billingNextPayment": "Next payment",
     "growthTrends": "Growth Trends",
-    "growthTrendsTooltip": "User, traffic and violation growth dynamics over 30 days",
+    "growthTrendsTooltip": "30-day dynamics: new users, violations and day-over-day traffic change",
     "trendUsers": "Users",
     "trendTraffic": "Traffic",
     "trendViolations": "Violations",

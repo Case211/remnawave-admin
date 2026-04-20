@@ -475,10 +475,12 @@ async def _compute_trends(metric: str = "users", period: str = "30d", date_from:
                 growth = sum(s["value"] for s in series)
 
             elif metric == "traffic":
-                # Daily network traffic from node_traffic_snapshots.
-                # Snapshots are cumulative per-day totals per node (sync writes
-                # them every 5 min) — MAX per (node, day) gives that day's
-                # traffic for the node; sum across nodes is the daily total.
+                # Day-over-day traffic delta from node_traffic_snapshots.
+                # Snapshots are cumulative per-day totals per node — MAX per
+                # (node, day) gives the day's traffic; sum across nodes is
+                # the daily total. Chart value = today_total - yesterday_total
+                # so users see the direction of change (up/down) rather than
+                # duplicating the absolute-traffic chart on the dashboard.
                 rows = await conn.fetch(
                     """
                     SELECT day, SUM(per_node) AS total_bytes
@@ -495,11 +497,14 @@ async def _compute_trends(metric: str = "users", period: str = "30d", date_from:
                     """,
                     since,
                 )
-                series = [
-                    {"date": str(r["day"]), "value": int(r["total_bytes"] or 0)}
-                    for r in rows
-                ]
-                growth = sum(s["value"] for s in series)
+                daily_totals = [(str(r["day"]), int(r["total_bytes"] or 0)) for r in rows]
+                series = []
+                prev_total: Optional[int] = None
+                for day, total in daily_totals:
+                    delta = 0 if prev_total is None else total - prev_total
+                    series.append({"date": day, "value": delta})
+                    prev_total = total
+                growth = (daily_totals[-1][1] - daily_totals[0][1]) if len(daily_totals) >= 2 else 0
 
             else:
                 series = []

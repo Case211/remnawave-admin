@@ -258,23 +258,27 @@ const fetchExpiringCounts = async (): Promise<{ in7d: number; in30d: number }> =
 
 function createFormatBytes(t: (key: string) => string) {
   return function formatBytes(bytes: number | null | undefined): string {
-    if (!bytes || bytes <= 0) return `0 ${t('common.bytes.b')}`
+    if (!bytes) return `0 ${t('common.bytes.b')}`
+    const sign = bytes < 0 ? '-' : ''
+    const abs = Math.abs(bytes)
     const k = 1024
     const sizes = [t('common.bytes.b'), t('common.bytes.kb'), t('common.bytes.mb'), t('common.bytes.gb'), t('common.bytes.tb')]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    const i = Math.floor(Math.log(abs) / Math.log(k))
     if (i < 0 || i >= sizes.length) return `0 ${t('common.bytes.b')}`
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    return sign + parseFloat((abs / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
   }
 }
 
 function createFormatBytesShort(t: (key: string) => string) {
   return function formatBytesShort(bytes: number): string {
-    if (bytes <= 0) return '0'
+    if (!bytes) return '0'
+    const sign = bytes < 0 ? '-' : ''
+    const abs = Math.abs(bytes)
     const k = 1024
     const sizes = [t('common.bytes.b'), t('common.bytes.kb_short'), t('common.bytes.mb_short'), t('common.bytes.gb_short'), t('common.bytes.tb_short')]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    const i = Math.floor(Math.log(abs) / Math.log(k))
     if (i < 0 || i >= sizes.length) return '0'
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i]
+    return sign + parseFloat((abs / Math.pow(k, i)).toFixed(1)) + sizes[i]
   }
 }
 

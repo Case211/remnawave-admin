@@ -369,7 +369,7 @@
     "billingTotalSpent": "Всего потрачено",
     "billingNextPayment": "Следующий платёж",
     "growthTrends": "Тренды роста",
-    "growthTrendsTooltip": "Динамика роста пользователей, трафика и нарушений за 30 дней",
+    "growthTrendsTooltip": "Динамика за 30 дней: новые пользователи, нарушения и изменение трафика день-к-дню",
     "trendUsers": "Пользователи",
     "trendTraffic": "Трафик",
     "trendViolations": "Нарушения",
