@@ -393,14 +393,14 @@ class SyncService:
             response = await api_client.get_nodes(skip_cache=True)
             nodes = response.get("response", [])
 
-            # Collect API node UUIDs for reconciliation
-            api_node_uuids = set()
+            # Collect API node UUIDs for reconciliation (normalized)
+            api_node_uuids: set[str] = set()
 
             total_synced = 0
             for node in nodes:
                 node_uuid = node.get("uuid")
                 if node_uuid:
-                    api_node_uuids.add(node_uuid)
+                    api_node_uuids.add(str(node_uuid).lower())
                 try:
                     await db_service.upsert_node({"response": node})
                     total_synced += 1
@@ -408,15 +408,34 @@ class SyncService:
                     logger.warning("Failed to sync node %s: %s", node.get("uuid"), e)
 
             # Remove local nodes that no longer exist in API
+            removed = 0
             try:
                 local_nodes = await db_service.get_all_nodes()
+                stale_uuids: list[str] = []
                 for local_node in local_nodes:
                     local_uuid = local_node.get("uuid")
-                    if local_uuid and local_uuid not in api_node_uuids:
-                        await db_service.delete_node(local_uuid)
-                        logger.info("Removed stale node %s from local DB (not in API)", local_uuid)
+                    if not local_uuid:
+                        continue
+                    if str(local_uuid).lower() not in api_node_uuids:
+                        stale_uuids.append(str(local_uuid))
+
+                logger.info(
+                    "Node reconciliation: api=%d local=%d stale=%d",
+                    len(api_node_uuids), len(local_nodes), len(stale_uuids),
+                )
+
+                for stale_uuid in stale_uuids:
+                    try:
+                        deleted = await db_service.delete_node(stale_uuid)
+                        if deleted:
+                            removed += 1
+                            logger.info("Removed stale node %s from local DB (not in API)", stale_uuid)
+                        else:
+                            logger.warning("delete_node returned False for stale node %s", stale_uuid)
+                    except Exception as e:
+                        logger.error("Failed to delete stale node %s: %s", stale_uuid, e)
             except Exception as e:
-                logger.warning("Failed to reconcile stale nodes: %s", e)
+                logger.error("Failed to reconcile stale nodes: %s", e, exc_info=True)
 
             # Update sync metadata
             await db_service.update_sync_metadata(
