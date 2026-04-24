@@ -305,6 +305,9 @@ class SyncService:
                     if batch_uuids:
                         old_traffic = await db_service.get_used_traffic_map(batch_uuids)
                         raw_traffic = await db_service.get_raw_traffic_for_uuids(batch_uuids)
+                        # Get last traffic sync timestamp
+                        users_meta = await db_service.get_sync_metadata("users")
+                        last_traffic_sync = users_meta["last_sync_at"] if users_meta else None
                         reset_uuids = []
                         for u in users:
                             uid = u.get("uuid")
@@ -312,15 +315,20 @@ class SyncService:
                                 continue
                             ut = u.get("userTraffic") or {}
                             ut_val = ut.get("usedTrafficBytes")
-                            new_used = int(ut_val if ut_val is not None else (u.get("usedTrafficBytes") or 0))
-                            old_used = old_traffic.get(uid, 0)
-                            raw_used = raw_traffic.get(uid, 0)
-                            # Primary: used_traffic dropped (normal reset detection)
-                            if old_used > 0 and new_used < old_used:
-                                reset_uuids.append(uid)
-                            # Catch-up: raw >> used_traffic from API — missed reset
-                            elif raw_used > 0 and new_used < raw_used and (raw_used - new_used) > 1_073_741_824:
-                                reset_uuids.append(uid)
+                            last_reset_s = u.get("lastTrafficResetAt")
+
+                            # Reset traffic usage for users with reset after last sync
+                            if last_reset_s:
+                                last_reset = datetime.fromisoformat(last_reset_s.replace("Z", "+00:00"))
+
+                                if last_traffic_sync is not None:
+                                    if last_traffic_sync.tzinfo is None:
+                                        last_traffic_sync = last_traffic_sync.replace(tzinfo=timezone.utc)
+
+                                    if last_traffic_sync < last_reset:
+                                        reset_uuids.append(uid)
+                                        logger.debug("TRAFFIC RESET Last sync: %s. Remnawave last traffic reset for %s user: %s", last_traffic_sync, uid, last_reset_s)
+
                         if reset_uuids:
                             await db_service.reset_raw_traffic(reset_uuids)
                             logger.info("Traffic reset detected for %d users, raw counters zeroed", len(reset_uuids))
