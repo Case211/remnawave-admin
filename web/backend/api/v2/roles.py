@@ -9,6 +9,7 @@ from web.backend.api.deps import (
     get_client_ip,
 )
 from web.backend.core.errors import api_error, E
+from web.backend.core.plugins import get_extra_rbac_resources
 from web.backend.core.rbac import (
     list_roles,
     get_role_by_id,
@@ -29,7 +30,8 @@ from web.backend.schemas.common import SuccessResponse
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# All available resources and their allowed actions
+# Built-in resources and their allowed actions. Plugins extend this map at
+# runtime via the plugin loader — see ``get_resources_map()`` below.
 AVAILABLE_RESOURCES = {
     "users": ["view", "create", "edit", "delete", "bulk_operations"],
     "nodes": ["view", "create", "edit", "delete"],
@@ -59,6 +61,22 @@ AVAILABLE_RESOURCES = {
     "bedolaga_support": ["view", "create", "edit"],
     "bedolaga_config": ["view", "edit"],
 }
+
+
+def get_resources_map() -> dict[str, list[str]]:
+    """Return built-in resources merged with plugin-contributed ones.
+
+    Plugin actions are appended (de-duplicated) to a built-in resource if it
+    already exists, otherwise the plugin resource is added as-is.
+    """
+    merged: dict[str, list[str]] = {res: list(actions) for res, actions in AVAILABLE_RESOURCES.items()}
+    for resource, actions in get_extra_rbac_resources().items():
+        if resource in merged:
+            existing = set(merged[resource])
+            merged[resource] = sorted(existing | set(actions))
+        else:
+            merged[resource] = list(actions)
+    return merged
 
 
 def _role_to_response(role: dict) -> RoleResponse:
@@ -99,7 +117,7 @@ async def get_available_resources(
     admin: AdminUser = Depends(require_permission("roles", "view")),
 ):
     """Get all available resources and actions for the permission matrix."""
-    return AVAILABLE_RESOURCES
+    return get_resources_map()
 
 
 @router.get("/{role_id}", response_model=RoleResponse)
@@ -127,10 +145,11 @@ async def create_new_role(
         raise api_error(409, E.ROLE_NAME_EXISTS)
 
     # Validate permissions
+    resources_map = get_resources_map()
     for perm in data.permissions:
-        if perm.resource not in AVAILABLE_RESOURCES:
+        if perm.resource not in resources_map:
             raise api_error(400, E.UNKNOWN_RESOURCE, f"Unknown resource: {perm.resource}")
-        if perm.action not in AVAILABLE_RESOURCES[perm.resource]:
+        if perm.action not in resources_map[perm.resource]:
             raise api_error(400, E.INVALID_ACTION, f"Invalid action '{perm.action}' for resource '{perm.resource}'")
 
     role = await create_role(
@@ -170,10 +189,11 @@ async def update_existing_role(
 
     # Validate permissions if provided
     if data.permissions is not None:
+        resources_map = get_resources_map()
         for perm in data.permissions:
-            if perm.resource not in AVAILABLE_RESOURCES:
+            if perm.resource not in resources_map:
                 raise api_error(400, E.UNKNOWN_RESOURCE, f"Unknown resource: {perm.resource}")
-            if perm.action not in AVAILABLE_RESOURCES[perm.resource]:
+            if perm.action not in resources_map[perm.resource]:
                 raise api_error(400, E.INVALID_ACTION, f"Invalid action '{perm.action}' for resource '{perm.resource}'")
 
     role = await update_role(

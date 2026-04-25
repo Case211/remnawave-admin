@@ -752,19 +752,22 @@ async def ensure_rbac_tables() -> None:
 
 
 async def sync_superadmin_permissions() -> None:
-    """Ensure the superadmin system role has ALL permissions from AVAILABLE_RESOURCES.
+    """Ensure the superadmin system role has ALL permissions, including plugin-contributed ones.
 
-    This runs on every startup so that when new resources/actions are added in code,
-    the superadmin role in the database is automatically updated without requiring
-    a manual migration or database edit.
+    This runs on every startup so that when new resources/actions are added
+    (either in core code or by an installed plugin), the superadmin role in
+    the database is automatically updated without requiring a manual
+    migration or database edit.
     """
     try:
         from shared.database import db_service
         if not db_service.is_connected:
             return
 
-        # Import AVAILABLE_RESOURCES from roles module
-        from web.backend.api.v2.roles import AVAILABLE_RESOURCES
+        # Use the merged map (built-in + plugin extras) so superadmin always
+        # gets full coverage even when plugins contribute new resources.
+        from web.backend.api.v2.roles import get_resources_map
+        resources_map = get_resources_map()
 
         async with db_service.acquire() as conn:
             # Get the superadmin role
@@ -784,9 +787,9 @@ async def sync_superadmin_permissions() -> None:
             )
             existing_set = {(row["resource"], row["action"]) for row in existing}
 
-            # Build the full set of permissions from AVAILABLE_RESOURCES
+            # Build the full set of permissions from the merged resources map
             full_set = set()
-            for resource, actions in AVAILABLE_RESOURCES.items():
+            for resource, actions in resources_map.items():
                 for action in actions:
                     full_set.add((resource, action))
 

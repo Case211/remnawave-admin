@@ -58,6 +58,8 @@ from web.backend.api.v2 import blocked_ips as blocked_ips_api
 from web.backend.api.v2 import webhooks as webhooks_api
 from web.backend.api.v2 import squads as squads_api
 from web.backend.api.v2.bedolaga import router as bedolaga_router
+from web.backend.api.v2 import plugins as plugins_api
+from web.backend.core import plugins as plugin_loader
 from web.backend.api.v3 import public as public_api_v3
 
 
@@ -783,6 +785,17 @@ def create_app() -> FastAPI:
     app.include_router(webhooks_api.router, prefix="/api/v2/webhooks", tags=["webhooks"])
     app.include_router(squads_api.router, prefix="/api/v2/squads", tags=["squads"])
     app.include_router(bedolaga_router, prefix="/api/v2/bedolaga", tags=["bedolaga"])
+
+    # Plugin metadata endpoint (must be registered before plugin_loader.register
+    # so that the meta route is reachable even if no plugins are installed).
+    app.include_router(plugins_api.router, prefix="/api/v2/plugins", tags=["plugins"])
+
+    # Discover and mount installed plugins. Fail-soft: a broken plugin logs
+    # an error but never breaks the panel.
+    try:
+        plugin_loader.register(app)
+    except Exception:
+        logger.exception("Plugin loader failed during startup")
 
     # Public API v3 — enabled via EXTERNAL_API_ENABLED=true
     if settings.external_api_enabled:

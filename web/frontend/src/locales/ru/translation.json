@@ -145,7 +145,8 @@
       "security": "Безопасность",
       "data": "Данные",
       "bedolaga": "Bedolaga",
-      "admin": "Управление"
+      "admin": "Управление",
+      "plugins": "Расширения"
     }
   },
   "header": {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -39,6 +39,7 @@ import {
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
 import { useAppearanceStore } from '../../store/useAppearanceStore'
+import { useActivePlugins, resolvePluginIcon, type PluginInfo } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 // Separator removed — using gradient dividers instead
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -146,6 +147,36 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const toggleSidebar = useAppearanceStore((s) => s.toggleSidebar)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const { data: activePlugins } = useActivePlugins()
+
+  // Build the navigation merged with plugin-contributed entries. Plugins
+  // are grouped by ``section_i18n`` (or fall back to a generic "Plugins"
+  // section). Entries appear in the order the backend returned them.
+  const mergedNavigation = useMemo<NavigationEntry[]>(() => {
+    if (!activePlugins || activePlugins.length === 0) return navigation
+    const bySection = new Map<string, NavItem[]>()
+    for (const p of activePlugins as PluginInfo[]) {
+      for (const nav of p.navigation) {
+        const section = nav.section_i18n || 'nav.sections.plugins'
+        const item: NavItem = {
+          name: nav.label_i18n,
+          href: nav.path,
+          icon: resolvePluginIcon(nav.icon),
+          permission: nav.permission ? { resource: nav.permission[0], action: nav.permission[1] } : null,
+        }
+        const list = bySection.get(section) ?? []
+        list.push(item)
+        bySection.set(section, list)
+      }
+    }
+    if (bySection.size === 0) return navigation
+    const extras: NavigationEntry[] = []
+    for (const [section, items] of bySection) {
+      extras.push({ type: 'section', name: section } as NavSection)
+      extras.push(...items)
+    }
+    return [...navigation, ...extras]
+  }, [activePlugins])
 
   const { data: panelNameData } = useQuery({
     queryKey: ['panel-name'],
@@ -178,11 +209,11 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   }
 
   // Filter navigation entries based on permissions (keep sections if next items are visible)
-  const visibleNavigation = navigation.filter((entry, idx) => {
+  const visibleNavigation = mergedNavigation.filter((entry, idx) => {
     if (isNavSection(entry)) {
       // Show section header only if at least one following item (before next section) is visible
-      for (let i = idx + 1; i < navigation.length; i++) {
-        const next = navigation[i]
+      for (let i = idx + 1; i < mergedNavigation.length; i++) {
+        const next = mergedNavigation[i]
         if (isNavSection(next)) break
         if (isNavGroup(next) && next.items.some(isItemVisible)) return true
         if (!isNavSection(next) && !isNavGroup(next) && isItemVisible(next as NavItem)) return true

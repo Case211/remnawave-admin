@@ -145,7 +145,8 @@
       "security": "Security",
       "data": "Data",
       "bedolaga": "Bedolaga",
-      "admin": "Management"
+      "admin": "Management",
+      "plugins": "Extensions"
     }
   },
   "header": {

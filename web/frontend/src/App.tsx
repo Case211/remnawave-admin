@@ -47,6 +47,67 @@ const BedolagaMarketing = lazy(() => import('./pages/bedolaga/BedolagaMarketing'
 const BedolagaReferrals = lazy(() => import('./pages/bedolaga/BedolagaReferrals'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
+// Plugin UI route registry — see web/frontend/src/plugins/registry.tsx
+import { PLUGIN_ROUTES } from './plugins/registry'
+import { useActivePlugins } from './lib/plugins'
+
+/**
+ * Inner shell that renders all protected routes, including any contributed
+ * by installed plugins. Lives in its own component so we can call
+ * ``useActivePlugins`` (a query hook) inside the authenticated tree.
+ *
+ * Plugin pages render even when the plugin's license is expired or missing
+ * — the page itself reacts to the resulting HTTP 402 from the plugin's API
+ * by showing a "buy/renew license" banner.
+ */
+function ProtectedShell() {
+  const { data: activePlugins } = useActivePlugins()
+  const pluginRouteEntries = (activePlugins ?? []).flatMap((p) =>
+    (PLUGIN_ROUTES[p.id] ?? []).map((r) => ({ key: `${p.id}:${r.path}`, ...r })),
+  )
+
+  return (
+    <ProtectedRoute>
+      <Layout>
+        <Suspense fallback={null}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/users" element={<Users />} />
+            <Route path="/users/:uuid" element={<UserDetail />} />
+            <Route path="/nodes" element={<Nodes />} />
+            <Route path="/fleet" element={<Fleet />} />
+            <Route path="/hosts" element={<Hosts />} />
+            <Route path="/violations" element={<Violations />} />
+            <Route path="/blocking" element={<Blocking />} />
+            <Route path="/automations" element={<Automations />} />
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/mailserver" element={<MailServer />} />
+            <Route path="/admins" element={<Admins />} />
+            <Route path="/audit" element={<AuditLog />} />
+            <Route path="/logs" element={<SystemLogs />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/billing" element={<Billing />} />
+            <Route path="/backups" element={<Backup />} />
+            <Route path="/api-keys" element={<ApiKeys />} />
+            <Route path="/squads" element={<Squads />} />
+            <Route path="/bedolaga" element={<BedolagaDashboard />} />
+            <Route path="/bedolaga/customers" element={<BedolagaCustomers />} />
+            <Route path="/bedolaga/customers/:id" element={<BedolagaCustomerDetail />} />
+            <Route path="/bedolaga/promo" element={<BedolagaPromo />} />
+            <Route path="/bedolaga/marketing" element={<BedolagaMarketing />} />
+            <Route path="/bedolaga/referrals" element={<BedolagaReferrals />} />
+            <Route path="/settings" element={<Settings />} />
+            {pluginRouteEntries.map(({ key, path, Component }) => (
+              <Route key={key} path={path} element={<Component />} />
+            ))}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </Layout>
+    </ProtectedRoute>
+  )
+}
+
 /**
  * Protected route wrapper - redirects to login if not authenticated.
  * Also loads RBAC permissions on first mount.
@@ -116,46 +177,7 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
 
             {/* Protected routes */}
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Suspense fallback={null}>
-                      <Routes>
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/users" element={<Users />} />
-                        <Route path="/users/:uuid" element={<UserDetail />} />
-                        <Route path="/nodes" element={<Nodes />} />
-                        <Route path="/fleet" element={<Fleet />} />
-                        <Route path="/hosts" element={<Hosts />} />
-                        <Route path="/violations" element={<Violations />} />
-                        <Route path="/blocking" element={<Blocking />} />
-                        <Route path="/automations" element={<Automations />} />
-                        <Route path="/notifications" element={<Notifications />} />
-                        <Route path="/mailserver" element={<MailServer />} />
-                        <Route path="/admins" element={<Admins />} />
-                        <Route path="/audit" element={<AuditLog />} />
-                        <Route path="/logs" element={<SystemLogs />} />
-                        <Route path="/analytics" element={<Analytics />} />
-                        <Route path="/billing" element={<Billing />} />
-                        <Route path="/backups" element={<Backup />} />
-                        <Route path="/api-keys" element={<ApiKeys />} />
-                        <Route path="/squads" element={<Squads />} />
-                        <Route path="/bedolaga" element={<BedolagaDashboard />} />
-                        <Route path="/bedolaga/customers" element={<BedolagaCustomers />} />
-                        <Route path="/bedolaga/customers/:id" element={<BedolagaCustomerDetail />} />
-                        <Route path="/bedolaga/promo" element={<BedolagaPromo />} />
-                        <Route path="/bedolaga/marketing" element={<BedolagaMarketing />} />
-                        <Route path="/bedolaga/referrals" element={<BedolagaReferrals />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="*" element={<NotFound />} />
-                      </Routes>
-                    </Suspense>
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/*" element={<ProtectedShell />} />
           </Routes>
         </BrowserRouter>
       </AppearanceProvider>
