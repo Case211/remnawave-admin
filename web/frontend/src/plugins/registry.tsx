@@ -15,21 +15,19 @@
  * Adding a plugin: import a lazy page below and add an entry to
  * ``PLUGIN_ROUTES`` keyed by the plugin id.
  */
-import type { ComponentType } from 'react'
+import { lazy, type ComponentType } from 'react'
 
 interface PluginRoute {
   path: string
   Component: ComponentType
 }
 
-// To register routes for a plugin, import ``lazy`` from React and add an
-// entry keyed by the plugin id, e.g.:
-//   import { lazy } from 'react'
-//   export const PLUGIN_ROUTES: Record<string, PluginRoute[]> = {
-//     debugger: [
-//       { path: '/plugins/debugger', Component: lazy(() => import('./debugger/DebuggerHome')) },
-//     ],
-//   }
-export const PLUGIN_ROUTES: Record<string, PluginRoute[]> = {}
+// Plugin id (key) must match the ``id`` returned by the backend manifest.
+export const PLUGIN_ROUTES: Record<string, PluginRoute[]> = {
+  smart_support: [
+    { path: '/plugins/smart-support', Component: lazy(() => import('./smart-support/SearchPage')) },
+    { path: '/plugins/smart-support/report/:uuid', Component: lazy(() => import('./smart-support/ReportPage')) },
+  ],
+}
 
 export type { PluginRoute }

@@ -4182,5 +4182,64 @@
       "edit": "Edit",
       "delete": "Delete"
     }
+  },
+  "plugins": {
+    "smart_support": {
+      "nav": "Smart Support",
+      "license": {
+        "missing_title": "License not active",
+        "missing_body": "Install your Smart Support key in settings to continue.",
+        "expired_title": "License expired",
+        "expired_body": "Renew your subscription to use the debugger again."
+      },
+      "search": {
+        "title": "Smart Support — user lookup",
+        "subtitle": "UUID, short_uuid, email, IP, Telegram ID or a chunk of the username — we'll find them.",
+        "placeholder": "Paste any identifier from the ticket…",
+        "hint": "Any free-form string works — the resolver picks the right lookup automatically.",
+        "matched_by": "Matched by: {{kind}}",
+        "count": "found: {{n}}",
+        "empty": "Nothing matched. Try a shorter or different query."
+      },
+      "report": {
+        "back_to_search": "Back to search",
+        "generated_at": "Captured at {{ts}}",
+        "error": "Failed to load the report.",
+        "client_unknown": "Client app could not be inferred from recent subscription requests.",
+        "nodes_empty": "No nodes touched in the last 24 hours.",
+        "nodes_active": "active now",
+        "nodes_online": "online",
+        "nodes_offline": "offline",
+        "correlations_empty": "No correlations yet — the background worker isn't running or no patterns matched.",
+        "correlations_affected": "affected: {{n}}",
+        "violations_empty": "No violations recorded in the last 14 days.",
+        "sections": {
+          "user": "Subscription & user",
+          "client": "Client app",
+          "nodes": "User's nodes",
+          "history": "24h connection history",
+          "correlations": "Correlations",
+          "violations": "Violations"
+        },
+        "fields": {
+          "status": "Status",
+          "expire_at": "Expires at",
+          "days_left": "Days left",
+          "traffic": "Traffic",
+          "hwid": "Devices",
+          "hwid_blacklisted": "Warning: one device is on the blacklist.",
+          "squads": "Squads",
+          "app": "App",
+          "version": "Version",
+          "last_request": "Last subscription request",
+          "outdated_warning": "Client version is outdated — ask the user to update.",
+          "connections": "Connections",
+          "unique_ips": "Unique IPs",
+          "unique_countries": "Countries",
+          "unique_asns": "ASNs",
+          "anomalies": "Anomalies"
+        }
+      }
+    }
   }
 }
