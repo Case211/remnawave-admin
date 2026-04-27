@@ -471,10 +471,30 @@ async def lifespan(app: FastAPI):
                 from web.backend.core.task_scheduler import task_scheduler_loop
                 _bg_tasks.append(asyncio.create_task(task_scheduler_loop()))
 
-                # Background tasks contributed by plugins (manifest.scheduled_tasks).
-                # plugin_loader.register() runs in create_app() before the event
-                # loop exists, so the actual asyncio.create_task() calls happen
-                # here, where a running loop is guaranteed.
+                # Plugin lifecycle: install wheels → prime license cache
+                # → register manifests → start their scheduled tasks. Every
+                # step happens here (not create_app) because they need
+                # the DB pool and the event loop. Failure of any step is
+                # logged but doesn't break panel startup.
+                try:
+                    from web.backend.core.plugin_installer import scan_and_install_wheels
+                    installed = scan_and_install_wheels()
+                    if installed:
+                        logger.info("Plugin wheels installed: %s", installed)
+                except Exception:
+                    logger.exception("Plugin wheel scan failed")
+
+                try:
+                    from web.backend.core import plugin_licenses
+                    await plugin_licenses.prime_cache()
+                except Exception:
+                    logger.exception("Plugin license cache priming failed")
+
+                try:
+                    plugin_loader.register(app)
+                except Exception:
+                    logger.exception("Plugin loader failed during startup")
+
                 try:
                     plugin_tasks = plugin_loader.start_scheduled_tasks()
                     if plugin_tasks:
@@ -802,12 +822,19 @@ def create_app() -> FastAPI:
     # so that the meta route is reachable even if no plugins are installed).
     app.include_router(plugins_api.router, prefix="/api/v2/plugins", tags=["plugins"])
 
-    # Discover and mount installed plugins. Fail-soft: a broken plugin logs
-    # an error but never breaks the panel.
-    try:
-        plugin_loader.register(app)
-    except Exception:
-        logger.exception("Plugin loader failed during startup")
+    # Admin endpoints for the in-panel plugin manager (upload wheels, manage
+    # licenses, restart backend). Mounted under the same /plugins prefix.
+    from web.backend.api.v2 import admin_plugins as admin_plugins_api
+    app.include_router(
+        admin_plugins_api.router,
+        prefix="/api/v2/admin/plugins",
+        tags=["admin-plugins"],
+    )
+
+    # Pip-install + register run inside lifespan instead of create_app
+    # because they need both the event loop (for license cache priming
+    # against the DB) and the DB pool to be ready. See lifespan() for
+    # the actual call sequence.
 
     # Public API v3 — enabled via EXTERNAL_API_ENABLED=true
     if settings.external_api_enabled:

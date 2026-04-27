@@ -60,6 +60,7 @@ AVAILABLE_RESOURCES = {
     "bedolaga_marketing": ["view", "create", "edit", "delete"],
     "bedolaga_support": ["view", "create", "edit"],
     "bedolaga_config": ["view", "edit"],
+    "plugins": ["view", "install", "uninstall"],
 }
 
 

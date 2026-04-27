@@ -76,6 +76,35 @@ def _load_public_key(public_key: bytes) -> Ed25519PublicKey:
     return pem_obj
 
 
+def peek_jwt_payload(token: str) -> Optional[dict]:
+    """Decode a JWT *without* verifying its signature.
+
+    Used by the in-panel installer's master-license flow: the panel
+    doesn't have access to every plugin's public key, but it still
+    needs to know which plugin ids the JWT covers and when it expires
+    so it can fan-out the token to the right ``plugin_licenses`` rows.
+
+    Signature verification still happens when the plugin actually loads
+    (via :func:`verify_offline_jwt` against its own embedded public key),
+    so a forged payload here can't bypass licensing — at worst the
+    operator wastes a row in ``plugin_licenses`` that no plugin will
+    accept.
+
+    Returns ``None`` for malformed tokens; never raises.
+    """
+    if not token or "." not in token:
+        return None
+    parts = token.strip().split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        payload = json.loads(_b64url_decode(parts[1]))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+    return pem_obj
+
+
 def verify_offline_jwt(
     token: str,
     public_key: bytes,

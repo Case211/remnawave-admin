@@ -30,6 +30,7 @@ const Blocking = lazy(() => import('./pages/Blocking'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Admins = lazy(() => import('./pages/Admins'))
 const AuditLog = lazy(() => import('./pages/AuditLog'))
+const AdminPlugins = lazy(() => import('./pages/AdminPlugins'))
 const SystemLogs = lazy(() => import('./pages/SystemLogs'))
 const Analytics = lazy(() => import('./pages/Analytics'))
 const Automations = lazy(() => import('./pages/automations'))
@@ -84,6 +85,7 @@ function ProtectedShell() {
             <Route path="/mailserver" element={<MailServer />} />
             <Route path="/admins" element={<Admins />} />
             <Route path="/audit" element={<AuditLog />} />
+            <Route path="/admin/plugins" element={<AdminPlugins />} />
             <Route path="/logs" element={<SystemLogs />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/billing" element={<Billing />} />

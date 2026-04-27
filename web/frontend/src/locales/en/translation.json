@@ -117,6 +117,7 @@
     "notifications": "Notifications",
     "admins": "Admins & Roles",
     "audit": "Audit Log",
+    "adminPlugins": "Plugins",
     "logs": "System Logs",
     "analytics": "Analytics",
     "settings": "Settings",
@@ -4181,6 +4182,66 @@
       "view": "View",
       "edit": "Edit",
       "delete": "Delete"
+    }
+  },
+  "adminPlugins": {
+    "title": "Plugins",
+    "subtitle": "Manage paid add-ons: upload wheel, set license, uninstall.",
+    "refresh": "Refresh",
+    "install": "Install plugin",
+    "master_license": "Master key",
+    "restart": "Restart backend",
+    "restart_started": "Restart in progress",
+    "restart_hint": "Restart the backend after any change to apply it.",
+    "empty": "No plugins installed. Upload a wheel from the vendor to start.",
+    "pending_wheel": "Wheel found but no license attached — provide a JWT via Install or Master key.",
+    "dir_label": "Plugins directory",
+    "update_license": "Update license",
+    "update_license_success": "License updated",
+    "uninstall_success": "Plugin removed",
+    "master_license_applied": "Applied to {{count}} plugins",
+    "license": {
+      "valid": "active",
+      "expired": "expired",
+      "missing": "missing",
+      "invalid": "invalid"
+    },
+    "install_dialog": {
+      "title": "Install plugin",
+      "subtitle": "Upload the wheel file and paste the vendor-issued JWT. The plugin activates after a restart.",
+      "plugin_id": "Plugin ID",
+      "plugin_id_hint": "Same id the vendor uses (e.g. smart_support).",
+      "wheel": ".whl file",
+      "jwt": "License key (JWT)",
+      "submit": "Install"
+    },
+    "master_dialog": {
+      "title": "Master key",
+      "subtitle": "A single JWT can cover several plugins. Paste it and the panel will fan it out to every plugin it licenses.",
+      "jwt": "Bundle JWT",
+      "submit": "Apply"
+    },
+    "license_dialog": {
+      "title": "Update license: {{name}}",
+      "subtitle": "Paste a new JWT for this plugin.",
+      "submit": "Save"
+    },
+    "uninstall_dialog": {
+      "title": "Remove plugin",
+      "subtitle": "Plugin \"{{name}}\" will be removed together with its license. This is irreversible. Continue?",
+      "confirm": "Remove"
+    },
+    "restart_dialog": {
+      "title": "Restart backend?",
+      "subtitle": "The backend will shut down and the container should bring it back automatically (if docker-compose has restart: unless-stopped). Panel will be briefly unavailable.",
+      "confirm": "Restart"
+    },
+    "errors": {
+      "upload_failed": "Failed to install plugin",
+      "master_failed": "Failed to apply master key",
+      "update_license_failed": "Failed to update license",
+      "uninstall_failed": "Failed to remove plugin",
+      "restart_failed": "Failed to restart backend"
     }
   },
   "plugins": {

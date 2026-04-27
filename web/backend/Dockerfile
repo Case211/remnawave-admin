@@ -36,7 +36,7 @@ COPY alembic.ini /app/alembic.ini
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-RUN mkdir -p /app/logs /app/geoip
+RUN mkdir -p /app/logs /app/geoip /app/plugins /app/plugins/.installed
 
 # Expose port
 EXPOSE 8081

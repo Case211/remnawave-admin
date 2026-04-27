@@ -98,6 +98,11 @@ services:
       - ./logs:/app/logs
       - geoip_data:/app/geoip
       - ./backups:/app/backups
+      # Paid-plugin wheels are uploaded through the admin UI and live in
+      # this volume. Mounting it persists installed plugins across
+      # container recreation and lets operators drop wheels in via FTP
+      # too (see ./plugins/ next to docker-compose.yml).
+      - ./plugins:/app/plugins
     ports:
       - "${WEB_BACKEND_PORT:-8081}:8081"
       - "${MAIL_INBOUND_PORT:-2525}:${MAIL_INBOUND_PORT:-2525}"
