@@ -63,6 +63,10 @@ export async function fetchAIStatus(): Promise<AIStatusResponse> {
   return data
 }
 
+export async function resetAICooldown(): Promise<void> {
+  await client.post(`${BASE}/ai-reset-cooldown`)
+}
+
 export async function fetchActions(): Promise<ActionListResponse> {
   const { data } = await client.get<ActionListResponse>(`${BASE}/actions`)
   return data

@@ -4421,6 +4421,8 @@
           "status_title": "Current provider status",
           "status_ok": "available",
           "status_cooldown": "paused {{seconds}}s",
+          "reset_cooldown": "reset",
+          "cooldown_reset": "Cooldowns cleared",
           "providers": {
             "gemini": {
               "label": "Google Gemini",

@@ -16,6 +16,7 @@ import {
   fetchAISettings,
   fetchAIStatus,
   fetchSettings,
+  resetAICooldown,
   updateAISettings,
   updateSettings,
 } from './api'
@@ -321,24 +322,48 @@ function AISettingsSection() {
 
       {status && status.chain.length > 0 && (
         <div className="rounded-lg border border-[var(--glass-border)] p-3">
-          <div className="text-[11px] uppercase tracking-wider text-dark-400 mb-2">
-            {t('plugins.smart_support.settings.ai.status_title')}
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[11px] uppercase tracking-wider text-dark-400">
+              {t('plugins.smart_support.settings.ai.status_title')}
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await resetAICooldown()
+                  qc.invalidateQueries({ queryKey: ['smart-support-ai-status'] })
+                  toast.success(t('plugins.smart_support.settings.ai.cooldown_reset'))
+                } catch {
+                  toast.error(t('plugins.smart_support.settings.save_error'))
+                }
+              }}
+              className="text-[10px] uppercase tracking-wider text-dark-300 hover:text-white transition-colors"
+            >
+              {t('plugins.smart_support.settings.ai.reset_cooldown')}
+            </button>
           </div>
-          <ul className="space-y-1">
+          <ul className="space-y-2">
             {status.chain.map((s) => (
-              <li key={s.name} className="flex items-center justify-between text-xs">
-                <span className="text-white font-mono">{s.name}</span>
-                <span
-                  className={
-                    s.available ? 'text-emerald-400' : 'text-amber-400'
-                  }
-                >
-                  {s.available
-                    ? t('plugins.smart_support.settings.ai.status_ok')
-                    : t('plugins.smart_support.settings.ai.status_cooldown', {
-                        seconds: s.cooldown_seconds_remaining,
-                      })}
-                </span>
+              <li key={s.name} className="text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-white font-mono">{s.name}</span>
+                  <span
+                    className={
+                      s.available ? 'text-emerald-400 shrink-0' : 'text-amber-400 shrink-0'
+                    }
+                  >
+                    {s.available
+                      ? t('plugins.smart_support.settings.ai.status_ok')
+                      : t('plugins.smart_support.settings.ai.status_cooldown', {
+                          seconds: s.cooldown_seconds_remaining,
+                        })}
+                  </span>
+                </div>
+                {s.last_error && (
+                  <div className="mt-0.5 text-[11px] text-dark-300 break-all">
+                    {s.last_error}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

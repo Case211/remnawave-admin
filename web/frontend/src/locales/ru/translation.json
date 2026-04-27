@@ -4421,6 +4421,8 @@
           "status_title": "Текущее состояние провайдеров",
           "status_ok": "доступен",
           "status_cooldown": "пауза {{seconds}} сек",
+          "reset_cooldown": "сбросить",
+          "cooldown_reset": "Cooldown'ы сброшены",
           "providers": {
             "gemini": {
               "label": "Google Gemini",
