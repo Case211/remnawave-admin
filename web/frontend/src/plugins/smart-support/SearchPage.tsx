@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, Search, Sliders } from 'lucide-react'
+import { ArrowRight, History, Search, Sliders } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
 
@@ -43,13 +43,22 @@ export default function SearchPage() {
           <h1 className="text-2xl font-bold text-white">{t('plugins.smart_support.search.title')}</h1>
           <p className="mt-1 text-sm text-dark-300">{t('plugins.smart_support.search.subtitle')}</p>
         </div>
-        <Link
-          to="/plugins/smart-support/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-dark-300 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-[var(--glass-border)]"
-        >
-          <Sliders className="w-3.5 h-3.5" />
-          {t('plugins.smart_support.settings.open')}
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/plugins/smart-support/audit"
+            className="inline-flex items-center gap-1.5 text-xs text-dark-300 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-[var(--glass-border)]"
+          >
+            <History className="w-3.5 h-3.5" />
+            {t('plugins.smart_support.audit.open')}
+          </Link>
+          <Link
+            to="/plugins/smart-support/settings"
+            className="inline-flex items-center gap-1.5 text-xs text-dark-300 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-[var(--glass-border)]"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            {t('plugins.smart_support.settings.open')}
+          </Link>
+        </div>
       </div>
 
       {licenseError && <LicenseBanner error={licenseError} />}

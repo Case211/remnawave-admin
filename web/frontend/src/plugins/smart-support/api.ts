@@ -18,6 +18,7 @@ import type {
   LicenseError,
   ReportResponse,
   SearchResponse,
+  SessionListResponse,
   ThresholdSettings,
 } from './types'
 
@@ -74,6 +75,32 @@ export async function executeAction(
   const { data } = await client.post<ActionExecuteOut>(
     `${BASE}/actions/${actionId}/execute`,
     payload,
+  )
+  return data
+}
+
+export async function fetchSessionsForUser(
+  userUuid: string,
+  params: { limit?: number; offset?: number } = {},
+): Promise<SessionListResponse> {
+  const { data } = await client.get<SessionListResponse>(
+    `${BASE}/sessions/user/${userUuid}`,
+    { params },
+  )
+  return data
+}
+
+export async function fetchRecentSessions(
+  params: {
+    limit?: number
+    offset?: number
+    action_id?: string
+    admin_username?: string
+  } = {},
+): Promise<SessionListResponse> {
+  const { data } = await client.get<SessionListResponse>(
+    `${BASE}/sessions/recent`,
+    { params },
   )
   return data
 }

@@ -6,15 +6,18 @@ import {
   AlertCircle,
   ArrowLeft,
   Bot,
+  Check,
   ChevronDown,
   ChevronUp,
   Cpu,
   Globe2,
+  History,
   Lightbulb,
   ShieldAlert,
   Smartphone,
   Sparkles,
   Users as UsersIcon,
+  X,
   Zap,
 } from 'lucide-react'
 
@@ -25,8 +28,8 @@ import {
   useActionByIdFinder,
   useActionsCatalog,
 } from './actions'
-import { asLicenseError, fetchReport } from './api'
-import type { Hypothesis, ReportResponse } from './types'
+import { asLicenseError, fetchReport, fetchSessionsForUser } from './api'
+import type { Hypothesis, ReportResponse, SessionEntry } from './types'
 
 /**
  * /plugins/smart-support/report/:uuid — single-page diagnostic.
@@ -93,6 +96,7 @@ export default function ReportPage() {
         <CorrelationsCard report={data} />
         <HistoryCard report={data} />
         <ViolationsCard report={data} />
+        <SessionLogCard userUuid={data.user.uuid} />
       </div>
     </div>
   )
@@ -561,6 +565,88 @@ function CorrelationsCard({ report }: { report: ReportResponse }) {
         })}
       </ul>
     </Section>
+  )
+}
+
+
+/**
+ * Per-user audit log: every quick action that has been run on this
+ * user, newest first. Cap at 20 here — the dedicated /audit page
+ * shows the long tail with filters.
+ */
+function SessionLogCard({ userUuid }: { userUuid: string }) {
+  const { t } = useTranslation()
+  const { data } = useQuery({
+    queryKey: ['smart-support-sessions-user', userUuid],
+    queryFn: () => fetchSessionsForUser(userUuid, { limit: 20 }),
+    retry: false,
+    staleTime: 30_000,
+  })
+  return (
+    <Section title={t('plugins.smart_support.report.sections.sessions')} icon={History}>
+      {!data || data.items.length === 0 ? (
+        <p className="text-sm text-dark-400">
+          {t('plugins.smart_support.report.sessions_empty')}
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--glass-border)]">
+          {data.items.map((s) => (
+            <SessionRow key={s.id} entry={s} />
+          ))}
+        </ul>
+      )}
+    </Section>
+  )
+}
+
+
+export function SessionRow({
+  entry,
+  showUser = false,
+}: {
+  entry: SessionEntry
+  showUser?: boolean
+}) {
+  const { t } = useTranslation()
+  const actionLabel = entry.action_id
+    ? t(`plugins.smart_support.actions.${entry.action_id}.title`, {
+        defaultValue: entry.action_id,
+      })
+    : '—'
+  const ruleLabel = entry.triggered_by_rule_id
+    ? t(`plugins.smart_support.rules.${entry.triggered_by_rule_id}.title`, {
+        defaultValue: entry.triggered_by_rule_id,
+      })
+    : null
+
+  return (
+    <li className="py-2 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            {entry.ok === false ? (
+              <X className="w-3.5 h-3.5 text-red-400" />
+            ) : (
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span className="text-white font-medium">{actionLabel}</span>
+            {ruleLabel && (
+              <span className="text-[11px] text-dark-300">
+                ← {ruleLabel}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 text-[11px] text-dark-400">
+            {entry.admin_username ? `@${entry.admin_username}` : t('plugins.smart_support.report.sessions_unknown_admin')}
+            {showUser && entry.target_user_uuid ? ` · ${entry.target_user_uuid.slice(0, 8)}…` : ''}
+            {entry.message ? ` · ${entry.message}` : ''}
+          </div>
+        </div>
+        <span className="text-[11px] text-dark-300 whitespace-nowrap shrink-0">
+          {fmtDate(entry.opened_at)}
+        </span>
+      </div>
+    </li>
   )
 }
 

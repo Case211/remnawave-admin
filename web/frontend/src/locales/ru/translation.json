@@ -4223,8 +4223,11 @@
           "violations": "Нарушения",
           "hypotheses": "Скорее всего это",
           "ai_analysis": "AI-анализ",
-          "actions": "Быстрые действия"
+          "actions": "Быстрые действия",
+          "sessions": "История действий"
         },
+        "sessions_empty": "По этому юзеру действий ещё не было.",
+        "sessions_unknown_admin": "(система)",
         "ai_confidence": {
           "low": "уверенность низкая",
           "medium": "уверенность средняя",
@@ -4259,6 +4262,19 @@
             "notify_update": "Сообщить об обновлении"
           }
         }
+      },
+      "audit": {
+        "title": "Журнал действий",
+        "subtitle": "Все быстрые действия, выполненные через Smart Support. Журнал append-only — ничего удалить или поправить нельзя.",
+        "open": "Журнал",
+        "filter_action": "Действие",
+        "filter_action_all": "Все",
+        "filter_admin": "Админ",
+        "filter_admin_placeholder": "username",
+        "total": "всего записей: {{n}}",
+        "empty": "По заданным фильтрам ничего нет.",
+        "prev": "← Назад",
+        "next": "Далее →"
       },
       "actions": {
         "run": "Выполнить",

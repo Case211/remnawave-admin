@@ -269,3 +269,20 @@ export interface ActionExecuteOut {
   message: string
   data?: Record<string, unknown> | null
 }
+
+export interface SessionEntry {
+  id: number
+  opened_at: string
+  admin_username?: string | null
+  target_user_uuid?: string | null
+  triggered_by_rule_id?: string | null
+  action_id?: string | null
+  ok?: boolean | null
+  message?: string | null
+  params: Record<string, unknown>
+}
+
+export interface SessionListResponse {
+  items: SessionEntry[]
+  total: number
+}

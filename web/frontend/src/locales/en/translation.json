@@ -4223,8 +4223,11 @@
           "violations": "Violations",
           "hypotheses": "Most likely causes",
           "ai_analysis": "AI analysis",
-          "actions": "Quick actions"
+          "actions": "Quick actions",
+          "sessions": "Action history"
         },
+        "sessions_empty": "No actions on this user yet.",
+        "sessions_unknown_admin": "(system)",
         "ai_confidence": {
           "low": "low confidence",
           "medium": "medium confidence",
@@ -4259,6 +4262,19 @@
             "notify_update": "Notify about update"
           }
         }
+      },
+      "audit": {
+        "title": "Audit log",
+        "subtitle": "Every quick action triggered through Smart Support. Append-only — entries can't be edited or removed.",
+        "open": "Audit",
+        "filter_action": "Action",
+        "filter_action_all": "All",
+        "filter_admin": "Admin",
+        "filter_admin_placeholder": "username",
+        "total": "{{n}} entries",
+        "empty": "Nothing matches the current filters.",
+        "prev": "← Prev",
+        "next": "Next →"
       },
       "actions": {
         "run": "Run",
