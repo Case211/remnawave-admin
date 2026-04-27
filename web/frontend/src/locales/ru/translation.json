@@ -4222,7 +4222,8 @@
           "correlations": "Корреляции",
           "violations": "Нарушения",
           "hypotheses": "Скорее всего это",
-          "ai_analysis": "AI-анализ"
+          "ai_analysis": "AI-анализ",
+          "actions": "Быстрые действия"
         },
         "ai_confidence": {
           "low": "уверенность низкая",
@@ -4257,6 +4258,37 @@
             "reset_traffic": "Сбросить трафик",
             "notify_update": "Сообщить об обновлении"
           }
+        }
+      },
+      "actions": {
+        "run": "Выполнить",
+        "success": "Действие выполнено",
+        "error": "Не удалось выполнить действие",
+        "confirm_safe": "Подтвердите выполнение действия.",
+        "confirm_destructive": "Действие необратимо. Точно продолжить?",
+        "reset_traffic": {
+          "title": "Сбросить трафик"
+        },
+        "extend_subscription": {
+          "title": "Продлить подписку",
+          "params": {
+            "days": "На сколько дней"
+          }
+        },
+        "revoke_subscription": {
+          "title": "Перевыпустить подписку",
+          "params": {
+            "revoke_only_passwords": "Перегенерировать только пароли (URL подписки сохранится)"
+          }
+        },
+        "disable_user": {
+          "title": "Заблокировать юзера"
+        },
+        "enable_user": {
+          "title": "Разблокировать юзера"
+        },
+        "disconnect_user": {
+          "title": "Сбросить активные соединения"
         }
       },
       "rules": {

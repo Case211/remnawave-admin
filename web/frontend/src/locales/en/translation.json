@@ -4222,7 +4222,8 @@
           "correlations": "Correlations",
           "violations": "Violations",
           "hypotheses": "Most likely causes",
-          "ai_analysis": "AI analysis"
+          "ai_analysis": "AI analysis",
+          "actions": "Quick actions"
         },
         "ai_confidence": {
           "low": "low confidence",
@@ -4257,6 +4258,37 @@
             "reset_traffic": "Reset traffic",
             "notify_update": "Notify about update"
           }
+        }
+      },
+      "actions": {
+        "run": "Run",
+        "success": "Done",
+        "error": "Action failed",
+        "confirm_safe": "Confirm the action.",
+        "confirm_destructive": "This is irreversible. Continue?",
+        "reset_traffic": {
+          "title": "Reset traffic"
+        },
+        "extend_subscription": {
+          "title": "Extend subscription",
+          "params": {
+            "days": "Days"
+          }
+        },
+        "revoke_subscription": {
+          "title": "Revoke subscription",
+          "params": {
+            "revoke_only_passwords": "Rotate proxy passwords only (keep the subscription URL)"
+          }
+        },
+        "disable_user": {
+          "title": "Disable user"
+        },
+        "enable_user": {
+          "title": "Enable user"
+        },
+        "disconnect_user": {
+          "title": "Drop active connections"
         }
       },
       "rules": {

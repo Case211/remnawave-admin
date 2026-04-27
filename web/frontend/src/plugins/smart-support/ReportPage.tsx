@@ -15,9 +15,16 @@ import {
   Smartphone,
   Sparkles,
   Users as UsersIcon,
+  Zap,
 } from 'lucide-react'
 
 import LicenseBanner from './LicenseBanner'
+import {
+  ActionLauncher,
+  actionForSuggested,
+  useActionByIdFinder,
+  useActionsCatalog,
+} from './actions'
 import { asLicenseError, fetchReport } from './api'
 import type { Hypothesis, ReportResponse } from './types'
 
@@ -79,6 +86,7 @@ export default function ReportPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <HypothesesCard report={data} />
         <AIAnalysisCard report={data} />
+        <QuickActionsCard userUuid={data.user.uuid} />
         <UserCard report={data} />
         <ClientCard report={data} />
         <NodesCard report={data} />
@@ -87,6 +95,32 @@ export default function ReportPage() {
         <ViolationsCard report={data} />
       </div>
     </div>
+  )
+}
+
+
+/**
+ * Card listing every quick action available for this user. Lets the
+ * operator trigger something the rule engine didn't suggest (e.g.
+ * "I just want to disable this account regardless of the report").
+ */
+function QuickActionsCard({ userUuid }: { userUuid: string }) {
+  const { t } = useTranslation()
+  const { data } = useActionsCatalog()
+  if (!data?.actions?.length) return null
+  return (
+    <Section title={t('plugins.smart_support.report.sections.actions')} icon={Zap}>
+      <div className="flex flex-wrap gap-2">
+        {data.actions.map((a) => (
+          <ActionLauncher
+            key={a.id}
+            meta={a}
+            userUuid={userUuid}
+            variant={a.severity === 'destructive' ? 'outline' : 'default'}
+          />
+        ))}
+      </div>
+    </Section>
   )
 }
 
@@ -185,10 +219,12 @@ function HypothesesCard({ report }: { report: ReportResponse }) {
       </div>
       <ul className="space-y-2">
         {top.map((h) => (
-          <HypothesisRow key={h.rule_id} h={h} />
+          <HypothesisRow key={h.rule_id} h={h} userUuid={report.user.uuid} />
         ))}
         {expanded &&
-          rest.map((h) => <HypothesisRow key={h.rule_id} h={h} />)}
+          rest.map((h) => (
+            <HypothesisRow key={h.rule_id} h={h} userUuid={report.user.uuid} />
+          ))}
       </ul>
       {rest.length > 0 && (
         <button
@@ -248,6 +284,7 @@ function AIAnalysisCard({ report }: { report: ReportResponse }) {
           {a.extra_hypotheses.map((h) => (
             <HypothesisRow
               key={h.rule_id}
+              userUuid={report.user.uuid}
               h={{
                 rule_id: h.rule_id,
                 title: h.title,
@@ -265,7 +302,7 @@ function AIAnalysisCard({ report }: { report: ReportResponse }) {
 }
 
 
-function HypothesisRow({ h }: { h: Hypothesis }) {
+function HypothesisRow({ h, userUuid }: { h: Hypothesis; userUuid: string }) {
   const { t } = useTranslation()
   const palette = severityPalette(h.severity)
   // Prefer the localised title/detail if the rule has a translation key,
@@ -276,12 +313,18 @@ function HypothesisRow({ h }: { h: Hypothesis }) {
   const detailKey = `plugins.smart_support.rules.${h.rule_id}.detail`
   const localisedDetail = t(detailKey, { defaultValue: '' })
   const detail = h.detail || localisedDetail
-  const action = h.suggested_action
+  const actionLabel = h.suggested_action
     ? t(`plugins.smart_support.report.hypotheses.suggested.${h.suggested_action}`, {
         defaultValue: h.suggested_action,
       })
     : null
   const confidencePct = Math.round(h.confidence * 100)
+
+  // Map "suggested_action" to a real action and surface a button if the
+  // panel actually exposes that action.
+  const findAction = useActionByIdFinder()
+  const actionId = actionForSuggested(h.suggested_action)
+  const meta = findAction(actionId)
 
   return (
     <li
@@ -296,9 +339,14 @@ function HypothesisRow({ h }: { h: Hypothesis }) {
           </span>
         </div>
         {detail && <p className="mt-0.5 text-xs text-dark-200">{detail}</p>}
-        {action && (
-          <span className="mt-1 inline-block text-[11px] text-emerald-300">→ {action}</span>
-        )}
+        <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+          {actionLabel && !meta && (
+            <span className="text-[11px] text-emerald-300">→ {actionLabel}</span>
+          )}
+          {meta && (
+            <ActionLauncher meta={meta} userUuid={userUuid} ruleId={h.rule_id} size="sm" />
+          )}
+        </div>
       </div>
     </li>
   )

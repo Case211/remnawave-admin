@@ -12,6 +12,9 @@ import type {
   AISettingsIn,
   AISettingsOut,
   AIStatusResponse,
+  ActionExecuteIn,
+  ActionExecuteOut,
+  ActionListResponse,
   LicenseError,
   ReportResponse,
   SearchResponse,
@@ -56,6 +59,22 @@ export async function updateAISettings(patch: AISettingsIn): Promise<AISettingsO
 
 export async function fetchAIStatus(): Promise<AIStatusResponse> {
   const { data } = await client.get<AIStatusResponse>(`${BASE}/ai-status`)
+  return data
+}
+
+export async function fetchActions(): Promise<ActionListResponse> {
+  const { data } = await client.get<ActionListResponse>(`${BASE}/actions`)
+  return data
+}
+
+export async function executeAction(
+  actionId: string,
+  payload: ActionExecuteIn,
+): Promise<ActionExecuteOut> {
+  const { data } = await client.post<ActionExecuteOut>(
+    `${BASE}/actions/${actionId}/execute`,
+    payload,
+  )
   return data
 }
 

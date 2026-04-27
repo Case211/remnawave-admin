@@ -236,3 +236,36 @@ export interface AIStatusResponse {
   enabled: boolean
   chain: AIProviderStatus[]
 }
+
+export interface ActionParamSpec {
+  name: string
+  type: 'number' | 'boolean' | 'string'
+  default?: number | boolean | string | null
+  label_i18n?: string | null
+  min?: number | null
+  max?: number | null
+}
+
+export interface ActionMetadata {
+  id: string
+  title_i18n: string
+  severity: 'safe' | 'destructive'
+  requires_confirmation: boolean
+  params: ActionParamSpec[]
+}
+
+export interface ActionListResponse {
+  actions: ActionMetadata[]
+}
+
+export interface ActionExecuteIn {
+  user_uuid: string
+  params?: Record<string, unknown>
+  triggered_by_rule_id?: string | null
+}
+
+export interface ActionExecuteOut {
+  ok: boolean
+  message: string
+  data?: Record<string, unknown> | null
+}
