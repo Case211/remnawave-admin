@@ -490,17 +490,22 @@ async def lifespan(app: FastAPI):
                     installed = scan_and_install_wheels()
                     if installed:
                         logger.info("Plugin wheels installed: %s", installed)
-                        # Force importlib to re-scan site-packages so
-                        # entry_points() picks up the freshly installed
-                        # distribution before alembic looks for it.
-                        import importlib
-                        importlib.invalidate_caches()
-                        try:
-                            await _run_migrations(database_url)
-                        except Exception:
-                            logger.exception("Plugin migrations replay failed")
                 except Exception:
                     logger.exception("Plugin wheel scan failed")
+
+                # Always re-run alembic after plugin scan: the first pass
+                # at the top of lifespan ran before any plugin had been
+                # pip-installed in this Python, so plugin alembic branches
+                # weren't visible. We invalidate importlib's metadata
+                # cache to make sure entry_points() reflects the live
+                # state. ``alembic upgrade head`` is idempotent so this
+                # is a no-op when nothing changed.
+                try:
+                    import importlib
+                    importlib.invalidate_caches()
+                    await _run_migrations(database_url)
+                except Exception:
+                    logger.exception("Plugin migrations replay failed")
 
                 try:
                     from web.backend.core import plugin_licenses
