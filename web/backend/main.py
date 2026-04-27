@@ -287,6 +287,52 @@ logger = logging.getLogger("web")
 # ── Database migrations ───────────────────────────────────────────
 
 
+def _augment_with_plugin_versions(alembic_cfg) -> None:
+    """Append plugin-contributed version_locations onto the alembic config.
+
+    Mirrors what ``alembic/env.py`` does at runtime, but applied to the
+    in-process Config so the static ScriptDirectory check in
+    :func:`_run_migrations` sees plugin branches too. Without this the
+    early "schema up to date" gate would only know about panel revisions
+    and skip pending plugin migrations on every restart.
+    """
+    try:
+        from importlib.metadata import entry_points
+    except Exception:
+        return
+
+    locations: list[str] = []
+    try:
+        try:
+            eps = list(entry_points(group="rwa.plugin.migrations"))
+        except TypeError:
+            eps = list(entry_points().get("rwa.plugin.migrations", []))
+    except Exception:
+        return
+
+    for ep in eps:
+        try:
+            target = ep.load()
+            path = target() if callable(target) else target
+        except Exception:
+            continue
+        if not path:
+            continue
+        path_str = str(path)
+        if os.path.isdir(path_str):
+            locations.append(path_str)
+
+    if not locations:
+        return
+
+    panel_versions = str(PROJECT_ROOT / "alembic" / "versions")
+    all_locations = [panel_versions] + locations
+    # Alembic accepts ``version_locations`` as an os.pathsep-separated
+    # string or a space-separated one. We use os.pathsep for safety on
+    # Windows (semicolon) vs Linux (colon).
+    alembic_cfg.set_main_option("version_locations", os.pathsep.join(all_locations))
+
+
 async def _run_migrations(database_url: str) -> bool:
     """
     Run Alembic migrations automatically on startup.
@@ -321,35 +367,40 @@ async def _run_migrations(database_url: str) -> bool:
 
                 with engine.connect() as conn:
                     ctx = MigrationContext.configure(conn)
-                    current_rev = ctx.get_current_revision()
+                    current_heads = set(ctx.get_current_heads() or ())
 
                 alembic_cfg = Config(str(PROJECT_ROOT / "alembic.ini"))
                 alembic_cfg.set_main_option("sqlalchemy.url", db_url)
+                # Augment config with plugin migration paths *before* the
+                # static head check below — env.py also discovers them at
+                # ``command.upgrade`` time, but the early "schema up to
+                # date" gate looks at ScriptDirectory which only sees
+                # what's in alembic.ini. Without this every plugin branch
+                # was invisible to the gate and migrations were skipped.
+                _augment_with_plugin_versions(alembic_cfg)
 
                 script = ScriptDirectory.from_config(alembic_cfg)
-                head_rev = script.get_current_head()
+                heads = set(script.get_heads())
 
-                logger.info("DB revision: current=%s, head=%s", current_rev or "None", head_rev)
+                logger.info(
+                    "DB revision: current=%s, heads=%s",
+                    sorted(current_heads) or "None",
+                    sorted(heads),
+                )
 
-                if current_rev == head_rev:
+                if current_heads == heads:
                     logger.info("Database schema up to date")
                     return True
 
-                pending = []
-                for rev in script.iterate_revisions(head_rev, current_rev):
-                    if rev.revision != current_rev:
-                        pending.append(rev.revision)
-                pending.reverse()
                 logger.info(
-                    "Running %d migration(s): %s",
-                    len(pending),
-                    " -> ".join(pending),
+                    "Pending migrations to apply: %s",
+                    sorted(heads - current_heads) or "none",
                 )
 
                 connection = engine.connect()
                 try:
                     alembic_cfg.attributes["connection"] = connection
-                    command.upgrade(alembic_cfg, "head")
+                    command.upgrade(alembic_cfg, "heads")
                     connection.commit()
                 except Exception:
                     connection.rollback()
@@ -359,8 +410,12 @@ async def _run_migrations(database_url: str) -> bool:
 
                 with engine.connect() as conn:
                     ctx = MigrationContext.configure(conn)
-                    new_rev = ctx.get_current_revision()
-                    logger.info("Migrated: %s -> %s", current_rev or "None", new_rev)
+                    new_heads = set(ctx.get_current_heads() or ())
+                    logger.info(
+                        "Migrated: %s -> %s",
+                        sorted(current_heads) or "None",
+                        sorted(new_heads),
+                    )
 
                 return True
 
