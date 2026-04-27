@@ -471,6 +471,18 @@ async def lifespan(app: FastAPI):
                 from web.backend.core.task_scheduler import task_scheduler_loop
                 _bg_tasks.append(asyncio.create_task(task_scheduler_loop()))
 
+                # Background tasks contributed by plugins (manifest.scheduled_tasks).
+                # plugin_loader.register() runs in create_app() before the event
+                # loop exists, so the actual asyncio.create_task() calls happen
+                # here, where a running loop is guaranteed.
+                try:
+                    plugin_tasks = plugin_loader.start_scheduled_tasks()
+                    if plugin_tasks:
+                        _bg_tasks.extend(plugin_tasks)
+                        logger.info("Plugin scheduled tasks started: %d", len(plugin_tasks))
+                except Exception:
+                    logger.exception("Plugin scheduled tasks failed to start")
+
                 # Start sync service (Panel API → local DB cache)
                 # Sync service — единственный источник синхронизации Panel API → БД
                 # background=True: initial sync runs in background so HTTP server

@@ -432,18 +432,32 @@ function CorrelationsCard({ report }: { report: ReportResponse }) {
   return (
     <Section title={t('plugins.smart_support.report.sections.correlations')} icon={Sparkles}>
       <ul className="divide-y divide-[var(--glass-border)]">
-        {report.correlations.map((c) => (
-          <li key={`${c.kind}:${c.key}`} className="py-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-white">
-                {c.kind} · {c.label || c.key}
-              </span>
-              <span className="text-amber-400 text-xs">
-                {t('plugins.smart_support.report.correlations_affected', { n: c.affected_users })}
-              </span>
-            </div>
-          </li>
-        ))}
+        {report.correlations.map((c) => {
+          const minutes = Math.max(
+            1,
+            Math.round(
+              (new Date(c.window_end).getTime() - new Date(c.window_start).getTime()) / 60000,
+            ),
+          )
+          return (
+            <li key={`${c.kind}:${c.key}`} className="py-2 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--glass-bg)] text-dark-200 mr-2">
+                    {c.kind}
+                  </span>
+                  <span className="text-white font-mono text-xs">{c.label || c.key}</span>
+                </div>
+                <span className="text-amber-400 text-xs whitespace-nowrap">
+                  {t('plugins.smart_support.report.correlations_affected', { n: c.affected_users })}
+                </span>
+              </div>
+              <div className="mt-0.5 text-[11px] text-dark-400">
+                {t('plugins.smart_support.report.correlations_window', { minutes })}
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </Section>
   )

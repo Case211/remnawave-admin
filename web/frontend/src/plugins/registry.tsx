@@ -27,6 +27,7 @@ export const PLUGIN_ROUTES: Record<string, PluginRoute[]> = {
   smart_support: [
     { path: '/plugins/smart-support', Component: lazy(() => import('./smart-support/SearchPage')) },
     { path: '/plugins/smart-support/report/:uuid', Component: lazy(() => import('./smart-support/ReportPage')) },
+    { path: '/plugins/smart-support/settings', Component: lazy(() => import('./smart-support/SettingsPage')) },
   ],
 }
 

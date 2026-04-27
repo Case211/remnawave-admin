@@ -4212,6 +4212,7 @@
         "nodes_offline": "offline",
         "correlations_empty": "No correlations yet — the background worker isn't running or no patterns matched.",
         "correlations_affected": "affected: {{n}}",
+        "correlations_window": "in the last {{minutes}} min",
         "violations_empty": "No violations recorded in the last 14 days.",
         "sections": {
           "user": "Subscription & user",
@@ -4272,6 +4273,87 @@
         "client_version_outdated": {
           "title": "Client outdated",
           "detail": "An older version of the app is installed — bugs may be involved."
+        },
+        "affected_by_cluster": {
+          "title": "Mass incident",
+          "detail": "User is part of an active incident cluster — several users affected at once."
+        }
+      },
+      "settings": {
+        "title": "Smart Support settings",
+        "subtitle": "Rule firing thresholds and correlation worker schedule. Change with care.",
+        "save": "Save",
+        "saved": "Settings saved",
+        "save_error": "Could not save — please try again",
+        "open": "Settings",
+        "sections": {
+          "node": "Node thresholds",
+          "traffic": "Traffic thresholds",
+          "cluster_node": "Node clusters (reconnect spike)",
+          "cluster_asn": "ASN clusters (violations + shared provider)",
+          "worker": "Correlation worker"
+        },
+        "fields": {
+          "node_cpu_high": {
+            "label": "CPU threshold, %",
+            "help": "\"Node overloaded\" fires when CPU >= this value."
+          },
+          "node_cpu_critical": {
+            "label": "Critical CPU, %",
+            "help": "Hypothesis confidence climbs once this threshold is exceeded."
+          },
+          "node_memory_high": {
+            "label": "RAM threshold, %",
+            "help": "\"Node overloaded\" fires when memory usage >= this value."
+          },
+          "node_metrics_stale_seconds": {
+            "label": "Metrics stale after, sec",
+            "help": "Treat the node as stuck if its last update is older than this."
+          },
+          "traffic_high": {
+            "label": "Traffic high threshold, %",
+            "help": "\"Traffic exhausted\" fires once usage >= this percent."
+          },
+          "traffic_full": {
+            "label": "Fully exhausted, %",
+            "help": "Confidence reaches 1.0 at this value."
+          },
+          "traffic_high_confidence": {
+            "label": "Confidence (high)",
+            "help": "Hypothesis confidence between high and full (0..1)."
+          },
+          "traffic_full_confidence": {
+            "label": "Confidence (full)",
+            "help": "Hypothesis confidence at the full mark (0..1)."
+          },
+          "cluster_node_window_minutes": {
+            "label": "Node window, min",
+            "help": "How recent reconnect spikes on a single node we look at."
+          },
+          "cluster_node_reconnects_per_user": {
+            "label": "Reconnects per user",
+            "help": "Reconnect count inside the window to count a user toward a cluster."
+          },
+          "cluster_node_min_affected": {
+            "label": "Min users in cluster (node)",
+            "help": "Unique users needed for the node cluster to become hot."
+          },
+          "cluster_asn_window_minutes": {
+            "label": "ASN window, min",
+            "help": "How far back we collect violations for ASN clusters."
+          },
+          "cluster_asn_min_affected": {
+            "label": "Min users in cluster (ASN)",
+            "help": "Unique users needed for the ASN cluster to become hot."
+          },
+          "correlation_recompute_seconds": {
+            "label": "Recompute interval, sec",
+            "help": "Takes effect on the next panel restart."
+          },
+          "correlation_max_age_minutes": {
+            "label": "Cache TTL, min",
+            "help": "Older clusters are not surfaced in reports even if still in DB."
+          }
         }
       }
     }

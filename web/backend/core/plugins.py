@@ -14,6 +14,7 @@ HTTP 402 for every path under the plugin's prefix.
 """
 from __future__ import annotations
 
+import asyncio
 import importlib
 import logging
 import os
@@ -237,3 +238,66 @@ def register(app: FastAPI) -> list[PluginManifest]:
     if _loaded:
         logger.info("plugins.registered", extra={"count": len(_loaded)})
     return list(_loaded)
+
+
+# ── scheduled tasks ──────────────────────────────────────────────
+
+async def _safe_periodic_loop(
+    plugin_id: str,
+    task: ScheduledTask,
+) -> None:
+    """Drive one ScheduledTask forever, isolating each tick's failure.
+
+    A crash inside the coroutine logs and waits one interval before
+    retrying — never propagates out, so a buggy plugin can't take down
+    the panel's lifespan.
+    """
+    interval = max(1, int(task.interval_seconds))
+    logger.info(
+        "plugins.task_started",
+        extra={"plugin": plugin_id, "task": task.name, "interval_seconds": interval},
+    )
+    while True:
+        try:
+            await task.coro()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "plugins.task_iteration_failed",
+                extra={"plugin": plugin_id, "task": task.name},
+            )
+        try:
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            logger.info(
+                "plugins.task_cancelled",
+                extra={"plugin": plugin_id, "task": task.name},
+            )
+            raise
+
+
+def start_scheduled_tasks() -> list[asyncio.Task]:
+    """Spawn asyncio.Tasks for every scheduled task contributed by plugins.
+
+    Returns the task handles so the caller can register them in the panel's
+    central ``_bg_tasks`` list and cancel them on shutdown. Plugins whose
+    license is not active have their scheduled tasks skipped — the same
+    way the router is replaced with a 402 stub above.
+    """
+    tasks: list[asyncio.Task] = []
+    for manifest in _loaded:
+        if manifest.license_state not in ("valid", "not_required"):
+            if manifest.scheduled_tasks:
+                logger.info(
+                    "plugins.tasks_skipped_license",
+                    extra={"plugin": manifest.id, "license_state": manifest.license_state},
+                )
+            continue
+        for task in manifest.scheduled_tasks:
+            handle = asyncio.create_task(
+                _safe_periodic_loop(manifest.id, task),
+                name=f"plugin:{manifest.id}:{task.name}",
+            )
+            tasks.append(handle)
+    return tasks

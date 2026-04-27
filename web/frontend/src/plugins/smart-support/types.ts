@@ -161,3 +161,26 @@ export interface LicenseError {
   license_state: 'expired' | 'missing'
   code: 'license_expired' | 'license_required'
 }
+
+/**
+ * Mirrors ``ThresholdSettings`` in ``schemas.py`` — every key is optional
+ * because PUT accepts a partial payload, and GET returns a fully resolved
+ * (defaults + DB overrides) view.
+ */
+export interface ThresholdSettings {
+  node_cpu_high?: number | null
+  node_cpu_critical?: number | null
+  node_memory_high?: number | null
+  node_metrics_stale_seconds?: number | null
+  traffic_high?: number | null
+  traffic_full?: number | null
+  traffic_full_confidence?: number | null
+  traffic_high_confidence?: number | null
+  cluster_node_window_minutes?: number | null
+  cluster_node_reconnects_per_user?: number | null
+  cluster_node_min_affected?: number | null
+  cluster_asn_window_minutes?: number | null
+  cluster_asn_min_affected?: number | null
+  correlation_recompute_seconds?: number | null
+  correlation_max_age_minutes?: number | null
+}

@@ -8,7 +8,12 @@
  */
 import client from '@/api/client'
 
-import type { LicenseError, ReportResponse, SearchResponse } from './types'
+import type {
+  LicenseError,
+  ReportResponse,
+  SearchResponse,
+  ThresholdSettings,
+} from './types'
 
 const BASE = '/plugins/smart_support'
 
@@ -21,6 +26,18 @@ export async function searchUsers(q: string, limit = 20): Promise<SearchResponse
 
 export async function fetchReport(uuid: string): Promise<ReportResponse> {
   const { data } = await client.get<ReportResponse>(`${BASE}/report/${uuid}`)
+  return data
+}
+
+export async function fetchSettings(): Promise<ThresholdSettings> {
+  const { data } = await client.get<ThresholdSettings>(`${BASE}/settings`)
+  return data
+}
+
+export async function updateSettings(
+  patch: Partial<ThresholdSettings>,
+): Promise<ThresholdSettings> {
+  const { data } = await client.put<ThresholdSettings>(`${BASE}/settings`, patch)
   return data
 }
 
