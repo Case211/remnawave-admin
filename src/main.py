@@ -59,43 +59,47 @@ async def run_migrations() -> bool:
                     pool_recycle=3600,
                 )
 
-                # Проверяем текущую версию
+                # Multi-head aware: панель может содержать ревизии от
+                # установленных плагинов (отдельные ветки в alembic-графе).
+                # У бота нет своих entry_points для plugin-миграций, но он
+                # должен корректно жить с ними в alembic_version.
                 with engine.connect() as conn:
                     ctx = MigrationContext.configure(conn)
-                    current_rev = ctx.get_current_revision()
+                    current_heads = set(ctx.get_current_heads() or ())
 
                 # Настраиваем Alembic
                 alembic_cfg = Config("alembic.ini")
                 alembic_cfg.set_main_option("sqlalchemy.url", db_url)
 
-                # Получаем head revision
                 script = ScriptDirectory.from_config(alembic_cfg)
-                head_rev = script.get_current_head()
+                heads = set(script.get_heads())
 
-                logger.info("📊 DB revision: current=%s, head=%s", current_rev or "None", head_rev)
+                logger.info(
+                    "📊 DB revision: current=%s, heads=%s",
+                    sorted(current_heads) or "None",
+                    sorted(heads),
+                )
 
-                if current_rev == head_rev:
-                    logger.info("✅ Database up to date")
+                pending = heads - current_heads
+                stale = current_heads - heads
+                if stale:
+                    logger.info(
+                        "ℹ️  В БД есть ревизии, неизвестные коду бота: %s — это плагин-ветки от панели, бот их не трогает",
+                        sorted(stale),
+                    )
+
+                if not pending:
+                    logger.info("✅ Database up to date (no pending)")
                     return True
 
-                # Показываем список миграций, которые будут применены
-                pending = []
-                for rev in script.iterate_revisions(head_rev, current_rev):
-                    if rev.revision != current_rev:
-                        pending.append(rev.revision)
-                pending.reverse()
-                logger.info(
-                    "🔄 Running %d migration(s): %s",
-                    len(pending),
-                    " → ".join(pending),
-                )
+                logger.info("🔄 Pending migrations: %s", sorted(pending))
 
                 # Одно соединение — используем его и в main.py, и в env.py
                 # (env.py проверяет config.attributes['connection'])
                 connection = engine.connect()
                 try:
                     alembic_cfg.attributes['connection'] = connection
-                    command.upgrade(alembic_cfg, "head")
+                    command.upgrade(alembic_cfg, "heads")
                     connection.commit()
                 except Exception:
                     connection.rollback()
@@ -103,11 +107,14 @@ async def run_migrations() -> bool:
                 finally:
                     connection.close()
 
-                # Проверяем новую версию
                 with engine.connect() as conn:
                     ctx = MigrationContext.configure(conn)
-                    new_rev = ctx.get_current_revision()
-                    logger.info("✅ Migrated: %s → %s", current_rev or "None", new_rev)
+                    new_heads = set(ctx.get_current_heads() or ())
+                    logger.info(
+                        "✅ Migrated: %s → %s",
+                        sorted(current_heads) or "None",
+                        sorted(new_heads),
+                    )
 
                 return True
 
