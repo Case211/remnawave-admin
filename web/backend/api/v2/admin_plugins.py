@@ -126,7 +126,12 @@ async def list_inventory(
             )
         )
 
-    pending = _list_pending_wheels(installed_plugin_ids=set(licenses_rows.keys()))
+    licensed_wheel_names = {
+        str(row.get("wheel_name"))
+        for row in licenses_rows.values()
+        if row.get("wheel_name")
+    }
+    pending = _list_pending_wheels(licensed_wheel_names=licensed_wheel_names)
     return PluginInventoryResponse(
         installed=items,
         pending_wheels=pending,
@@ -335,24 +340,21 @@ async def restart_backend(
 # ── helpers ──────────────────────────────────────────────────────
 
 
-def _list_pending_wheels(installed_plugin_ids: set[str]) -> List[WheelFileInfo]:
-    """Wheels on disk that don't have a matching license row.
+def _list_pending_wheels(licensed_wheel_names: set[str]) -> List[WheelFileInfo]:
+    """Wheels on disk that aren't tied to any license row.
 
     Useful UI hint: the operator dropped a wheel via volume mount but
-    forgot the JWT. We show it as pending so they can attach a license
-    without re-uploading the file.
+    forgot the JWT. We match by exact filename rather than by package-
+    name convention because the pip-package name (``rwa-plugin-X-Y``)
+    doesn't always equal the plugin id (``X``) — the operator picks the
+    id at upload time.
     """
     out: List[WheelFileInfo] = []
-    # We can't infer the plugin_id from a wheel filename without
-    # importing it. Skip wheels whose package name maps to a known
-    # plugin via convention; keep the rest as "pending".
     for wheel in plugin_installer.list_wheel_files():
+        if wheel.name in licensed_wheel_names:
+            continue
         meta = plugin_installer.parse_wheel_name(wheel.name)
         if meta is None:
-            continue
-        # Convention: pip package ``rwa-plugin-<id>`` ↔ plugin id ``<id>``.
-        guessed_id = meta.package_name.removeprefix("rwa-plugin-").replace("-", "_")
-        if guessed_id in installed_plugin_ids:
             continue
         out.append(
             WheelFileInfo(
