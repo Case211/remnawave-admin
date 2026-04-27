@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   AlertCircle,
   ArrowLeft,
+  Bot,
   ChevronDown,
   ChevronUp,
   Cpu,
@@ -77,6 +78,7 @@ export default function ReportPage() {
       <ReportHeader report={data} />
       <div className="grid gap-6 lg:grid-cols-2">
         <HypothesesCard report={data} />
+        <AIAnalysisCard report={data} />
         <UserCard report={data} />
         <ClientCard report={data} />
         <NodesCard report={data} />
@@ -206,6 +208,57 @@ function HypothesesCard({ report }: { report: ReportResponse }) {
             </>
           )}
         </button>
+      )}
+    </div>
+  )
+}
+
+
+/**
+ * AI summary + extra hypotheses. Renders nothing if AI is disabled or
+ * the call fell through (no provider answered) — silently downgrading
+ * is the right move because the rest of the report is still useful.
+ */
+function AIAnalysisCard({ report }: { report: ReportResponse }) {
+  const { t } = useTranslation()
+  const a = report.ai_analysis
+  if (!a) return null
+  return (
+    <div className="glass-card p-5 lg:col-span-2">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <Bot className="w-4 h-4 text-cyan-400" />
+          <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+            {t('plugins.smart_support.report.sections.ai_analysis')}
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--glass-bg)] text-dark-200">
+            {a.provider_used}
+            {a.model ? ` · ${a.model}` : ''}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-dark-300">
+            {t(`plugins.smart_support.report.ai_confidence.${a.confidence}`)}
+          </span>
+        </div>
+      </div>
+      <p className="text-sm text-dark-100 leading-relaxed whitespace-pre-line">{a.summary}</p>
+      {a.extra_hypotheses.length > 0 && (
+        <ul className="mt-4 space-y-2">
+          {a.extra_hypotheses.map((h) => (
+            <HypothesisRow
+              key={h.rule_id}
+              h={{
+                rule_id: h.rule_id,
+                title: h.title,
+                detail: h.detail,
+                severity: h.severity,
+                confidence: h.confidence,
+                suggested_action: h.suggested_action,
+              }}
+            />
+          ))}
+        </ul>
       )}
     </div>
   )

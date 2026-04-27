@@ -4221,7 +4221,13 @@
           "history": "24h connection history",
           "correlations": "Correlations",
           "violations": "Violations",
-          "hypotheses": "Most likely causes"
+          "hypotheses": "Most likely causes",
+          "ai_analysis": "AI analysis"
+        },
+        "ai_confidence": {
+          "low": "low confidence",
+          "medium": "medium confidence",
+          "high": "high confidence"
         },
         "fields": {
           "status": "Status",
@@ -4291,7 +4297,33 @@
           "traffic": "Traffic thresholds",
           "cluster_node": "Node clusters (reconnect spike)",
           "cluster_asn": "ASN clusters (violations + shared provider)",
-          "worker": "Correlation worker"
+          "worker": "Correlation worker",
+          "ai": "AI analysis"
+        },
+        "ai": {
+          "enabled": "Enable AI analysis in reports",
+          "chain": "Provider priority",
+          "chain_hint": "Comma-separated list. Allowed: gemini, groq, openrouter. When the first one runs out of free-tier limits, the request falls through to the next.",
+          "key_set": "key set",
+          "key_placeholder_set": "Enter a new key to replace it",
+          "key_placeholder_empty": "Enter API key",
+          "status_title": "Current provider status",
+          "status_ok": "available",
+          "status_cooldown": "paused {{seconds}}s",
+          "providers": {
+            "gemini": {
+              "label": "Google Gemini",
+              "model_placeholder": "gemini-2.0-flash"
+            },
+            "groq": {
+              "label": "Groq",
+              "model_placeholder": "llama-3.3-70b-versatile"
+            },
+            "openrouter": {
+              "label": "OpenRouter",
+              "model_placeholder": "meta-llama/llama-3.3-70b-instruct:free"
+            }
+          }
         },
         "fields": {
           "node_cpu_high": {

@@ -9,6 +9,9 @@
 import client from '@/api/client'
 
 import type {
+  AISettingsIn,
+  AISettingsOut,
+  AIStatusResponse,
   LicenseError,
   ReportResponse,
   SearchResponse,
@@ -38,6 +41,21 @@ export async function updateSettings(
   patch: Partial<ThresholdSettings>,
 ): Promise<ThresholdSettings> {
   const { data } = await client.put<ThresholdSettings>(`${BASE}/settings`, patch)
+  return data
+}
+
+export async function fetchAISettings(): Promise<AISettingsOut> {
+  const { data } = await client.get<AISettingsOut>(`${BASE}/ai-settings`)
+  return data
+}
+
+export async function updateAISettings(patch: AISettingsIn): Promise<AISettingsOut> {
+  const { data } = await client.put<AISettingsOut>(`${BASE}/ai-settings`, patch)
+  return data
+}
+
+export async function fetchAIStatus(): Promise<AIStatusResponse> {
+  const { data } = await client.get<AIStatusResponse>(`${BASE}/ai-status`)
   return data
 }
 

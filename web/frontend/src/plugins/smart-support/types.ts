@@ -141,6 +141,23 @@ export interface Hypothesis {
   suggested_action?: string | null
 }
 
+export interface AIExtraHypothesis {
+  rule_id: string
+  title: string
+  detail?: string | null
+  severity: 'low' | 'medium' | 'high'
+  confidence: number
+  suggested_action?: string | null
+}
+
+export interface AIAnalysis {
+  summary: string
+  extra_hypotheses: AIExtraHypothesis[]
+  confidence: 'low' | 'medium' | 'high'
+  provider_used: string
+  model?: string | null
+}
+
 export interface ReportResponse {
   generated_at: string
   user: UserSection
@@ -150,6 +167,7 @@ export interface ReportResponse {
   correlations: CorrelationCluster[]
   violations_recent: ViolationCard[]
   hypotheses: Hypothesis[]
+  ai_analysis?: AIAnalysis | null
   session_id?: number | null
 }
 
@@ -183,4 +201,38 @@ export interface ThresholdSettings {
   cluster_asn_min_affected?: number | null
   correlation_recompute_seconds?: number | null
   correlation_max_age_minutes?: number | null
+}
+
+export interface AISettingsOut {
+  enabled: boolean
+  provider_chain: string[]
+  gemini_key_set: boolean
+  groq_key_set: boolean
+  openrouter_key_set: boolean
+  gemini_model?: string | null
+  groq_model?: string | null
+  openrouter_model?: string | null
+}
+
+export interface AISettingsIn {
+  enabled?: boolean
+  provider_chain?: string[]
+  gemini_api_key?: string
+  groq_api_key?: string
+  openrouter_api_key?: string
+  gemini_model?: string
+  groq_model?: string
+  openrouter_model?: string
+}
+
+export interface AIProviderStatus {
+  name: string
+  available: boolean
+  cooldown_seconds_remaining: number
+  last_error?: string | null
+}
+
+export interface AIStatusResponse {
+  enabled: boolean
+  chain: AIProviderStatus[]
 }
