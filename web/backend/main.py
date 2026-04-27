@@ -388,14 +388,27 @@ async def _run_migrations(database_url: str) -> bool:
                     sorted(heads),
                 )
 
-                if current_heads == heads:
-                    logger.info("Database schema up to date")
+                pending = heads - current_heads
+                # ``stale`` = revisions the DB knows about but our code
+                # doesn't. Happens when a plugin's wheel isn't loaded yet
+                # this run (fresh container after pull) — its branch is
+                # still in the DB from previous runs. We deliberately do
+                # not try to clean those up: the plugin's pip install
+                # will land later in the lifespan and the next migration
+                # pass will see them again as known revisions.
+                stale = current_heads - heads
+                if stale:
+                    logger.info(
+                        "Revisions present in DB but unknown to current code: %s "
+                        "(plugin not loaded yet — will be reconciled after install)",
+                        sorted(stale),
+                    )
+
+                if not pending:
+                    logger.info("Database schema up to date (no pending)")
                     return True
 
-                logger.info(
-                    "Pending migrations to apply: %s",
-                    sorted(heads - current_heads) or "none",
-                )
+                logger.info("Pending migrations to apply: %s", sorted(pending))
 
                 connection = engine.connect()
                 try:
