@@ -4219,7 +4219,8 @@
           "nodes": "Ноды юзера",
           "history": "История подключений 24ч",
           "correlations": "Корреляции",
-          "violations": "Нарушения"
+          "violations": "Нарушения",
+          "hypotheses": "Скорее всего это"
         },
         "fields": {
           "status": "Статус",
@@ -4238,6 +4239,39 @@
           "unique_countries": "Стран",
           "unique_asns": "ASN",
           "anomalies": "Аномалии"
+        },
+        "hypotheses": {
+          "show_more": "Ещё {{n}}",
+          "show_less": "Свернуть",
+          "confidence": "уверенность {{pct}}%",
+          "suggested": {
+            "switch_node": "Переключить ноду",
+            "extend_subscription": "Продлить подписку",
+            "reset_traffic": "Сбросить трафик",
+            "notify_update": "Сообщить об обновлении"
+          }
+        }
+      },
+      "rules": {
+        "node_overloaded": {
+          "title": "Нода перегружена",
+          "detail": "CPU/RAM ноды близки к пределу — клиент может тормозить."
+        },
+        "node_disconnected": {
+          "title": "Нода недоступна",
+          "detail": "Активная нода не отвечает или давно не присылала метрики."
+        },
+        "subscription_expired": {
+          "title": "Подписка истекла",
+          "detail": "Срок действия подписки прошёл — клиент отключён по плану."
+        },
+        "traffic_exhausted": {
+          "title": "Трафик исчерпан",
+          "detail": "Клиент израсходовал лимит трафика своего тарифа."
+        },
+        "client_version_outdated": {
+          "title": "Клиент устарел",
+          "detail": "Установлена не последняя версия приложения — могут быть баги."
         }
       }
     }

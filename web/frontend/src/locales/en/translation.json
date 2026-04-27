@@ -4219,7 +4219,8 @@
           "nodes": "User's nodes",
           "history": "24h connection history",
           "correlations": "Correlations",
-          "violations": "Violations"
+          "violations": "Violations",
+          "hypotheses": "Most likely causes"
         },
         "fields": {
           "status": "Status",
@@ -4238,6 +4239,39 @@
           "unique_countries": "Countries",
           "unique_asns": "ASNs",
           "anomalies": "Anomalies"
+        },
+        "hypotheses": {
+          "show_more": "{{n}} more",
+          "show_less": "Collapse",
+          "confidence": "{{pct}}% confidence",
+          "suggested": {
+            "switch_node": "Switch node",
+            "extend_subscription": "Extend subscription",
+            "reset_traffic": "Reset traffic",
+            "notify_update": "Notify about update"
+          }
+        }
+      },
+      "rules": {
+        "node_overloaded": {
+          "title": "Node overloaded",
+          "detail": "CPU/RAM are near the limit — the user may experience slowness."
+        },
+        "node_disconnected": {
+          "title": "Node unavailable",
+          "detail": "The active node is offline or hasn't reported metrics in a while."
+        },
+        "subscription_expired": {
+          "title": "Subscription expired",
+          "detail": "The plan has lapsed — the user is disconnected by design."
+        },
+        "traffic_exhausted": {
+          "title": "Traffic exhausted",
+          "detail": "The user has used up the traffic quota of their plan."
+        },
+        "client_version_outdated": {
+          "title": "Client outdated",
+          "detail": "An older version of the app is installed — bugs may be involved."
         }
       }
     }

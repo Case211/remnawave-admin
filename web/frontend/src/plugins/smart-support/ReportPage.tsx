@@ -1,11 +1,15 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
+  AlertCircle,
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
   Cpu,
   Globe2,
+  Lightbulb,
   ShieldAlert,
   Smartphone,
   Sparkles,
@@ -14,7 +18,7 @@ import {
 
 import LicenseBanner from './LicenseBanner'
 import { asLicenseError, fetchReport } from './api'
-import type { ReportResponse } from './types'
+import type { Hypothesis, ReportResponse } from './types'
 
 /**
  * /plugins/smart-support/report/:uuid — single-page diagnostic.
@@ -72,6 +76,7 @@ export default function ReportPage() {
       <BackLink />
       <ReportHeader report={data} />
       <div className="grid gap-6 lg:grid-cols-2">
+        <HypothesesCard report={data} />
         <UserCard report={data} />
         <ClientCard report={data} />
         <NodesCard report={data} />
@@ -151,6 +156,123 @@ function KV({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-white text-right truncate">{value ?? '—'}</span>
     </div>
   )
+}
+
+
+/**
+ * Top-of-page card with the rule engine's ranked guesses. We show the
+ * top 3 prominently and tuck the rest behind a "show more" toggle so a
+ * busy operator sees the most likely cause without scanning every rule.
+ */
+function HypothesesCard({ report }: { report: ReportResponse }) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
+  const items = report.hypotheses
+  if (items.length === 0) return null
+
+  const top = items.slice(0, 3)
+  const rest = items.slice(3)
+
+  return (
+    <div className="glass-card p-5 lg:col-span-2">
+      <div className="flex items-center gap-2 mb-3">
+        <Lightbulb className="w-4 h-4 text-emerald-400" />
+        <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+          {t('plugins.smart_support.report.sections.hypotheses')}
+        </h2>
+      </div>
+      <ul className="space-y-2">
+        {top.map((h) => (
+          <HypothesisRow key={h.rule_id} h={h} />
+        ))}
+        {expanded &&
+          rest.map((h) => <HypothesisRow key={h.rule_id} h={h} />)}
+      </ul>
+      {rest.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-3 inline-flex items-center gap-1 text-xs text-dark-300 hover:text-white transition-colors"
+        >
+          {expanded ? (
+            <>
+              <ChevronUp className="w-3 h-3" />
+              {t('plugins.smart_support.report.hypotheses.show_less')}
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-3 h-3" />
+              {t('plugins.smart_support.report.hypotheses.show_more', { n: rest.length })}
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  )
+}
+
+
+function HypothesisRow({ h }: { h: Hypothesis }) {
+  const { t } = useTranslation()
+  const palette = severityPalette(h.severity)
+  // Prefer the localised title/detail if the rule has a translation key,
+  // otherwise fall back to whatever the backend provided. This lets us
+  // ship new rules from the plugin without a frontend release while the
+  // i18n catch-up.
+  const title = t(`plugins.smart_support.rules.${h.rule_id}.title`, { defaultValue: h.title })
+  const detailKey = `plugins.smart_support.rules.${h.rule_id}.detail`
+  const localisedDetail = t(detailKey, { defaultValue: '' })
+  const detail = h.detail || localisedDetail
+  const action = h.suggested_action
+    ? t(`plugins.smart_support.report.hypotheses.suggested.${h.suggested_action}`, {
+        defaultValue: h.suggested_action,
+      })
+    : null
+  const confidencePct = Math.round(h.confidence * 100)
+
+  return (
+    <li
+      className={`flex items-start gap-3 rounded-lg border-l-2 px-3 py-2 ${palette.bg} ${palette.border}`}
+    >
+      <AlertCircle className={`w-4 h-4 mt-0.5 shrink-0 ${palette.icon}`} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <span className="text-sm font-medium text-white">{title}</span>
+          <span className="text-[11px] text-dark-300">
+            {t('plugins.smart_support.report.hypotheses.confidence', { pct: confidencePct })}
+          </span>
+        </div>
+        {detail && <p className="mt-0.5 text-xs text-dark-200">{detail}</p>}
+        {action && (
+          <span className="mt-1 inline-block text-[11px] text-emerald-300">→ {action}</span>
+        )}
+      </div>
+    </li>
+  )
+}
+
+
+function severityPalette(severity: Hypothesis['severity']) {
+  switch (severity) {
+    case 'high':
+      return {
+        bg: 'bg-red-500/5',
+        border: 'border-red-500/60',
+        icon: 'text-red-400',
+      }
+    case 'medium':
+      return {
+        bg: 'bg-amber-500/5',
+        border: 'border-amber-500/60',
+        icon: 'text-amber-400',
+      }
+    default:
+      return {
+        bg: 'bg-dark-700/30',
+        border: 'border-dark-500/60',
+        icon: 'text-dark-300',
+      }
+  }
 }
 
 
