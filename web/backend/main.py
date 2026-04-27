@@ -471,16 +471,34 @@ async def lifespan(app: FastAPI):
                 from web.backend.core.task_scheduler import task_scheduler_loop
                 _bg_tasks.append(asyncio.create_task(task_scheduler_loop()))
 
-                # Plugin lifecycle: install wheels → prime license cache
-                # → register manifests → start their scheduled tasks. Every
-                # step happens here (not create_app) because they need
-                # the DB pool and the event loop. Failure of any step is
-                # logged but doesn't break panel startup.
+                # Plugin lifecycle: install wheels → re-run migrations
+                # (so any plugin-contributed alembic branches catch up)
+                # → prime license cache → register manifests → start
+                # their scheduled tasks. Each step is wrapped because a
+                # broken plugin must not knock the panel out.
+                #
+                # Why migrations run twice: the first pass at the very
+                # top of lifespan applies panel-only revisions before
+                # the DB pool is used. A plugin's own ``alembic`` branch
+                # is only visible *after* its wheel has been pip-
+                # installed (because env.py reads the
+                # ``rwa.plugin.migrations`` entry-point from
+                # site-packages). So we re-run alembic once the wheels
+                # are in.
                 try:
                     from web.backend.core.plugin_installer import scan_and_install_wheels
                     installed = scan_and_install_wheels()
                     if installed:
                         logger.info("Plugin wheels installed: %s", installed)
+                        # Force importlib to re-scan site-packages so
+                        # entry_points() picks up the freshly installed
+                        # distribution before alembic looks for it.
+                        import importlib
+                        importlib.invalidate_caches()
+                        try:
+                            await _run_migrations(database_url)
+                        except Exception:
+                            logger.exception("Plugin migrations replay failed")
                 except Exception:
                     logger.exception("Plugin wheel scan failed")
 
