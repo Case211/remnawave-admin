@@ -29,6 +29,12 @@ import {
   useActionsCatalog,
 } from './actions'
 import { asLicenseError, fetchReport, fetchSessionsForUser } from './api'
+import {
+  CopyChip,
+  EmptyState,
+  ReportSkeleton,
+  ThresholdBar,
+} from './primitives'
 import type { Hypothesis, ReportResponse, SessionEntry } from './types'
 
 /**
@@ -63,12 +69,7 @@ export default function ReportPage() {
   }
 
   if (isLoading || !data) {
-    return (
-      <div className="space-y-6">
-        <BackLink />
-        <div className="glass-card p-6 text-sm text-dark-300">{t('common.loading')}</div>
-      </div>
-    )
+    return <ReportSkeleton />
   }
 
   if (error) {
@@ -147,20 +148,29 @@ function ReportHeader({ report }: { report: ReportResponse }) {
   const { t } = useTranslation()
   const u = report.user
   return (
-    <div className="glass-card p-5">
+    // ``sticky`` keeps the user identity in view while the operator
+    // scrolls through the (long) report. ``top-0`` works because the
+    // panel layout above provides its own non-sticky shell — if that
+    // changes, this offset must move too.
+    <div className="glass-card p-4 sm:p-5 sticky top-0 z-20 backdrop-blur-md">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-white">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-white truncate">
             {u.username || u.email || u.uuid}
           </h1>
-          <p className="mt-1 text-xs text-dark-400 font-mono">{u.uuid}</p>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <CopyChip value={u.uuid} />
+            {u.status && (
+              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--glass-bg)] text-dark-200">
+                {u.status}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-dark-300">
-          <span>
-            {t('plugins.smart_support.report.generated_at', {
-              ts: new Date(report.generated_at).toLocaleString(),
-            })}
-          </span>
+        <div className="text-xs text-dark-300 shrink-0 hidden sm:block">
+          {t('plugins.smart_support.report.generated_at', {
+            ts: new Date(report.generated_at).toLocaleString(),
+          })}
         </div>
       </div>
     </div>
@@ -178,9 +188,9 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div className="glass-card p-5">
+    <div className="glass-card p-5 transition-colors duration-200 hover:border-[var(--glass-border-hover,var(--glass-border))]">
       <div className="flex items-center gap-2 mb-3">
-        <Icon className="w-4 h-4 text-dark-300" />
+        <Icon className="w-4 h-4 text-dark-300" aria-hidden />
         <h2 className="text-sm font-semibold text-white uppercase tracking-wider">{title}</h2>
       </div>
       {children}
@@ -193,7 +203,9 @@ function KV({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-1 text-sm">
       <span className="text-dark-400 shrink-0">{label}</span>
-      <span className="text-white text-right truncate">{value ?? '—'}</span>
+      {/* tabular-nums prevents the right column from twitching when
+          counters change (e.g. "9 → 10" with proportional digits). */}
+      <span className="text-white text-right truncate tabular-nums">{value ?? '—'}</span>
     </div>
   )
 }
@@ -384,6 +396,7 @@ function severityPalette(severity: Hypothesis['severity']) {
 function UserCard({ report }: { report: ReportResponse }) {
   const { t } = useTranslation()
   const u = report.user
+  const trafficPercent = u.traffic.percent
   return (
     <Section title={t('plugins.smart_support.report.sections.user')} icon={UsersIcon}>
       <KV label={t('plugins.smart_support.report.fields.status')} value={u.status} />
@@ -392,20 +405,36 @@ function UserCard({ report }: { report: ReportResponse }) {
         label={t('plugins.smart_support.report.fields.days_left')}
         value={u.days_until_expire ?? '—'}
       />
-      <KV
-        label={t('plugins.smart_support.report.fields.traffic')}
-        value={
-          u.traffic.percent !== null && u.traffic.percent !== undefined
-            ? `${fmtBytes(u.traffic.used_bytes)} / ${fmtBytes(u.traffic.limit_bytes)} (${u.traffic.percent}%)`
-            : fmtBytes(u.traffic.used_bytes)
-        }
-      />
+      {/* Traffic gets the progress-bar treatment because the percent
+          is the metric operators care about — text alone hides the
+          "you have 2% left" cliff. */}
+      <div className="py-1 text-sm">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-dark-400 shrink-0">
+            {t('plugins.smart_support.report.fields.traffic')}
+          </span>
+          <span className="text-white text-right tabular-nums">
+            {fmtBytes(u.traffic.used_bytes)}
+            {u.traffic.limit_bytes != null && (
+              <>
+                <span className="text-dark-400"> / </span>
+                {fmtBytes(u.traffic.limit_bytes)}
+              </>
+            )}
+            {trafficPercent != null && (
+              <span className="text-dark-300"> · {trafficPercent}%</span>
+            )}
+          </span>
+        </div>
+        {trafficPercent != null && <ThresholdBar percent={trafficPercent} className="mt-1.5" />}
+      </div>
       <KV
         label={t('plugins.smart_support.report.fields.hwid')}
         value={`${u.hwid_devices.length}/${u.hwid_limit ?? '∞'}`}
       />
       {u.hwid_devices.some((d) => d.is_blacklisted) && (
-        <div className="mt-2 text-xs text-amber-400">
+        <div className="mt-2 text-xs text-amber-400 flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden />
           {t('plugins.smart_support.report.fields.hwid_blacklisted')}
         </div>
       )}
@@ -464,7 +493,10 @@ function NodesCard({ report }: { report: ReportResponse }) {
   if (report.nodes.length === 0) {
     return (
       <Section title={t('plugins.smart_support.report.sections.nodes')} icon={Cpu}>
-        <p className="text-sm text-dark-400">{t('plugins.smart_support.report.nodes_empty')}</p>
+        <EmptyState
+          icon={Cpu}
+          message={t('plugins.smart_support.report.nodes_empty')}
+        />
       </Section>
     )
   }
@@ -528,9 +560,10 @@ function CorrelationsCard({ report }: { report: ReportResponse }) {
   if (report.correlations.length === 0) {
     return (
       <Section title={t('plugins.smart_support.report.sections.correlations')} icon={Sparkles}>
-        <p className="text-sm text-dark-400">
-          {t('plugins.smart_support.report.correlations_empty')}
-        </p>
+        <EmptyState
+          icon={Sparkles}
+          message={t('plugins.smart_support.report.correlations_empty')}
+        />
       </Section>
     )
   }
@@ -585,9 +618,10 @@ function SessionLogCard({ userUuid }: { userUuid: string }) {
   return (
     <Section title={t('plugins.smart_support.report.sections.sessions')} icon={History}>
       {!data || data.items.length === 0 ? (
-        <p className="text-sm text-dark-400">
-          {t('plugins.smart_support.report.sessions_empty')}
-        </p>
+        <EmptyState
+          icon={History}
+          message={t('plugins.smart_support.report.sessions_empty')}
+        />
       ) : (
         <ul className="divide-y divide-[var(--glass-border)]">
           {data.items.map((s) => (
@@ -656,7 +690,10 @@ function ViolationsCard({ report }: { report: ReportResponse }) {
   if (report.violations_recent.length === 0) {
     return (
       <Section title={t('plugins.smart_support.report.sections.violations')} icon={ShieldAlert}>
-        <p className="text-sm text-dark-400">{t('plugins.smart_support.report.violations_empty')}</p>
+        <EmptyState
+          icon={ShieldAlert}
+          message={t('plugins.smart_support.report.violations_empty')}
+        />
       </Section>
     )
   }

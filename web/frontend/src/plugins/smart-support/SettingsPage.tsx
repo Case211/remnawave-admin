@@ -19,6 +19,7 @@ import {
   updateAISettings,
   updateSettings,
 } from './api'
+import { CardSkeleton, Skeleton } from './primitives'
 import type { AISettingsIn, ThresholdSettings } from './types'
 
 /**
@@ -94,7 +95,12 @@ export default function SettingsPage() {
     return (
       <div className="space-y-6">
         <BackLink />
-        <div className="glass-card p-6 text-sm text-dark-300">{t('common.loading')}</div>
+        <Skeleton className="h-8 w-64" />
+        <div className="grid gap-6">
+          <CardSkeleton rows={4} />
+          <CardSkeleton rows={4} />
+          <CardSkeleton rows={3} />
+        </div>
       </div>
     )
   }
@@ -105,15 +111,24 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <BackLink />
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Sliders className="w-5 h-5 text-emerald-400" />
-          <h1 className="text-2xl font-bold text-white">
+      {/* Sticky strip — keeps the Save button reachable while the
+          operator scrolls through threshold sections. ``backdrop-blur``
+          lets sections show through faintly so the strip doesn't feel
+          like a wall. */}
+      <div className="flex items-center justify-between gap-3 sticky top-0 z-20 -mx-1 px-1 py-2 bg-[var(--bg,transparent)] backdrop-blur-md">
+        <div className="flex items-center gap-2 min-w-0">
+          <Sliders className="w-5 h-5 text-emerald-400 shrink-0" aria-hidden />
+          <h1 className="text-xl sm:text-2xl font-bold text-white truncate">
             {t('plugins.smart_support.settings.title')}
           </h1>
+          {dirty && (
+            <span className="hidden sm:inline-flex items-center text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 shrink-0">
+              {t('plugins.smart_support.settings.dirty', { defaultValue: 'unsaved' })}
+            </span>
+          )}
         </div>
-        <Button onClick={onSave} disabled={!dirty || mutation.isPending}>
-          <Save className="w-4 h-4 mr-2" />
+        <Button onClick={onSave} disabled={!dirty || mutation.isPending} className="shrink-0">
+          <Save className="w-4 h-4 mr-2" aria-hidden />
           {t('plugins.smart_support.settings.save')}
         </Button>
       </div>

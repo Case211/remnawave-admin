@@ -4203,6 +4203,7 @@
       },
       "report": {
         "back_to_search": "Back to search",
+        "copy": "Copy",
         "generated_at": "Captured at {{ts}}",
         "error": "Failed to load the report.",
         "client_unknown": "Client app could not be inferred from recent subscription requests.",
@@ -4340,6 +4341,7 @@
         "saved": "Settings saved",
         "save_error": "Could not save — please try again",
         "open": "Settings",
+        "dirty": "unsaved",
         "sections": {
           "node": "Node thresholds",
           "traffic": "Traffic thresholds",
