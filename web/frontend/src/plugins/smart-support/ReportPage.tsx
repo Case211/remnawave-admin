@@ -478,6 +478,13 @@ function ClientCard({ report }: { report: ReportResponse }) {
         label={t('plugins.smart_support.report.fields.last_request')}
         value={fmtDate(c.last_request_at)}
       />
+      {/* Surface the raw UA when ua_parser couldn't identify the app —
+          the operator can still recognise unfamiliar clients by eye. */}
+      {!c.last_app && c.raw_user_agent && (
+        <div className="mt-2 text-[11px] text-dark-300 break-all font-mono">
+          {c.raw_user_agent}
+        </div>
+      )}
       {c.is_outdated && (
         <div className="mt-2 text-xs text-amber-400">
           {t('plugins.smart_support.report.fields.outdated_warning')}
