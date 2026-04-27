@@ -1,20 +1,24 @@
 """Wheel-based plugin installer.
 
 The panel scans ``RWA_PLUGINS_DIR`` (default ``/app/plugins``) at startup
-and ``pip install``-s every wheel that isn't already installed in the
-running Python. Operators can drop wheels there manually or upload them
-through the admin UI (``api/v2/admin_plugins.py``); both paths funnel
-into the same code in this module.
+and ``pip install``-s every wheel that isn't already present in the
+running Python's site-packages. Operators can drop wheels there
+manually or upload them through the admin UI (``api/v2/admin_plugins.py``);
+both paths funnel into the same code in this module.
 
-A few constraints kept the design honest:
+Why we ask ``importlib.metadata`` instead of trusting a sentinel file:
+the plugins directory is a bind-mount, so it survives ``docker compose
+down/up``, but the *container's* site-packages does not. After a
+``docker compose pull`` operators get a fresh container with the wheel
+file still on the volume but no pip install — a marker-based check
+would see the marker and skip install, leaving the plugin half-present
+(its DB migrations are recorded but its Python package isn't there).
+Distribution lookup catches this case automatically.
 
 - We use ``--no-deps`` because plugin authors are expected to depend
   only on libraries the panel itself already has. Pulling in arbitrary
   transitive dependencies from third-party wheels is a security
   liability we don't want to take on.
-- We mark already-installed wheels with a sentinel file in
-  ``<plugins_dir>/.installed/`` so a restart is fast — pip's own
-  detection is a few hundred ms per wheel and adds up.
 - We deliberately don't import the new package after install. Python's
   import machinery doesn't reliably re-discover entry points without a
   process restart, so the contract is "install + restart" rather than
@@ -22,6 +26,7 @@ A few constraints kept the design honest:
 """
 from __future__ import annotations
 
+import importlib.metadata
 import logging
 import os
 import re
@@ -105,12 +110,28 @@ def list_wheel_files() -> List[Path]:
     return sorted(p for p in d.glob("*.whl") if p.is_file())
 
 
-def is_already_installed(wheel: Path) -> bool:
-    """Sentinel file means we've already pip-installed this exact filename."""
-    return (installed_marker_dir() / wheel.name).exists()
+def is_distribution_installed(package_name: str, version: Optional[str] = None) -> bool:
+    """True if the *running* Python has this distribution importable.
+
+    Optional version pin lets us treat a wheel-version mismatch as
+    "needs reinstall" — useful when the operator drops a newer wheel
+    on top of an older one without going through the upload flow.
+    """
+    try:
+        dist = importlib.metadata.distribution(package_name)
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    if version and dist.version != version:
+        return False
+    return True
 
 
 def mark_installed(wheel: Path) -> None:
+    """Optional: drop a sentinel file. Kept around for forensic logging
+    (``ls /app/plugins/.installed`` shows the last install pass) but no
+    longer authoritative. ``is_distribution_installed`` is the source of
+    truth.
+    """
     try:
         (installed_marker_dir() / wheel.name).touch()
     except OSError:
@@ -118,18 +139,19 @@ def mark_installed(wheel: Path) -> None:
 
 
 def scan_and_install_wheels() -> List[str]:
-    """Install any wheels that haven't been installed in this process yet.
+    """Install any wheels whose distribution isn't importable yet.
 
     Returns the list of wheel filenames that were actually installed.
-    Idempotent — safe to call on every startup.
+    Idempotent: when the distribution is already present at the wheel's
+    version we skip pip entirely.
     """
     installed: List[str] = []
     for wheel in list_wheel_files():
-        if is_already_installed(wheel):
-            continue
         meta = parse_wheel_name(wheel.name)
         if meta is None:
             logger.warning("plugin_installer.unrecognised_wheel", extra={"wheel": wheel.name})
+            continue
+        if is_distribution_installed(meta.package_name, version=meta.version):
             continue
         try:
             _pip_install(wheel)
