@@ -299,15 +299,17 @@ class SyncService:
                     if user_uuid:
                         api_user_uuids.add(user_uuid)
 
-                # Detect traffic resets: used_traffic_bytes dropped → reset raw counter
+                # Detect traffic resets: lastTrafficResetAt > last_sync, with
+                # delta-fallback when Panel didn't expose the timestamp.
                 try:
                     batch_uuids = [u["uuid"] for u in users if u.get("uuid")]
                     if batch_uuids:
                         old_traffic = await db_service.get_used_traffic_map(batch_uuids)
-                        raw_traffic = await db_service.get_raw_traffic_for_uuids(batch_uuids)
-                        # Get last traffic sync timestamp
                         users_meta = await db_service.get_sync_metadata("users")
                         last_traffic_sync = users_meta["last_sync_at"] if users_meta else None
+                        if last_traffic_sync is not None and last_traffic_sync.tzinfo is None:
+                            last_traffic_sync = last_traffic_sync.replace(tzinfo=timezone.utc)
+
                         reset_uuids = []
                         for u in users:
                             uid = u.get("uuid")
@@ -315,19 +317,32 @@ class SyncService:
                                 continue
                             ut = u.get("userTraffic") or {}
                             ut_val = ut.get("usedTrafficBytes")
+                            new_used = int(ut_val if ut_val is not None else (u.get("usedTrafficBytes") or 0))
+                            old_used = old_traffic.get(uid, 0)
                             last_reset_s = u.get("lastTrafficResetAt")
 
-                            # Reset traffic usage for users with reset after last sync
-                            if last_reset_s:
-                                last_reset = datetime.fromisoformat(last_reset_s.replace("Z", "+00:00"))
+                            # Primary: Panel явно прислал timestamp ресета — сравниваем с последним sync'ом.
+                            primary_hit = False
+                            if last_reset_s and last_traffic_sync is not None:
+                                try:
+                                    last_reset = datetime.fromisoformat(last_reset_s.replace("Z", "+00:00"))
+                                except ValueError:
+                                    last_reset = None
+                                if last_reset is not None and last_traffic_sync < last_reset:
+                                    reset_uuids.append(uid)
+                                    primary_hit = True
+                                    logger.debug(
+                                        "TRAFFIC RESET via timestamp uuid=%s last_sync=%s last_reset=%s",
+                                        uid, last_traffic_sync, last_reset_s,
+                                    )
 
-                                if last_traffic_sync is not None:
-                                    if last_traffic_sync.tzinfo is None:
-                                        last_traffic_sync = last_traffic_sync.replace(tzinfo=timezone.utc)
-
-                                    if last_traffic_sync < last_reset:
-                                        reset_uuids.append(uid)
-                                        logger.debug("TRAFFIC RESET Last sync: %s. Remnawave last traffic reset for %s user: %s", last_traffic_sync, uid, last_reset_s)
+                            # Fallback: timestamp пустой/кривой, но used_traffic явно упал.
+                            if not primary_hit and old_used > 0 and new_used < old_used:
+                                reset_uuids.append(uid)
+                                logger.debug(
+                                    "TRAFFIC RESET via delta uuid=%s old=%d new=%d",
+                                    uid, old_used, new_used,
+                                )
 
                         if reset_uuids:
                             await db_service.reset_raw_traffic(reset_uuids)
