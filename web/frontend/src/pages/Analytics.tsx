@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, memo, lazy, Suspense, Fragment } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { useOpenUser } from '@/lib/useOpenUser'
 import { useTabParam } from '@/lib/useTabParam'
 import { useUrlParam } from '@/lib/useUrlParam'
 import { usePermissionStore } from '@/store/permissionStore'
@@ -199,7 +199,6 @@ function DateRangePicker({
 
 function GeoMapCard() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [geoPeriod, setGeoPeriod] = useUrlParam('geo_period', '7d')
   const [geoDateFrom, setGeoDateFrom] = useUrlParam('geo_from', '')
   const [geoDateTo, setGeoDateTo] = useUrlParam('geo_to', '')
@@ -308,7 +307,7 @@ function GeoMapCard() {
 
             {/* Users by city — collapsible list */}
             {cities.length > 0 && (
-              <CityUsersList cities={cities} navigate={navigate} />
+              <CityUsersList cities={cities} />
             )}
           </div>
         )}
@@ -321,12 +320,11 @@ function GeoMapCard() {
 
 function CityUsersList({
   cities,
-  navigate,
 }: {
   cities: GeoCity[]
-  navigate: (path: string) => void
 }) {
   const { t } = useTranslation()
+  const openUser = useOpenUser()
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('count_desc')
   const [countryFilter, setCountryFilter] = useState('all')
@@ -513,7 +511,7 @@ function CityUsersList({
                         <TableRow
                           key={user.uuid}
                           className="cursor-pointer hover:bg-[var(--glass-bg-hover)]/30"
-                          onClick={() => navigate(`/users/${user.uuid}`)}
+                          {...openUser(user.uuid)}
                         >
                           <TableCell>
                             <div className="flex flex-col gap-0.5">
@@ -612,7 +610,7 @@ function countryFlag(code: string): string {
 function TopUsersCard() {
   const { t } = useTranslation()
   const { formatBytes } = useFormatters()
-  const navigate = useNavigate()
+  const openUser = useOpenUser()
   const [limit, setLimit] = useState(20)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -707,7 +705,7 @@ function TopUsersCard() {
                   <TableRow
                     key={user.uuid}
                     className="cursor-pointer hover:bg-[var(--glass-bg-hover)]/30"
-                    onClick={() => navigate(`/users/${user.uuid}`)}
+                    {...openUser(user.uuid)}
                   >
                     <TableCell className="font-mono text-muted-foreground text-xs">
                       {idx + 1}
@@ -1023,7 +1021,7 @@ type HwidFilter = 'all' | 'has_trial' | 'has_expired' | 'has_active'
 
 function SharedHwidsCard() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const openUser = useOpenUser()
   const [search, setSearch] = useState('')
   const [expandedHwid, setExpandedHwid] = useState<string | null>(null)
   const [filter, setFilter] = useState<HwidFilter>('all')
@@ -1206,7 +1204,7 @@ function SharedHwidsCard() {
                             <TableRow
                               key={user.uuid}
                               className="cursor-pointer hover:bg-[var(--glass-bg-hover)]/30"
-                              onClick={() => navigate(`/users/${user.uuid}`)}
+                              {...openUser(user.uuid)}
                             >
                               <TableCell>
                                 <div className="flex items-center gap-1.5">
@@ -2738,7 +2736,7 @@ function GeoBalanceCard() {
 
 function TorrentAnalyticsCard() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const openUser = useOpenUser()
   const chart = useChartTheme()
   const [days, setDays] = useState('7')
 
@@ -2854,7 +2852,7 @@ function TorrentAnalyticsCard() {
                       <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
                         <span
                           className="text-white/80 font-mono truncate max-w-[200px] cursor-pointer hover:text-primary hover:underline transition-colors"
-                          onClick={() => u.user_uuid && navigate(`/users/${u.user_uuid}`)}
+                          {...openUser(u.user_uuid)}
                         >
                           {u.username || (u.user_uuid ? `${u.user_uuid.slice(0, 8)}...` : '?')}
                         </span>

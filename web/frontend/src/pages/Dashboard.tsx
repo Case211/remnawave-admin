@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, memo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useOpenUser } from '@/lib/useOpenUser'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Users,
@@ -632,7 +633,7 @@ function TopUsersCard({
   loading: boolean
 }) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const openUser = useOpenUser()
   const formatBytesLocal = createFormatBytes(t)
   const items = topUsers?.items || []
 
@@ -658,7 +659,7 @@ function TopUsersCard({
               <div
                 key={user.uuid}
                 className="flex items-center gap-3 bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)] cursor-pointer hover:bg-[var(--glass-bg-hover)] transition-colors"
-                onClick={() => navigate(`/users/${user.uuid}`)}
+                {...openUser(user.uuid)}
               >
                 <span className="text-xs text-muted-foreground w-4 text-center font-mono">{i + 1}</span>
                 <div className="min-w-0 flex-1">

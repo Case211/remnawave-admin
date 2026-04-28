@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, memo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -549,7 +549,6 @@ function ViolationDetailPanel({
 }) {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
-  const navigate = useNavigate()
 
   const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['violationDetail', violationId],
@@ -935,10 +934,10 @@ function ViolationDetailPanel({
             </h4>
             <div className="space-y-1.5">
               {detail.hwid_matched_users.map((match: any, idx: number) => (
-                <div
+                <Link
                   key={match.uuid || idx}
+                  to={`/users/${match.uuid}`}
                   className="flex items-center gap-2 p-2 rounded-md bg-red-500/10 border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors"
-                  onClick={() => navigate(`/users/${match.uuid}`)}
                 >
                   <Users className="w-3.5 h-3.5 text-red-400 shrink-0" />
                   <div className="min-w-0 flex-1">
@@ -955,7 +954,7 @@ function ViolationDetailPanel({
                     {match.status}
                   </Badge>
                   <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                </div>
+                </Link>
               ))}
             </div>
           </CardContent>

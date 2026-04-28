@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { useFormatters } from '@/lib/useFormatters'
+import { useOpenUser } from '@/lib/useOpenUser'
 import {
   Search,
   RefreshCw,
@@ -764,6 +765,7 @@ export default function Users() {
   const { t } = useTranslation()
   const { formatDateShort, formatNumber, formatBytes } = useFormatters()
   const navigate = useNavigate()
+  const openUser = useOpenUser()
   const queryClient = useQueryClient()
   const canCreate = useHasPermission('users', 'create')
   const canBulk = useHasPermission('users', 'bulk_operations')
@@ -1515,7 +1517,7 @@ export default function Users() {
                         data-index={virtualRow.index}
                         ref={rowVirtualizer.measureElement}
                         className="cursor-pointer hover:bg-[var(--glass-bg-hover)]"
-                        onClick={() => navigate(`/users/${user.uuid}`)}
+                        {...openUser(user.uuid)}
                       >
                         {canBulk && (
                           <td className="px-3" onClick={(e) => e.stopPropagation()}>
@@ -1578,7 +1580,7 @@ export default function Users() {
                   <tr
                     key={user.uuid}
                     className="cursor-pointer hover:bg-[var(--glass-bg-hover)]"
-                    onClick={() => navigate(`/users/${user.uuid}`)}
+                    {...openUser(user.uuid)}
                   >
                     {canBulk && (
                       <td className="px-3" onClick={(e) => e.stopPropagation()}>
