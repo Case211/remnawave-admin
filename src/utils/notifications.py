@@ -1043,7 +1043,7 @@ async def send_violation_notification(
                 InlineKeyboardButton(text="🔄 Сбросить трафик", callback_data=f"vact:reset:{user_uuid}"),
             ],
             [
-                InlineKeyboardButton(text="✅ Пропустить", callback_data=f"vact:dismiss:{user_uuid}"),
+                InlineKeyboardButton(text="🚫 Аннулировать", callback_data=f"vact:dismiss:{user_uuid}"),
             ],
         ])
 

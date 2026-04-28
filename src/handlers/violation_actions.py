@@ -1,7 +1,7 @@
 """Обработчики inline-кнопок быстрых действий из уведомлений о нарушениях.
 
 Callback data format: vact:<action>:<user_uuid>
-Actions: info, block, dismiss, reset
+Actions: info, block, kill, dismiss (= annul), reset
 """
 import logging
 
@@ -41,7 +41,7 @@ async def handle_violation_action(callback: CallbackQuery) -> None:
         elif action == "kill":
             await _kill_user(callback, user_uuid)
         elif action == "dismiss":
-            await _dismiss(callback)
+            await _annul(callback, user_uuid)
         elif action == "reset":
             await _reset_traffic(callback, user_uuid)
         else:
@@ -151,15 +151,32 @@ async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
         await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
 
-async def _dismiss(callback: CallbackQuery) -> None:
-    """Dismiss the notification (remove buttons)."""
-    await callback.answer("✅ Пропущено")
+async def _annul(callback: CallbackQuery, user_uuid: str) -> None:
+    """Аннулировать все pending-нарушения юзера и закрыть уведомление."""
+    admin_id = callback.from_user.id
+    admin_name = callback.from_user.first_name or str(admin_id)
+    try:
+        count = await db_service.annul_pending_violations(
+            user_uuid=user_uuid,
+            admin_telegram_id=admin_id,
+            admin_comment=f"Аннулировано из бота ({admin_name})",
+        )
+    except Exception as e:
+        logger.error("Annul violations for %s failed: %s", user_uuid, e)
+        await callback.answer(f"❌ Не удалось аннулировать: {e}", show_alert=True)
+        return
+
+    if count > 0:
+        logger.info("Violations annulled for user %s by %s (count=%d)", user_uuid, admin_name, count)
+        await callback.answer(f"🚫 Аннулировано: {count}")
+        suffix = f"\n\n🚫 <i>Аннулировано {count} нарушени{'е' if count == 1 else 'й'} ({_esc(admin_name)})</i>"
+    else:
+        await callback.answer("ℹ️ Нечего аннулировать (нарушения уже обработаны)")
+        suffix = f"\n\n🚫 <i>Уже обработано ранее ({_esc(admin_name)})</i>"
+
     try:
         old_text = callback.message.text or callback.message.html_text or ""
-        await callback.message.edit_text(
-            old_text + f"\n\n✅ <i>Пропущено ({callback.from_user.first_name})</i>",
-            parse_mode="HTML",
-        )
+        await callback.message.edit_text(old_text + suffix, parse_mode="HTML")
     except Exception:
         pass
 
