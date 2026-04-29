@@ -302,6 +302,16 @@
   border-radius: 4px;
 }
 
+/* iOS: prevent auto-zoom on input focus when font-size < 16px.
+   We override only on small screens — desktop keeps tighter typography. */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Legacy component styles */
 @layer components {
   /* Card - diagonal gradient background with fadeIn animation */

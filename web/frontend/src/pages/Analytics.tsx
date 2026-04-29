@@ -497,7 +497,7 @@ function CityUsersList({
 
               {/* Expanded user rows */}
               {isOpen && hasUsers && (
-                <div className="border-t border-[var(--glass-border)]">
+                <div className="border-t border-[var(--glass-border)] overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1188,7 +1188,7 @@ function SharedHwidsCard() {
                   </div>
 
                   {isOpen && (
-                    <div className="ml-8 mb-2 border border-[var(--glass-border)] rounded-lg overflow-hidden">
+                    <div className="ml-8 mb-2 border border-[var(--glass-border)] rounded-lg overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>

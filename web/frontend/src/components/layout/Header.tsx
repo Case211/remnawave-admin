@@ -91,7 +91,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
           variant="ghost"
           size="icon"
           onClick={onMenuToggle}
-          className="md:hidden"
+          className="md:hidden h-11 w-11"
           aria-label={t('header.menu', 'Open menu')}
         >
           <Menu className="w-6 h-6" />
@@ -118,7 +118,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="sm:hidden"
+          className="sm:hidden h-11 w-11"
           onClick={onSearchClick}
           aria-label={t('header.search', 'Search')}
         >
@@ -136,7 +136,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
           variant="ghost"
           size="icon"
           onClick={() => i18n.changeLanguage(i18n.language === 'ru' ? 'en' : 'ru')}
-          className="relative"
+          className="relative h-11 w-11 md:h-9 md:w-9"
         >
           <Globe className="w-5 h-5" />
           <span className="sr-only">{i18n.language === 'ru' ? 'EN' : 'RU'}</span>
@@ -147,7 +147,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="relative"
+            className="relative h-11 w-11 md:h-9 md:w-9"
             onClick={() => setDropdownOpen(!dropdownOpen)}
             aria-label={t('header.notifications', 'Notifications')}
           >

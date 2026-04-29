@@ -66,16 +66,18 @@ function BreadcrumbEntry({ segment, parentSegment, path, isLast }: CrumbProps) {
 
   if (isLast) {
     return (
-      <BreadcrumbItem>
-        <BreadcrumbPage>{label}</BreadcrumbPage>
+      <BreadcrumbItem className="min-w-0">
+        <BreadcrumbPage className="truncate max-w-[140px] sm:max-w-[240px] md:max-w-none">{label}</BreadcrumbPage>
       </BreadcrumbItem>
     )
   }
 
   return (
-    <BreadcrumbItem>
+    <BreadcrumbItem className="min-w-0">
       <BreadcrumbLink asChild>
-        <Link to={path}>{label}</Link>
+        <Link to={path} className="truncate max-w-[100px] sm:max-w-[180px] md:max-w-none inline-block align-bottom">
+          {label}
+        </Link>
       </BreadcrumbLink>
     </BreadcrumbItem>
   )
