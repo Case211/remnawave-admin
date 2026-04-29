@@ -104,6 +104,8 @@ export function useChartTheme() {
         borderRadius: '8px',
         backdropFilter: 'blur(12px)',
         color: isLight ? '#1e293b' : '#0f172a',
+        fontSize: '13px',
+        padding: '8px 12px',
         boxShadow: isLight
           ? '0 4px 12px rgba(0, 0, 0, 0.08)'
           : '0 4px 12px rgba(0, 0, 0, 0.3)',

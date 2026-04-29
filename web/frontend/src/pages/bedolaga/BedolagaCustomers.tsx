@@ -664,11 +664,11 @@ export default function BedolagaCustomers() {
           <div className="flex items-center justify-between text-xs text-dark-300">
             <span>{total > 0 ? `${(page - 1) * perPage + 1}–${Math.min(page * perPage, total)}` : '0'} {t('common.of')} {total}</span>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={t('common.previousPage')}>
+              <Button variant="ghost" size="icon" className="h-10 w-10" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={t('common.previousPage')}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              <span className="px-2">{page} / {totalPages}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={t('common.nextPage')}>
+              <span className="px-2 tabular-nums">{page} / {totalPages}</span>
+              <Button variant="ghost" size="icon" className="h-10 w-10" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={t('common.nextPage')}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>

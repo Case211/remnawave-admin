@@ -2265,18 +2265,20 @@ export default function Violations() {
                 <Button
                   variant="secondary"
                   size="icon"
+                  className="h-11 w-11 md:h-9 md:w-9"
                   onClick={() => setPage(page - 1)}
                   disabled={page <= 1}
                   aria-label={t('common.previousPage')}
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
-                <span className="text-sm text-dark-200 min-w-[80px] text-center">
+                <span className="text-sm text-dark-200 min-w-[80px] text-center tabular-nums">
                   {page} / {pages}
                 </span>
                 <Button
                   variant="secondary"
                   size="icon"
+                  className="h-11 w-11 md:h-9 md:w-9"
                   onClick={() => setPage(page + 1)}
                   disabled={page >= pages}
                   aria-label={t('common.nextPage')}

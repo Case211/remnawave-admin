@@ -1658,11 +1658,11 @@ export default function Users() {
           )}
         </p>
         <div className="flex items-center gap-2 order-1 sm:order-2">
-          <Button variant="secondary" size="icon" onClick={() => setPage(page - 1)} disabled={page <= 1} aria-label={t('common.previousPage')}>
+          <Button variant="secondary" size="icon" className="h-11 w-11 md:h-9 md:w-9" onClick={() => setPage(page - 1)} disabled={page <= 1} aria-label={t('common.previousPage')}>
             <ChevronLeft className="w-5 h-5" />
           </Button>
-          <span className="text-sm text-muted-foreground min-w-[80px] text-center">{page} / {pages}</span>
-          <Button variant="secondary" size="icon" onClick={() => setPage(page + 1)} disabled={page >= pages} aria-label={t('common.nextPage')}>
+          <span className="text-sm text-muted-foreground min-w-[80px] text-center tabular-nums">{page} / {pages}</span>
+          <Button variant="secondary" size="icon" className="h-11 w-11 md:h-9 md:w-9" onClick={() => setPage(page + 1)} disabled={page >= pages} aria-label={t('common.nextPage')}>
             <ChevronRight className="w-5 h-5" />
           </Button>
         </div>

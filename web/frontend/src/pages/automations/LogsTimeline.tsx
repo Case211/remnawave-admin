@@ -204,7 +204,7 @@ export function LogsTimeline() {
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-10 w-10 md:h-8 md:w-8"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
               aria-label={t('common.previousPage')}
@@ -214,7 +214,7 @@ export function LogsTimeline() {
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8"
+              className="h-10 w-10 md:h-8 md:w-8"
               onClick={() => setPage((p) => Math.min(data.pages, p + 1))}
               disabled={page >= data.pages}
               aria-label={t('common.nextPage')}
