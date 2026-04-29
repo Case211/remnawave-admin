@@ -383,8 +383,8 @@ export default function BedolagaMarketing() {
                       <td className="p-3 text-center hidden md:table-cell">
                         <Badge className="text-[10px] bg-[var(--glass-bg-hover)]">{p.effective_referral_commission_percent ?? 0}%</Badge>
                       </td>
-                      <td className="p-3 text-right hidden md:table-cell text-emerald-400 text-xs font-medium">{formatRubles(p.month_earned_kopeks)}</td>
-                      <td className="p-3 text-right hidden lg:table-cell text-xs">{formatRubles(p.total_earned_kopeks)}</td>
+                      <td className="p-3 text-right hidden md:table-cell text-emerald-400 text-xs font-medium tabular-nums">{formatRubles(p.month_earned_kopeks)}</td>
+                      <td className="p-3 text-right hidden lg:table-cell text-xs tabular-nums">{formatRubles(p.total_earned_kopeks)}</td>
                       <td className="p-3 text-right"><ExternalLink className="w-4 h-4 text-dark-400" /></td>
                     </tr>
                   ))}

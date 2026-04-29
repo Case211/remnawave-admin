@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef, memo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useOpenUser } from '@/lib/useOpenUser'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useUserLinkProps } from '@/lib/useOpenUser'
+import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query'
 import {
   Users,
   Server,
@@ -633,7 +633,7 @@ function TopUsersCard({
   loading: boolean
 }) {
   const { t } = useTranslation()
-  const openUser = useOpenUser()
+  const userLink = useUserLinkProps()
   const formatBytesLocal = createFormatBytes(t)
   const items = topUsers?.items || []
 
@@ -656,16 +656,16 @@ function TopUsersCard({
         ) : items.length > 0 ? (
           <div className="space-y-2">
             {items.map((user, i) => (
-              <div
+              <a
                 key={user.uuid}
-                className="flex items-center gap-3 bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)] cursor-pointer hover:bg-[var(--glass-bg-hover)] transition-colors"
-                {...openUser(user.uuid)}
+                className="flex items-center gap-3 bg-[var(--glass-bg)] rounded-lg px-3 py-2 border border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)] transition-colors no-underline"
+                {...userLink(user.uuid)}
               >
-                <span className="text-xs text-muted-foreground w-4 text-center font-mono">{i + 1}</span>
+                <span className="text-xs text-muted-foreground w-4 text-center font-mono tabular-nums">{i + 1}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-white truncate hover:text-primary-400 transition-colors">{user.username}</span>
-                    <span className="text-xs text-primary-400 font-mono font-semibold shrink-0 ml-2">{formatBytesLocal(user.used_traffic_bytes)}</span>
+                    <span className="text-xs text-primary-400 font-mono tabular-nums font-semibold shrink-0 ml-2">{formatBytesLocal(user.used_traffic_bytes)}</span>
                   </div>
                   {user.traffic_limit_bytes && user.usage_percent != null ? (
                     <div className="w-full h-1.5 bg-[var(--glass-bg-hover)] rounded-full overflow-hidden">
@@ -683,7 +683,7 @@ function TopUsersCard({
                     </div>
                   )}
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         ) : (
@@ -741,8 +741,8 @@ function TopViolatorsCard({
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-white truncate">{v.username || v.user_uuid.substring(0, 8)}</span>
                     <div className="flex items-center gap-2 shrink-0 ml-2">
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{v.violations_count}</Badge>
-                      <span className={cn("text-xs font-mono font-semibold", scoreColor(v.max_score))}>{v.max_score.toFixed(0)}</span>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 tabular-nums">{v.violations_count}</Badge>
+                      <span className={cn("text-xs font-mono tabular-nums font-semibold", scoreColor(v.max_score))}>{v.max_score.toFixed(0)}</span>
                     </div>
                   </div>
                   {v.top_reasons.length > 0 && (
@@ -1547,7 +1547,7 @@ const NodeLoadCard = memo(function NodeLoadCard({
                     style={{ width: `${Math.min(node.load, 100)}%`, background: loadColor(node.load) }}
                   />
                 </div>
-                <span className="text-xs text-muted-foreground font-mono w-10 text-right">
+                <span className="text-xs text-muted-foreground font-mono tabular-nums w-10 text-right">
                   {node.load.toFixed(0)}%
                 </span>
               </div>
@@ -1604,7 +1604,7 @@ const ExpiryCountsCard = memo(function ExpiryCountsCard({
               <Badge
                 variant="secondary"
                 className={cn(
-                  'font-mono text-xs',
+                  'font-mono tabular-nums text-xs',
                   counts.in7d > 10 && 'bg-red-500/20 text-red-400 border-red-500/30',
                   counts.in7d > 0 && counts.in7d <= 10 && 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
                 )}
@@ -1617,7 +1617,7 @@ const ExpiryCountsCard = memo(function ExpiryCountsCard({
               onClick={() => navigate('/users?expire_filter=expiring_30d')}
             >
               <span className="text-xs text-muted-foreground">{t('dashboard.expiringIn30d')}</span>
-              <Badge variant="secondary" className="font-mono text-xs">{counts.in30d}</Badge>
+              <Badge variant="secondary" className="font-mono tabular-nums text-xs">{counts.in30d}</Badge>
             </div>
           </div>
         ) : (
@@ -1753,7 +1753,7 @@ export default function Dashboard() {
     enabled: canViewAnalytics,
   })
 
-  const { data: connectionsSeries, isLoading: connectionsLoading } = useQuery({
+  const { data: connectionsSeries } = useQuery({
     queryKey: ['timeseries', '24h', 'connections'],
     queryFn: () => fetchTimeseries('24h', 'connections'),
     refetchInterval: 60_000,
@@ -1834,6 +1834,9 @@ export default function Dashboard() {
   })
 
   // ── Refresh ──────────────────────────────────────────────────
+
+  const fetchingCount = useIsFetching()
+  const isRefreshing = fetchingCount > 0
 
   const handleRefreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ['overview'] })
@@ -1922,8 +1925,6 @@ export default function Dashboard() {
     return anomalies.sort((a, b) => Math.abs(b.deviationPercent) - Math.abs(a.deviationPercent)).slice(0, 5)
   }, [nodeFleet, timeseries])
 
-  const isLoading = overviewLoading || violationsLoading || trafficLoading || timeseriesLoading || connectionsLoading || componentsLoading
-
   return (
     <div className="space-y-6">
       {/* ── Page header ─────────────────────────────────────────── */}
@@ -1936,10 +1937,11 @@ export default function Dashboard() {
           variant="outline"
           size="sm"
           onClick={handleRefreshAll}
-          disabled={isLoading}
+          disabled={isRefreshing}
           className="gap-2 backdrop-blur-sm"
+          aria-label={t('dashboard.refresh')}
         >
-          <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
+          <RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
           <span className="hidden sm:inline">{t('dashboard.refresh')}</span>
         </Button>
       </div>

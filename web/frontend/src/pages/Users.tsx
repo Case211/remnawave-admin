@@ -31,6 +31,7 @@ import {
   Users as UsersIcon,
   Infinity,
   Crosshair,
+  ArrowUpRight,
 } from 'lucide-react'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -218,7 +219,7 @@ function UserActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('common.openMenu')}>
           <MoreVertical className="w-4 h-4" />
         </Button>
       </DropdownMenuTrigger>
@@ -226,12 +227,17 @@ function UserActions({
         <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}`)}>
           <Eye className="w-4 h-4 mr-2" /> {t('users.actions.view')}
         </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => window.open(`/users/${user.uuid}`, '_blank', 'noopener,noreferrer')}
+        >
+          <ArrowUpRight className="w-4 h-4 mr-2" /> {t('common.openInNewTab')}
+        </DropdownMenuItem>
         {canEdit && (
           <DropdownMenuItem onClick={() => navigate(`/users/${user.uuid}?edit=1`)}>
             <Pencil className="w-4 h-4 mr-2" /> {t('users.actions.edit')}
           </DropdownMenuItem>
         )}
-        {(canEdit || canDelete) && <DropdownMenuSeparator />}
+        {canEdit && <DropdownMenuSeparator />}
         {canEdit && (
           user.status === 'disabled' ? (
             <DropdownMenuItem onClick={onEnable} className="text-green-400 focus:text-green-400">
@@ -244,12 +250,15 @@ function UserActions({
           )
         )}
         {canDelete && (
-          <DropdownMenuItem
-            onClick={onDelete}
-            className="text-red-400 focus:text-red-400"
-          >
-            <Trash2 className="w-4 h-4 mr-2" /> {t('users.actions.delete')}
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={onDelete}
+              className="text-red-400 focus:text-red-400 focus:bg-red-500/10"
+            >
+              <Trash2 className="w-4 h-4 mr-2" /> {t('users.actions.delete')}
+            </DropdownMenuItem>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -775,6 +784,7 @@ export default function Users() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createError, setCreateError] = useState('')
   const [deleteConfirmUuid, setDeleteConfirmUuid] = useState<string | null>(null)
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
   const [disableConfirmUuid, setDisableConfirmUuid] = useState<string | null>(null)
 
   // State (persisted in URL — shareable + survives refresh)
@@ -1084,6 +1094,7 @@ export default function Users() {
                 disabled={!search.trim() || resolveMutation.isPending}
                 onClick={() => resolveMutation.mutate(search.trim())}
                 title={t('users.resolveButton')}
+                aria-label={t('users.resolveButton')}
               >
                 <Crosshair className={cn("w-4 h-4", resolveMutation.isPending && "animate-spin")} />
               </Button>
@@ -1117,6 +1128,7 @@ export default function Users() {
                   size="icon"
                   onClick={() => { setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); setPage(1) }}
                   title={sortOrder === 'desc' ? t('users.sort.descending') : t('users.sort.ascending')}
+                  aria-label={t('common.toggleSort')}
                 >
                   {sortOrder === 'desc' ? (
                     <ArrowDown className="w-5 h-5 text-primary-400" />
@@ -1152,6 +1164,7 @@ export default function Users() {
                 onClick={() => refetch()}
                 disabled={isLoading}
                 title={t('users.refresh')}
+                aria-label={t('common.refresh')}
               >
                 <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
               </Button>
@@ -1435,7 +1448,7 @@ export default function Users() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => bulkDelete.mutate([...selectedUuids])}
+              onClick={() => setBulkDeleteConfirmOpen(true)}
               disabled={bulkEnable.isPending || bulkDisable.isPending || bulkDelete.isPending}
               className="text-red-400 border-red-500/30 hover:bg-red-500/10 gap-1.5"
             >
@@ -1551,11 +1564,11 @@ export default function Users() {
                           )}
                         </td>
                         <td className="text-center">
-                          <span className="text-dark-100 text-sm">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
+                          <span className="text-dark-100 text-sm tabular-nums">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
                         </td>
                         <td><OnlineIndicator onlineAt={user.online_at} /></td>
-                        <td className="text-dark-200 text-sm">{user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</td>
-                        <td className="text-dark-200 text-sm">{user.created_at ? formatDateShort(user.created_at) : '\u2014'}</td>
+                        <td className="text-dark-200 text-sm tabular-nums">{user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</td>
+                        <td className="text-dark-200 text-sm tabular-nums">{user.created_at ? formatDateShort(user.created_at) : '\u2014'}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <UserActions
                             user={user}
@@ -1645,11 +1658,11 @@ export default function Users() {
           )}
         </p>
         <div className="flex items-center gap-2 order-1 sm:order-2">
-          <Button variant="secondary" size="icon" onClick={() => setPage(page - 1)} disabled={page <= 1}>
+          <Button variant="secondary" size="icon" onClick={() => setPage(page - 1)} disabled={page <= 1} aria-label={t('common.previousPage')}>
             <ChevronLeft className="w-5 h-5" />
           </Button>
           <span className="text-sm text-muted-foreground min-w-[80px] text-center">{page} / {pages}</span>
-          <Button variant="secondary" size="icon" onClick={() => setPage(page + 1)} disabled={page >= pages}>
+          <Button variant="secondary" size="icon" onClick={() => setPage(page + 1)} disabled={page >= pages} aria-label={t('common.nextPage')}>
             <ChevronRight className="w-5 h-5" />
           </Button>
         </div>
@@ -1676,6 +1689,21 @@ export default function Users() {
             deleteUser.mutate(deleteConfirmUuid)
             setDeleteConfirmUuid(null)
           }
+        }}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteConfirmOpen}
+        onOpenChange={setBulkDeleteConfirmOpen}
+        title={t('users.bulkDeleteConfirm.title', { count: selectedUuids.size })}
+        description={t('users.bulkDeleteConfirm.description')}
+        confirmLabel={t('users.bulkDeleteConfirm.confirm', { count: selectedUuids.size })}
+        variant="destructive"
+        onConfirm={() => {
+          const uuids = [...selectedUuids]
+          setBulkDeleteConfirmOpen(false)
+          clearSelection()
+          bulkDelete.mutate(uuids)
         }}
       />
 

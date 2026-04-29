@@ -25,6 +25,7 @@ import {
 import { toast } from 'sonner'
 import { useHasPermission } from '../components/PermissionGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { EmptyState } from '@/components/EmptyState'
 import { useFormatters } from '@/lib/useFormatters'
 import { cn } from '@/lib/utils'
 import type { WhitelistItem } from '@/types/violations'
@@ -281,7 +282,7 @@ function BlockedIPsTab() {
                   </TableCell>
                   {canDelete && (
                     <TableCell>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => setDeleteTarget(item)}>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => setDeleteTarget(item)} aria-label={t('common.delete')}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -536,7 +537,11 @@ function HwidBlacklistTab() {
       {isLoading ? (
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
       ) : !data?.items?.length ? (
-        <Card><CardContent className="py-8 text-center text-dark-300 text-sm">{t('violations.hwidBlacklist.empty')}</CardContent></Card>
+        <Card>
+          <CardContent className="p-2">
+            <EmptyState icon={Fingerprint} title={t('violations.hwidBlacklist.empty')} size="sm" />
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-2">
           {data.items.map((item) => (
@@ -863,11 +868,14 @@ function WhitelistTab() {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <Card className="text-center py-12">
-          <CardContent>
-            <ShieldCheck className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-            <p className="text-dark-200 text-lg">{t('violations.whitelist.empty')}</p>
-            <p className="text-sm text-dark-200 mt-1">{t('violations.whitelist.emptyDesc')}</p>
+        <Card>
+          <CardContent className="p-2">
+            <EmptyState
+              icon={ShieldCheck}
+              title={t('violations.whitelist.empty')}
+              description={t('violations.whitelist.emptyDesc')}
+              size="lg"
+            />
           </CardContent>
         </Card>
       ) : (

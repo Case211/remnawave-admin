@@ -570,6 +570,7 @@ function AgentTokenModal({
                     className="absolute top-1.5 right-1.5 h-7 w-7 text-dark-300 hover:text-white"
                     onClick={() => copyToClipboard(generatedToken)}
                     title={t('nodes.agentToken.copyToken')}
+                    aria-label={t('common.copy')}
                   >
                     <Copy className="w-4 h-4" />
                   </Button>
@@ -587,6 +588,7 @@ function AgentTokenModal({
                         className="absolute top-1.5 right-1.5 h-7 w-7 text-dark-300 hover:text-white"
                         onClick={() => copyToClipboard(envConfig)}
                         title={t('nodes.agentToken.copyConfig')}
+                        aria-label={t('common.copy')}
                       >
                         <Copy className="w-4 h-4" />
                       </Button>
@@ -612,6 +614,7 @@ function AgentTokenModal({
                     className="absolute top-1.5 right-1.5 h-7 w-7 text-dark-300 hover:text-white"
                     onClick={() => copyToClipboard(installCommand)}
                     title={t('nodes.agentToken.copyCommand')}
+                    aria-label={t('common.copy')}
                   >
                     <Copy className="w-4 h-4" />
                   </Button>
@@ -917,7 +920,7 @@ function NodeCard({
             {(effectiveCanEdit || effectiveCanDelete) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('common.openMenu')}>
                     <MoreVertical className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>

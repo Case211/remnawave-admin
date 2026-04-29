@@ -135,6 +135,7 @@ function InternalSquadsTab() {
                         size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-primary-400"
                         onClick={() => openEdit(sq)}
+                        aria-label={t('common.edit')}
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
@@ -145,6 +146,7 @@ function InternalSquadsTab() {
                         size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-red-400"
                         onClick={() => setDeleteUuid(sq.uuid)}
+                        aria-label={t('common.delete')}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -389,6 +391,7 @@ function ExternalSquadsTab() {
                         size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-primary-400"
                         onClick={() => openEdit(sq)}
+                        aria-label={t('common.edit')}
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
@@ -399,6 +402,7 @@ function ExternalSquadsTab() {
                         size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-red-400"
                         onClick={() => setDeleteUuid(sq.uuid)}
+                        aria-label={t('common.delete')}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>

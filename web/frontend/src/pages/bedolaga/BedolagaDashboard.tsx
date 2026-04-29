@@ -321,8 +321,8 @@ export default function BedolagaDashboard() {
                               <span className="font-medium">{ref.display_name || ref.username || '—'}</span>
                             </div>
                             <div className="flex items-center gap-3">
-                              <span className="text-dark-300">{ref.referrals_count ?? 0} inv</span>
-                              <span className="font-medium text-emerald-400 w-16 text-right">{ref.total_earned_kopeks ? (ref.total_earned_kopeks / 100).toLocaleString() : 0} ₽</span>
+                              <span className="text-dark-300 tabular-nums">{ref.referrals_count ?? 0} inv</span>
+                              <span className="font-medium text-emerald-400 tabular-nums w-16 text-right">{ref.total_earned_kopeks ? (ref.total_earned_kopeks / 100).toLocaleString() : 0} ₽</span>
                             </div>
                           </div>
                         </div>

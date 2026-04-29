@@ -256,7 +256,7 @@ const ScoreBar = memo(function ScoreBar({ label, score, weight, icon }: { label:
           style={{ width: `${Math.min(score, 100)}%` }}
         />
       </div>
-      <span className={`text-sm font-medium w-10 text-right ${getScoreColor(score)}`}>
+      <span className={`text-sm font-medium tabular-nums w-10 text-right ${getScoreColor(score)}`}>
         {Math.round(score)}
       </span>
     </div>
@@ -575,7 +575,7 @@ function ViolationDetailPanel({
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onClose}>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('common.back')}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <Skeleton className="h-6 w-48" />
@@ -1675,7 +1675,7 @@ export default function Violations() {
   }
 
   // Fetch violations list
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['violations', page, perPage, severity, days, resolved, minScore, ipFilter, countryFilter, dateFrom, dateTo, sortBy, sortOrder, actionFilter, userUuidFilter, usernameFilter],
     queryFn: () =>
       fetchViolations({
@@ -1950,9 +1950,10 @@ export default function Violations() {
               queryClient.invalidateQueries({ queryKey: ['violationStats'] })
               queryClient.invalidateQueries({ queryKey: ['topViolators'] })
             }}
-            disabled={isLoading}
+            disabled={isFetching}
+            aria-label={t('common.refresh')}
           >
-            <RefreshCw className={cn('w-5 h-5', isLoading && 'animate-spin')} />
+            <RefreshCw className={cn('w-5 h-5', isFetching && 'animate-spin')} />
           </Button>
           <ExportDropdown
             onExportCSV={handleExportCSV}
@@ -2266,6 +2267,7 @@ export default function Violations() {
                   size="icon"
                   onClick={() => setPage(page - 1)}
                   disabled={page <= 1}
+                  aria-label={t('common.previousPage')}
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
@@ -2277,6 +2279,7 @@ export default function Violations() {
                   size="icon"
                   onClick={() => setPage(page + 1)}
                   disabled={page >= pages}
+                  aria-label={t('common.nextPage')}
                 >
                   <ChevronRight className="w-5 h-5" />
                 </Button>

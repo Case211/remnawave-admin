@@ -98,7 +98,7 @@ export function AppearancePanel() {
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon" className="relative" aria-label={t('appearance.title', 'Appearance')}>
               <Paintbrush className="w-5 h-5" />
             </Button>
           </PopoverTrigger>
@@ -117,6 +117,7 @@ export function AppearancePanel() {
                 size="icon"
                 className="h-7 w-7 text-dark-300 hover:text-white"
                 onClick={resetToDefaults}
+                aria-label={t('common.reset')}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </Button>

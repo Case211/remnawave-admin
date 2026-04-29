@@ -472,16 +472,17 @@ function AlertRulesTab({ canEdit, canCreate, canDelete }: { canEdit: boolean; ca
                           variant="ghost" size="icon"
                           onClick={() => toggleRule.mutate(rule.id)}
                           className={rule.is_enabled ? 'text-green-400' : 'text-dark-400'}
+                          aria-label={t('notifications.toggleRule', 'Toggle rule')}
                         >
                           {rule.is_enabled ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingRule(rule); setDialogOpen(true) }}>
+                        <Button variant="ghost" size="icon" onClick={() => { setEditingRule(rule); setDialogOpen(true) }} aria-label={t('common.edit')}>
                           <Pencil className="w-4 h-4" />
                         </Button>
                       </>
                     )}
                     {canDelete && (
-                      <Button variant="ghost" size="icon" className="text-red-400" onClick={() => setDeleteId(rule.id)}>
+                      <Button variant="ghost" size="icon" className="text-red-400" onClick={() => setDeleteId(rule.id)} aria-label={t('common.delete')}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     )}
@@ -986,7 +987,7 @@ function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
                     </div>
                   </div>
                   {canEdit && !log.acknowledged && (
-                    <Button variant="ghost" size="icon" onClick={() => ackOne.mutate(log.id)} className="text-cyan-400">
+                    <Button variant="ghost" size="icon" onClick={() => ackOne.mutate(log.id)} className="text-cyan-400" aria-label={t('notifications.acknowledge', 'Acknowledge')}>
                       <Check className="w-4 h-4" />
                     </Button>
                   )}
@@ -1102,7 +1103,7 @@ function ChannelsTab() {
                       checked={ch.is_enabled}
                       onCheckedChange={(v) => toggleChannel.mutate({ id: ch.id, enabled: v })}
                     />
-                    <Button variant="ghost" size="icon" className="text-red-400" onClick={() => deleteChannel.mutate(ch.id)}>
+                    <Button variant="ghost" size="icon" className="text-red-400" onClick={() => deleteChannel.mutate(ch.id)} aria-label={t('common.delete')}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </CardContent>

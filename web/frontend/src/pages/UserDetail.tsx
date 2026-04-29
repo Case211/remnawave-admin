@@ -1656,6 +1656,7 @@ export default function UserDetail() {
                 size="icon"
                 onClick={goBack}
                 className="flex-shrink-0"
+                aria-label={t('common.back')}
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>

@@ -257,6 +257,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           size="icon"
           onClick={onClose}
           className="md:hidden h-8 w-8"
+          aria-label={t('common.close')}
         >
           <X className="w-5 h-5" />
         </Button>
@@ -457,6 +458,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               size="icon"
               onClick={toggleSidebar}
               className="h-8 w-8 text-dark-300 hover:text-white"
+              aria-label={t('sidebar.toggleCollapse', 'Toggle sidebar')}
             >
               {collapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
             </Button>
@@ -580,6 +582,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                     size="icon"
                     onClick={() => setLogoutConfirmOpen(true)}
                     className="h-9 w-9 text-dark-200 hover:text-red-400"
+                    aria-label={t('common.logout', 'Log out')}
                   >
                     <LogOut className="w-5 h-5" />
                   </Button>
@@ -596,6 +599,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                   size="icon"
                   onClick={() => setLogoutConfirmOpen(true)}
                   className="h-8 w-8 text-dark-200 hover:text-red-400 mt-2"
+                  aria-label={t('common.logout', 'Log out')}
                 >
                   <LogOut className="w-4 h-4" />
                 </Button>

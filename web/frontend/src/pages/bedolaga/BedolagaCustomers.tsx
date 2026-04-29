@@ -299,7 +299,7 @@ export default function BedolagaCustomers() {
               </span>
             )}
           </Button>
-          <Button variant="secondary" size="icon" onClick={() => refetch()} disabled={isLoading}>
+          <Button variant="secondary" size="icon" onClick={() => refetch()} disabled={isLoading} aria-label={t('common.refresh')}>
             <RefreshCw className={cn('w-5 h-5', isLoading && 'animate-spin')} />
           </Button>
         </div>
@@ -467,7 +467,7 @@ export default function BedolagaCustomers() {
                       </td>
                       {/* Balance */}
                       <td className="p-3 text-right">
-                        <span className={cn('font-medium', (user.balance_rubles ?? 0) < 0 && 'text-red-400 animate-pulse')}>
+                        <span className={cn('font-medium tabular-nums', (user.balance_rubles ?? 0) < 0 && 'text-red-400 animate-pulse')}>
                           {(user.balance_rubles ?? 0).toLocaleString()} ₽
                         </span>
                       </td>
@@ -520,7 +520,7 @@ export default function BedolagaCustomers() {
                       <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={t('common.openMenu')}>
                               <MoreVertical className="w-4 h-4 text-dark-400" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -558,11 +558,11 @@ export default function BedolagaCustomers() {
             </Select>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={t('common.previousPage')}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <span className="px-2">{page} / {totalPages}</span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={t('common.nextPage')}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -664,11 +664,11 @@ export default function BedolagaCustomers() {
           <div className="flex items-center justify-between text-xs text-dark-300">
             <span>{total > 0 ? `${(page - 1) * perPage + 1}–${Math.min(page * perPage, total)}` : '0'} {t('common.of')} {total}</span>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={t('common.previousPage')}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               <span className="px-2">{page} / {totalPages}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={t('common.nextPage')}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>

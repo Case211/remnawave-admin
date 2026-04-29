@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { EmptyState } from '@/components/EmptyState'
 import { QueryError } from '@/components/QueryError'
 import { useHasPermission } from '@/components/PermissionGate'
 import { useFormatters } from '@/lib/useFormatters'
@@ -319,9 +320,8 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
             </div>
           ) : providers.length === 0 ? (
             <Card className="border-[var(--glass-border)] bg-[var(--glass-bg)]">
-              <CardContent className="p-8 text-center">
-                <Building2 className="w-12 h-12 mx-auto mb-3 text-dark-400" />
-                <p className="text-dark-200">{t('billing.providers.empty')}</p>
+              <CardContent className="p-2">
+                <EmptyState icon={Building2} title={t('billing.providers.empty')} />
               </CardContent>
             </Card>
           ) : (
@@ -450,9 +450,8 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
             </div>
           ) : history.length === 0 ? (
             <Card className="border-[var(--glass-border)] bg-[var(--glass-bg)]">
-              <CardContent className="p-8 text-center">
-                <History className="w-12 h-12 mx-auto mb-3 text-dark-400" />
-                <p className="text-dark-200">{t('billing.history.empty')}</p>
+              <CardContent className="p-2">
+                <EmptyState icon={History} title={t('billing.history.empty')} />
               </CardContent>
             </Card>
           ) : (
@@ -572,9 +571,8 @@ export default function Billing({ embedded }: { embedded?: boolean } = {}) {
             </div>
           ) : billingNodes.length === 0 ? (
             <Card className="border-[var(--glass-border)] bg-[var(--glass-bg)]">
-              <CardContent className="p-8 text-center">
-                <Server className="w-12 h-12 mx-auto mb-3 text-dark-400" />
-                <p className="text-dark-200">{t('billing.nodes.empty')}</p>
+              <CardContent className="p-2">
+                <EmptyState icon={Server} title={t('billing.nodes.empty')} />
               </CardContent>
             </Card>
           ) : (
@@ -928,7 +926,7 @@ function BillingAnalyticsTab() {
                       style={{ width: `${Math.min(100, (m.amount / Math.max(...data!.monthly_series.map((s: { amount: number }) => s.amount))) * 100)}%` }}
                     />
                   </div>
-                  <span className="text-xs font-medium text-white w-16 text-right">${m.amount}</span>
+                  <span className="text-xs font-medium text-white tabular-nums w-16 text-right">${m.amount}</span>
                 </div>
               ))}
             </div>
@@ -957,9 +955,9 @@ function BillingAnalyticsTab() {
                     <tr key={n.node_uuid as string} className="border-b border-[var(--glass-border)]/50">
                       <td className="py-2 text-white">{n.node_name as string}</td>
                       <td className="py-2 text-muted-foreground">{n.provider as string}</td>
-                      <td className="py-2 text-center text-xs">{n.cpu_usage != null ? `${n.cpu_usage}%` : '-'}</td>
-                      <td className="py-2 text-center text-xs">{n.memory_usage != null ? `${n.memory_usage}%` : '-'}</td>
-                      <td className="py-2 text-right">{(n.users_online as number) || 0}</td>
+                      <td className="py-2 text-center text-xs tabular-nums">{n.cpu_usage != null ? `${n.cpu_usage}%` : '-'}</td>
+                      <td className="py-2 text-center text-xs tabular-nums">{n.memory_usage != null ? `${n.memory_usage}%` : '-'}</td>
+                      <td className="py-2 text-right tabular-nums">{(n.users_online as number) || 0}</td>
                     </tr>
                   ))}
                 </tbody>

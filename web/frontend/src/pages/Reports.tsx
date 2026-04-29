@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { reportsApi, asnApi, ViolationReport, ASNRecord } from '../api/reports'
 import client from '../api/client'
+import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -204,9 +205,8 @@ export default function Reports({ embedded }: { embedded?: boolean } = {}) {
             </div>
           ) : reports.length === 0 ? (
             <Card className="border-[var(--glass-border)] bg-[var(--glass-bg)]">
-              <CardContent className="p-8 text-center">
-                <FileText className="w-12 h-12 mx-auto mb-3 text-dark-400" />
-                <p className="text-dark-200">{t('reports.empty')}</p>
+              <CardContent className="p-2">
+                <EmptyState icon={FileText} title={t('reports.empty')} />
               </CardContent>
             </Card>
           ) : (

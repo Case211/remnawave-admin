@@ -30,6 +30,12 @@
     "selectAll": "Select All",
     "deselectAll": "Deselect All",
     "reset": "Reset",
+    "openMenu": "Open menu",
+    "openInNewTab": "Open in new tab",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "remove": "Remove",
+    "toggleSort": "Toggle sort order",
     "loading": "Loading...",
     "error": "Error",
     "loadError": "Failed to load data. Please try again.",
@@ -566,6 +572,11 @@
       "title": "Delete user?",
       "description": "User and all data will be deleted. This action cannot be undone.",
       "confirm": "Delete"
+    },
+    "bulkDeleteConfirm": {
+      "title": "Delete {{count}} users?",
+      "description": "All selected users and their data will be permanently deleted. This action cannot be undone.",
+      "confirm": "Delete {{count}}"
     },
     "disableConfirm": {
       "title": "Disable user?",
@@ -2599,6 +2610,8 @@
       "faq": "FAQ"
     },
     "searchPlaceholder": "Search settings...",
+    "filterInCategory": "Filter in this category...",
+    "noLocalMatches": "No matches in this category",
     "foundSettings": "Found: {{count}} settings",
     "noSettings": "Settings not found",
     "noSettingsHint": "Make sure the database is connected and the bot has been started at least once",

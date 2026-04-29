@@ -569,7 +569,7 @@ function AdminActions({ admin, onEdit, onToggle, onDelete }: {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('common.openMenu')}>
           <MoreVertical className="w-4 h-4" />
         </Button>
       </DropdownMenuTrigger>
@@ -642,7 +642,7 @@ function AdminsTab({ roles }: { roles: Role[] }) {
       <div className="flex items-center justify-between mb-4">
         <div />
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="icon" onClick={() => refetch()} disabled={isLoading}>
+          <Button variant="secondary" size="icon" onClick={() => refetch()} disabled={isLoading} aria-label={t('common.refresh')}>
             <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
           </Button>
           <PermissionGate resource="admins" action="create">
@@ -814,7 +814,7 @@ function RolesTab({ resources }: { resources: AvailableResources }) {
       <div className="flex items-center justify-between mb-4">
         <div />
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="icon" onClick={() => refetch()} disabled={isLoading}>
+          <Button variant="secondary" size="icon" onClick={() => refetch()} disabled={isLoading} aria-label={t('common.refresh')}>
             <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
           </Button>
           <PermissionGate resource="roles" action="create">

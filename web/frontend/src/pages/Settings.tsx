@@ -249,6 +249,7 @@ function SyncStatusBlock({
                           onClick={() => syncMutation.mutate(entityKey)}
                           disabled={syncingEntity !== null || !canEdit}
                           className="h-6 w-6 text-dark-400 hover:text-primary-400"
+                          aria-label={t('common.refresh')}
                           title={t('settings.sync.syncEntity')}
                         >
                           <RefreshCw className={cn('w-3.5 h-3.5', isSyncing && 'animate-spin')} />
@@ -580,6 +581,7 @@ function ChangePasswordBlock() {
                 size="icon"
                 onClick={() => setError('')}
                 className="h-5 w-5 ml-2 text-red-300 hover:text-red-200"
+                aria-label={t('common.close')}
               >
                 <X className="w-3 h-3" />
               </Button>
@@ -764,6 +766,7 @@ function IpWhitelistBlock() {
                 size="icon"
                 onClick={() => setError('')}
                 className="h-5 w-5 ml-2 text-red-300 hover:text-red-200"
+                aria-label={t('common.close')}
               >
                 <X className="w-3 h-3" />
               </Button>
@@ -785,6 +788,7 @@ function IpWhitelistBlock() {
                     onClick={() => removeIp(ip)}
                     className="h-6 w-6 text-dark-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                     title="Remove"
+                    aria-label={t('common.remove')}
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -916,6 +920,7 @@ export default function Settings() {
   const canEdit = useHasPermission('settings', 'edit')
   const [search, setSearch] = useState('')
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({})
+  const [categoryFilters, setCategoryFilters] = useState<Record<string, string>>({})
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set())
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
   const [errorKeys, setErrorKeys] = useState<Record<string, string>>({})
@@ -923,7 +928,7 @@ export default function Settings() {
   const savedTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Fetch settings
-  const { data: settingsData, isLoading: settingsLoading, refetch: refetchSettings } = useQuery({
+  const { data: settingsData, isLoading: settingsLoading, isFetching: settingsFetching, refetch: refetchSettings } = useQuery({
     queryKey: ['settings'],
     queryFn: fetchSettings,
   })
@@ -1081,6 +1086,7 @@ export default function Settings() {
                 onClick={() => handleReset(item.key)}
                 className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
                 title={t('settings.resetToFallback')}
+                aria-label={t('common.reset')}
               >
                 <X className="w-3.5 h-3.5" />
               </Button>
@@ -1111,6 +1117,7 @@ export default function Settings() {
                 onClick={() => handleReset(item.key)}
                 className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
                 title={t('settings.reset')}
+                aria-label={t('common.reset')}
               >
                 <X className="w-3.5 h-3.5" />
               </Button>
@@ -1164,6 +1171,7 @@ export default function Settings() {
                 onClick={() => handleReset(item.key)}
                 className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
                 title={t('settings.reset')}
+                aria-label={t('common.reset')}
               >
                 <X className="w-3.5 h-3.5" />
               </Button>
@@ -1219,6 +1227,7 @@ export default function Settings() {
                 onClick={() => handleReset(item.key)}
                 className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
                 title={t('settings.reset')}
+                aria-label={t('common.reset')}
               >
                 <X className="w-3.5 h-3.5" />
               </Button>
@@ -1305,9 +1314,23 @@ export default function Settings() {
   }
 
   // Group items by subcategory within a category
-  const renderCategoryItems = (items: ConfigItem[]) => {
-    const filtered = items.filter(matchesSearch)
-    if (filtered.length === 0) return null
+  const renderCategoryItems = (items: ConfigItem[], category: string) => {
+    const localFilter = (categoryFilters[category] || '').trim().toLowerCase()
+    const filtered = items.filter(matchesSearch).filter((item) => {
+      if (!localFilter) return true
+      const haystack = [
+        item.key,
+        item.display_name,
+        item.description,
+        item.env_var_name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(localFilter)
+    })
+    const showLocalFilter = items.filter(matchesSearch).length > 6
+    if (!showLocalFilter && filtered.length === 0) return null
 
     // Separate into subcategories
     const mainItems = filtered.filter((i) => !i.subcategory)
@@ -1321,25 +1344,55 @@ export default function Settings() {
 
     return (
       <>
-        {mainItems.length > 0 && (
-          <div className="divide-y divide-dark-700/50">
-            {mainItems.map((item) => renderConfigItem(item))}
+        {showLocalFilter && (
+          <div className="relative pt-3 pb-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 mt-1 w-3.5 h-3.5 text-dark-300 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder={t('settings.filterInCategory')}
+              className="w-full pl-9 pr-9 h-8 text-sm"
+              value={categoryFilters[category] || ''}
+              onChange={(e) => setCategoryFilters((prev) => ({ ...prev, [category]: e.target.value }))}
+              autoComplete="off"
+            />
+            {categoryFilters[category] && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCategoryFilters((prev) => ({ ...prev, [category]: '' }))}
+                className="absolute right-1 top-1/2 -translate-y-1/2 mt-1 h-6 w-6 text-dark-300 hover:text-dark-100"
+                aria-label={t('common.close')}
+              >
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            )}
           </div>
         )}
-        {Object.entries(subcategories).map(([sub, subItems]) => (
-          <div key={sub} className="mt-4">
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <div className="h-4 w-1 rounded-full bg-gradient-to-b from-cyan-500 to-teal-500" />
-              <span className="text-xs font-semibold text-dark-200 tracking-wide">
-                {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
-              </span>
-              <div className="flex-1 h-px bg-gradient-to-r from-dark-700/50 to-transparent" />
-            </div>
-            <div className="bg-[var(--glass-bg)]/30 rounded-lg px-3 divide-y divide-dark-700/30 border border-[var(--glass-border)]/10">
-              {subItems.map((item) => renderConfigItem(item))}
-            </div>
-          </div>
-        ))}
+        {filtered.length === 0 ? (
+          <p className="text-xs text-dark-300 italic py-3">{t('settings.noLocalMatches')}</p>
+        ) : (
+          <>
+            {mainItems.length > 0 && (
+              <div className="divide-y divide-dark-700/50">
+                {mainItems.map((item) => renderConfigItem(item))}
+              </div>
+            )}
+            {Object.entries(subcategories).map(([sub, subItems]) => (
+              <div key={sub} className="mt-4">
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <div className="h-4 w-1 rounded-full bg-gradient-to-b from-cyan-500 to-teal-500" />
+                  <span className="text-xs font-semibold text-dark-200 tracking-wide">
+                    {t(`settings.subcategories.${sub}`, { defaultValue: sub })}
+                  </span>
+                  <div className="flex-1 h-px bg-gradient-to-r from-dark-700/50 to-transparent" />
+                </div>
+                <div className="bg-[var(--glass-bg)]/30 rounded-lg px-3 divide-y divide-dark-700/30 border border-[var(--glass-border)]/10">
+                  {subItems.map((item) => renderConfigItem(item))}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </>
     )
   }
@@ -1373,9 +1426,11 @@ export default function Settings() {
         <Button
           variant="secondary"
           onClick={() => refetchSettings()}
+          disabled={settingsFetching}
           className="flex items-center gap-1"
+          aria-label={t('common.refresh')}
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className={cn('w-4 h-4', settingsFetching && 'animate-spin')} />
           <span className="hidden sm:inline">{t('common.refresh')}</span>
         </Button>
       </div>
@@ -1419,6 +1474,7 @@ export default function Settings() {
             size="icon"
             onClick={() => setSearch('')}
             className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-dark-300 hover:text-dark-100"
+            aria-label={t('common.close')}
           >
             <X className="w-4 h-4" />
           </Button>
@@ -1495,7 +1551,7 @@ export default function Settings() {
                 </button>
                 {isOpen && (
                   <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-[var(--glass-border)]/50 animate-fade-in-down">
-                    {renderCategoryItems(items)}
+                    {renderCategoryItems(items, category)}
                   </div>
                 )}
               </Card>

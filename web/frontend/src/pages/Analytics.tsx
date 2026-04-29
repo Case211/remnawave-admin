@@ -537,7 +537,7 @@ function CityUsersList({
                               {t(`analytics.status.${user.status}`, { defaultValue: user.status })}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
+                          <TableCell className="text-right font-mono tabular-nums text-sm">
                             {user.connections.toLocaleString()}
                           </TableCell>
                         </TableRow>
@@ -726,10 +726,10 @@ function TopUsersCard() {
                         {t(`analytics.status.${user.status}`, { defaultValue: user.status })}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
+                    <TableCell className="text-right font-mono tabular-nums text-sm">
                       {formatBytes(user.used_traffic_bytes)}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm hidden md:table-cell text-muted-foreground">
+                    <TableCell className="text-right font-mono tabular-nums text-sm hidden md:table-cell text-muted-foreground">
                       {user.traffic_limit_bytes
                         ? formatBytes(user.traffic_limit_bytes)
                         : '\u221E'}
@@ -1782,8 +1782,8 @@ function NodesTrafficCard() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-white font-medium truncate">{node.name}</span>
                   <div className="flex items-center gap-3 ml-3 shrink-0">
-                    <span className="text-xs text-muted-foreground font-mono">{node.percent}%</span>
-                    <span className="text-sm text-white font-mono w-24 text-right">{formatBytes(node.traffic_bytes)}</span>
+                    <span className="text-xs text-muted-foreground font-mono tabular-nums">{node.percent}%</span>
+                    <span className="text-sm text-white font-mono tabular-nums w-24 text-right">{formatBytes(node.traffic_bytes)}</span>
                   </div>
                 </div>
                 <div className="w-full h-1.5 bg-dark-700 rounded-full overflow-hidden">
@@ -1992,10 +1992,10 @@ function NodesCard() {
                         <ResourceBar value={node.disk_usage} />
                       ) : <span className="text-xs text-muted-foreground">-</span>}
                     </TableCell>
-                    <TableCell className="font-mono text-sm text-center">
+                    <TableCell className="font-mono tabular-nums text-sm text-center">
                       {node.users_online}
                     </TableCell>
-                    <TableCell className="font-mono text-sm text-right">
+                    <TableCell className="font-mono tabular-nums text-sm text-right">
                       {formatBytes(node.traffic_today_bytes)}
                     </TableCell>
                     <TableCell className="text-xs text-right">

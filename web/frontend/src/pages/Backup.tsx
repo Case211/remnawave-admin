@@ -273,6 +273,7 @@ function BackupsTab() {
                       className="h-8 w-8 text-dark-200 hover:text-white"
                       onClick={() => handleDownload(file.filename)}
                       title={t('backup.download')}
+                      aria-label={t('backup.download', 'Download backup')}
                     >
                       <Download className="w-4 h-4" />
                     </Button>
@@ -285,6 +286,7 @@ function BackupsTab() {
                           className="h-8 w-8 text-primary-400 hover:text-primary-300"
                           onClick={() => setConfirmRestore(file.filename)}
                           title={t('backup.restore')}
+                          aria-label={t('backup.restore', 'Restore backup')}
                         >
                           <RotateCcw className="w-4 h-4" />
                         </Button>
@@ -298,6 +300,7 @@ function BackupsTab() {
                         className="h-8 w-8 text-red-400 hover:text-red-300"
                         onClick={() => setConfirmDelete(file.filename)}
                         title={t('backup.delete')}
+                        aria-label={t('common.delete')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

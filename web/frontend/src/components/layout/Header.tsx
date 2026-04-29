@@ -92,6 +92,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
           size="icon"
           onClick={onMenuToggle}
           className="md:hidden"
+          aria-label={t('header.menu', 'Open menu')}
         >
           <Menu className="w-6 h-6" />
         </Button>
@@ -119,6 +120,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
           size="icon"
           className="sm:hidden"
           onClick={onSearchClick}
+          aria-label={t('header.search', 'Search')}
         >
           <Search className="w-5 h-5" />
         </Button>
@@ -147,6 +149,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
             size="icon"
             className="relative"
             onClick={() => setDropdownOpen(!dropdownOpen)}
+            aria-label={t('header.notifications', 'Notifications')}
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (

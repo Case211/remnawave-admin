@@ -23,6 +23,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { EmptyState } from '@/components/EmptyState'
 import { toast } from 'sonner'
 
 interface Role {
@@ -146,10 +148,11 @@ export default function AccessPoliciesTab({ roles }: { roles: Role[] }) {
     create.mutate({ name: name.trim(), description: '', rules: [] })
   }
 
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
   const handleDelete = () => {
     if (!selectedId) return
-    if (!confirm(t('accessPolicies.confirmDelete') || 'Delete this policy?')) return
-    remove.mutate(selectedId)
+    setDeleteOpen(true)
   }
 
   return (
@@ -166,8 +169,8 @@ export default function AccessPoliciesTab({ roles }: { roles: Role[] }) {
           <Skeleton className="h-24 w-full" />
         ) : (listQ.data?.length ?? 0) === 0 ? (
           <Card className="glass-card">
-            <CardContent className="p-4 text-sm text-muted-foreground text-center">
-              {t('accessPolicies.empty')}
+            <CardContent className="p-2">
+              <EmptyState icon={Shield} title={t('accessPolicies.empty')} size="sm" />
             </CardContent>
           </Card>
         ) : (
@@ -222,6 +225,19 @@ export default function AccessPoliciesTab({ roles }: { roles: Role[] }) {
           />
         )}
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={t('accessPolicies.deleteConfirm.title', 'Delete access policy?')}
+        description={t('accessPolicies.deleteConfirm.description', 'This policy will be permanently removed. Roles and admins attached to it will lose this scope.')}
+        confirmLabel={t('common.delete')}
+        variant="destructive"
+        onConfirm={() => {
+          if (selectedId) remove.mutate(selectedId)
+          setDeleteOpen(false)
+        }}
+      />
     </div>
   )
 }
