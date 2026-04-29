@@ -82,7 +82,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
 
   return (
     <header
-      className="h-16 flex items-center justify-between px-4 md:px-6 animate-fade-in relative z-30 backdrop-blur-sm [&::after]:content-[''] [&::after]:absolute [&::after]:bottom-0 [&::after]:inset-x-0 [&::after]:h-px [&::after]:bg-gradient-to-r [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.12)] [&::after]:to-transparent"
+      className="h-16 flex items-center justify-between px-4 md:px-6 animate-fade-in relative z-30 backdrop-blur-sm pt-safe pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] [&::after]:content-[''] [&::after]:absolute [&::after]:bottom-0 [&::after]:inset-x-0 [&::after]:h-px [&::after]:bg-gradient-to-r [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.12)] [&::after]:to-transparent"
     >
       {/* Left side: hamburger + search */}
       <div className="flex items-center gap-3 flex-1">

@@ -1396,7 +1396,7 @@ export default function Users() {
 
       {/* Bulk action toolbar */}
       {selectedUuids.size > 0 && canBulk && (
-        <div className="sticky bottom-4 z-30 mx-auto max-w-3xl animate-fade-in-up">
+        <div className="sticky bottom-4 z-30 mx-auto max-w-3xl animate-fade-in-up pb-safe">
           <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)]/95 backdrop-blur-xl shadow-deep">
             <span className="text-sm text-white font-medium">
               {t('users.bulkSelected', { count: selectedUuids.size })}

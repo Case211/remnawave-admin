@@ -627,6 +627,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex flex-col",
           "glass-heavy animate-fade-in",
+          "pt-safe pb-safe pl-[env(safe-area-inset-left)] md:pl-0",
           "[&::after]:content-[''] [&::after]:absolute [&::after]:right-0 [&::after]:inset-y-0 [&::after]:w-px [&::after]:bg-gradient-to-b [&::after]:from-transparent [&::after]:via-[rgba(var(--glow-rgb),0.2)] [&::after]:to-transparent",
           "transform transition-all duration-300 ease-in-out",
           "md:relative md:translate-x-0",

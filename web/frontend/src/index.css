@@ -699,6 +699,20 @@
       0 0 20px -5px rgba(var(--card-rgb), 0.18);
   }
 
+  /* Touch press feedback: explicit scale on :active for tap feedback on mobile.
+     Desktop hover lift handled above; touch devices need :active because hover
+     "sticks" until next tap. */
+  @media (hover: none) {
+    .glass-card:active,
+    [role='link']:active,
+    a:active,
+    button:active:not(:disabled),
+    [class*='cursor-pointer']:active {
+      transform: scale(0.985);
+      transition: transform 80ms ease-out;
+    }
+  }
+
   /* Glow effects — uses theme accent */
   .glow-accent {
     box-shadow: 0 0 30px -5px rgba(var(--glow-rgb), 0.3);
