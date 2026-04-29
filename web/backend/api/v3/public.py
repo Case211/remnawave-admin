@@ -3,11 +3,12 @@
 Authenticated via X-API-Key header. Scopes control access.
 """
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
+from uuid import UUID as _UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from web.backend.api.v3.deps import ApiKeyUser, require_scope
 
@@ -17,7 +18,23 @@ router = APIRouter()
 
 # ── Schemas ──────────────────────────────────────────────────────
 
-class UserPublic(BaseModel):
+
+class _PublicBase(BaseModel):
+    """Base for v3 response models. Coerces asyncpg UUID objects to str so
+    pydantic-v2 strict validation does not 500 on the response.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_uuid_fields(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            for k, v in list(values.items()):
+                if isinstance(v, _UUID):
+                    values[k] = str(v)
+        return values
+
+
+class UserPublic(_PublicBase):
     uuid: str
     username: str
     status: Optional[str] = None
@@ -40,7 +57,7 @@ class UserCreate(BaseModel):
     status: Optional[str] = None
 
 
-class NodePublic(BaseModel):
+class NodePublic(_PublicBase):
     uuid: str
     name: str
     country_code: Optional[str] = None
@@ -49,7 +66,7 @@ class NodePublic(BaseModel):
     users_online: Optional[int] = None
 
 
-class HostPublic(BaseModel):
+class HostPublic(_PublicBase):
     uuid: str
     remark: Optional[str] = None
     address: Optional[str] = None
@@ -417,8 +434,11 @@ async def get_stats(
             "SELECT "
             "  COUNT(*) AS total_users, "
             "  COUNT(*) FILTER (WHERE LOWER(status) = 'active') AS active_users, "
-            "  COUNT(*) FILTER (WHERE online = true) AS online_users, "
-            "  COALESCE(SUM(used_traffic_bytes), 0) AS total_traffic_bytes "
+            "  COUNT(*) FILTER ("
+            "    WHERE NULLIF(raw_data->'userTraffic'->>'onlineAt', '')::timestamptz"
+            "      >= NOW() - INTERVAL '5 minutes'"
+            "  ) AS online_users, "
+            "  COALESCE(SUM(used_traffic_bytes), 0)::bigint AS total_traffic_bytes "
             "FROM users"
         )
         node_stats = await conn.fetchrow(
@@ -429,12 +449,12 @@ async def get_stats(
         )
 
     return StatsPublic(
-        total_users=user_stats["total_users"],
-        active_users=user_stats["active_users"],
-        online_users=user_stats["online_users"],
-        total_nodes=node_stats["total_nodes"],
-        connected_nodes=node_stats["connected_nodes"],
-        total_traffic_bytes=user_stats["total_traffic_bytes"],
+        total_users=int(user_stats["total_users"]),
+        active_users=int(user_stats["active_users"]),
+        online_users=int(user_stats["online_users"]),
+        total_nodes=int(node_stats["total_nodes"]),
+        connected_nodes=int(node_stats["connected_nodes"]),
+        total_traffic_bytes=int(user_stats["total_traffic_bytes"]),
     )
 
 
