@@ -132,7 +132,7 @@ def _violation_keyboard(user_uuid: str) -> Dict:
                 {"text": "🔄 Сбросить трафик", "callback_data": f"vact:reset:{user_uuid}"},
             ],
             [
-                {"text": "✅ Пропустить", "callback_data": f"vact:dismiss:{user_uuid}"},
+                {"text": "🚫 Аннулировать", "callback_data": f"vact:dismiss:{user_uuid}"},
             ],
         ]
     }
