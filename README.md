@@ -82,9 +82,9 @@
 
 | Параметр | До 1 000 юзеров | 1 000–5 000 | 5 000–20 000 | 20 000+ |
 |----------|----------------|-------------|--------------|---------|
-| **CPU** | 1 vCPU | 2 vCPU | 4 vCPU | 4–8 vCPU |
-| **RAM** | 1 GB | 2 GB | 4 GB | 8+ GB |
-| **Диск** | 10 GB SSD | 20 GB SSD | 40 GB NVMe | 80+ GB NVMe |
+| **CPU** | 2 vCPU | 4 vCPU | 8 vCPU | 8-16 vCPU |
+| **RAM** | 4 GB | 8 GB | 16+ GB | 32+ GB |
+| **Диск** | 40 GB SSD | 80 GB SSD | 240 GB NVMe | 240+ GB NVMe |
 | **PostgreSQL** | По умолч. | Tuning рекомендуется | Tuning обязателен | Dedicated DB |
 
 > **Примечания:**
