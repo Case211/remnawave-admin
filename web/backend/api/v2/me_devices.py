@@ -98,6 +98,28 @@ async def list_devices(
     return [DeviceItem(**dict(r)) for r in rows]
 
 
+@router.post("/me/devices/test")
+async def send_test_push(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Кнопка «отправить тестовый пуш мне»: проверка, что Firebase настроен и
+    у устройства есть валидный токен. Шлёт на все девайсы текущего админа."""
+    from web.backend.core.push_service import is_enabled, send_to_admin
+    if not is_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="FCM disabled (set FCM_ENABLED=true and FCM_CREDENTIALS_PATH on server)",
+        )
+    admin_id = await _resolve_admin_id(admin)
+    result = await send_to_admin(
+        admin_id=admin_id,
+        title="Remnawave Admin",
+        body="Тестовый пуш — всё работает",
+        data={"type": "info", "severity": "info"},
+    )
+    return {"success": result.get("sent", 0) > 0, **result}
+
+
 @router.delete("/me/devices/{token}")
 async def unregister_device(
     token: str,
