@@ -62,10 +62,11 @@ async def _list_tokens_for_admin(admin_id: int) -> List[str]:
     from shared.database import db_service
     if not db_service.is_connected:
         return []
-    rows = await db_service.fetch(
-        "SELECT fcm_token FROM admin_devices WHERE admin_id = $1",
-        admin_id,
-    )
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT fcm_token FROM admin_devices WHERE admin_id = $1",
+            admin_id,
+        )
     return [r["fcm_token"] for r in rows]
 
 
@@ -74,9 +75,10 @@ async def _list_tokens_for_all_admins() -> List[tuple]:
     from shared.database import db_service
     if not db_service.is_connected:
         return []
-    rows = await db_service.fetch(
-        "SELECT fcm_token, admin_id FROM admin_devices",
-    )
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT fcm_token, admin_id FROM admin_devices",
+        )
     return [(r["fcm_token"], r["admin_id"]) for r in rows]
 
 
@@ -84,9 +86,10 @@ async def _delete_token(token: str) -> None:
     from shared.database import db_service
     if not db_service.is_connected:
         return
-    await db_service.execute(
-        "DELETE FROM admin_devices WHERE fcm_token = $1", token,
-    )
+    async with db_service.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM admin_devices WHERE fcm_token = $1", token,
+        )
 
 
 async def _send_via_fcm(
