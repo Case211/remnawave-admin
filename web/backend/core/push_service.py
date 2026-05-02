@@ -58,28 +58,57 @@ async def _ensure_app():
         return _app
 
 
-async def _list_tokens_for_admin(admin_id: int) -> List[str]:
+def _category_for_type(notification_type: Optional[str]) -> str:
+    """Маппинг {`violation`, `alert`, `escalation`, остальное} → канонические
+    категории `violations`/`alerts`/`info`. Совпадает со списком в `me_devices`."""
+    if notification_type == "violation":
+        return "violations"
+    if notification_type in ("alert", "escalation"):
+        return "alerts"
+    return "info"
+
+
+def _device_accepts(category: str, enabled: bool, subscriptions) -> bool:
+    """True если устройство хочет получать пуш этой категории."""
+    if not enabled:
+        return False
+    # null/None — клиент не настраивал → шлём всё
+    if subscriptions is None:
+        return True
+    # Пустой список — клиент явно отписался от всего
+    if isinstance(subscriptions, str):
+        try:
+            import json
+            subscriptions = json.loads(subscriptions)
+        except Exception:
+            return True  # Битые данные — лучше пропустить, чем потерять алерт
+    if not isinstance(subscriptions, list):
+        return True
+    return category in subscriptions
+
+
+async def _list_devices_for_admin(admin_id: int) -> List[dict]:
     from shared.database import db_service
     if not db_service.is_connected:
         return []
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT fcm_token FROM admin_devices WHERE admin_id = $1",
+            "SELECT fcm_token, notifications_enabled, subscriptions "
+            "FROM admin_devices WHERE admin_id = $1",
             admin_id,
         )
-    return [r["fcm_token"] for r in rows]
+    return [dict(r) for r in rows]
 
 
-async def _list_tokens_for_all_admins() -> List[tuple]:
-    """Returns [(token, admin_id)] для всех зарегистрированных устройств."""
+async def _list_devices_for_all_admins() -> List[dict]:
     from shared.database import db_service
     if not db_service.is_connected:
         return []
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT fcm_token, admin_id FROM admin_devices",
+            "SELECT fcm_token, admin_id, notifications_enabled, subscriptions FROM admin_devices",
         )
-    return [(r["fcm_token"], r["admin_id"]) for r in rows]
+    return [dict(r) for r in rows]
 
 
 async def _delete_token(token: str) -> None:
@@ -167,10 +196,16 @@ async def send_to_admin(
     body: str,
     data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, int]:
-    """Push конкретному админу на все его устройства."""
+    """Push конкретному админу на все его устройства, отфильтрованные по
+    notifications_enabled и subscriptions (по категории из data['type'])."""
     if not _is_enabled():
         return {"sent": 0, "failed": 0}
-    tokens = await _list_tokens_for_admin(admin_id)
+    devices = await _list_devices_for_admin(admin_id)
+    category = _category_for_type((data or {}).get("type"))
+    tokens = [
+        d["fcm_token"] for d in devices
+        if _device_accepts(category, d["notifications_enabled"], d["subscriptions"])
+    ]
     return await _send_via_fcm(tokens, title, body, data)
 
 
@@ -179,11 +214,16 @@ async def broadcast_to_admins(
     body: str,
     data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, int]:
-    """Push всем зарегистрированным устройствам всех админов."""
+    """Push всем устройствам всех админов с тем же фильтром по подпискам."""
     if not _is_enabled():
         return {"sent": 0, "failed": 0}
-    pairs = await _list_tokens_for_all_admins()
-    return await _send_via_fcm([t for t, _ in pairs], title, body, data)
+    devices = await _list_devices_for_all_admins()
+    category = _category_for_type((data or {}).get("type"))
+    tokens = [
+        d["fcm_token"] for d in devices
+        if _device_accepts(category, d["notifications_enabled"], d["subscriptions"])
+    ]
+    return await _send_via_fcm(tokens, title, body, data)
 
 
 def is_enabled() -> bool:
