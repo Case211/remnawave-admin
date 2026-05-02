@@ -321,6 +321,7 @@ async def create_notification(
     topic_type: str = "service",
     telegram_body: Optional[str] = None,
     reply_markup: Optional[Dict[str, Any]] = None,
+    event: Optional[str] = None,
     **kwargs,
 ) -> Optional[int]:
     """Create in-app notification and dispatch to configured channels.
@@ -469,6 +470,8 @@ async def create_notification(
                         "type": type or "info",
                         "severity": severity or "info",
                     }
+                    if event:
+                        push_data["event"] = event
                     if source:
                         push_data["source"] = source
                     if source_id:

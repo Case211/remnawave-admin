@@ -22,10 +22,11 @@ from web.backend.api.deps import AdminUser, get_current_admin
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Канонический список категорий пушей. Если в data['type'] от backend пришёл
-# тип, который не в этом списке — он всё равно проходит (мы фильтруем только
-# по непустому subscriptions), но в UI настройка показывается только для них.
-PUSH_CATEGORIES = {"violations", "alerts", "info"}
+# Канонический список категорий пушей. Источник правды — `shared.notification_events`,
+# здесь оставляем для валидации входящего payload в PATCH.
+from shared.notification_events import all_categories as _all_categories
+
+PUSH_CATEGORIES = set(_all_categories())
 
 
 class DeviceRegisterRequest(BaseModel):
@@ -37,9 +38,13 @@ class DeviceRegisterRequest(BaseModel):
 
 class DeviceUpdateRequest(BaseModel):
     notifications_enabled: Optional[bool] = None
-    # null/отсутствие = «все категории», пустой список = «ничего не слать»,
-    # непустой = «только эти» (фильтр на стороне push_service).
+    # Старый формат (для обратной совместимости со старыми клиентами):
+    # массив "разрешённых" категорий — null=все, пустой=ничего, иначе whitelist.
     subscriptions: Optional[List[str]] = None
+    # Новый формат: явные блокировки. Категория или event_id в этих списках
+    # означает «не присылать». Если оба null — присылаем всё.
+    disabled_categories: Optional[List[str]] = None
+    disabled_events: Optional[List[str]] = None
 
 
 class DeviceItem(BaseModel):
@@ -48,7 +53,12 @@ class DeviceItem(BaseModel):
     app_version: Optional[str] = None
     device_label: Optional[str] = None
     notifications_enabled: bool = True
+    # Старый whitelist категорий — оставляем в ответе для совместимости с уже
+    # установленными клиентами 0.3.1; они продолжат работать как раньше.
     subscriptions: Optional[List[str]] = None
+    # Новый формат настроек, которым пользуется свежий клиент.
+    disabled_categories: List[str] = []
+    disabled_events: List[str] = []
     created_at: datetime
     last_seen_at: datetime
 
@@ -75,9 +85,24 @@ async def _resolve_admin_id(admin: AdminUser) -> int:
     return await _require_account_id(admin)
 
 
+def _decode_string_list(value) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+    if isinstance(value, list):
+        return [str(x) for x in value]
+    return []
+
+
 def _row_to_device(row) -> DeviceItem:
     d = dict(row)
     d["subscriptions"] = _decode_subscriptions(d.get("subscriptions"))
+    d["disabled_categories"] = _decode_string_list(d.get("disabled_categories"))
+    d["disabled_events"] = _decode_string_list(d.get("disabled_events"))
     return DeviceItem(**d)
 
 
@@ -110,7 +135,9 @@ async def register_device(
                 device_label = COALESCE(EXCLUDED.device_label, admin_devices.device_label),
                 last_seen_at = NOW()
             RETURNING id, platform, app_version, device_label,
-                      notifications_enabled, subscriptions, created_at, last_seen_at
+                      notifications_enabled, subscriptions,
+                      disabled_categories, disabled_events,
+                      created_at, last_seen_at
             """,
             admin_id,
             payload.fcm_token,
@@ -132,7 +159,9 @@ async def list_devices(
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
             "SELECT id, platform, app_version, device_label, "
-            "notifications_enabled, subscriptions, created_at, last_seen_at "
+            "notifications_enabled, subscriptions, "
+            "disabled_categories, disabled_events, "
+            "created_at, last_seen_at "
             "FROM admin_devices WHERE admin_id = $1 ORDER BY last_seen_at DESC",
             admin_id,
         )
@@ -156,11 +185,26 @@ async def update_device(
     if not db_service.is_connected:
         raise HTTPException(status_code=503, detail="DB not connected")
 
+    from shared.notification_events import all_event_ids
+
     subs_json = None
     set_subs = payload.subscriptions is not None
     if set_subs:
         cleaned = [s for s in (payload.subscriptions or []) if s in PUSH_CATEGORIES]
         subs_json = json.dumps(cleaned)
+
+    set_dc = payload.disabled_categories is not None
+    dc_json = None
+    if set_dc:
+        cleaned_dc = [s for s in (payload.disabled_categories or []) if s in PUSH_CATEGORIES]
+        dc_json = json.dumps(cleaned_dc)
+
+    set_de = payload.disabled_events is not None
+    de_json = None
+    if set_de:
+        known_events = set(all_event_ids())
+        cleaned_de = [s for s in (payload.disabled_events or []) if s in known_events]
+        de_json = json.dumps(cleaned_de)
 
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
@@ -169,20 +213,40 @@ async def update_device(
             SET
                 notifications_enabled = COALESCE($3, notifications_enabled),
                 subscriptions = CASE WHEN $4 THEN $5::jsonb ELSE subscriptions END,
+                disabled_categories = CASE WHEN $6 THEN $7::jsonb ELSE disabled_categories END,
+                disabled_events = CASE WHEN $8 THEN $9::jsonb ELSE disabled_events END,
                 last_seen_at = NOW()
             WHERE id = $1 AND admin_id = $2
             RETURNING id, platform, app_version, device_label,
-                      notifications_enabled, subscriptions, created_at, last_seen_at
+                      notifications_enabled, subscriptions,
+                      disabled_categories, disabled_events,
+                      created_at, last_seen_at
             """,
             device_id,
             admin_id,
             payload.notifications_enabled,
             set_subs,
             subs_json,
+            set_dc,
+            dc_json,
+            set_de,
+            de_json,
         )
     if not row:
         raise HTTPException(status_code=404, detail="Device not found")
     return _row_to_device(row)
+
+
+@router.get("/me/notification-events")
+async def list_notification_events(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Каталог известных бэкенду событий уведомлений с группировкой по
+    категориям. Mobile-клиент использует его, чтобы построить UI настроек
+    динамически — добавление нового события на сервере не требует обновления APK.
+    """
+    from shared.notification_events import CATALOG
+    return {"groups": CATALOG}
 
 
 @router.post("/me/devices/test")

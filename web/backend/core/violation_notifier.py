@@ -414,6 +414,7 @@ async def send_violation_notification(
             topic_type="violations",
             telegram_body=body,
             reply_markup=_violation_keyboard(user_uuid),
+            event="violation.detected",
         )
 
         # Update throttling: persistent DB + in-memory fallback

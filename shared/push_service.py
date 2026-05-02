@@ -74,9 +74,8 @@ async def _ensure_app():
 
 
 def _category_for_type(notification_type: Optional[str]) -> str:
-    """Маппинг {`violation`, `alert`, `escalation`, остальное} → канонические
-    категории `violations`/`alerts`/`info`. Совпадает со списком в API
-    `web/backend/api/v2/me_devices.py`."""
+    """Fallback маппинг по data['type'] для случаев, когда event_id не указан
+    (в legacy-вызовах из notification_service до добавления event)."""
     if notification_type == "violation":
         return "violations"
     if notification_type in ("alert", "escalation"):
@@ -84,22 +83,74 @@ def _category_for_type(notification_type: Optional[str]) -> str:
     return "info"
 
 
-def _device_accepts(category: str, enabled: bool, subscriptions) -> bool:
-    """True если устройство хочет получать пуш этой категории."""
-    if not enabled:
-        return False
-    # null/None — клиент не настраивал → шлём всё
-    if subscriptions is None:
-        return True
-    if isinstance(subscriptions, str):
+def _resolve_category(event_id: Optional[str], notification_type: Optional[str]) -> str:
+    """Сначала пытаемся найти категорию по event_id в каталоге; если не нашли —
+    деривируем из data.type. Это даёт обратную совместимость со старыми вызовами
+    и приоритет более точному `event` для новых."""
+    if event_id:
+        try:
+            from shared.notification_events import category_for_event
+            return category_for_event(event_id)
+        except Exception:
+            pass
+    return _category_for_type(notification_type)
+
+
+def _decode_list(value) -> list:
+    if value is None:
+        return []
+    if isinstance(value, str):
         try:
             import json
-            subscriptions = json.loads(subscriptions)
+            value = json.loads(value)
         except Exception:
-            return True  # Битые данные — лучше пропустить, чем потерять алерт
-    if not isinstance(subscriptions, list):
-        return True
-    return category in subscriptions
+            return []
+    return list(value) if isinstance(value, list) else []
+
+
+def _device_accepts(
+    category: str,
+    event_id: Optional[str],
+    enabled: bool,
+    subscriptions,
+    disabled_categories,
+    disabled_events,
+) -> bool:
+    """True если устройство хочет получать пуш этой категории/события.
+
+    Логика, в порядке проверки:
+      1. notifications_enabled=false → False
+      2. event_id в disabled_events → False (точечный отказ от конкретного события)
+      3. category в disabled_categories → False (отказ от группы целиком)
+      4. legacy whitelist `subscriptions` (массив) — если задан и непуст,
+         категория должна быть в нём; пустой = «отписан от всего».
+      5. иначе → True
+    """
+    if not enabled:
+        return False
+    de = _decode_list(disabled_events)
+    if event_id and event_id in de:
+        return False
+    dc = _decode_list(disabled_categories)
+    if category in dc:
+        return False
+    # Legacy формат: subscriptions = массив-whitelist (только эти категории)
+    if subscriptions is not None:
+        subs = _decode_list(subscriptions)
+        if subs:
+            return category in subs
+        # Пустой whitelist = клиент явно отписался от всего (старый клиент)
+        # — но если он же выставит явно disabled_categories=[]/disabled_events=[],
+        # ниже мы уже не отказали, значит здесь возвращаем False только если
+        # subscriptions реально передавался как пустой явный whitelist.
+        return False
+    return True
+
+
+_DEVICE_FIELDS = (
+    "fcm_token, notifications_enabled, subscriptions, "
+    "disabled_categories, disabled_events"
+)
 
 
 async def _list_devices_for_admin(admin_id: int) -> List[dict]:
@@ -108,8 +159,7 @@ async def _list_devices_for_admin(admin_id: int) -> List[dict]:
         return []
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT fcm_token, notifications_enabled, subscriptions "
-            "FROM admin_devices WHERE admin_id = $1",
+            f"SELECT {_DEVICE_FIELDS} FROM admin_devices WHERE admin_id = $1",
             admin_id,
         )
     return [dict(r) for r in rows]
@@ -121,7 +171,7 @@ async def _list_devices_for_all_admins() -> List[dict]:
         return []
     async with db_service.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT fcm_token, admin_id, notifications_enabled, subscriptions FROM admin_devices",
+            f"SELECT {_DEVICE_FIELDS}, admin_id FROM admin_devices",
         )
     return [dict(r) for r in rows]
 
@@ -201,23 +251,36 @@ async def _send_via_fcm(
 # Public API ────────────────────────────────────────────────────────────────
 
 
+def _filter_tokens(devices: list, data: Optional[Dict[str, Any]]) -> List[str]:
+    payload = data or {}
+    event_id = payload.get("event")
+    notification_type = payload.get("type")
+    category = _resolve_category(event_id, notification_type)
+    return [
+        d["fcm_token"] for d in devices
+        if _device_accepts(
+            category=category,
+            event_id=event_id,
+            enabled=d["notifications_enabled"],
+            subscriptions=d["subscriptions"],
+            disabled_categories=d.get("disabled_categories"),
+            disabled_events=d.get("disabled_events"),
+        )
+    ]
+
+
 async def send_to_admin(
     admin_id: int,
     title: str,
     body: str,
     data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, int]:
-    """Push конкретному админу на все его устройства, отфильтрованные по
-    notifications_enabled и subscriptions (по категории из data['type'])."""
+    """Push конкретному админу. Фильтр: notifications_enabled, точечный
+    disabled_events, disabled_categories, плюс legacy `subscriptions` whitelist."""
     if not _is_enabled():
         return {"sent": 0, "failed": 0}
     devices = await _list_devices_for_admin(admin_id)
-    category = _category_for_type((data or {}).get("type"))
-    tokens = [
-        d["fcm_token"] for d in devices
-        if _device_accepts(category, d["notifications_enabled"], d["subscriptions"])
-    ]
-    return await _send_via_fcm(tokens, title, body, data)
+    return await _send_via_fcm(_filter_tokens(devices, data), title, body, data)
 
 
 async def broadcast_to_admins(
@@ -225,16 +288,11 @@ async def broadcast_to_admins(
     body: str,
     data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, int]:
-    """Push всем устройствам всех админов с тем же фильтром по подпискам."""
+    """Push всем устройствам всех админов с тем же фильтром."""
     if not _is_enabled():
         return {"sent": 0, "failed": 0}
     devices = await _list_devices_for_all_admins()
-    category = _category_for_type((data or {}).get("type"))
-    tokens = [
-        d["fcm_token"] for d in devices
-        if _device_accepts(category, d["notifications_enabled"], d["subscriptions"])
-    ]
-    return await _send_via_fcm(tokens, title, body, data)
+    return await _send_via_fcm(_filter_tokens(devices, data), title, body, data)
 
 
 def is_enabled() -> bool:

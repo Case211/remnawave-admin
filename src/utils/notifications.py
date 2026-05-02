@@ -24,8 +24,14 @@ def _push_dispatch(
     source: Optional[str] = None,
     source_id: Optional[str] = None,
     severity: str = "info",
+    event: Optional[str] = None,
 ) -> None:
     """Запускаем broadcast пуша в фоне — НЕ блокирует основной поток отправки в TG.
+
+    `event` — конкретный event_id (например `user.expires_in_72_hours`,
+    `node.connection_lost`). Используется push_service для точечной фильтрации
+    по подпискам устройства; должен соответствовать одному из id в
+    `shared/notification_events.py`.
 
     Бот ловит часть событий от Panel (node.online/offline, user.*, hwid.*, service.*)
     напрямую через webhook и отправляет в Telegram через aiogram, обходя
@@ -40,6 +46,8 @@ def _push_dispatch(
             "type": notification_type,
             "severity": severity,
         }
+        if event:
+            data["event"] = event
         if source:
             data["source"] = source
         if source_id:
@@ -344,14 +352,22 @@ async def send_user_notification(
         await bot.send_message(**message_kwargs)
         logger.info("User notification sent successfully action=%s chat_id=%s", action, settings.notifications_chat_id)
 
-        # Создание/удаление юзера и т.п. — info-категория, не критика. На пуш всё
-        # равно хорошо, чтобы видеть активность; юзер мог отписаться от 'info'.
+        # Маппинг наших коротких action-имён в Panel webhook event_id, под которыми
+        # они известны и хранятся в каталоге shared/notification_events.py.
+        action_to_event = {
+            "expires_in_72h": "user.expires_in_72_hours",
+            "expires_in_48h": "user.expires_in_48_hours",
+            "expires_in_24h": "user.expires_in_24_hours",
+            "expired_24h_ago": "user.expired_24_hours_ago",
+        }
+        event_id = action_to_event.get(action, f"user.{action}")
         _push_dispatch(
             title=f"Юзер: {action}",
             body=info.get("username") or info.get("uuid", "")[:8],
             notification_type="info",
             source="panel.webhook",
             source_id=info.get("uuid"),
+            event=event_id,
         )
 
     except Exception as exc:
@@ -506,6 +522,7 @@ async def send_node_notification(
             source="panel.webhook",
             source_id=node_uuid,
             severity=push_severity,
+            event=event,
         )
 
     except Exception as exc:
@@ -586,6 +603,7 @@ async def send_service_notification(
             source="panel.webhook",
             source_id=event,
             severity="warning",
+            event=event,
         )
 
     except Exception as exc:
@@ -735,6 +753,7 @@ async def send_error_notification(
             source="panel.webhook",
             source_id=event,
             severity="critical",
+            event=event,
         )
 
     except Exception as exc:
