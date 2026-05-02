@@ -518,6 +518,7 @@ async def send_torrent_notification(
             topic_type="violations",
             telegram_body=body,
             reply_markup=_violation_keyboard(user_uuid),
+            event="violation.torrent",
         )
 
         _violation_notification_cache[user_uuid] = datetime.utcnow()

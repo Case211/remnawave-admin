@@ -770,8 +770,9 @@ async def _handle_blacklisted_hwid_users(
             link="/violations",
             source="hwid_blacklist",
             source_id=hwid,
-            channels=["in_app", "telegram"],
+            channels=["in_app", "telegram", "push"],
             topic_type="violations",
+            event="violation.hwid_blacklist",
         )
     else:
         # Alert only
@@ -786,8 +787,9 @@ async def _handle_blacklisted_hwid_users(
             link="/violations",
             source="hwid_blacklist",
             source_id=hwid,
-            channels=["in_app", "telegram"],
+            channels=["in_app", "telegram", "push"],
             topic_type="violations",
+            event="violation.hwid_blacklist",
         )
 
 

@@ -28,10 +28,13 @@ CATALOG: List[Dict[str, Any]] = [
     {
         "id": "violations",
         "label": "Нарушения",
-        "description": "Детектор abuse: одновременные подключения, гео, ASN, профиль",
+        "description": "Multi-factor детектор abuse, торрент/P2P, превышение скорости трафика, HWID-blacklist",
         "category": "violations",
         "events": [
-            _e("violation.detected", "Нарушение обнаружено", "warning"),
+            _e("violation.detected", "Multi-factor abuse (temporal/geo/ASN/profile/device/HWID)", "warning"),
+            _e("violation.torrent", "Торрент/P2P трафик", "critical"),
+            _e("violation.traffic_rate", "Превышение скорости трафика", "warning"),
+            _e("violation.hwid_blacklist", "Совпадение с HWID-blacklist", "critical"),
         ],
     },
     {
