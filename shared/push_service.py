@@ -203,21 +203,25 @@ async def _send_via_fcm(
 
     invalid_tokens: List[str] = []
 
-    # Все строки в data; FCM требует строковые поля
+    # Кладём title/body внутрь data, без notification-блока. Это data-only message:
+    # Firebase в любом состоянии (foreground/background/killed) дёргает наш
+    # FirebaseMessagingService.onMessageReceived и НЕ рисует системную нотификацию
+    # сам — мы на клиенте рендерим её через NotificationCompat вместе с PendingIntent
+    # для deeplink. С `notification`-блоком в фоне Firebase бы перехватил и
+    # открыл MainActivity без нашего intent.data — diplinks бы не работали.
     payload_data: Dict[str, str] = {k: str(v) for k, v in (data or {}).items()}
+    payload_data.setdefault("title", title)
+    payload_data.setdefault("body", body)
 
     def _send_sync(token: str) -> bool:
         try:
             message = messaging.Message(
-                notification=messaging.Notification(title=title, body=body),
                 data=payload_data,
                 token=token,
                 android=messaging.AndroidConfig(
+                    # high — чтобы пуш будил устройство в Doze; data-only по
+                    # умолчанию идёт normal priority, что задерживает доставку.
                     priority="high",
-                    notification=messaging.AndroidNotification(
-                        channel_id="remnawave_admin",
-                        default_sound=True,
-                    ),
                 ),
             )
             messaging.send(message, app=app)
