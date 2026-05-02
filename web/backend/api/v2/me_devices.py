@@ -103,7 +103,10 @@ async def send_test_push(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """Кнопка «отправить тестовый пуш мне»: проверка, что Firebase настроен и
-    у устройства есть валидный токен. Шлёт на все девайсы текущего админа."""
+    у устройства есть валидный токен. Шлёт на все девайсы текущего админа.
+    В ответе возвращаем admin_id и сколько устройств зарегистрировано — чтобы
+    видеть, если веб и мобильник попали в разные admin_accounts.id."""
+    from shared.database import db_service
     from web.backend.core.push_service import is_enabled, send_to_admin
     if not is_enabled():
         raise HTTPException(
@@ -111,13 +114,24 @@ async def send_test_push(
             detail="FCM disabled (set FCM_ENABLED=true and FCM_CREDENTIALS_PATH on server)",
         )
     admin_id = await _resolve_admin_id(admin)
+    devices_count = 0
+    if db_service.is_connected:
+        async with db_service.acquire() as conn:
+            devices_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM admin_devices WHERE admin_id = $1", admin_id,
+            ) or 0
     result = await send_to_admin(
         admin_id=admin_id,
         title="Remnawave Admin",
         body="Тестовый пуш — всё работает",
         data={"type": "info", "severity": "info"},
     )
-    return {"success": result.get("sent", 0) > 0, **result}
+    return {
+        "success": result.get("sent", 0) > 0,
+        "admin_id": admin_id,
+        "devices_for_admin": devices_count,
+        **result,
+    }
 
 
 @router.delete("/me/devices/{token}")
