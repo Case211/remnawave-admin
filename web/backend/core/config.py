@@ -62,6 +62,12 @@ class WebSettings(BaseSettings):
     # Redis (optional, for distributed caching and rate limiting)
     redis_url: Optional[str] = Field(default=None, alias="REDIS_URL")
 
+    # FCM Push notifications (mobile app)
+    fcm_enabled: bool = Field(default=False, alias="FCM_ENABLED")
+    fcm_credentials_path: Optional[str] = Field(
+        default=None, alias="FCM_CREDENTIALS_PATH",
+    )
+
     # Admins list (shared with bot)
     admins_raw: str = Field(default="", alias="ADMINS")
 
