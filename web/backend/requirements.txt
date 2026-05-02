@@ -29,6 +29,9 @@ slowapi>=0.1.9
 # Caching
 redis[hiredis]>=5.0.0
 
+# Push notifications (FCM)
+firebase-admin>=6.5.0
+
 # Structured logging
 structlog>=24.1.0
 

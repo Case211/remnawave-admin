@@ -25,3 +25,6 @@ api-1.json
 node-agent/.env
 node-agent/test-logs/*.log
 node-agent/test-logs/access.log
+# Firebase service account credentials
+web/backend/secrets/
+

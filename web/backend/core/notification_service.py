@@ -321,6 +321,7 @@ async def create_notification(
     topic_type: str = "service",
     telegram_body: Optional[str] = None,
     reply_markup: Optional[Dict[str, Any]] = None,
+    event: Optional[str] = None,
     **kwargs,
 ) -> Optional[int]:
     """Create in-app notification and dispatch to configured channels.
@@ -453,6 +454,36 @@ async def create_notification(
                 logger.debug("No global NOTIFICATIONS_CHAT_ID, skipping global Telegram")
             else:
                 logger.debug("Global chat_id=%s already covered by per-admin channel, skipping duplicate", global_chat_id)
+
+        # FCM push для мобильных админов: дублируем все нотификации, у которых
+        # явно запрошен канал "push" или "all". В data-payload кладём тип/source/id —
+        # клиент решит, куда диплинкнуть (users/{uuid}, nodes/{uuid}, violations/{id}).
+        if "push" in channels or "all" in channels:
+            try:
+                from web.backend.core.push_service import (
+                    is_enabled as _push_enabled,
+                    send_to_admin as _push_to_admin,
+                    broadcast_to_admins as _push_broadcast,
+                )
+                if _push_enabled():
+                    push_data = {
+                        "type": type or "info",
+                        "severity": severity or "info",
+                    }
+                    if event:
+                        push_data["event"] = event
+                    if source:
+                        push_data["source"] = source
+                    if source_id:
+                        push_data["source_id"] = str(source_id)
+                    if link:
+                        push_data["link"] = link
+                    if admin_id is not None:
+                        asyncio.create_task(_push_to_admin(admin_id, title, body, push_data))
+                    else:
+                        asyncio.create_task(_push_broadcast(title, body, push_data))
+            except Exception as e:
+                logger.debug("FCM push dispatch skipped: %s", e)
 
     except Exception as e:
         logger.error("Failed to create notification: %s", e, exc_info=True)

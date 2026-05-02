@@ -317,10 +317,11 @@ class TrafficRateMonitor:
                 source="traffic_rate_monitor",
                 source_id=user_uuid,
                 group_key=f"traffic_rate:{user_uuid}",
-                channels=["telegram", "in_app"],
+                channels=["telegram", "in_app", "push"],
                 topic_type="violations",
                 telegram_body=body,
                 reply_markup=keyboard,
+                event="violation.traffic_rate",
             )
 
             # Save as violation so it appears on the Violations page

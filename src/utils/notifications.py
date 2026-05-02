@@ -1,6 +1,8 @@
 """Утилиты для отправки уведомлений в Telegram топики."""
+import asyncio
+import re
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Any, Dict, Optional
 
 from aiogram import Bot
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -8,6 +10,60 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from src.config import get_settings
 from src.utils.formatters import format_bytes, format_datetime, format_provider_name
 from shared.logger import logger
+
+
+def _strip_html(text: str) -> str:
+    """Чистим HTML-теги из текста — для FCM payload, который читается как plain text."""
+    return re.sub(r"<[^>]+>", "", text)
+
+
+def _push_dispatch(
+    title: str,
+    body: str,
+    notification_type: str = "info",
+    source: Optional[str] = None,
+    source_id: Optional[str] = None,
+    severity: str = "info",
+    event: Optional[str] = None,
+) -> None:
+    """Запускаем broadcast пуша в фоне — НЕ блокирует основной поток отправки в TG.
+
+    `event` — конкретный event_id (например `user.expires_in_72_hours`,
+    `node.connection_lost`). Используется push_service для точечной фильтрации
+    по подпискам устройства; должен соответствовать одному из id в
+    `shared/notification_events.py`.
+
+    Бот ловит часть событий от Panel (node.online/offline, user.*, hwid.*, service.*)
+    напрямую через webhook и отправляет в Telegram через aiogram, обходя
+    `notification_service.create_notification()`. Чтобы те же события долетели
+    до мобильника как FCM-пуш, дёргаем shared.push_service отсюда.
+    """
+    try:
+        from shared.push_service import broadcast_to_admins, is_enabled
+        if not is_enabled():
+            return
+        data: Dict[str, Any] = {
+            "type": notification_type,
+            "severity": severity,
+        }
+        if event:
+            data["event"] = event
+        if source:
+            data["source"] = source
+        if source_id:
+            data["source_id"] = str(source_id)
+        clean_body = _strip_html(body)
+        clean_title = _strip_html(title)
+        asyncio.create_task(
+            broadcast_to_admins(
+                title=clean_title or "Remnawave Admin",
+                body=clean_body,
+                data=data,
+            )
+        )
+    except Exception as e:
+        # Падать в push не должны — бот шлёт TG в любом случае.
+        logger.debug("push dispatch from bot skipped: %s", e)
 
 
 # Кэш для throttling уведомлений о нарушениях
@@ -296,6 +352,24 @@ async def send_user_notification(
         await bot.send_message(**message_kwargs)
         logger.info("User notification sent successfully action=%s chat_id=%s", action, settings.notifications_chat_id)
 
+        # Маппинг наших коротких action-имён в Panel webhook event_id, под которыми
+        # они известны и хранятся в каталоге shared/notification_events.py.
+        action_to_event = {
+            "expires_in_72h": "user.expires_in_72_hours",
+            "expires_in_48h": "user.expires_in_48_hours",
+            "expires_in_24h": "user.expires_in_24_hours",
+            "expired_24h_ago": "user.expired_24_hours_ago",
+        }
+        event_id = action_to_event.get(action, f"user.{action}")
+        _push_dispatch(
+            title=f"Юзер: {action}",
+            body=info.get("username") or info.get("uuid", "")[:8],
+            notification_type="info",
+            source="panel.webhook",
+            source_id=info.get("uuid"),
+            event=event_id,
+        )
+
     except Exception as exc:
         logger.exception(
             "Failed to send user notification action=%s user_uuid=%s chat_id=%s topic_id=%s error=%s",
@@ -436,6 +510,21 @@ async def send_node_notification(
         await bot.send_message(**message_kwargs)
         logger.info("Node notification sent successfully event=%s node_uuid=%s topic_id=%s", event, node_uuid, topic_id)
 
+        # FCM push: критичные события про ноды отправляем как category=alerts,
+        # обычные изменения — как info. node.connection_lost = 🔴 → severity critical.
+        critical_events = {"node.connection_lost", "node.disabled", "node.deleted"}
+        push_severity = "critical" if event in critical_events else "info"
+        push_type = "alert" if event in critical_events else "info"
+        _push_dispatch(
+            title=event_titles.get(event, "Событие ноды"),
+            body=f"{node_name} ({address})",
+            notification_type=push_type,
+            source="panel.webhook",
+            source_id=node_uuid,
+            severity=push_severity,
+            event=event,
+        )
+
     except Exception as exc:
         logger.exception("Failed to send node notification event=%s error=%s", event, exc)
 
@@ -504,6 +593,18 @@ async def send_service_notification(
 
         await bot.send_message(**message_kwargs)
         logger.info("Service notification sent successfully event=%s topic_id=%s", event, topic_id)
+
+        # Сервисные события (бэкап, рестарт панели и т.п.) — alert-категория,
+        # они интересны на телефоне даже когда ты не у компа.
+        _push_dispatch(
+            title=f"Сервис: {event}",
+            body=f"Событие {event}",
+            notification_type="alert",
+            source="panel.webhook",
+            source_id=event,
+            severity="warning",
+            event=event,
+        )
 
     except Exception as exc:
         logger.exception("Failed to send service notification event=%s error=%s", event, exc)
@@ -643,6 +744,17 @@ async def send_error_notification(
 
         await bot.send_message(**message_kwargs)
         logger.info("Error notification sent successfully event=%s topic_id=%s", event, topic_id)
+
+        # Ошибки/системные алерты обязательно пушим — это то, ради чего пуши и нужны.
+        _push_dispatch(
+            title=f"Ошибка: {event}",
+            body=f"Событие {event}",
+            notification_type="alert",
+            source="panel.webhook",
+            source_id=event,
+            severity="critical",
+            event=event,
+        )
 
     except Exception as exc:
         logger.exception("Failed to send error notification event=%s error=%s", event, exc)

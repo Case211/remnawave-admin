@@ -410,10 +410,11 @@ async def send_violation_notification(
             source="collector",
             source_id=user_uuid,
             group_key=f"violation:{user_uuid}",
-            channels=["telegram", "in_app"],
+            channels=["telegram", "in_app", "push"],
             topic_type="violations",
             telegram_body=body,
             reply_markup=_violation_keyboard(user_uuid),
+            event="violation.detected",
         )
 
         # Update throttling: persistent DB + in-memory fallback
@@ -513,10 +514,11 @@ async def send_torrent_notification(
             source="collector",
             source_id=user_uuid,
             group_key=f"torrent:{user_uuid}",
-            channels=["telegram", "in_app"],
+            channels=["telegram", "in_app", "push"],
             topic_type="violations",
             telegram_body=body,
             reply_markup=_violation_keyboard(user_uuid),
+            event="violation.torrent",
         )
 
         _violation_notification_cache[user_uuid] = datetime.utcnow()

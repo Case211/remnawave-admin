@@ -400,7 +400,10 @@ async def _compute_traffic() -> TrafficStats:
 
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = now - timedelta(days=7)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # «Месяц» = последние 30 дней (как в Аналитике/«Трафик по нодам» и в bandwidthLast30Days
+    # из Panel API). Календарный month (с 1 числа) на 1-2 числа давал ~ноль и расходился
+    # с тем, что показывает родная Panel.
+    month_start = now - timedelta(days=30)
     end_date = (now + timedelta(days=1)).strftime('%Y-%m-%d')
 
     try:
@@ -434,11 +437,14 @@ async def _compute_traffic() -> TrafficStats:
             week_bytes = _parse_bandwidth_bytes(last_seven.get('current'))
 
         if not month_bytes:
-            calendar_month = bw_stats.get('bandwidthCalendarMonth', {})
-            month_bytes = _parse_bandwidth_bytes(calendar_month.get('current'))
+            # Семантика month_bytes — «последние 30 дней», поэтому приоритет на bandwidthLast30Days.
+            # bandwidthCalendarMonth оставляем последним fallback'ом — он считает с 1 числа и на
+            # начало месяца сильно расходится с ожиданием.
+            last_30 = bw_stats.get('bandwidthLast30Days', {})
+            month_bytes = _parse_bandwidth_bytes(last_30.get('current'))
             if not month_bytes:
-                last_30 = bw_stats.get('bandwidthLast30Days', {})
-                month_bytes = _parse_bandwidth_bytes(last_30.get('current'))
+                calendar_month = bw_stats.get('bandwidthCalendarMonth', {})
+                month_bytes = _parse_bandwidth_bytes(calendar_month.get('current'))
 
         if not today_bytes:
             last_two_days = bw_stats.get('bandwidthLastTwoDays', {})

@@ -39,6 +39,7 @@ from web.backend.api.v2 import logs as logs_api
 from web.backend.api.v2 import advanced_analytics
 from web.backend.api.v2 import automations as automations_api
 from web.backend.api.v2 import notifications as notifications_api
+from web.backend.api.v2 import me_devices as me_devices_api
 from web.backend.api.v2 import mailserver as mailserver_api
 from web.backend.api.v2 import agent_ws as agent_ws_api
 from web.backend.api.v2 import fleet as fleet_api
@@ -885,6 +886,7 @@ def create_app() -> FastAPI:
     app.include_router(advanced_analytics.router, prefix="/api/v2/analytics/advanced", tags=["advanced-analytics"])
     app.include_router(automations_api.router, prefix="/api/v2/automations", tags=["automations"])
     app.include_router(notifications_api.router, prefix="/api/v2", tags=["notifications"])
+    app.include_router(me_devices_api.router, prefix="/api/v2", tags=["me-devices"])
     app.include_router(mailserver_api.router, prefix="/api/v2", tags=["mailserver"])
     app.include_router(websocket.router, prefix="/api/v2", tags=["websocket"])
     app.include_router(agent_ws_api.router, prefix="/api/v2", tags=["agent-ws"])
