@@ -25,7 +25,7 @@ def upgrade() -> None:
         """
         CREATE TABLE IF NOT EXISTS admin_devices (
             id            BIGSERIAL PRIMARY KEY,
-            admin_id      INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+            admin_id      INTEGER NOT NULL REFERENCES admin_accounts(id) ON DELETE CASCADE,
             fcm_token     TEXT NOT NULL UNIQUE,
             platform      VARCHAR(16) NOT NULL DEFAULT 'android',
             app_version   VARCHAR(32),
