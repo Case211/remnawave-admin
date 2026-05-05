@@ -115,6 +115,12 @@ async def register_device(
     обновляет привязку к текущему админу (например, переустановили приложение
     или выполнен relogin под другим юзером).
 
+    Дополнительно дедуплицируем по (admin_id, device_label, platform): если
+    у юзера на том же физическом устройстве уже есть записи со СТАРЫМИ
+    fcm_token'ами (logout→login инвалидирует токен; clean install приложения
+    выдаёт новый), сносим их при регистрации свежего. Без этого в push-settings
+    у юзера копились по 3-5 «версий» одного телефона.
+
     Subscriptions/notifications_enabled НЕ сбрасываются при повторной регистрации —
     юзер мог настроить под себя, не теряем эти настройки."""
     from shared.database import db_service
@@ -124,27 +130,47 @@ async def register_device(
         raise HTTPException(status_code=503, detail="DB not connected")
 
     async with db_service.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            INSERT INTO admin_devices (admin_id, fcm_token, platform, app_version, device_label)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (fcm_token) DO UPDATE SET
-                admin_id = EXCLUDED.admin_id,
-                platform = EXCLUDED.platform,
-                app_version = EXCLUDED.app_version,
-                device_label = COALESCE(EXCLUDED.device_label, admin_devices.device_label),
-                last_seen_at = NOW()
-            RETURNING id, platform, app_version, device_label,
-                      notifications_enabled, subscriptions,
-                      disabled_categories, disabled_events,
-                      created_at, last_seen_at
-            """,
-            admin_id,
-            payload.fcm_token,
-            payload.platform,
-            payload.app_version,
-            payload.device_label,
-        )
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """
+                INSERT INTO admin_devices (admin_id, fcm_token, platform, app_version, device_label)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (fcm_token) DO UPDATE SET
+                    admin_id = EXCLUDED.admin_id,
+                    platform = EXCLUDED.platform,
+                    app_version = EXCLUDED.app_version,
+                    device_label = COALESCE(EXCLUDED.device_label, admin_devices.device_label),
+                    last_seen_at = NOW()
+                RETURNING id, platform, app_version, device_label,
+                          notifications_enabled, subscriptions,
+                          disabled_categories, disabled_events,
+                          created_at, last_seen_at
+                """,
+                admin_id,
+                payload.fcm_token,
+                payload.platform,
+                payload.app_version,
+                payload.device_label,
+            )
+            # Подчищаем устаревшие записи того же физического устройства.
+            # Считаем «то же устройство» по совпадению admin_id + device_label
+            # + platform. Edge-case с двумя одинаковыми телефонами у одного
+            # админа теоретически возможен, но в push-settings UI они
+            # неотличимы — не великая потеря.
+            if payload.device_label:
+                await conn.execute(
+                    """
+                    DELETE FROM admin_devices
+                    WHERE admin_id = $1
+                      AND platform = $2
+                      AND device_label = $3
+                      AND id <> $4
+                    """,
+                    admin_id,
+                    payload.platform,
+                    payload.device_label,
+                    row["id"],
+                )
     return _row_to_device(row)
 
 
