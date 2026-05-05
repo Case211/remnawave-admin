@@ -352,13 +352,19 @@ async def send_user_notification(
         await bot.send_message(**message_kwargs)
         logger.info("User notification sent successfully action=%s chat_id=%s", action, settings.notifications_chat_id)
 
-        # Маппинг наших коротких action-имён в Panel webhook event_id, под которыми
-        # они известны и хранятся в каталоге shared/notification_events.py.
+        # Маппинг коротких action-имён → event_id из catalog
+        # (shared/notification_events.py). Без этого fallback `user.{action}`
+        # генерил event_id, не совпадающий с тем, что мобильник кладёт в
+        # disabled_events — фильтр пропускал пуши, отключённые в UI.
+        # Mismatch'и были у `updated` (catalog: user.modified) и
+        # `bandwidth_threshold` (catalog: user.bandwidth_usage_threshold_reached).
         action_to_event = {
+            "updated": "user.modified",
             "expires_in_72h": "user.expires_in_72_hours",
             "expires_in_48h": "user.expires_in_48_hours",
             "expires_in_24h": "user.expires_in_24_hours",
             "expired_24h_ago": "user.expired_24_hours_ago",
+            "bandwidth_threshold": "user.bandwidth_usage_threshold_reached",
         }
         event_id = action_to_event.get(action, f"user.{action}")
         _push_dispatch(
@@ -700,6 +706,33 @@ async def send_hwid_notification(
 
         await bot.send_message(**message_kwargs)
         logger.info("HWID notification sent successfully event=%s topic_id=%s", event, topic_id)
+
+        # FCM push: соответствует событиям user_hwid_devices.added/.deleted в
+        # каталоге shared/notification_events.py. Открываем карточку юзера —
+        # там видно весь список устройств. Для type="user" RemnawavePushService
+        # построит deeplink users/{uuid}, потому что event_id "user_hwid_devices.*"
+        # не подходит под startsWith("user.") (нет точки после user).
+        username = user_data.get("username") if user_data else None
+        user_uuid = user_data.get("uuid") if user_data else None
+        platform = hwid_data.get("platform") if hwid_data else None
+        action_label = "Добавлено устройство" if event == "user_hwid_devices.added" else (
+            "Удалено устройство" if event == "user_hwid_devices.deleted" else f"HWID: {event}"
+        )
+        body_parts = []
+        if username:
+            body_parts.append(str(username))
+        if platform:
+            body_parts.append(str(platform))
+        push_body = " · ".join(body_parts) if body_parts else action_label
+        _push_dispatch(
+            title=action_label,
+            body=push_body,
+            notification_type="user",
+            source="panel.webhook",
+            source_id=user_uuid,
+            severity="info",
+            event=event,
+        )
 
     except Exception as exc:
         logger.exception("Failed to send HWID notification event=%s error=%s", event, exc)

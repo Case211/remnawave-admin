@@ -285,6 +285,30 @@ async def send_test_push(
     }
 
 
+@router.delete("/me/devices/by-id/{device_id}")
+async def unregister_device_by_id(
+    device_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Удаление по db-id записи admin_devices. Используется в push-settings
+    UI, где мобильник видит свои девайсы по id (а не fcm_token, который
+    приватный). Удаляет только из своего admin_id."""
+    from shared.database import db_service
+    admin_id = await _resolve_admin_id(admin)
+    if not db_service.is_connected:
+        raise HTTPException(status_code=503, detail="DB not connected")
+    async with db_service.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM admin_devices WHERE admin_id = $1 AND id = $2",
+            admin_id,
+            device_id,
+        )
+    deleted = int(result.split()[-1]) if result and result.startswith("DELETE") else 0
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"success": True, "deleted": deleted}
+
+
 @router.delete("/me/devices/{token}")
 async def unregister_device(
     token: str,
