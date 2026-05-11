@@ -18,13 +18,28 @@ from shared.logger import logger
 router = Router(name="billing")
 
 
+# ── Action aliases — Telegram caps callback_data at 64 bytes ──
+#
+# Full action strings like "billing_history_create" / "billing_nodes_create"
+# pushed callback_data over the limit once a 36-char UUID was appended (see
+# issue #248). We send a 2-char alias on the wire and resolve it back to the
+# full action in the handler.
+_BILLING_ACTIONS_SHORT = {
+    "billing_history_create": "bh",
+    "billing_nodes_create": "bn",
+    "billing_nodes_update": "bu",
+}
+_BILLING_ACTIONS_LONG = {v: k for k, v in _BILLING_ACTIONS_SHORT.items()}
+
+
 def _billing_providers_keyboard(providers: list[dict], action_prefix: str, nav_target: str = NavTarget.BILLING_MENU) -> InlineKeyboardMarkup:
     """Клавиатура для выбора провайдера в биллинге."""
+    short = _BILLING_ACTIONS_SHORT.get(action_prefix, action_prefix)
     rows: list[list[InlineKeyboardButton]] = []
     for provider in sorted(providers, key=lambda p: p.get("name", ""))[:10]:
         name = provider.get("name", "n/a")
         uuid = provider.get("uuid", "")
-        rows.append([InlineKeyboardButton(text=name, callback_data=f"billing:provider:{action_prefix}:{uuid}")])
+        rows.append([InlineKeyboardButton(text=name, callback_data=f"billing:p:{short}:{uuid}")])
     rows.append(nav_row(nav_target))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -195,17 +210,22 @@ async def _fetch_billing_nodes_stats_text() -> str:
 
 
 def _billing_nodes_keyboard(nodes: list[dict], action_prefix: str, provider_uuid: str = "", nav_target: str = NavTarget.BILLING_NODES_MENU) -> InlineKeyboardMarkup:
-    """Клавиатура для выбора ноды в биллинге."""
+    """Клавиатура для выбора ноды в биллинге.
+
+    `provider_uuid` параметр оставлен для совместимости с callsites,
+    но сам в callback_data НЕ передаётся (вылазит за 64-байтный лимит
+    Telegram, см. issue #248). Вместо этого callsite должен сохранить
+    provider_uuid в PENDING_INPUT[user_id] до показа этой клавиатуры,
+    а handler `billing_nodes:n:*` достанет его оттуда.
+    """
+    short = _BILLING_ACTIONS_SHORT.get(action_prefix, action_prefix)
     rows: list[list[InlineKeyboardButton]] = []
     for node in sorted(nodes, key=lambda n: n.get("name", ""))[:10]:
         name = node.get("name", "n/a")
         uuid = node.get("uuid", "")
         country = node.get("countryCode", "")
         label = f"{name} ({country})" if country else name
-        callback_data = f"billing_nodes:node:{action_prefix}:{uuid}"
-        if provider_uuid:
-            callback_data += f":{provider_uuid}"
-        rows.append([InlineKeyboardButton(text=label, callback_data=callback_data)])
+        rows.append([InlineKeyboardButton(text=label, callback_data=f"billing_nodes:n:{short}:{uuid}")])
     rows.append(nav_row(nav_target))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -710,12 +730,14 @@ async def cb_billing_actions(callback: CallbackQuery) -> None:
         except ApiClientError:
             logger.exception("❌ Billing record delete failed")
             await _edit_text_safe(callback.message, _("billing.invalid"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
-    elif action == "provider":
-        # Обработка выбора провайдера
+    elif action in ("provider", "p"):
+        # Обработка выбора провайдера. Короткий префикс `p` пришёл с укороченной
+        # клавиатуры (см. _billing_providers_keyboard); полный `provider` остался
+        # ради совместимости со старыми pending-кнопками после редеплоя.
         if len(parts) < 4:
             await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
             return
-        provider_action = parts[2]  # billing_history_create или billing_nodes_create
+        provider_action = _BILLING_ACTIONS_LONG.get(parts[2], parts[2])
         provider_uuid = parts[3]
 
         if provider_action == "billing_history_create":
@@ -736,15 +758,20 @@ async def cb_billing_actions(callback: CallbackQuery) -> None:
                 callback.message, _("billing.prompt_amount"), reply_markup=input_keyboard("billing_history_create"), parse_mode="Markdown"
             )
         elif provider_action == "billing_nodes_create":
-            # Для создания биллинга ноды нужно показать все ноды системы
-            # (можно создать биллинг для любой ноды с указанным провайдером)
+            # Для создания биллинга ноды нужно показать все ноды системы.
+            # provider_uuid сохраняем в FSM state — раньше он ехал в
+            # callback_data вторым полем, но это вылазило за 64 байта.
             try:
                 nodes_data = await api_client.get_nodes()
                 all_nodes = nodes_data.get("response", {}).get("nodes", [])
                 if not all_nodes:
                     await _edit_text_safe(callback.message, _("billing_nodes.no_nodes"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
                     return
-                keyboard = _billing_nodes_keyboard(all_nodes, "billing_nodes_create", provider_uuid)
+                PENDING_INPUT[callback.from_user.id] = {
+                    "action": "billing_nodes_create_pick_node",
+                    "provider_uuid": provider_uuid,
+                }
+                keyboard = _billing_nodes_keyboard(all_nodes, "billing_nodes_create")
                 await _edit_text_safe(callback.message, _("billing_nodes.select_node"), reply_markup=keyboard, parse_mode="Markdown")
             except Exception:
                 await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
@@ -785,14 +812,19 @@ async def cb_billing_nodes_actions(callback: CallbackQuery) -> None:
             await _edit_text_safe(callback.message, _("billing_nodes.select_provider"), reply_markup=keyboard, parse_mode="Markdown")
         except Exception:
             await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
-    elif action == "node":
-        # Обработка выбора ноды после выбора провайдера
+    elif action in ("node", "n"):
+        # Обработка выбора ноды после выбора провайдера. Короткий `n`
+        # пришёл с укороченной клавиатуры (issue #248); полный `node`
+        # сохраняем ради совместимости со старыми pending-кнопками.
         if len(parts) < 4:
             await _edit_text_safe(callback.message, _("errors.generic"), reply_markup=billing_nodes_menu_keyboard(), parse_mode="Markdown")
             return
-        node_action = parts[2]  # billing_nodes:node:action:uuid:provider_uuid
+        node_action = _BILLING_ACTIONS_LONG.get(parts[2], parts[2])
         node_uuid = parts[3]
-        provider_uuid = parts[4] if len(parts) > 4 else None
+        # provider_uuid теперь приходит из FSM state (новый поток), но если
+        # это старая залежавшаяся кнопка с UUID-ом в callback — берём оттуда.
+        fsm_state = PENDING_INPUT.get(callback.from_user.id, {})
+        provider_uuid = (parts[4] if len(parts) > 4 else None) or fsm_state.get("provider_uuid")
 
         if node_action == "billing_nodes_create" and provider_uuid:
             # Запрашиваем дату следующей оплаты (опционально)
