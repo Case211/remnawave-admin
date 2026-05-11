@@ -75,6 +75,10 @@ export function Select<T extends string = string>({
                 : { top: rect.bottom + GAP }),
             maxHeight: POPPER_MAX_H,
             zIndex: 9999,
+            // Radix Dialog (modal=true) sets pointer-events: none on body so
+            // clicks outside its Content get swallowed. Our popper lives on
+            // body via createPortal — explicitly re-enable pointer events on it.
+            pointerEvents: 'auto',
         });
     };
 

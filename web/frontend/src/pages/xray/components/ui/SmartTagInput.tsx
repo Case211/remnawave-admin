@@ -70,6 +70,9 @@ export const SmartTagInput = ({
                 top: placeAbove ? Math.max(8, rect.top - MAX_H - GAP) : rect.bottom + GAP,
                 left: rect.left,
                 width: Math.max(rect.width, 250),
+                // Radix Dialog sets pointer-events: none on body when modal,
+                // re-enable on the portal'd popup so clicks reach options.
+                pointerEvents: 'auto',
             });
         };
         reposition();
