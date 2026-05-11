@@ -87,7 +87,7 @@ export const OutboundImport = ({ onImport }: any) => {
             <div className="flex flex-col gap-2">
                 <textarea 
                     className={`w-full bg-slate-900 border rounded-lg p-2.5 text-white text-[11px] focus:border-indigo-500 outline-none transition-all font-mono min-h-[100px] custom-scroll ${isAWGDetected ? 'border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.05)]' : 'border-slate-800'}`} 
-                    placeholder="Paste vless://... or [Interface]... config here" 
+                    placeholder="Вставь vless://... или [Interface]... конфиг сюда" 
                     value={input} 
                     onChange={e => setInput(e.target.value)} 
                 />

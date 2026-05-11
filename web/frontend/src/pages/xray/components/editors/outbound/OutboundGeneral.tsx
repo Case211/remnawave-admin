@@ -6,9 +6,9 @@ import { Select } from '../../ui/Select';
 
 export const OutboundGeneral = ({ outbound, onChange, onProtocolChange, errors = {} }: any) => {
     return (
-        <Card title="Outbound Protocol" icon="PaperPlaneTilt">
+        <Card title="Протокол Outbound" icon="PaperPlaneTilt">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField label="Protocol" help="Xray supports VLESS, VMess, Trojan, Shadowsocks, Hysteria, etc.">
+                <FormField label="Протокол" help="Xray поддерживает VLESS, VMess, Trojan, Shadowsocks, Hysteria и др.">
                     <Select 
                         value={outbound.protocol} 
                         onChange={val => onProtocolChange(val)}
@@ -22,14 +22,14 @@ export const OutboundGeneral = ({ outbound, onChange, onProtocolChange, errors =
                             { value: "wireguard", label: "WireGuard", description: "Modern UDP VPN" },
                             { value: "hysteria", label: "Hysteria 2", description: "Brutal speed over UDP" },
                             { value: "tuic", label: "TUIC", description: "QUIC-based protocol" },
-                            { value: "freedom", label: "Freedom (Direct)", description: "Bypass proxy (Direct IP)" },
+                            { value: "freedom", label: "Freedom (прямое подключение)", description: "Bypass proxy (Direct IP)" },
                             { value: "blackhole", label: "Blackhole (Block)", description: "Silently drop traffic" },
                             { value: "dns", label: "DNS (Server)", description: "Internal DNS handling" },
                         ]}
                     />
                 </FormField>
 
-                <FormField label="Tag" help="Unique name for this outbound (used in routing rules)." error={errors.tag}>
+                <FormField label="Тег" help="Уникальное имя outbound (используется в правилах маршрутизации)." error={errors.tag}>
                     <input 
                         className="input-base" 
                         value={outbound.tag || ""} 

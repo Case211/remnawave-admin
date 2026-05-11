@@ -42,7 +42,7 @@ export const InboundClients = ({ inbound, onChange, errors = {} as any }) => {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Select 
-                            label="Method"
+                            label="Метод"
                             hint="Encryption algorithm for Shadowsocks."
                             value={inbound.settings?.method || (is2022 ? "2022-blake3-aes-128-gcm" : "aes-256-gcm")}
                             onChange={val => onChange(['settings', 'method'], val)}
@@ -133,7 +133,7 @@ export const InboundClients = ({ inbound, onChange, errors = {} as any }) => {
                             <Switch 
                                 checked={inbound.settings?.ignore_client_bandwidth === true}
                                 onChange={checked => onChange(['settings', 'ignore_client_bandwidth'], checked)}
-                                label="Ignore Client Bandwidth"
+                                label="Игнорировать лимит клиента"
                             />
                             <Help>If enabled, the server will ignore the bandwidth limits requested by the client.</Help>
                         </div>
@@ -152,7 +152,7 @@ export const InboundClients = ({ inbound, onChange, errors = {} as any }) => {
                             <div key={i} className="bg-slate-950 border border-slate-800 rounded-lg p-3 relative group flex items-center gap-3">
                                 <Icon name="Key" className="text-indigo-400 shrink-0" />
                                 <input className="input-base py-1.5 text-xs font-mono"
-                                    placeholder="Password"
+                                    placeholder="Пароль"
                                     value={u.password || ""}
                                     onChange={e => updateUser(i, e.target.value)}
                                 />
@@ -191,12 +191,12 @@ export const InboundClients = ({ inbound, onChange, errors = {} as any }) => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {proto === 'socks' && (
                             <Select 
-                                label="Auth Type"
+                                label="Тип авторизации"
                                 value={inbound.settings?.auth || "noauth"}
                                 onChange={val => onChange(['settings', 'auth'], val)}
                                 options={[
                                     { value: "noauth", label: "No Auth" },
-                                    { value: "password", label: "Password" },
+                                    { value: "password", label: "Пароль" },
                                 ]}
                             />
                         )}
@@ -207,7 +207,7 @@ export const InboundClients = ({ inbound, onChange, errors = {} as any }) => {
                                         id="socks-udp"
                                         checked={inbound.settings?.udp === true}
                                         onChange={checked => onChange(['settings', 'udp'], checked)}
-                                        label="UDP Support"
+                                        label="Поддержка UDP"
                                     />
                                     <Help>Enable UDP associate for SOCKS5.</Help>
                                 </div>
@@ -218,7 +218,7 @@ export const InboundClients = ({ inbound, onChange, errors = {} as any }) => {
                                         id="http-transparent"
                                         checked={inbound.settings?.allowTransparent === true}
                                         onChange={checked => onChange(['settings', 'allowTransparent'], checked)}
-                                        label="Allow Transparent"
+                                        label="Прозрачный режим"
                                     />
                                     <Help>Allow transparent proxying for HTTP.</Help>
                                 </div>
@@ -352,7 +352,7 @@ export const InboundClients = ({ inbound, onChange, errors = {} as any }) => {
                                         value={c.flow || ""}
                                         onChange={val => updateClient(i, 'flow', val)}
                                         options={[
-                                            { value: "", label: "None" },
+                                            { value: "", label: "Нет" },
                                             { value: "xtls-rprx-vision", label: "xtls-rprx-vision" },
                                         ]}
                                     />

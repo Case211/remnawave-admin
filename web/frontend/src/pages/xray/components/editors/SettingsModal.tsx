@@ -51,7 +51,7 @@ export const SettingsModal = ({ onClose }: { onClose: () => void }) => {
 
     return (
         <EditorLayout
-            title="General Settings"
+            title="Общие настройки"
             local={coreSettings}
             setLocal={handleRawUpdate}
             rawMode={rawMode}
@@ -65,7 +65,7 @@ export const SettingsModal = ({ onClose }: { onClose: () => void }) => {
             <div className="max-w-3xl mx-auto space-y-6">
                 {activeTab === 'general' && (
                     <>
-                        <Card title="Core Compatibility & Generators" icon="Cpu">
+                        <Card title="Совместимость ядра и генераторы" icon="Cpu">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Select 
                                     label="Target Xray-core Version"
@@ -78,7 +78,7 @@ export const SettingsModal = ({ onClose }: { onClose: () => void }) => {
                                         { value: "v1.5.0", label: "Legacy (v1.5.0)" },
                                     ]}
                                 />
-                                <FormField label="WARP Worker URL" help="Optional: Your private Cloudflare Worker URL for CORS-safe registration.">
+                                <FormField label="URL WARP-воркера" help="Опционально: URL приватного Cloudflare Worker для CORS-безопасной регистрации.">
                                     <input 
                                         className="input-base"
                                         placeholder="https://your-worker.workers.dev"

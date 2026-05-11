@@ -88,8 +88,8 @@ export const SockoptEditor = ({ sockopt, onChange, isClient }: any) => {
                                     value={local.acceptProxyProtocol === true ? "true" : "false"}
                                     onChange={val => update('acceptProxyProtocol', val === "true")}
                                     options={[
-                                        { value: "false", label: "Disabled" },
-                                        { value: "true", label: "Enabled" },
+                                        { value: "false", label: "Отключено" },
+                                        { value: "true", label: "Включено" },
                                     ]}
                                 />
                                 <Select 
@@ -97,8 +97,8 @@ export const SockoptEditor = ({ sockopt, onChange, isClient }: any) => {
                                     value={local.v6only === true ? "true" : "false"}
                                     onChange={val => update('v6only', val === "true")}
                                     options={[
-                                        { value: "false", label: "Disabled" },
-                                        { value: "true", label: "Enabled" },
+                                        { value: "false", label: "Отключено" },
+                                        { value: "true", label: "Включено" },
                                     ]}
                                 />
                         </>
@@ -123,7 +123,7 @@ export const SockoptEditor = ({ sockopt, onChange, isClient }: any) => {
                                 />
                             </div>
                                 <Select 
-                                    label="Domain Strategy"
+                                    label="Стратегия доменов"
                                     value={local.domainStrategy || "AsIs"}
                                     onChange={val => update('domainStrategy', val)}
                                     options={[
@@ -144,8 +144,8 @@ export const SockoptEditor = ({ sockopt, onChange, isClient }: any) => {
                                     value={local.tcpFastOpen === true ? "true" : "false"}
                                     onChange={val => update('tcpFastOpen', val === "true")}
                                     options={[
-                                        { value: "false", label: "Disabled" },
-                                        { value: "true", label: "Enabled" },
+                                        { value: "false", label: "Отключено" },
+                                        { value: "true", label: "Включено" },
                                     ]}
                                 />
 
@@ -155,8 +155,8 @@ export const SockoptEditor = ({ sockopt, onChange, isClient }: any) => {
                                     value={local.tcpMptcp === true ? "true" : "false"}
                                     onChange={val => update('tcpMptcp', val === "true")}
                                     options={[
-                                        { value: "false", label: "Disabled" },
-                                        { value: "true", label: "Enabled" },
+                                        { value: "false", label: "Отключено" },
+                                        { value: "true", label: "Включено" },
                                     ]}
                                 />
                 </div>

@@ -38,7 +38,7 @@ export const ReverseModal = ({ onClose }: any) => {
                     <button 
                         onClick={() => removeItem(type, i)} 
                         className="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
-                        title="Delete"
+                        title="Удалить"
                     >
                         <Icon name="Trash" weight="bold" />
                     </button>
@@ -58,7 +58,7 @@ export const ReverseModal = ({ onClose }: any) => {
 
     return (
         <Modal 
-            title="Reverse Proxy" 
+            title="Reverse-прокси" 
             onClose={onClose} 
             onSave={() => onClose()}
             className="md:max-w-[800px]"

@@ -51,7 +51,7 @@ export const DnsModal = ({ onClose }: any) => {
                         This editor manages both <code>dns</code> and <code>fakedns</code> root sections simultaneously.
                     </div>
                     <JsonField
-                        label="Combined Configuration"
+                        label="Совмещённая конфигурация"
                         value={compositeConfig}
                         onChange={handleCompositeUpdate}
                         className="flex-1"
@@ -65,7 +65,7 @@ export const DnsModal = ({ onClose }: any) => {
     // --- FORM MODE VIEW ---
     return (
         <Modal
-            title="DNS Configuration"
+            title="Настройка DNS"
             onClose={onClose}
             onSave={() => onClose()}
             className="md:max-w-[1000px]"

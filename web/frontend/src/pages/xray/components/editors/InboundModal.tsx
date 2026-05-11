@@ -23,7 +23,7 @@ export const InboundModal = ({ data, onSave, onClose }: any) => {
 
     return (
         <EditorLayout
-            title="Inbound Editor"
+            title="Редактор Inbound"
             local={local}
             setLocal={setLocal}
             rawMode={rawMode}

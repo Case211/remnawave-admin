@@ -26,9 +26,9 @@ export const Modal = ({ title, onClose, onSave, children, extraButtons = null, c
             <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2 truncate">
                 <Icon name="PencilSimple" className="text-indigo-400 shrink-0"/> {title}
             </h3>
-            <button 
-              onClick={() => setIsFullScreen(!isFullScreen)} 
-              title={isFullScreen ? "Exit Fullscreen" : "Fullscreen"}
+            <button
+              onClick={() => setIsFullScreen(!isFullScreen)}
+              title={isFullScreen ? "Выйти из полноэкранного режима" : "На весь экран"}
               className="text-slate-500 hover:text-indigo-400 p-1.5 hover:bg-slate-800 rounded-lg transition-all hidden md:block"
             >
               <Icon name={isFullScreen ? "CornersIn" : "CornersOut"} className="text-base" />
@@ -50,8 +50,8 @@ export const Modal = ({ title, onClose, onSave, children, extraButtons = null, c
               {extraButtons}
           </div>
           <div className="flex gap-3 w-full md:w-auto relative z-10">
-              <Button variant="secondary" onClick={onClose} className="flex-1 md:flex-none">Close</Button>
-              {onSave !== onClose && <Button variant="success" onClick={onSave} icon="FloppyDisk" className="flex-1 md:flex-none">Save</Button>}
+              <Button variant="secondary" onClick={onClose} className="flex-1 md:flex-none">Закрыть</Button>
+              {onSave !== onClose && <Button variant="success" onClick={onSave} icon="FloppyDisk" className="flex-1 md:flex-none">Сохранить</Button>}
           </div>
         </div>
       </div>

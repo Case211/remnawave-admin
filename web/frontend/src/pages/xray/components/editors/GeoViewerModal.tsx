@@ -29,8 +29,8 @@ const TagDetailsPanel = ({ tag, customUrl, customFormat, customFileBuffer, onClo
                     <span className="text-sm font-bold text-slate-200 truncate pr-2">{tag}</span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={handleCopy} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors" title="Copy raw text"><Icon name="Copy" /></button>
-                    <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors" title="Close panel"><Icon name="X" /></button>
+                    <button onClick={handleCopy} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors" title="Скопировать текст"><Icon name="Копировать" /></button>
+                    <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors" title="Закрыть"><Icon name="X" /></button>
                 </div>
             </div>
             <div className="flex-1 relative bg-slate-950 p-1 min-h-0 overflow-hidden">
@@ -125,7 +125,7 @@ export const GeoViewerModal = ({ onClose }: { onClose: () => void }) => {
     }, [displayData]);
 
     return (
-        <Modal title="Geo Data Viewer" onClose={onClose} onSave={onClose} className="max-w-7xl"
+        <Modal title="Просмотр Geo-данных" onClose={onClose} onSave={onClose} className="max-w-7xl"
             extraButtons={
                 <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 h-11 items-center">
                     <button onClick={() => handleTabChange('geosite')} className={`px-4 h-full text-xs font-bold rounded-lg transition-all ${activeTab === 'geosite' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>GeoSite</button>
@@ -166,7 +166,7 @@ export const GeoViewerModal = ({ onClose }: { onClose: () => void }) => {
                                 </div>
                                 
                                 <input type="file" ref={fileInputRef} className="hidden" accept=".dat,.txt" onChange={handleFileUpload} />
-                                <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="shrink-0 h-11 w-11 p-0" title="Upload Local File">
+                                <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="shrink-0 h-11 w-11 p-0" title="Загрузить файл">
                                     <Icon name="UploadSimple" />
                                 </Button>
                             </div>
@@ -205,7 +205,7 @@ export const GeoViewerModal = ({ onClose }: { onClose: () => void }) => {
                         <div className="text-xs text-slate-400 font-mono bg-slate-950 px-4 h-full flex items-center rounded-lg border border-slate-800">
                             Showing: <span className="text-white font-bold ml-1">{displayData.length}</span>
                         </div>
-                        <Button variant="secondary" onClick={handleCopyAll} icon="Copy" className="h-full px-4">Copy All</Button>
+                        <Button variant="secondary" onClick={handleCopyAll} icon="Копировать" className="h-full px-4">Copy All</Button>
                     </div>
                 </div>
 

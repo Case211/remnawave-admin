@@ -30,7 +30,7 @@ export const InboundTun = ({ inbound, onChange }: any) => {
 
                 {/* Network Stack */}
                     <Select 
-                        label="Network Stack"
+                        label="Сетевой стек"
                         value={settings.stack || "system"} 
                         onChange={val => update('stack', val)}
                         options={[
@@ -54,7 +54,7 @@ export const InboundTun = ({ inbound, onChange }: any) => {
                          <input 
                             type="number"
                             className="input-base w-24 font-mono"
-                            placeholder="Port" 
+                            placeholder="Порт" 
                             value={settings.endpointPort || ""} 
                             onChange={e => update('endpointPort', parseInt(e.target.value) || undefined)}
                         />

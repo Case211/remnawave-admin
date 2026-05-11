@@ -277,7 +277,7 @@ export const RuleEditor = ({
                             )}
                         </div>
                         <div>
-                            <TagSelector label="Protocol" availableTags={['http', 'tls', 'bittorrent']} selected={rule.protocol || []}
+                            <TagSelector label="Протокол" availableTags={['http', 'tls', 'bittorrent']} selected={rule.protocol || []}
                                 onChange={v => update('protocol', v)} multi={true} />
                         </div>
 

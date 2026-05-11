@@ -53,7 +53,7 @@ export const RoutingModal = ({ onClose }: any) => {
 
     return (
         <Modal
-            title="Routing Manager"
+            title="Маршрутизация"
             onClose={handleClose}
             onSave={handleClose}
             extraButtons={
@@ -75,7 +75,7 @@ export const RoutingModal = ({ onClose }: any) => {
                 )}
                 <div className={`flex flex-col w-full md:w-64 ${mobileEditMode ? 'hidden md:flex' : ''}`}>
                     <Select
-                        label="Domain Strategy"
+                        label="Стратегия доменов"
                         value={config?.routing?.domainStrategy || "AsIs"}
                         onChange={val => updateSection('routing', { ...config?.routing, domainStrategy: val })}
                         options={[
@@ -151,7 +151,7 @@ export const RoutingModal = ({ onClose }: any) => {
                                     <Icon name="MagnifyingGlass" className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600 text-xs" />
                                     <input
                                         className="w-full bg-slate-950 border border-slate-700 rounded-md pl-8 pr-2 py-1.5 text-[11px] text-white outline-none focus:border-indigo-500 transition-colors"
-                                        placeholder="Search by name, domain, ip..."
+                                        placeholder="Поиск по имени, домену, IP..."
                                         value={searchQuery}
                                         onChange={e => setSearchQuery(e.target.value)}
                                     />

@@ -136,7 +136,7 @@ const handleFetchSub = async () => {
                         <div className="flex flex-col sm:flex-row gap-2">
                             <div className="relative flex-1">
                                 <Icon name="Link" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                                <input className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:border-indigo-500 outline-none transition-colors" placeholder="Subscription URL..." value={subUrl} onChange={e => setSubUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleFetchSub()}/>
+                                <input className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:border-indigo-500 outline-none transition-colors" placeholder="URL подписки..." value={subUrl} onChange={e => setSubUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleFetchSub()}/>
                             </div>
                             <Button variant="secondary" onClick={handleFetchSub} disabled={isFetching || !subUrl}>
                                 {isFetching ? <Icon name="Spinner" className="animate-spin" /> : <Icon name="CloudArrowDown" />}
@@ -174,7 +174,7 @@ const handleFetchSub = async () => {
                     </div>
                 )}
 
-                <textarea className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-4 text-xs font-mono text-white focus:border-indigo-500 outline-none resize-none leading-relaxed custom-scroll ${mode === 'import' ? 'h-[280px]' : 'h-[380px]'}`} placeholder="Nodes will appear here after Fetching or Paste manual links..." value={text} onChange={e => setText(e.target.value)} readOnly={mode === 'export'} />
+                <textarea className={`w-full bg-slate-950 border border-slate-700 rounded-lg p-4 text-xs font-mono text-white focus:border-indigo-500 outline-none resize-none leading-relaxed custom-scroll ${mode === 'import' ? 'h-[280px]' : 'h-[380px]'}`} placeholder="Ноды появятся после загрузки или вставки ссылок..." value={text} onChange={e => setText(e.target.value)} readOnly={mode === 'export'} />
                 
                 {mode === 'import' && text.trim() && (
                     <Button className="w-full" onClick={() => {

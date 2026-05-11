@@ -8,9 +8,9 @@ export const InboundGeneral = ({ inbound, onChange, onProtocolChange, errors = {
     const isTun = inbound.protocol === 'tun';
 
     return (
-        <Card title="Inbound Connectivity" icon="Globe">
+        <Card title="Подключение Inbound" icon="Globe">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <FormField label="Protocol" help="Xray supports multiple protocols like VLESS, VMess, Trojan, and Shadowsocks.">
+                <FormField label="Протокол" help="Xray поддерживает несколько протоколов: VLESS, VMess, Trojan, Shadowsocks и др.">
                     <Select 
                         value={inbound.protocol} 
                         onChange={val => onProtocolChange(val)}
@@ -29,7 +29,7 @@ export const InboundGeneral = ({ inbound, onChange, onProtocolChange, errors = {
                 </FormField>
 
                 {!isTun && (
-                    <FormField label="Port" error={errors.port}>
+                    <FormField label="Порт" error={errors.port}>
                         <input 
                             type="number" 
                             className="input-base"
@@ -40,7 +40,7 @@ export const InboundGeneral = ({ inbound, onChange, onProtocolChange, errors = {
                 )}
 
                 {!isTun && (
-                    <FormField label="Listen IP" help="IP address for the inbound to listen on. Default is 0.0.0.0 (all interfaces).">
+                    <FormField label="IP для прослушки" help="IP-адрес, который слушает inbound. По умолчанию 0.0.0.0 (все интерфейсы).">
                         <input 
                             className="input-base"
                             placeholder="0.0.0.0" 
@@ -50,7 +50,7 @@ export const InboundGeneral = ({ inbound, onChange, onProtocolChange, errors = {
                     </FormField>
                 )}
 
-                <FormField label="Tag" help="A unique name for this inbound to refer to it in routing rules." error={errors.tag}>
+                <FormField label="Тег" help="Уникальное имя inbound для ссылки в правилах маршрутизации." error={errors.tag}>
                     <input 
                         className="input-base"
                         value={inbound.tag} 

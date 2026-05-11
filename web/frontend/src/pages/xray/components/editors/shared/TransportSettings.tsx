@@ -137,7 +137,7 @@ export const TransportSettings = ({ streamSettings = {}, onChange, isClient = fa
                             value={streamSettings.tcpSettings?.header?.type || "none"}
                             onChange={val => update(['tcpSettings', 'header', 'type'], val)}
                             options={[
-                                { value: "none", label: "None", description: "No obfuscation" },
+                                { value: "none", label: "Нет", description: "No obfuscation" },
                                 { value: "http", label: "HTTP", description: "Simulate HTTP request" },
                             ]}
                         />
@@ -228,7 +228,7 @@ export const TransportSettings = ({ streamSettings = {}, onChange, isClient = fa
                             value={streamSettings.kcpSettings?.header?.type || "none"}
                             onChange={val => update(['kcpSettings', 'header', 'type'], val)}
                             options={[
-                                { value: "none", label: "None" },
+                                { value: "none", label: "Нет" },
                                 { value: "srtp", label: "SRTP", description: "Video call simulation" },
                                 { value: "utp", label: "uTP", description: "BitTorrent simulation" },
                                 { value: "wechat-video", label: "WeChat", description: "WeChat video call" },
@@ -261,7 +261,7 @@ export const TransportSettings = ({ streamSettings = {}, onChange, isClient = fa
                             value={streamSettings.quicSettings?.security || "none"}
                             onChange={val => update(['quicSettings', 'security'], val)}
                             options={[
-                                { value: "none", label: "None" },
+                                { value: "none", label: "Нет" },
                                 { value: "aes-128-gcm", label: "AES-128-GCM" },
                                 { value: "chacha20-poly1305", label: "ChaCha20" },
                             ]}
@@ -271,7 +271,7 @@ export const TransportSettings = ({ streamSettings = {}, onChange, isClient = fa
                             value={streamSettings.quicSettings?.header?.type || "none"}
                             onChange={val => update(['quicSettings', 'header', 'type'], val)}
                             options={[
-                                { value: "none", label: "None" },
+                                { value: "none", label: "Нет" },
                                 { value: "srtp", label: "SRTP" },
                                 { value: "utp", label: "uTP" },
                                 { value: "wechat-video", label: "WeChat" },
@@ -301,7 +301,7 @@ export const TransportSettings = ({ streamSettings = {}, onChange, isClient = fa
                             <label className="label-xs text-emerald-400">Generated Public Key</label>
                             <div className="flex gap-2">
                                 <code className="flex-1 bg-black/30 p-2 rounded text-xs font-mono break-all text-emerald-200">{tempPublicKey}</code>
-                                <Button variant="ghost" icon="Copy" onClick={() => navigator.clipboard.writeText(tempPublicKey)} />
+                                <Button variant="ghost" icon="Копировать" onClick={() => navigator.clipboard.writeText(tempPublicKey)} />
                             </div>
                         </div>
                     )}
@@ -377,7 +377,7 @@ export const TransportSettings = ({ streamSettings = {}, onChange, isClient = fa
                                     value={streamSettings.realitySettings?.fingerprint || ""}
                                     onChange={val => update(['realitySettings', 'fingerprint'], val)}
                                     options={[
-                                        { value: "", label: "None" },
+                                        { value: "", label: "Нет" },
                                         { value: "chrome", label: "Chrome" },
                                         { value: "firefox", label: "Firefox" },
                                         { value: "safari", label: "Safari" },

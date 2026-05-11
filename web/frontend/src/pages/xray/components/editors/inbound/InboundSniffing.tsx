@@ -17,9 +17,9 @@ export const InboundSniffing = ({ sniffing, onChange }: any) => {
     };
 
     return (
-        <Card title="Traffic Sniffing" icon="MagnifyingGlass" className="mt-4">
+        <Card title="Sniffing трафика" icon="MagnifyingGlass" className="mt-4">
             <div className="space-y-4">
-                <FormField label="Enable Sniffing" help="Analyze traffic to determine destination domain and protocol." horizontal>
+                <FormField label="Включить sniffing" help="Анализирует трафик для определения целевого домена и протокола." horizontal>
                     <Switch 
                         checked={enabled} 
                         onChange={(val) => onChange(['sniffing', 'enabled'], val)} 
@@ -48,13 +48,13 @@ export const InboundSniffing = ({ sniffing, onChange }: any) => {
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField label="Metadata Only" help="Sniff only connection metadata (faster, less accurate)." horizontal>
+                            <FormField label="Только метаданные" help="Снифать только метаданные соединения (быстрее, но менее точно)." horizontal>
                                 <Switch 
                                     checked={sniffing?.metadataOnly || false} 
                                     onChange={(val) => onChange(['sniffing', 'metadataOnly'], val)} 
                                 />
                             </FormField>
-                            <FormField label="Route Only" help="Use sniffed domain only for routing, not for DNS." horizontal>
+                            <FormField label="Только для маршрутизации" help="Использовать сниффенный домен только для маршрутизации, не для DNS." horizontal>
                                 <Switch 
                                     checked={sniffing?.routeOnly || false} 
                                     onChange={(val) => onChange(['sniffing', 'routeOnly'], val)} 

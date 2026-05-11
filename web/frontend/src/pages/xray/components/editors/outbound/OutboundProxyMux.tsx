@@ -37,7 +37,7 @@ export const OutboundProxyMux = ({ outbound, onChange, allTags }) => {
                     availableTags={availableProxies}
                     selected={outbound.proxySettings?.tag || ""}
                     onChange={v => updateProxy(v)}
-                    placeholder="Direct (None)"
+                    placeholder="Прямой (без проксирования)"
                 />
             </div>
 

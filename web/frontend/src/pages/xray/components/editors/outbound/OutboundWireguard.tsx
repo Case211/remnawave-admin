@@ -75,20 +75,20 @@ export const OutboundWireguard = ({ outbound, onChange, errors = {} as any }: an
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField label="Secret Key" error={errors.secretKey}>
-                    <input className={`input-base font-mono text-rose-300 ${errors.secretKey ? 'border-rose-500 bg-rose-500/10' : ''}`} value={settings.secretKey || ""} onChange={e => update('secretKey', e.target.value)} placeholder="Private Key" />
+                <FormField label="Секретный ключ" error={errors.secretKey}>
+                    <input className={`input-base font-mono text-rose-300 ${errors.secretKey ? 'border-rose-500 bg-rose-500/10' : ''}`} value={settings.secretKey || ""} onChange={e => update('secretKey', e.target.value)} placeholder="Приватный ключ" />
                 </FormField>
-                <FormField label="Local Address (CIDR)">
+                <FormField label="Локальный адрес (CIDR)">
                     <input className="input-base font-mono" value={(settings.address || []).join(', ')} onChange={e => update('address', e.target.value.split(',').map((s: string) => s.trim()))} placeholder="10.0.0.1/24, fd00::1/64" />
                 </FormField>
             </div>
 
             {/* Advanced WG Settings */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
-                <FormField label="MTU" help="Maximum Transmission Unit. Default is 1280 for WARP.">
+                <FormField label="MTU" help="Maximum Transmission Unit. По умолчанию 1280 для WARP.">
                     <input type="number" className="input-base" placeholder="1280" value={settings.mtu || ""} onChange={e => update('mtu', parseInt(e.target.value) || 0)} />
                 </FormField>
-                <FormField label="Reserved (CSV)" help="[n,n,n] — header byte substitution. Use [0,0,0] for standard WARP.">
+                <FormField label="Reserved (CSV)" help="[n,n,n] — подстановка байт заголовка. Для стандартного WARP — [0,0,0].">
                     <input className="input-base font-mono" 
                         placeholder="0, 0, 0" 
                         value={(settings.reserved || []).map((v: any) => isNaN(v) ? 0 : v).join(', ')} 
@@ -108,7 +108,7 @@ export const OutboundWireguard = ({ outbound, onChange, errors = {} as any }: an
                     <Switch
                         checked={settings.noKernelTun || false}
                         onChange={checked => update('noKernelTun', checked)}
-                        label="No Kernel TUN"
+                        label="Без kernel TUN"
                     />
                     <p className="text-[10px] text-slate-500 mt-1">Enabled: use gVisor (no root). Disabled: system (faster).</p>
                 </div>
@@ -138,15 +138,15 @@ export const OutboundWireguard = ({ outbound, onChange, errors = {} as any }: an
                                     <FormField label="Endpoint" error={epErr}>
                                         <input className={`input-base font-mono ${epErr ? 'border-rose-500' : ''}`} value={peer.endpoint || ""} onChange={e => updatePeer(i, 'endpoint', e.target.value)} placeholder="engage.cloudflareclient.com:2408" />
                                     </FormField>
-                                    <FormField label="Public Key" error={pkErr}>
-                                        <input className={`input-base font-mono text-emerald-300 ${pkErr ? 'border-rose-500' : ''}`} value={peer.publicKey || ""} onChange={e => updatePeer(i, 'publicKey', e.target.value)} placeholder="Public Key" />
+                                    <FormField label="Публичный ключ" error={pkErr}>
+                                        <input className={`input-base font-mono text-emerald-300 ${pkErr ? 'border-rose-500' : ''}`} value={peer.publicKey || ""} onChange={e => updatePeer(i, 'publicKey', e.target.value)} placeholder="Публичный ключ" />
                                     </FormField>
                                 </div>
                                 
                                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                                     <div className="col-span-1 lg:col-span-3">
                                         <FormField label="Pre-shared Key">
-                                            <input className="input-base font-mono" value={peer.preSharedKey || ""} onChange={e => updatePeer(i, 'preSharedKey', e.target.value)} placeholder="Optional" />
+                                            <input className="input-base font-mono" value={peer.preSharedKey || ""} onChange={e => updatePeer(i, 'preSharedKey', e.target.value)} placeholder="Необязательно" />
                                         </FormField>
                                     </div>
                                     <div className="col-span-1 lg:col-span-2">
@@ -196,7 +196,7 @@ export const OutboundWireguard = ({ outbound, onChange, errors = {} as any }: an
             {/* General WG Engine Settings */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-800 pt-4">
                 <Select 
-                    label="Domain Strategy"
+                    label="Стратегия доменов"
                     hint="ForceIP: query DNS locally and use IP. UseIP: resolve IP through system."
                     value={settings.domainStrategy || "AsIs"}
                     onChange={val => update('domainStrategy', val)}
@@ -206,8 +206,8 @@ export const OutboundWireguard = ({ outbound, onChange, errors = {} as any }: an
                         { value: 'ForceIP', label: 'ForceIP' }
                     ]}
                 />
-                <FormField label="Workers" help="Number of concurrent workers. Default is CPU core count.">
-                    <input type="number" className="input-base h-[42px]" placeholder="Auto" value={settings.workers || ""} onChange={e => update('workers', parseInt(e.target.value) || 0)} />
+                <FormField label="Воркеров" help="Количество одновременных воркеров. По умолчанию = количество ядер CPU.">
+                    <input type="number" className="input-base h-[42px]" placeholder="Авто" value={settings.workers || ""} onChange={e => update('workers', parseInt(e.target.value) || 0)} />
                 </FormField>
             </div>
         </div>

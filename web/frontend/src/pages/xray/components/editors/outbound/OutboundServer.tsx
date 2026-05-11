@@ -54,19 +54,19 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
 
     if (isBlackhole) {
         return (
-            <Card title="Blackhole Settings" icon="NoEntry" className="mt-4">
+            <Card title="Blackhole" icon="NoEntry" className="mt-4">
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg mb-4">
                     <p className="text-[11px] text-slate-400 leading-relaxed italic">
                         The <b>Blackhole</b> outbound drops all outgoing traffic. It is primarily used to block specific domains or IPs (e.g., for ad-blocking or preventing telemetry) by routing them here.
                     </p>
                 </div>
                 <Select 
-                    label="Response Type"
+                    label="Тип ответа"
                     hint="Determines what the client receives when traffic is blocked."
                     value={outbound.settings?.response?.type || "none"}
                     onChange={val => onChange('settings', { ...outbound.settings, response: { type: val } })}
                     options={[
-                        { value: "none", label: "None", description: "Silent Drop" },
+                        { value: "none", label: "Нет", description: "Silent Drop" },
                         { value: "http", label: "HTTP", description: "Return 403 Forbidden" },
                     ]}
                 />
@@ -76,7 +76,7 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
 
     if (isDns) {
         return (
-            <Card title="DNS Outbound" icon="Globe" className="mt-4">
+            <Card title="DNS-outbound" icon="Globe" className="mt-4">
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg mb-4">
                     <p className="text-[11px] text-slate-400 leading-relaxed italic">
                         The <b>DNS</b> outbound is used to intercept and forward DNS queries. When a query is routed here, Xray will handle it using internal DNS logic.
@@ -84,14 +84,14 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="md:col-span-3">
-                        <FormField label="DNS Server Address">
+                        <FormField label="Адрес DNS-сервера">
                             <input className="input-base" 
                                 value={outbound.settings?.address || ""} 
                                 onChange={e => onChange('settings', { ...outbound.settings, address: e.target.value })} 
                             />
                         </FormField>
                     </div>
-                    <FormField label="Port">
+                    <FormField label="Порт">
                         <input type="number" className="input-base" 
                             value={outbound.settings?.port || 53} 
                             onChange={e => onChange('settings', { ...outbound.settings, port: parseInt(e.target.value) || 53 })} 
@@ -104,7 +104,7 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
 
     if (isFreedom) {
         return (
-            <Card title="Freedom (Direct)" icon="ArrowSquareOut" className="mt-4">
+            <Card title="Freedom (прямое подключение)" icon="ArrowSquareOut" className="mt-4">
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg">
                     <p className="text-[11px] text-slate-400 leading-relaxed italic">
                         The <b>Freedom</b> outbound sends traffic directly to its destination without any proxy. This is typically used for local traffic or bypassing the VPN.
@@ -112,7 +112,7 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
                 </div>
                 <div className="mt-4">
                         <Select 
-                            label="Domain Strategy"
+                            label="Стратегия доменов"
                             hint="How to resolve domain names when connecting."
                             value={outbound.settings?.domainStrategy || "AsIs"}
                             onChange={val => onChange('settings', { ...outbound.settings, domainStrategy: val })}
@@ -129,10 +129,10 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
     }
 
     return (
-        <Card title="Server Details" icon="Cloud" className="mt-4">
+        <Card title="Параметры сервера" icon="Cloud" className="mt-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-3">
-                    <FormField label="Address (IP or Domain)" error={errors.address}>
+                    <FormField label="Адрес (IP или домен)" error={errors.address}>
                         <input 
                             className="input-base" 
                             placeholder="example.com"
@@ -141,7 +141,7 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
                         />
                     </FormField>
                 </div>
-                <FormField label="Port" error={errors.port}>
+                <FormField label="Порт" error={errors.port}>
                     <input 
                         type="number"
                         className="input-base" 
@@ -153,7 +153,7 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                <FormField label={isShadowsocks || outbound.protocol === 'trojan' ? "Password" : "UUID / ID"}>
+                <FormField label={isShadowsocks || outbound.protocol === 'trojan' ? "Пароль" : "UUID / ID"}>
                     <input 
                         className="input-base font-mono text-xs" 
                         value={getUserId()} 
@@ -163,7 +163,7 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
 
                 {isShadowsocks && (
                     <Select 
-                        label="Method"
+                        label="Метод"
                         value={server.method || (outbound.protocol === 'shadowsocks-2022' ? "2022-blake3-aes-128-gcm" : "aes-256-gcm")}
                         onChange={val => updateMethod(val)}
                         options={outbound.protocol === 'shadowsocks' ? [
@@ -188,7 +188,7 @@ export const OutboundServer = ({ outbound, onChange, errors = {} }: any) => {
                                 servers[0] = { ...servers[0], uot: checked };
                                 onChange('settings', { ...outbound.settings, servers });
                             }}
-                            label="UDP over TCP (UOT)"
+                            label="UDP поверх TCP (UOT)"
                         />
                     </div>
                 )}

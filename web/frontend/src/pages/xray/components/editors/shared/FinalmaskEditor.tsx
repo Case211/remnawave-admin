@@ -177,7 +177,7 @@ export const FinalmaskEditor = ({ finalmask, onChange }) => {
 
                                                     {['salamander', 'mkcp-aes128gcm', 'sudoku'].includes(currentType) && (
                                                         <div className="grid grid-cols-2 gap-4">
-                                                            <input className="input-base text-xs font-mono" placeholder="Password" value={layer.settings?.password || ""} onChange={e => updateSetting(netType, index, 'password', e.target.value)} />
+                                                            <input className="input-base text-xs font-mono" placeholder="Пароль" value={layer.settings?.password || ""} onChange={e => updateSetting(netType, index, 'password', e.target.value)} />
                                                             {currentType === 'sudoku' && (
                                                                 <input className="input-base text-xs font-mono" placeholder="ASCII" value={layer.settings?.ascii || ""} onChange={e => updateSetting(netType, index, 'ascii', e.target.value)} />
                                                             )}
@@ -225,7 +225,7 @@ export const FinalmaskEditor = ({ finalmask, onChange }) => {
                                     value={finalmask.quicParams?.congestion || ""} 
                                     onChange={val => updateQuic('congestion', val)}
                                     options={[
-                                        { value: "", label: "Auto" },
+                                        { value: "", label: "Авто" },
                                         { value: "bbr", label: "BBR" },
                                         { value: "brutal", label: "Brutal" },
                                         { value: "force-brutal", label: "Force Brutal" },

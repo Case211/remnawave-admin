@@ -111,7 +111,7 @@ export const ConfigInspectorModal = ({ onClose, setModal, openSectionJson }: {
     };
 
     return (
-        <Modal title="Config Harvester & Inspector" onClose={onClose} className="max-w-[95vw] 2xl:max-w-[1600px]" hideSave>
+        <Modal title="Инспектор конфигов" onClose={onClose} className="max-w-[95vw] 2xl:max-w-[1600px]" hideSave>
             <div className="h-[80vh] flex flex-col min-h-[600px]">
                 {!parsedConfigs ? (
                     <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full space-y-6 py-6">
@@ -158,7 +158,7 @@ export const ConfigInspectorModal = ({ onClose, setModal, openSectionJson }: {
                                     <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Source Index</span>
                                     <span className="text-xs font-bold text-white mt-1">{parsedConfigs.length} Objects Found</span>
                                 </div>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-slate-800/50 hover:bg-rose-500/20 hover:text-rose-400" onClick={() => setParsedConfigs(null)} title="Clear Data">
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-slate-800/50 hover:bg-rose-500/20 hover:text-rose-400" onClick={() => setParsedConfigs(null)} title="Очистить">
                                     <Icon name="Trash" />
                                 </Button>
                             </div>
@@ -239,9 +239,9 @@ export const ConfigInspectorModal = ({ onClose, setModal, openSectionJson }: {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                                                                                                    <button onClick={() => openSectionJson('inbound', `JSON: ${ib.tag}`, ib)} title="Edit JSON" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="Code" weight="bold" /></button>
-                                                                                                    <button onClick={() => openInboundEditor(ib)} title="Open GUI Editor" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="PencilSimple" weight="bold" /></button>
-                                                                                                    <button onClick={() => { addItem('inbounds', ib); toast.success("Inbound added"); }} title="Add to Config" className="p-2 rounded-md bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all"><Icon name="Plus" weight="bold" /></button>
+                                                                                                    <button onClick={() => openSectionJson('inbound', `JSON: ${ib.tag}`, ib)} title="Редактировать JSON" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="Code" weight="bold" /></button>
+                                                                                                    <button onClick={() => openInboundEditor(ib)} title="Открыть в редакторе" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="PencilSimple" weight="bold" /></button>
+                                                                                                    <button onClick={() => { addItem('inbounds', ib); toast.success("Inbound added"); }} title="Добавить в конфиг" className="p-2 rounded-md bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all"><Icon name="Plus" weight="bold" /></button>
                                                                                                 </div>
                                             </div>
                                         ))}
@@ -267,9 +267,9 @@ export const ConfigInspectorModal = ({ onClose, setModal, openSectionJson }: {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                                                                                                    <button onClick={() => openSectionJson('outbound', `JSON: ${ob.tag}`, ob)} title="Edit JSON" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="Code" weight="bold" /></button>
-                                                                                                    <button onClick={() => openOutboundEditor(ob)} title="Open GUI Editor" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="PencilSimple" weight="bold" /></button>
-                                                                                                    <button onClick={() => importOutbound(ob)} title="Add to Config" className="p-2 rounded-md bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all"><Icon name="Plus" weight="bold" /></button>
+                                                                                                    <button onClick={() => openSectionJson('outbound', `JSON: ${ob.tag}`, ob)} title="Редактировать JSON" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="Code" weight="bold" /></button>
+                                                                                                    <button onClick={() => openOutboundEditor(ob)} title="Открыть в редакторе" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="PencilSimple" weight="bold" /></button>
+                                                                                                    <button onClick={() => importOutbound(ob)} title="Добавить в конфиг" className="p-2 rounded-md bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all"><Icon name="Plus" weight="bold" /></button>
                                                                                                 </div>
                                             </div>
                                         ))}
@@ -299,7 +299,7 @@ export const ConfigInspectorModal = ({ onClose, setModal, openSectionJson }: {
                                                         </div>
                                                         <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
                                                             <button onClick={() => openSectionJson('rule', 'Rule JSON', rule)} title="JSON" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"><Icon name="Code" weight="bold" /></button>
-                                                            <button onClick={() => importRoutingItem('rules', rule)} title="Steal to Top" className="p-2 rounded-md bg-purple-500/20 text-purple-400 hover:bg-purple-500 hover:text-white"><Icon name="ArrowCircleUp" weight="bold" /></button>
+                                                            <button onClick={() => importRoutingItem('rules', rule)} title="Импортировать наверх" className="p-2 rounded-md bg-purple-500/20 text-purple-400 hover:bg-purple-500 hover:text-white"><Icon name="ArrowCircleUp" weight="bold" /></button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -325,7 +325,7 @@ export const ConfigInspectorModal = ({ onClose, setModal, openSectionJson }: {
                                                     </div>
                                                     <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
                                                         <button onClick={() => openSectionJson('balancer', 'Balancer JSON', bal)} title="JSON" className="p-2 rounded-md bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"><Icon name="Code" weight="bold" /></button>
-                                                        <button onClick={() => importRoutingItem('balancers', bal)} title="Import Balancer" className="p-2 rounded-md bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white"><Icon name="ArrowCircleUp" weight="bold" /></button>
+                                                        <button onClick={() => importRoutingItem('balancers', bal)} title="Импортировать балансировщик" className="p-2 rounded-md bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-white"><Icon name="ArrowCircleUp" weight="bold" /></button>
                                                     </div>
                                                 </div>
                                             ))}

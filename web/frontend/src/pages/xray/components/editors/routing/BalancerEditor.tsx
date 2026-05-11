@@ -132,7 +132,7 @@ export const BalancerEditor = ({ balancer, onChange, outboundTags, rawMode }: an
                             }
                         }}
                         options={[
-                            { value: "", label: "None" },
+                            { value: "", label: "Нет" },
                             ...outboundTags.map((tag: string) => ({ value: tag, label: tag }))
                         ]}
                     />

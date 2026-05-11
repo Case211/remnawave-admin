@@ -54,14 +54,14 @@ export const OutboundModal = ({ data, onSave, onClose, index }: any) => {
     };
 
     const extraButtons = (
-        <Button variant="success" className="text-xs py-1 px-3" onClick={handleCopyLink} icon="Copy">
+        <Button variant="success" className="text-xs py-1 px-3" onClick={handleCopyLink} icon="Копировать">
             Copy Link
         </Button>
     );
 
     return (
         <EditorLayout
-            title="Outbound Editor"
+            title="Редактор Outbound"
             local={local}
             setLocal={setLocal}
             rawMode={rawMode}
