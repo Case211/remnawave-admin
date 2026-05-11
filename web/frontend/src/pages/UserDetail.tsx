@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useFormatters } from '@/lib/useFormatters'
+import { useFormatters, formatDateShortUtil } from '@/lib/useFormatters'
 import {
   ArrowLeft,
   RefreshCw,
@@ -983,7 +983,7 @@ function SubscriptionInfoDialog({
             {user.expiresAt && (
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">{t('userDetail.subscription.expiresAt', { defaultValue: 'Expires' })}</span>
-                <span className="text-white">{new Date(user.expiresAt).toLocaleDateString()}</span>
+                <span className="text-white">{formatDateShortUtil(user.expiresAt)}</span>
               </div>
             )}
             {links.length > 0 && (

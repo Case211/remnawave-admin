@@ -6,7 +6,7 @@ import i18n from '../i18n'
  * Get current locale string based on i18n language.
  */
 export function getLocale(): string {
-  return i18n.language === 'ru' ? 'ru-RU' : 'en-US'
+  return (i18n.language || '').toLowerCase().startsWith('ru') ? 'ru-RU' : 'en-US'
 }
 
 /**
@@ -41,7 +41,7 @@ export function formatDateShortUtil(dateStr: string | null | undefined): string 
  */
 export function useFormatters() {
   const { t, i18n } = useTranslation()
-  const locale = i18n.language === 'ru' ? 'ru-RU' : 'en-US'
+  const locale = (i18n.language || '').toLowerCase().startsWith('ru') ? 'ru-RU' : 'en-US'
 
   const formatDate = useCallback(
     (dateStr: string | null | undefined) => {

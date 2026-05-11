@@ -79,6 +79,7 @@ const PAGE_SIZE = 50
 function BlockedIPsTab() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { formatDate } = useFormatters()
 
   const canCreate = useHasPermission('blocked_ips', 'create')
   const canDelete = useHasPermission('blocked_ips', 'delete')
@@ -193,10 +194,6 @@ function BlockedIPsTab() {
     })
   }
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '—'
-    try { return new Date(dateStr).toLocaleString() } catch { return dateStr }
-  }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1
