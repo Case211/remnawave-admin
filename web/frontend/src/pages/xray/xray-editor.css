@@ -6,7 +6,70 @@
  * index.html via the Tailwind play CDN; we re-declare them through PostCSS
  * @apply directives — they piggyback on the global `@tailwind` setup in
  * src/index.css.
+ *
+ * The .xray-page wrapper repaints the upstream's slate/indigo palette to
+ * our admin glass theme. We don't touch the underlying components — just
+ * cascade overrides scoped to the editor surface.
  */
+
+/* ── Theme overrides: slate → our dark background, indigo → primary ── */
+.xray-page nav {
+    background: hsl(var(--card) / 0.6) !important;
+    border-color: hsl(var(--border)) !important;
+    backdrop-filter: blur(20px);
+}
+
+.xray-page .bg-slate-950,
+.xray-page .bg-slate-900\/80,
+.xray-page .bg-slate-900 {
+    background-color: hsl(var(--background));
+}
+
+.xray-page [class*="bg-slate-800"] {
+    background-color: hsl(var(--card));
+}
+
+.xray-page [class*="border-slate-700"],
+.xray-page [class*="border-slate-800"] {
+    border-color: hsl(var(--border));
+}
+
+.xray-page [class*="text-slate-2"],
+.xray-page [class*="text-slate-3"] {
+    color: hsl(var(--foreground));
+}
+
+.xray-page [class*="text-slate-4"],
+.xray-page [class*="text-slate-5"] {
+    color: hsl(var(--muted-foreground));
+}
+
+/* Indigo / purple accents → our primary */
+.xray-page [class*="bg-indigo-5"],
+.xray-page [class*="bg-indigo-6"] {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.xray-page [class*="text-indigo-4"],
+.xray-page [class*="text-indigo-5"] {
+    color: hsl(var(--primary));
+}
+
+.xray-page [class*="border-indigo-5"] {
+    border-color: hsl(var(--primary));
+}
+
+.xray-page [class*="from-indigo-5"] {
+    --tw-gradient-from: hsl(var(--primary)) var(--tw-gradient-from-position);
+}
+
+.xray-page [class*="to-purple-6"] {
+    --tw-gradient-to: hsl(var(--primary) / 0.7) var(--tw-gradient-to-position);
+}
+
+/* Inputs/selects inherit the admin theme colours via @apply below, but the
+   defaults above also handle the inline tailwind-class versions. */
 
 .xray-input-base,
 .input-base {

@@ -128,7 +128,7 @@ const SortableOutboundItem = ({
           size="sm"
           onClick={() => onEdit(ob, ob.i)}
           icon="PencilSimple"
-          title="Edit"
+          title="Редактировать"
           className="h-8 w-8 p-0 text-slate-500 hover:text-white hover:bg-transparent transition-all duration-300"
         />
         <Button
@@ -136,7 +136,7 @@ const SortableOutboundItem = ({
           size="sm"
           onClick={() => onDelete(ob.i)}
           icon="Trash"
-          title="Delete"
+          title="Удалить"
           className="h-8 w-8 p-0 text-slate-500 hover:!text-rose-500 hover:bg-transparent transition-all duration-300"
         />
       </div>
@@ -224,7 +224,7 @@ export const ConfigDashboard = ({
         <div className="flex flex-col md:flex-row items-start md:items-center gap-4 w-full md:w-auto">
           <div className="flex items-center justify-between w-full md:w-auto">
             <h2 className="font-bold text-slate-300 flex items-center gap-2 text-sm md:text-base">
-              <Icon name="SlidersHorizontal" /> Core Modules
+              <Icon name="SlidersHorizontal" /> Модули ядра
             </h2>
             <button
               onClick={() => setModulesVisible(!modulesVisible)}
@@ -248,7 +248,7 @@ export const ConfigDashboard = ({
               onClick={onOpenSettings}
               icon="Gear"
             >
-              Core Settings
+              Настройки ядра
             </Button>
             <Button
               className="flex-1 md:flex-none text-[10px] md:text-xs py-1.5 md:py-2"
@@ -256,7 +256,7 @@ export const ConfigDashboard = ({
               onClick={onOpenReverse}
               icon="ArrowsLeftRight"
             >
-              Reverse Proxy
+              Reverse-прокси
             </Button>
             <Button
               className="flex-1 md:flex-none text-[10px] md:text-xs py-1.5 md:py-2"
@@ -264,7 +264,7 @@ export const ConfigDashboard = ({
               onClick={onOpenTopology}
               icon="GitMerge"
             >
-              Topology
+              Топология
             </Button>
             <Button
               className="flex-1 md:flex-none text-[10px] md:text-xs py-1.5 md:py-2"
@@ -272,7 +272,7 @@ export const ConfigDashboard = ({
               onClick={onOpenGeoViewer}
               icon="GlobeHemisphereWest"
             >
-              Geo Viewer
+              Geo-просмотр
             </Button>
             <Button
               className="flex-1 md:flex-none text-[10px] md:text-xs py-1.5 md:py-2 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10"
@@ -280,7 +280,7 @@ export const ConfigDashboard = ({
               onClick={onOpenConfigInspector}
               icon="FileSearch"
             >
-              Config Inspector
+              Инспектор конфига
             </Button>
           </div>
         </div>
@@ -294,18 +294,18 @@ export const ConfigDashboard = ({
             icon={rawMode ? "Layout" : "Code"}
             className={`flex-1 md:flex-none text-[10px] md:text-xs py-1.5 md:py-2 ${rawMode ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20" : ""}`}
           >
-            {rawMode ? "UI Mode" : "JSON Mode"}
+            {rawMode ? "UI-режим" : "JSON-режим"}
           </Button>
           <Button
             variant="danger"
             className="text-[10px] md:text-xs px-3 py-1.5 md:py-2 flex-1 md:flex-none"
             onClick={() => {
-              if (confirm("Clear config?")) setConfig(null as any);
+              if (confirm("Очистить конфиг?")) setConfig(null as any);
             }}
             icon="XCircle"
-            title="Close Config"
+            title="Закрыть конфиг"
           >
-            <span className="md:inline">Clear</span>
+            <span className="md:inline">Очистить</span>
           </Button>
         </div>
       </div>
@@ -314,7 +314,7 @@ export const ConfigDashboard = ({
       {rawMode ? (
         <div className="flex-1 min-h-0 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden p-4 shadow-2xl flex flex-col">
           <JsonField
-            label="Full Configuration (Auto-saved)"
+            label="Полный конфиг (авто-сохранение)"
             value={config}
             onChange={(newConfig: any) => {
               if (newConfig) setConfig(newConfig);
@@ -338,7 +338,7 @@ export const ConfigDashboard = ({
                     size="sm"
                     onClick={onOpenInboundJson}
                     icon="Code"
-                    title="View JSON"
+                    title="Открыть JSON"
                     className="h-9 w-9 p-0"
                   />
                   <Button
@@ -346,7 +346,7 @@ export const ConfigDashboard = ({
                     size="sm"
                     onClick={onAddInbound}
                     icon="Plus"
-                    title="Add Inbound"
+                    title="Добавить inbound"
                     className="h-9 w-9 p-0"
                   />
                 </div>
@@ -384,7 +384,7 @@ export const ConfigDashboard = ({
                       size="sm"
                       onClick={() => onEditInbound(ib, i)}
                       icon="PencilSimple"
-                      title="Edit"
+                      title="Редактировать"
                       className="h-8 w-8 p-0 text-slate-500 hover:text-white hover:bg-transparent transition-all duration-300"
                     />
                     <Button
@@ -392,7 +392,7 @@ export const ConfigDashboard = ({
                       size="sm"
                       onClick={() => onDeleteInbound(i)}
                       icon="Trash"
-                      title="Delete"
+                      title="Удалить"
                       className="h-8 w-8 p-0 text-slate-500 hover:!text-rose-500 hover:bg-transparent transition-all duration-300"
                     />
                   </div>
@@ -402,7 +402,7 @@ export const ConfigDashboard = ({
 
             {/* Routing */}
             <DashCard
-              title="Routing"
+              title="Маршрутизация"
               icon="ArrowsSplit"
               color="bg-purple-600"
               className="h-[400px] xl:h-full xl:min-h-0 shrink-0 xl:shrink"
@@ -413,7 +413,7 @@ export const ConfigDashboard = ({
                     size="sm"
                     onClick={onOpenRoutingJson}
                     icon="Code"
-                    title="View JSON"
+                    title="Открыть JSON"
                     className="h-9 w-9 p-0"
                   />
                   <Button
@@ -421,14 +421,14 @@ export const ConfigDashboard = ({
                     size="sm"
                     onClick={onEditRouting}
                     icon="PencilSimple"
-                    title="Edit Routing"
+                    title="Редактировать маршруты"
                     className="h-9 w-9 p-0"
                   />
                 </div>
               }
             >
               <div className="text-xs text-center text-purple-300 bg-purple-900/20 p-2 rounded mb-2 border border-purple-500/20 flex justify-between px-4 shrink-0">
-                <span className="opacity-70">Strategy:</span>
+                <span className="opacity-70">Стратегия:</span>
                 <span className="font-bold text-white">
                   {config.routing?.domainStrategy || "AsIs"}
                 </span>
@@ -488,14 +488,14 @@ export const ConfigDashboard = ({
                   })}
                 {(config.routing?.rules || []).length === 0 && (
                   <div className="text-center text-slate-600 py-8 italic text-xs">
-                    No routing rules.
+                    Правил маршрутизации нет.
                     <br />
-                    Traffic will follow the first outbound.
+                    Трафик пойдёт через первый outbound.
                   </div>
                 )}
                 {(config.routing?.rules || []).length > 20 && (
                   <div className="text-center text-xs text-slate-500 italic pt-2 border-t border-slate-800">
-                    ... +{(config.routing?.rules || []).length - 20} more rules
+                    ...ещё {(config.routing?.rules || []).length - 20} правил
                   </div>
                 )}
               </div>
@@ -516,7 +516,7 @@ export const ConfigDashboard = ({
                     />
                     <input
                       className="bg-slate-950/50 border border-slate-700/50 rounded-xl pl-9 pr-3 h-full w-32 outline-none focus:w-64 focus:border-indigo-500 transition-all text-white text-xs placeholder:text-slate-600 shadow-inner"
-                      placeholder="Filter IP, Tag..."
+                      placeholder="Фильтр по IP, тэгу..."
                       value={obSearch}
                       onChange={(e) => setObSearch(e.target.value)}
                     />
@@ -528,7 +528,7 @@ export const ConfigDashboard = ({
                       size="sm"
                       onClick={onOpenWarpModal}
                       icon="Lightning"
-                      title="Generate WARP Outbound"
+                      title="Сгенерировать WARP outbound"
                       className="h-9 w-9 p-0 text-amber-500 hover:text-amber-400"
                     />
                     <Button
@@ -536,7 +536,7 @@ export const ConfigDashboard = ({
                       size="sm"
                       onClick={onBatchImport}
                       icon="Stack"
-                      title="Batch Import/Export"
+                      title="Массовый импорт / экспорт"
                       className="h-9 w-9 p-0"
                     />
                     <Button
@@ -544,7 +544,7 @@ export const ConfigDashboard = ({
                       size="sm"
                       onClick={onOpenOutboundJson}
                       icon="Code"
-                      title="View JSON"
+                      title="Открыть JSON"
                       className="h-9 w-9 p-0"
                     />
                     <Button
@@ -552,7 +552,7 @@ export const ConfigDashboard = ({
                       size="sm"
                       onClick={onAddOutbound}
                       icon="Plus"
-                      title="Add New Outbound"
+                      title="Добавить outbound"
                       className="h-9 w-9 p-0"
                     />
                   </div>
@@ -566,7 +566,7 @@ export const ConfigDashboard = ({
                 />
                 <input
                   className="input-base pl-8 text-xs py-2 bg-slate-950/50"
-                  placeholder="Search outbounds..."
+                  placeholder="Поиск по outbounds..."
                   value={obSearch}
                   onChange={(e) => setObSearch(e.target.value)}
                 />
@@ -598,7 +598,7 @@ export const ConfigDashboard = ({
                           className="mx-auto text-3xl mb-2"
                         />
                         <p className="text-xs">
-                          No outbounds match your search
+                          Ничего не нашлось
                         </p>
                       </div>
                     )}
@@ -621,7 +621,7 @@ export const ConfigDashboard = ({
                   size="sm"
                   onClick={onOpenDnsJson}
                   icon="Code"
-                  title="View JSON"
+                  title="Открыть JSON"
                   className="h-9 w-9 p-0"
                 />
                 <Button
@@ -629,7 +629,7 @@ export const ConfigDashboard = ({
                   size="sm"
                   onClick={onEditDns}
                   icon="PencilSimple"
-                  title="Edit DNS"
+                  title="Редактировать DNS"
                   className="h-9 w-9 p-0"
                 />
               </div>
@@ -640,7 +640,7 @@ export const ConfigDashboard = ({
                 <div className="grid grid-cols-2 gap-2 text-xs flex-1">
                   <div className="bg-slate-900 p-2 rounded border border-slate-700/50 flex items-center justify-between px-4">
                     <span className="text-slate-500 block text-[10px] uppercase">
-                      Servers
+                      Серверов
                     </span>
                     <span className="text-white font-bold font-mono text-lg">
                       {config.dns.servers?.length || 0}
@@ -648,7 +648,7 @@ export const ConfigDashboard = ({
                   </div>
                   <div className="bg-slate-900 p-2 rounded border border-slate-700/50 flex items-center justify-between px-4">
                     <span className="text-slate-500 block text-[10px] uppercase">
-                      Hosts
+                      Хостов
                     </span>
                     <span className="text-white font-bold font-mono text-lg">
                       {Object.keys(config.dns.hosts || {}).length}
@@ -657,7 +657,7 @@ export const ConfigDashboard = ({
                 </div>
                 <div className="text-xs text-slate-400 md:border-l border-slate-800 md:pl-4 flex flex-col gap-1 min-w-[200px]">
                   <div className="flex justify-between">
-                    <span>Strategy:</span>
+                    <span>Стратегия:</span>
                     <span className="text-indigo-300 font-bold">
                       {config.dns.queryStrategy || "UseIP"}
                     </span>
@@ -665,14 +665,14 @@ export const ConfigDashboard = ({
                   <div className="flex justify-between">
                     <span>Client IP:</span>
                     <span className="font-mono text-slate-500">
-                      {config.dns.clientIp || "N/A"}
+                      {config.dns.clientIp || "—"}
                     </span>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="text-center py-4 text-slate-500 text-xs">
-                DNS not configured. Click Edit to initialize defaults.
+                DNS не настроен. Нажмите «Редактировать», чтобы создать с дефолтами.
               </div>
             )}
           </DashCard>

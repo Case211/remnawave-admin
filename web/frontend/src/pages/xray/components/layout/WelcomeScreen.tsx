@@ -23,10 +23,10 @@ export const WelcomeScreen = ({
     <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto custom-scroll">
         <div className="text-center mb-10">
             <h1 className="text-3xl md:text-4xl text-white font-bold mb-3 tracking-tight">
-                Welcome to Xray GUI
+                Редактор Xray-конфигов
             </h1>
             <p className="text-slate-400 max-w-md mx-auto">
-                Drag &amp; Drop your <code>config.json</code> anywhere or choose a template to start.
+                Перетащи свой <code>config.json</code> в любое место или выбери шаблон для старта.
             </p>
         </div>
 
@@ -51,17 +51,17 @@ export const WelcomeScreen = ({
         </div>
 
         <div className="mt-12 flex flex-col items-center gap-4 opacity-70 hover:opacity-100 transition-opacity pb-8">
-            <div className="text-sm text-slate-500">Or import from sources:</div>
+            <div className="text-sm text-slate-500">Или загрузить из источника:</div>
             <div className="flex gap-4">
                 <label className="text-sm text-slate-400 cursor-pointer flex items-center gap-2 hover:text-indigo-400 transition-colors bg-slate-900 border border-slate-800 px-4 py-2 rounded-full">
-                    <Icon name="FolderOpen" /> Local File
+                    <Icon name="FolderOpen" /> Локальный файл
                     <input type="file" className="hidden" accept=".json" onChange={onFileUpload} />
                 </label>
                 <button
                     onClick={onOpenRemnawave}
                     className="text-sm text-slate-400 cursor-pointer flex items-center gap-2 hover:text-indigo-400 transition-colors bg-slate-900 border border-slate-800 px-4 py-2 rounded-full"
                 >
-                    <Icon name="Cloud" /> Remnawave Panel
+                    <Icon name="Cloud" /> Профиль Remnawave
                 </button>
             </div>
         </div>

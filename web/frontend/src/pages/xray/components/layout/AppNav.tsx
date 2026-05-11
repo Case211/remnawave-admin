@@ -62,14 +62,14 @@ export const AppNav = ({
                 <Icon name="Planet" weight="fill" className="text-xl" />
             </div>
             <div className="flex flex-col leading-tight hidden sm:flex">
-                <span className="font-black text-sm tracking-tight text-white uppercase">Xray GUI</span>
+                <span className="font-black text-sm tracking-tight text-white uppercase">Xray-редактор</span>
                 {connected ? (
                     <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
                         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                        Cloud Linked
+                        Подключено к панели
                     </span>
                 ) : (
-                    <span className="text-[10px] text-slate-500 font-medium">Local Mode</span>
+                    <span className="text-[10px] text-slate-500 font-medium">Локальный режим</span>
                 )}
             </div>
 
@@ -85,7 +85,7 @@ export const AppNav = ({
                 >
                     <Icon name={criticalCount > 0 ? 'XCircle' : 'Warning'} weight="bold" />
                     <span className="text-[10px] font-black uppercase hidden md:inline">
-                        {criticalCount > 0 ? `${criticalCount} Critical Issues` : `${warningCount} Warnings`}
+                        {criticalCount > 0 ? `${criticalCount} критич. ошибок` : `${warningCount} предупреждений`}
                     </span>
                 </div>
             )}
@@ -99,7 +99,7 @@ export const AppNav = ({
                     <button
                         onClick={onOpenSwitchProfile}
                         className="w-9 h-9 flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-all"
-                        title="Switch Profile"
+                        title="Сменить профиль"
                     >
                         <Icon name="ListDashes" weight="bold" />
                     </button>
@@ -112,13 +112,13 @@ export const AppNav = ({
                         }`}
                     >
                         <Icon name={pushStage === 'confirm' ? 'SealCheck' : 'CloudArrowUp'} weight="bold" className="text-base" />
-                        <span className="hidden lg:inline">{pushStage === 'confirm' ? 'Confirm Push?' : 'Push'}</span>
+                        <span className="hidden lg:inline">{pushStage === 'confirm' ? 'Подтвердить?' : 'Сохранить'}</span>
                     </button>
                     <div className="w-px h-4 bg-slate-800 mx-1" />
                     <button
                         onClick={onDisconnect}
                         className="w-9 h-9 flex items-center justify-center hover:bg-rose-500/10 rounded-lg text-slate-600 hover:text-rose-500 transition-all"
-                        title="Disconnect"
+                        title="Отключиться"
                     >
                         <Icon name="LinkBreak" weight="bold" />
                     </button>
@@ -132,7 +132,7 @@ export const AppNav = ({
                     onClick={onOpenRemnawave}
                     className="text-xs h-11 px-4 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10"
                 >
-                    <Icon name="Cloud" /> <span className="hidden md:inline">Connect Cloud</span>
+                    <Icon name="Cloud" /> <span className="hidden md:inline">Загрузить профиль</span>
                 </Button>
             )}
 
@@ -142,13 +142,13 @@ export const AppNav = ({
             <div className="flex gap-1.5 h-11 items-center bg-slate-950/50 p-1 rounded-xl border border-slate-800">
                 <label
                     className="bg-slate-800 hover:bg-slate-700 text-slate-200 p-2 w-9 h-9 rounded-lg cursor-pointer transition-all border border-slate-700 flex items-center justify-center text-sm"
-                    title="Load JSON"
+                    title="Загрузить JSON"
                 >
                     <Icon name="FolderOpen" />
                     <input type="file" className="hidden" accept=".json" onChange={onFileUpload} />
                 </label>
                 <Button variant="success" onClick={onDownload} icon="DownloadSimple" className="rounded-lg h-9 px-4 text-sm shadow-none" disabled={!hasConfig}>
-                    <span className="hidden md:inline text-xs">Download</span>
+                    <span className="hidden md:inline text-xs">Скачать</span>
                 </Button>
             </div>
 
@@ -157,7 +157,7 @@ export const AppNav = ({
             <button
                 onClick={onOpenAbout}
                 className="h-11 px-3 flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-all border border-slate-800 bg-slate-950/50"
-                title="About / Repository"
+                title="О редакторе"
             >
                 <Icon name="Info" className="text-lg" />
             </button>

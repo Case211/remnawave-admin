@@ -51,7 +51,7 @@ export default function XrayEditor() {
 
     return (
         <div
-            className="h-dvh flex flex-col bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30 overflow-hidden relative"
+            className="xray-page h-dvh flex flex-col bg-background text-foreground font-sans selection:bg-primary/30 overflow-hidden relative"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
