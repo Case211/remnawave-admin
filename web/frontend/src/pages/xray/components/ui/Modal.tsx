@@ -15,6 +15,10 @@ import { Icon } from './Icon';
  * plain div without a click handler). We mirror that here by preventing
  * Radix's onInteractOutside / onPointerDownOutside.
  *
+ * On mobile (≤768px) we additionally support swipe-down-to-dismiss anchored
+ * on the title bar: drag the header down ≥80px and the modal closes. The
+ * gesture is ignored on desktop and when started with a mouse pointer.
+ *
  * isSecondary toggles the overlay opacity (bg-black/40 vs bg-black/80) so
  * stacked dialogs — e.g. TagDetailsModal opened over the main editor —
  * stay visually distinguishable.
@@ -31,6 +35,8 @@ interface ModalProps {
     isSecondary?: boolean;
 }
 
+const DISMISS_THRESHOLD_PX = 80;
+
 export const Modal = ({
     title,
     onClose,
@@ -41,6 +47,42 @@ export const Modal = ({
     isSecondary = false,
 }: ModalProps) => {
     const [isFullScreen, setIsFullScreen] = React.useState(false);
+    const [dragY, setDragY] = React.useState(0);
+    const dragStateRef = React.useRef<{ startY: number; pointerId: number } | null>(null);
+
+    const isTouchPointer = (e: React.PointerEvent<HTMLDivElement>) =>
+        e.pointerType === 'touch' && window.matchMedia('(max-width: 767px)').matches;
+
+    const handleHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!isTouchPointer(e)) return;
+        // Don't hijack pointer events that started on actual buttons (X, fullscreen).
+        if ((e.target as HTMLElement).closest('button')) return;
+        dragStateRef.current = { startY: e.clientY, pointerId: e.pointerId };
+        (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    };
+
+    const handleHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        const state = dragStateRef.current;
+        if (!state || state.pointerId !== e.pointerId) return;
+        const dy = Math.max(0, e.clientY - state.startY); // only downward
+        setDragY(dy);
+    };
+
+    const handleHeaderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        const state = dragStateRef.current;
+        if (!state || state.pointerId !== e.pointerId) return;
+        const dy = e.clientY - state.startY;
+        dragStateRef.current = null;
+        try {
+            (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+        } catch {
+            /* pointer already released by the browser — fine */
+        }
+        if (dy >= DISMISS_THRESHOLD_PX) {
+            onClose();
+        }
+        setDragY(0);
+    };
 
     return (
         <DialogPrimitive.Root open onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -50,6 +92,7 @@ export const Modal = ({
                         'fixed inset-0 z-50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
                         isSecondary ? 'bg-black/40' : 'bg-black/80',
                     )}
+                    style={dragY > 0 ? { opacity: Math.max(0.3, 1 - dragY / 400) } : undefined}
                 />
                 <DialogPrimitive.Content
                     onEscapeKeyDown={(e) => { e.preventDefault(); onClose(); }}
@@ -66,9 +109,25 @@ export const Modal = ({
                         isFullScreen && 'h-full md:h-screen md:max-h-screen md:max-w-full md:w-full md:rounded-none is-modal-fullscreen',
                         className,
                     )}
+                    style={
+                        dragY > 0
+                            ? { transform: `translate(-50%, calc(-50% + ${dragY}px))`, transition: 'none' }
+                            : undefined
+                    }
                 >
-                    {/* Header */}
-                    <div className="flex justify-between items-center p-4 md:p-5 border-b border-slate-800 shrink-0">
+                    {/* Header — doubles as a drag-handle on mobile */}
+                    <div
+                        className="flex justify-between items-center p-4 md:p-5 border-b border-slate-800 shrink-0 touch-none md:touch-auto select-none md:select-auto cursor-grab md:cursor-default"
+                        onPointerDown={handleHeaderPointerDown}
+                        onPointerMove={handleHeaderPointerMove}
+                        onPointerUp={handleHeaderPointerUp}
+                        onPointerCancel={handleHeaderPointerUp}
+                    >
+                        {/* Visual grab handle (mobile only) */}
+                        <span
+                            aria-hidden="true"
+                            className="md:hidden absolute top-1.5 left-1/2 -translate-x-1/2 h-1 w-10 rounded-full bg-slate-700"
+                        />
                         <div className="flex items-center gap-3 min-w-0 relative z-10">
                             <DialogPrimitive.Title className="text-lg md:text-xl font-bold text-white flex items-center gap-2 truncate">
                                 <Icon name="PencilSimple" className="text-indigo-400 shrink-0" /> {title}
