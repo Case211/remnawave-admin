@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useConfigStore, type XrayConfig } from '../store/configStore';
 import { runFullDiagnostics } from '../utils/diagnostics';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Thin adapter over the admin-panel axios client.
  *

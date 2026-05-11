@@ -1,4 +1,3 @@
-// @ts-nocheck
 import validator from 'validator';
 
 const { isIP, isFQDN, isPort, isUUID } = validator;

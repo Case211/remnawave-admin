@@ -1,4 +1,3 @@
-// @ts-nocheck
 /// <reference lib="webworker" />
 import * as protobuf from 'protobufjs';
 

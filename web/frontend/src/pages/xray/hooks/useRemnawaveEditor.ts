@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useCallback } from 'react';
 import { useConfigStore } from '../store/configStore';
 import { RemnawaveClient, type RemnawaveProfile } from '../utils/remnawave-client';

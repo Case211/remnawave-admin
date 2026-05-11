@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { expect, test, describe } from "vitest";
 import { 
     isValidAddress, 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from 'react';
 import { Toaster } from 'sonner';
 import { useNavigate } from 'react-router-dom';

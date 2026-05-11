@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useMemo, useCallback } from 'react';
 import { useConfigStore } from '../store/configStore';
 import { getCriticalRuleErrors } from '../utils/validator';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from 'react';
 
 export interface NumberInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange' | 'value'> {

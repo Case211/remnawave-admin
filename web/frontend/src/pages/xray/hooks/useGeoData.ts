@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { getDefaultGeoList } from '../utils/geo-data';
 import { getSharedProtoWorker } from '../utils/proto-worker';

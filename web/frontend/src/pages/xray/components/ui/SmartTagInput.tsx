@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect } from "react";
 import { Icon } from "./Icon";
 import { toast } from "sonner";

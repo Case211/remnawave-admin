@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useCallback, useMemo } from 'react';
 import { useConfigStore } from '../store/configStore';
 
