@@ -30,7 +30,7 @@ import {
   Pencil,
   Users,
   Share2,
-  Network,
+  List,
 } from 'lucide-react'
 import client from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -655,8 +655,8 @@ export default function BedolagaCustomerDetail() {
             </div>
             <Link to="/bedolaga/referrals">
               <Button variant="secondary" size="sm" className="gap-1.5 text-xs">
-                <Network className="w-4 h-4" />
-                <span className="hidden sm:inline">{t('bedolaga.customerDetail.refGraph')}</span>
+                <List className="w-4 h-4" />
+                <span className="hidden sm:inline">{t('bedolaga.referrals.title')}</span>
               </Button>
             </Link>
           </div>
