@@ -46,6 +46,7 @@ const BedolagaCustomerDetail = lazy(() => import('./pages/bedolaga/BedolagaCusto
 const BedolagaPromo = lazy(() => import('./pages/bedolaga/BedolagaPromo'))
 const BedolagaMarketing = lazy(() => import('./pages/bedolaga/BedolagaMarketing'))
 const BedolagaReferrals = lazy(() => import('./pages/bedolaga/BedolagaReferrals'))
+const XrayEditor = lazy(() => import('./pages/xray/XrayEditor'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 // Plugin UI route registry — see web/frontend/src/plugins/registry.tsx
@@ -178,7 +179,19 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Protected routes */}
+            {/* Full-screen protected pages (own chrome, no admin sidebar/header) */}
+            <Route
+              path="/resources/xray"
+              element={
+                <ProtectedRoute>
+                  <Suspense fallback={null}>
+                    <XrayEditor />
+                  </Suspense>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Standard protected pages (inside admin Layout) */}
             <Route path="/*" element={<ProtectedShell />} />
           </Routes>
         </BrowserRouter>

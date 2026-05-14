@@ -28,6 +28,8 @@ import {
   Terminal,
   Scan,
   Loader2,
+  Bot,
+  BotOff,
 } from 'lucide-react'
 import client from '../api/client'
 import { resourcesApi } from '../api/resources'
@@ -75,6 +77,10 @@ interface Node {
   traffic_today_bytes: number
   created_at: string
   last_seen_at: string | null
+  // Node-agent state (independent of Panel's is_connected)
+  has_agent_token?: boolean
+  agent_v2_connected?: boolean
+  agent_v2_last_ping?: string | null
   // null/undefined = no access-policy restriction
   allowed_actions?: string[] | null
 }
@@ -812,6 +818,57 @@ function NodeUsersIpsDialog({ node, open, onClose }: { node: Node; open: boolean
   )
 }
 
+// Compact agent-state badge shown next to status badge on each node card.
+function AgentBadge({ node }: { node: Node }) {
+  const { t } = useTranslation()
+  const { formatTimeAgo } = useFormatters()
+
+  if (node.agent_v2_connected) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-emerald-500/40 bg-emerald-500/10 text-emerald-300 gap-1 px-1.5 py-0 text-[10px] h-5"
+        title={
+          node.agent_v2_last_ping
+            ? t('nodes.agent.connectedSince', { ago: formatTimeAgo(node.agent_v2_last_ping) })
+            : t('nodes.agent.connected')
+        }
+      >
+        <Bot className="w-3 h-3" />
+        <span className="hidden sm:inline">{t('nodes.agent.connected')}</span>
+      </Badge>
+    )
+  }
+
+  if (node.has_agent_token) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-amber-500/40 bg-amber-500/10 text-amber-300 gap-1 px-1.5 py-0 text-[10px] h-5"
+        title={
+          node.agent_v2_last_ping
+            ? t('nodes.agent.offlineSince', { ago: formatTimeAgo(node.agent_v2_last_ping) })
+            : t('nodes.agent.offlineNever')
+        }
+      >
+        <Bot className="w-3 h-3" />
+        <span className="hidden sm:inline">{t('nodes.agent.offline')}</span>
+      </Badge>
+    )
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className="border-dark-400/40 bg-dark-500/10 text-dark-200 gap-1 px-1.5 py-0 text-[10px] h-5"
+      title={t('nodes.agent.missingHint')}
+    >
+      <BotOff className="w-3 h-3" />
+      <span className="hidden sm:inline">{t('nodes.agent.missing')}</span>
+    </Badge>
+  )
+}
+
 // Node card component
 function NodeCard({
   node,
@@ -912,6 +969,8 @@ function NodeCard({
           </div>
 
           <div className="flex items-center gap-2">
+            <AgentBadge node={node} />
+
             <Badge variant={statusVariant as 'success' | 'secondary' | 'destructive'}>
               {statusText}
             </Badge>
@@ -1178,6 +1237,8 @@ export default function Nodes() {
   const offlineNodes = nodes.filter((n) => !n.is_connected && !n.is_disabled).length
   const disabledNodes = nodes.filter((n) => n.is_disabled).length
   const totalUsersOnline = nodes.reduce((sum, n) => sum + n.users_online, 0)
+  const agentsConnected = nodes.filter((n) => n.agent_v2_connected).length
+  const agentsMissing = nodes.filter((n) => !n.has_agent_token).length
 
   return (
     <div className="space-y-6">
@@ -1220,7 +1281,7 @@ export default function Nodes() {
         <TabsContent value="nodes" className="space-y-6 mt-4">
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
         <Card className="text-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <CardContent className="p-4 md:p-6">
             <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.total')}</p>
@@ -1259,6 +1320,19 @@ export default function Nodes() {
             <p className="text-xl md:text-2xl font-bold text-primary-400 mt-1">
               {isLoading ? '-' : totalUsersOnline}
             </p>
+          </CardContent>
+        </Card>
+        <Card className="text-center col-span-2 sm:col-span-1 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+          <CardContent className="p-4 md:p-6">
+            <p className="text-xs md:text-sm text-dark-200">{t('nodes.stats.agents')}</p>
+            <p className="text-xl md:text-2xl font-bold text-emerald-400 mt-1">
+              {isLoading ? '-' : agentsConnected}
+            </p>
+            {!isLoading && agentsMissing > 0 && (
+              <p className="text-[10px] text-amber-400 mt-0.5">
+                {t('nodes.stats.agentsMissing', { count: agentsMissing })}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

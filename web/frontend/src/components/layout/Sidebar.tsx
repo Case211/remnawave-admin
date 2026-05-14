@@ -36,6 +36,7 @@ import {
   Share2,
   ShieldBan,
   Package,
+  FileJson,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -104,6 +105,7 @@ const navigation: NavigationEntry[] = [
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
   { name: 'nav.backups', href: '/backups', icon: HardDrive, permission: { resource: 'backups', action: 'view' } },
   { name: 'nav.apiKeys', href: '/api-keys', icon: Key, permission: { resource: 'api_keys', action: 'view' } },
+  { name: 'nav.xrayEditor', href: '/resources/xray', icon: FileJson, permission: { resource: 'resources', action: 'view' } },
   // Bedolaga
   { type: 'section', name: 'nav.sections.bedolaga' },
   {

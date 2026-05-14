@@ -1,308 +1,197 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
+  ChevronDown,
+  ChevronRight,
+  Crown,
+  ExternalLink,
   RefreshCw,
   Search,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Users,
   Share2,
-  Megaphone,
-  X,
+  Sparkles,
+  TrendingUp,
+  Users,
+  Wallet,
 } from 'lucide-react'
 import client from '@/api/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { formatDateShortUtil as formatDate } from '@/lib/useFormatters'
 
-// ── Types (matching Bedolaga API) ──
+// ── Types ──
 
-interface NetworkUserNode {
+interface Referrer {
   id: number
-  tg_id?: number | null
-  username?: string | null
-  display_name: string
+  telegram_id?: number
+  username?: string
+  first_name?: string
+  referral_code?: string
+  effective_referral_commission_percent?: number
+  invited_count?: number
+  active_referrals?: number
+  total_earned_kopeks?: number
+  total_earned_rubles?: number
+  month_earned_kopeks?: number
+  month_earned_rubles?: number
+  created_at?: string
+  last_activity?: string
+}
+
+interface ReferralRow {
+  id: number
+  telegram_id?: number
+  username?: string
+  first_name?: string
+  display_name?: string
   status?: string
-  is_partner?: boolean
-  referrer_id?: number | null
-  campaign_id?: number | null
-  direct_referrals: number
   balance_rubles?: number
-  referral_code?: string | null
-  subscription_status?: string | null
-  subscription_name?: string | null
-  subscription_end?: string | null
+  subscription_status?: string
   is_trial?: boolean
+  subscription_end?: string
+  created_at?: string
+  last_activity?: string
 }
 
-interface NetworkCampaignNode {
-  id: number
-  name: string
-  is_active?: boolean
-  direct_users: number
-  total_network_users?: number
-  total_revenue_kopeks?: number
+interface ReferrersResponse {
+  items?: Referrer[]
+  total?: number
+  total_unfiltered?: number
+  limit?: number
+  offset?: number
 }
 
-interface NetworkEdge {
-  source: string
-  target: string
-  type: 'referral' | 'campaign'
+interface RefsResponse {
+  items?: ReferralRow[]
+  total?: number
+  cached_at?: number
 }
 
-interface NetworkGraphData {
-  users: NetworkUserNode[]
-  campaigns?: NetworkCampaignNode[]
-  edges: NetworkEdge[]
-  total_users: number
-  total_referrers: number
-  total_campaigns?: number
-  total_earnings_kopeks?: number
+interface PartnerStats {
+  total_referrers?: number
+  active_referrers?: number
+  total_referrals?: number
+  active_referrals?: number
+  total_paid_kopeks?: number
+  total_paid_rubles?: number
+  month_paid_kopeks?: number
+  month_paid_rubles?: number
 }
 
-// ── Color by subscription ──
+type SortKey = 'invited_desc' | 'invited_asc' | 'earned_desc' | 'earned_asc' | 'activity_desc' | 'created_desc'
 
-function getNodeColor(user: NetworkUserNode): { fill: string; border: string; glow: string } {
-  if (user.is_partner) return { fill: '#fbbf24', border: '#fcd34d', glow: 'rgba(251,191,36,0.35)' }
-  if (user.direct_referrals >= 10) return { fill: '#e879f9', border: '#f0abfc', glow: 'rgba(232,121,249,0.4)' }
-  if (user.direct_referrals >= 3) return { fill: '#818cf8', border: '#a5b4fc', glow: 'rgba(129,140,248,0.35)' }
+// ── Helpers ──
 
-  const subEnd = user.subscription_end
-  const subName = user.subscription_name
-  if (!subName) return { fill: '#6b7280', border: '#9ca3af', glow: 'rgba(107,114,128,0.2)' }
-
-  const expired = subEnd ? new Date(subEnd).getTime() < Date.now() : false
-  const isTrial = subName?.toLowerCase().includes('trial') || subName?.toLowerCase().includes('триал')
-
-  if (expired && isTrial) return { fill: '#fb923c', border: '#fdba74', glow: 'rgba(251,146,60,0.35)' }
-  if (expired) return { fill: '#f472b6', border: '#f9a8d4', glow: 'rgba(244,114,182,0.3)' }
-  if (isTrial) return { fill: '#60a5fa', border: '#93c5fd', glow: 'rgba(96,165,250,0.35)' }
-  return { fill: '#10b981', border: '#34d399', glow: 'rgba(16,185,129,0.35)' }
+function relativeTime(d?: string): string {
+  if (!d) return '—'
+  const diff = Date.now() - new Date(d).getTime()
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return 'online'
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d`
+  return `${Math.floor(days / 30)}mo`
 }
 
-function getNodeRadius(referrals: number): number {
-  if (referrals >= 20) return 32
-  if (referrals >= 10) return 26
-  if (referrals >= 5) return 20
-  if (referrals >= 1) return 16
-  return 10
+function isOnline(d?: string): boolean {
+  if (!d) return false
+  return Date.now() - new Date(d).getTime() < 5 * 60_000
 }
 
-// Campaign color (for future use)
-// const CAMPAIGN_COLOR = { fill: '#f472b6', border: '#f9a8d4', glow: 'rgba(244,114,182,0.3)' }
-
-// ── Layout ──
-
-interface LayoutItem {
-  id: string
-  x: number
-  y: number
-  r: number
-  color: { fill: string; border: string; glow: string }
-  label: string
-  count: number
-  type: 'user' | 'campaign'
-  rawId: number
+function displayName(u: { username?: string; first_name?: string; id: number }): string {
+  return u.username || u.first_name || `#${u.id}`
 }
 
-function layoutGraph(data: NetworkGraphData): { items: LayoutItem[]; edges: { x1: number; y1: number; x2: number; y2: number; color: string; type: string }[] } {
-  const items: LayoutItem[] = []
-  const posMap = new Map<string, { x: number; y: number }>()
-
-  const users = data.users || []
-
-  // Build parent→children map
-  const childrenMap = new Map<number, NetworkUserNode[]>()
-  const userMap = new Map<number, NetworkUserNode>()
-  const hasParent = new Set<number>()
-
-  for (const u of users) {
-    userMap.set(u.id, u)
-    if (u.referrer_id) {
-      hasParent.add(u.id)
-      const siblings = childrenMap.get(u.referrer_id) || []
-      siblings.push(u)
-      childrenMap.set(u.referrer_id, siblings)
-    }
-  }
-
-  // Find roots: users who have referrals but no parent (top referrers)
-  const roots = users
-    .filter((u) => u.direct_referrals > 0 && !hasParent.has(u.id))
-    .sort((a, b) => b.direct_referrals - a.direct_referrals)
-
-  if (roots.length === 0) return { items: [], edges: [] }
-
-  // Radial layout — children placed in a circle around parent
-  const placed = new Set<number>()
-
-  function placeNode(u: NetworkUserNode, cx: number, cy: number) {
-    if (placed.has(u.id)) return
-    placed.add(u.id)
-
-    const nodeId = `user-${u.id}`
-    const r = getNodeRadius(u.direct_referrals)
-    const color = getNodeColor(u)
-
-    items.push({
-      id: nodeId, x: cx, y: cy, r, color,
-      label: u.display_name || u.username || `#${u.id}`,
-      count: u.direct_referrals,
-      type: 'user',
-      rawId: u.id,
-    })
-    posMap.set(nodeId, { x: cx, y: cy })
-
-    const children = childrenMap.get(u.id) || []
-    if (children.length === 0) return
-
-    // Radius of the circle around this node — scales with number of children
-    const orbitRadius = Math.max(80, children.length * 22)
-
-    children.forEach((child, i) => {
-      const angle = (i / children.length) * Math.PI * 2 - Math.PI / 2
-      const childX = cx + Math.cos(angle) * orbitRadius
-      const childY = cy + Math.sin(angle) * orbitRadius
-      placeNode(child, childX, childY)
-    })
-  }
-
-  // Place each root tree, spaced apart
-  let offsetX = 0
-  for (const root of roots) {
-    const childCount = childrenMap.get(root.id)?.length ?? 0
-    const treeRadius = Math.max(120, childCount * 25)
-    placeNode(root, offsetX, 0)
-    offsetX += treeRadius * 2 + 150
-  }
-
-  // Build edges
-  const edgeLines: { x1: number; y1: number; x2: number; y2: number; color: string; type: string }[] = []
-  for (const e of (data.edges || [])) {
-    const src = posMap.get(e.source)
-    const tgt = posMap.get(e.target)
-    if (!src || !tgt) continue
-    edgeLines.push({
-      x1: src.x, y1: src.y, x2: tgt.x, y2: tgt.y,
-      color: e.type === 'campaign' ? '#f472b6' : '#4b5563',
-      type: e.type,
-    })
-  }
-
-  return { items, edges: edgeLines }
+function avatarColor(id: number): string {
+  const palette = [
+    'bg-blue-500/20 text-blue-400',
+    'bg-emerald-500/20 text-emerald-400',
+    'bg-violet-500/20 text-violet-400',
+    'bg-amber-500/20 text-amber-400',
+    'bg-pink-500/20 text-pink-400',
+    'bg-cyan-500/20 text-cyan-400',
+  ]
+  return palette[Math.abs(id) % palette.length]
 }
 
-// ── Legend ──
+function rubles(value?: number): string {
+  if (value == null) return '—'
+  return `${Math.round(value).toLocaleString()} ₽`
+}
 
-const LEGEND = [
-  { color: '#10b981', label: 'paidActive' },
-  { color: '#60a5fa', label: 'trial' },
-  { color: '#f472b6', label: 'paidExpired' },
-  { color: '#fb923c', label: 'trialExpired' },
-  { color: '#fbbf24', label: 'partner' },
-  { color: '#e879f9', label: 'topReferrer' },
-  { color: '#818cf8', label: 'activeReferrer' },
-  { color: '#6b7280', label: 'noSub' },
-]
+const PAGE = 50
 
 // ── Component ──
 
 export default function BedolagaReferrals() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
-  const containerRef = useRef<HTMLDivElement>(null)
 
-  const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [dragging, setDragging] = useState(false)
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [hovered, setHovered] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [selectedUser, setSelectedUser] = useState<NetworkUserNode | null>(null)
+  const [topOnly, setTopOnly] = useState(false)
+  const [minRefs, setMinRefs] = useState(0)
+  const [sort, setSort] = useState<SortKey>('invited_desc')
+  const [offset, setOffset] = useState(0)
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
-  const { data, isLoading, refetch } = useQuery<NetworkGraphData>({
-    queryKey: ['bedolaga-referral-network'],
-    queryFn: () => client.get('/bedolaga/referrals/network').then((r) => r.data),
+  const params = useMemo(() => {
+    const sp = new URLSearchParams({
+      sort,
+      limit: String(PAGE),
+      offset: String(offset),
+    })
+    if (search.trim()) sp.set('search', search.trim())
+    if (topOnly) sp.set('top_only', 'true')
+    if (minRefs > 0 && !topOnly) sp.set('min_refs', String(minRefs))
+    return sp.toString()
+  }, [search, topOnly, minRefs, sort, offset])
+
+  const { data: stats } = useQuery<PartnerStats>({
+    queryKey: ['bedolaga-referral-stats'],
+    queryFn: () => client.get('/bedolaga/referrals/stats').then((r) => r.data),
     staleTime: 60_000,
   })
 
-  const { items, edges } = useMemo(() => {
-    if (!data) return { items: [], edges: [] }
-    return layoutGraph(data)
-  }, [data])
+  const { data, isLoading, isFetching, refetch } = useQuery<ReferrersResponse>({
+    queryKey: ['bedolaga-referrers', params],
+    queryFn: () => client.get(`/bedolaga/referrals/referrers?${params}`).then((r) => r.data),
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
+  })
 
-  // Filter by search
-  const filteredItems = useMemo(() => {
-    if (!search) return items
-    const q = search.toLowerCase()
-    const matchIds = new Set(items.filter((i) => i.label.toLowerCase().includes(q)).map((i) => i.id))
-    return items.map((i) => ({ ...i, dimmed: !matchIds.has(i.id) }))
-  }, [items, search])
+  const referrers: Referrer[] = Array.isArray(data?.items) ? data.items : []
+  const total = data?.total ?? 0
+  const totalUnfiltered = data?.total_unfiltered ?? total
+  const pages = Math.max(1, Math.ceil(total / PAGE))
+  const currentPage = Math.floor(offset / PAGE) + 1
 
-  // SVG bounds
-  const padding = 80
-  const minX = items.length ? Math.min(...items.map((n) => n.x - n.r)) - padding : -200
-  const maxX = items.length ? Math.max(...items.map((n) => n.x + n.r)) + padding : 200
-  const minY = items.length ? Math.min(...items.map((n) => n.y - n.r)) - padding : -200
-  const maxY = items.length ? Math.max(...items.map((n) => n.y + n.r)) + padding + 20 : 200
-  const svgW = maxX - minX
-  const svgH = maxY - minY
-
-  // Pan/zoom handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-node]')) return
-    setDragging(true)
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
-  }, [pan])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging) return
-    setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y })
-  }, [dragging, dragStart])
-
-  const handleMouseUp = useCallback(() => setDragging(false), [])
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    setZoom((z) => Math.max(0.2, Math.min(4, z - e.deltaY * 0.001)))
-  }, [])
-
-  const fitView = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [])
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const prevent = (e: WheelEvent) => e.preventDefault()
-    el.addEventListener('wheel', prevent, { passive: false })
-    return () => el.removeEventListener('wheel', prevent)
-  }, [])
-
-  const handleNodeClick = (item: LayoutItem & { dimmed?: boolean }) => {
-    if (item.type === 'user') {
-      const u = data?.users.find((u) => u.id === item.rawId)
-      if (u) setSelectedUser(u)
-    }
+  function toggleRow(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
-  const formatRubles = (kopeks?: number) => {
-    if (!kopeks) return '0 ₽'
-    return `${(kopeks / 100).toLocaleString('ru-RU')} ₽`
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="page-header">
-          <Skeleton className="h-8 w-48" />
-        </div>
-        <Skeleton className="h-[500px] rounded-xl" />
-      </div>
-    )
+  function resetFilters() {
+    setSearch('')
+    setTopOnly(false)
+    setMinRefs(0)
+    setSort('invited_desc')
+    setOffset(0)
   }
 
   return (
@@ -314,265 +203,373 @@ export default function BedolagaReferrals() {
           <p className="text-dark-200 mt-1 text-sm">{t('bedolaga.referrals.subtitle')}</p>
         </div>
         <div className="page-header-actions">
-          <Button variant="secondary" size="icon" onClick={() => refetch()} disabled={isLoading}>
-            <RefreshCw className={cn('w-5 h-5', isLoading && 'animate-spin')} />
+          <Button variant="secondary" size="icon" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn('w-5 h-5', isFetching && 'animate-spin')} />
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="glass-card">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--glass-bg-hover)] text-blue-400"><Users className="w-4.5 h-4.5" /></div>
-            <div><p className="text-xs text-dark-300">{t('bedolaga.referrals.totalUsers')}</p><p className="text-lg font-bold">{data?.total_users ?? 0}</p></div>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--glass-bg-hover)] text-violet-400"><Share2 className="w-4.5 h-4.5" /></div>
-            <div><p className="text-xs text-dark-300">{t('bedolaga.referrals.totalReferrers')}</p><p className="text-lg font-bold">{data?.total_referrers ?? 0}</p></div>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--glass-bg-hover)] text-pink-400"><Megaphone className="w-4.5 h-4.5" /></div>
-            <div><p className="text-xs text-dark-300">{t('bedolaga.referrals.totalCampaigns')}</p><p className="text-lg font-bold">{data?.total_campaigns ?? 0}</p></div>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--glass-bg-hover)] text-emerald-400"><Share2 className="w-4.5 h-4.5" /></div>
-            <div><p className="text-xs text-dark-300">{t('bedolaga.referrals.totalEarnings')}</p><p className="text-lg font-bold text-emerald-400">{formatRubles(data?.total_earnings_kopeks)}</p></div>
-          </CardContent>
-        </Card>
+      {/* Stat row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          icon={Users}
+          label={t('bedolaga.referrals.totalReferrers')}
+          value={stats?.total_referrers ?? totalUnfiltered}
+          sub={stats?.active_referrers != null ? `${t('bedolaga.referrals.active')}: ${stats.active_referrers}` : undefined}
+          tone="text-violet-400"
+        />
+        <StatCard
+          icon={Share2}
+          label={t('bedolaga.referrals.totalReferrals')}
+          value={stats?.total_referrals ?? '—'}
+          sub={stats?.active_referrals != null ? `${t('bedolaga.referrals.active')}: ${stats.active_referrals}` : undefined}
+          tone="text-blue-400"
+        />
+        <StatCard
+          icon={Wallet}
+          label={t('bedolaga.referrals.totalEarnings')}
+          value={rubles(stats?.total_paid_rubles)}
+          tone="text-emerald-400"
+        />
+        <StatCard
+          icon={TrendingUp}
+          label={t('bedolaga.referrals.monthEarnings')}
+          value={rubles(stats?.month_paid_rubles)}
+          tone="text-amber-400"
+        />
       </div>
 
-      {/* Graph */}
-      <div className="relative rounded-xl overflow-hidden border border-[var(--glass-border)] bg-[var(--surface-body)]">
-        {/* Search bar */}
-        <div className="absolute top-3 left-3 right-3 z-10 flex gap-2">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-dark-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t('bedolaga.referrals.searchPlaceholder')}
-              className="w-full h-8 pl-8 pr-8 rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg-solid)] text-xs placeholder:text-dark-400 focus:outline-none focus:ring-1 focus:ring-primary-500/50"
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-dark-400 hover:text-white">
-                <X className="w-3.5 h-3.5" />
-              </button>
+      {/* Filters */}
+      <Card className="glass-card">
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setOffset(0)
+                }}
+                placeholder={t('bedolaga.referrals.searchPlaceholder')}
+                className="w-full pl-10 pr-3 py-2 text-sm rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] focus:border-violet-500/50 focus:outline-none transition-colors"
+              />
+            </div>
+
+            <Select
+              value={String(minRefs)}
+              onValueChange={(v) => {
+                setMinRefs(Number(v))
+                setOffset(0)
+              }}
+              disabled={topOnly}
+            >
+              <SelectTrigger className="w-full lg:w-48 h-9 text-sm">
+                <SelectValue placeholder={t('bedolaga.referrals.minRefs')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">{t('bedolaga.referrals.minRefsAny')}</SelectItem>
+                <SelectItem value="1">≥ 1</SelectItem>
+                <SelectItem value="3">≥ 3</SelectItem>
+                <SelectItem value="5">≥ 5</SelectItem>
+                <SelectItem value="10">≥ 10</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant={topOnly ? 'default' : 'secondary'}
+              size="sm"
+              onClick={() => {
+                setTopOnly((v) => !v)
+                setOffset(0)
+              }}
+              className="gap-1.5"
+            >
+              <Crown className="w-4 h-4" />
+              {t('bedolaga.referrals.topOnly')}
+            </Button>
+
+            <Select value={sort} onValueChange={(v) => { setSort(v as SortKey); setOffset(0) }}>
+              <SelectTrigger className="w-full lg:w-56 h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="invited_desc">{t('bedolaga.referrals.sort.invitedDesc')}</SelectItem>
+                <SelectItem value="invited_asc">{t('bedolaga.referrals.sort.invitedAsc')}</SelectItem>
+                <SelectItem value="earned_desc">{t('bedolaga.referrals.sort.earnedDesc')}</SelectItem>
+                <SelectItem value="earned_asc">{t('bedolaga.referrals.sort.earnedAsc')}</SelectItem>
+                <SelectItem value="activity_desc">{t('bedolaga.referrals.sort.activityDesc')}</SelectItem>
+                <SelectItem value="created_desc">{t('bedolaga.referrals.sort.createdDesc')}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {(search || topOnly || minRefs > 0 || sort !== 'invited_desc') && (
+              <Button variant="ghost" size="sm" onClick={resetFilters}>
+                {t('bedolaga.referrals.resetFilters')}
+              </Button>
             )}
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        {/* SVG Canvas */}
-        <div
-          ref={containerRef}
-          className="h-[500px] sm:h-[600px] cursor-grab active:cursor-grabbing select-none overflow-hidden"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onWheel={handleWheel}
-        >
-          {items.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-dark-400">
-              <div className="text-center">
-                <Share2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>{t('bedolaga.referrals.noData')}</p>
+      {/* Table */}
+      <Card className="glass-card overflow-hidden">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--glass-bg)] text-[10px] uppercase tracking-wider text-dark-300">
+                <tr>
+                  <th className="w-10" />
+                  <th className="text-left p-3 font-medium">{t('bedolaga.referrals.referrer')}</th>
+                  <th className="text-right p-3 font-medium hidden sm:table-cell">{t('bedolaga.referrals.invited')}</th>
+                  <th className="text-right p-3 font-medium hidden md:table-cell">{t('bedolaga.referrals.activeRefs')}</th>
+                  <th className="text-right p-3 font-medium">{t('bedolaga.referrals.earnedTotal')}</th>
+                  <th className="text-right p-3 font-medium hidden lg:table-cell">{t('bedolaga.referrals.earnedMonth')}</th>
+                  <th className="text-right p-3 font-medium hidden lg:table-cell">{t('bedolaga.referrals.lastActivity')}</th>
+                  <th className="text-right p-3 font-medium hidden md:table-cell">{t('bedolaga.referrals.createdAt')}</th>
+                  <th className="w-12" />
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading && !data && (
+                  <>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <tr key={i} className="border-t border-[var(--glass-border)]">
+                        <td colSpan={9} className="p-3"><Skeleton className="h-8 w-full" /></td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+
+                {!isLoading && referrers.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="p-10 text-center text-dark-300">
+                      <Sparkles className="w-8 h-8 text-dark-400 mx-auto mb-2" />
+                      <p>{t('bedolaga.referrals.noData')}</p>
+                    </td>
+                  </tr>
+                )}
+
+                {referrers.map((r) => (
+                  <ReferrerRow
+                    key={r.id}
+                    referrer={r}
+                    isOpen={expanded.has(r.id)}
+                    onToggle={() => toggleRow(r.id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {total > PAGE && (
+            <div className="flex items-center justify-between p-3 border-t border-[var(--glass-border)] text-xs text-dark-300">
+              <span>
+                {t('bedolaga.referrals.showing', { from: offset + 1, to: Math.min(offset + referrers.length, total), total })}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
+                  ←
+                </Button>
+                <span>{currentPage} / {pages}</span>
+                <Button variant="ghost" size="sm" disabled={currentPage >= pages} onClick={() => setOffset(offset + PAGE)}>
+                  →
+                </Button>
               </div>
             </div>
-          ) : (
-            <svg
-              width="100%" height="100%"
-              viewBox={`${minX} ${minY} ${svgW} ${svgH}`}
-              style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center' }}
-            >
-              {/* Edges */}
-              {edges.map((e, i) => (
-                <line
-                  key={i}
-                  x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-                  stroke={e.color}
-                  strokeWidth={e.type === 'campaign' ? 1.5 : 1}
-                  strokeOpacity={0.3}
-                />
-              ))}
-              {/* Nodes */}
-              {(filteredItems as (LayoutItem & { dimmed?: boolean })[]).map((item) => {
-                const isHovered = hovered === item.id
-                const dimmed = (item as any).dimmed
-                const scale = isHovered ? 1.15 : 1
-                const isCampaign = item.type === 'campaign'
-                return (
-                  <g
-                    key={item.id}
-                    data-node
-                    className="cursor-pointer"
-                    transform={`translate(${item.x}, ${item.y}) scale(${scale})`}
-                    style={{ transition: 'transform 0.15s ease', opacity: dimmed ? 0.15 : 1 }}
-                    onClick={() => handleNodeClick(item)}
-                    onMouseEnter={() => setHovered(item.id)}
-                    onMouseLeave={() => setHovered(null)}
-                  >
-                    {/* Glow */}
-                    <circle r={item.r + 5} fill={item.color.glow} opacity={isHovered ? 0.7 : 0.35} />
-                    {/* Shape */}
-                    {isCampaign ? (
-                      <rect
-                        x={-item.r} y={-item.r} width={item.r * 2} height={item.r * 2}
-                        rx={6} fill={item.color.fill} stroke={item.color.border} strokeWidth={2} opacity={0.9}
-                      />
-                    ) : (
-                      <circle r={item.r} fill={item.color.fill} stroke={item.color.border} strokeWidth={2} opacity={0.9} />
-                    )}
-                    {/* Initial */}
-                    <text
-                      textAnchor="middle" dominantBaseline="central"
-                      fill="white" fontWeight="700"
-                      fontSize={Math.max(8, item.r * 0.65)}
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {isCampaign ? '🎯' : item.label.charAt(0).toUpperCase()}
-                    </text>
-                    {/* Label */}
-                    {item.r >= 14 && (
-                      <text
-                        y={item.r + 13} textAnchor="middle"
-                        fill="#d1d5db" fontSize={9} fontWeight="500"
-                        style={{ pointerEvents: 'none' }}
-                      >
-                        {item.label.length > 12 ? item.label.slice(0, 11) + '…' : item.label}
-                        {item.count > 0 ? ` | ${item.count}` : ''}
-                      </text>
-                    )}
-                  </g>
-                )
-              })}
-            </svg>
           )}
-        </div>
-
-        {/* Zoom controls */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 rounded-lg bg-[var(--glass-bg-solid)] border border-[var(--glass-border)]">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(4, z + 0.25))}>
-            <ZoomIn className="w-3.5 h-3.5 text-dark-200" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.2, z - 0.25))}>
-            <ZoomOut className="w-3.5 h-3.5 text-dark-200" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fitView}>
-            <Maximize2 className="w-3.5 h-3.5 text-dark-200" />
-          </Button>
-        </div>
-
-        {/* Legend */}
-        <div className="absolute bottom-3 right-3 p-2.5 rounded-lg bg-[var(--glass-bg-solid)] border border-[var(--glass-border)]">
-          <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-1.5">{t('bedolaga.customerDetail.refLegendTitle')}</p>
-          <div className="space-y-1">
-            {LEGEND.map(({ color, label }) => (
-              <div key={label} className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}66` }} />
-                <span className="text-[10px] text-dark-200">{t(`bedolaga.customerDetail.refLegend.${label}`)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* User detail panel */}
-      {selectedUser && (() => {
-        // Find this user's referrals from the data
-        const userReferrals = (data?.users || []).filter((u) => u.referrer_id === selectedUser.id)
-        const referredBy = selectedUser.referrer_id ? (data?.users || []).find((u) => u.id === selectedUser.referrer_id) : null
-
-        return (
-          <Card className="glass-card animate-fade-in">
-            <CardContent className="p-4">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-medium text-sm flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-400" />
-                  {selectedUser.display_name || selectedUser.username || `#${selectedUser.id}`}
-                  {selectedUser.referral_code && (
-                    <span className="text-[10px] font-mono text-dark-400 bg-[var(--glass-bg)] px-1.5 py-0.5 rounded">{selectedUser.referral_code}</span>
-                  )}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <Button variant="secondary" size="sm" className="text-xs" onClick={() => navigate(`/bedolaga/customers/${selectedUser.id}`)}>
-                    {t('bedolaga.referrals.openProfile')}
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedUser(null)}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <p className="text-dark-400">{t('bedolaga.referrals.directReferrals')}</p>
-                  <p className="font-bold text-lg">{selectedUser.direct_referrals}</p>
-                </div>
-                <div>
-                  <p className="text-dark-400">{t('bedolaga.customers.balance')}</p>
-                  <p className="font-bold text-lg">{(selectedUser.balance_rubles ?? 0).toLocaleString()} ₽</p>
-                </div>
-                <div>
-                  <p className="text-dark-400">{t('bedolaga.customers.status')}</p>
-                  <Badge className={cn('text-[10px] mt-1',
-                    selectedUser.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-dark-500/20 text-dark-300'
-                  )}>{selectedUser.status || '—'}</Badge>
-                </div>
-                <div>
-                  <p className="text-dark-400">{t('bedolaga.customers.subscription')}</p>
-                  <Badge className={cn('text-[10px] mt-1',
-                    selectedUser.subscription_status === 'active' ? 'bg-emerald-500/20 text-emerald-400' :
-                    selectedUser.subscription_status === 'expired' ? 'bg-amber-500/20 text-amber-400' : 'bg-dark-500/20 text-dark-300'
-                  )}>{selectedUser.subscription_status || '—'}</Badge>
-                </div>
-              </div>
-
-              {/* Referred by */}
-              {referredBy && (
-                <div className="mt-2 pt-2 border-t border-[var(--glass-border)] text-xs">
-                  <span className="text-dark-400">{t('bedolaga.referrals.referredBy')}: </span>
-                  <button className="text-primary-400 hover:underline" onClick={() => setSelectedUser(referredBy)}>
-                    {referredBy.display_name || referredBy.username || `#${referredBy.id}`}
-                  </button>
-                </div>
-              )}
-
-              {/* Referrals list */}
-              {userReferrals.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-[var(--glass-border)]">
-                  <p className="text-xs text-dark-400 mb-2">{t('bedolaga.customerDetail.refList')} ({userReferrals.length})</p>
-                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                    {userReferrals.map((ref) => (
-                      <div
-                        key={ref.id}
-                        className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-[var(--glass-bg-hover)] cursor-pointer transition-colors text-xs"
-                        onClick={() => setSelectedUser(ref)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getNodeColor(ref).fill }} />
-                          <span className="font-medium">{ref.display_name || ref.username || `#${ref.id}`}</span>
-                          {ref.direct_referrals > 0 && <span className="text-dark-400">| {ref.direct_referrals}</span>}
-                        </div>
-                        <span className="text-dark-300">{(ref.balance_rubles ?? 0).toLocaleString()} ₽</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )
-      })()}
+        </CardContent>
+      </Card>
     </div>
   )
+}
+
+// ── Stat card ──
+
+function StatCard({ icon: Icon, label, value, sub, tone }: {
+  icon: typeof Users
+  label: string
+  value: number | string
+  sub?: string
+  tone?: string
+}) {
+  return (
+    <Card className="glass-card">
+      <CardContent className="p-3 sm:p-4">
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-xs text-dark-300 uppercase tracking-wider truncate">{label}</p>
+            <p className="text-xl sm:text-2xl font-bold mt-0.5 truncate">{value}</p>
+            {sub && <p className="text-[10px] text-dark-400 mt-0.5 truncate">{sub}</p>}
+          </div>
+          <div className={cn('p-2 rounded-lg bg-[var(--glass-bg)] flex-shrink-0', tone)}>
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Referrer row + lazy-loaded refs ──
+
+function ReferrerRow({
+  referrer,
+  isOpen,
+  onToggle,
+}: {
+  referrer: Referrer
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  const { t } = useTranslation()
+  const earnedRub = referrer.total_earned_rubles ?? (referrer.total_earned_kopeks ? referrer.total_earned_kopeks / 100 : 0)
+  const monthRub = referrer.month_earned_rubles ?? (referrer.month_earned_kopeks ? referrer.month_earned_kopeks / 100 : 0)
+  const online = isOnline(referrer.last_activity)
+
+  const { data: refsData, isFetching: refsLoading } = useQuery<RefsResponse>({
+    queryKey: ['bedolaga-referrer-refs', referrer.id],
+    queryFn: () => client.get(`/bedolaga/referrals/referrers/${referrer.id}/refs`).then((r) => r.data),
+    enabled: isOpen,
+    staleTime: 5 * 60_000,
+  })
+  const refs: ReferralRow[] = Array.isArray(refsData?.items) ? refsData.items : []
+
+  return (
+    <>
+      <tr
+        className="border-t border-[var(--glass-border)] hover:bg-[var(--glass-bg-hover)] transition-colors cursor-pointer"
+        onClick={onToggle}
+      >
+        <td className="p-3 align-middle">
+          {isOpen ? <ChevronDown className="w-4 h-4 text-dark-400" /> : <ChevronRight className="w-4 h-4 text-dark-400" />}
+        </td>
+        <td className="p-3 align-middle">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0', avatarColor(referrer.id))}>
+              {displayName(referrer).charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <Link
+                to={`/bedolaga/customers/${referrer.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="font-medium text-white hover:text-violet-400 transition-colors truncate block"
+              >
+                {displayName(referrer)}
+              </Link>
+              <div className="text-[11px] text-dark-400 flex items-center gap-2 truncate">
+                {referrer.telegram_id ? <span>TG {referrer.telegram_id}</span> : null}
+                {referrer.referral_code ? (
+                  <span className="font-mono">/{referrer.referral_code}</span>
+                ) : null}
+              </div>
+            </div>
+            {online && <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" title="online" />}
+          </div>
+        </td>
+        <td className="p-3 align-middle text-right hidden sm:table-cell">
+          <span className="font-medium tabular-nums">{referrer.invited_count ?? 0}</span>
+        </td>
+        <td className="p-3 align-middle text-right hidden md:table-cell">
+          <span className="text-dark-200 tabular-nums">{referrer.active_referrals ?? 0}</span>
+        </td>
+        <td className="p-3 align-middle text-right">
+          <span className="font-medium tabular-nums text-emerald-400">{earnedRub.toLocaleString()} ₽</span>
+        </td>
+        <td className="p-3 align-middle text-right hidden lg:table-cell">
+          <span className="tabular-nums text-dark-200">{monthRub.toLocaleString()} ₽</span>
+        </td>
+        <td className="p-3 align-middle text-right hidden lg:table-cell text-dark-300 text-xs">
+          {relativeTime(referrer.last_activity)}
+        </td>
+        <td className="p-3 align-middle text-right hidden md:table-cell text-dark-300 text-xs">
+          {formatDate(referrer.created_at)}
+        </td>
+        <td className="p-3 align-middle text-right">
+          <Link to={`/bedolaga/customers/${referrer.id}`} onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" title={t('bedolaga.referrals.openProfile')}>
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+          </Link>
+        </td>
+      </tr>
+
+      {isOpen && (
+        <tr className="bg-[var(--glass-bg)]">
+          <td colSpan={9} className="p-0">
+            <div className="px-3 sm:px-12 py-3 border-t border-[var(--glass-border)]">
+              {refsLoading && !refsData && (
+                <div className="space-y-2 py-2">
+                  {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+                </div>
+              )}
+              {!refsLoading && refs.length === 0 && (
+                <p className="py-4 text-center text-dark-400 text-xs">{t('bedolaga.referrals.noRefsForUser')}</p>
+              )}
+              {refs.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-[10px] uppercase tracking-wider text-dark-400">
+                      <tr>
+                        <th className="text-left py-2 font-medium">{t('bedolaga.referrals.referral')}</th>
+                        <th className="text-left py-2 font-medium hidden sm:table-cell">{t('bedolaga.referrals.subStatus')}</th>
+                        <th className="text-right py-2 font-medium hidden md:table-cell">{t('bedolaga.referrals.balance')}</th>
+                        <th className="text-right py-2 font-medium hidden md:table-cell">{t('bedolaga.referrals.registered')}</th>
+                        <th className="text-right py-2 font-medium">{t('bedolaga.referrals.lastActivity')}</th>
+                        <th className="w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {refs.map((ref) => (
+                        <tr key={ref.id} className="border-t border-[var(--glass-border)]">
+                          <td className="py-2">
+                            <Link
+                              to={`/bedolaga/customers/${ref.id}`}
+                              className="text-white hover:text-violet-400 transition-colors"
+                            >
+                              {ref.display_name || displayName(ref)}
+                            </Link>
+                          </td>
+                          <td className="py-2 hidden sm:table-cell">
+                            <SubBadge status={ref.subscription_status} isTrial={ref.is_trial} />
+                          </td>
+                          <td className="py-2 text-right hidden md:table-cell tabular-nums">
+                            {ref.balance_rubles != null ? `${ref.balance_rubles.toLocaleString()} ₽` : '—'}
+                          </td>
+                          <td className="py-2 text-right hidden md:table-cell text-dark-300">
+                            {formatDate(ref.created_at)}
+                          </td>
+                          <td className="py-2 text-right text-dark-300">
+                            {relativeTime(ref.last_activity)}
+                          </td>
+                          <td className="py-2 text-right">
+                            <Link to={`/bedolaga/customers/${ref.id}`}>
+                              <Button variant="ghost" size="icon" className="h-6 w-6">
+                                <ExternalLink className="w-3 h-3" />
+                              </Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+function SubBadge({ status, isTrial }: { status?: string; isTrial?: boolean }) {
+  const { t } = useTranslation()
+  if (!status || status === 'none') return <Badge variant="outline" className="text-[10px] text-dark-400">—</Badge>
+  if (status === 'active' && isTrial) return <Badge className="text-[10px] bg-blue-500/20 text-blue-400 border-blue-500/30">{t('bedolaga.referrals.subLabels.trial')}</Badge>
+  if (status === 'active') return <Badge className="text-[10px] bg-emerald-500/20 text-emerald-400 border-emerald-500/30">{t('bedolaga.referrals.subLabels.active')}</Badge>
+  if (status === 'expired') return <Badge className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">{t('bedolaga.referrals.subLabels.expired')}</Badge>
+  return <Badge variant="outline" className="text-[10px]">{status}</Badge>
 }

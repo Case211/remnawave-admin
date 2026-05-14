@@ -172,6 +172,20 @@ async def list_nodes(
         except Exception as e:
             logger.debug("Realtime bandwidth fetch failed: %s", e)
 
+        # Enrich with node-agent state (token presence + WS connectivity)
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                agent_state = await db_service.get_nodes_agent_state()
+                for n in nodes:
+                    state = agent_state.get(str(n.get("uuid", "")).lower())
+                    if state:
+                        n["has_agent_token"] = state["has_agent_token"]
+                        n["agent_v2_connected"] = state["agent_v2_connected"]
+                        n["agent_v2_last_ping"] = state["agent_v2_last_ping"]
+        except Exception as e:
+            logger.debug("Agent state enrichment failed: %s", e)
+
         # Apply access-policy scope (whitelist by UUID/tag)
         scope = await get_scope(admin, "node", "view")
         if scope is not None:

@@ -28,6 +28,12 @@ async def get_health(admin: AdminUser = Depends(require_permission("bedolaga", "
     return await proxy_request(bedolaga_client.get_health)
 
 
+@router.get("/maintenance")
+async def get_maintenance(admin: AdminUser = Depends(require_permission("bedolaga", "view"))):
+    """Реальный статус техобслуживания Bedolaga Bot."""
+    return await proxy_request(bedolaga_client.get_maintenance)
+
+
 @router.get("/status")
 async def get_status(admin: AdminUser = Depends(require_permission("bedolaga", "view"))):
     """Проверить настроен ли Bedolaga API."""

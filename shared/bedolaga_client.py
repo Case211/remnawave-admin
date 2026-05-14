@@ -71,6 +71,37 @@ class BedolagaClient:
     async def get_health(self) -> dict:
         return await self._get("/health")
 
+    async def get_maintenance(self) -> dict:
+        """Real maintenance status. Tries /maintenance/status, falls back to /admin/maintenance.
+
+        Returns dict with at least {"enabled": bool}; may also include
+        {"reason": str, "until": iso8601, "available": bool}. If the bot does
+        not expose either endpoint, returns {"available": False, "enabled": False}.
+        """
+        client = self._get_client()
+        for path in ("/maintenance/status", "/admin/maintenance"):
+            try:
+                response = await client.get(path)
+            except httpx.HTTPError as exc:
+                logger.warning("Bedolaga maintenance probe failed on %s: %s", path, exc)
+                continue
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            data = response.json() if response.content else {}
+            if not isinstance(data, dict):
+                data = {}
+            data.setdefault("available", True)
+            data["enabled"] = bool(
+                data.get("enabled")
+                or data.get("is_enabled")
+                or data.get("active")
+                or data.get("mode") == "maintenance"
+                or data.get("status") == "maintenance"
+            )
+            return data
+        return {"available": False, "enabled": False}
+
     # ── Users ──
 
     async def list_users(self, limit: int = 20, offset: int = 0, **filters) -> dict:

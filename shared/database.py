@@ -1304,13 +1304,45 @@ class DatabaseService:
         """Получить токен агента для ноды (если установлен)."""
         if not self.is_connected:
             return None
-        
+
         async with self.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT agent_token FROM nodes WHERE uuid = $1",
                 uuid
             )
             return row["agent_token"] if row and row["agent_token"] else None
+
+    async def get_nodes_agent_state(self) -> Dict[str, Dict[str, Any]]:
+        """Per-node agent flags: has_agent_token, agent_v2_connected, agent_v2_last_ping.
+
+        Returned dict is keyed by lowercase uuid string. The token value itself
+        is NOT returned — only a boolean indicating whether it is set, to keep
+        the secret off API responses.
+        """
+        if not self.is_connected:
+            return {}
+
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT uuid,
+                       (agent_token IS NOT NULL AND agent_token <> '') AS has_agent_token,
+                       COALESCE(agent_v2_connected, false) AS agent_v2_connected,
+                       agent_v2_last_ping
+                FROM nodes
+                """
+            )
+
+        result: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            uid = str(row["uuid"]).lower()
+            last_ping = row["agent_v2_last_ping"]
+            result[uid] = {
+                "has_agent_token": bool(row["has_agent_token"]),
+                "agent_v2_connected": bool(row["agent_v2_connected"]),
+                "agent_v2_last_ping": last_ping.isoformat() if last_ping else None,
+            }
+        return result
     
     async def get_nodes_stats(self) -> Dict[str, int]:
         """
@@ -5474,7 +5506,13 @@ class DatabaseService:
             return []
 
     async def get_shared_hwids_for_user(self, user_uuid: str) -> List[Dict[str, Any]]:
-        """For a given user, find other users sharing the same HWID(s)."""
+        """For a given user, find other users sharing the same HWID(s).
+
+        Each returned group also carries ``self_telegram_id`` (telegram_id of
+        the requested user) and ``telegram_id`` on every other user, so the
+        violation detector can group sibling accounts: Bedolaga multi-tariff
+        mode binds several panel UUIDs to one telegram_id.
+        """
         if not self.is_connected:
             return []
 
@@ -5482,8 +5520,14 @@ class DatabaseService:
             async with self.acquire() as conn:
                 rows = await conn.fetch(
                     """
-                    SELECT h2.hwid, u.uuid::text as user_uuid, u.username, u.status
+                    SELECT h2.hwid,
+                           u.uuid::text  AS user_uuid,
+                           u.username,
+                           u.status,
+                           u.telegram_id,
+                           me.telegram_id AS self_telegram_id
                     FROM user_hwid_devices h1
+                    JOIN users me ON me.uuid = h1.user_uuid
                     JOIN user_hwid_devices h2 ON h1.hwid = h2.hwid AND h2.user_uuid != h1.user_uuid
                     JOIN users u ON h2.user_uuid = u.uuid
                     WHERE h1.user_uuid = $1
@@ -5495,16 +5539,20 @@ class DatabaseService:
                 if not rows:
                     return []
 
-                # Group by hwid
                 groups: Dict[str, Dict[str, Any]] = {}
                 for r in rows:
                     hwid = r["hwid"]
                     if hwid not in groups:
-                        groups[hwid] = {"hwid": hwid, "other_users": []}
+                        groups[hwid] = {
+                            "hwid": hwid,
+                            "self_telegram_id": r["self_telegram_id"],
+                            "other_users": [],
+                        }
                     groups[hwid]["other_users"].append({
                         "uuid": r["user_uuid"],
                         "username": r["username"],
                         "status": r["status"],
+                        "telegram_id": r["telegram_id"],
                     })
 
                 return list(groups.values())

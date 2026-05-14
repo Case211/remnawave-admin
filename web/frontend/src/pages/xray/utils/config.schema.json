@@ -1,0 +1,536 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ConfigObject",
+  "definitions": {
+    "ConfigObject": {
+      "type": "object",
+      "title": "Xray-core Configuration",
+      "additionalProperties": false,
+      "properties": {
+        "log": {
+          "$ref": "#/definitions/LogObject"
+        },
+        "api": {
+          "$ref": "#/definitions/ApiObject"
+        },
+        "metrics": {
+          "$ref": "#/definitions/MetricsObject"
+        },
+        "dns": {
+          "$ref": "#/definitions/DnsObject"
+        },
+        "routing": {
+          "$ref": "#/definitions/RoutingObject"
+        },
+        "policy": {
+          "$ref": "#/definitions/PolicyObject"
+        },
+        "inbounds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InboundObject"
+          }
+        },
+        "outbounds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OutboundObject"
+          }
+        },
+        "transport": {
+          "$ref": "#/definitions/TransportObject"
+        },
+        "stats": {
+          "$ref": "#/definitions/StatsObject"
+        },
+        "reverse": {
+          "$ref": "#/definitions/ReverseObject"
+        },
+        "fakedns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FakeDnsObject"
+          }
+        },
+        "observatory": {
+          "$ref": "#/definitions/ObservatoryObject"
+        },
+        "burstObservatory": {
+          "$ref": "#/definitions/BurstObservatoryObject"
+        }
+      }
+    },
+    "LogObject": {
+      "type": "object",
+      "properties": {
+        "access": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "loglevel": {
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error",
+            "none"
+          ]
+        },
+        "dnsLog": {
+          "type": "boolean"
+        },
+        "maskAddress": {
+          "type": "string"
+        }
+      }
+    },
+    "ApiObject": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string"
+        },
+        "listen": {
+          "type": "string"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "MetricsObject": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string"
+        },
+        "listen": {
+          "type": "string"
+        }
+      }
+    },
+    "DnsObject": {
+      "type": "object",
+      "properties": {
+        "servers": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer"
+                  },
+                  "domains": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "expectIPs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "skipFallback": {
+                    "type": "boolean"
+                  },
+                  "clientIp": {
+                    "type": "string"
+                  },
+                  "tag": {
+                    "type": "string"
+                  },
+                  "queryStrategy": {
+                    "enum": [
+                      "UseIP",
+                      "UseIPv4",
+                      "UseIPv6"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "hosts": {
+          "type": "object"
+        },
+        "clientIp": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "queryStrategy": {
+          "enum": [
+            "UseIP",
+            "UseIPv4",
+            "UseIPv6"
+          ]
+        },
+        "disableCache": {
+          "type": "boolean"
+        },
+        "disableFallback": {
+          "type": "boolean"
+        },
+        "disableFallbackIfMatch": {
+          "type": "boolean"
+        }
+      }
+    },
+    "RoutingObject": {
+      "type": "object",
+      "properties": {
+        "domainStrategy": {
+          "enum": [
+            "AsIs",
+            "IPIfNonMatch",
+            "IPOnDemand"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RoutingRule"
+          }
+        },
+        "balancers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BalancerObject"
+          }
+        }
+      }
+    },
+    "RoutingRule": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "field"
+        },
+        "ruleTag": {
+          "type": "string",
+          "description": "Human-readable name for the rule."
+        },
+        "domain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ip": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "port": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "user": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inboundTag": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protocol": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outboundTag": {
+          "type": "string"
+        },
+        "balancerTag": {
+          "type": "string"
+        },
+        "attrs": {
+          "type": "object"
+        }
+      }
+    },
+    "BalancerObject": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string"
+        },
+        "selector": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "strategy": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "random",
+                "roundRobin",
+                "leastPing",
+                "leastLoad"
+              ]
+            }
+          }
+        },
+        "fallbackTag": {
+          "type": "string"
+        }
+      }
+    },
+    "InboundObject": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "listen": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object"
+        },
+        "streamSettings": {
+          "$ref": "#/definitions/StreamSettingsObject"
+        },
+        "sniffing": {
+          "type": "object"
+        },
+        "allocate": {
+          "type": "object"
+        }
+      }
+    },
+    "OutboundObject": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string"
+        },
+        "sendThrough": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object"
+        },
+        "streamSettings": {
+          "$ref": "#/definitions/StreamSettingsObject"
+        },
+        "proxySettings": {
+          "type": "object"
+        },
+        "mux": {
+          "type": "object"
+        }
+      }
+    },
+    "StreamSettingsObject": {
+      "type": "object",
+      "properties": {
+        "network": {
+          "enum": [
+            "tcp",
+            "udp",
+            "kcp",
+            "ws",
+            "http",
+            "quic",
+            "grpc",
+            "xhttp",
+            "raw",
+            "httpupgrade",
+            "hysteria"
+          ]
+        },
+        "security": {
+          "enum": [
+            "none",
+            "tls",
+            "reality"
+          ]
+        },
+        "tlsSettings": {
+          "type": "object"
+        },
+        "realitySettings": {
+          "type": "object"
+        },
+        "tcpSettings": {
+          "type": "object"
+        },
+        "kcpSettings": {
+          "type": "object"
+        },
+        "wsSettings": {
+          "type": "object"
+        },
+        "httpSettings": {
+          "type": "object"
+        },
+        "quicSettings": {
+          "type": "object"
+        },
+        "grpcSettings": {
+          "type": "object"
+        },
+        "xhttpSettings": {
+          "type": "object"
+        },
+        "httpupgradeSettings": {
+          "type": "object"
+        },
+        "hysteriaSettings": {
+          "type": "object"
+        },
+        "sockopt": {
+          "$ref": "#/definitions/SockoptObject"
+        },
+        "finalmask": {
+          "$ref": "#/definitions/FinalmaskObject"
+        }
+      }
+    },
+    "SockoptObject": {
+      "type": "object",
+      "properties": {
+        "mark": { "type": "integer" },
+        "tcpFastOpen": { "type": "boolean" },
+        "tproxy": { "enum": ["off", "tproxy", "redirect"] },
+        "v6only": { "type": "boolean" },
+        "acceptProxyProtocol": { "type": "boolean" },
+        "interface": { "type": "string" },
+        "dialerProxy": { "type": "string" },
+        "domainStrategy": { "enum": ["AsIs", "UseIP", "UseIPv4", "UseIPv6", "UseIPv4v6", "UseIPv6v4"] },
+        "tcpKeepAliveIdle": { "type": "integer" },
+        "tcpKeepAliveInterval": { "type": "integer" },
+        "tcpUserTimeout": { "type": "integer" },
+        "tcpMaxSeg": { "type": "integer" },
+        "tcpCongestion": { "type": "string" },
+        "tcpWindowClamp": { "type": "integer" },
+        "tcpMptcp": { "type": "boolean" },
+        "tcpNoDelay": { "type": "boolean" }
+      }
+    },
+    "FinalmaskObject": {
+      "type": "object",
+      "properties": {
+        "tcp": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FinalmaskNoiseItem"
+          }
+        },
+        "udp": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FinalmaskNoiseItem"
+          }
+        },
+        "quicParams": {
+          "type": "object"
+        }
+      }
+    },
+    "FinalmaskNoiseItem": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["noise"] },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "noise": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": { "enum": ["hex", "rand"] },
+                  "packet": { "type": "string" },
+                  "rand": { "type": "string" },
+                  "delay": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "TransportObject": {
+      "type": "object"
+    },
+    "StatsObject": {
+      "type": "object"
+    },
+    "PolicyObject": {
+      "type": "object"
+    },
+    "ReverseObject": {
+      "type": "object"
+    },
+    "FakeDnsObject": {
+      "type": "object",
+      "properties": {
+        "ipPool": {
+          "type": "string"
+        },
+        "poolSize": {
+          "type": "integer"
+        }
+      }
+    },
+    "ObservatoryObject": {
+      "type": "object"
+    },
+    "BurstObservatoryObject": {
+      "type": "object"
+    }
+  }
+}

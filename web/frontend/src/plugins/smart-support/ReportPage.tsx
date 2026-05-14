@@ -36,6 +36,7 @@ import {
   ThresholdBar,
 } from './primitives'
 import type { Hypothesis, ReportResponse, SessionEntry } from './types'
+import { formatDateUtil } from '@/lib/useFormatters'
 
 /**
  * /plugins/smart-support/report/:uuid — single-page diagnostic.
@@ -169,7 +170,7 @@ function ReportHeader({ report }: { report: ReportResponse }) {
         </div>
         <div className="text-xs text-dark-300 shrink-0 hidden sm:block">
           {t('plugins.smart_support.report.generated_at', {
-            ts: new Date(report.generated_at).toLocaleString(),
+            ts: formatDateUtil(report.generated_at),
           })}
         </div>
       </div>
@@ -727,10 +728,7 @@ function ViolationsCard({ report }: { report: ReportResponse }) {
 // ── small formatters ────────────────────────────────────────────────────
 
 function fmtDate(value: string | null | undefined): string {
-  if (!value) return '—'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleString()
+  return formatDateUtil(value)
 }
 
 function fmtBytes(value: number | null | undefined): string {

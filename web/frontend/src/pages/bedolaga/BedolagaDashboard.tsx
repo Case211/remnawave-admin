@@ -57,7 +57,15 @@ interface FullStatsData {
 
 interface HealthData {
   status?: string; api_version?: string; bot_version?: string
-  features?: { monitoring?: boolean; maintenance?: boolean; reporting?: boolean; webhooks?: boolean }
+  features?: { monitoring?: boolean; reporting?: boolean; webhooks?: boolean }
+}
+
+interface MaintenanceData {
+  available?: boolean
+  enabled?: boolean
+  reason?: string
+  until?: string
+  message?: string
 }
 
 // ── Page ──
@@ -87,9 +95,14 @@ export default function BedolagaDashboard() {
     queryFn: () => client.get('/bedolaga/health').then((r) => r.data),
     enabled: isConfigured === true, staleTime: 60_000, retry: 1,
   })
+  const { data: maintenance, refetch: refetchMaintenance } = useQuery<MaintenanceData>({
+    queryKey: ['bedolaga-maintenance'],
+    queryFn: () => client.get('/bedolaga/maintenance').then((r) => r.data),
+    enabled: isConfigured === true, staleTime: 60_000, retry: 1,
+  })
 
   const isLoading = overviewLoading
-  const refetchAll = () => { refetchOverview(); refetchFull(); refetchHealth() }
+  const refetchAll = () => { refetchOverview(); refetchFull(); refetchHealth(); refetchMaintenance() }
 
   // Not configured
   if (isConfigured === false) {
@@ -115,7 +128,7 @@ export default function BedolagaDashboard() {
   const refs = full?.referrals
   const fullSubs = full?.subscriptions
   const healthOk = health?.status === 'ok'
-  const inMaintenance = health?.features?.maintenance
+  const inMaintenance = Boolean(maintenance?.enabled)
   const profit = txns?.totals?.profit_rubles
 
   return (
@@ -127,7 +140,17 @@ export default function BedolagaDashboard() {
             <h1 className="page-header-title">{t('bedolaga.title')}</h1>
             <InfoTooltip text={t('bedolaga.tooltip')} side="right" />
             {health && (
-              <Badge className={cn('text-[10px]', healthOk && !inMaintenance ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30')}>
+              <Badge
+                className={cn(
+                  'text-[10px]',
+                  inMaintenance
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                    : healthOk
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : 'bg-red-500/20 text-red-400 border-red-500/30',
+                )}
+                title={inMaintenance ? maintenance?.reason || maintenance?.message || undefined : undefined}
+              >
                 {inMaintenance ? t('bedolaga.maintenance') : healthOk ? t('bedolaga.online') : t('bedolaga.offline')}
               </Badge>
             )}
@@ -163,7 +186,19 @@ export default function BedolagaDashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <MiniStat icon={Ticket} label={t('bedolaga.stats.openTickets')} value={support?.open_tickets ?? 0} color="text-rose-400" />
             <MiniStat icon={Users} label={t('bedolaga.stats.blockedUsers')} value={users?.blocked ?? 0} color="text-red-400" />
-            <MiniStat icon={HeartPulse} label={t('bedolaga.stats.botStatus')} value={healthOk ? t('bedolaga.online') : t('bedolaga.offline')} sub={health?.api_version ? `API ${health.api_version}` : undefined} color={healthOk ? 'text-emerald-400' : 'text-red-400'} />
+            <MiniStat
+              icon={HeartPulse}
+              label={t('bedolaga.stats.botStatus')}
+              value={inMaintenance ? t('bedolaga.maintenance') : healthOk ? t('bedolaga.online') : t('bedolaga.offline')}
+              sub={
+                inMaintenance
+                  ? maintenance?.reason || maintenance?.message || (maintenance?.until ? `until ${maintenance.until}` : undefined)
+                  : health?.api_version
+                    ? `API ${health.api_version}`
+                    : undefined
+              }
+              color={inMaintenance ? 'text-amber-400' : healthOk ? 'text-emerald-400' : 'text-red-400'}
+            />
             <MiniStat icon={Bot} label={t('bedolaga.stats.services')} value={[health?.features?.monitoring && 'Mon', health?.features?.webhooks && 'WH', health?.features?.reporting && 'Rep'].filter(Boolean).join(' / ') || '—'} color="text-cyan-400" />
           </div>
         </>

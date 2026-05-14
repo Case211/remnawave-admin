@@ -1,0 +1,254 @@
+/**
+ * Local styles for the xray-editor page (forked from xray-config-ui-editor).
+ *
+ * Imported only by XrayEditor.tsx, so these utility classes don't leak into
+ * the rest of the admin panel. The original upstream defined them in
+ * index.html via the Tailwind play CDN; we re-declare them through PostCSS
+ * @apply directives — they piggyback on the global `@tailwind` setup in
+ * src/index.css.
+ *
+ * The .xray-page wrapper repaints the upstream's slate/indigo palette to
+ * our admin glass theme. We don't touch the underlying components — just
+ * cascade overrides scoped to the editor surface.
+ */
+
+/* ── Theme overrides: slate → our dark background, indigo → primary ──
+ *
+ * Use [class~="..."] (whitespace-delimited match) instead of [class*="..."]
+ * so we only repaint the EXACT solid tailwind classes (e.g. bg-indigo-500),
+ * NOT their alpha-variants (bg-indigo-500/10, /20, /30 …). The earlier
+ * substring match turned every semi-transparent indigo background into a
+ * solid primary block — visible as the giant purple rectangles in the
+ * editor toolbar (issue logged from the screenshot).
+ */
+.xray-page nav {
+    background: hsl(var(--card) / 0.6) !important;
+    border-color: hsl(var(--border)) !important;
+    backdrop-filter: blur(20px);
+}
+
+.xray-page .bg-slate-950,
+.xray-page .bg-slate-900\/80,
+.xray-page .bg-slate-900 {
+    background-color: hsl(var(--background));
+}
+
+.xray-page [class~="bg-slate-800"] {
+    background-color: hsl(var(--card));
+}
+
+.xray-page [class~="border-slate-700"],
+.xray-page [class~="border-slate-800"] {
+    border-color: hsl(var(--border));
+}
+
+.xray-page [class~="text-slate-200"],
+.xray-page [class~="text-slate-300"] {
+    color: hsl(var(--foreground));
+}
+
+.xray-page [class~="text-slate-400"],
+.xray-page [class~="text-slate-500"] {
+    color: hsl(var(--muted-foreground));
+}
+
+/* Indigo / purple accents → our primary. Solid-only variants. */
+.xray-page [class~="bg-indigo-500"],
+.xray-page [class~="bg-indigo-600"] {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.xray-page [class~="text-indigo-400"],
+.xray-page [class~="text-indigo-500"] {
+    color: hsl(var(--primary));
+}
+
+.xray-page [class~="border-indigo-500"] {
+    border-color: hsl(var(--primary));
+}
+
+.xray-page [class~="from-indigo-500"] {
+    --tw-gradient-from: hsl(var(--primary)) var(--tw-gradient-from-position);
+}
+
+.xray-page [class~="to-purple-600"] {
+    --tw-gradient-to: hsl(var(--primary) / 0.7) var(--tw-gradient-to-position);
+}
+
+/* Inputs/selects inherit the admin theme colours via @apply below, but the
+   defaults above also handle the inline tailwind-class versions. */
+
+.xray-input-base,
+.input-base {
+    @apply w-full bg-slate-950 border border-slate-700 rounded-lg h-11 px-4 text-white text-base md:text-sm outline-none transition-all font-mono shadow-inner;
+}
+.input-base:focus,
+.xray-input-base:focus {
+    @apply border-indigo-500;
+}
+
+.xray-select-base,
+.select-base {
+    @apply w-full bg-slate-950 border border-slate-700 rounded-lg h-11 pl-4 pr-10 text-white text-base md:text-sm outline-none transition-all appearance-none cursor-pointer shadow-inner;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5' /%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+}
+.select-base:focus,
+.xray-select-base:focus {
+    @apply border-indigo-500;
+}
+
+.label-xs {
+    @apply block text-xs md:text-[11px] uppercase text-slate-500 font-bold mb-1 tracking-wider;
+}
+
+.card-item {
+    @apply bg-slate-900 p-3 rounded-lg border border-slate-700/50 transition-all;
+}
+.card-item:hover {
+    @apply border-indigo-500/50;
+}
+
+.btn-icon {
+    @apply p-2 rounded text-slate-400 transition-colors min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center;
+}
+.btn-icon:hover {
+    @apply bg-indigo-600 text-white;
+}
+
+.btn-icon-danger {
+    @apply p-2 rounded text-slate-400 transition-colors min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center;
+}
+.btn-icon-danger:hover {
+    @apply bg-rose-600 text-white;
+}
+
+/* ── Mobile touch & interaction ──
+ * iOS Safari auto-zooms when an input has font-size < 16px on focus.
+ * Force ≥16px for all editor inputs/textareas/selects on mobile.
+ * touch-action: manipulation drops the 300ms tap-delay.
+ */
+.xray-page {
+    touch-action: manipulation;
+}
+
+/* Safe-area insets (notch / Dynamic Island / gesture bar) — mobile only.
+ * On desktop env() returns 0 in most browsers, but some Chromium builds
+ * report non-zero values when the OS-level zoom is set, which used to
+ * push the AppNav title into the logo. Lock the padding/negative-margin
+ * trick behind a mobile media query to keep desktop layout pristine. */
+@media (max-width: 767px) {
+    .xray-page {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+    }
+
+    .xray-page > nav {
+        margin-left: calc(-1 * env(safe-area-inset-left));
+        margin-right: calc(-1 * env(safe-area-inset-right));
+        padding-left: calc(1rem + env(safe-area-inset-left));
+        padding-right: calc(1rem + env(safe-area-inset-right));
+    }
+
+    [data-radix-dialog-content] > div:last-child {
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
+}
+
+/* On mobile, the upstream's text-[10px] (10px) labels are below comfortable
+ * reading and below WCAG SC 1.4.4 (resize text up to 200%). Bump them to
+ * 12px / text-xs on small screens and let desktop keep its tight rhythm. */
+@media (max-width: 767px) {
+    .xray-page label[class*="text-[10px]"],
+    .xray-page span[class*="text-[10px]"],
+    .xray-page p[class*="text-[10px]"],
+    .xray-page div[class*="text-[10px]"] {
+        font-size: 0.75rem; /* 12px */
+        line-height: 1rem;
+    }
+}
+
+/* Drag-handle hit area for Outbound reordering — 16px Phosphor icon is
+ * too small to grab on a phone. Wrap-grab area enlarged to 32px on
+ * mobile via the inline-flex padding around the dnd-kit listener target.
+ * Desktop unaffected to keep the upstream layout rhythm.
+ */
+@media (max-width: 767px) {
+    .xray-page .cursor-grab {
+        padding: 0.5rem;
+        margin: -0.5rem;
+    }
+}
+
+@media (max-width: 767px) {
+    .xray-page input:not([type="checkbox"]):not([type="radio"]),
+    .xray-page textarea,
+    .xray-page select {
+        font-size: 16px;
+    }
+
+    /* Bring icon-only buttons up to the 44pt touch target floor on mobile.
+     * Desktop hover-state UIs stay compact via the unscoped variant above.
+     */
+    .xray-page button[class*="h-9"][class*="w-9"],
+    .xray-page button[class*="h-8"][class*="w-8"],
+    .xray-page button[title]:not([class*="flex-1"]):not([class*="w-full"]) {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
+
+/* Custom scrollbar for the editor surfaces */
+.custom-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #0f172a;
+}
+
+.custom-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.5);
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+    border: 1px solid transparent;
+    background-clip: content-box;
+}
+
+/* Will-change for animation perf */
+.animate-in {
+    will-change: transform, opacity;
+}
+
+/* Adaptive height for modals */
+.adaptive-height {
+    height: 100% !important;
+    max-height: none !important;
+    flex: 1 !important;
+}
+
+@media (min-width: 768px) {
+    .adaptive-height {
+        height: 60vh !important;
+        max-height: 60vh !important;
+        flex: none !important;
+    }
+    .is-modal-fullscreen .adaptive-height {
+        height: 100% !important;
+        max-height: none !important;
+        flex: 1 !important;
+    }
+}

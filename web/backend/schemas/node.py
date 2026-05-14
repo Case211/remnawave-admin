@@ -39,6 +39,10 @@ class NodeListItem(NodeBase):
     upload_speed_bps: int = 0
     disk_read_speed_bps: int = 0
     disk_write_speed_bps: int = 0
+    # Node-agent state (independent of Panel's is_connected)
+    has_agent_token: bool = False
+    agent_v2_connected: bool = False
+    agent_v2_last_ping: Optional[datetime] = None
     # Access-policy scope for the current admin:
     # None = no restriction, list = allowed actions (e.g. ["view","edit"])
     allowed_actions: Optional[List[str]] = None

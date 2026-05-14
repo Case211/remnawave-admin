@@ -49,7 +49,7 @@ import { Separator } from '@/components/ui/separator'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { cn } from '@/lib/utils'
 import { useChartTheme } from '@/lib/useChartTheme'
-import { useFormatters } from '@/lib/useFormatters'
+import { useFormatters, formatDateShortUtil } from '@/lib/useFormatters'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -982,7 +982,7 @@ function SystemStatusCard({
               <span>CPU: {panelRecap.total.nodesCpuCores} {t('dashboard.cores')}</span>
             )}
             {panelRecap.initDate && (
-              <span>{t('dashboard.panelSince')}: {new Date(panelRecap.initDate).toLocaleDateString()}</span>
+              <span>{t('dashboard.panelSince')}: {formatDateShortUtil(panelRecap.initDate)}</span>
             )}
           </div>
         )}
@@ -1233,7 +1233,7 @@ function UpdateCheckerCard() {
                       <span className="text-sm font-medium text-white">v{rel.tag}</span>
                       {rel.published_at && (
                         <span className="text-[11px] text-dark-400 ml-auto mr-2">
-                          {new Date(rel.published_at).toLocaleDateString()}
+                          {formatDateShortUtil(rel.published_at)}
                         </span>
                       )}
                       {isExpanded ? (

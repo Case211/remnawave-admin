@@ -42,23 +42,31 @@ export default defineConfig({
           // forcing CSS into a manualChunk breaks lazy-load CSS code-splitting.
           if (id.endsWith('.css')) return
 
-          // Core React runtime — cached long-term
+          // Core React runtime + all React-dependent libs that touch
+          // React at module-init. Anything that calls React.createContext,
+          // React.forwardRef, etc. synchronously in its module body MUST
+          // ride in the same chunk as React itself; otherwise it can
+          // race ahead of vendor-react and crash with
+          // `Cannot read properties of undefined (reading 'forwardRef'/'createContext')`.
+          //
+          // react-is, recharts (Surface.js), @tanstack/react-query
+          // (QueryClientProvider.js) and zustand (use-sync-external-store)
+          // all bit us in production — keep them together.
           if (
             id.includes('/react/') ||
             id.includes('/react-dom/') ||
             id.includes('/react-router') ||
+            id.includes('/react-is/') ||
             id.includes('/use-sync-external-store/') ||
-            id.includes('/scheduler/')
+            id.includes('/scheduler/') ||
+            id.includes('/@tanstack/react-query/') ||
+            id.includes('/zustand/')
           ) {
             return 'vendor-react'
           }
 
-          // Data layer (state, HTTP, queries)
-          if (
-            id.includes('/zustand/') ||
-            id.includes('/axios/') ||
-            id.includes('/@tanstack/react-query/')
-          ) {
+          // HTTP client — pure JS, no React touch at init, can ship separately
+          if (id.includes('/axios/')) {
             return 'vendor-data'
           }
 
@@ -76,9 +84,12 @@ export default defineConfig({
             return 'vendor-radix'
           }
 
-          // Charts
+          // Charts — recharts must share the React chunk so its synchronous
+          // `forwardRef` access never races a separate vendor file. d3-*
+          // is recharts' transitive dep, keep it together to avoid
+          // splitting recharts' internals across multiple chunks.
           if (id.includes('/recharts/') || id.includes('/d3-')) {
-            return 'vendor-charts'
+            return 'vendor-react'
           }
 
           // Maps (heavy — loaded only with Analytics page)
