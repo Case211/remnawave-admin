@@ -18,11 +18,15 @@ export const runFullDiagnostics = (config: XrayConfig | null): Diagnostic[] => {
 
     if (!config) return diagnostics;
 
-    const inbounds = config.inbounds || [];
-    const outbounds = config.outbounds || [];
+    // Defensive null-filter: Panel может вернуть массив с null элементами
+    // (например, если запись была удалена в БД, но осталась ссылка в JSON).
+    // Без фильтрации `o.tag` на null крашит весь Xray-редактор при mount —
+    // юзер ловит «Cannot read properties of null (reading 'tag')».
+    const inbounds = (config.inbounds || []).filter(Boolean);
+    const outbounds = (config.outbounds || []).filter(Boolean);
     const routing = config.routing || {};
-    const rules = routing.rules || [];
-    const balancers = routing.balancers || [];
+    const rules = (routing.rules || []).filter(Boolean);
+    const balancers = (routing.balancers || []).filter(Boolean);
 
     const allOutboundTags = new Set(outbounds.map((o: any) => o.tag).filter(Boolean));
     const allBalancerTags = new Set(balancers.map((b: any) => b.tag).filter(Boolean));

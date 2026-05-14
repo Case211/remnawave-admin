@@ -167,7 +167,8 @@ export const useConfigStore = create(
                 }
 
                 // --- КРИТИЧЕСКАЯ ВАЛИДАЦИЯ БАЛАНСИРОВЩИКОВ ПЕРЕД ПУШЕМ ---
-                const balancers = config.routing?.balancers || [];
+                // filter(Boolean) защищает от null элементов в массиве (бывает после удаления)
+                const balancers = (config.routing?.balancers || []).filter(Boolean);
                 const invalidBalancer = balancers.find(b => validateBalancer(b).length > 0);
                 
                 if (invalidBalancer) {
@@ -218,7 +219,9 @@ export const useConfigStore = create(
 
             addOutbounds: (items) => set(produce((state) => {
                 if (!state.config) state.config = { inbounds: [], outbounds: [] };
-                const existingTags = new Set(state.config.outbounds?.map((o: any) => o.tag));
+                const existingTags = new Set(
+                    (state.config.outbounds || []).filter(Boolean).map((o: any) => o.tag).filter(Boolean),
+                );
                 
                 const cleanItems = items.map((item) => {
                     let tag = item.tag || `${item.protocol}-${Math.floor(Math.random() * 1000)}`;

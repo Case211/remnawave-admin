@@ -33,6 +33,33 @@ async def _ensure_user_visible(admin: AdminUser, user_uuid: str) -> None:
         raise api_error(403, E.FORBIDDEN)
 
 
+def _extract_panel_error(exc: Exception) -> Optional[str]:
+    """
+    Достаёт человекочитаемое описание ошибки из ответа Panel API.
+    httpx.HTTPStatusError содержит response.text — Panel пишет туда JSON
+    вида `{"message": "...", "errorCode": "..."}`. Парсим аккуратно, иначе
+    юзер видит «Internal server error» и нечего смотреть.
+    """
+    try:
+        import httpx
+        import json as _json
+        if isinstance(exc, httpx.HTTPStatusError):
+            body = exc.response.text or ""
+            try:
+                parsed = _json.loads(body)
+                if isinstance(parsed, dict):
+                    msg = parsed.get("message") or parsed.get("detail") or parsed.get("error")
+                    if isinstance(msg, str) and msg.strip():
+                        return msg
+            except (ValueError, TypeError):
+                pass
+            if body:
+                return body[:300]
+    except Exception:
+        return None
+    return None
+
+
 def _ensure_snake_case(user: dict) -> dict:
     """Ensure user dict has snake_case keys for pydantic schemas."""
     result = dict(user)
@@ -572,6 +599,14 @@ async def create_user(
             # Default: 30 days from now
             expire_at_str = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
 
+        # Panel API хочет enum-поля в UPPERCASE (status, traffic_limit_strategy).
+        status_upper = data.status.upper() if isinstance(data.status, str) else data.status
+        strategy_upper = (
+            data.traffic_limit_strategy.upper()
+            if isinstance(data.traffic_limit_strategy, str)
+            else data.traffic_limit_strategy
+        )
+
         result = await api_client.create_user(
             username=data.username,
             expire_at=expire_at_str,
@@ -579,10 +614,10 @@ async def create_user(
             hwid_device_limit=data.hwid_device_limit,
             telegram_id=data.telegram_id,
             description=data.description,
-            traffic_limit_strategy=data.traffic_limit_strategy,
+            traffic_limit_strategy=strategy_upper,
             external_squad_uuid=data.external_squad_uuid,
             active_internal_squads=data.active_internal_squads,
-            status=data.status,
+            status=status_upper,
             tag=data.tag,
             email=data.email,
             short_uuid=data.short_uuid,
@@ -618,7 +653,9 @@ async def create_user(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail="Internal server error")
+        detail = _extract_panel_error(e) or "Не удалось создать юзера"
+        logger.error("create_user(username=%s) failed: %s", data.username, detail, exc_info=True)
+        raise HTTPException(status_code=400, detail=detail)
 
 
 @router.patch("/{user_uuid}", response_model=UserDetail)
@@ -634,6 +671,13 @@ async def update_user(
         from shared.api_client import api_client
 
         update_data = data.model_dump(exclude_unset=True, mode='json')
+        # Panel API ждёт enum status в UPPERCASE (ACTIVE/LIMITED/DISABLED/EXPIRED).
+        # Фронт хранит их в lowercase для удобства, апаем тут.
+        if isinstance(update_data.get('status'), str):
+            update_data['status'] = update_data['status'].upper()
+        # traffic_limit_strategy — тоже enum, тоже UPPERCASE (NO_RESET / DAY / WEEK / MONTH)
+        if isinstance(update_data.get('traffic_limit_strategy'), str):
+            update_data['traffic_limit_strategy'] = update_data['traffic_limit_strategy'].upper()
         # Convert snake_case keys to camelCase for Remnawave API
         snake_to_camel = {
             'traffic_limit_bytes': 'trafficLimitBytes',
@@ -666,7 +710,12 @@ async def update_user(
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
     except Exception as e:
-        raise HTTPException(status_code=400, detail="Internal server error")
+        # Достаём текст ошибки от Panel (если это HTTPStatusError) — иначе плоский
+        # «Internal server error» не даёт юзеру никаких подсказок и нам нечего смотреть
+        # в логах SystemLogs.
+        detail = _extract_panel_error(e) or "Не удалось обновить юзера"
+        logger.error("update_user(%s) failed: %s", user_uuid, detail, exc_info=True)
+        raise HTTPException(status_code=400, detail=detail)
 
 
 @router.delete("/{user_uuid}", response_model=SuccessResponse)
