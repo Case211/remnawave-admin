@@ -619,6 +619,13 @@ async def lifespan(app: FastAPI):
                 except Exception as e:
                     logger.warning("Online snapshot recorder start failed: %s", e)
 
+                # Prometheus gauge updater — refreshes panel_* metrics every 15s
+                try:
+                    from web.backend.core.metrics import gauge_updater
+                    await gauge_updater.start()
+                except Exception as e:
+                    logger.warning("Prometheus gauge updater start failed: %s", e)
+
                 # User blacklist sync — periodically fetch external blacklists
                 async def _blacklist_sync_loop():
                     await asyncio.sleep(60)  # initial delay 1 min
@@ -745,6 +752,11 @@ async def lifespan(app: FastAPI):
     try:
         from web.backend.core.online_snapshot_recorder import online_snapshot_recorder
         await online_snapshot_recorder.stop()
+    except Exception:
+        pass
+    try:
+        from web.backend.core.metrics import gauge_updater
+        await gauge_updater.stop()
     except Exception:
         pass
     try:
@@ -881,6 +893,28 @@ def create_app() -> FastAPI:
     # Audit middleware — logs all mutable API actions automatically
     from web.backend.core.audit_middleware import AuditMiddleware
     app.add_middleware(AuditMiddleware)
+
+    # Prometheus metrics middleware (HTTP RPS / latency / in-progress)
+    from web.backend.core.metrics import (
+        MetricsMiddleware,
+        metrics_auth_token,
+        render_metrics,
+    )
+    app.add_middleware(MetricsMiddleware)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def prometheus_metrics(request: Request):
+        """Prometheus scrape endpoint (text format 0.0.4).
+
+        If METRICS_AUTH_TOKEN is set, requires `Authorization: Bearer <token>`.
+        """
+        expected = metrics_auth_token()
+        if expected:
+            auth = request.headers.get("authorization", "")
+            if not auth.startswith("Bearer ") or auth[len("Bearer "):].strip() != expected:
+                return Response(status_code=401, content="Unauthorized")
+        body, content_type = render_metrics()
+        return Response(content=body, media_type=content_type)
 
     # Include routers
     app.include_router(auth.router, prefix="/api/v2/auth", tags=["auth"])

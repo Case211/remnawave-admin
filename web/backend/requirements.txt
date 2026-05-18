@@ -29,6 +29,9 @@ slowapi>=0.1.9
 # Caching
 redis[hiredis]>=5.0.0
 
+# Prometheus metrics
+prometheus-client>=0.20.0
+
 # Push notifications (FCM)
 firebase-admin>=6.5.0
 
