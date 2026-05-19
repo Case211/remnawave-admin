@@ -167,6 +167,54 @@ PANEL_NODE_CONNECTED = Gauge(
     ["node"],
 )
 
+PANEL_NODE_CPU_CORES = Gauge(
+    "panel_node_cpu_cores",
+    "Per-node CPU cores reported by agent.",
+    ["node"],
+)
+
+PANEL_NODE_MEMORY_TOTAL_BYTES = Gauge(
+    "panel_node_memory_total_bytes",
+    "Per-node total RAM (bytes).",
+    ["node"],
+)
+
+PANEL_NODE_MEMORY_USED_BYTES = Gauge(
+    "panel_node_memory_used_bytes",
+    "Per-node used RAM (bytes).",
+    ["node"],
+)
+
+PANEL_NODE_DISK_TOTAL_BYTES = Gauge(
+    "panel_node_disk_total_bytes",
+    "Per-node total disk space (bytes).",
+    ["node"],
+)
+
+PANEL_NODE_DISK_USED_BYTES = Gauge(
+    "panel_node_disk_used_bytes",
+    "Per-node used disk space (bytes).",
+    ["node"],
+)
+
+PANEL_NODE_DISK_READ_BPS = Gauge(
+    "panel_node_disk_read_bytes_per_second",
+    "Per-node current disk read speed.",
+    ["node"],
+)
+
+PANEL_NODE_DISK_WRITE_BPS = Gauge(
+    "panel_node_disk_write_bytes_per_second",
+    "Per-node current disk write speed.",
+    ["node"],
+)
+
+PANEL_NODE_UPTIME_SECONDS = Gauge(
+    "panel_node_uptime_seconds",
+    "Per-node uptime since last boot, reported by agent.",
+    ["node"],
+)
+
 # Sync lag
 PANEL_SYNC_LAG_SECONDS = Gauge(
     "panel_sync_lag_seconds",
@@ -352,7 +400,12 @@ class GaugeUpdater:
 
             nodes = await conn.fetch(
                 """
-                SELECT name, cpu_usage, memory_usage, disk_usage,
+                SELECT name,
+                       cpu_usage, cpu_cores,
+                       memory_usage, memory_total_bytes, memory_used_bytes,
+                       disk_usage, disk_total_bytes, disk_used_bytes,
+                       disk_read_speed_bps, disk_write_speed_bps,
+                       uptime_seconds,
                        traffic_used_bytes, is_connected, is_disabled,
                        EXTRACT(EPOCH FROM (NOW() - metrics_updated_at)) AS age_seconds
                 FROM nodes
@@ -396,20 +449,38 @@ class GaugeUpdater:
             PANEL_HWID_BY_PLATFORM.labels(platform=r["platform"]).set(int(r["n"]))
 
         PANEL_NODE_CPU_USAGE.clear()
+        PANEL_NODE_CPU_CORES.clear()
         PANEL_NODE_MEMORY_USAGE.clear()
+        PANEL_NODE_MEMORY_TOTAL_BYTES.clear()
+        PANEL_NODE_MEMORY_USED_BYTES.clear()
         PANEL_NODE_DISK_USAGE.clear()
+        PANEL_NODE_DISK_TOTAL_BYTES.clear()
+        PANEL_NODE_DISK_USED_BYTES.clear()
+        PANEL_NODE_DISK_READ_BPS.clear()
+        PANEL_NODE_DISK_WRITE_BPS.clear()
         PANEL_NODE_LAST_SEEN_SECONDS.clear()
         PANEL_NODE_TRAFFIC_USED_BYTES.clear()
         PANEL_NODE_CONNECTED.clear()
+        PANEL_NODE_UPTIME_SECONDS.clear()
         for r in nodes:
             name = r["name"]
             PANEL_NODE_CPU_USAGE.labels(node=name).set(float(r["cpu_usage"] or 0))
+            if r["cpu_cores"] is not None:
+                PANEL_NODE_CPU_CORES.labels(node=name).set(int(r["cpu_cores"]))
             PANEL_NODE_MEMORY_USAGE.labels(node=name).set(float(r["memory_usage"] or 0))
+            PANEL_NODE_MEMORY_TOTAL_BYTES.labels(node=name).set(int(r["memory_total_bytes"] or 0))
+            PANEL_NODE_MEMORY_USED_BYTES.labels(node=name).set(int(r["memory_used_bytes"] or 0))
             PANEL_NODE_DISK_USAGE.labels(node=name).set(float(r["disk_usage"] or 0))
+            PANEL_NODE_DISK_TOTAL_BYTES.labels(node=name).set(int(r["disk_total_bytes"] or 0))
+            PANEL_NODE_DISK_USED_BYTES.labels(node=name).set(int(r["disk_used_bytes"] or 0))
+            PANEL_NODE_DISK_READ_BPS.labels(node=name).set(int(r["disk_read_speed_bps"] or 0))
+            PANEL_NODE_DISK_WRITE_BPS.labels(node=name).set(int(r["disk_write_speed_bps"] or 0))
             PANEL_NODE_TRAFFIC_USED_BYTES.labels(node=name).set(int(r["traffic_used_bytes"] or 0))
             PANEL_NODE_CONNECTED.labels(node=name).set(
                 1 if (r["is_connected"] and not r["is_disabled"]) else 0
             )
+            if r["uptime_seconds"] is not None:
+                PANEL_NODE_UPTIME_SECONDS.labels(node=name).set(int(r["uptime_seconds"]))
             age = r["age_seconds"]
             if age is not None:
                 PANEL_NODE_LAST_SEEN_SECONDS.labels(node=name).set(float(age))
