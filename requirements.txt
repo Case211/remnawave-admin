@@ -28,3 +28,5 @@ respx>=0.21.1
 freezegun>=1.4.0
 # Push notifications (FCM) — общий модуль shared/push_service.py
 firebase-admin>=6.5.0
+# Prometheus exposition — shared/metrics.py инкрементируется из бота тоже
+prometheus-client>=0.20.0
