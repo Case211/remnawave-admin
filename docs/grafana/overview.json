@@ -15,106 +15,210 @@
   ],
   "liveNow": false,
   "panels": [
+    { "id": 100, "type": "row", "title": "KPI", "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
+
     {
-      "id": 1, "title": "Online users (now)", "type": "stat",
+      "id": 1, "title": "Online users", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "auto" },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "value", "wideLayout": true },
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "short" }, "overrides": [] },
-      "targets": [{ "refId": "A", "expr": "panel_online_users{instance=~\"$instance\"}", "legendFormat": "online" }]
+      "targets": [{ "refId": "A", "expr": "panel_online_users{instance=~\"$instance\"}", "legendFormat": "" }]
     },
     {
       "id": 2, "title": "Active connections", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "value" },
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "short" }, "overrides": [] },
-      "targets": [{ "refId": "A", "expr": "panel_active_connections{instance=~\"$instance\"}", "legendFormat": "open" }]
+      "targets": [{ "refId": "A", "expr": "panel_active_connections{instance=~\"$instance\"}", "legendFormat": "" }]
     },
     {
-      "id": 3, "title": "Total / Active users", "type": "stat",
+      "id": 3, "title": "Active users", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 5, "x": 8, "y": 0 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "value" },
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "short" }, "overrides": [] },
-      "targets": [
-        { "refId": "A", "expr": "panel_total_users{instance=~\"$instance\"}", "legendFormat": "Total" },
-        { "refId": "B", "expr": "panel_active_users{instance=~\"$instance\"}", "legendFormat": "Active" }
-      ]
+      "targets": [{ "refId": "A", "expr": "panel_active_users{instance=~\"$instance\"}", "legendFormat": "" }]
     },
     {
-      "id": 4, "title": "Online / Total nodes", "type": "stat",
+      "id": 4, "title": "Online nodes", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 5, "x": 13, "y": 0 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
-      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "short" }, "overrides": [] },
-      "targets": [
-        { "refId": "A", "expr": "panel_online_nodes{instance=~\"$instance\"}", "legendFormat": "Online" },
-        { "refId": "B", "expr": "panel_total_nodes{instance=~\"$instance\"}", "legendFormat": "Total" }
-      ]
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
+      "description": "Connected nodes / total. Красный = что-то отвалилось.",
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "value_and_name" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "red", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "green", "value": 0.99 }
+      ]}, "unit": "percentunit", "min": 0, "max": 1, "decimals": 0 }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "panel_online_nodes{instance=~\"$instance\"} / clamp_min(panel_total_nodes{instance=~\"$instance\"}, 1)", "legendFormat": "online %" }]
     },
     {
       "id": 5, "title": "Open violations", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "value" },
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
-        { "color": "green", "value": null },
-        { "color": "orange", "value": 5 },
-        { "color": "red", "value": 25 }
+        { "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 25 }
       ]}, "unit": "short" }, "overrides": [] },
-      "targets": [{ "refId": "A", "expr": "panel_violations_open{instance=~\"$instance\"}", "legendFormat": "open" }]
+      "targets": [{ "refId": "A", "expr": "panel_violations_open{instance=~\"$instance\"}", "legendFormat": "" }]
     },
     {
-      "id": 6, "title": "Online users — trend", "type": "timeseries",
+      "id": 6, "title": "HWID devices", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
-      "options": { "tooltip": { "mode": "single" }, "legend": { "showLegend": false } },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 25, "gradientMode": "opacity", "spanNulls": true, "showPoints": "never" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "value" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }, "unit": "short" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "panel_hwid_devices_total{instance=~\"$instance\"}", "legendFormat": "" }]
+    },
+
+    { "id": 101, "type": "row", "title": "Тренды", "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }, "panels": [] },
+
+    {
+      "id": 10, "title": "Online users — trend", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "options": { "tooltip": { "mode": "single" }, "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list", "calcs": ["mean","max"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" }, "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 30, "gradientMode": "opacity", "spanNulls": true, "showPoints": "never" }, "unit": "short" }, "overrides": [] },
       "targets": [{ "refId": "A", "expr": "panel_online_users{instance=~\"$instance\"}", "legendFormat": "online" }]
     },
     {
-      "id": 7, "title": "Users by status", "type": "piechart",
+      "id": 11, "title": "Active connections — trend", "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "pieType": "donut", "displayLabels": ["name","percent"], "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "values": ["value","percent"] } },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "options": { "tooltip": { "mode": "single" }, "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list", "calcs": ["mean","max"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "green" }, "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 25, "gradientMode": "opacity", "showPoints": "never" }, "unit": "short" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "panel_active_connections{instance=~\"$instance\"}", "legendFormat": "open" }]
+    },
+
+    { "id": 102, "type": "row", "title": "Структура и здоровье", "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }, "panels": [] },
+
+    {
+      "id": 20, "title": "Users by status", "type": "bargauge",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [
+        { "matcher": { "id": "byName", "options": "active" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+        { "matcher": { "id": "byName", "options": "expired" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+        { "matcher": { "id": "byName", "options": "disabled" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+        { "matcher": { "id": "byName", "options": "limited" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }] }
+      ]},
       "targets": [{ "refId": "A", "expr": "panel_users_by_status{instance=~\"$instance\"}", "legendFormat": "{{status}}" }]
     },
     {
-      "id": 8, "title": "Expiring soon (7d)", "type": "stat",
+      "id": 21, "title": "HTTP RPS", "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 12 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
-      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }, { "color": "orange", "value": 10 }] }, "unit": "short" }, "overrides": [] },
-      "targets": [{ "refId": "A", "expr": "panel_users_expiring_soon{instance=~\"$instance\"}", "legendFormat": "expiring" }]
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" }, "legend": { "showLegend": true, "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "stacking": { "mode": "normal", "group": "A" }, "showPoints": "never", "spanNulls": true }, "unit": "reqps" }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": "/^5../" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+        { "matcher": { "id": "byRegexp", "options": "/^4../" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] }
+      ]},
+      "targets": [{ "refId": "A", "expr": "sum by (status) (rate(panel_http_requests_total{instance=~\"$instance\"}[$__rate_interval]))", "legendFormat": "{{status}}" }]
     },
     {
-      "id": 9, "title": "Hit traffic limit", "type": "stat",
+      "id": 22, "title": "HTTP latency p50 / p95", "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 12 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
-      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }, { "color": "orange", "value": 5 }] }, "unit": "short" }, "overrides": [] },
-      "targets": [{ "refId": "A", "expr": "panel_users_traffic_limit_reached{instance=~\"$instance\"}", "legendFormat": "users" }]
-    },
-    {
-      "id": 10, "title": "HWID devices", "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
-      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "short" }, "overrides": [] },
-      "targets": [{ "refId": "A", "expr": "panel_hwid_devices_total{instance=~\"$instance\"}", "legendFormat": "devices" }]
-    },
-    {
-      "id": 11, "title": "DB pool (used / size)", "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 12 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
       "options": { "tooltip": { "mode": "multi" }, "legend": { "showLegend": true, "placement": "bottom" } },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }, "unit": "short" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 5, "showPoints": "never", "spanNulls": true }, "unit": "s" }, "overrides": [] },
       "targets": [
-        { "refId": "A", "expr": "panel_db_pool_used{instance=~\"$instance\"}", "legendFormat": "used" },
-        { "refId": "B", "expr": "panel_db_pool_size{instance=~\"$instance\"}", "legendFormat": "size" }
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(panel_http_request_duration_seconds_bucket{instance=~\"$instance\"}[$__rate_interval])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(panel_http_request_duration_seconds_bucket{instance=~\"$instance\"}[$__rate_interval])))", "legendFormat": "p95" }
       ]
+    },
+
+    { "id": 103, "type": "row", "title": "Сигналы", "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 }, "panels": [] },
+
+    {
+      "id": 30, "title": "Expiring soon (7d)", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 25 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background_solid", "graphMode": "area", "textMode": "value" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "blue", "value": null }, { "color": "orange", "value": 15 }, { "color": "red", "value": 40 }
+      ]}, "unit": "short" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "panel_users_expiring_soon{instance=~\"$instance\"}", "legendFormat": "" }]
+    },
+    {
+      "id": 31, "title": "Hit traffic limit", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 25 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background_solid", "graphMode": "area", "textMode": "value" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "blue", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 25 }
+      ]}, "unit": "short" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "panel_users_traffic_limit_reached{instance=~\"$instance\"}", "legendFormat": "" }]
+    },
+    {
+      "id": 32, "title": "Torrent events (24h)", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 25 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background_solid", "graphMode": "area", "textMode": "value" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "orange", "value": 10 }, { "color": "red", "value": 100 }
+      ]}, "unit": "short" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "panel_torrent_events_24h{instance=~\"$instance\"}", "legendFormat": "" }]
+    },
+    {
+      "id": 33, "title": "Total users", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 25 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area", "textMode": "value" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }, "unit": "short" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "panel_total_users{instance=~\"$instance\"}", "legendFormat": "" }]
+    },
+    {
+      "id": 34, "title": "Sync lag (max)", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 25 },
+      "description": "Самый отставший sync — если красное, что-то залипло.",
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background_solid", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "orange", "value": 600 }, { "color": "red", "value": 1800 }
+      ]}, "unit": "s" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "max(panel_sync_lag_seconds{instance=~\"$instance\"})", "legendFormat": "" }]
+    },
+    {
+      "id": 35, "title": "DB pool saturation", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 25 },
+      "description": "used/size — 1.0 = пул упёрся в потолок.",
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background_solid", "graphMode": "area", "textMode": "value" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "orange", "value": 0.8 }, { "color": "red", "value": 0.95 }
+      ]}, "unit": "percentunit", "min": 0, "max": 1, "decimals": 0 }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "panel_db_pool_used{instance=~\"$instance\"} / clamp_min(panel_db_pool_size{instance=~\"$instance\"}, 1)", "legendFormat": "" }]
+    },
+
+    { "id": 104, "type": "row", "title": "События", "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 }, "panels": [] },
+
+    {
+      "id": 40, "title": "Collector throughput", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "description": "Принятые батчи vs отклонённые. Если красное — node-агенты лупят слишком часто или у них кривой токен.",
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" }, "legend": { "showLegend": true, "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }, "unit": "ops" }, "overrides": [
+        { "matcher": { "id": "byName", "options": "rejected" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+      ]},
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(panel_collector_batches_received_total{instance=~\"$instance\"}[$__rate_interval]))", "legendFormat": "received" },
+        { "refId": "B", "expr": "sum(rate(panel_collector_batches_rejected_total{instance=~\"$instance\"}[$__rate_interval]))", "legendFormat": "rejected" }
+      ]
+    },
+    {
+      "id": 41, "title": "Notifications sent (rate)", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" }, "legend": { "showLegend": true, "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": true }, "unit": "ops" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "sum by (channel) (rate(panel_notifications_sent_total{instance=~\"$instance\"}[$__rate_interval]))", "legendFormat": "{{channel}}" }]
     }
   ],
   "refresh": "30s",
@@ -131,6 +235,6 @@
   "timezone": "browser",
   "title": "Remnawave Admin — Overview",
   "uid": "remnawave-panel-overview",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
