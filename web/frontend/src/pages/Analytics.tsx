@@ -100,7 +100,7 @@ function PeriodSwitcher({
           key={opt.value}
           onClick={() => onChange(opt.value)}
           className={cn(
-            'px-2.5 py-1 text-xs rounded-md transition-all duration-200',
+            'px-2.5 py-2 sm:py-1 text-xs rounded-md transition-all duration-200 min-h-[44px] sm:min-h-0',
             value === opt.value
               ? 'bg-primary/20 text-primary-400 font-medium'
               : 'text-muted-foreground hover:text-white',
@@ -852,7 +852,7 @@ function OnlineTrendCard() {
                   key={opt.value}
                   onClick={() => setAgg(opt.value)}
                   className={cn(
-                    'px-2.5 py-1 text-xs rounded-md transition-all duration-200',
+                    'px-2.5 py-2 sm:py-1 text-xs rounded-md transition-all duration-200 min-h-[44px] sm:min-h-0',
                     aggregation === opt.value
                       ? 'bg-primary/20 text-primary-400 font-medium'
                       : 'text-muted-foreground hover:text-white',

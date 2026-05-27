@@ -143,6 +143,7 @@ export default function Header({ onMenuToggle, onSearchClick }: HeaderProps) {
           size="icon"
           onClick={() => i18n.changeLanguage(i18n.language === 'ru' ? 'en' : 'ru')}
           className="relative h-11 w-11 md:h-9 md:w-9"
+          aria-label={i18n.language === 'ru' ? 'Switch to English' : 'Переключить на русский'}
         >
           <Globe className="w-5 h-5" />
           <span className="sr-only">{i18n.language === 'ru' ? 'EN' : 'RU'}</span>
