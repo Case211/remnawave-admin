@@ -18,6 +18,9 @@ import {
   Loader2,
   Shield,
   Archive,
+  Send,
+  Search,
+  Recycle,
 } from 'lucide-react'
 import { backupApi } from '../api/backup'
 import { useAuthStore } from '../store/authStore'
@@ -29,6 +32,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PermissionGate } from '@/components/PermissionGate'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { useFormatters } from '@/lib/useFormatters'
 
 function formatBytes(bytes: number): string {
@@ -62,6 +67,10 @@ function BackupsTab() {
   const queryClient = useQueryClient()
   const token = useAuthStore((s) => s.accessToken)
 
+  const [telegramDialog, setTelegramDialog] = useState<{ filename: string; chatId: string; topicId: string } | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [importStrategy, setImportStrategy] = useState<'skip' | 'overwrite'>('skip')
+
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [confirmRestore, setConfirmRestore] = useState<string | null>(null)
 
@@ -70,7 +79,9 @@ function BackupsTab() {
     queryFn: backupApi.listFiles,
   })
 
-  const sorted = [...files].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const sorted = [...files]
+    .filter((f) => !searchQuery || f.filename.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   const createDbBackup = useMutation({
     mutationFn: backupApi.createDatabaseBackup,
@@ -109,6 +120,53 @@ function BackupsTab() {
     },
     onError: (err: any) => toast.error(err.response?.data?.detail || t('backup.restoreFailed'), { duration: 8000 }),
   })
+
+  const { data: diskUsage } = useQuery({
+    queryKey: ['backup-disk-usage'],
+    queryFn: backupApi.getDiskUsage,
+    refetchInterval: 60_000,
+  })
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => backupApi.uploadFile(file),
+    onSuccess: (data) => {
+      toast.success(t('backup.uploaded', { defaultValue: `Uploaded: ${data.filename}` }))
+      queryClient.invalidateQueries({ queryKey: ['backup-files'] })
+      queryClient.invalidateQueries({ queryKey: ['backup-disk-usage'] })
+    },
+    onError: (err: any) => toast.error(err.response?.data?.detail || 'Upload failed', { duration: 8000 }),
+  })
+
+  const rotateMutation = useMutation({
+    mutationFn: () => backupApi.rotateBackups(10, 30),
+    onSuccess: (data) => {
+      toast.success(t('backup.rotated', { defaultValue: `Deleted ${data.deleted} old backups` }))
+      queryClient.invalidateQueries({ queryKey: ['backup-files'] })
+      queryClient.invalidateQueries({ queryKey: ['backup-disk-usage'] })
+    },
+    onError: () => toast.error('Rotation failed'),
+  })
+
+  const telegramMutation = useMutation({
+    mutationFn: ({ filename, chatId, topicId }: { filename: string; chatId?: string; topicId?: number }) =>
+      backupApi.sendToTelegram(filename, chatId, topicId),
+    onSuccess: (data) => {
+      toast.success(t('backup.sentToTelegram', { defaultValue: `Sent ${data.parts_sent} part(s) to Telegram` }))
+      setTelegramDialog(null)
+    },
+    onError: (err: any) => toast.error(err.response?.data?.detail || 'Send failed', { duration: 8000 }),
+  })
+
+  const handleUpload = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.sql.gz,.json'
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) uploadMutation.mutate(file)
+    }
+    input.click()
+  }
 
   const handleDownload = (filename: string) => {
     const url = backupApi.downloadBackup(filename)
@@ -155,8 +213,8 @@ function BackupsTab() {
       try {
         const text = await file.text()
         const config = JSON.parse(text)
-        const result = await backupApi.importFullConfig(config, 'skip')
-        toast.success(t('backup.fullConfigImported', { defaultValue: `Imported: ${JSON.stringify(result.imported)}` }))
+        const result = await backupApi.importFullConfig(config, importStrategy)
+        toast.success(t('backup.fullConfigImported', { defaultValue: `Imported: ${JSON.stringify(result.imported)} (strategy: ${importStrategy})` }))
         queryClient.invalidateQueries()
       } catch {
         toast.error(t('backup.fullConfigImportFailed', { defaultValue: 'Import failed' }))
@@ -220,11 +278,64 @@ function BackupsTab() {
             </div>
             <div>
               <p className="text-sm font-medium text-white">{t('backup.importFullConfig', { defaultValue: 'Import Config' })}</p>
-              <p className="text-xs text-dark-300">JSON</p>
+              <p className="text-xs text-dark-300">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setImportStrategy(importStrategy === 'skip' ? 'overwrite' : 'skip') }}
+                  className="underline decoration-dotted hover:text-dark-100 transition-colors"
+                >
+                  {importStrategy === 'skip' ? 'skip existing' : 'overwrite'}
+                </button>
+              </p>
             </div>
           </button>
         </div>
       </PermissionGate>
+
+      {/* Disk usage + tools */}
+      <div className="flex flex-wrap items-center gap-3">
+        {diskUsage && (
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] flex-1 min-w-[200px]">
+            <HardDrive className="w-4 h-4 text-dark-300" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-dark-200">{formatBytes(diskUsage.backup_size_bytes)} / {formatBytes(diskUsage.disk_total_bytes)}</span>
+                <span className="text-dark-400">{diskUsage.file_count} {t('backup.filesCount', { defaultValue: 'files' })}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-dark-700 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-primary-500 to-primary-400 transition-all"
+                  style={{ width: `${Math.min(100, (diskUsage.backup_size_bytes / Math.max(1, diskUsage.disk_total_bytes)) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <PermissionGate resource="backups" action="create">
+          <Button variant="outline" size="sm" onClick={handleUpload} disabled={uploadMutation.isPending} className="gap-1.5">
+            {uploadMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {t('backup.upload', { defaultValue: 'Upload' })}
+          </Button>
+        </PermissionGate>
+
+        <PermissionGate resource="backups" action="delete">
+          <Button variant="outline" size="sm" onClick={() => rotateMutation.mutate()} disabled={rotateMutation.isPending} className="gap-1.5">
+            {rotateMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Recycle className="w-3.5 h-3.5" />}
+            {t('backup.rotate', { defaultValue: 'Rotate' })}
+          </Button>
+        </PermissionGate>
+
+        <div className="relative ml-auto">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-dark-400" />
+          <Input
+            placeholder={t('backup.search', { defaultValue: 'Search...' })}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-8 w-40 text-xs bg-[var(--glass-bg)]"
+          />
+        </div>
+      </div>
 
       {/* Files list */}
       <Card>
@@ -276,6 +387,15 @@ function BackupsTab() {
                       aria-label={t('backup.download', { defaultValue: 'Download' })}
                     >
                       <Download className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-dark-200 hover:text-blue-400"
+                      onClick={() => setTelegramDialog({ filename: file.filename, chatId: '', topicId: '' })}
+                      aria-label={t('backup.sendTelegram', { defaultValue: 'Send to Telegram' })}
+                    >
+                      <Send className="w-4 h-4" />
                     </Button>
 
                     {file.filename.endsWith('.sql.gz') && (
@@ -334,6 +454,52 @@ function BackupsTab() {
           if (confirmRestore) restoreDb.mutate(confirmRestore, { onSuccess: () => setConfirmRestore(null) })
         }}
       />
+
+      {/* Telegram send dialog */}
+      <Dialog open={!!telegramDialog} onOpenChange={(open) => !open && setTelegramDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('backup.sendToTelegram', { defaultValue: 'Send to Telegram' })}</DialogTitle>
+            <DialogDescription className="text-dark-300 text-xs font-mono truncate">{telegramDialog?.filename}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-dark-200 mb-1 block">Chat ID <span className="text-dark-400">({t('backup.leaveEmptyDefault', { defaultValue: 'leave empty for default' })})</span></label>
+              <Input
+                placeholder="-100123456789"
+                value={telegramDialog?.chatId || ''}
+                onChange={(e) => setTelegramDialog((p) => p ? { ...p, chatId: e.target.value } : null)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-dark-200 mb-1 block">Topic ID <span className="text-dark-400">({t('common.optional', { defaultValue: 'optional' })})</span></label>
+              <Input
+                placeholder="42"
+                value={telegramDialog?.topicId || ''}
+                onChange={(e) => setTelegramDialog((p) => p ? { ...p, topicId: e.target.value } : null)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTelegramDialog(null)}>{t('common.cancel')}</Button>
+            <Button
+              onClick={() => {
+                if (!telegramDialog) return
+                telegramMutation.mutate({
+                  filename: telegramDialog.filename,
+                  chatId: telegramDialog.chatId || undefined,
+                  topicId: telegramDialog.topicId ? parseInt(telegramDialog.topicId) : undefined,
+                })
+              }}
+              disabled={telegramMutation.isPending}
+              className="gap-1.5"
+            >
+              {telegramMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {t('backup.send', { defaultValue: 'Send' })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

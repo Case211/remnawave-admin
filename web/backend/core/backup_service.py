@@ -265,3 +265,139 @@ def get_backup_filepath(filename: str) -> Optional[Path]:
     if filepath and filepath.exists() and filepath.is_file():
         return filepath
     return None
+
+
+# ── Disk usage ───────────────────────────────────────────────
+
+def get_disk_usage() -> dict:
+    """Get backup directory disk usage stats."""
+    ensure_backup_dir()
+    import shutil
+    total_size = sum(f.stat().st_size for f in BACKUP_DIR.iterdir() if f.is_file())
+    file_count = sum(1 for f in BACKUP_DIR.iterdir() if f.is_file())
+    try:
+        disk = shutil.disk_usage(BACKUP_DIR)
+        disk_free = disk.free
+        disk_total = disk.total
+    except Exception:
+        disk_free = 0
+        disk_total = 0
+    return {
+        "backup_size_bytes": total_size,
+        "file_count": file_count,
+        "disk_free_bytes": disk_free,
+        "disk_total_bytes": disk_total,
+    }
+
+
+# ── Auto-rotation ────────────────────────────────────────────
+
+def rotate_backups(keep_count: int = 10, keep_days: int = 30) -> int:
+    """Delete old backups beyond retention limits. Returns number deleted."""
+    ensure_backup_dir()
+    files = sorted(
+        [f for f in BACKUP_DIR.iterdir() if f.is_file() and f.name.endswith('.sql.gz')],
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+
+    deleted = 0
+    cutoff = time.time() - keep_days * 86400
+
+    for i, f in enumerate(files):
+        if i >= keep_count or f.stat().st_mtime < cutoff:
+            try:
+                f.unlink()
+                deleted += 1
+                logger.info("Rotated backup: %s", f.name)
+            except Exception as e:
+                logger.warning("Failed to rotate %s: %s", f.name, e)
+
+    return deleted
+
+
+# ── Upload ───────────────────────────────────────────────────
+
+async def send_backup_to_telegram(
+    filename: str,
+    chat_id: str,
+    topic_id: int | None = None,
+    bot_token: str | None = None,
+) -> dict:
+    """Send backup file to Telegram chat. Splits if >49 MB."""
+    import httpx
+    import math
+
+    filepath = _safe_backup_path(filename)
+    if not filepath or not filepath.exists():
+        raise FileNotFoundError(f"Backup not found: {filename}")
+
+    if not bot_token:
+        from web.backend.core.config import get_web_settings
+        bot_token = get_web_settings().telegram_bot_token
+    if not bot_token:
+        raise ValueError("No Telegram bot token configured")
+
+    file_size = filepath.stat().st_size
+    max_chunk = 49 * 1024 * 1024  # 49 MB (Telegram limit 50 MB)
+    parts_sent = 0
+
+    if file_size <= max_chunk:
+        async with httpx.AsyncClient(timeout=120) as client:
+            data = {"chat_id": chat_id}
+            if topic_id:
+                data["message_thread_id"] = str(topic_id)
+            with open(filepath, "rb") as f:
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                    data=data,
+                    files={"document": (filename, f)},
+                )
+            if resp.status_code != 200:
+                raise RuntimeError(f"Telegram send failed: {resp.text[:200]}")
+            parts_sent = 1
+    else:
+        total_parts = math.ceil(file_size / max_chunk)
+        raw = filepath.read_bytes()
+        for i in range(total_parts):
+            chunk = raw[i * max_chunk : (i + 1) * max_chunk]
+            part_name = f"{filename}.part{i + 1}of{total_parts}"
+            async with httpx.AsyncClient(timeout=120) as client:
+                data = {
+                    "chat_id": chat_id,
+                    "caption": f"Part {i + 1}/{total_parts} — {filename}" if total_parts > 1 else filename,
+                }
+                if topic_id:
+                    data["message_thread_id"] = str(topic_id)
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                    data=data,
+                    files={"document": (part_name, chunk)},
+                )
+                if resp.status_code != 200:
+                    raise RuntimeError(f"Telegram send part {i + 1} failed: {resp.text[:200]}")
+            parts_sent += 1
+            logger.info("Sent backup part %d/%d to Telegram", i + 1, total_parts)
+
+    return {"filename": filename, "parts_sent": parts_sent, "size_bytes": file_size}
+
+
+def save_uploaded_file(filename: str, content: bytes) -> dict:
+    """Save an uploaded backup file. Returns file info."""
+    import re
+    ensure_backup_dir()
+
+    safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', filename)
+    if not (safe_name.endswith('.sql.gz') or safe_name.endswith('.json')):
+        raise ValueError("Only .sql.gz and .json files are accepted")
+
+    filepath = BACKUP_DIR / safe_name
+    if filepath.exists():
+        raise FileExistsError(f"File already exists: {safe_name}")
+
+    filepath.write_bytes(content)
+    return {
+        "filename": safe_name,
+        "size_bytes": len(content),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
