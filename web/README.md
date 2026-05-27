@@ -83,10 +83,10 @@ docker compose up -d
 
 Caddy автоматически получает SSL сертификаты от Let's Encrypt.
 
-Создайте файл `Caddyfile`:
+#### Стандартный режим (всё в одном контейнере)
 
 ```caddyfile
-admin.yourdomain.com {
+admin.example.com {
     # Frontend
     handle {
         reverse_proxy web-frontend:80
@@ -94,17 +94,52 @@ admin.yourdomain.com {
 
     # Backend API
     handle /api/* {
-        reverse_proxy web-backend:8081
+        reverse_proxy web-backend:8081 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 
-    # WebSocket (браузер — реалтайм обновления)
+    # WebSocket (браузер + node-agent)
     handle /ws/* {
         reverse_proxy web-backend:8081
     }
+}
+```
 
-    # WebSocket (node-agent — связь с нодами)
-    handle /api/v2/agent/ws {
-        reverse_proxy web-backend:8081
+#### Split-режим (collector отдельно, для высоких нагрузок)
+
+При использовании `APP_MODE=api` + `docker compose --profile collector up -d`:
+
+```caddyfile
+admin.example.com {
+    # Collector (агенты шлют батчи сюда — порт 8081)
+    handle /api/v2/collector/* {
+        reverse_proxy web-collector:8081 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Backend API (админка — порт 8082)
+    handle /api/* {
+        reverse_proxy web-backend:8082 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # WebSocket (браузер + node-agent)
+    handle /ws/* {
+        reverse_proxy web-backend:8082
+    }
+
+    # Frontend
+    handle {
+        reverse_proxy web-frontend:80
     }
 }
 ```
