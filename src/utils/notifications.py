@@ -176,166 +176,88 @@ async def send_user_notification(
         lines.append(event_titles.get(action, "✏️ <b>Пользователь изменен</b>"))
         lines.append("")
         
-        # Основная информация о пользователе
-        lines.append("👤 <b>Информация о пользователе</b>")
-        lines.append(f"   Username: <code>{_esc(info.get('username', 'n/a'))}</code>")
-        
-        user_uuid = info.get("uuid", "")
-        short_uuid = info.get("shortUuid", "")
-        if user_uuid:
-            lines.append(f"   UUID: <code>{user_uuid}</code>")
-        if short_uuid:
-            lines.append(f"   Short UUID: <code>{short_uuid}</code>")
-        
+        # Идентификация
+        lines.append(f"👤 <code>{_esc(info.get('username', 'n/a'))}</code>  <code>{info.get('uuid', '')[:8]}</code>")
         lines.append("")
-        
-        # Секция: Трафик и лимиты
-        lines.append("📊 <b>Трафик и лимиты</b>")
-        
-        traffic_limit = info.get("trafficLimitBytes")
-        if traffic_limit:
-            traffic_display = format_bytes(traffic_limit)
-        else:
-            traffic_display = "Безлимит"
-        
-        if action == "updated" and old_user_info:
-            old_info = old_user_info.get("response", old_user_info)
-            old_traffic_limit = old_info.get("trafficLimitBytes")
-            if old_traffic_limit:
-                old_traffic_display = format_bytes(old_traffic_limit)
-            else:
-                old_traffic_display = "Безлимит"
-            
-            if old_traffic_display != traffic_display:
-                lines.append(f"   Лимит трафика: <code>{old_traffic_display}</code> → <code>{traffic_display}</code>")
-            else:
-                lines.append(f"   Лимит трафика: <code>{traffic_display}</code>")
-        else:
-            lines.append(f"   Лимит трафика: <code>{traffic_display}</code>")
-        
-        # Дата истечения подписки (особенно важно для expired событий)
-        expire_at = info.get("expireAt")
-        if expire_at:
-            expire_display = format_datetime(expire_at)
-        else:
-            expire_display = "—"
-        
-        if action == "updated" and old_user_info:
-            old_info = old_user_info.get("response", old_user_info)
-            old_expire_at = old_info.get("expireAt")
-            if old_expire_at:
-                old_expire_display = format_datetime(old_expire_at)
-            else:
-                old_expire_display = "—"
-            
-            if old_expire_display != expire_display:
-                lines.append(f"   Дата истечения: <code>{old_expire_display}</code> → <code>{expire_display}</code>")
-            else:
-                lines.append(f"   Дата истечения: <code>{expire_display}</code>")
-        else:
-            lines.append(f"   Дата истечения: <code>{expire_display}</code>")
-        
-        traffic_strategy = info.get("trafficLimitStrategy") or "NO_RESET"
-        strategy_display = traffic_strategy
-        if action == "updated" and old_user_info:
-            old_info = old_user_info.get("response", old_user_info)
-            old_strategy = old_info.get("trafficLimitStrategy") or "NO_RESET"
-            old_strategy_display = old_strategy
-            
-            if old_strategy_display != strategy_display:
-                lines.append(f"   Период сброса: <code>{old_strategy_display}</code> → <code>{strategy_display}</code>")
-            else:
-                lines.append(f"   Период сброса: <code>{strategy_display}</code>")
-        else:
-            lines.append(f"   Период сброса: <code>{strategy_display}</code>")
-        
-        hwid_limit = info.get("hwidDeviceLimit")
-        if hwid_limit is not None:
-            hwid_display = "Безлимит" if hwid_limit == 0 else str(hwid_limit)
-            if action == "updated" and old_user_info:
-                old_info = old_user_info.get("response", old_user_info)
-                old_hwid_limit = old_info.get("hwidDeviceLimit")
-                if old_hwid_limit is not None:
-                    old_hwid_display = "Безлимит" if old_hwid_limit == 0 else str(old_hwid_limit)
-                else:
-                    old_hwid_display = "—"
-                
-                if old_hwid_display != hwid_display:
-                    lines.append(f"   HWID лимит: <code>{old_hwid_display}</code> → <code>{hwid_display}</code>")
-                else:
-                    lines.append(f"   HWID лимит: <code>{hwid_display}</code>")
-            else:
-                lines.append(f"   HWID лимит: <code>{hwid_display}</code>")
-        
-        lines.append("")
-        
-        # Секция: Дополнительная информация
-        lines.append("🔗 <b>Дополнительная информация</b>")
-        
-        subscription_url = info.get("subscriptionUrl")
-        if subscription_url:
-            url_display = _esc(subscription_url[:80]) + "..." if len(subscription_url) > 80 else _esc(subscription_url)
-            lines.append(f"   Ссылка: <code>{url_display}</code>")
-        else:
-            lines.append(f"   Ссылка на подписку: —")
-        
-        # Внутренний сквад
-        active_squads = info.get("activeInternalSquads", [])
-        external_squad = info.get("externalSquadUuid")
-        
-        squad_display = await _resolve_squads_display(active_squads)
-        if squad_display == "—" and external_squad:
-            squad_display = f"External: {external_squad[:8]}..."
 
+        # Для updated: показываем только изменившиеся поля (diff)
         if action == "updated" and old_user_info:
             old_info = old_user_info.get("response", old_user_info)
+            diff_lines = []
+
+            diff_fields = [
+                ("trafficLimitBytes", "Лимит трафика", lambda v: format_bytes(v) if v else "Безлимит"),
+                ("expireAt", "Дата истечения", lambda v: format_datetime(v) if v else "—"),
+                ("trafficLimitStrategy", "Период сброса", lambda v: v or "NO_RESET"),
+                ("hwidDeviceLimit", "HWID лимит", lambda v: "Безлимит" if v == 0 else str(v) if v is not None else "—"),
+                ("status", "Статус", lambda v: str(v) if v else "—"),
+                ("description", "Описание", lambda v: _esc(str(v)[:60]) if v else "—"),
+                ("telegramId", "Telegram ID", lambda v: str(v) if v is not None else "—"),
+                ("email", "Email", lambda v: _esc(str(v)) if v else "—"),
+                ("tag", "Тег", lambda v: _esc(str(v)) if v else "—"),
+            ]
+
+            for key, label, fmt in diff_fields:
+                old_val = old_info.get(key)
+                new_val = info.get(key)
+                if old_val != new_val:
+                    diff_lines.append(f"   {label}: <code>{fmt(old_val)}</code> → <code>{fmt(new_val)}</code>")
+
+            # Сквад diff
+            active_squads = info.get("activeInternalSquads", [])
             old_active_squads = old_info.get("activeInternalSquads", [])
-            old_external_squad = old_info.get("externalSquadUuid")
+            if active_squads != old_active_squads:
+                old_sq = await _resolve_squads_display(old_active_squads)
+                new_sq = await _resolve_squads_display(active_squads)
+                if old_sq != new_sq:
+                    diff_lines.append(f"   Сквад: <code>{old_sq}</code> → <code>{new_sq}</code>")
 
-            old_squad_display = await _resolve_squads_display(old_active_squads)
-            if old_squad_display == "—" and old_external_squad:
-                old_squad_display = f"External: {old_external_squad[:8]}..."
-
-            if old_squad_display != squad_display:
-                lines.append(f"   Сквад: <code>{old_squad_display}</code> → <code>{squad_display}</code>")
+            if diff_lines:
+                lines.append("📋 <b>Изменения</b>")
+                lines.extend(diff_lines)
+            elif changes:
+                lines.append("📋 <b>Изменения</b>")
+                for change in changes:
+                    lines.append(f"   {_esc(change)}")
             else:
-                lines.append(f"   Сквад: <code>{squad_display}</code>")
+                lines.append("<i>Изменения не определены</i>")
+
         else:
-            lines.append(f"   Сквад: <code>{squad_display}</code>")
-        
-        # Контакты
-        telegram_id = info.get("telegramId")
-        email = info.get("email")
-        if telegram_id is not None or email:
+            # Для created/deleted/other: полная информация
+            lines.append("📊 <b>Трафик и лимиты</b>")
+            traffic_limit = info.get("trafficLimitBytes")
+            lines.append(f"   Лимит: <code>{format_bytes(traffic_limit) if traffic_limit else 'Безлимит'}</code>")
+            expire_at = info.get("expireAt")
+            lines.append(f"   Истекает: <code>{format_datetime(expire_at) if expire_at else '—'}</code>")
+            lines.append(f"   Сброс: <code>{info.get('trafficLimitStrategy') or 'NO_RESET'}</code>")
+            hwid_limit = info.get("hwidDeviceLimit")
+            if hwid_limit is not None:
+                lines.append(f"   HWID: <code>{'Безлимит' if hwid_limit == 0 else hwid_limit}</code>")
             lines.append("")
-            lines.append("📞 <b>Контакты</b>")
+
+            subscription_url = info.get("subscriptionUrl")
+            if subscription_url:
+                url_display = _esc(subscription_url[:80]) + ("..." if len(subscription_url) > 80 else "")
+                lines.append(f"🔗 Ссылка: <code>{url_display}</code>")
+
+            active_squads = info.get("activeInternalSquads", [])
+            squad_display = await _resolve_squads_display(active_squads)
+            external_squad = info.get("externalSquadUuid")
+            if squad_display == "—" and external_squad:
+                squad_display = f"External: {external_squad[:8]}..."
+            if squad_display != "—":
+                lines.append(f"   Сквад: <code>{squad_display}</code>")
+
+            telegram_id = info.get("telegramId")
+            email = info.get("email")
             if telegram_id is not None:
-                lines.append(f"   Telegram ID: <code>{telegram_id}</code>")
+                lines.append(f"📞 Telegram: <code>{telegram_id}</code>")
             if email:
-                lines.append(f"   Email: <code>{_esc(email)}</code>")
-        
-        # Описание (только если есть)
-        description = info.get("description")
-        if description:
-            lines.append("")
-            lines.append("📝 <b>Описание</b>")
-            if action == "updated" and old_user_info:
-                old_info = old_user_info.get("response", old_user_info)
-                old_description = old_info.get("description")
-                
-                if old_description != description:
-                    lines.append(f"   <code>{_esc(old_description or '—')}</code> → <code>{_esc(description)}</code>")
-                else:
-                    lines.append(f"   <code>{_esc(description)}</code>")
-            else:
-                lines.append(f"   <code>{_esc(description)}</code>")
-        
-        # Секция изменений (если есть changes из sync_service)
-        if changes and action == "updated":
-            lines.append("")
-            lines.append("📋 <b>Изменения</b>")
-            for change in changes:
-                lines.append(f"   {_esc(change)}")
+                lines.append(f"📧 Email: <code>{_esc(email)}</code>")
+
+            description = info.get("description")
+            if description:
+                lines.append(f"📝 <code>{_esc(description[:100])}</code>")
         
         text = "\n".join(lines)
         
