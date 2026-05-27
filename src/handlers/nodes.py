@@ -292,9 +292,9 @@ async def _apply_node_update(target: Message | CallbackQuery, node_uuid: str, pa
         text = _format_node_edit_snapshot(info, _)
         markup = node_edit_keyboard(node_uuid, is_disabled=is_disabled, back_to=back_to)
         if isinstance(target, CallbackQuery):
-            await target.message.edit_text(text, reply_markup=markup, parse_mode="Markdown")
+            await target.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
         else:
-            await _send_clean_message(target, text, reply_markup=markup, parse_mode="Markdown")
+            await _send_clean_message(target, text, reply_markup=markup, parse_mode="HTML")
     except UnauthorizedError:
         reply_markup = nodes_menu_keyboard()
         if isinstance(target, CallbackQuery):
@@ -389,7 +389,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                 profiles_data = await api_client.get_config_profiles()
                 profiles = profiles_data.get("response", {}).get("configProfiles", [])
                 if not profiles:
-                    await _send_clean_message(message, _("node.no_profiles"), reply_markup=nodes_menu_keyboard(), parse_mode="Markdown")
+                    await _send_clean_message(message, _("node.no_profiles"), reply_markup=nodes_menu_keyboard(), parse_mode="HTML")
                     PENDING_INPUT.pop(user_id, None)
                     return
                 keyboard = _node_config_profiles_keyboard(profiles)
@@ -399,7 +399,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                     reply_markup=keyboard,
                 )
             except Exception:
-                await _send_clean_message(message, _("errors.generic"), reply_markup=nodes_menu_keyboard(), parse_mode="Markdown")
+                await _send_clean_message(message, _("errors.generic"), reply_markup=nodes_menu_keyboard(), parse_mode="HTML")
                 PENDING_INPUT.pop(user_id, None)
             return
 
@@ -415,7 +415,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                         message,
                         _("node.invalid_port"),
                         reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:node_create:port"),
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
                     PENDING_INPUT[user_id] = ctx
                     return
@@ -444,7 +444,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                         message,
                         _("node.invalid_country"),
                         reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:node_create:country"),
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
                     PENDING_INPUT[user_id] = ctx
                     return
@@ -505,7 +505,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                         message,
                         _("node.invalid_traffic_limit"),
                         reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:node_create:traffic_limit"),
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
                     PENDING_INPUT[user_id] = ctx
                     return
@@ -543,7 +543,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                         message,
                         _("node.invalid_notify_percent"),
                         reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:node_create:notify_percent"),
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
                     PENDING_INPUT[user_id] = ctx
                     return
@@ -582,7 +582,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                         message,
                         _("node.invalid_reset_day"),
                         reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:node_create:traffic_reset_day"),
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
                     PENDING_INPUT[user_id] = ctx
                     return
@@ -622,7 +622,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                         message,
                         _("node.invalid_multiplier"),
                         reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:node_create:consumption_multiplier"),
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
                     PENDING_INPUT[user_id] = ctx
                     return
@@ -663,7 +663,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                         message,
                         _("node.invalid_tags"),
                         reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:node_create:tags"),
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
                     PENDING_INPUT[user_id] = ctx
                     return
@@ -673,7 +673,7 @@ async def _handle_node_create_input(message: Message, ctx: dict) -> None:
                             message,
                             _("node.invalid_tags"),
                             reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:node_create:tags"),
-                            parse_mode="Markdown",
+                            parse_mode="HTML",
                         )
                         PENDING_INPUT[user_id] = ctx
                         return
@@ -1083,7 +1083,7 @@ async def cb_nodes_actions(callback: CallbackQuery) -> None:
 
             if not inbounds:
                 await callback.message.edit_text(
-                    _("node.no_inbounds"), reply_markup=input_keyboard("node_create"), parse_mode="Markdown"
+                    _("node.no_inbounds"), reply_markup=input_keyboard("node_create"), parse_mode="HTML"
                 )
                 return
 
@@ -1103,7 +1103,7 @@ async def cb_nodes_actions(callback: CallbackQuery) -> None:
                 reply_markup=keyboard,
             )
         except Exception:
-            await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_menu_keyboard(), parse_mode="Markdown")
+            await callback.message.edit_text(_("errors.generic"), reply_markup=nodes_menu_keyboard(), parse_mode="HTML")
     elif action == "toggle_inbound":
         # Переключение выбора инбаунда
         if len(parts) < 3:

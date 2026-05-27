@@ -212,7 +212,7 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
             await callback.message.edit_text(
                 _("provider.prompt_login_url").format(name=data.get("name", ""), favicon="—"),
                 reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:provider_create:login_url"),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
         elif stage == "login_url":
             data["login_url"] = None
@@ -237,7 +237,7 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
                     current_favicon=data.get("current_favicon", "—") or "—"
                 ),
                 reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:provider_update:favicon"),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
         elif stage == "favicon":
             # Оставляем текущий favicon
@@ -252,7 +252,7 @@ async def cb_input_skip(callback: CallbackQuery) -> None:
                     current_login_url=data.get("current_login_url", "—") or "—"
                 ),
                 reply_markup=input_keyboard(action, allow_skip=True, skip_callback="input:skip:provider_update:login_url"),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
         elif stage == "login_url":
             # Оставляем текущий login_url

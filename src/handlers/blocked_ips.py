@@ -82,7 +82,7 @@ async def handle_block_ip_add(message: Message, ctx: dict) -> None:
             message,
             _("blocked_ips.invalid_ip").format(ip=text),
             reply_markup=_input_cancel_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return
 
@@ -92,7 +92,7 @@ async def handle_block_ip_add(message: Message, ctx: dict) -> None:
             message,
             _("blocked_ips.subnet_too_wide").format(ip=text),
             reply_markup=_input_cancel_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return
     if net.version == 6 and net.prefixlen < _MIN_IPV6_PREFIX:
@@ -100,7 +100,7 @@ async def handle_block_ip_add(message: Message, ctx: dict) -> None:
             message,
             _("blocked_ips.subnet_too_wide").format(ip=text),
             reply_markup=_input_cancel_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return
 
@@ -124,7 +124,7 @@ async def handle_block_ip_add(message: Message, ctx: dict) -> None:
             message,
             _("blocked_ips.duplicate").format(ip=ip_cidr),
             reply_markup=_blocked_ips_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return
 
@@ -132,7 +132,7 @@ async def handle_block_ip_add(message: Message, ctx: dict) -> None:
         message,
         _("blocked_ips.added").format(ip=ip_cidr),
         reply_markup=_blocked_ips_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
 
 
@@ -166,7 +166,7 @@ async def cb_blocked_ips_menu(callback: CallbackQuery) -> None:
         text = f"*{_('blocked_ips.title')}*\n\n{_('blocked_ips.empty')}"
         kb = _blocked_ips_keyboard()
 
-    await _edit_text_safe(callback.message, text, reply_markup=kb, parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=kb, parse_mode="HTML")
 
 
 @router.callback_query(F.data == "block_ip:add")
@@ -182,7 +182,7 @@ async def cb_block_ip_add(callback: CallbackQuery) -> None:
         callback.message,
         _("blocked_ips.prompt_ip"),
         reply_markup=_input_cancel_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
 
 
@@ -204,7 +204,7 @@ async def cb_block_ip_remove(callback: CallbackQuery) -> None:
         callback.message,
         _("blocked_ips.confirm_remove").format(id=ip_id),
         reply_markup=_confirm_remove_keyboard(ip_id),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
 
 
@@ -233,7 +233,7 @@ async def cb_block_ip_confirm_remove(callback: CallbackQuery) -> None:
             callback.message,
             _("blocked_ips.not_found"),
             reply_markup=_blocked_ips_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
         return
 
@@ -241,5 +241,5 @@ async def cb_block_ip_confirm_remove(callback: CallbackQuery) -> None:
         callback.message,
         _("blocked_ips.removed").format(id=ip_id),
         reply_markup=_blocked_ips_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )

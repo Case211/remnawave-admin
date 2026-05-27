@@ -147,7 +147,7 @@ async def cmd_health(message: Message) -> None:
     """Обработчик команды /health."""
     if await _not_admin(message):
         return
-    await _send_clean_message(message, await _fetch_health_text(), reply_markup=system_menu_keyboard(), parse_mode="Markdown")
+    await _send_clean_message(message, await _fetch_health_text(), reply_markup=system_menu_keyboard(), parse_mode="HTML")
 
 
 @router.message(Command("stats"))
@@ -156,7 +156,7 @@ async def cmd_stats(message: Message) -> None:
     if await _not_admin(message):
         return
     text = _("stats.menu_title")
-    await _send_clean_message(message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+    await _send_clean_message(message, text, reply_markup=stats_menu_keyboard(), parse_mode="HTML")
 
 
 @router.message(Command("bandwidth"))
@@ -165,7 +165,7 @@ async def cmd_bandwidth(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_bandwidth_text()
-    await _send_clean_message(message, text, reply_markup=system_menu_keyboard(), parse_mode="Markdown")
+    await _send_clean_message(message, text, reply_markup=system_menu_keyboard(), parse_mode="HTML")
 
 
 @router.message(Command("billing"))
@@ -174,7 +174,7 @@ async def cmd_billing(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_billing_text()
-    await _send_clean_message(message, text, reply_markup=billing_menu_keyboard(), parse_mode="Markdown")
+    await _send_clean_message(message, text, reply_markup=billing_menu_keyboard(), parse_mode="HTML")
 
 
 @router.message(Command("providers"))
@@ -183,7 +183,7 @@ async def cmd_providers(message: Message) -> None:
     if await _not_admin(message):
         return
     text = await _fetch_providers_text()
-    await _send_clean_message(message, text, reply_markup=providers_menu_keyboard(), parse_mode="Markdown")
+    await _send_clean_message(message, text, reply_markup=providers_menu_keyboard(), parse_mode="HTML")
 
 
 @router.message(Command("billing_nodes"))

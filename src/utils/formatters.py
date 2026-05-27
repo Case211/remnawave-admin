@@ -508,14 +508,14 @@ def build_bandwidth_stats(stats: dict, t: Callable[[str], str]) -> str:
         previous = item.get("previous", NA)
         diff = item.get("difference", NA)
         return t("bandwidth.row").format(
-            label=f"*{label}*",
-            current=f"`{current}`",
-            previous=f"`{previous}`",
-            diff=f"`{diff}`",
+            label=f"<b>{label}</b>",
+            current=f"<code>{current}</code>",
+            previous=f"<code>{previous}</code>",
+            diff=f"<code>{diff}</code>",
         )
 
     lines = [
-        f"*{t('bandwidth.title')}*",
+        f"<b>{t('bandwidth.title')}</b>",
         "",
         row("bandwidthLastTwoDays", t("bandwidth.last_two_days")),
         row("bandwidthLastSevenDays", t("bandwidth.last_seven_days")),
@@ -711,8 +711,8 @@ def build_config_profile_detail(profile: dict, t: Callable[[str], str]) -> str:
 
 def build_billing_history(records: list[dict], t: Callable[[str], str]) -> str:
     if not records:
-        return f"*{t('billing.title').split(':')[0]}*\n\n{t('billing.empty')}"
-    lines = [f"*{t('billing.title').format(total=len(records))}*", ""]
+        return f"<b>{t('billing.title').split(':')[0]}</b>\n\n{t('billing.empty')}"
+    lines = [f"<b>{t('billing.title').format(total=len(records))}</b>", ""]
     for rec in records[:10]:
         provider = rec.get("provider", {})
         amount = rec.get("amount", NA)
@@ -720,9 +720,9 @@ def build_billing_history(records: list[dict], t: Callable[[str], str]) -> str:
         provider_name = provider.get("name", NA)
         lines.append(
             t("billing.item").format(
-                amount=f"*{amount}*",
-                provider=f"`{provider_name}`",
-                date=f"`{date}`",
+                amount=f"<b>{amount}</b>",
+                provider=f"<code>{provider_name}</code>",
+                date=f"<code>{date}</code>",
             )
         )
     if len(records) > 10:
@@ -733,17 +733,17 @@ def build_billing_history(records: list[dict], t: Callable[[str], str]) -> str:
 
 def build_infra_providers(providers: list[dict], t: Callable[[str], str]) -> str:
     if not providers:
-        return f"*{t('provider.title').split(':')[0]}*\n\n{t('provider.empty')}"
-    lines = [f"*{t('provider.title').format(total=len(providers))}*", ""]
+        return f"<b>{t('provider.title').split(':')[0]}</b>\n\n{t('provider.empty')}"
+    lines = [f"<b>{t('provider.title').format(total=len(providers))}</b>", ""]
     for prov in providers[:10]:
         hist = prov.get("billingHistory", {}) or {}
         nodes = prov.get("billingNodes", []) or []
         lines.append(
             t("provider.item").format(
-                name=f"*{prov.get('name', NA)}*",
-                totalAmount=f"`{hist.get('totalAmount', NA)}`",
-                totalBills=f"`{hist.get('totalBills', NA)}`",
-                nodes=f"`{len(nodes)}`",
+                name=f"<b>{prov.get('name', NA)}</b>",
+                totalAmount=f"<code>{hist.get('totalAmount', NA)}</code>",
+                totalBills=f"<code>{hist.get('totalBills', NA)}</code>",
+                nodes=f"<code>{len(nodes)}</code>",
             )
         )
     if len(providers) > 10:
@@ -757,18 +757,18 @@ def build_billing_nodes(data: dict, t: Callable[[str], str]) -> str:
     nodes = resp.get("billingNodes", []) or []
     stats = resp.get("stats", {}) or {}
     if not nodes:
-        return f"*{t('billing_nodes.title').split(':')[0]}*\n\n{t('billing_nodes.empty')}"
+        return f"<b>{t('billing_nodes.title').split(':')[0]}</b>\n\n{t('billing_nodes.empty')}"
     upcoming_val = stats.get("upcomingNodesCount", NA)
     month_val = stats.get("currentMonthPayments", NA)
     total_val = stats.get("totalSpent", NA)
     
     lines = [
-        f"*{t('billing_nodes.title').format(total=resp.get('totalBillingNodes', len(nodes)))}*",
+        f"<b>{t('billing_nodes.title').format(total=resp.get('totalBillingNodes', len(nodes)))}</b>",
         "",
-        f"*{t('billing_nodes.stats_section')}*",
-        f"  {t('billing_nodes.stats_text').format(upcoming=f'*{upcoming_val}*', month=f'`{month_val}`', total=f'*{total_val}*')}",
+        f"<b>{t('billing_nodes.stats_section')}</b>",
+        f"  {t('billing_nodes.stats_text').format(upcoming=f'<b>{upcoming_val}</b>', month=f'<code>{month_val}</code>', total=f'<b>{total_val}</b>')}",
         "",
-        f"*{t('billing_nodes.nodes_section')}*",
+        f"<b>{t('billing_nodes.nodes_section')}</b>",
     ]
     for item in nodes[:10]:
         node = item.get("node", {})
@@ -778,7 +778,7 @@ def build_billing_nodes(data: dict, t: Callable[[str], str]) -> str:
         provider_name = prov.get("name", NA)
         next_billing = format_datetime(item.get("nextBillingAt"))
         lines.append(
-            f"  {t('billing_nodes.item').format(node=f'*{node_name}*', country=f'`{country_code}`', provider=f'`{provider_name}`', next=f'`{next_billing}`')}"
+            f"  {t('billing_nodes.item').format(node=f'<b>{node_name}</b>', country=f'<code>{country_code}</code>', provider=f'<code>{provider_name}</code>', next=f'<code>{next_billing}</code>')}"
         )
     if len(nodes) > 10:
         lines.append("")

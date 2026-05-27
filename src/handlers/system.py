@@ -550,7 +550,7 @@ async def cb_health(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = await _fetch_health_text()
-    await _edit_text_safe(callback.message, text, reply_markup=system_menu_keyboard(), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=system_menu_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "menu:stats")
@@ -560,7 +560,7 @@ async def cb_stats(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = _("stats.menu_title")
-    await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(F.data.in_(["stats:panel", "stats:server", "stats:traffic", "stats:extended"]))
@@ -573,17 +573,17 @@ async def cb_stats_type(callback: CallbackQuery) -> None:
 
     if stats_type == "panel":
         text = await _fetch_panel_stats_text()
-        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="HTML")
     elif stats_type == "server":
         text = await _fetch_server_stats_text()
-        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="HTML")
     elif stats_type == "traffic":
         # Показываем меню выбора периода
         text = _("stats.traffic_select_period")
-        await _edit_text_safe(callback.message, text, reply_markup=stats_period_keyboard(), parse_mode="Markdown")
+        await _edit_text_safe(callback.message, text, reply_markup=stats_period_keyboard(), parse_mode="HTML")
     elif stats_type == "extended":
         text = await _fetch_extended_stats_text()
-        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="HTML")
     else:
         await callback.answer(_("errors.generic"), show_alert=True)
 
@@ -596,7 +596,7 @@ async def cb_stats_refresh(callback: CallbackQuery) -> None:
     await callback.answer(_("node.list_updated"), show_alert=False)
     # Обновляем последний просмотренный тип статистики или показываем меню
     text = _("stats.menu_title")
-    await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "menu:system_nodes")
@@ -785,7 +785,7 @@ async def cb_stats_traffic_period(callback: CallbackQuery) -> None:
             return
 
         text = await _fetch_traffic_stats_text(start, end)
-        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="Markdown")
+        await _edit_text_safe(callback.message, text, reply_markup=stats_menu_keyboard(), parse_mode="HTML")
     except UnauthorizedError:
         await _edit_text_safe(callback.message, _("errors.unauthorized"), reply_markup=stats_menu_keyboard())
     except ApiClientError:
@@ -883,7 +883,7 @@ async def cb_sync_asn_menu(callback: CallbackQuery) -> None:
         return
     await callback.answer()
     text = _("asn_sync.menu_title")
-    await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("asn_sync:"))
@@ -898,7 +898,7 @@ async def cb_asn_sync_action(callback: CallbackQuery) -> None:
     if action == "status":
         await callback.answer()
         text = await _fetch_asn_sync_status_text()
-        await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+        await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="HTML")
         return
     
     if action == "custom":
@@ -910,7 +910,7 @@ async def cb_asn_sync_action(callback: CallbackQuery) -> None:
             "message_id": callback.message.message_id
         }
         text = _("asn_sync.enter_limit")
-        await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+        await _edit_text_safe(callback.message, text, reply_markup=asn_sync_menu_keyboard(), parse_mode="HTML")
         return
     
     # Запускаем синхронизацию
@@ -950,7 +950,7 @@ async def cb_asn_sync_action(callback: CallbackQuery) -> None:
             result_text += f"{_('asn_sync.failed')}: *{stats['failed']}*\n"
             result_text += f"{_('asn_sync.skipped')}: *{stats['skipped']}*"
             
-            await _edit_text_safe(status_message, result_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+            await _edit_text_safe(status_message, result_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="HTML")
             
         finally:
             await parser_service.close()
@@ -958,7 +958,7 @@ async def cb_asn_sync_action(callback: CallbackQuery) -> None:
     except Exception as e:
         logger.error("Error during ASN sync: %s", e, exc_info=True)
         error_text = f"{_('asn_sync.error')}: {str(e)}"
-        await _edit_text_safe(status_message, error_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+        await _edit_text_safe(status_message, error_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="HTML")
 
 
 async def _handle_asn_sync_custom_limit_input(message: Message, ctx: dict) -> None:
@@ -1000,7 +1000,7 @@ async def _handle_asn_sync_custom_limit_input(message: Message, ctx: dict) -> No
                 result_text += f"{_('asn_sync.failed')}: *{stats['failed']}*\n"
                 result_text += f"{_('asn_sync.skipped')}: *{stats['skipped']}*"
                 
-                await _edit_text_safe(status_message, result_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+                await _edit_text_safe(status_message, result_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="HTML")
                 
             finally:
                 await parser_service.close()
@@ -1008,7 +1008,7 @@ async def _handle_asn_sync_custom_limit_input(message: Message, ctx: dict) -> No
         except Exception as e:
             logger.error("Error during ASN sync: %s", e, exc_info=True)
             error_text = f"{_('asn_sync.error')}: {str(e)}"
-            await _edit_text_safe(status_message, error_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="Markdown")
+            await _edit_text_safe(status_message, error_text, reply_markup=asn_sync_menu_keyboard(), parse_mode="HTML")
     
     except ValueError:
         await _send_clean_message(message, _("asn_sync.invalid_limit"))

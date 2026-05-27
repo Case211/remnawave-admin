@@ -98,7 +98,7 @@ def _format_item_details(item: ConfigItem) -> str:
 async def show_bot_config_menu(callback: CallbackQuery) -> None:
     """Показывает главное меню конфигурации бота."""
     text = f"*{_('bot_config.title')}*\n\n{_('bot_config.description')}"
-    await _edit_text_safe(callback.message, text, reply_markup=bot_config_menu_keyboard(), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=bot_config_menu_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "bot_config:menu")
@@ -123,7 +123,7 @@ async def show_config_categories(callback: CallbackQuery) -> None:
         items = config_service.get_by_category(cat)
         text += f"{emoji} *{name}* — {len(items)} настроек\n"
 
-    await _edit_text_safe(callback.message, text, reply_markup=bot_config_categories_keyboard(categories), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=bot_config_categories_keyboard(categories), parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("bot_config:cat:"))
@@ -160,7 +160,7 @@ async def show_category_items(callback: CallbackQuery) -> None:
         callback.message,
         text,
         reply_markup=bot_config_category_items_keyboard(category, items, page),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
 
@@ -175,7 +175,7 @@ async def show_config_item(callback: CallbackQuery) -> None:
         return
 
     text = _format_item_details(item)
-    await _edit_text_safe(callback.message, text, reply_markup=bot_config_item_keyboard(item), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=bot_config_item_keyboard(item), parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("bot_config:set:"))
@@ -229,7 +229,7 @@ async def request_config_input(callback: CallbackQuery, state: FSMContext) -> No
     text += f"Ожидается: _{hint}_\n\n"
     text += "_Отправьте значение или /cancel для отмены_"
 
-    await callback.message.edit_text(text, parse_mode="Markdown")
+    await callback.message.edit_text(text, parse_mode="HTML")
 
 
 @router.message(ConfigInputState.waiting_value)
@@ -266,7 +266,7 @@ async def process_config_input(message: Message, state: FSMContext) -> None:
                 f"Введено: `{value}`\n"
                 f"Допустимые значения: {options_str}\n\n"
                 f"_Попробуйте снова или /cancel для отмены_",
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
             return
 
@@ -302,7 +302,7 @@ async def process_config_input(message: Message, state: FSMContext) -> None:
             f"Введено: `{value}`\n"
             f"Ожидается: _{hint}_\n\n"
             f"_Попробуйте снова или /cancel для отмены_",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         return
     except json_module.JSONDecodeError:
@@ -310,7 +310,7 @@ async def process_config_input(message: Message, state: FSMContext) -> None:
             f"❌ *Некорректный JSON*\n\n"
             f"Введённое значение не является валидным JSON.\n\n"
             f"_Попробуйте снова или /cancel для отмены_",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         return
 
@@ -322,7 +322,7 @@ async def process_config_input(message: Message, state: FSMContext) -> None:
         await message.answer(
             f"✅ *Настройка сохранена*\n\n"
             f"*{item.display_name or item.key}*: `{value}`",
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     else:
         await message.answer(_("bot_config.save_error"))
@@ -342,7 +342,7 @@ async def confirm_reset_config(callback: CallbackQuery) -> None:
     text += f"Настройка: *{item.display_name or item.key}*\n"
     text += f"Будет сброшено к: `{item.default_value or 'пустое значение'}`"
 
-    await _edit_text_safe(callback.message, text, reply_markup=bot_config_confirm_keyboard(key, "reset"), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=bot_config_confirm_keyboard(key, "reset"), parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("bot_config:confirm:reset:"))
@@ -420,7 +420,7 @@ async def show_all_settings(callback: CallbackQuery) -> None:
     if len(text) > 4000:
         text = text[:4000] + "\n\n_...обрезано_"
 
-    await _edit_text_safe(callback.message, text, reply_markup=bot_config_menu_keyboard(), parse_mode="Markdown")
+    await _edit_text_safe(callback.message, text, reply_markup=bot_config_menu_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "noop")
