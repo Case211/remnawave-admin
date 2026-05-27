@@ -6,6 +6,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from shared.db._base import _db_row_to_api_format
+
 from shared.logger import logger
 from shared.metrics import VIOLATIONS_DETECTED
 
