@@ -1172,10 +1172,29 @@ async def _handle_violation(
 
 @router.get("/health")
 async def collector_health():
-    """Health check endpoint."""
+    """Health check endpoint — includes violation worker and queue health."""
+    worker_alive = _violation_worker_task is not None and not _violation_worker_task.done()
+    queue_size = len(_pending_violation_users)
+    queue_overloaded = queue_size > 5000
+
+    health_status = "ok"
+    if not db_service.is_connected:
+        health_status = "degraded"
+    if queue_overloaded:
+        health_status = "degraded"
+
+    status_code = 200 if health_status == "ok" else 503
+
     return JSONResponse(
-        status_code=200,
-        content={"status": "ok", "service": "collector", "database_connected": db_service.is_connected},
+        status_code=status_code,
+        content={
+            "status": health_status,
+            "service": "collector",
+            "database_connected": db_service.is_connected,
+            "violation_worker_alive": worker_alive,
+            "violation_queue_size": queue_size,
+            "violation_queue_overloaded": queue_overloaded,
+        },
     )
 
 

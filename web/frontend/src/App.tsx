@@ -4,6 +4,7 @@ import { useAuthStore } from './store/authStore'
 import { usePermissionStore } from './store/permissionStore'
 import { AppearanceProvider } from './components/AppearanceProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { OfflineIndicator } from './components/OfflineIndicator'
 import { clientLogger } from './lib/clientLogger'
 import { ForcePasswordChange } from './components/ForcePasswordChange'
 
@@ -173,6 +174,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AppearanceProvider>
+        <OfflineIndicator />
         <BrowserRouter basename={routerBasename}>
           <Routes>
             {/* Public routes */}
