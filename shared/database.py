@@ -1238,16 +1238,19 @@ class DatabaseService:
             return 0
 
     async def delete_user(self, uuid: str) -> bool:
-        """Delete user by UUID."""
+        """Delete user by UUID. Also cleans up connections (no FK CASCADE on partitioned table)."""
         if not self.is_connected:
             return False
-        
+
         async with self.acquire() as conn:
-            result = await conn.execute(
-                "DELETE FROM users WHERE uuid = $1",
-                uuid
-            )
-            return result == "DELETE 1"
+            async with conn.transaction():
+                await conn.execute(
+                    "DELETE FROM user_connections WHERE user_uuid = $1", uuid
+                )
+                result = await conn.execute(
+                    "DELETE FROM users WHERE uuid = $1", uuid
+                )
+                return result == "DELETE 1"
 
     async def get_all_user_uuids(self) -> set[str]:
         """Get set of all user UUIDs. Lightweight alternative to get_all_users() for reconciliation."""
@@ -2080,22 +2083,48 @@ class DatabaseService:
 
                 ip_cast = "::inet" if self._ip_col_is_inet else ""
 
-                # 1. Bulk upsert via UNNEST + ON CONFLICT on partial unique index
-                # Index includes connected_at for partitioned table compatibility
-                upsert_result = await conn.execute(
+                # 1a. Update existing active connections (match by user_uuid + ip_address)
+                # Two-step approach: partitioned tables require partition key in
+                # unique index, so ON CONFLICT (user_uuid, ip_address) alone won't
+                # work. Instead: UPDATE existing rows first, then INSERT truly new.
+                update_result = await conn.execute(
+                    f"""
+                    UPDATE user_connections uc
+                    SET connected_at = GREATEST(uc.connected_at, batch.ca),
+                        node_uuid = COALESCE(batch.n, uc.node_uuid),
+                        device_info = COALESCE(batch.d, uc.device_info)
+                    FROM (
+                        SELECT u::uuid AS uid, u_ip{ip_cast} AS ip,
+                               n::uuid AS n, d::jsonb AS d, COALESCE(t, NOW()) AS ca
+                        FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[])
+                            AS t(u, u_ip, n, d, t)
+                    ) batch
+                    WHERE uc.user_uuid = batch.uid
+                      AND uc.ip_address::text = batch.ip::text
+                      AND uc.disconnected_at IS NULL
+                    """,
+                    user_uuids, ip_addresses, node_uuids, device_infos, connected_ats,
+                )
+                updated = int(update_result.split()[-1]) if update_result else 0
+
+                # 1b. Insert truly new connections (no existing active row for user+ip)
+                insert_result = await conn.execute(
                     f"""
                     INSERT INTO user_connections (user_uuid, ip_address, node_uuid, device_info, connected_at)
                     SELECT u::uuid, u_ip{ip_cast}, n::uuid, d::jsonb, COALESCE(t, NOW())
                     FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[])
                         AS t(u, u_ip, n, d, t)
-                    ON CONFLICT (user_uuid, ip_address, connected_at) WHERE disconnected_at IS NULL
-                    DO UPDATE SET
-                        node_uuid = COALESCE(EXCLUDED.node_uuid, user_connections.node_uuid),
-                        device_info = COALESCE(EXCLUDED.device_info, user_connections.device_info)
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM user_connections uc
+                        WHERE uc.user_uuid = u::uuid
+                          AND uc.ip_address::text = u_ip::text
+                          AND uc.disconnected_at IS NULL
+                    )
                     """,
                     user_uuids, ip_addresses, node_uuids, device_infos, connected_ats,
                 )
-                upserted = int(upsert_result.split()[-1]) if upsert_result else 0
+                inserted = int(insert_result.split()[-1]) if insert_result else 0
+                upserted = updated + inserted
 
                 # 2. Close stale connections — IPs not in this batch, older than threshold
                 # Cast ip_address to text for comparison (works with both INET and VARCHAR)
@@ -2381,24 +2410,25 @@ class DatabaseService:
                     """,
                 )
                 if partitions:
+                    import re
                     from datetime import datetime, timedelta, timezone
                     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
                     for part in partitions:
+                        name = part["relname"]
+                        if not re.match(r'^user_connections_p\d{4}_\d{2}$', name):
+                            continue
                         bound = part["bound_expr"] or ""
-                        # Extract upper bound: FOR VALUES FROM ('2026-03-01') TO ('2026-04-01')
                         if " TO ('" in bound:
                             to_str = bound.split(" TO ('")[1].split("')")[0]
                             try:
                                 upper = datetime.fromisoformat(to_str).replace(tzinfo=timezone.utc)
                                 if upper <= cutoff:
-                                    name = part["relname"]
-                                    count = await conn.fetchval(f"SELECT COUNT(*) FROM {name}")
                                     await conn.execute(
                                         f"ALTER TABLE user_connections DETACH PARTITION {name}"
                                     )
                                     await conn.execute(f"DROP TABLE {name}")
-                                    total += count or 0
-                                    logger.info("Dropped partition %s (%d rows)", name, count or 0)
+                                    logger.info("Dropped partition %s", name)
+                                    total += 1
                             except (ValueError, IndexError):
                                 pass
                     if total > 0:
@@ -2474,7 +2504,7 @@ class DatabaseService:
 
                 return created
         except Exception as e:
-            logger.debug("ensure_connection_partitions: %s", e)
+            logger.warning("ensure_connection_partitions failed: %s", e)
             return 0
 
     # ==================== Torrent Events ====================

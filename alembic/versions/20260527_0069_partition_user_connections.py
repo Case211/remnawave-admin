@@ -85,10 +85,10 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_uc_part_node
         ON user_connections_partitioned (node_uuid)
     """)
-    # Partial unique index for ON CONFLICT — must include partition key
+    # Partial index for active connection lookups (UPDATE + WHERE NOT EXISTS)
     op.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_uc_part_active_uq
-        ON user_connections_partitioned (user_uuid, ip_address, connected_at)
+        CREATE INDEX IF NOT EXISTS idx_uc_part_active_user_ip
+        ON user_connections_partitioned (user_uuid, ip_address)
         WHERE disconnected_at IS NULL
     """)
 
@@ -115,7 +115,7 @@ def downgrade() -> None:
     # Recreate original non-partitioned table
     op.execute("""
         CREATE TABLE IF NOT EXISTS user_connections_regular (
-            id SERIAL NOT NULL,
+            id BIGSERIAL NOT NULL,
             user_uuid UUID REFERENCES users(uuid) ON DELETE CASCADE,
             ip_address VARCHAR(45),
             node_uuid UUID REFERENCES nodes(uuid) ON DELETE SET NULL,
@@ -156,6 +156,3 @@ def downgrade() -> None:
         ON user_connections (user_uuid, connected_at DESC)
     """)
 
-    # Drop partition tables
-    for suffix in ['p2026_03', 'p2026_04', 'p2026_05', 'p2026_06', 'p2026_07', 'default']:
-        op.execute(f"DROP TABLE IF EXISTS user_connections_{suffix}")
