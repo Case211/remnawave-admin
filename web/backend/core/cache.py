@@ -10,7 +10,16 @@ import time
 from functools import wraps
 from typing import Any, Optional
 
+from prometheus_client import Counter, Gauge
+
 logger = logging.getLogger(__name__)
+
+# ── Prometheus metrics ──
+CACHE_HITS = Counter("panel_cache_hits_total", "Cache hits", ["backend"])
+CACHE_MISSES = Counter("panel_cache_misses_total", "Cache misses", ["backend"])
+CACHE_ERRORS = Counter("panel_cache_errors_total", "Cache operation errors", ["backend", "op"])
+CACHE_BACKEND = Gauge("panel_cache_redis_connected", "1 if Redis is active, 0 if in-memory fallback")
+CACHE_KEYS = Gauge("panel_cache_keys_total", "Approximate number of cached keys")
 
 # TTL presets (seconds)
 CACHE_TTL_SHORT = 60       # overview, fleet, system components (was 30)
@@ -75,6 +84,7 @@ class CacheService:
         """Try to connect to Redis. Returns True if successful."""
         if not redis_url:
             logger.info("No REDIS_URL configured, using in-memory cache")
+            CACHE_BACKEND.set(0)
             return False
         try:
             import redis.asyncio as aioredis
@@ -87,21 +97,36 @@ class CacheService:
             )
             await self._redis.ping()
             self._using_redis = True
+            CACHE_BACKEND.set(1)
             logger.info("Redis cache connected: %s", redis_url.split("@")[-1])
+            self._stats_task = asyncio.create_task(self._stats_loop())
             return True
         except Exception as e:
             logger.warning("Redis connection failed (%s), using in-memory cache", e)
             self._redis = None
             self._using_redis = False
+            CACHE_BACKEND.set(0)
             return False
 
     async def get(self, key: str) -> Optional[str]:
+        backend = "redis" if self._using_redis else "memory"
         if self._using_redis:
             try:
-                return await self._redis.get(key)
+                val = await self._redis.get(key)
+                if val is not None:
+                    CACHE_HITS.labels(backend=backend).inc()
+                else:
+                    CACHE_MISSES.labels(backend=backend).inc()
+                return val
             except Exception as e:
+                CACHE_ERRORS.labels(backend=backend, op="get").inc()
                 logger.debug("Redis GET failed for key %s: %s", key, e)
-        return await self._fallback.get(key)
+        val = await self._fallback.get(key)
+        if val is not None:
+            CACHE_HITS.labels(backend=backend).inc()
+        else:
+            CACHE_MISSES.labels(backend=backend).inc()
+        return val
 
     async def set(self, key: str, value: str, ex: int = 60) -> None:
         if self._using_redis:
@@ -109,6 +134,7 @@ class CacheService:
                 await self._redis.set(key, value, ex=ex)
                 return
             except Exception as e:
+                CACHE_ERRORS.labels(backend="redis", op="set").inc()
                 logger.debug("Redis SET failed for key %s: %s", key, e)
         await self._fallback.set(key, value, ex=ex)
 
@@ -118,6 +144,7 @@ class CacheService:
                 await self._redis.delete(key)
                 return
             except Exception as e:
+                CACHE_ERRORS.labels(backend="redis", op="delete").inc()
                 logger.debug("Redis DELETE failed for key %s: %s", key, e)
         await self._fallback.delete(key)
 
@@ -132,10 +159,13 @@ class CacheService:
                     await self._redis.delete(*keys)
                 return len(keys)
             except Exception as e:
+                CACHE_ERRORS.labels(backend="redis", op="flush").inc()
                 logger.debug("Redis flush_pattern failed for %s: %s", pattern, e)
         return await self._fallback.flush_pattern(pattern)
 
     async def close(self) -> None:
+        if hasattr(self, '_stats_task') and self._stats_task:
+            self._stats_task.cancel()
         if self._redis:
             await self._redis.aclose()
         await self._fallback.close()
@@ -143,6 +173,32 @@ class CacheService:
     @property
     def is_redis(self) -> bool:
         return self._using_redis
+
+    async def _stats_loop(self) -> None:
+        """Periodically log Redis stats and update Prometheus gauges."""
+        while True:
+            try:
+                await asyncio.sleep(300)
+                if not self._using_redis or not self._redis:
+                    break
+                info = await self._redis.info(section="stats")
+                memory = await self._redis.info(section="memory")
+                dbsize = await self._redis.dbsize()
+                CACHE_KEYS.set(dbsize)
+                hits = info.get("keyspace_hits", 0)
+                misses = info.get("keyspace_misses", 0)
+                total = hits + misses
+                hit_rate = (hits / total * 100) if total > 0 else 0
+                mem_used = memory.get("used_memory_human", "?")
+                mem_peak = memory.get("used_memory_peak_human", "?")
+                logger.info(
+                    "Redis stats: keys=%d hit_rate=%.1f%% mem=%s peak=%s",
+                    dbsize, hit_rate, mem_used, mem_peak,
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug("Redis stats fetch failed: %s", e)
 
     # ── JSON helpers ──────────────────────────────────────────
 
