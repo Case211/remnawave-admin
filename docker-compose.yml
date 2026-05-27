@@ -98,11 +98,10 @@ services:
       WEB_HOST: '0.0.0.0'
       WEB_PORT: '${WEB_BACKEND_PORT:-8081}'
       APP_MODE: '${APP_MODE:-full}'
+      REDIS_URL: '${REDIS_URL:-}'
       MAXMIND_CITY_DB: /app/geoip/GeoLite2-City.mmdb
       MAXMIND_ASN_DB: /app/geoip/GeoLite2-ASN.mmdb
       BACKUP_DIR: /app/backups
-      # Redis (опционально, нужен при >1 инстансе для общего кеша и rate limiting)
-      # REDIS_URL: redis://redis:6379/0
     command: ["python", "-m", "uvicorn", "web.backend.main:app", "--host", "0.0.0.0", "--port", "${WEB_BACKEND_PORT:-8081}", "--no-access-log", "--log-level", "warning", "--ws", "websockets", "--ws-per-message-deflate", "true"]
     volumes:
       - ./logs:/app/logs
@@ -143,6 +142,7 @@ services:
       WEB_HOST: '0.0.0.0'
       WEB_PORT: '8081'
       APP_MODE: 'collector'
+      REDIS_URL: '${REDIS_URL:-}'
       MAXMIND_CITY_DB: /app/geoip/GeoLite2-City.mmdb
       MAXMIND_ASN_DB: /app/geoip/GeoLite2-ASN.mmdb
     command: ["python", "-m", "uvicorn", "web.backend.main:app", "--host", "0.0.0.0", "--port", "8081", "--no-access-log", "--log-level", "warning"]
@@ -215,29 +215,33 @@ services:
       start_period: 30s
 
   # ===========================================
-  # Redis (опционально, раскомментировать при >1 инстансе web-backend
-  # для общего кеша аналитики и distributed rate limiting)
+  # Redis (--profile redis)
+  # Общий кэш аналитики + distributed rate limiting между контейнерами.
+  # Включить: docker compose --profile redis up -d
+  # В .env добавить: REDIS_URL=redis://redis:6379/0
   # ===========================================
 
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: remnawave-redis
-  #   restart: unless-stopped
-  #   volumes:
-  #     - redis_data:/data
-  #   networks:
-  #     - remnawave-network
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 3
+  redis:
+    image: redis:7-alpine
+    container_name: remnawave-redis
+    restart: unless-stopped
+    profiles: [redis]
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    volumes:
+      - redis_data:/data
+    networks:
+      - remnawave-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres_data:
   geoip_data:
   prometheus_data:
-  # redis_data:
+  redis_data:
 
 networks:
   remnawave-network:
