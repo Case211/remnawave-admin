@@ -331,15 +331,15 @@ async def get_log_levels(
     admin: AdminUser = Depends(require_permission("logs", "view")),
 ):
     """Get current log levels for backend and bot."""
-    # Backend level: read from root logger's console handler
+    from logging.handlers import RotatingFileHandler
+
     root = logging.getLogger()
     backend_level = "INFO"
     for handler in root.handlers:
-        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.handlers.RotatingFileHandler):
+        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, RotatingFileHandler):
             backend_level = logging.getLevelName(handler.level)
             break
 
-    # Bot level: read from config_service if available
     bot_level = "INFO"
     try:
         from shared.config_service import config_service
@@ -351,7 +351,7 @@ async def get_log_levels(
 
 
 @router.put("/level")
-async def set_log_level(
+async def set_log_level_endpoint(
     component: str = Query(..., description="Component: backend or bot"),
     level: str = Query(..., description="Level: DEBUG, INFO, WARNING, ERROR"),
     admin: AdminUser = Depends(require_permission("logs", "edit")),
@@ -362,15 +362,8 @@ async def set_log_level(
         return {"error": "Invalid level"}
 
     if component == "backend":
-        numeric_level = getattr(logging, level_upper, logging.INFO)
-        root = logging.getLogger()
-        for handler in root.handlers:
-            if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.handlers.RotatingFileHandler):
-                handler.setLevel(numeric_level)
-            elif isinstance(handler, logging.handlers.RotatingFileHandler):
-                base = os.path.basename(handler.baseFilename)
-                if "violations" not in base:
-                    handler.setLevel(numeric_level)
+        from shared.logger import set_log_level as _set_log_level
+        _set_log_level(level_upper)
         logger.info("Backend log level changed to %s by %s", level_upper, admin.username)
         return {"component": "backend", "level": level_upper}
 
