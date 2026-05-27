@@ -201,7 +201,7 @@ const OnlineIndicator = memo(function OnlineIndicator({ onlineAt }: { onlineAt: 
 })
 
 // Action dropdown
-function UserActions({
+const UserActions = memo(function UserActions({
   user,
   onEnable,
   onDisable,
@@ -264,7 +264,7 @@ function UserActions({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
+})
 
 // Sortable header
 const SortHeader = memo(function SortHeader({
@@ -896,7 +896,7 @@ export default function Users() {
         sort_order: sortOrder,
       }),
     retry: 2,
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
   })
 
   // Mutations

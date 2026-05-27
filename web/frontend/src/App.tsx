@@ -71,7 +71,7 @@ function ProtectedShell() {
   return (
     <ProtectedRoute>
       <Layout>
-        <Suspense fallback={null}>
+        <Suspense fallback={<div className="flex items-center justify-center h-64 animate-pulse"><div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" /></div>}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/users" element={<Users />} />

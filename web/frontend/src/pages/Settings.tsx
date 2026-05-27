@@ -937,7 +937,7 @@ export default function Settings() {
   const { data: syncData } = useQuery({
     queryKey: ['syncStatus'],
     queryFn: fetchSyncStatus,
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
   })
 
   // Fetch internal squads for trial squad selector

@@ -627,6 +627,12 @@
 
   /* ===== Glass System ===== */
 
+  /* GPU-accelerated transitions for smoothness */
+  .gpu-smooth {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+  }
+
   /* Base glass surface */
   .glass {
     background: var(--glass-bg);

@@ -233,7 +233,7 @@ export default function AuditLog() {
   const { data, isLoading, isError: isDataError, refetch } = useQuery({
     queryKey: ['audit-logs', params],
     queryFn: () => auditApi.list(params),
-    refetchInterval: 15000,
+    refetchInterval: 60_000,
   })
 
   const { data: stats, isError: isStatsError, refetch: refetchStats } = useQuery({

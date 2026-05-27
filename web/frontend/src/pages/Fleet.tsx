@@ -405,7 +405,7 @@ export default function Fleet() {
   const { data: fleet, isLoading, isError, refetch } = useQuery({
     queryKey: ['fleet'],
     queryFn: fetchFleet,
-    refetchInterval: 15000,
+    refetchInterval: 60_000,
   })
 
   // ── Mutations ─────────────────────────────────────────────────

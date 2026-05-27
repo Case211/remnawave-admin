@@ -215,7 +215,7 @@ function NotificationsTab() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['notifications', params],
     queryFn: () => notificationsApi.list(params as Parameters<typeof notificationsApi.list>[0]),
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
   })
 
   const markAllRead = useMutation({
@@ -895,7 +895,7 @@ function AlertLogsTab({ canEdit }: { canEdit: boolean }) {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['alert-logs', params],
     queryFn: () => notificationsApi.listAlertLogs(params as Parameters<typeof notificationsApi.listAlertLogs>[0]),
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
   })
 
   const ackAll = useMutation({
