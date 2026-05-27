@@ -380,6 +380,12 @@ async def receive_connections(
         except Exception as e:
             logger.warning("Failed to cleanup old connections: %s", e)
         try:
+            created = await db_service.ensure_connection_partitions(months_ahead=3)
+            if created > 0:
+                logger.info("Created %d new connection partitions", created)
+        except Exception as e:
+            logger.debug("Failed to ensure connection partitions: %s", e)
+        try:
             deleted = await db_service.cleanup_old_torrent_events(90)
             if deleted > 0:
                 logger.info("Cleaned up %d old torrent events", deleted)

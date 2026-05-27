@@ -2081,15 +2081,15 @@ class DatabaseService:
                 ip_cast = "::inet" if self._ip_col_is_inet else ""
 
                 # 1. Bulk upsert via UNNEST + ON CONFLICT on partial unique index
+                # Index includes connected_at for partitioned table compatibility
                 upsert_result = await conn.execute(
                     f"""
                     INSERT INTO user_connections (user_uuid, ip_address, node_uuid, device_info, connected_at)
                     SELECT u::uuid, u_ip{ip_cast}, n::uuid, d::jsonb, COALESCE(t, NOW())
                     FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[])
                         AS t(u, u_ip, n, d, t)
-                    ON CONFLICT (user_uuid, ip_address) WHERE disconnected_at IS NULL
+                    ON CONFLICT (user_uuid, ip_address, connected_at) WHERE disconnected_at IS NULL
                     DO UPDATE SET
-                        connected_at = GREATEST(user_connections.connected_at, EXCLUDED.connected_at),
                         node_uuid = COALESCE(EXCLUDED.node_uuid, user_connections.node_uuid),
                         device_info = COALESCE(EXCLUDED.device_info, user_connections.device_info)
                     """,
@@ -2362,12 +2362,50 @@ class DatabaseService:
             return int(result.split()[-1]) if result else 0
 
     async def cleanup_old_connections(self, retention_days: int = 30, batch_size: int = 5000) -> int:
-        """Delete closed user_connections older than retention_days in batches."""
+        """Drop old partitions or delete old rows from user_connections."""
         if not self.is_connected:
             return 0
         total = 0
-        max_batches = 1000
         try:
+            async with self.acquire() as conn:
+                # Try partition-based cleanup: find and detach+drop old partitions
+                partitions = await conn.fetch(
+                    """
+                    SELECT c.relname, pg_get_expr(c.relpartbound, c.oid) AS bound_expr
+                    FROM pg_inherits i
+                    JOIN pg_class p ON i.inhparent = p.oid
+                    JOIN pg_class c ON i.inhrelid = c.oid
+                    WHERE p.relname = 'user_connections'
+                      AND c.relname != 'user_connections_default'
+                    ORDER BY c.relname
+                    """,
+                )
+                if partitions:
+                    from datetime import datetime, timedelta, timezone
+                    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+                    for part in partitions:
+                        bound = part["bound_expr"] or ""
+                        # Extract upper bound: FOR VALUES FROM ('2026-03-01') TO ('2026-04-01')
+                        if " TO ('" in bound:
+                            to_str = bound.split(" TO ('")[1].split("')")[0]
+                            try:
+                                upper = datetime.fromisoformat(to_str).replace(tzinfo=timezone.utc)
+                                if upper <= cutoff:
+                                    name = part["relname"]
+                                    count = await conn.fetchval(f"SELECT COUNT(*) FROM {name}")
+                                    await conn.execute(
+                                        f"ALTER TABLE user_connections DETACH PARTITION {name}"
+                                    )
+                                    await conn.execute(f"DROP TABLE {name}")
+                                    total += count or 0
+                                    logger.info("Dropped partition %s (%d rows)", name, count or 0)
+                            except (ValueError, IndexError):
+                                pass
+                    if total > 0:
+                        return total
+
+            # Fallback: non-partitioned table or no old partitions — batched DELETE
+            max_batches = 1000
             for _ in range(max_batches):
                 async with self.acquire() as conn:
                     result = await conn.execute(
@@ -2394,6 +2432,50 @@ class DatabaseService:
         except Exception as e:
             logger.error("cleanup_old_connections failed: %s", e)
             return total
+
+    async def ensure_connection_partitions(self, months_ahead: int = 3) -> int:
+        """Auto-create future monthly partitions for user_connections."""
+        if not self.is_connected:
+            return 0
+        try:
+            async with self.acquire() as conn:
+                is_partitioned = await conn.fetchval(
+                    "SELECT COUNT(*) FROM pg_inherits i JOIN pg_class p ON i.inhparent = p.oid WHERE p.relname = 'user_connections'"
+                )
+                if not is_partitioned:
+                    return 0
+
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc)
+                created = 0
+                for offset in range(months_ahead + 1):
+                    month = now.month + offset
+                    year = now.year + (month - 1) // 12
+                    month = (month - 1) % 12 + 1
+                    next_month = month + 1
+                    next_year = year + (next_month - 1) // 12
+                    next_month = (next_month - 1) % 12 + 1
+
+                    part_name = f"user_connections_p{year}_{month:02d}"
+                    from_date = f"{year}-{month:02d}-01"
+                    to_date = f"{next_year}-{next_month:02d}-01"
+
+                    exists = await conn.fetchval(
+                        "SELECT 1 FROM pg_class WHERE relname = $1", part_name
+                    )
+                    if not exists:
+                        await conn.execute(f"""
+                            CREATE TABLE {part_name}
+                            PARTITION OF user_connections
+                            FOR VALUES FROM ('{from_date}') TO ('{to_date}')
+                        """)
+                        created += 1
+                        logger.info("Created partition %s (%s to %s)", part_name, from_date, to_date)
+
+                return created
+        except Exception as e:
+            logger.debug("ensure_connection_partitions: %s", e)
+            return 0
 
     # ==================== Torrent Events ====================
 
