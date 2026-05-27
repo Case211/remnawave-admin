@@ -73,7 +73,7 @@ export function SavedFiltersDropdown({
             <span className="truncate">{filter.name}</span>
             <button
               onClick={(e) => handleDelete(e, filter)}
-              className="opacity-0 group-hover:opacity-100 ml-2 p-0.5 rounded hover:bg-[var(--glass-bg-hover)] transition-opacity"
+              className="md:opacity-0 md:group-hover:opacity-100 ml-2 p-0.5 rounded hover:bg-[var(--glass-bg-hover)] transition-opacity"
             >
               <X className="w-3 h-3 text-dark-300" />
             </button>

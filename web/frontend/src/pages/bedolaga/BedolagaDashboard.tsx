@@ -386,7 +386,7 @@ export default function BedolagaDashboard() {
                     <div className="flex items-center gap-2.5 p-3 rounded-lg bg-[var(--glass-bg)] hover:bg-[var(--glass-bg-hover)] border border-transparent hover:border-[var(--glass-border-hover)] transition-all cursor-pointer group">
                       <Icon className={cn('w-4 h-4 group-hover:scale-110 transition-transform', color)} />
                       <span className="text-xs font-medium text-dark-200 group-hover:text-white transition-colors">{label}</span>
-                      <ArrowRight className="w-3 h-3 text-dark-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <ArrowRight className="w-3 h-3 text-dark-400 ml-auto md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
                     </div>
                   </Link>
                 ))}

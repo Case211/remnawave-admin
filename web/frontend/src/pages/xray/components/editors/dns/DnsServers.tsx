@@ -47,7 +47,7 @@ const SortableDnsItem = ({ server, id, isActive, onClick, onDelete }) => {
                 </div>
             </div>
             
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 p-2 hover:text-rose-500 transition-opacity">
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="md:opacity-0 md:group-hover:opacity-100 p-2 hover:text-rose-500 transition-opacity">
                 <Icon name="Trash" />
             </button>
         </div>

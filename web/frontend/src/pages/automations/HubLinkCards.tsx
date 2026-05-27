@@ -47,7 +47,7 @@ function HubLinkCard({ icon, title, description, to, badge, accent = 'cyan' }: H
               )}
             </div>
             <p className="text-xs text-dark-200 mt-1 line-clamp-2">{description}</p>
-            <div className="mt-3 flex items-center gap-1 text-xs text-primary-400 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="mt-3 flex items-center gap-1 text-xs text-primary-400 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
               {t('automations.hub.open', { defaultValue: 'Открыть' })}
               <ArrowRight className="w-3 h-3" />
             </div>

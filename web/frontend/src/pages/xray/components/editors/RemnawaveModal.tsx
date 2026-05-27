@@ -91,7 +91,7 @@ export const RemnawaveModal = ({ onClose }: { onClose: () => void }) => {
                                     {remnawave.activeProfileUuid === p.uuid ? (
                                         <Icon name="CheckCircle" weight="fill" className="text-emerald-400" />
                                     ) : (
-                                        <Icon name="ArrowRight" className="text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        <Icon name="ArrowRight" className="text-slate-600 md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
                                     )}
                                 </div>
                             ))}

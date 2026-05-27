@@ -211,7 +211,7 @@ export default function BedolagaCustomers() {
   }
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-dark-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-dark-400 md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
     return sortOrder === 'asc' ? <ChevronUp className="w-3 h-3 text-primary-400" /> : <ChevronDown className="w-3 h-3 text-primary-400" />
   }
 

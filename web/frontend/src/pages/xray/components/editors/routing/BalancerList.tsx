@@ -22,7 +22,7 @@ export const BalancerList = ({ balancers, activeIndex, onSelect, onDelete }) => 
                     {/* Кнопка удаления */}
                     <button 
                         onClick={(e) => { e.stopPropagation(); onDelete(i); }}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-rose-900/50 rounded-md text-slate-500 hover:text-rose-400 transition-all"
+                        className="md:opacity-0 md:group-hover:opacity-100 p-1.5 hover:bg-rose-900/50 rounded-md text-slate-500 hover:text-rose-400 transition-all"
                     >
                         <Icon name="Trash" className="text-xs" />
                     </button>

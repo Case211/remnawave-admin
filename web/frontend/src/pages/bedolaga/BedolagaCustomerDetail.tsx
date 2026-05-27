@@ -894,7 +894,7 @@ function InfoRow({ icon: Icon, label, value, mono, copyable, onCopy, copied, hig
           {value}
         </span>
         {copyable && onCopy && (
-          <button onClick={onCopy} className="opacity-0 group-hover:opacity-100 transition-opacity text-dark-400 hover:text-white">
+          <button onClick={onCopy} className="md:opacity-0 md:group-hover:opacity-100 transition-opacity text-dark-400 hover:text-white">
             {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
           </button>
         )}

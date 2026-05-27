@@ -1277,7 +1277,7 @@ function SortableNodeCard({
       }}
       className={cn(
         'flex items-center justify-center h-7 w-5 -ml-1 rounded text-dark-300 cursor-grab touch-none',
-        'opacity-0 group-hover:opacity-100 transition-opacity',
+        'md:opacity-0 md:group-hover:opacity-100 transition-opacity',
         'hover:text-white hover:bg-white/5 active:cursor-grabbing',
       )}
       aria-label={t('nodes.sort.dragHandle', { defaultValue: 'Перетащите для изменения порядка' })}

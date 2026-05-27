@@ -786,7 +786,7 @@ function IpWhitelistBlock() {
                     variant="ghost"
                     size="icon"
                     onClick={() => removeIp(ip)}
-                    className="h-6 w-6 text-dark-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                    className="h-6 w-6 text-dark-400 hover:text-red-400 md:opacity-0 md:group-hover:opacity-100 transition-all"
                     title="Remove"
                     aria-label={t('common.remove')}
                   >
@@ -1084,7 +1084,7 @@ export default function Settings() {
                 variant="ghost"
                 size="icon"
                 onClick={() => handleReset(item.key)}
-                className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 text-dark-300 hover:text-dark-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                 title={t('settings.resetToFallback')}
                 aria-label={t('common.reset')}
               >
@@ -1115,7 +1115,7 @@ export default function Settings() {
                 variant="ghost"
                 size="icon"
                 onClick={() => handleReset(item.key)}
-                className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 text-dark-300 hover:text-dark-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                 title={t('settings.reset')}
                 aria-label={t('common.reset')}
               >
@@ -1169,7 +1169,7 @@ export default function Settings() {
                 variant="ghost"
                 size="icon"
                 onClick={() => handleReset(item.key)}
-                className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 text-dark-300 hover:text-dark-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                 title={t('settings.reset')}
                 aria-label={t('common.reset')}
               >
@@ -1225,7 +1225,7 @@ export default function Settings() {
                 variant="ghost"
                 size="icon"
                 onClick={() => handleReset(item.key)}
-                className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 text-dark-300 hover:text-dark-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                 title={t('settings.reset')}
                 aria-label={t('common.reset')}
               >
@@ -1273,7 +1273,7 @@ export default function Settings() {
               variant="ghost"
               size="icon"
               onClick={() => handleReset(item.key)}
-              className="h-6 w-6 text-dark-300 hover:text-dark-100 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-6 w-6 text-dark-300 hover:text-dark-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
               title={t('settings.reset')}
             >
               <X className="w-3.5 h-3.5" />

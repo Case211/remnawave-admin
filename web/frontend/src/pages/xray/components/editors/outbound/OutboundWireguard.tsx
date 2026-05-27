@@ -130,7 +130,7 @@ export const OutboundWireguard = ({ outbound, onChange, errors = {} as any }: an
                         const pkErr = errors[`peer_${i}_publicKey`] as string | undefined;
                         return (
                             <div key={i} className="bg-slate-950 p-4 rounded-xl border border-slate-700/50 flex flex-col gap-4 relative group">
-                                <button onClick={() => removePeer(i)} className="absolute top-3 right-3 text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => removePeer(i)} className="absolute top-3 right-3 text-slate-600 hover:text-rose-500 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                     <Icon name="Trash" />
                                 </button>
                                 
