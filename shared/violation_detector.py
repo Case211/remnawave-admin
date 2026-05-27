@@ -154,11 +154,12 @@ class TemporalAnalyzer:
         self,
         connections: List[ActiveConnection],
         connection_history: List[Dict[str, Any]],
-        user_device_count: int = 1
+        user_device_count: int = 1,
+        is_mobile: bool = False,
     ) -> TemporalScore:
         """
         Анализирует временные паттерны подключений.
-        
+
         Args:
             connections: Активные подключения
             connection_history: История подключений за период
@@ -293,9 +294,13 @@ class TemporalAnalyzer:
                     else:
                         network_switch_buffer = 2
 
-                    effective_threshold = max_allowed_simultaneous + network_switch_buffer
+                    # CGNAT: мобильные операторы дают 3-5 IP с одного устройства
+                    cgnat_buffer = 0
+                    if is_mobile:
+                        cgnat_buffer = int(config_service.get("violations_mobile_cgnat_buffer", 3))
 
-                    # Если пользователь имеет много устройств (3+), даём дополнительный буфер
+                    effective_threshold = max_allowed_simultaneous + network_switch_buffer + cgnat_buffer
+
                     if user_device_count >= 3:
                         effective_threshold += 1
 
@@ -2233,8 +2238,14 @@ class IntelligentViolationDetector:
                 except Exception as geo_err:
                     logger.warning("Failed pre-fetching GeoIP data for %d IPs: %s", len(all_ips_for_geo), geo_err)
 
-            # Анализируем временные паттерны (передаём количество устройств)
-            temporal_score = self.temporal_analyzer.analyze(active_connections, connection_history, user_device_count)
+            # Determine if user is on a mobile carrier (for CGNAT buffer)
+            _has_mobile = any(
+                ip_metadata_cache.get(str(c.ip_address), None) and
+                getattr(ip_metadata_cache[str(c.ip_address)], 'connection_type', '') in ('mobile', 'mobile_isp')
+                for c in active_connections
+            ) if ip_metadata_cache else False
+
+            temporal_score = self.temporal_analyzer.analyze(active_connections, connection_history, user_device_count, is_mobile=_has_mobile)
 
             # Анализируем геолокацию (используем общий кэш)
             geo_score = await self.geo_analyzer.analyze(active_connections, connection_history, ip_metadata_cache)
