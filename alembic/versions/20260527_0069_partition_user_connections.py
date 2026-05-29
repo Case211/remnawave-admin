@@ -14,6 +14,7 @@ Downtime: ~30-60s for the swap (collector INSERT will fail during rename).
 """
 from typing import Sequence, Union
 from alembic import op
+from sqlalchemy import text
 
 revision: str = '0069'
 down_revision: Union[str, None] = '0068'
@@ -22,6 +23,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Idempotency guard (added in 2.15.1 after the partition incident):
+    # if user_connections is already a partitioned table (pg_class.relkind = 'p'),
+    # a previous run already completed the RENAME swap. Re-running the body would
+    # create a second empty partitioned table and re-swap, leaving duplicate
+    # tables/indexes. This happens when the backend container restarts mid-migration.
+    # Bail out cleanly so the run is a no-op.
+    conn = op.get_bind()
+    relkind = conn.execute(text(
+        "SELECT relkind FROM pg_class "
+        "WHERE relname = 'user_connections' AND relnamespace = 'public'::regnamespace"
+    )).scalar()
+    if relkind == 'p':
+        return
+
     # 1. Create partitioned table (same schema, no FK — partitioned tables
     #    can have FK referencing other tables but need partition key in PK)
     op.execute("""
