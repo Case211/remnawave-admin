@@ -254,7 +254,14 @@ docker run -d \
 
 ## Аутентификация
 
-Используется Telegram Login Widget. Доступ имеют только пользователи из списка `ADMINS`.
+Поддерживаются два способа входа (включаются/выключаются в настройках панели):
+
+- **Telegram Login Widget** — доступ имеют только пользователи из списка `ADMINS`
+- **Логин/пароль** — аккаунты из БД (страница «Администраторы», RBAC) или
+  `WEB_ADMIN_LOGIN`/`WEB_ADMIN_PASSWORD` из .env; опционально 2FA (TOTP)
+
+Первый администратор создаётся через форму регистрации при первом запуске
+или через CLI: `python3 scripts/admin_cli.py create-superadmin --username admin`.
 
 ### Как узнать свой Telegram ID
 
@@ -262,12 +269,30 @@ docker run -d \
 2. Он пришлёт ваш ID
 3. Добавьте его в `ADMINS` в .env
 
+### Сессии и токены
+
+Веб-панель хранит JWT в **HttpOnly cookies** (`rw_access`, `rw_refresh`) —
+токены недоступны JavaScript и не попадают в localStorage. Мутирующие
+запросы с cookie-аутентификацией требуют заголовок `X-CSRF-Token` со
+значением cookie `rw_csrf` (double-submit защита от CSRF).
+
+API-клиенты и мобильное приложение используют классический
+`Authorization: Bearer <access_token>` — токены по-прежнему возвращаются
+в теле ответов `/auth/login`, `/auth/telegram`, `/auth/refresh`;
+Bearer-запросы CSRF-заголовок не требуют.
+
+WebSocket аутентифицируется через subprotocol
+(`Sec-WebSocket-Protocol: access-token, <jwt>`) или HttpOnly cookie.
+Передача `?token=` в query string устарела и оставлена только для
+совместимости со старыми клиентами.
+
 ## API эндпоинты
 
 | Эндпоинт | Метод | Описание |
 |----------|-------|----------|
 | `/api/v2/auth/telegram` | POST | Вход через Telegram |
-| `/api/v2/auth/refresh` | POST | Обновление токена |
+| `/api/v2/auth/login` | POST | Вход по логину/паролю |
+| `/api/v2/auth/refresh` | POST | Обновление токена (тело или cookie) |
 | `/api/v2/auth/me` | GET | Информация о текущем админе |
 | `/api/v2/users` | GET | Список пользователей |
 | `/api/v2/nodes` | GET | Список нод |
