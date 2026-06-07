@@ -404,7 +404,11 @@ export default function Login() {
     }
 
     const script = document.createElement('script')
-    script.src = 'https://telegram.org/js/telegram-widget.js?22'
+    // Вендоренная копия https://telegram.org/js/telegram-widget.js?22 —
+    // защита от supply-chain атаки через CDN Telegram (виджет сам строит
+    // iframe на https://oauth.telegram.org, от origin скрипта не зависит).
+    // Обновление: скачать новую версию в public/vendor/ руками.
+    script.src = '/vendor/telegram-widget.js'
     script.setAttribute('data-telegram-login', botUsername)
     script.setAttribute('data-size', 'large')
     script.setAttribute('data-radius', '8')

@@ -836,9 +836,12 @@ def create_app() -> FastAPI:
                 "connect-src 'self'"
             )
         else:
+            # telegram.org убран из script-src: виджет логина теперь
+            # вендорится фронтом (/vendor/telegram-widget.js), внешние
+            # скрипты бэкенд-страницам не нужны.
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' https://telegram.org; "
+                "script-src 'self'; "
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
                 "connect-src 'self' wss: ws:; "
