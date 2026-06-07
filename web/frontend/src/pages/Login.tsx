@@ -409,7 +409,9 @@ export default function Login() {
     // выводит origin iframe из script.src, поэтому копия пропатчена
     // (getWidgetsOrigin всегда возвращает https://oauth.telegram.org).
     // Обновление: скачать новую версию в public/vendor/ и заново пропатчить.
-    script.src = '/vendor/telegram-widget.js'
+    // ?v= — cache-busting: при обновлении вендоренной копии поднять версию,
+    // иначе браузеры/прокси держат старый скрипт в кэше
+    script.src = '/vendor/telegram-widget.js?v=22.1'
     script.setAttribute('data-telegram-login', botUsername)
     script.setAttribute('data-size', 'large')
     script.setAttribute('data-radius', '8')
