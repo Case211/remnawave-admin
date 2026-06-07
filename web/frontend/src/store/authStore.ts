@@ -50,6 +50,12 @@ interface User {
 
 interface AuthState {
   user: User | null
+  /**
+   * Access-токен живёт ТОЛЬКО в памяти вкладки (Bearer + WS-subprotocol).
+   * После перезагрузки страницы аутентификация идёт через HttpOnly cookies.
+   * refreshToken заполнен только у легаси-сессий (мигрировавших со старого
+   * localStorage) — новый код держит refresh исключительно в cookie.
+   */
   accessToken: string | null
   refreshToken: string | null
   isAuthenticated: boolean
@@ -71,7 +77,7 @@ interface AuthState {
   totpVerify: (code: string) => Promise<void>
   cancel2fa: () => void
   logout: () => void
-  setTokens: (accessToken: string, refreshToken: string) => void
+  setTokens: (accessToken: string, refreshToken?: string | null) => void
   clearError: () => void
   validateSession: () => Promise<void>
 }
@@ -140,8 +146,9 @@ export const useAuthStore = create<AuthState>()(
               photoUrl: telegramUser.photo_url,
               authMethod: 'telegram',
             },
+            // refresh уходит в HttpOnly cookie, access — только в память
             accessToken: response.access_token || null,
-            refreshToken: response.refresh_token || null,
+            refreshToken: null,
             isAuthenticated: true,
             isLoading: false,
           })
@@ -182,7 +189,7 @@ export const useAuthStore = create<AuthState>()(
               authMethod: 'password',
             },
             accessToken: response.access_token || null,
-            refreshToken: response.refresh_token || null,
+            refreshToken: null,
             isAuthenticated: true,
             isLoading: false,
           })
@@ -208,7 +215,7 @@ export const useAuthStore = create<AuthState>()(
               authMethod: 'password',
             },
             accessToken: response.access_token,
-            refreshToken: response.refresh_token,
+            refreshToken: null,
             isAuthenticated: true,
             isLoading: false,
           })
@@ -245,7 +252,7 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.totpConfirmSetup(tempToken, code)
           set({
             accessToken: response.access_token,
-            refreshToken: response.refresh_token,
+            refreshToken: null,
             isAuthenticated: true,
             isLoading: false,
             requires2fa: false,
@@ -269,7 +276,7 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.totpVerify(tempToken, code)
           set({
             accessToken: response.access_token,
-            refreshToken: response.refresh_token,
+            refreshToken: null,
             isAuthenticated: true,
             isLoading: false,
             requires2fa: false,
@@ -296,7 +303,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        const { accessToken } = get()
+        const { isAuthenticated } = get()
 
         // Clear state immediately for responsive UX
         set({
@@ -307,15 +314,16 @@ export const useAuthStore = create<AuthState>()(
           error: null,
         })
 
-        // Notify backend to blacklist the token (fire-and-forget)
-        if (accessToken) {
+        // Notify backend: blacklist токенов + очистка HttpOnly cookies
+        // (fire-and-forget). Вызываем и при cookie-сессии без токена в памяти.
+        if (isAuthenticated) {
           authApi.logout().catch(() => {
             // Ignore errors — token will expire naturally
           })
         }
       },
 
-      setTokens: (accessToken: string, refreshToken: string) => {
+      setTokens: (accessToken: string, refreshToken: string | null = null) => {
         set({ accessToken, refreshToken })
       },
 
@@ -329,38 +337,37 @@ export const useAuthStore = create<AuthState>()(
         // Not authenticated — nothing to validate
         if (!isAuthenticated) return
 
-        // No tokens at all — invalid session
-        if (!accessToken && !refreshToken) {
-          set({
-            user: null,
-            accessToken: null,
-            refreshToken: null,
-            isAuthenticated: false,
-            error: null,
-          })
-          return
-        }
-
         // Access token still valid — session OK
         if (accessToken && !isTokenExpired(accessToken)) {
           return
         }
 
-        // Access token expired but refresh token available — try to refresh
+        // Легаси-путь: refresh-токен из старого localStorage. Сервер при
+        // ротации поставит HttpOnly cookies — сессия мигрирует сама.
         if (refreshToken && !isTokenExpired(refreshToken)) {
           try {
             const response = await authApi.refreshToken(refreshToken)
             set({
               accessToken: response.access_token,
-              refreshToken: response.refresh_token,
+              refreshToken: null,
             })
             return
           } catch {
-            // Refresh failed — session is dead
+            // Refresh failed — пробуем cookie-путь ниже
           }
         }
 
-        // Both tokens expired or refresh failed — clear session
+        // Cookie-путь: токенов в памяти нет (перезагрузка страницы) —
+        // проверяем сессию запросом /me. Cookie уходит автоматически,
+        // 401-interceptor при необходимости сам сделает cookie-refresh.
+        try {
+          await authApi.getMe()
+          return
+        } catch {
+          // Session is dead
+        }
+
+        // Session invalid — clear state
         set({
           user: null,
           accessToken: null,
@@ -373,10 +380,11 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'remnawave-auth',
       storage: createJSONStorage(() => safeLocalStorage),
+      // Токены НЕ персистятся: access живёт в памяти, refresh — в HttpOnly
+      // cookie. Старые записи localStorage с токенами при rehydrate ещё
+      // читаются (легаси-миграция), но перезаписываются без токенов.
       partialize: (state) => ({
         user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
     }

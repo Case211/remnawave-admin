@@ -34,7 +34,20 @@ function getApiBaseUrl(): string {
 }
 
 /**
- * Axios client with interceptors for auth
+ * Read a cookie value by name (used for the non-HttpOnly CSRF cookie).
+ */
+export function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+/**
+ * Axios client with interceptors for auth.
+ *
+ * Аутентификация: HttpOnly cookies (rw_access/rw_refresh) — браузер шлёт
+ * их сам (withCredentials). Bearer-заголовок добавляется только пока
+ * access-токен есть в памяти (свежий логин или легаси-сессия из
+ * localStorage до миграции).
  */
 const client = axios.create({
   baseURL: getApiBaseUrl(),
@@ -42,18 +55,26 @@ const client = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 30000,
+  withCredentials: true,
 })
 
 /**
- * Request interceptor - add auth token from Zustand store (in-memory).
- * Reading from the store directly is more reliable than localStorage
- * (avoids timing issues with persist middleware).
+ * Request interceptor:
+ * - Bearer из Zustand-стора (in-memory), если есть
+ * - X-CSRF-Token для мутирующих запросов (double-submit к cookie rw_csrf)
  */
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const auth = getAuthState()
     if (auth?.accessToken) {
       config.headers.Authorization = `Bearer ${auth.accessToken}`
+    }
+    const method = (config.method || 'get').toUpperCase()
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      const csrf = getCookie('rw_csrf')
+      if (csrf) {
+        config.headers['X-CSRF-Token'] = csrf
+      }
     }
     return config
   },
@@ -68,14 +89,20 @@ client.interceptors.request.use(
 let isRefreshing = false
 let refreshPromise: Promise<{ access_token: string; refresh_token: string }> | null = null
 
-function doRefresh(refreshToken: string): Promise<{ access_token: string; refresh_token: string }> {
+function doRefresh(refreshToken?: string | null): Promise<{ access_token: string; refresh_token: string }> {
   if (isRefreshing && refreshPromise) {
     return refreshPromise
   }
 
   isRefreshing = true
+  // Тело с токеном — легаси-путь (старый localStorage); без токена
+  // сервер берёт refresh из HttpOnly cookie rw_refresh
   const promise = axios
-    .post(`${getApiBaseUrl()}/auth/refresh`, { refresh_token: refreshToken })
+    .post(
+      `${getApiBaseUrl()}/auth/refresh`,
+      refreshToken ? { refresh_token: refreshToken } : {},
+      { withCredentials: true }
+    )
     .then((response) => response.data as { access_token: string; refresh_token: string })
     .finally(() => {
       isRefreshing = false
@@ -117,17 +144,17 @@ client.interceptors.response.use(
 
       const auth = getAuthState()
 
-      // No refresh token available — force logout immediately
-      if (!auth?.refreshToken) {
-        forceLogout()
+      // Не аутентифицированы вовсе (страница логина) — не рефрешим
+      if (!auth?.isAuthenticated) {
         return Promise.reject(error)
       }
 
       try {
-        const { access_token, refresh_token } = await doRefresh(auth.refreshToken)
+        // refreshToken из стора — легаси-путь; null → cookie-refresh
+        const { access_token } = await doRefresh(auth.refreshToken)
 
-        // Update tokens in Zustand store (will also persist to localStorage)
-        auth.setTokens(access_token, refresh_token)
+        // Access держим в памяти (для Bearer/WS); refresh живёт в cookie
+        auth.setTokens(access_token)
 
         // Retry original request
         originalRequest.headers.Authorization = `Bearer ${access_token}`

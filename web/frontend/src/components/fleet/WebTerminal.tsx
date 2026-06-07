@@ -56,8 +56,9 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
   onReadyRef.current = onReady
 
   useEffect(() => {
+    // Токен в памяти — subprotocol; нет — аутентификация по HttpOnly cookie
     const token = useAuthStore.getState().accessToken
-    if (!token || !containerRef.current) return
+    if (!useAuthStore.getState().isAuthenticated || !containerRef.current) return
 
     // Cancelled flag — set by cleanup to prevent the deferred connect
     // from running after React.StrictMode's synchronous unmount.
@@ -120,7 +121,7 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
 
       // Connect WebSocket — JWT через subprotocol, не в query
       const url = getWsUrl(nodeUuid)
-      ws = new WebSocket(url, ['access-token', token])
+      ws = token ? new WebSocket(url, ['access-token', token]) : new WebSocket(url)
       wsRef.current = ws
 
       ws.onopen = () => {

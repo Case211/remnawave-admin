@@ -221,13 +221,13 @@ export function useRealtimeUpdates() {
    */
   const tryRefreshToken = useCallback(async (): Promise<string | null> => {
     if (isRefreshing.current) return null
-    const currentRefreshToken = useAuthStore.getState().refreshToken
-    if (!currentRefreshToken) return null
 
     isRefreshing.current = true
     try {
+      // refreshToken из стора — легаси-путь; null → refresh из HttpOnly cookie
+      const currentRefreshToken = useAuthStore.getState().refreshToken
       const response = await authApi.refreshToken(currentRefreshToken)
-      setTokens(response.access_token, response.refresh_token)
+      setTokens(response.access_token)
       return response.access_token
     } catch {
       // Refresh failed — session is dead
@@ -241,7 +241,7 @@ export function useRealtimeUpdates() {
   const connect = useCallback(() => {
     const currentToken = useAuthStore.getState().accessToken
     const currentAuth = useAuthStore.getState().isAuthenticated
-    if (!currentToken || !currentAuth || !isMounted.current) return
+    if (!currentAuth || !isMounted.current) return
 
     // Close existing connection
     if (wsRef.current) {
@@ -250,8 +250,11 @@ export function useRealtimeUpdates() {
     }
 
     const url = getWsUrl()
-    // JWT через subprotocol — сервер подтверждает 'access-token'
-    const ws = new WebSocket(url, ['access-token', currentToken])
+    // JWT через subprotocol, если access есть в памяти; иначе сервер
+    // аутентифицирует по HttpOnly cookie (уходит с handshake сама)
+    const ws = currentToken
+      ? new WebSocket(url, ['access-token', currentToken])
+      : new WebSocket(url)
     wsRef.current = ws
 
     ws.onopen = () => {

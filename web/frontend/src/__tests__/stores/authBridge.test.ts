@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+﻿import { describe, it, expect, beforeEach } from 'vitest'
 import { registerAuthGetter, getAuthState } from '@/store/authBridge'
 
 describe('authBridge', () => {
@@ -14,6 +14,7 @@ describe('authBridge', () => {
   it('returns auth state after registering getter', () => {
     const mockAuth = {
       accessToken: 'test-token',
+      isAuthenticated: true,
       refreshToken: 'test-refresh',
       setTokens: () => {},
       logout: () => {},
@@ -28,6 +29,7 @@ describe('authBridge', () => {
 
     registerAuthGetter(() => ({
       accessToken: token,
+      isAuthenticated: true,
       refreshToken: 'refresh',
       setTokens: () => {},
       logout: () => {},
@@ -42,6 +44,7 @@ describe('authBridge', () => {
   it('can override getter with new registration', () => {
     registerAuthGetter(() => ({
       accessToken: 'first',
+      isAuthenticated: true,
       refreshToken: 'r1',
       setTokens: () => {},
       logout: () => {},
@@ -49,6 +52,7 @@ describe('authBridge', () => {
 
     registerAuthGetter(() => ({
       accessToken: 'second',
+      isAuthenticated: true,
       refreshToken: 'r2',
       setTokens: () => {},
       logout: () => {},
@@ -57,3 +61,4 @@ describe('authBridge', () => {
     expect(getAuthState()?.accessToken).toBe('second')
   })
 })
+

@@ -223,12 +223,15 @@ export const authApi = {
   },
 
   /**
-   * Refresh access token
+   * Refresh access token.
+   * Без аргумента сервер берёт refresh из HttpOnly cookie rw_refresh;
+   * с аргументом — легаси-путь (токен из старого localStorage).
    */
-  refreshToken: async (refreshToken: string): Promise<TokenResponse> => {
-    const response = await client.post<TokenResponse>('/auth/refresh', {
-      refresh_token: refreshToken,
-    })
+  refreshToken: async (refreshToken?: string | null): Promise<TokenResponse> => {
+    const response = await client.post<TokenResponse>(
+      '/auth/refresh',
+      refreshToken ? { refresh_token: refreshToken } : {}
+    )
     return response.data
   },
 

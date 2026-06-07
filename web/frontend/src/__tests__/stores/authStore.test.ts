@@ -78,7 +78,8 @@ describe('authStore', () => {
       const state = useAuthStore.getState()
       expect(state.isAuthenticated).toBe(true)
       expect(state.accessToken).toBe('acc-123')
-      expect(state.refreshToken).toBe('ref-456')
+      // refresh-токен живёт только в HttpOnly cookie — в сторе его нет
+      expect(state.refreshToken).toBeNull()
       expect(state.user?.username).toBe('alice')
       expect(state.user?.authMethod).toBe('telegram')
       expect(state.user?.telegramId).toBe(1001)
@@ -211,10 +212,22 @@ describe('authStore', () => {
       expect(authApi.logout).toHaveBeenCalled()
     })
 
-    it('does not call API logout when no token', async () => {
+    it('calls API logout even without in-memory token (cookie session)', async () => {
+      const { authApi } = await import('@/api/auth')
+      vi.mocked(authApi.logout).mockResolvedValue()
+
+      // После перезагрузки страницы access живёт только в cookie —
+      // logout всё равно должен дёрнуть бэкенд, чтобы погасить cookies
+      useAuthStore.setState({ accessToken: null, isAuthenticated: true })
+      useAuthStore.getState().logout()
+
+      expect(authApi.logout).toHaveBeenCalled()
+    })
+
+    it('does not call API logout when not authenticated', async () => {
       const { authApi } = await import('@/api/auth')
 
-      useAuthStore.setState({ accessToken: null, isAuthenticated: true })
+      useAuthStore.setState({ accessToken: null, isAuthenticated: false })
       useAuthStore.getState().logout()
 
       expect(authApi.logout).not.toHaveBeenCalled()
@@ -246,7 +259,32 @@ describe('authStore', () => {
       expect(useAuthStore.getState().isAuthenticated).toBe(false)
     })
 
-    it('clears session when no tokens at all', async () => {
+    it('keeps cookie session when getMe succeeds (no in-memory tokens)', async () => {
+      const { authApi } = await import('@/api/auth')
+      vi.mocked(authApi.getMe).mockResolvedValue({
+        telegram_id: null,
+        username: 'admin',
+        role: 'superadmin',
+        role_id: 1,
+        auth_method: 'password',
+        password_is_generated: false,
+        permissions: [],
+      })
+
+      useAuthStore.setState({
+        isAuthenticated: true,
+        accessToken: null,
+        refreshToken: null,
+      })
+
+      await useAuthStore.getState().validateSession()
+      expect(useAuthStore.getState().isAuthenticated).toBe(true)
+    })
+
+    it('clears session when no tokens and cookie session is dead', async () => {
+      const { authApi } = await import('@/api/auth')
+      vi.mocked(authApi.getMe).mockRejectedValue(new Error('401'))
+
       useAuthStore.setState({
         isAuthenticated: true,
         accessToken: null,
@@ -290,13 +328,15 @@ describe('authStore', () => {
 
       const state = useAuthStore.getState()
       expect(state.accessToken).toBe('new-access')
-      expect(state.refreshToken).toBe('new-refresh')
+      // refresh ротировался в HttpOnly cookie, в сторе очищен
+      expect(state.refreshToken).toBeNull()
       expect(state.isAuthenticated).toBe(true)
     })
 
-    it('clears session when refresh also fails', async () => {
+    it('clears session when refresh and cookie fallback both fail', async () => {
       const { authApi } = await import('@/api/auth')
       vi.mocked(authApi.refreshToken).mockRejectedValue(new Error('Expired'))
+      vi.mocked(authApi.getMe).mockRejectedValue(new Error('401'))
 
       const pastExp = Math.floor(Date.now() / 1000) - 60
       const futureRefresh = Math.floor(Date.now() / 1000) + 3600
@@ -310,7 +350,10 @@ describe('authStore', () => {
       expect(useAuthStore.getState().isAuthenticated).toBe(false)
     })
 
-    it('clears session when both tokens expired', async () => {
+    it('clears session when both tokens expired and no cookie session', async () => {
+      const { authApi } = await import('@/api/auth')
+      vi.mocked(authApi.getMe).mockRejectedValue(new Error('401'))
+
       const pastExp = Math.floor(Date.now() / 1000) - 60
       useAuthStore.setState({
         isAuthenticated: true,

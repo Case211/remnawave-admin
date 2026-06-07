@@ -243,7 +243,7 @@ export default function SystemLogs() {
 
   // WebSocket streaming
   useEffect(() => {
-    if (!isStreaming || !accessToken) return
+    if (!isStreaming) return
 
     const envUrl =
       window.__ENV?.API_URL ||
@@ -264,8 +264,11 @@ export default function SystemLogs() {
     }
 
     const wsUrl = `${base}/logs/stream?file=${activeTab}`
-    // JWT через subprotocol — не попадает в access-логи
-    const ws = new WebSocket(wsUrl, ['access-token', accessToken])
+    // JWT через subprotocol (если есть в памяти) — не попадает в access-логи;
+    // иначе аутентификация по HttpOnly cookie
+    const ws = accessToken
+      ? new WebSocket(wsUrl, ['access-token', accessToken])
+      : new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
