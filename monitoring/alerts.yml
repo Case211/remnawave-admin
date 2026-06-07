@@ -1,0 +1,130 @@
+# Готовые alert rules для Remnawave Admin Panel.
+#
+# Подключаются автоматически при запуске встроенного Prometheus:
+#   docker compose --profile monitoring up -d
+#
+# Алерты видны в Prometheus UI (http://server:9090/alerts) и в Grafana
+# (Alerting → Alert rules при подключённом datasource). Доставка
+# уведомлений (Telegram/Slack/email) — через внешний Alertmanager или
+# Grafana Alerting: правила ниже совместимы с обоими.
+#
+# Пороги подобраны консервативно — подстраивай под свой SLO.
+
+groups:
+  - name: remnawave-panel
+    rules:
+      # ── Доступность ───────────────────────────────────────────
+      - alert: PanelBackendDown
+        expr: up{job="remnawave-panel"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Бэкенд панели недоступен"
+          description: "Prometheus не может скрейпить /metrics дольше 2 минут. Проверь контейнер web-backend."
+
+      - alert: PanelHigh5xxRate
+        expr: sum(rate(panel_http_requests_total{status=~"5.."}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Всплеск 5xx ошибок"
+          description: "Больше 0.5 ошибок 5xx в секунду за последние 5 минут ({{ $value | printf \"%.2f\" }} rps). Смотри SystemLogs и логи web-backend."
+
+      - alert: PanelHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(panel_http_request_duration_seconds_bucket[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency выше 2 секунд"
+          description: "95-й перцентиль времени ответа API держится выше 2с уже 10 минут ({{ $value | printf \"%.2f\" }}s)."
+
+      # ── База данных ───────────────────────────────────────────
+      - alert: PanelDBPoolSaturation
+        expr: panel_db_pool_size > 0 and panel_db_pool_used / panel_db_pool_size > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Пул соединений PostgreSQL почти исчерпан"
+          description: "Занято больше 80% соединений пула дольше 10 минут. Проверь долгие запросы и idle-in-transaction."
+
+      # ── Ноды ──────────────────────────────────────────────────
+      - alert: NodeOffline
+        expr: panel_node_connected == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Нода {{ $labels.node }} офлайн"
+          description: "Нода {{ $labels.node }} не подключена к панели дольше 5 минут."
+
+      - alert: NodeAgentSilent
+        expr: panel_node_last_seen_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Агент ноды {{ $labels.node }} молчит"
+          description: "Node-agent на {{ $labels.node }} не присылал метрики больше 5 минут ({{ $value | printf \"%.0f\" }}s). Связь с панелью или сам агент."
+
+      - alert: NodeHighCPU
+        expr: panel_node_cpu_usage_percent > 90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU на ноде {{ $labels.node }} выше 90%"
+          description: "CPU {{ $labels.node }}: {{ $value | printf \"%.0f\" }}% дольше 15 минут."
+
+      - alert: NodeHighMemory
+        expr: panel_node_memory_usage_percent > 90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Память на ноде {{ $labels.node }} выше 90%"
+          description: "RAM {{ $labels.node }}: {{ $value | printf \"%.0f\" }}% дольше 15 минут."
+
+      - alert: NodeDiskAlmostFull
+        expr: panel_node_disk_usage_percent > 85
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Диск на ноде {{ $labels.node }} заполнен на {{ $value | printf \"%.0f\" }}%"
+          description: "Диск {{ $labels.node }} заполнен больше чем на 85%. Логи xray и журналы — первые кандидаты на чистку."
+
+      # ── Синхронизация и коллектор ─────────────────────────────
+      - alert: PanelSyncLag
+        expr: panel_sync_lag_seconds > 900
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Синхронизация «{{ $labels.kind }}» отстаёт"
+          description: "Последний успешный sync «{{ $labels.kind }}» был больше 15 минут назад. Проверь связь с Panel API и логи web-backend."
+
+      - alert: CollectorRejectSpike
+        expr: sum(rate(panel_collector_batches_rejected_total[5m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Коллектор отклоняет батчи агентов"
+          description: "Больше 0.2 отклонённых батчей в секунду за 5 минут. Причины — в лейбле reason метрики panel_collector_batches_rejected_total (auth / rate_limit / malformed)."
+
+      - alert: NotificationFailures
+        expr: sum(rate(panel_notifications_failed_total[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Уведомления не доставляются"
+          description: "Канал доставки уведомлений стабильно фейлится (>0.1/s за 10 минут). Каналы — в лейбле channel метрики panel_notifications_failed_total."

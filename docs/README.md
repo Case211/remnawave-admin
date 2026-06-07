@@ -271,7 +271,29 @@ panel_db_pool_used / panel_db_pool_size > 0.8
 (panel_online_users - panel_online_users offset 1h) / panel_online_users offset 1h < -0.3
 ```
 
-## 6. Troubleshooting
+## 6. Алерты из коробки
+
+Встроенный Prometheus автоматически подхватывает готовый набор правил из
+[`monitoring/alerts.yml`](../monitoring/alerts.yml) — 12 алертов: доступность
+бэкенда, всплеск 5xx, p95 latency, насыщение пула БД, нода офлайн / агент
+молчит / CPU / RAM / диск, отставание sync, отклонённые батчи коллектора,
+фейлы доставки уведомлений.
+
+Смотреть: **Prometheus UI → Alerts** (`http://server:9090/alerts`).
+
+Доставка уведомлений (Telegram / Slack / email) — через внешний
+Alertmanager или Grafana Alerting; правила совместимы с обоими. Пороги
+консервативные — правь `monitoring/alerts.yml` под свой SLO, Prometheus
+перечитает их при рестарте контейнера:
+
+```bash
+docker compose --profile monitoring restart prometheus
+```
+
+Если скрейпишь панель внешним Prometheus / vmagent — просто скопируй
+`monitoring/alerts.yml` к себе в `rule_files`.
+
+## 7. Troubleshooting
 
 ### `/metrics` отвечает 401
 `METRICS_AUTH_TOKEN` задан, но скрейпер не шлёт `Authorization: Bearer`. Проверь
@@ -297,7 +319,7 @@ Counter появится в `/metrics` только после первого `i
 2. Если 0 — Prometheus не достал target. Проверь Status → Targets.
 3. Если нет даже `up` — datasource в дашборде указывает не на тот Prometheus.
 
-## 7. Кастомизация
+## 8. Кастомизация
 
 Чтобы добавить свою метрику, например счётчик «сколько раз срабатывал детектор
 торрентов»:
@@ -320,11 +342,12 @@ TORRENT_DETECTIONS.labels(node=node_name).inc()
 После перезапуска метрика начнёт публиковаться в `/metrics`. Добавь панель в
 Grafana руками (или через export-update-import).
 
-## 8. Что осознанно не сделано
+## 9. Что осознанно не сделано
 
 - Нет встроенной Grafana внутри панели — внешняя инсталляция чище и менее
   навязчива.
-- Нет алертов из коробки — алертинг живёт в Grafana / Prometheus / VictoriaMetrics
-  Alertmanager, набор правил зависит от твоего SLO.
+- Нет встроенного Alertmanager — правила алертов поставляются
+  (см. раздел 6), но доставка уведомлений живёт в твоём Alertmanager /
+  Grafana Alerting: маршрутизация и каналы зависят от твоей инфраструктуры.
 - Нет автоматического include в API spec — `/metrics` помечен
   `include_in_schema=False`, чтобы не светить его в OpenAPI/Swagger.

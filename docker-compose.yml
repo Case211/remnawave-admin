@@ -198,6 +198,7 @@ services:
     user: "65534:65534"  # nobody:nobody, владелец /prometheus в образе
     volumes:
       - ./monitoring/prometheus.yml.tmpl:/etc/prometheus/prometheus.yml.tmpl:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - ./monitoring/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
       - prometheus_data:/prometheus
     environment:
