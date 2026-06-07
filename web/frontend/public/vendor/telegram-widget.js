@@ -1,3 +1,6 @@
+// Vendored: https://telegram.org/js/telegram-widget.js?22
+// PATCHED: getWidgetsOrigin всегда возвращает официальный origin (см. ниже).
+// При обновлении скачать новую версию и заново применить патч.
 (function(window) {
   (function(window){
     window.__parseFunction = function(__func, __attrs) {
@@ -45,16 +48,12 @@
     return null;
   }
 
+  // PATCHED (vendored copy): оригинал выводит origin из script.src — при
+  // загрузке скрипта с нашего домена iframe строился бы на наш же origin
+  // (SPA-fallback рекурсивно рендерил страницу логина вместо виджета).
+  // Всегда используем официальный origin Telegram.
   var getWidgetsOrigin = function(default_origin, dev_origin) {
-    var link = document.createElement('A'), origin;
-    link.href = document.currentScript && document.currentScript.src || default_origin;
-    origin = link.origin || link.protocol + '//' + link.hostname;
-    if (origin == 'https://telegram.org') {
-      origin = default_origin;
-    } else if (origin == 'https://telegram-js.azureedge.net' || origin == 'https://tg.dev') {
-      origin = dev_origin;
-    }
-    return origin;
+    return default_origin;
   };
 
   var getPageCanonical = function() {

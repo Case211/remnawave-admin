@@ -405,9 +405,10 @@ export default function Login() {
 
     const script = document.createElement('script')
     // Вендоренная копия https://telegram.org/js/telegram-widget.js?22 —
-    // защита от supply-chain атаки через CDN Telegram (виджет сам строит
-    // iframe на https://oauth.telegram.org, от origin скрипта не зависит).
-    // Обновление: скачать новую версию в public/vendor/ руками.
+    // защита от supply-chain атаки через CDN Telegram. ВАЖНО: оригинал
+    // выводит origin iframe из script.src, поэтому копия пропатчена
+    // (getWidgetsOrigin всегда возвращает https://oauth.telegram.org).
+    // Обновление: скачать новую версию в public/vendor/ и заново пропатчить.
     script.src = '/vendor/telegram-widget.js'
     script.setAttribute('data-telegram-login', botUsername)
     script.setAttribute('data-size', 'large')
