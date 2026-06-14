@@ -3,7 +3,7 @@ export type UserAgentClass = 'valid' | 'link_in_ua' | 'bot_library' | 'stub' | '
 const WHITELIST = [
   /^Happ\//i, /^Stash\//i, /^Streisand\//i, /^V2Box\//i, /^Karing\//i,
   /^ShadowRocket\//i, /^FoXray\//i, /^Loon\//i, /^Wings\s?X\//i,
-  /^v2rayNG\//i, /^NekoBox\//i, /^Exclave\//i, /^Matsuri\//i, /^SagerNet\//i,
+  /^v2rayNG\//i, /^v2raytun\//i, /^NekoBox\//i, /^Exclave\//i, /^Matsuri\//i, /^SagerNet\//i,
   /^Hiddify\//i, /^HiddifyNext\//i,
   /^FlClash(?:\s?X)?\//i, /^ClashX(?:\s?Pro)?\//i,
   /^Clash(?:\s?Verge)?(?:\s?Rev)?\//i, /^ClashMeta\//i,
