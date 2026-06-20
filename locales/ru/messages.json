@@ -244,6 +244,8 @@
     "no_subscription_url": "⚠️ У пользователя нет ссылки подписки.",
     "happ_crypto_link_error": "⚠️ Не удалось получить Happ crypto link.",
     "link_not_found": "⚠️ Ссылка не найдена.",
+    "qr_button": "🔳 QR-код",
+    "qr_caption": "🔳 Ссылка подписки:\n<code>{url}</code>",
     "back_to_configs": "↩️ Назад к ссылкам",
     "stats": "📊 Статистика",
     "stats.subscription_history": "📜 История запросов подписки",

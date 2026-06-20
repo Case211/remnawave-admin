@@ -23,6 +23,7 @@ def user_actions_keyboard(user_uuid: str, status: str, back_to: str = NavTarget.
     if row2:
         rows.append(row2)
     row3 = [b for b in [
+        perm_btn(admin, "users", "view", _("user.qr_button"), f"uqr:{user_uuid}"),
         perm_btn(admin, "users", "edit", _("user.edit"), f"user_edit:{user_uuid}"),
     ] if b is not None]
     if row3:

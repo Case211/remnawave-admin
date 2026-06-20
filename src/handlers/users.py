@@ -1,11 +1,13 @@
 """Обработчики для работы с пользователями."""
 import asyncio
 import base64
+import io
 import json
 from datetime import datetime, timedelta, timezone
 
+import qrcode
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Message
 from aiogram.utils.i18n import gettext as _
 
 from src.config import get_settings
@@ -2777,6 +2779,69 @@ async def cb_user_happ_link(callback: CallbackQuery) -> None:
         await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
     except ApiClientError:
         logger.exception("Failed to get Happ crypto link for user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
+        await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
+
+
+@router.callback_query(F.data.startswith("uqr:"))
+async def cb_user_qr(callback: CallbackQuery, admin: BotAdmin) -> None:
+    """Обработчик показа QR-кода подписной ссылки пользователя."""
+    if await _not_admin(callback):
+        return
+    if not await require_permission(callback, admin, "users", "view"):
+        return
+    await callback.answer()
+
+    user_uuid = callback.data.split(":", 1)[1]
+    back_to = _get_user_detail_back_target(callback.from_user.id)
+
+    try:
+        user = await data_access.get_user_by_uuid_wrapped(user_uuid)
+        user_info = user.get("response", user)
+        subscription_url = user_info.get("subscriptionUrl")
+
+        if not subscription_url:
+            await callback.message.edit_text(
+                _("user.no_subscription_url"),
+                reply_markup=user_actions_keyboard(user_uuid, user_info.get("status", "UNKNOWN"), back_to=back_to, admin=admin),
+            )
+            return
+
+        qr_buf = io.BytesIO()
+        qrcode.make(subscription_url, box_size=8, border=2).save(qr_buf, format="PNG")
+        qr_buf.seek(0)
+
+        caption = _("user.qr_caption").format(url=_esc(subscription_url))
+        media = InputMediaPhoto(
+            media=BufferedInputFile(qr_buf.read(), filename="subscription.png"),
+            caption=caption,
+            parse_mode="HTML",
+        )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=_("actions.back"), callback_data=f"user:{user_uuid}")],
+                nav_row(back_to),
+            ]
+        )
+        try:
+            await callback.message.edit_media(media=media, reply_markup=keyboard)
+        except Exception:
+            logger.exception("edit_media failed for user QR, falling back to delete+send user_uuid=%s", user_uuid)
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await callback.message.answer_photo(
+                photo=BufferedInputFile(qr_buf.getvalue(), filename="subscription.png"),
+                caption=caption,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+    except UnauthorizedError:
+        await callback.message.edit_text(_("errors.unauthorized"), reply_markup=nav_keyboard(back_to))
+    except NotFoundError:
+        await callback.message.edit_text(_("user.not_found"), reply_markup=nav_keyboard(back_to))
+    except ApiClientError:
+        logger.exception("Failed to load user for QR user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
         await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
 
 

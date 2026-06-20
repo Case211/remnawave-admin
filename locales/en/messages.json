@@ -244,6 +244,8 @@
     "no_subscription_url": "⚠️ User has no subscription URL.",
     "happ_crypto_link_error": "⚠️ Failed to get Happ crypto link.",
     "link_not_found": "⚠️ Link not found.",
+    "qr_button": "🔳 QR Code",
+    "qr_caption": "🔳 Subscription URL:\n<code>{url}</code>",
     "back_to_configs": "↩️ Back to links",
     "stats": "📊 Statistics",
     "stats.subscription_history": "📜 Subscription request history",
