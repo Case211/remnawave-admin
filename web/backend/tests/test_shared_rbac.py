@@ -229,12 +229,14 @@ class TestGetScope:
         result = await get_scope(None, None, None, "node", "view")
         assert result is None
 
-    async def test_db_disconnected_returns_none(self):
+    async def test_db_disconnected_failclosed(self):
+        # fail-closed (#1): при недоступной БД get_scope не выдаёт полный доступ (None),
+        # а пустой scope (нет доступа) — как get_visible_user_uuids
         from shared.rbac import get_scope
         with patch("shared.rbac.db_service") as mock_db:
             mock_db.is_connected = False
             result = await get_scope(1, 1, "admin", "node", "view")
-        assert result is None
+        assert result == set()
 
     async def test_no_rules_returns_none(self):
         from shared.rbac import get_scope

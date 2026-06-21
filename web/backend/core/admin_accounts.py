@@ -175,7 +175,7 @@ async def create_admin_account(
     max_nodes: Optional[int] = None,
     max_hosts: Optional[int] = None,
     unlimited_traffic_policy: str = "allowed",
-    unrestricted_user_access: bool = True,
+    unrestricted_user_access: bool = False,  # scoping ON по умолчанию для новых админов
     has_bot_access: bool = False,
     is_generated_password: bool = False,
     created_by: Optional[int] = None,

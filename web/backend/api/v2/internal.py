@@ -58,6 +58,10 @@ async def _check_permission(
     Returns False only if admin lacks the specific permission.
     """
     if not resource or resource not in _KNOWN_RBAC_RESOURCES:
+        # Panel-only ресурс (вне RBAC-системы) проходит без проверки прав. Логируем для
+        # аудита: чувствительные Panel-операции желательно переводить на типизированные эндпоинты.
+        if resource:
+            logger.debug("Proxy: non-RBAC resource '%s' (%s) passed without RBAC check", resource, action)
         return True
     if admin_account_id is None:
         return True

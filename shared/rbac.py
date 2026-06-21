@@ -187,7 +187,7 @@ async def get_scope(
             return cached
 
     if not db_service.is_connected:
-        return None
+        return set()  # fail-closed: при недоступной БД не выдаём полный доступ (как get_visible_user_uuids)
     try:
         rules = await db_service.get_effective_policy_rules(account_id, role_id)
         if not rules:
@@ -220,7 +220,7 @@ async def get_scope(
         return allowed.copy()
     except Exception as e:
         logger.warning("get_scope failed for admin=%s rt=%s: %s", account_id, resource_type, e)
-        return None
+        return set()  # fail-closed: при ошибке резолва scope не выдаём полный доступ
 
 
 def filter_by_scope(items: List[dict], scope: Optional[Set[str]], uuid_key: str = "uuid") -> List[dict]:

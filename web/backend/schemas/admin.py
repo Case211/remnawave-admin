@@ -51,7 +51,7 @@ class AdminAccountBase(BaseModel):
     max_hosts: Optional[int] = Field(None, ge=0)
     has_bot_access: bool = False
     unlimited_traffic_policy: str = "allowed"
-    unrestricted_user_access: bool = True
+    unrestricted_user_access: bool = False  # scoping ON для НОВЫХ админов (изоляция multi-tenant); снимается опционально
 
 
 class AdminAccountCreate(AdminAccountBase):

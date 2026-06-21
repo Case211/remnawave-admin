@@ -287,7 +287,7 @@ const emptyForm: AdminFormData = {
   max_hosts: '',
   has_bot_access: false,
   unlimited_traffic_policy: 'allowed',
-  unrestricted_user_access: true,
+  unrestricted_user_access: false, // scoping ON по умолчанию для новых админов (изоляция multi-tenant)
 }
 
 function AdminFormDialog({
