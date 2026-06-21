@@ -25,9 +25,11 @@ AVAILABLE_EVENTS = [
     "user.created",
     "user.updated",
     "user.deleted",
+    "user.blocked",
     "node.online",
     "node.offline",
     "violation.created",
+    "automation.triggered",
     "backup.created",
 ]
 

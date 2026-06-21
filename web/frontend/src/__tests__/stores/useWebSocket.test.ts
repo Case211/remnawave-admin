@@ -51,6 +51,7 @@ class MockWebSocket {
   static CLOSED = 3
 
   url: string
+  protocols?: string | string[]
   onopen: ((event: Event) => void) | null = null
   onclose: ((event: CloseEvent) => void) | null = null
   onmessage: ((event: MessageEvent) => void) | null = null
@@ -60,8 +61,12 @@ class MockWebSocket {
   send = vi.fn()
   close = vi.fn()
 
-  constructor(url: string) {
+  static lastInstance: MockWebSocket | null = null
+
+  constructor(url: string, protocols?: string | string[]) {
     this.url = url
+    this.protocols = protocols
+    MockWebSocket.lastInstance = this
     // Auto-open after a tick
     setTimeout(() => {
       this.readyState = MockWebSocket.OPEN
@@ -102,9 +107,10 @@ describe('useWebSocket / useRealtimeUpdates', () => {
     vi.useRealTimers()
   })
 
-  it('creates WebSocket connection with auth token', async () => {
+  it('passes JWT via Sec-WebSocket-Protocol, not in URL', async () => {
     const { useRealtimeUpdates } = await import('@/store/useWebSocket')
 
+    MockWebSocket.lastInstance = null
     renderHook(() => useRealtimeUpdates())
 
     // Advance timers for WebSocket auto-open
@@ -112,9 +118,12 @@ describe('useWebSocket / useRealtimeUpdates', () => {
       vi.advanceTimersByTime(10)
     })
 
-    // Check that WebSocket was created
-    // The URL should contain the token
-    expect(MockWebSocket.prototype.constructor).toBeDefined()
+    const ws = MockWebSocket.lastInstance as MockWebSocket | null
+    expect(ws).not.toBeNull()
+    // Токен НЕ должен утекать в query string (попадает в access-логи)
+    expect(ws!.url).not.toContain('token=')
+    // Токен передаётся через subprotocol-пару
+    expect(ws!.protocols).toEqual(['access-token', 'test-jwt-token'])
   })
 
   it('does not connect when not authenticated', async () => {

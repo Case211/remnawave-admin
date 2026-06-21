@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTabParam } from '@/lib/useTabParam'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +14,7 @@ import {
   Code,
   Settings,
   RefreshCw,
+  FileJson,
 } from 'lucide-react'
 import { resourcesApi, Template, Snippet, ConfigProfile } from '../api/resources'
 import { Button } from '@/components/ui/button'
@@ -54,6 +56,7 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   // Permissions
   const canCreate = useHasPermission('resources', 'create')
@@ -619,7 +622,22 @@ export default function Resources({ embedded }: { embedded?: boolean } = {}) {
                 >
                   <CardContent className="p-4">
                     <div className="space-y-3">
-                      <h3 className="font-medium text-white">{profile.name}</h3>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-medium text-white">{profile.name}</h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs shrink-0 text-dark-200 hover:text-white"
+                          title={t('resources.profiles.openInEditor')}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigate(`/resources/xray?profile=${profile.uuid}`)
+                          }}
+                        >
+                          <FileJson className="w-3.5 h-3.5 mr-1" />
+                          {t('resources.profiles.openInEditor')}
+                        </Button>
+                      </div>
                       <div className="text-xs text-dark-300 space-y-1">
                         <div>{t('resources.uuid')} {profile.uuid.slice(0, 8)}...</div>
                         <div>{t('resources.position')} {profile.viewPosition}</div>

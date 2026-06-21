@@ -171,20 +171,19 @@ function BackupsTab() {
   const handleDownload = (filename: string) => {
     const url = backupApi.downloadBackup(filename)
     const a = document.createElement('a')
-    a.href = url
     a.download = filename
-    if (token) {
-      fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.blob())
-        .then((blob) => {
-          const blobUrl = URL.createObjectURL(blob)
-          a.href = blobUrl
-          a.click()
-          URL.revokeObjectURL(blobUrl)
-        })
-    } else {
-      a.click()
-    }
+    // Bearer — пока access есть в памяти; иначе HttpOnly cookie (credentials)
+    fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const blobUrl = URL.createObjectURL(blob)
+        a.href = blobUrl
+        a.click()
+        URL.revokeObjectURL(blobUrl)
+      })
   }
 
   const handleExportFullConfig = async () => {

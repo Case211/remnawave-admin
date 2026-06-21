@@ -1,6 +1,6 @@
 import React from 'react';
 import { Toaster } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './xray-editor.css';
 import { useAppLogic } from './hooks/useAppLogic';
 import { getPresets } from './core/presets';
@@ -15,7 +15,12 @@ import {
 
 export default function XrayEditor() {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [modulesVisible, setModulesVisible] = React.useState(false);
+
+    // Deep-link: /resources/xray?profile=<uuid> открывает конкретный профиль
+    // (кнопка «Открыть в редакторе» на витрине профилей в Resources).
+    const requestedProfile = searchParams.get('profile');
 
     // Auto-connect through the admin's JWT (no login form needed) and, if
     // exactly one config-profile exists in the Panel, pre-load it so the
@@ -30,6 +35,19 @@ export default function XrayEditor() {
         autoConnect();
         (async () => {
             try {
+                if (requestedProfile) {
+                    // Явный запрос профиля через URL имеет приоритет над
+                    // автовыбором. Параметр одноразовый: убираем его после
+                    // обработки, иначе effect перезатрёт ручную смену
+                    // профиля внутри редактора.
+                    if (activeProfileUuid !== requestedProfile) {
+                        await loadProfile(requestedProfile);
+                    }
+                    if (!cancelled) {
+                        setSearchParams({}, { replace: true });
+                    }
+                    return;
+                }
                 const profiles = await fetchProfiles();
                 if (cancelled || !Array.isArray(profiles) || profiles.length === 0) return;
                 if (activeProfileUuid) return;
@@ -41,7 +59,7 @@ export default function XrayEditor() {
             }
         })();
         return () => { cancelled = true; };
-    }, [autoConnect, fetchProfiles, loadProfile, activeProfileUuid]);
+    }, [autoConnect, fetchProfiles, loadProfile, activeProfileUuid, requestedProfile, setSearchParams]);
     const {
         config, setConfig, deleteItem, addItem, remnawave, disconnectRemnawave, initDns,
         modal, setModal,

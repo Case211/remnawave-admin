@@ -66,6 +66,7 @@ class HwidScore:
     other_accounts_count: int = 0
     other_accounts: List[str] = None
     matched_details: List[Dict[str, Any]] = None
+    per_account_abuse: bool = False  # абуз мультитарифа (один telegram_id, N подписок на HWID)
 
 
 class UserAgentClassification(Enum):

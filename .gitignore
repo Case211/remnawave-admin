@@ -11,6 +11,7 @@ backups/
 node_modules/
 log_error.json
 IMPROVEMENTS.md
+CLAUDE.md
 access.json
 logs_node_agent.json
 design-mockups/
@@ -28,3 +29,15 @@ node-agent/test-logs/access.log
 # Firebase service account credentials
 web/backend/secrets/
 
+# Security / internal audit reports (детали эксплуатации и слабости детекта — не коммитить)
+docs/SECURITY_AUDIT_*.md
+docs/VIOLATIONS_AUDIT_*.md
+
+# Playwright E2E artifacts
+web/frontend/test-results/
+
+# Agent skills lock (глобальный инструментарий, не часть проекта)
+skills-lock.json
+
+# MCP-сервер для админки — локальный инструмент диагностики (не в репо, содержит прод-доступ)
+mcp_server/

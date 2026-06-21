@@ -222,6 +222,17 @@ class TrafficRateMonitor:
                         "Auto-blocked user %s for excessive traffic: %.1f GB (threshold: %.1f GB)",
                         v["username"], v["delta_gb"], auto_block_gb,
                     )
+                    from web.backend.core.webhook_security import fire_event
+                    fire_event("user.blocked", {
+                        "uuid": v["user_uuid"],
+                        "username": v["username"],
+                        "reason": "traffic_rate",
+                        "details": (
+                            f"{v['delta_gb']} GB in {int(v['elapsed_minutes'])} min "
+                            f"(auto-block threshold: {auto_block_gb} GB)"
+                        ),
+                        "blocked_by": "auto",
+                    })
                 except Exception as e:
                     logger.warning("Failed to auto-block user %s: %s", v["user_uuid"], e)
 
@@ -345,7 +356,7 @@ class TrafficRateMonitor:
             auto_block_gb = cfg.get("auto_block_gb", 50.0)
             rec_action = "hard_block" if auto_action == "block_user" and delta_gb >= auto_block_gb else "monitor"
 
-            await db_service.save_violation(
+            violation_id = await db_service.save_violation(
                 user_uuid=user_uuid,
                 username=username,
                 score=min(rate / 10, 10.0),  # normalize: 10 GB/h → 1.0, 100 GB/h → 10.0
@@ -353,6 +364,17 @@ class TrafficRateMonitor:
                 confidence=0.9,
                 reasons=[reason],
             )
+
+            from web.backend.core.webhook_security import fire_event
+            fire_event("violation.created", {
+                "violation_id": violation_id,
+                "user_uuid": user_uuid,
+                "username": username,
+                "score": min(rate / 10, 10.0),
+                "recommended_action": rec_action,
+                "reasons": [reason],
+                "source": "traffic_rate",
+            })
         except Exception as e:
             logger.error("Failed to send traffic rate notification for %s: %s",
                          violator["username"], e)

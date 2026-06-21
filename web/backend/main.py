@@ -491,6 +491,12 @@ async def lifespan(app: FastAPI):
                 # Initialize dynamic config service (DB settings cache)
                 from shared.config_service import config_service
                 await config_service.initialize()
+                # Авто-reload конфига из БД для ВСЕХ режимов. В split-режиме (APP_MODE=collector/api
+                # в разных процессах) collector иначе держит stale-кэш и не видит правок настроек
+                # из UI (их обслуживает api-процесс) до рестарта контейнера.
+                config_service.start_auto_reload(
+                    int(config_service.get("config_auto_reload_interval", 30) or 30)
+                )
 
                 # ── Services for API and full mode ──
                 if app_mode in ("api", "full"):
@@ -532,6 +538,26 @@ async def lifespan(app: FastAPI):
                                 logger.warning("Baseline refresh failed: %s", exc)
                             await asyncio.sleep(1800)
                     _bg_tasks.append(asyncio.create_task(_baseline_refresh_loop()))
+
+                    # C3: периодический HWID-скан. Детектор по батчам node-agent проверяет только
+                    # юзеров с активными подключениями СЕЙЧАС, поэтому кросс-аккаунт HWID у оффлайн-
+                    # абузеров не ловится. Этот цикл периодически ставит юзеров с общими HWID в очередь.
+                    async def _hwid_scan_loop():
+                        from web.backend.api.v2.collector import _enqueue_violation_users
+                        await asyncio.sleep(600)
+                        while True:
+                            try:
+                                if config_service.get("violations_enabled", True) and config_service.get("violations_analyzer_hwid", True):
+                                    rows = await db_service.get_shared_hwids(min_users=2, limit=1000)
+                                    uuids = {r["user_uuid"] for r in rows if r.get("user_uuid")}
+                                    if uuids:
+                                        _enqueue_violation_users(uuids)
+                                        logger.info("HWID scan: %d users sharing HWIDs enqueued for violation check", len(uuids))
+                            except Exception as exc:
+                                logger.warning("HWID scan loop failed: %s", exc)
+                            interval = int(config_service.get("violations_hwid_scan_interval_minutes", 30) or 30)
+                            await asyncio.sleep(max(5, interval) * 60)
+                    _bg_tasks.append(asyncio.create_task(_hwid_scan_loop()))
 
                 # ── Services for all modes ──
                 async def _maintenance_loop():
@@ -804,7 +830,7 @@ def create_app() -> FastAPI:
         allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
     )
 
     # Request body size limit (10 MB)
@@ -837,9 +863,12 @@ def create_app() -> FastAPI:
                 "connect-src 'self'"
             )
         else:
+            # telegram.org убран из script-src: виджет логина теперь
+            # вендорится фронтом (/vendor/telegram-widget.js), внешние
+            # скрипты бэкенд-страницам не нужны.
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' https://telegram.org; "
+                "script-src 'self'; "
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
                 "connect-src 'self' wss: ws:; "

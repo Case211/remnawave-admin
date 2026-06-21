@@ -30,14 +30,16 @@ class UserProfileAnalyzer:
     _BASELINE_CACHE_TTL = 21600  # 6 hours
     _BASELINE_CACHE_MAX_SIZE = 25000
 
-    def __init__(self, db_service: DatabaseService):
+    def __init__(self, db_service: DatabaseService, geoip_service=None):
         """
         Инициализирует UserProfileAnalyzer.
 
         Args:
             db_service: Сервис для работы с БД
+            geoip_service: GeoIP для резолва гео-baseline по known_ips (опционально)
         """
         self.db = db_service
+        self.geoip = geoip_service
         self._baseline_cache: Dict[str, tuple] = {}  # {user_uuid: (baseline_dict, timestamp)}
         self._baseline_lock = asyncio.Lock()  # single lock for baseline builds (prevents stampede)
     
@@ -136,6 +138,20 @@ class UserProfileAnalyzer:
                                 if duration_minutes > 0:
                                     session_durations.append(duration_minutes)
             
+            # Гео-baseline: история подключений не содержит country/asn (только ip), поэтому
+            # резолвим типичные страны/ASN по known_ips через GeoIP — оживляет детект «новой
+            # страны» в analyze() (без этого typical_countries всегда пуст и проверка мертва).
+            if self.geoip and all_known_ips and not countries:
+                try:
+                    geo_meta = await self.geoip.lookup_batch(list(all_known_ips)[:200])
+                    for _m in geo_meta.values():
+                        if getattr(_m, "country_code", None):
+                            countries.add(_m.country_code)
+                        if getattr(_m, "asn_org", None):
+                            asns.add(_m.asn_org)
+                except Exception:
+                    pass
+
             # Вычисляем средние значения
             daily_unique_ips = [len(ips) for ips in daily_ips.values()]
             avg_daily_unique_ips = sum(daily_unique_ips) / len(daily_unique_ips) if daily_unique_ips else 0.0

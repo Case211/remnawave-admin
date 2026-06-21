@@ -197,7 +197,7 @@ class TemporalAnalyzer:
                     if simultaneous_count > effective_threshold:
                         # Превышение буфера — вероятно шаринг
                         excess = simultaneous_count - effective_threshold
-                        if excess >= 3 or simultaneous_count > 5:
+                        if excess >= 3 or simultaneous_count > 10:
                             # Сильное превышение
                             score = 100.0
                             reasons.append(f"Множественные одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
@@ -234,7 +234,14 @@ class TemporalAnalyzer:
                         # Но также учитываем разброс: если все подключились в одну секунду — это подозрительнее
                         group_spread_minutes = (latest_start - earliest_start).total_seconds() / 60
 
-                        if overlap_minutes < 2:
+                        # M2: при ЯВНОМ массовом шаринге (сильное превышение лимита устройств)
+                        # overlap-dampening НЕ применяем — это не «переключение сети». Иначе из-за
+                        # max_age 10мин потолок score держался на 70 и temporal-floor (>=80) был мёртв.
+                        # Мобильных это не задевает: их гасит CGNAT-буфер (выше порог) + floor_suppressed.
+                        strong_sharing = simultaneous_count > 5 or (simultaneous_count - effective_threshold) >= 3
+                        if strong_sharing:
+                            pass  # реальный массовый шаринг — score не снижаем
+                        elif overlap_minutes < 2:
                             # Очень короткое перекрытие — переключение сети, сильно снижаем
                             score *= 0.15
                             reasons.append(f"Кратковременное перекрытие ({overlap_minutes:.1f} мин) — вероятно переключение сети")

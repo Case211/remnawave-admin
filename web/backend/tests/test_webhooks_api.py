@@ -84,7 +84,9 @@ class TestListEvents:
         assert "events" in data
         assert "user.created" in data["events"]
         assert "violation.created" in data["events"]
-        assert len(data["events"]) == 7
+        assert "user.blocked" in data["events"]
+        assert "automation.triggered" in data["events"]
+        assert len(data["events"]) == 9
 
 
 class TestCreateWebhook:

@@ -530,12 +530,12 @@ remnawave-admin/
 
 | Document | Description |
 |----------|-------------|
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [docs/README.md](docs/README.md) | Monitoring, Prometheus metrics catalog, VictoriaMetrics integration |
 | [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) | Webhook setup guide |
-| [docs/anti-abuse.md](docs/anti-abuse.md) | Anti-Abuse system, ASN database, provider classification |
 | [web/README.md](web/README.md) | Web panel: setup, reverse proxy, API |
-| [web/SECURITY_AUDIT.md](web/SECURITY_AUDIT.md) | Web panel security audit |
 | [node-agent/README.md](node-agent/README.md) | Node Agent: installation, configuration, troubleshooting |
+| [docs/API.md](docs/API.md), [docs/API-ENDPOINTS.md](docs/API-ENDPOINTS.md) | External API v3 |
+| [docs/WEBHOOKS-EVENTS.md](docs/WEBHOOKS-EVENTS.md), [docs/WEBHOOKS-SIGNATURES.md](docs/WEBHOOKS-SIGNATURES.md) | Webhook event catalog and signatures |
 
 ---
 

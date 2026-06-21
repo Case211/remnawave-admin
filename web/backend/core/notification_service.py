@@ -23,6 +23,9 @@ from shared.db_query import select_sql, insert_sql
 
 logger = logging.getLogger(__name__)
 
+# Предупреждаем об отсутствии глобального Telegram-чата один раз за процесс (иначе спам в debug).
+_warned_no_global_chat = False
+
 
 def _get_global_telegram_config(topic_type: str = "service") -> tuple:
     """Return (bot_token, chat_id, topic_id) from global settings.
@@ -539,7 +542,16 @@ async def create_notification(
                     _send_to_global_telegram(title, tg_body, severity, topic_type, reply_markup=reply_markup)
                 )
             elif not global_chat_id:
-                logger.debug("No global NOTIFICATIONS_CHAT_ID, skipping global Telegram")
+                global _warned_no_global_chat
+                if not _warned_no_global_chat:
+                    _warned_no_global_chat = True
+                    logger.warning(
+                        "notifications_chat_id не настроен и нет per-admin Telegram-каналов — "
+                        "Telegram-уведомления (включая нарушения) НЕ отправляются. "
+                        "Укажите чат в Настройках → Уведомления."
+                    )
+                else:
+                    logger.debug("No global NOTIFICATIONS_CHAT_ID, skipping global Telegram")
             else:
                 logger.debug("Global chat_id=%s already covered by per-admin channel, skipping duplicate", global_chat_id)
 

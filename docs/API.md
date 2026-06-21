@@ -94,6 +94,7 @@ scope required by the endpoint.
 | `nodes:write` | Enable/disable/restart a node | `POST /nodes/{uuid}/restart` |
 | `hosts:read` | Read hosts | `GET /hosts`, `GET /hosts/{uuid}` |
 | `stats:read` | Global statistics | `GET /stats` |
+| `violations:read` | Read anti-abuse violations | `GET /violations`, `GET /violations/{id}` |
 | `bulk:write` | Bulk operations on users | `POST /users/bulk/*` |
 
 Guidelines:

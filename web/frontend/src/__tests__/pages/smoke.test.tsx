@@ -328,6 +328,24 @@ describe('Page smoke tests', () => {
     expect(container).toBeTruthy()
   })
 
+  it('Reports renders without errors', async () => {
+    const Reports = (await import('@/pages/Reports')).default
+    const { container } = renderPage(<Reports />)
+    expect(container).toBeTruthy()
+  })
+
+  it('Resources renders without errors', async () => {
+    const Resources = (await import('@/pages/Resources')).default
+    const { container } = renderPage(<Resources />)
+    expect(container).toBeTruthy()
+  })
+
+  it('Billing renders without errors', async () => {
+    const Billing = (await import('@/pages/Billing')).default
+    const { container } = renderPage(<Billing />)
+    expect(container).toBeTruthy()
+  })
+
   it('Login renders without errors', async () => {
     // Login page doesn't require auth
     useAuthStore.setState({ isAuthenticated: false, accessToken: null })

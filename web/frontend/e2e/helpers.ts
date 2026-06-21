@@ -3,29 +3,25 @@
  */
 import { Page, expect } from '@playwright/test';
 
-/** Inject a mock JWT token into localStorage to bypass auth. */
+/**
+ * Inject persisted auth state under the real zustand persist key.
+ *
+ * Токены в localStorage не хранятся (живут в HttpOnly cookies) — приложению
+ * достаточно isAuthenticated=true в persisted-стейте плюс замоканный
+ * GET /auth/me (validateSession проверяет cookie-сессию именно им).
+ */
 export async function loginAsAdmin(page: Page) {
-  // Set window.__ENV before page loads
   await page.addInitScript(() => {
-    (window as any).__ENV = {
-      VITE_API_URL: 'http://localhost:8081',
-    };
-  });
-
-  // Set auth token in localStorage to simulate logged-in state
-  await page.evaluate(() => {
-    const mockToken = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.' +
-      btoa(JSON.stringify({
-        sub: 'pwd:admin',
-        username: 'admin',
-        type: 'access',
-        auth_method: 'password',
-        exp: Math.floor(Date.now() / 1000) + 3600,
-        iat: Math.floor(Date.now() / 1000),
-      })) + '.fake-signature';
-
-    localStorage.setItem('access_token', mockToken);
-    localStorage.setItem('refresh_token', 'mock-refresh-token');
+    localStorage.setItem(
+      'remnawave-auth',
+      JSON.stringify({
+        state: {
+          user: { username: 'admin', firstName: 'admin', authMethod: 'password' },
+          isAuthenticated: true,
+        },
+        version: 0,
+      })
+    );
   });
 }
 

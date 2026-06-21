@@ -53,6 +53,13 @@ async def create_database_backup(database_url: str) -> dict:
 
         size_bytes = filepath.stat().st_size
 
+        from web.backend.core.webhook_security import fire_event
+        fire_event("backup.created", {
+            "filename": filename,
+            "size_bytes": size_bytes,
+            "backup_type": "database",
+        })
+
         return {
             "filename": filename,
             "size_bytes": size_bytes,
@@ -132,6 +139,13 @@ async def export_config() -> dict:
 
         filepath.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
         size_bytes = filepath.stat().st_size
+
+        from web.backend.core.webhook_security import fire_event
+        fire_event("backup.created", {
+            "filename": filename,
+            "size_bytes": size_bytes,
+            "backup_type": "config",
+        })
 
         return {
             "filename": filename,

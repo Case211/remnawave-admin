@@ -885,6 +885,15 @@ async def resolve_violation(
                     "User %s disabled via violation resolve by admin '%s'",
                     user_uuid, admin.username,
                 )
+                from web.backend.core.webhook_security import fire_event
+                fire_event("user.blocked", {
+                    "uuid": str(user_uuid),
+                    "username": violation.get("username"),
+                    "reason": "manual",
+                    "details": f"violation #{violation_id} resolved as block",
+                    "violation_id": violation_id,
+                    "blocked_by": admin.username,
+                })
             except ImportError:
                 raise api_error(503, E.API_SERVICE_UNAVAILABLE)
             except Exception as e:

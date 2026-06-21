@@ -493,7 +493,11 @@
 
 .mesh-layer {
   position: absolute;
-  inset: 0;
+  /* Выходим за вьюпорт на 25% со всех сторон — запас под анимацию translate(±8%)/scale.
+     Иначе слой при сдвиге оголяет тёмный базовый фон по краям (чёрные полосы).
+     Лишнее обрезает overflow:hidden у .mesh-bg. Позиции/размеры пятен ниже
+     пересчитаны в 1/1.5, чтобы статичная картинка осталась прежней. */
+  inset: -25%;
   opacity: 0.22;
   will-change: transform;
   contain: layout paint;
@@ -521,27 +525,27 @@
 }
 
 .mesh-layer--1 {
-  background: radial-gradient(ellipse 60% 50% at 10% 20%, var(--mesh-color-1) 0%, transparent 70%);
+  background: radial-gradient(ellipse 40% 33% at 23% 30%, var(--mesh-color-1) 0%, transparent 70%);
   animation: meshFloat1 25s ease-in-out infinite;
 }
 
 .mesh-layer--2 {
-  background: radial-gradient(ellipse 50% 60% at 80% 30%, var(--mesh-color-2) 0%, transparent 70%);
+  background: radial-gradient(ellipse 33% 40% at 70% 37%, var(--mesh-color-2) 0%, transparent 70%);
   animation: meshFloat2 30s ease-in-out infinite;
 }
 
 .mesh-layer--3 {
-  background: radial-gradient(ellipse 45% 55% at 30% 70%, var(--mesh-color-3) 0%, transparent 70%);
+  background: radial-gradient(ellipse 30% 37% at 37% 63%, var(--mesh-color-3) 0%, transparent 70%);
   animation: meshFloat3 35s ease-in-out infinite;
 }
 
 .mesh-layer--4 {
-  background: radial-gradient(ellipse 55% 45% at 70% 80%, var(--mesh-color-4) 0%, transparent 70%);
+  background: radial-gradient(ellipse 37% 30% at 63% 70%, var(--mesh-color-4) 0%, transparent 70%);
   animation: meshFloat1 28s ease-in-out infinite reverse;
 }
 
 .mesh-layer--5 {
-  background: radial-gradient(ellipse 40% 40% at 50% 50%, var(--mesh-color-1) 0%, transparent 60%);
+  background: radial-gradient(ellipse 27% 27% at 50% 50%, var(--mesh-color-1) 0%, transparent 60%);
   opacity: 0.12;
   animation: meshFloat2 32s ease-in-out infinite;
 }

@@ -64,9 +64,21 @@ class GeoIPService:
 
     # Классификация ASN организаций
     MOBILE_CARRIERS = {
-        'mts', 'beeline', 'megafon', 'tele2', 'yota', 'rostelecom mobile',
+        # РФ — разные варианты названий оператора в MaxMind/RIPE (matching по подстроке)
+        'mts', 'mobile telesystems', 'beeline', 'vimpelcom', 'vimpel-communications',
+        'megafon', 'tele2', 't2 mobile', 't2 rtk', 'yota', 'scartel',
+        'rostelecom mobile', 'motiv', 'ekaterinburg-2000', 'sberbank-telecom',
+        'tinkoff mobile', 'k-telecom', 'krymtelekom', 'win mobile',
+        # СНГ
+        'kcell', 'kar-tel', 'kyivstar', 'lifecell', 'vodafone ukraine',
+        'velcom', 'mts belarus', 'a1 belarus', 'ucell', 'beeline uzbekistan',
+        'azercell', 'bakcell', 'nar mobile', 'geocell', 'magticom', 'silknet',
+        # Мир — крупные
         'vodafone', 'orange', 't-mobile', 'verizon', 'at&t', 'sprint',
-        'ee', 'three', 'o2', 'china mobile', 'china unicom', 'china telecom'
+        'ee', 'three', 'o2', 'china mobile', 'china unicom', 'china telecom',
+        'airtel', 'reliance jio', 'telefonica', 'movistar', 'claro',
+        # Общие маркеры мобильных сетей (с пробелом/контекстом — низкий риск ложных)
+        'cellular', 'wireless', ' gsm', ' lte', 'mobile network', 'mobile communications',
     }
 
     DATACENTER_KEYWORDS = {

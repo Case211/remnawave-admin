@@ -382,12 +382,15 @@ async def set_log_level_endpoint(
 @router.websocket("/stream")
 async def stream_logs(
     websocket: WebSocket,
-    token: str = Query(...),
     file: str = Query("backend"),
 ):
-    """WebSocket endpoint for real-time log streaming."""
+    """WebSocket endpoint for real-time log streaming.
+
+    Аутентификация: Sec-WebSocket-Protocol "access-token, <jwt>"
+    (fallback: ?token= — deprecated).
+    """
     try:
-        admin = await get_current_admin_ws(websocket, token)
+        admin = await get_current_admin_ws(websocket)
     except Exception as e:
         logger.debug("Non-critical: %s", e)
         return
@@ -398,7 +401,9 @@ async def stream_logs(
         return
 
     filename, fmt = file_info
-    await websocket.accept()
+    await websocket.accept(
+        subprotocol=getattr(websocket.state, "auth_subprotocol", None)
+    )
 
     logger.info("Log stream started: %s by %s", file, admin.username)
 

@@ -196,7 +196,7 @@ class GeoAnalyzer:
     }
 
     # Минимальное расстояние (км), при котором города считаются "далеко" друг от друга (по умолчанию)
-    MIN_DISTANCE_FOR_DIFFERENT_CITIES_DEFAULT = 100
+    MIN_DISTANCE_FOR_DIFFERENT_CITIES_DEFAULT = 50
 
     def __init__(self, geoip_service: Optional[GeoIPService] = None):
         """

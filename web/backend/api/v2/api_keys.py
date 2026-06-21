@@ -21,6 +21,7 @@ AVAILABLE_SCOPES = [
     "hosts:read",
     "bulk:write",
     "stats:read",
+    "violations:read",
 ]
 
 

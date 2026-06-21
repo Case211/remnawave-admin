@@ -233,6 +233,27 @@ async def deliver_once(
         return (False, 0, None, str(e)[:500], elapsed)
 
 
+# Держим ссылки на fire-and-forget таски, иначе GC может убить их на лету
+_fire_tasks: set = set()
+
+
+def fire_event(event: str, payload: dict) -> None:
+    """Fire-and-forget диспатч события: не блокирует вызывающий код
+    (HTTP-хендлер, пайплайн коллектора) на время доставки вебхуков.
+
+    Безопасен в любом async-контексте; если активных подписок на событие
+    нет — dispatch_event выходит после одного SELECT.
+    """
+    try:
+        task = asyncio.get_running_loop().create_task(dispatch_event(event, payload))
+        _fire_tasks.add(task)
+        task.add_done_callback(_fire_tasks.discard)
+    except RuntimeError:
+        # Нет running loop (синхронный контекст) — событие пропускаем,
+        # это вспомогательный канал, ронять вызывающий код нельзя.
+        logger.warning("fire_event(%s) skipped: no running event loop", event)
+
+
 async def dispatch_event(event: str, payload: dict) -> None:
     """Fan out an event to all active subscriptions. First attempt synchronous;
     failures enqueue to webhook_retry_queue.

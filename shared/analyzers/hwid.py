@@ -180,6 +180,7 @@ class HwidCrossAccountAnalyzer:
             other_accounts_count=distinct_accounts_global - 1,  # «другие» аккаунты, не подписки
             other_accounts=all_other_usernames[:10],
             matched_details=matched_details[:20],
+            per_account_abuse=per_account_threshold_hit,
         )
 
 

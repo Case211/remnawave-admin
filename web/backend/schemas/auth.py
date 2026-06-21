@@ -32,9 +32,13 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    """Token refresh request."""
+    """Token refresh request.
 
-    refresh_token: str
+    refresh_token опционален: веб-фронт на cookie-аутентификации шлёт
+    пустое тело — сервер берёт токен из HttpOnly cookie rw_refresh.
+    """
+
+    refresh_token: Optional[str] = None
 
 
 class ChangePasswordRequest(BaseModel):

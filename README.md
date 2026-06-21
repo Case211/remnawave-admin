@@ -564,7 +564,6 @@ remnawave-admin/
 | [docs/README.md](docs/README.md) | Мониторинг, каталог Prometheus-метрик, интеграция с VictoriaMetrics |
 | [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) | Настройка webhook + HMAC-подпись |
 | [web/README.md](web/README.md) | Веб-панель: настройка, реверс-прокси, API |
-| [web/SECURITY_AUDIT.md](web/SECURITY_AUDIT.md) | Аудит безопасности веб-панели |
 | [node-agent/README.md](node-agent/README.md) | Node Agent: установка, настройка, troubleshooting |
 | [docs/API.md](docs/API.md), [docs/API-ENDPOINTS.md](docs/API-ENDPOINTS.md) | Внешний API v3 |
 | [docs/WEBHOOKS-EVENTS.md](docs/WEBHOOKS-EVENTS.md), [docs/WEBHOOKS-SIGNATURES.md](docs/WEBHOOKS-SIGNATURES.md) | Каталог webhook-событий и подписи |

@@ -2,7 +2,8 @@
  * WebTerminal — xterm.js terminal connected to a node via WebSocket.
  *
  * Uses @xterm/xterm + @xterm/addon-fit for responsive terminal.
- * Connects to WS /api/v2/fleet/{nodeUuid}/terminal?token=JWT.
+ * Connects to WS /api/v2/fleet/{nodeUuid}/terminal
+ * (JWT через Sec-WebSocket-Protocol "access-token, <jwt>").
  * All data is base64-encoded over WebSocket.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -21,7 +22,7 @@ interface WebTerminalProps {
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error'
 
-function getWsUrl(nodeUuid: string, token: string): string {
+function getWsUrl(nodeUuid: string): string {
   const envUrl = window.__ENV?.API_URL || import.meta.env.VITE_API_URL || ''
 
   let base: string
@@ -38,7 +39,7 @@ function getWsUrl(nodeUuid: string, token: string): string {
     base = `${proto}//${host}/api/v2`
   }
 
-  return `${base}/fleet/${nodeUuid}/terminal?token=${encodeURIComponent(token)}`
+  return `${base}/fleet/${nodeUuid}/terminal`
 }
 
 export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady }: WebTerminalProps) {
@@ -55,8 +56,9 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
   onReadyRef.current = onReady
 
   useEffect(() => {
+    // Токен в памяти — subprotocol; нет — аутентификация по HttpOnly cookie
     const token = useAuthStore.getState().accessToken
-    if (!token || !containerRef.current) return
+    if (!useAuthStore.getState().isAuthenticated || !containerRef.current) return
 
     // Cancelled flag — set by cleanup to prevent the deferred connect
     // from running after React.StrictMode's synchronous unmount.
@@ -117,9 +119,9 @@ export default function WebTerminal({ nodeUuid, nodeName, onDisconnect, onReady 
 
       term.writeln(`\x1b[1;35mConnecting to ${nodeName}...\x1b[0m\r\n`)
 
-      // Connect WebSocket
-      const url = getWsUrl(nodeUuid, token)
-      ws = new WebSocket(url)
+      // Connect WebSocket — JWT через subprotocol, не в query
+      const url = getWsUrl(nodeUuid)
+      ws = token ? new WebSocket(url, ['access-token', token]) : new WebSocket(url)
       wsRef.current = ws
 
       ws.onopen = () => {

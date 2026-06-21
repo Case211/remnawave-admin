@@ -5,6 +5,7 @@
  * and render without errors. Uses API mocking to avoid backend dependency.
  */
 import { test, expect, Page } from '@playwright/test';
+import { loginAsAdmin } from './helpers';
 
 /**
  * Set up route intercepts for all API calls so pages
@@ -72,32 +73,33 @@ async function mockAllApiCalls(page: Page) {
   await page.route('**/ws/**', (route) => route.abort());
 }
 
-/** Inject auth state so the app thinks we're logged in. */
-async function setAuth(page: Page) {
-  await page.addInitScript(() => {
-    const fakeToken = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJwd2Q6YWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwidHlwZSI6ImFjY2VzcyIsImF1dGhfbWV0aG9kIjoicGFzc3dvcmQiLCJleHAiOjk5OTk5OTk5OTksImlhdCI6MTcwMDAwMDAwMH0.fake';
-    localStorage.setItem('access_token', fakeToken);
-    localStorage.setItem('refresh_token', 'mock-refresh');
-  });
-}
-
 test.describe('Navigation Smoke Tests', () => {
   test.beforeEach(async ({ page }) => {
     await mockAllApiCalls(page);
-    await setAuth(page);
+    await loginAsAdmin(page);
   });
 
   const pages = [
     { path: '/', name: 'Dashboard' },
     { path: '/users', name: 'Users' },
     { path: '/nodes', name: 'Nodes' },
+    { path: '/fleet', name: 'Fleet' },
     { path: '/hosts', name: 'Hosts' },
     { path: '/violations', name: 'Violations' },
+    { path: '/blocking', name: 'Blocking' },
     { path: '/analytics', name: 'Analytics' },
     { path: '/admins', name: 'Admins' },
     { path: '/settings', name: 'Settings' },
     { path: '/audit', name: 'Audit Log' },
     { path: '/automations', name: 'Automations' },
+    { path: '/notifications', name: 'Notifications' },
+    { path: '/logs', name: 'System Logs' },
+    { path: '/billing', name: 'Billing' },
+    { path: '/backups', name: 'Backups' },
+    { path: '/api-keys', name: 'API Keys' },
+    { path: '/reports', name: 'Reports' },
+    { path: '/resources', name: 'Resources' },
+    { path: '/squads', name: 'Squads' },
   ];
 
   for (const { path, name } of pages) {
@@ -116,9 +118,15 @@ test.describe('Navigation Smoke Tests', () => {
       await page.goto(path);
       await page.waitForLoadState('domcontentloaded');
 
-      // Should not show a hard crash / white screen
-      const bodyText = await page.textContent('body');
-      expect(bodyText).toBeTruthy();
+      // КРИТИЧНО: страница не должна редиректить на /login — иначе тест
+      // молча проверяет страницу логина вместо целевой (так и было,
+      // пока setAuth писал токены в несуществующий ключ localStorage)
+      await expect(page).not.toHaveURL(/login/);
+
+      // Should not show a hard crash / white screen.
+      // Auto-retrying: domcontentloaded ≠ React отрендерился — vite в dev
+      // транспилирует lazy-чанки на лету, тяжёлым страницам нужно время
+      await expect(page.locator('#root')).not.toBeEmpty({ timeout: 15_000 });
 
       // Should not have JS errors (excluding expected network errors)
       expect(consoleErrors).toEqual([]);

@@ -14,7 +14,8 @@ from shared.db_schema import ADMIN_TABLE
 from shared.db_query import insert_sql
 
 logger = logging.getLogger(__name__)
-security = HTTPBearer()
+# auto_error=False: при отсутствии Authorization пробуем cookie-аутентификацию
+security = HTTPBearer(auto_error=False)
 
 
 @dataclass
@@ -203,10 +204,34 @@ async def _resolve_telegram_admin(subject: str, payload: dict, settings) -> Admi
 
 
 async def get_current_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> AdminUser:
-    """Dependency for verifying admin authentication."""
-    token = credentials.credentials
+    """Dependency for verifying admin authentication.
+
+    Источники токена (по приоритету):
+    1. Authorization: Bearer — API-клиенты, мобильное приложение
+    2. HttpOnly cookie rw_access — веб-фронт; мутирующие методы требуют
+       X-CSRF-Token (double-submit, см. core/auth_cookies.py)
+    """
+    from web.backend.core.auth_cookies import ACCESS_COOKIE, csrf_check_passed
+
+    token: Optional[str] = credentials.credentials if credentials else None
+
+    if token is None:
+        token = request.cookies.get(ACCESS_COOKIE)
+        if token and not csrf_check_passed(request):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF token missing or invalid",
+            )
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     if token_blacklist.is_blacklisted(token):
         raise HTTPException(
@@ -227,9 +252,19 @@ async def get_current_admin(
 
 
 async def get_2fa_temp_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> AdminUser:
-    """Dependency for endpoints that accept a 2FA temp token."""
+    """Dependency for endpoints that accept a 2FA temp token.
+
+    Temp-токен короткоживущий (5 мин) и передаётся только через
+    Authorization header — cookie-механизм к нему не применяется.
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = credentials.credentials
 
     if token_blacklist.is_blacklisted(token):
@@ -250,11 +285,58 @@ async def get_2fa_temp_admin(
     return await _validate_token_payload(payload)
 
 
+# Маркер-подпротокол для передачи JWT в WebSocket-handshake:
+# клиент шлёт Sec-WebSocket-Protocol: "access-token, <jwt>".
+WS_AUTH_SUBPROTOCOL = "access-token"
+
+
+def extract_ws_token(websocket: WebSocket) -> Tuple[Optional[str], Optional[str]]:
+    """Extract JWT from a WebSocket handshake.
+
+    Источники (по приоритету):
+    1. Sec-WebSocket-Protocol ("access-token, <jwt>") — токен не попадает
+       в access-логи прокси/сервера в отличие от query string.
+    2. HttpOnly cookie rw_access — веб-фронт на cookie-аутентификации
+       (браузер шлёт cookie при handshake автоматически; CSRF-риска нет —
+       сервер только пушит события, мутаций по WS не делает).
+    3. ?token= query param — deprecated, для старых клиентов
+       (мобильное приложение обновляется отдельно).
+
+    Returns (token, subprotocol): subprotocol нужно передать в
+    websocket.accept(subprotocol=...) — браузер разрывает соединение,
+    если сервер не подтвердил запрошенный подпротокол.
+    """
+    from web.backend.core.auth_cookies import ACCESS_COOKIE
+
+    proto_header = websocket.headers.get("sec-websocket-protocol", "")
+    if proto_header:
+        parts = [p.strip() for p in proto_header.split(",")]
+        if len(parts) >= 2 and parts[0] == WS_AUTH_SUBPROTOCOL and parts[1]:
+            return parts[1], WS_AUTH_SUBPROTOCOL
+
+    cookie_token = websocket.cookies.get(ACCESS_COOKIE)
+    if cookie_token:
+        return cookie_token, None
+
+    return websocket.query_params.get("token"), None
+
+
 async def get_current_admin_ws(
     websocket: WebSocket,
-    token: Optional[str] = Query(None),
+    token: Optional[str] = None,
 ) -> AdminUser:
-    """Dependency for verifying admin authentication in WebSocket."""
+    """Dependency for verifying admin authentication in WebSocket.
+
+    Если token не передан явно, извлекается из handshake (см. extract_ws_token).
+    Сохраняет websocket.state.auth_subprotocol — эндпоинт ОБЯЗАН передать его
+    в websocket.accept(subprotocol=...).
+    """
+    if token is None:
+        token, subprotocol = extract_ws_token(websocket)
+        websocket.state.auth_subprotocol = subprotocol
+    else:
+        websocket.state.auth_subprotocol = None
+
     if not token:
         await websocket.close(code=4001, reason="Missing token")
         raise HTTPException(status_code=401, detail="Missing token")
@@ -278,15 +360,14 @@ async def get_current_admin_ws(
 
 
 async def get_optional_admin(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(
         HTTPBearer(auto_error=False)
     ),
 ) -> Optional[AdminUser]:
     """Optional admin authentication (doesn't fail if not authenticated)."""
-    if not credentials:
-        return None
     try:
-        return await get_current_admin(credentials)
+        return await get_current_admin(request, credentials)
     except HTTPException:
         return None
 

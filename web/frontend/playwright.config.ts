@@ -15,7 +15,7 @@ export default defineConfig({
   timeout: 30_000,
 
   use: {
-    baseURL: process.env.E2E_BASE_URL || 'http://localhost:5173',
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:3000',
     locale: 'ru-RU',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -39,7 +39,7 @@ export default defineConfig({
     ? undefined
     : {
         command: 'npm run dev',
-        url: 'http://localhost:5173',
+        url: 'http://localhost:3000',
         reuseExistingServer: true,
         timeout: 60_000,
       },

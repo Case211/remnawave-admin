@@ -1,9 +1,16 @@
 """Auth API endpoints."""
 import json
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 
 from web.backend.api.deps import get_current_admin, get_2fa_temp_admin, get_client_ip, AdminUser
+from web.backend.core.auth_cookies import (
+    ACCESS_COOKIE,
+    REFRESH_COOKIE,
+    set_auth_cookies,
+    clear_auth_cookies,
+)
 from web.backend.core.errors import api_error, E
 from web.backend.core.config import get_web_settings
 from web.backend.core.login_guard import login_guard
@@ -101,7 +108,7 @@ async def get_setup_status(request: Request):
 
 @router.post("/register", response_model=TokenResponse)
 @limiter.limit("3/minute")
-async def register_admin(request: Request, data: RegisterRequest):
+async def register_admin(request: Request, response: Response, data: RegisterRequest):
     """
     Register the first admin account. Only works when no admin exists.
 
@@ -157,6 +164,7 @@ async def register_admin(request: Request, data: RegisterRequest):
     access_token = create_access_token(subject, data.username.strip(), auth_method="password")
     refresh_token = create_refresh_token(subject)
 
+    set_auth_cookies(response, request, access_token, refresh_token)
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -182,7 +190,7 @@ async def _get_rbac_account(subject: str):
 
 @router.post("/telegram", response_model=LoginResponse)
 @limiter.limit("5/minute")
-async def telegram_login(request: Request, data: TelegramAuthData):
+async def telegram_login(request: Request, response: Response, data: TelegramAuthData):
     """
     Authenticate via Telegram Login Widget.
 
@@ -280,6 +288,7 @@ async def telegram_login(request: Request, data: TelegramAuthData):
     access_token = create_access_token(subject, username, auth_method="telegram")
     refresh_token = create_refresh_token(subject)
 
+    set_auth_cookies(response, request, access_token, refresh_token)
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -289,7 +298,7 @@ async def telegram_login(request: Request, data: TelegramAuthData):
 
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
-async def password_login(request: Request, data: LoginRequest):
+async def password_login(request: Request, response: Response, data: LoginRequest):
     """
     Authenticate with username and password.
 
@@ -373,6 +382,7 @@ async def password_login(request: Request, data: LoginRequest):
     access_token = create_access_token(subject, data.username, auth_method="password")
     refresh_token = create_refresh_token(subject)
 
+    set_auth_cookies(response, request, access_token, refresh_token)
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -463,6 +473,7 @@ async def totp_setup(request: Request, admin: AdminUser = Depends(get_2fa_temp_a
 @limiter.limit("5/minute")
 async def totp_confirm_setup(
     request: Request,
+    response: Response,
     data: TotpVerifyRequest,
     admin: AdminUser = Depends(get_2fa_temp_admin),
 ):
@@ -505,6 +516,7 @@ async def totp_confirm_setup(
 
     logger.info("TOTP enabled for user '%s'", admin.username)
     await notify_login_success(ip=client_ip, username=admin.username, auth_method=admin.auth_method)
+    set_auth_cookies(response, request, access_token, refresh_token)
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -516,6 +528,7 @@ async def totp_confirm_setup(
 @limiter.limit("10/minute")
 async def totp_verify(
     request: Request,
+    response: Response,
     data: TotpVerifyRequest,
     admin: AdminUser = Depends(get_2fa_temp_admin),
 ):
@@ -543,6 +556,7 @@ async def totp_verify(
         access_token = create_access_token(subject, admin.username, auth_method=admin.auth_method)
         refresh_token = create_refresh_token(subject)
         await notify_login_success(ip=client_ip, username=admin.username, auth_method=admin.auth_method)
+        set_auth_cookies(response, request, access_token, refresh_token)
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -563,6 +577,7 @@ async def totp_verify(
         access_token = create_access_token(subject, admin.username, auth_method=admin.auth_method)
         refresh_token = create_refresh_token(subject)
         await notify_login_success(ip=client_ip, username=admin.username, auth_method=admin.auth_method)
+        set_auth_cookies(response, request, access_token, refresh_token)
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -584,18 +599,32 @@ async def totp_verify(
 
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("10/minute")
-async def refresh_tokens(request: Request, data: RefreshRequest):
+async def refresh_tokens(
+    request: Request,
+    response: Response,
+    data: Optional[RefreshRequest] = None,
+):
     """
     Refresh access token using refresh token.
+
+    Источник refresh-токена: тело запроса (Bearer-клиенты) или
+    HttpOnly cookie rw_refresh (веб-фронт). CSRF-проверка не нужна:
+    refresh-cookie имеет SameSite=Strict и кросс-сайтово не уходит.
 
     The old refresh token is blacklisted after successful rotation
     to prevent reuse (one-time use refresh tokens).
     """
+    refresh_token_in = (
+        data.refresh_token if data and data.refresh_token else None
+    ) or request.cookies.get(REFRESH_COOKIE)
+    if not refresh_token_in:
+        raise api_error(401, E.INVALID_REFRESH_TOKEN)
+
     # Check if this refresh token has already been used (blacklisted)
-    if token_blacklist.is_blacklisted(data.refresh_token):
+    if token_blacklist.is_blacklisted(refresh_token_in):
         raise api_error(401, E.TOKEN_ALREADY_USED)
 
-    payload = decode_token(data.refresh_token, token_type="refresh")
+    payload = decode_token(refresh_token_in, token_type="refresh")
 
     if not payload:
         raise api_error(401, E.INVALID_REFRESH_TOKEN)
@@ -636,8 +665,9 @@ async def refresh_tokens(request: Request, data: RefreshRequest):
 
     # Blacklist the old refresh token to prevent reuse
     if "exp" in payload:
-        token_blacklist.add(data.refresh_token, float(payload["exp"]))
+        token_blacklist.add(refresh_token_in, float(payload["exp"]))
 
+    set_auth_cookies(response, request, access_token, refresh_token)
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -772,16 +802,30 @@ async def change_password(
 @router.post("/logout", response_model=SuccessResponse)
 async def logout(
     request: Request,
+    response: Response,
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """Logout and invalidate the current access token."""
+    """Logout: invalidate access + refresh tokens and clear auth cookies."""
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-        payload = decode_token(token)
+        access_token = auth_header[7:]
+    else:
+        access_token = request.cookies.get(ACCESS_COOKIE)
+
+    if access_token:
+        payload = decode_token(access_token)
         if payload and "exp" in payload:
-            token_blacklist.add(token, float(payload["exp"]))
+            token_blacklist.add(access_token, float(payload["exp"]))
             logger.info("Token blacklisted for user '%s'", admin.username)
+
+    # Refresh из cookie тоже гасим — иначе сессию можно воскресить
+    refresh_cookie = request.cookies.get(REFRESH_COOKIE)
+    if refresh_cookie:
+        payload = decode_token(refresh_cookie, token_type="refresh")
+        if payload and "exp" in payload:
+            token_blacklist.add(refresh_cookie, float(payload["exp"]))
+
+    clear_auth_cookies(response)
     return SuccessResponse(message="Logged out successfully")
 
 

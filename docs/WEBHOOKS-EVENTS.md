@@ -16,109 +16,140 @@ receivers should **ignore unknown fields** (backward-compatible evolution).
 
 ## `user.created`
 
-Fires when a new user is created via admin UI or API.
+Fires when a new user is created via the admin UI or API.
 
 ```json
 {
   "uuid": "e4f...",
   "username": "alice",
-  "status": "active",
-  "traffic_limit_bytes": 107374182400,
-  "expire_at": "2026-06-01T00:00:00Z",
-  "tag": "vip",
-  "description": "Created via CI",
-  "created_at": "2026-04-16T11:23:45Z"
+  "email": "alice@example.com",
+  "telegram_id": 123456789,
+  "expire_at": "2026-06-01T00:00:00+00:00",
+  "created_by": "admin"
 }
 ```
 
 ## `user.updated`
 
-Fires when any mutable field changes (traffic limit, expire, status, description).
+Fires when user fields are changed via the admin UI or API.
 
 ```json
 {
   "uuid": "e4f...",
   "username": "alice",
-  "changes": {
-    "traffic_limit_bytes": {"old": 107374182400, "new": 214748364800},
-    "status": {"old": "active", "new": "disabled"}
-  },
-  "updated_at": "2026-04-16T11:25:01Z"
+  "changed_fields": ["expire_at", "traffic_limit_bytes"],
+  "updated_by": "admin"
 }
 ```
 
-Only changed fields appear under `changes`.
+`changed_fields` lists which fields were touched (sorted). Fetch the user via API
+if you need the new values.
 
 ## `user.deleted`
 
+Fires for single and bulk deletions (one event per user; bulk deletions carry
+`"bulk": true`).
+
+```json
+{
+  "uuid": "e4f...",
+  "deleted_by": "admin",
+  "bulk": false
+}
+```
+
+## `user.blocked`
+
+Fires whenever a user is disabled by the anti-abuse machinery or manually from a
+violation. **Not** fired for plain status edits (those are `user.updated`).
+
 ```json
 {
   "uuid": "e4f...",
   "username": "alice",
-  "deleted_at": "2026-04-16T11:30:00Z"
+  "reason": "violation",
+  "details": "hard_block recommended (score=87.5)",
+  "violation_id": 9123,
+  "blocked_by": "auto"
 }
 ```
+
+| Field | Meaning |
+|---|---|
+| `reason` | `violation` (detector hard_block), `torrent`, `blacklist`, `traffic_rate`, `automation`, `manual` |
+| `violation_id` | Present when the block is tied to a stored violation |
+| `blocked_by` | `auto`, `automation`, or the admin username for manual blocks |
 
 ---
 
 ## `node.online`
 
-A node has just connected (transitioned from offline -> online).
+A node transitioned offline → online (detected by the panel's polling loop,
+~120s granularity).
 
 ```json
 {
   "uuid": "...",
   "name": "eu-west-1",
-  "address": "1.2.3.4",
-  "port": 62050,
-  "connected_at": "2026-04-16T11:40:22Z"
+  "downtime_minutes": 7.5
 }
 ```
 
 ## `node.offline`
 
-A node has lost connection.
+A node transitioned online → offline.
 
 ```json
 {
   "uuid": "...",
-  "name": "eu-west-1",
-  "last_seen_at": "2026-04-16T11:45:05Z",
-  "downtime_seconds": 30
+  "name": "eu-west-1"
 }
 ```
+
+The event fires once per transition, not on every poll while the node stays down.
 
 ---
 
 ## `violation.created`
 
-A new anti-abuse violation has been detected.
+A new anti-abuse violation has been stored.
 
 ```json
 {
-  "id": 9123,
+  "violation_id": 9123,
   "user_uuid": "...",
   "username": "alice",
-  "severity": "high",
-  "score": 0.82,
-  "recommended_action": "temp_block",
-  "analyzers": {
-    "temporal": 0.9,
-    "geo": 0.6,
-    "asn": 0.3,
-    "profile": 0.7,
-    "device": 0.2
-  },
-  "evidence": {
-    "simultaneous_connections": 4,
-    "countries": ["RU", "US", "NL"],
-    "asn_types": ["datacenter"]
-  },
-  "detected_at": "2026-04-16T11:50:00Z"
+  "score": 87.5,
+  "confidence": 0.9,
+  "recommended_action": "hard_block",
+  "reasons": ["4 simultaneous connections from 3 countries"],
+  "ip_addresses": ["1.2.3.4", "5.6.7.8"],
+  "source": "detector"
 }
 ```
 
-See `docs/anti-abuse.md` for analyzer internals (if present in the repo).
+`source` is `detector` (multi-factor pipeline), `torrent`, or `traffic_rate`.
+Full analyzer breakdown is available via `GET /api/v3/violations/{id}`
+(scope `violations:read`, see [API-ENDPOINTS.md](./API-ENDPOINTS.md)).
+
+---
+
+## `automation.triggered`
+
+An automation rule fired and executed its action.
+
+```json
+{
+  "rule_id": 17,
+  "rule_name": "Block on torrent",
+  "event": "torrent.detected",
+  "action": "block_user",
+  "target_type": "user",
+  "target_id": "e4f...",
+  "result": "success",
+  "details": {"action": "block_user", "user_uuid": "e4f...", "reason": "Blocked by automation"}
+}
+```
 
 ---
 
@@ -128,15 +159,13 @@ A scheduled or manual backup completed successfully.
 
 ```json
 {
-  "id": 203,
-  "filename": "backup_2026-04-16T11-55-00.sql.gz",
-  "size_bytes": 4_837_293,
-  "created_at": "2026-04-16T11:55:00Z",
-  "trigger": "schedule"
+  "filename": "db_backup_20260607_115500.sql.gz",
+  "size_bytes": 4837293,
+  "backup_type": "database"
 }
 ```
 
-`trigger` is `schedule` or `manual`.
+`backup_type` is `database` (pg_dump) or `config` (settings export).
 
 ---
 
@@ -165,9 +194,9 @@ There is no batching - one logical event = one HTTP POST per matching subscripti
 ## Ordering
 
 Deliveries are not strictly ordered. If order matters for your integration, use the
-timestamp fields (`created_at`, `updated_at`, `detected_at`) on the payload itself.
+timestamps recorded on the underlying resources rather than delivery order.
 
 ## Idempotency
 
 Events currently do not carry a globally unique `event_id`. Receivers that need dedup should
-key off (resource id + timestamp). An `event_id` field is planned for a future release.
+key off (resource id + payload fields). An `event_id` field is planned for a future release.

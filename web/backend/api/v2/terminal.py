@@ -10,7 +10,7 @@ import base64
 import json
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from shared.db_schema import NODES_TABLE
 from shared.db_query import select_sql
@@ -45,9 +45,11 @@ async def _get_agent_token(node_uuid: str) -> str | None:
 async def terminal_websocket(
     websocket: WebSocket,
     node_uuid: str,
-    token: str = Query(...),
 ):
     """Browser terminal WebSocket endpoint.
+
+    Аутентификация: Sec-WebSocket-Protocol "access-token, <jwt>"
+    (fallback: ?token= — deprecated).
 
     Protocol:
     - Browser sends: base64-encoded keyboard input
@@ -57,10 +59,12 @@ async def terminal_websocket(
     """
     # Auth
     try:
-        admin = await get_current_admin_ws(websocket, token)
+        admin = await get_current_admin_ws(websocket)
     except Exception as e:
         logger.warning("Terminal auth failed: %s", e)
         return
+
+    auth_subprotocol = getattr(websocket.state, "auth_subprotocol", None)
 
     # Check permission: fleet.terminal
     has_perm = (
@@ -69,19 +73,19 @@ async def terminal_websocket(
         or admin.has_permission("fleet", "terminal")
     )
     if not has_perm:
-        await websocket.accept()
+        await websocket.accept(subprotocol=auth_subprotocol)
         await websocket.send_json({"type": "error", "message": "Permission denied: fleet.terminal required"})
         await websocket.close(code=4003, reason="permission_denied")
         return
 
     # Check agent is connected
     if not agent_manager.is_connected(node_uuid):
-        await websocket.accept()
+        await websocket.accept(subprotocol=auth_subprotocol)
         await websocket.send_json({"type": "error", "message": "Agent not connected"})
         await websocket.close(code=4004, reason="agent_not_connected")
         return
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=auth_subprotocol)
 
     # Get agent token for HMAC signing
     agent_token = await _get_agent_token(node_uuid)

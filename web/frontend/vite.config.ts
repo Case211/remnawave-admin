@@ -16,7 +16,10 @@ export default defineConfig({
     port: 3000,
     host: true,
     proxy: {
-      '/api': {
+      // ВАЖНО: '/api/' со слэшем — прокси матчит по префиксу строки,
+      // и '/api' без слэша съедал бы SPA-роут /api-keys (белый экран
+      // при прямом заходе/F5 в dev)
+      '/api/': {
         target: process.env.VITE_API_URL || 'http://localhost:8081',
         changeOrigin: true,
       },

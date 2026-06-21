@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Set, Dict, Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from web.backend.api.deps import get_current_admin_ws, AdminUser
 
@@ -23,7 +23,9 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, admin: AdminUser):
         """Подключить клиента."""
-        await websocket.accept()
+        await websocket.accept(
+            subprotocol=getattr(websocket.state, "auth_subprotocol", None)
+        )
         async with self._lock:
             self.active_connections.add(websocket)
             self._subscriptions[websocket] = set()
@@ -90,14 +92,12 @@ manager = ConnectionManager()
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    token: str = Query(...),
-):
+async def websocket_endpoint(websocket: WebSocket):
     """
     WebSocket endpoint для real-time обновлений.
 
-    Подключение: ws://host/api/v2/ws?token=JWT_TOKEN
+    Аутентификация: Sec-WebSocket-Protocol "access-token, <jwt>"
+    (fallback: ?token= — deprecated, для старых клиентов).
 
     События:
     - connection: Новое подключение пользователя
@@ -107,7 +107,7 @@ async def websocket_endpoint(
     """
     # Проверяем аутентификацию
     try:
-        admin = await get_current_admin_ws(websocket, token)
+        admin = await get_current_admin_ws(websocket)
     except Exception as e:
         logger.debug("WebSocket auth failed: %s", e)
         return

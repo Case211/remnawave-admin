@@ -163,9 +163,11 @@
       "settings": "Bot Settings"
     },
     "sections": {
-      "core": "Core",
+      "overview": "Overview",
+      "people": "Users",
+      "infrastructure": "Infrastructure",
       "security": "Security",
-      "data": "Data",
+      "services": "Services",
       "bedolaga": "Bedolaga",
       "admin": "Management",
       "plugins": "Extensions"
@@ -3838,7 +3840,8 @@
       "empty": "No config profiles yet",
       "loadError": "Failed to load computed config",
       "viewTitle": "Computed Config",
-      "viewDescription": "Full expanded configuration for this profile"
+      "viewDescription": "Full expanded configuration for this profile",
+      "openInEditor": "Open in editor"
     },
     "position": "Position:",
     "uuid": "UUID:"

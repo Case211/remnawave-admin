@@ -83,6 +83,44 @@ class StatsPublic(BaseModel):
     total_traffic_bytes: int
 
 
+class ViolationPublic(_PublicBase):
+    id: int
+    user_uuid: str
+    username: Optional[str] = None
+    score: Optional[float] = None
+    confidence: Optional[float] = None
+    recommended_action: Optional[str] = None
+    action_taken: Optional[str] = None
+    reasons: Optional[List[str]] = None
+    ip_addresses: Optional[List[str]] = None
+    countries: Optional[List[str]] = None
+    detected_at: Optional[str] = None
+
+
+class ViolationDetailPublic(ViolationPublic):
+    email: Optional[str] = None
+    telegram_id: Optional[int] = None
+    temporal_score: Optional[float] = None
+    geo_score: Optional[float] = None
+    asn_score: Optional[float] = None
+    profile_score: Optional[float] = None
+    device_score: Optional[float] = None
+    hwid_score: Optional[float] = None
+    user_agent_score: Optional[float] = None
+    cities: Optional[List[str]] = None
+    asn_types: Optional[List[str]] = None
+    os_list: Optional[List[str]] = None
+    client_list: Optional[List[str]] = None
+    simultaneous_connections: Optional[int] = None
+    unique_ips_count: Optional[int] = None
+    impossible_travel: Optional[bool] = None
+    is_mobile: Optional[bool] = None
+    is_datacenter: Optional[bool] = None
+    is_vpn: Optional[bool] = None
+    admin_comment: Optional[str] = None
+    action_taken_at: Optional[str] = None
+
+
 class BulkUuidsRequest(BaseModel):
     uuids: List[str] = Field(..., min_length=1, max_length=500)
 
@@ -459,6 +497,118 @@ async def get_stats(
 
 
 # ══════════════════════════════════════════════════════════════════
+# Violations — Read
+# ══════════════════════════════════════════════════════════════════
+
+_VIOLATION_LIST_COLUMNS = (
+    "id, user_uuid, username, score, confidence, recommended_action, "
+    "action_taken, reasons, ip_addresses, countries, detected_at"
+)
+
+
+def _violation_row_to_dict(row) -> dict:
+    d = dict(row)
+    for ts_field in ("detected_at", "action_taken_at"):
+        if d.get(ts_field):
+            d[ts_field] = d[ts_field].isoformat()
+    for arr_field in ("reasons", "ip_addresses", "countries", "cities",
+                      "asn_types", "os_list", "client_list"):
+        if d.get(arr_field) is not None:
+            d[arr_field] = list(d[arr_field])
+    return d
+
+
+@router.get("/violations", response_model=List[ViolationPublic])
+async def list_violations(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    user_uuid: Optional[str] = Query(None, description="Filter by user UUID"),
+    min_score: Optional[float] = Query(None, ge=0, description="Minimum violation score"),
+    recommended_action: Optional[str] = Query(None, description="e.g. hard_block, monitor"),
+    resolved: Optional[bool] = Query(None, description="true = action taken, false = open"),
+    date_from: Optional[str] = Query(None, description="ISO date/datetime lower bound"),
+    date_to: Optional[str] = Query(None, description="ISO date/datetime upper bound"),
+    api_key: ApiKeyUser = Depends(require_scope("violations:read")),
+):
+    """List anti-abuse violations, newest first."""
+    from shared.database import db_service
+    if not db_service.is_connected:
+        return []
+
+    conditions = []
+    args: List[Any] = []
+    idx = 0
+
+    if user_uuid:
+        idx += 1
+        conditions.append(f"user_uuid = ${idx}::uuid")
+        args.append(user_uuid)
+    if min_score is not None:
+        idx += 1
+        conditions.append(f"score >= ${idx}")
+        args.append(min_score)
+    if recommended_action:
+        idx += 1
+        conditions.append(f"LOWER(recommended_action) = LOWER(${idx})")
+        args.append(recommended_action)
+    if resolved is not None:
+        conditions.append(
+            "action_taken IS NOT NULL" if resolved else "action_taken IS NULL"
+        )
+    if date_from:
+        idx += 1
+        conditions.append(f"detected_at >= ${idx}::timestamptz")
+        args.append(date_from)
+    if date_to:
+        idx += 1
+        conditions.append(f"detected_at <= ${idx}::timestamptz")
+        args.append(date_to)
+
+    where = " AND ".join(conditions) if conditions else "TRUE"
+    idx += 1
+    args.append(limit)
+    idx += 1
+    args.append(offset)
+
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT {_VIOLATION_LIST_COLUMNS} FROM violations WHERE {where} "
+            f"ORDER BY detected_at DESC LIMIT ${idx - 1} OFFSET ${idx}",
+            *args,
+        )
+
+    return [ViolationPublic(**_violation_row_to_dict(r)) for r in rows]
+
+
+@router.get("/violations/{violation_id}", response_model=ViolationDetailPublic)
+async def get_violation(
+    violation_id: int,
+    api_key: ApiKeyUser = Depends(require_scope("violations:read")),
+):
+    """Get a single violation with the full analyzer breakdown."""
+    from shared.database import db_service
+    if not db_service.is_connected:
+        raise _service_unavailable()
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, user_uuid, username, email, telegram_id, score, confidence, "
+            "recommended_action, action_taken, action_taken_at, admin_comment, "
+            "temporal_score, geo_score, asn_score, profile_score, device_score, "
+            "hwid_score, user_agent_score, reasons, ip_addresses, countries, cities, "
+            "asn_types, os_list, client_list, simultaneous_connections, "
+            "unique_ips_count, impossible_travel, is_mobile, is_datacenter, is_vpn, "
+            "detected_at "
+            "FROM violations WHERE id = $1",
+            violation_id,
+        )
+    if not row:
+        raise _not_found("Violation")
+
+    return ViolationDetailPublic(**_violation_row_to_dict(row))
+
+
+# ══════════════════════════════════════════════════════════════════
 # Bulk Operations
 # ══════════════════════════════════════════════════════════════════
 
@@ -572,6 +722,6 @@ async def api_v3_openapi():
         version="3.0.0",
         description="Public API authenticated via X-API-Key header. "
         "Scopes: users:read, users:write, users:delete, nodes:read, nodes:write, "
-        "hosts:read, bulk:write, stats:read",
+        "hosts:read, bulk:write, stats:read, violations:read",
         routes=temp.routes,
     )

@@ -198,6 +198,18 @@ class AutomationEngine:
             details=details,
         )
 
+        from web.backend.core.webhook_security import fire_event
+        fire_event("automation.triggered", {
+            "rule_id": rule["id"],
+            "rule_name": rule.get("name"),
+            "event": event_type,
+            "action": rule["action_type"],
+            "target_type": target_type,
+            "target_id": target_id,
+            "result": result,
+            "details": details,
+        })
+
     # ── Schedule loop ────────────────────────────────────────
 
     async def _schedule_loop(self):
@@ -618,11 +630,27 @@ class AutomationEngine:
 
                 if is_connected:
                     # Node is online — remove from offline tracking
-                    self._node_offline_since.pop(uuid, None)
+                    was_offline_since = self._node_offline_since.pop(uuid, None)
+                    if was_offline_since is not None:
+                        # Переход offline → online: шлём вебхук подписчикам
+                        from web.backend.core.webhook_security import fire_event
+                        downtime = datetime.now(timezone.utc) - was_offline_since
+                        fire_event("node.online", {
+                            "uuid": uuid,
+                            "name": node.get("name", ""),
+                            "downtime_minutes": round(downtime.total_seconds() / 60, 1),
+                        })
                 else:
                     # Node is offline
                     if uuid not in self._node_offline_since:
                         self._node_offline_since[uuid] = datetime.now(timezone.utc)
+                        # Переход online → offline (фиксируем только сам переход,
+                        # automation handle_event ниже дёргается каждый цикл)
+                        from web.backend.core.webhook_security import fire_event
+                        fire_event("node.offline", {
+                            "uuid": uuid,
+                            "name": node.get("name", ""),
+                        })
 
                     offline_duration = datetime.now(timezone.utc) - self._node_offline_since[uuid]
                     offline_minutes = offline_duration.total_seconds() / 60
@@ -784,6 +812,14 @@ class AutomationEngine:
             json={},
         )
         resp.raise_for_status()
+        from web.backend.core.webhook_security import fire_event
+        fire_event("user.blocked", {
+            "uuid": target_id,
+            "username": context.get("username"),
+            "reason": "automation",
+            "details": "disable_user action",
+            "blocked_by": "automation",
+        })
         return {"action": "disable_user", "user_uuid": target_id, "status": resp.status_code}
 
     async def _action_block_user(
@@ -801,6 +837,14 @@ class AutomationEngine:
             json={"reason": reason},
         )
         resp.raise_for_status()
+        from web.backend.core.webhook_security import fire_event
+        fire_event("user.blocked", {
+            "uuid": target_id,
+            "username": context.get("username"),
+            "reason": "automation",
+            "details": reason,
+            "blocked_by": "automation",
+        })
         return {"action": "block_user", "user_uuid": target_id, "reason": reason}
 
     async def _action_notify(
