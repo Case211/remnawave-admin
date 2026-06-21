@@ -15,3 +15,7 @@ aiogram_mock = unittest.mock.MagicMock()
 aiogram_mock.Bot = unittest.mock.AsyncMock
 sys.modules["aiogram"] = aiogram_mock
 sys.modules["aiogram.types"] = unittest.mock.MagicMock()
+# aiogram.utils.i18n нужен src.utils.i18n; без явного мока submodule "aiogram" (MagicMock)
+# не считается пакетом и `from aiogram.utils.i18n import I18n` падает «not a package».
+sys.modules["aiogram.utils"] = unittest.mock.MagicMock()
+sys.modules["aiogram.utils.i18n"] = unittest.mock.MagicMock()
