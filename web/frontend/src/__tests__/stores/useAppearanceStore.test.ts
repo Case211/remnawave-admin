@@ -9,7 +9,7 @@ describe('useAppearanceStore', () => {
 
   describe('default values', () => {
     it('has correct default theme', () => {
-      expect(useAppearanceStore.getState().theme).toBe('obsidian')
+      expect(useAppearanceStore.getState().theme).toBe('halo')
     })
 
     it('has correct default color mode', () => {
@@ -44,7 +44,7 @@ describe('useAppearanceStore', () => {
     })
 
     it('can set all theme presets', () => {
-      const presets = ['obsidian', 'arctic', 'sakura', 'twilight', 'ember'] as const
+      const presets = ['halo', 'obsidian', 'arctic', 'sakura', 'twilight', 'ember'] as const
       presets.forEach((preset) => {
         useAppearanceStore.getState().setTheme(preset)
         expect(useAppearanceStore.getState().theme).toBe(preset)
@@ -136,7 +136,7 @@ describe('useAppearanceStore', () => {
       useAppearanceStore.getState().resetToDefaults()
 
       const state = useAppearanceStore.getState()
-      expect(state.theme).toBe('obsidian')
+      expect(state.theme).toBe('halo')
       expect(state.colorMode).toBe('dark')
       expect(state.density).toBe('comfortable')
       expect(state.borderRadius).toBe('default')

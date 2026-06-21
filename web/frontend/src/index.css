@@ -109,6 +109,25 @@
     --mesh-color-4: #162240;
   }
 
+  /* --- Halo (brand — cyan/teal/blue aurora; app default) --- */
+  [data-theme="halo"] {
+    --primary: 190 90% 46%;
+    --ring: 190 90% 46%;
+    --sidebar-primary: 190 90% 46%;
+    --sidebar-ring: 190 90% 46%;
+    --accent-from: #22d3ee;
+    --accent-to: #3b82f6;
+    --accent-from-light: #67e8f9;
+    --accent-to-light: #7dd3fc;
+    --glow-rgb: 34, 211, 238;
+    --selection-rgb: 34, 211, 238;
+    --surface-skeleton-shimmer: rgba(34, 211, 238, 0.04);
+    --mesh-color-1: #0e7e9c;
+    --mesh-color-2: #2056ad;
+    --mesh-color-3: #11a3c4;
+    --mesh-color-4: #2a2f7a;
+  }
+
   /* --- Arctic (sky-blue) --- */
   [data-theme="arctic"] {
     --primary: 199 89% 48%;

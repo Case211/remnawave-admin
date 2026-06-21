@@ -50,6 +50,7 @@ function OptionButton<T extends string>({ value, current, onChange, label }: Opt
 
 // Theme presets with their display colors and labels
 const themePresets: { value: ThemePreset; label: string; colors: [string, string] }[] = [
+  { value: 'halo', label: 'Halo', colors: ['#22d3ee', '#3b82f6'] },
   { value: 'obsidian', label: 'Obsidian', colors: ['#6366f1', '#818cf8'] },
   { value: 'arctic', label: 'Arctic', colors: ['#0ea5e9', '#38bdf8'] },
   { value: 'sakura', label: 'Sakura', colors: ['#ec4899', '#f472b6'] },

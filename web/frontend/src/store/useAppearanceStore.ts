@@ -5,7 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 export type UIDensity = 'compact' | 'comfortable' | 'spacious'
 export type BorderRadius = 'sharp' | 'default' | 'rounded'
 export type FontSize = 'small' | 'default' | 'large'
-export type ThemePreset = 'obsidian' | 'arctic' | 'sakura' | 'twilight' | 'ember'
+export type ThemePreset = 'halo' | 'obsidian' | 'arctic' | 'sakura' | 'twilight' | 'ember'
 export type ColorMode = 'dark' | 'light' | 'auto'
 
 interface AppearanceState {
@@ -32,7 +32,7 @@ interface AppearanceState {
 }
 
 const defaults = {
-  theme: 'obsidian' as ThemePreset,
+  theme: 'halo' as ThemePreset,
   colorMode: 'dark' as ColorMode,
   density: 'comfortable' as UIDensity,
   borderRadius: 'default' as BorderRadius,
