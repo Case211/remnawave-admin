@@ -29,8 +29,9 @@ node-agent/test-logs/access.log
 # Firebase service account credentials
 web/backend/secrets/
 
-# Security audit reports (содержат детали эксплуатации — не коммитить)
+# Security / internal audit reports (детали эксплуатации и слабости детекта — не коммитить)
 docs/SECURITY_AUDIT_*.md
+docs/VIOLATIONS_AUDIT_*.md
 
 # Playwright E2E artifacts
 web/frontend/test-results/
