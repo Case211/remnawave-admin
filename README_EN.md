@@ -6,7 +6,7 @@
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.12+-green)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL%20v3-blue)](LICENSE)
 
 [English](README_EN.md) | [Русский](README.md)
 
@@ -577,7 +577,7 @@ docker compose config                # Check configuration
 
 ## 📄 License
 
-MIT License — see [LICENSE](LICENSE).
+GNU Affero General Public License v3.0 with a plugin exception (§7) — see [LICENSE](LICENSE). Earlier versions (≤ 2.15.x) remain under MIT.
 
 ---
 
