@@ -21,7 +21,7 @@ import {
   Clock,
   Calendar,
   CalendarDays,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { reportsApi, asnApi, ViolationReport, ASNRecord } from '../api/reports'
 import client from '../api/client'
 import { EmptyState } from '@/components/EmptyState'

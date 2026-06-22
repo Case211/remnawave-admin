@@ -17,7 +17,7 @@ import {
   Lock,
   ShieldCheck,
   Plus,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'

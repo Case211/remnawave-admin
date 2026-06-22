@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Home, ArrowLeft } from 'lucide-react'
+import { Home, ArrowLeft } from '@/components/brand/icons'
 import { Button } from '@/components/ui/button'
 
 export default function NotFound() {

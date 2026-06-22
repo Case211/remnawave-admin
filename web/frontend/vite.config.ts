@@ -100,10 +100,6 @@ export default defineConfig({
             return 'vendor-maps'
           }
 
-          // Icons
-          if (id.includes('/lucide-react/')) {
-            return 'vendor-icons'
-          }
         },
       },
     },

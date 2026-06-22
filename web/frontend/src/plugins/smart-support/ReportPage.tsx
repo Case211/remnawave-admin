@@ -19,7 +19,7 @@ import {
   Users as UsersIcon,
   X,
   Zap,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 
 import LicenseBanner from './LicenseBanner'
 import {

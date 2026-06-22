@@ -8,7 +8,7 @@ import {
   Clock,
   Zap,
   Activity,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'

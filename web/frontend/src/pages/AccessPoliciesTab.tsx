@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Plus, Trash2, Shield, Users, Save } from 'lucide-react'
+import { Plus, Trash2, Shield, Users, Save } from '@/components/brand/icons'
 import {
   accessPoliciesApi,
   type PolicyDetail,

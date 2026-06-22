@@ -31,7 +31,7 @@ import {
   History,
   Plus,
   Trash2,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import client from '../api/client'
 import { usePermissionStore } from '../store/permissionStore'
 import { Card, CardContent } from '@/components/ui/card'

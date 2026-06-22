@@ -18,7 +18,7 @@ import {
   EyeOff,
   Copy,
   KeyRound,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { toast } from 'sonner'
 import client from '../api/client'
 import { authApi } from '../api/auth'

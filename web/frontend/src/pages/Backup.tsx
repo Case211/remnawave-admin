@@ -21,7 +21,7 @@ import {
   Send,
   Search,
   Recycle,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { backupApi } from '../api/backup'
 import { useAuthStore } from '../store/authStore'
 import { Button } from '@/components/ui/button'

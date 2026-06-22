@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Clock, CheckCircle, XCircle, RefreshCw, Terminal, FileCode } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, RefreshCw, Terminal, FileCode } from '@/components/brand/icons'
 import { getCommandLog, type CommandLogEntry } from '@/api/fleet'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

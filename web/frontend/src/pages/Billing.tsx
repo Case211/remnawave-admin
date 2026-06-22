@@ -15,7 +15,7 @@ import {
   ExternalLink,
   Calendar,
   BarChart3,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { billingApi, Provider } from '../api/billing'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'

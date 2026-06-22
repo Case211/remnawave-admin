@@ -36,7 +36,8 @@ import {
   Settings,
   KeyRound,
   Bot,
-} from 'lucide-react'
+  MessageSquare,
+} from '@/components/brand/icons'
 import { toast } from 'sonner'
 import client from '../api/client'
 import { useHasPermission } from '../components/PermissionGate'
@@ -2445,8 +2446,9 @@ export default function UserDetail() {
                         </p>
                       )}
                       {v.admin_comment && (
-                        <p className="text-xs text-muted-foreground italic mt-1 line-clamp-1">
-                          💬 {v.admin_comment}
+                        <p className="text-xs text-muted-foreground italic mt-1 line-clamp-1 flex items-center gap-1">
+                          <MessageSquare className="w-3 h-3 shrink-0" />
+                          {v.admin_comment}
                         </p>
                       )}
                     </div>

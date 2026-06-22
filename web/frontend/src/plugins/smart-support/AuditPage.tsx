@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, FileSearch, History } from 'lucide-react'
+import { ArrowLeft, FileSearch, History } from '@/components/brand/icons'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

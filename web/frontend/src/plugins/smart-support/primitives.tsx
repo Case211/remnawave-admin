@@ -12,7 +12,7 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, Inbox, type LucideIcon } from 'lucide-react'
+import { Check, Copy, Inbox, type LucideIcon } from '@/components/brand/icons'
 
 export function Skeleton({ className = '' }: { className?: string }) {
   return (

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, History, Search, SearchX, Sliders } from 'lucide-react'
+import { ArrowRight, History, Search, SearchX, Sliders } from '@/components/brand/icons'
 
 import { Input } from '@/components/ui/input'
 

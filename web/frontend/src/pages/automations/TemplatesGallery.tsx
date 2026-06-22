@@ -9,7 +9,7 @@ import {
   Bell,
   RotateCcw,
   FileText,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

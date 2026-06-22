@@ -33,7 +33,7 @@ import {
   GripVertical,
   ArrowUpDown,
   RotateCcw,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import {
   DndContext,
   PointerSensor,

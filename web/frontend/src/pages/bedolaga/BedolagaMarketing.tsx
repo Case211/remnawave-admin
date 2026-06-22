@@ -15,7 +15,7 @@ import {
   Users,
   ExternalLink,
   Square,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import client from '@/api/client'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

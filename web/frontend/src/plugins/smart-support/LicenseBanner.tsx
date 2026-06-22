@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { ShieldAlert } from 'lucide-react'
+import { ShieldAlert } from '@/components/brand/icons'
 
 import type { LicenseError } from './types'
 

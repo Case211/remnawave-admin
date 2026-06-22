@@ -7,7 +7,7 @@ import {
   Fingerprint, AlertTriangle, Ban, User,
   ShieldOff, ShieldCheck, Calendar,
   ChevronLeft, ChevronRight,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ShieldAlert, Eye, EyeOff, KeyRound, Check } from 'lucide-react'
+import { ShieldAlert, Eye, EyeOff, KeyRound, Check } from '@/components/brand/icons'
 import { authApi } from '@/api/auth'
 import { usePermissionStore } from '@/store/permissionStore'
 import { useAuthStore } from '@/store/authStore'

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bookmark, X, Plus } from 'lucide-react'
+import { Bookmark, X, Plus } from '@/components/brand/icons'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'

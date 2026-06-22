@@ -19,7 +19,7 @@ import {
   Pencil,
   Trash2,
   Download,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

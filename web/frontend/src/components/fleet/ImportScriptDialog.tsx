@@ -17,7 +17,7 @@ import {
   Loader2,
   AlertTriangle,
   FileCode,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'

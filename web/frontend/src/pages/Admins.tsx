@@ -15,7 +15,7 @@ import {
   Check,
   Lock,
   Users as UsersIcon,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import {
   adminsApi, rolesApi,
   AdminAccount, AdminAccountCreate, AdminAccountUpdate,

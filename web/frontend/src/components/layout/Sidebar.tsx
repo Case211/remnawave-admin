@@ -40,7 +40,8 @@ import {
   Wallet,
   FileText,
   Boxes,
-} from 'lucide-react'
+  type LucideIcon,
+} from '@/components/brand/icons'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
 import { useAppearanceStore } from '../../store/useAppearanceStore'
@@ -61,14 +62,14 @@ interface NavItem {
   type?: 'item'
   name: string
   href: string
-  icon: typeof LayoutDashboard
+  icon: LucideIcon
   permission: { resource: string; action: string } | null
 }
 
 interface NavGroup {
   type: 'group'
   name: string
-  icon: typeof LayoutDashboard
+  icon: LucideIcon
   items: NavItem[]
 }
 

@@ -31,7 +31,7 @@ import {
   Users,
   Share2,
   List,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import client from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

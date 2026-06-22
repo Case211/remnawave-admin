@@ -1,4 +1,4 @@
-import { Paintbrush, RotateCcw, Sun, Moon, Monitor } from 'lucide-react'
+import { Paintbrush, RotateCcw, Sun, Moon, Monitor } from '@/components/brand/icons'
 import { useTranslation } from 'react-i18next'
 import {
   useAppearanceStore,

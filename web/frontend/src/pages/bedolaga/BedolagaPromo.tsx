@@ -15,7 +15,7 @@ import {
   Ticket,
   Copy,
   Check,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import client from '@/api/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

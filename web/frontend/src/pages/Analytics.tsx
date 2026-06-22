@@ -29,7 +29,7 @@ import {
   GitCompare,
   CalendarDays,
   Download,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import {
   AreaChart,
   Area,

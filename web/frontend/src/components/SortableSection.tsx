@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical } from 'lucide-react'
+import { GripVertical } from '@/components/brand/icons'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 

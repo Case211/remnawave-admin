@@ -22,7 +22,7 @@ import {
   CreditCard,
   HardDrive,
   Key,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import {
   CommandDialog,
   CommandInput,

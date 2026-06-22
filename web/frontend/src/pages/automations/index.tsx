@@ -12,7 +12,7 @@ import {
   Bell,
   Terminal,
   CalendarClock,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'

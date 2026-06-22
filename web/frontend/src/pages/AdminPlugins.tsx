@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { toast } from 'sonner'
 
 import {

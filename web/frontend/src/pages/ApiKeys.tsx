@@ -16,7 +16,7 @@ import {
   History,
   Loader2,
   RotateCw,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import {
   apiKeysApi,
   webhooksApi,

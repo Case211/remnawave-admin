@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Maximize2, Minimize2, X, Terminal as TerminalIcon } from 'lucide-react'
+import { Maximize2, Minimize2, X, Terminal as TerminalIcon } from '@/components/brand/icons'
 
 const WebTerminal = lazy(() => import('./WebTerminal'))
 

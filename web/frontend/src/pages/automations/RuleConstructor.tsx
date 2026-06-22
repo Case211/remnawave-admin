@@ -18,7 +18,7 @@ import {
   HelpCircle,
   Loader2,
   Server,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

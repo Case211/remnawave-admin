@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Search, Menu, Globe, Check, ExternalLink, RefreshCw, RotateCcw } from 'lucide-react'
+import { Bell, Search, Menu, Globe, Check, ExternalLink, RefreshCw, RotateCcw } from '@/components/brand/icons'
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

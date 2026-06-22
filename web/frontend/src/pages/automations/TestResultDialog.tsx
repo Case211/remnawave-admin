@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, AlertTriangle, Info, Zap, Clock } from 'lucide-react'
+import { CheckCircle, AlertTriangle, Info, Zap, Clock } from '@/components/brand/icons'
 import type { AutomationTestResult } from '../../api/automations'
 
 interface TestResultDialogProps {

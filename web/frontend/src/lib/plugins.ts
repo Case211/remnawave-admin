@@ -35,7 +35,8 @@ import {
   UsersRound,
   Wrench,
   Zap,
-} from 'lucide-react'
+  type LucideIcon,
+} from '@/components/brand/icons'
 import client from '@/api/client'
 
 export type LicenseState = 'valid' | 'expired' | 'missing' | 'not_required'
@@ -64,7 +65,7 @@ export interface PluginInfo {
  *
  * To add a new icon: import it above, then add it here.
  */
-const ICON_MAP: Record<string, typeof LayoutDashboard> = {
+const ICON_MAP: Record<string, LucideIcon> = {
   Activity,
   AlertTriangle,
   BarChart3,
@@ -92,7 +93,7 @@ const ICON_MAP: Record<string, typeof LayoutDashboard> = {
   Zap,
 }
 
-export function resolvePluginIcon(name: string): typeof LayoutDashboard {
+export function resolvePluginIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Sparkles
 }
 

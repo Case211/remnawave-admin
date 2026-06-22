@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Bot, Save, Sliders } from 'lucide-react'
+import { ArrowLeft, Bot, Save, Sliders } from '@/components/brand/icons'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'

@@ -13,7 +13,7 @@ import {
   Globe, Send, Inbox, ListOrdered, Plus, Trash2, RefreshCw,
   CheckCircle2, XCircle, Copy, Mail, MailOpen, X, Ban,
   RotateCcw, KeyRound, Pencil,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

@@ -36,7 +36,12 @@ import {
   Search,
   MessageSquare,
   ArrowUpRight,
-} from 'lucide-react'
+  Monitor,
+  Laptop,
+  Terminal,
+  MonitorSmartphone,
+  type LucideIcon,
+} from '@/components/brand/icons'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -516,14 +521,14 @@ interface HwidDevice {
   updated_at: string | null
 }
 
-function getPlatformInfo(platform: string | null, unknownLabel: string): { icon: string; label: string } {
+function getPlatformInfo(platform: string | null, unknownLabel: string): { Icon: LucideIcon; label: string } {
   const p = (platform || '').toLowerCase()
-  if (p.includes('windows') || p === 'win') return { icon: '🖥️', label: 'Windows' }
-  if (p.includes('android')) return { icon: '📱', label: 'Android' }
-  if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return { icon: '📱', label: 'iOS' }
-  if (p.includes('macos') || p.includes('mac') || p.includes('darwin')) return { icon: '💻', label: 'macOS' }
-  if (p.includes('linux')) return { icon: '🐧', label: 'Linux' }
-  return { icon: '📟', label: platform || unknownLabel }
+  if (p.includes('windows') || p === 'win') return { Icon: Monitor, label: 'Windows' }
+  if (p.includes('android')) return { Icon: Smartphone, label: 'Android' }
+  if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return { Icon: Smartphone, label: 'iOS' }
+  if (p.includes('macos') || p.includes('mac') || p.includes('darwin')) return { Icon: Laptop, label: 'macOS' }
+  if (p.includes('linux')) return { Icon: Terminal, label: 'Linux' }
+  return { Icon: MonitorSmartphone, label: platform || unknownLabel }
 }
 
 function ViolationDetailPanel({
@@ -873,7 +878,7 @@ function ViolationDetailPanel({
                     }
                   >
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-base">{pi.icon}</span>
+                      <pi.Icon className="w-4 h-4 text-dark-200 shrink-0" />
                       <span className="text-sm font-medium text-white">{pi.label}</span>
                       {isMatched && (
                         <Badge variant="destructive" className="text-[9px] px-1.5 py-0">

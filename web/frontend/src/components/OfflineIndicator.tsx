@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { WifiOff, ServerCrash, RefreshCw } from 'lucide-react'
+import { WifiOff, ServerCrash, RefreshCw } from '@/components/brand/icons'
 import { useQueryClient } from '@tanstack/react-query'
 
 type Status = 'online' | 'offline' | 'api-down'

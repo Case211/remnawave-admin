@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react'
+import { Download } from '@/components/brand/icons'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {

@@ -14,7 +14,7 @@ import {
   Bell, Settings2, Shield, Mail, MessageSquare, Webhook,
   Check, Trash2, Plus, Power, PowerOff, Pencil, Send, AlertTriangle,
   CheckCircle2, ChevronDown, ChevronRight, MonitorSmartphone,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

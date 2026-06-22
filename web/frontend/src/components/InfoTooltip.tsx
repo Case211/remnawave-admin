@@ -1,4 +1,4 @@
-import { Info } from 'lucide-react'
+import { Info } from '@/components/brand/icons'
 import {
   Tooltip,
   TooltipContent,

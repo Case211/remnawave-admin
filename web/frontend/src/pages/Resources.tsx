@@ -15,7 +15,7 @@ import {
   Settings,
   RefreshCw,
   FileJson,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import { resourcesApi, Template, Snippet, ConfigProfile } from '../api/resources'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

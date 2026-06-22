@@ -35,7 +35,7 @@ import {
   ArrowLeftRight,
   Gauge,
   UserMinus,
-} from 'lucide-react'
+} from '@/components/brand/icons'
 import client from '../api/client'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'

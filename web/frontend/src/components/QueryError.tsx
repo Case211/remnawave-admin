@@ -1,4 +1,4 @@
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from '@/components/brand/icons'
 import { useTranslation } from 'react-i18next'
 
 interface QueryErrorProps {
