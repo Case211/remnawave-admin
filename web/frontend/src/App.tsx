@@ -20,8 +20,6 @@ import Layout from './components/layout/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ResetPassword from './pages/ResetPassword'
-// TEMP: view-mode preview — remove before release
-import ViewDemo from './pages/ViewDemo'
 
 // Lazy-loaded pages
 const Users = lazy(() => import('./pages/Users'))
@@ -224,8 +222,6 @@ export default function App() {
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            {/* TEMP: view-mode preview — remove before release */}
-            <Route path="/viewdemo" element={<ViewDemo />} />
 
             {/* Full-screen protected pages (own chrome, no admin sidebar/header) */}
             <Route
