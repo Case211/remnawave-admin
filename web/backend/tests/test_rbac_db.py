@@ -10,6 +10,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import web.backend.core.rbac as rbac_mod
+# RBAC cache + permission/account/quota logic lives in shared/rbac.py (re-exported
+# by core/rbac.py). Tests must reference the shared module so mocks/patches hit
+# the namespace where those functions actually look things up.
+import shared.rbac as shared_rbac
 
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -45,11 +49,11 @@ def _make_conn(**overrides):
 @pytest.fixture(autouse=True)
 def _reset_cache():
     """Reset the permission cache between tests."""
-    rbac_mod._permissions_cache.clear()
-    rbac_mod._cache_ts = 0
+    shared_rbac._permissions_cache.clear()
+    shared_rbac._cache_ts = 0
     yield
-    rbac_mod._permissions_cache.clear()
-    rbac_mod._cache_ts = 0
+    shared_rbac._permissions_cache.clear()
+    shared_rbac._cache_ts = 0
 
 
 # ── _ensure_cache / invalidate_cache ────────────────────────────
@@ -66,22 +70,22 @@ class TestEnsureCache:
         ])
         db = _make_db_mock(conn)
 
-        with patch("shared.database.db_service", db):
-            await rbac_mod._ensure_cache()
+        with patch("shared.rbac.db_service", db):
+            await shared_rbac._ensure_cache()
 
-        assert rbac_mod._permissions_cache[1] == {("users", "view"), ("users", "edit")}
-        assert rbac_mod._permissions_cache[2] == {("nodes", "view")}
-        assert rbac_mod._cache_ts > 0
+        assert shared_rbac._permissions_cache[1] == {("users", "view"), ("users", "edit")}
+        assert shared_rbac._permissions_cache[2] == {("nodes", "view")}
+        assert shared_rbac._cache_ts > 0
 
     async def test_skips_when_fresh(self):
-        rbac_mod._permissions_cache = {1: {("a", "b")}}
-        rbac_mod._cache_ts = time.time()
+        shared_rbac._permissions_cache = {1: {("a", "b")}}
+        shared_rbac._cache_ts = time.time()
 
         conn = _make_conn()
         db = _make_db_mock(conn)
 
-        with patch("shared.database.db_service", db):
-            await rbac_mod._ensure_cache()
+        with patch("shared.rbac.db_service", db):
+            await shared_rbac._ensure_cache()
 
         conn.fetch.assert_not_awaited()
 
@@ -89,26 +93,26 @@ class TestEnsureCache:
         db = MagicMock()
         db.is_connected = False
 
-        with patch("shared.database.db_service", db):
-            await rbac_mod._ensure_cache()
+        with patch("shared.rbac.db_service", db):
+            await shared_rbac._ensure_cache()
 
-        assert rbac_mod._permissions_cache == {}
+        assert shared_rbac._permissions_cache == {}
 
     async def test_handles_exception(self):
         db = MagicMock()
         db.is_connected = True
         db.acquire.side_effect = Exception("DB error")
 
-        with patch("shared.database.db_service", db):
-            await rbac_mod._ensure_cache()  # should not raise
+        with patch("shared.rbac.db_service", db):
+            await shared_rbac._ensure_cache()  # should not raise
 
 
 class TestInvalidateCache:
 
     def test_sets_cache_ts_to_zero(self):
-        rbac_mod._cache_ts = time.time()
-        rbac_mod.invalidate_cache()
-        assert rbac_mod._cache_ts == 0
+        shared_rbac._cache_ts = time.time()
+        shared_rbac.invalidate_cache()
+        assert shared_rbac._cache_ts == 0
 
 
 # ── Permission checking ────────────────────────────────────────
@@ -117,32 +121,32 @@ class TestInvalidateCache:
 class TestHasPermission:
 
     async def test_returns_false_for_none_role_id(self):
-        assert await rbac_mod.has_permission(None, "users", "view") is False
+        assert await shared_rbac.has_permission(None, "users", "view") is False
 
     async def test_permission_found(self):
-        rbac_mod._permissions_cache = {1: {("users", "view")}}
-        rbac_mod._cache_ts = time.time()
-        assert await rbac_mod.has_permission(1, "users", "view") is True
+        shared_rbac._permissions_cache = {1: {("users", "view")}}
+        shared_rbac._cache_ts = time.time()
+        assert await shared_rbac.has_permission(1, "users", "view") is True
 
     async def test_permission_not_found(self):
-        rbac_mod._permissions_cache = {1: {("users", "view")}}
-        rbac_mod._cache_ts = time.time()
-        assert await rbac_mod.has_permission(1, "users", "delete") is False
+        shared_rbac._permissions_cache = {1: {("users", "view")}}
+        shared_rbac._cache_ts = time.time()
+        assert await shared_rbac.has_permission(1, "users", "delete") is False
 
     async def test_unknown_role(self):
-        rbac_mod._permissions_cache = {1: {("users", "view")}}
-        rbac_mod._cache_ts = time.time()
-        assert await rbac_mod.has_permission(99, "users", "view") is False
+        shared_rbac._permissions_cache = {1: {("users", "view")}}
+        shared_rbac._cache_ts = time.time()
+        assert await shared_rbac.has_permission(99, "users", "view") is False
 
 
 class TestGetRolePermissions:
 
     async def test_returns_sorted_list(self):
-        rbac_mod._permissions_cache = {
+        shared_rbac._permissions_cache = {
             1: {("users", "view"), ("nodes", "edit"), ("analytics", "view")}
         }
-        rbac_mod._cache_ts = time.time()
-        result = await rbac_mod.get_role_permissions(1)
+        shared_rbac._cache_ts = time.time()
+        result = await shared_rbac.get_role_permissions(1)
         assert isinstance(result, list)
         assert all("resource" in p and "action" in p for p in result)
         # Sorted
@@ -150,24 +154,24 @@ class TestGetRolePermissions:
         assert resources == sorted(resources)
 
     async def test_unknown_role_returns_empty(self):
-        rbac_mod._permissions_cache = {}
-        rbac_mod._cache_ts = time.time()
-        result = await rbac_mod.get_role_permissions(999)
+        shared_rbac._permissions_cache = {}
+        shared_rbac._cache_ts = time.time()
+        result = await shared_rbac.get_role_permissions(999)
         assert result == []
 
 
 class TestGetAllPermissionsForRoleId:
 
     async def test_returns_set(self):
-        rbac_mod._permissions_cache = {1: {("a", "b"), ("c", "d")}}
-        rbac_mod._cache_ts = time.time()
-        result = await rbac_mod.get_all_permissions_for_role_id(1)
+        shared_rbac._permissions_cache = {1: {("a", "b"), ("c", "d")}}
+        shared_rbac._cache_ts = time.time()
+        result = await shared_rbac.get_all_permissions_for_role_id(1)
         assert result == {("a", "b"), ("c", "d")}
 
     async def test_unknown_role(self):
-        rbac_mod._permissions_cache = {}
-        rbac_mod._cache_ts = time.time()
-        result = await rbac_mod.get_all_permissions_for_role_id(42)
+        shared_rbac._permissions_cache = {}
+        shared_rbac._cache_ts = time.time()
+        result = await shared_rbac.get_all_permissions_for_role_id(42)
         assert result == set()
 
 
@@ -222,8 +226,8 @@ class TestGetAdminAccountByTelegramId:
         conn = _make_conn(fetchrow=AsyncMock(return_value=row))
         db = _make_db_mock(conn)
 
-        with patch("shared.database.db_service", db):
-            result = await rbac_mod.get_admin_account_by_telegram_id(12345)
+        with patch("shared.rbac.db_service", db):
+            result = await shared_rbac.get_admin_account_by_telegram_id(12345)
 
         assert result == dict(row)
 
@@ -231,8 +235,8 @@ class TestGetAdminAccountByTelegramId:
         db = MagicMock()
         db.is_connected = False
 
-        with patch("shared.database.db_service", db):
-            result = await rbac_mod.get_admin_account_by_telegram_id(12345)
+        with patch("shared.rbac.db_service", db):
+            result = await shared_rbac.get_admin_account_by_telegram_id(12345)
 
         assert result is None
 
@@ -244,8 +248,8 @@ class TestGetAdminAccountById:
         conn = _make_conn(fetchrow=AsyncMock(return_value=row))
         db = _make_db_mock(conn)
 
-        with patch("shared.database.db_service", db):
-            result = await rbac_mod.get_admin_account_by_id(5)
+        with patch("shared.rbac.db_service", db):
+            result = await shared_rbac.get_admin_account_by_id(5)
 
         assert result == dict(row)
 
@@ -254,8 +258,8 @@ class TestGetAdminAccountById:
         db.is_connected = True
         db.acquire.side_effect = Exception("err")
 
-        with patch("shared.database.db_service", db):
-            result = await rbac_mod.get_admin_account_by_id(5)
+        with patch("shared.rbac.db_service", db):
+            result = await shared_rbac.get_admin_account_by_id(5)
 
         assert result is None
 
@@ -761,49 +765,49 @@ class TestGetAuditDistinctActions:
 class TestCheckQuota:
 
     async def test_unlimited_quota(self):
-        with patch.object(rbac_mod, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
+        with patch.object(shared_rbac, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": 1, "is_active": True,
                 "max_users": None, "users_created": 5,
             }
-            allowed, msg = await rbac_mod.check_quota(1, "users")
+            allowed, msg = await shared_rbac.check_quota(1, "users")
 
         assert allowed is True
         assert msg == ""
 
     async def test_within_quota(self):
-        with patch.object(rbac_mod, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
+        with patch.object(shared_rbac, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": 1, "is_active": True,
                 "max_users": 10, "users_created": 5,
             }
-            allowed, msg = await rbac_mod.check_quota(1, "users")
+            allowed, msg = await shared_rbac.check_quota(1, "users")
 
         assert allowed is True
 
     async def test_quota_exceeded(self):
-        with patch.object(rbac_mod, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
+        with patch.object(shared_rbac, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": 1, "is_active": True,
                 "max_users": 5, "users_created": 5,
             }
-            allowed, msg = await rbac_mod.check_quota(1, "users")
+            allowed, msg = await shared_rbac.check_quota(1, "users")
 
         assert allowed is False
         assert "Quota exceeded" in msg
 
     async def test_account_not_found(self):
-        with patch.object(rbac_mod, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
+        with patch.object(shared_rbac, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
-            allowed, msg = await rbac_mod.check_quota(999, "users")
+            allowed, msg = await shared_rbac.check_quota(999, "users")
 
         assert allowed is False
         assert "not found" in msg
 
     async def test_account_disabled(self):
-        with patch.object(rbac_mod, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
+        with patch.object(shared_rbac, "get_admin_account_by_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {"id": 1, "is_active": False}
-            allowed, msg = await rbac_mod.check_quota(1, "users")
+            allowed, msg = await shared_rbac.check_quota(1, "users")
 
         assert allowed is False
         assert "disabled" in msg

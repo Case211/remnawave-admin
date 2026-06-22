@@ -23,6 +23,18 @@ from web.backend.core import notification_service as ns_mod
 
 class TestSendTelegram:
 
+    @pytest.fixture(autouse=True)
+    def _force_direct_path(self):
+        # Isolate from a global INTERNAL_API_SECRET leaking across the full suite:
+        # force the bot-callback path to a no-op so send_telegram always falls
+        # through to the direct httpx call these tests assert against.
+        with patch(
+            "web.backend.core.notification_service._send_telegram_via_bot_callback",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            yield
+
     @patch("web.backend.core.notification_service.httpx.AsyncClient")
     async def test_success(self, mock_client_cls):
         mock_resp = MagicMock()

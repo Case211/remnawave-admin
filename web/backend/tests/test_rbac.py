@@ -158,7 +158,8 @@ class TestPermissionCacheInvalidation:
     """Cache invalidation for RBAC permissions."""
 
     def test_invalidate_resets_timestamp(self):
-        from web.backend.core.rbac import _cache_ts
+        # The cache timestamp lives in shared/rbac.py (re-exported by core/rbac).
+        import shared.rbac as shared_rbac
+        shared_rbac._cache_ts = 12345.0
         invalidate_cache()
-        from web.backend.core import rbac
-        assert rbac._cache_ts == 0
+        assert shared_rbac._cache_ts == 0

@@ -35,10 +35,18 @@ describe('usePermissionStore', () => {
       expect(hasPermission('anything', 'everything')).toBe(true)
     })
 
-    it('grants all permissions to legacy admin role', () => {
-      usePermissionStore.setState({ isLoaded: true, role: 'admin', permissions: [] })
+    it('treats the admin role as RBAC-scoped (no implicit full access)', () => {
+      // Since admin-scoping (PR #252) only superadmin and the legacy null role
+      // bypass RBAC. A plain 'admin' role is checked against its explicit
+      // permission list rather than being granted everything.
+      usePermissionStore.setState({
+        isLoaded: true,
+        role: 'admin',
+        permissions: [{ resource: 'users', action: 'create' }],
+      })
       const { hasPermission } = usePermissionStore.getState()
       expect(hasPermission('users', 'create')).toBe(true)
+      expect(hasPermission('nodes', 'delete')).toBe(false)
     })
 
     it('grants all permissions when role is null after load (legacy)', () => {
