@@ -205,6 +205,8 @@ services:
     environment:
       METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
       PROMETHEUS_RETENTION: ${PROMETHEUS_RETENTION:-30d}
+      # Scrape target port: 8081 (full) or 8082 (APP_MODE=api split). Must match WEB_BACKEND_PORT.
+      WEB_BACKEND_PORT: ${WEB_BACKEND_PORT:-8081}
     entrypoint: ["/bin/sh", "/usr/local/bin/entrypoint.sh"]
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"

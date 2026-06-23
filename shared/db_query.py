@@ -6,6 +6,23 @@ use $N placeholders compatible with asyncpg/psycopg parameter binding.
 """
 
 
+def _reject_where_prefix(where: str) -> None:
+    """Guard against the select_sql/update_sql convention mismatch.
+
+    ``select_sql`` takes a full suffix (the caller writes ``"WHERE ..."``),
+    but ``update_sql``/``delete_sql`` prepend ``WHERE`` themselves. Passing a
+    condition that already starts with ``WHERE`` produced ``"WHERE WHERE ..."``
+    — invalid SQL that silently reached production. Fail loudly at the call
+    site instead of building a broken query.
+    """
+    s = where.lstrip()
+    if s[:5].upper() == "WHERE" and (len(s) == 5 or s[5].isspace()):
+        raise ValueError(
+            "update_sql()/delete_sql() already prepend WHERE — pass the "
+            f"condition without a leading 'WHERE' keyword (got {where!r})"
+        )
+
+
 def select_sql(
     table: str,
     columns: str = "*",
@@ -68,6 +85,7 @@ def update_sql(
     Returns:
         "UPDATE {table} SET {assignments} WHERE {where} RETURNING {returning}"
     """
+    _reject_where_prefix(where)
     ret = f" RETURNING {returning}" if returning else ""
     return f"UPDATE {table} SET {assignments} WHERE {where}{ret}"
 
@@ -85,6 +103,7 @@ def delete_sql(
     Returns:
         "DELETE FROM {table} WHERE {where}"
     """
+    _reject_where_prefix(where)
     return f"DELETE FROM {table} WHERE {where}"
 
 

@@ -461,7 +461,7 @@ class NetworkMixin:
                     update_sql(
                         ASN_RUSSIA_TABLE,
                         "last_synced_at = NOW()",
-                        "WHERE is_active = true AND (last_synced_at IS NULL OR last_synced_at < NOW() - INTERVAL '1 hour')",
+                        "is_active = true AND (last_synced_at IS NULL OR last_synced_at < NOW() - INTERVAL '1 hour')",
                     ),
                 )
             
@@ -1639,7 +1639,7 @@ class NetworkMixin:
                         update_sql(
                             ACCESS_POLICIES_TABLE,
                             "name = COALESCE($2, name), description = COALESCE($3, description), updated_at = NOW()",
-                            "WHERE id = $1",
+                            "id = $1",
                         ),
                         policy_id, name, description,
                     )

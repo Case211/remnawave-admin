@@ -73,7 +73,7 @@ async def _resolve_password_admin(username: str, settings) -> AdminUser:
             return AdminUser(
                 telegram_id=account.get("telegram_id"),
                 username=account["username"],
-                role=account.get("role_name", "admin"),
+                role=account.get("role_name") or "admin",
                 role_id=account.get("role_id"),
                 auth_method="password",
                 account_id=account["id"],
@@ -130,7 +130,7 @@ async def _resolve_telegram_admin(subject: str, payload: dict, settings) -> Admi
             return AdminUser(
                 telegram_id=telegram_id,
                 username=account["username"],
-                role=account.get("role_name", "admin"),
+                role=account.get("role_name") or "admin",
                 role_id=account.get("role_id"),
                 auth_method="telegram",
                 account_id=account["id"],

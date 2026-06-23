@@ -466,7 +466,11 @@ async def update_smtp_config(
             )
 
         row = await conn.fetchrow(
-            update_sql(SMTP_CONFIG_TABLE, ", ".join(updates), "WHERE id = (SELECT id FROM smtp_config ORDER BY id LIMIT 1) RETURNING *"),
+            update_sql(
+                SMTP_CONFIG_TABLE, ", ".join(updates),
+                "id = (SELECT id FROM smtp_config ORDER BY id LIMIT 1)",
+                returning="*",
+            ),
             *params,
         )
 
@@ -849,7 +853,7 @@ async def acknowledge_alerts(
     async with db_service.acquire() as conn:
         if data.ids:
             await conn.execute(
-                update_sql(ALERT_RULE_LOG_TABLE, "acknowledged = true, acknowledged_by = $1, acknowledged_at = NOW()", "WHERE id = ANY($2::bigint[])"),
+                update_sql(ALERT_RULE_LOG_TABLE, "acknowledged = true, acknowledged_by = $1, acknowledged_at = NOW()", "id = ANY($2::bigint[])"),
                 aid, data.ids,
             )
         else:

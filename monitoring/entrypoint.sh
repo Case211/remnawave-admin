@@ -5,13 +5,17 @@ set -e
 
 TMPL=/etc/prometheus/prometheus.yml.tmpl
 OUT=/tmp/prometheus.yml
+# Backend admin port: 8081 in full mode, 8082 when APP_MODE=api (split).
+PORT="${WEB_BACKEND_PORT:-8081}"
 
 if [ -z "${METRICS_AUTH_TOKEN:-}" ]; then
-  # Вырезаем 3 строки блока authorization (с отступом 4 пробела)
-  sed '/^    authorization:$/,/^      credentials: /d' "$TMPL" > "$OUT"
+  # Вырезаем блок authorization (токен пуст) + подставляем порт бэкенда
+  sed -e '/^    authorization:$/,/^      credentials: /d' \
+      -e "s|__WEB_BACKEND_PORT__|${PORT}|g" "$TMPL" > "$OUT"
 else
-  # Подставляем токен. Используем | как разделитель — токен может содержать /
-  sed "s|__METRICS_AUTH_TOKEN__|${METRICS_AUTH_TOKEN}|g" "$TMPL" > "$OUT"
+  # Подставляем токен (| как разделитель — токен может содержать /) и порт
+  sed -e "s|__METRICS_AUTH_TOKEN__|${METRICS_AUTH_TOKEN}|g" \
+      -e "s|__WEB_BACKEND_PORT__|${PORT}|g" "$TMPL" > "$OUT"
 fi
 
 exec /bin/prometheus \

@@ -23,7 +23,10 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-          - remnawave-web-backend:8081
+          # Port is substituted by entrypoint.sh from WEB_BACKEND_PORT:
+          # 8081 in full mode, 8082 when APP_MODE=api (split) — the admin
+          # backend moves to 8082 and the collector keeps 8081.
+          - remnawave-web-backend:__WEB_BACKEND_PORT__
         labels:
           service: panel
     authorization:
