@@ -1,5 +1,6 @@
 """API dependencies for web panel."""
 import functools
+import ipaddress
 import logging
 from dataclasses import dataclass, field
 from typing import Optional, List, Tuple, Set
@@ -470,21 +471,79 @@ def require_quota(resource: str):
 
 # ── Utility helpers ─────────────────────────────────────────────
 
-def get_client_ip(request: Request) -> str:
-    """Extract client IP from trusted proxy headers.
+# Forwarding headers are honored only from these proxy ranges when
+# WEB_TRUSTED_PROXIES is not explicitly configured. Mirrors the bundled nginx
+# `set_real_ip_from` (loopback + RFC1918 + IPv6 ULA/link-local).
+_DEFAULT_TRUSTED_PROXY_CIDRS = (
+    "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+    "::1/128", "fc00::/7", "fe80::/10",
+)
 
-    Priority:
-    1. X-Real-IP (set by nginx, most reliable)
-    2. X-Forwarded-For first entry (set by upstream reverse proxy)
-    3. request.client.host (direct connection fallback)
+
+@functools.lru_cache(maxsize=1)
+def _trusted_proxy_networks() -> tuple:
+    """Parse WEB_TRUSTED_PROXIES into networks (cached). Empty → private ranges."""
+    raw = (get_web_settings().trusted_proxies_raw or "").strip()
+    entries = (
+        [e.strip() for e in raw.split(",") if e.strip()]
+        if raw else list(_DEFAULT_TRUSTED_PROXY_CIDRS)
+    )
+    nets = []
+    for entry in entries:
+        try:
+            nets.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            logger.warning("Invalid WEB_TRUSTED_PROXIES entry ignored: %s", entry)
+    return tuple(nets)
+
+
+def _parse_ip(value: str):
+    try:
+        return ipaddress.ip_address(value)
+    except ValueError:
+        return None
+
+
+def _is_trusted_proxy(value: str) -> bool:
+    addr = _parse_ip(value)
+    if addr is None:
+        return False
+    return any(addr in net for net in _trusted_proxy_networks())
+
+
+def get_client_ip(request: Request) -> str:
+    """Resolve the real client IP, trusting proxy headers only from trusted proxies.
+
+    X-Real-IP / X-Forwarded-For are attacker-controllable, so they are honored
+    ONLY when the immediate peer (``request.client.host``) is a configured
+    trusted reverse proxy (``WEB_TRUSTED_PROXIES``). When the connection comes
+    straight to the backend port (e.g. the published collector port) the raw
+    socket address is used instead — a client cannot spoof its IP to bypass the
+    IP whitelist, the brute-force lockout, or fail2ban.
+
+    When the peer is trusted, priority is:
+    1. X-Real-IP — the bundled nginx overwrites it with the verified client IP.
+    2. right-most untrusted hop of X-Forwarded-For (skips our own proxies).
+    3. the peer address itself.
     """
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
+    peer = request.client.host if request.client else ""
+
+    # Untrusted / direct connection — never trust forwarding headers.
+    if not peer or not _is_trusted_proxy(peer):
+        return peer or "unknown"
+
+    real_ip = request.headers.get("x-real-ip", "").strip()
+    if real_ip and _parse_ip(real_ip) is not None:
+        return real_ip
+
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+        for hop in reversed([h.strip() for h in forwarded.split(",") if h.strip()]):
+            if _parse_ip(hop) is None or _is_trusted_proxy(hop):
+                continue
+            return hop
+
+    return peer
 
 
 async def get_db():

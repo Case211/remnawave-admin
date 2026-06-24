@@ -101,6 +101,10 @@ services:
       WEB_PORT: '${WEB_BACKEND_PORT:-8081}'
       APP_MODE: '${APP_MODE:-full}'
       REDIS_URL: '${REDIS_URL:-}'
+      # Trust X-Real-IP/X-Forwarded-For only from the reverse proxy. The admin
+      # API shares the published collector port, so pin this to the frontend
+      # proxy's address to stop direct-port IP spoofing (see .env.example).
+      WEB_TRUSTED_PROXIES: '${WEB_TRUSTED_PROXIES:-}'
       MAXMIND_CITY_DB: /app/geoip/GeoLite2-City.mmdb
       MAXMIND_ASN_DB: /app/geoip/GeoLite2-ASN.mmdb
       BACKUP_DIR: /app/backups
@@ -145,6 +149,7 @@ services:
       WEB_PORT: '8081'
       APP_MODE: 'collector'
       REDIS_URL: '${REDIS_URL:-}'
+      WEB_TRUSTED_PROXIES: '${WEB_TRUSTED_PROXIES:-}'
       WEBHOOK_SECRET: '${WEBHOOK_SECRET:-}'
       BOT_WEBHOOK_URL: 'http://bot:${WEBHOOK_PORT:-8080}/webhook'
       BOT_CALLBACK_URL: 'http://bot:${WEBHOOK_PORT:-8080}/internal/panel-event'

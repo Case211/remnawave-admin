@@ -35,6 +35,14 @@ class WebSettings(BaseSettings):
     # IP whitelist (optional, comma-separated IPs/CIDRs — empty = allow all)
     allowed_ips: str = Field(default="", alias="WEB_ALLOWED_IPS")
 
+    # Trusted reverse-proxy addresses (comma-separated IPs/CIDRs).
+    # Forwarding headers (X-Real-IP / X-Forwarded-For) are honored ONLY when the
+    # direct peer is in this set — otherwise the raw socket address is used, so a
+    # client reaching the backend port directly cannot spoof its IP. Empty falls
+    # back to the standard private/loopback ranges (see deps.get_client_ip),
+    # which matches the bundled nginx `set_real_ip_from`.
+    trusted_proxies_raw: str = Field(default="", alias="WEB_TRUSTED_PROXIES")
+
     # CORS
     cors_origins_raw: str = Field(
         default="http://localhost:3000,http://localhost:5173",
