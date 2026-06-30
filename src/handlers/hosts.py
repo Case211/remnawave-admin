@@ -49,23 +49,19 @@ def _host_inbounds_keyboard(inbounds: list[dict]) -> InlineKeyboardMarkup:
 
 
 async def _fetch_hosts_text(admin: BotAdmin | None = None) -> str:
-    """Получает текст со списком хостов (из БД, fallback на API)."""
+    """Получает текст со списком хостов (API для realtime, БД как fallback)."""
     try:
         hosts = []
-        
-        # Сначала пробуем получить из БД
-        if db_service.is_connected:
-            try:
-                hosts = await db_service.get_all_hosts()
-                logger.debug("Fetched %d hosts from database", len(hosts))
-            except Exception as e:
-                logger.warning("DB fetch failed, fallback to API: %s", e)
-                hosts = []
-        
-        # Fallback на API если БД пуста или недоступна
-        if not hosts:
+
+        # Пробуем получить из API (realtime данные)
+        try:
             data = await internal_api_client.get_hosts()
             hosts = data.get("response", [])
+        except ApiClientError:
+            # Fallback на БД, если API недоступен
+            if db_service.is_connected:
+                hosts = await db_service.get_all_hosts()
+                logger.warning("API unavailable, using database for hosts")
         
         if not hosts:
             return _("host.list_empty")

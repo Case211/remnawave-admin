@@ -89,44 +89,44 @@ async def _fetch_main_menu_text(force_refresh: bool = False) -> str:
         total_users = users.get("totalUsers", 0)
         online_now = online.get("onlineNow", 0)
 
-        # Получаем количество хостов (из БД, fallback на API)
+        # Количество хостов: единый источник — живой API панели.
+        # Раньше счётчик брался из снимка БД и "застывал", если фоновая
+        # синхронизация (sync_hosts) отставала. БД — только fallback при сбое API.
         try:
+            hosts_data = await internal_api_client.get_hosts()
+            hosts = hosts_data.get("response", [])
+            total_hosts = len(hosts)
+            enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
+        except Exception:
             if db_service.is_connected:
                 hosts_stats = await db_service.get_hosts_stats()
                 total_hosts = hosts_stats.get("total", 0)
                 enabled_hosts = hosts_stats.get("enabled", 0)
             else:
-                hosts_data = await internal_api_client.get_hosts()
-                hosts = hosts_data.get("response", [])
-                total_hosts = len(hosts)
-                enabled_hosts = sum(1 for h in hosts if not h.get("isDisabled"))
-        except Exception:
-            total_hosts = "—"
-            enabled_hosts = "—"
+                total_hosts = "—"
+                enabled_hosts = "—"
 
-        # Получаем количество нод (счётчики из БД, online из API)
+        # Количество нод: единый источник — живой API панели, чтобы все три
+        # счётчика (всего/включено/онлайн) были согласованы. Раньше всего/включено
+        # брались из снимка БД, а онлайн — из live API, из-за чего при отставании
+        # синхронизации возникала "чушь" вида «онлайн 6 > всего 5».
+        # БД — только fallback при сбое API (там все счётчики из одного снимка).
         try:
+            nodes_data = await internal_api_client.get_nodes()
+            nodes_list = nodes_data.get("response", [])
+            total_nodes = len(nodes_list)
+            enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
+            nodes_online = sum(1 for n in nodes_list if n.get("isConnected"))
+        except Exception:
             if db_service.is_connected:
                 nodes_stats = await db_service.get_nodes_stats()
                 total_nodes = nodes_stats.get("total", 0)
                 enabled_nodes = nodes_stats.get("enabled", 0)
-                # Для online нужен API
-                try:
-                    nodes_data = await internal_api_client.get_nodes()
-                    nodes_list = nodes_data.get("response", [])
-                    nodes_online = sum(1 for n in nodes_list if n.get("isConnected"))
-                except Exception:
-                    nodes_online = nodes_stats.get("connected", 0)
+                nodes_online = nodes_stats.get("connected", 0)
             else:
-                nodes_data = await internal_api_client.get_nodes()
-                nodes_list = nodes_data.get("response", [])
-                total_nodes = len(nodes_list)
-                enabled_nodes = sum(1 for n in nodes_list if not n.get("isDisabled"))
-                nodes_online = sum(1 for n in nodes_list if n.get("isConnected"))
-        except Exception:
-            total_nodes = "—"
-            enabled_nodes = "—"
-            nodes_online = "—"
+                total_nodes = "—"
+                enabled_nodes = "—"
+                nodes_online = "—"
 
         lines = [
             _("bot.menu"),
