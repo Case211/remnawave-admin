@@ -1338,16 +1338,12 @@ class RemnawaveApiClient(BaseHttpClient):
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def bulk_set_inbound_hosts(self, uuids: list[str], inbound: dict) -> dict:
-        """Массовая установка inbound для хостов."""
-        result = await self._post("/api/hosts/bulk/set-inbound", json={"uuids": uuids, "inbound": inbound})
+    async def bulk_update_hosts(self, uuids: list[str], **fields) -> dict:
+        """2.8.0: универсальное массовое обновление хостов (заменяет удалённые
+        bulk/set-inbound и bulk/set-port). Применяет переданные поля ко всем uuids."""
+        result = await self._patch("/api/hosts/bulk/update", json={"uuids": uuids, **fields})
         await cache.invalidate(CacheKeys.HOSTS)
-        return result
-
-    async def bulk_set_port_hosts(self, uuids: list[str], port: int) -> dict:
-        """Массовая установка порта для хостов."""
-        result = await self._post("/api/hosts/bulk/set-port", json={"uuids": uuids, "port": port})
-        await cache.invalidate(CacheKeys.HOSTS)
+        await cache.invalidate(CacheKeys.STATS)
         return result
 
     # --- Nodes bulk ---

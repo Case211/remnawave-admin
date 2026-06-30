@@ -185,8 +185,7 @@ _ROUTE_DEFS: list[dict[str, Any]] = [
     dict(name="bulk_update_users_squads", method="POST", path="/users/bulk/update-squads", body="kwargs"),
     # ── Bulk Hosts ──
     dict(name="bulk_delete_hosts", method="POST", path="/hosts/bulk/delete", body="kwargs"),
-    dict(name="bulk_set_inbound_hosts", method="POST", path="/hosts/bulk/set-inbound", body="kwargs"),
-    dict(name="bulk_set_port_hosts", method="POST", path="/hosts/bulk/set-port", body="kwargs"),
+    dict(name="bulk_update_hosts", method="PATCH", path="/hosts/bulk/update", body="kwargs"),
 ]
 
 
