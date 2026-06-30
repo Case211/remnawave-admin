@@ -1403,7 +1403,12 @@
       "hostPlaceholder": "Заголовок хоста",
       "pathPlaceholder": "/путь",
       "alpnPlaceholder": "h2,http/1.1",
-      "fingerprintPlaceholder": "chrome, firefox, safari..."
+      "fingerprintPlaceholder": "chrome, firefox, safari...",
+      "mihomoIpVersion": "Версия IP (Mihomo)",
+      "mihomoIpVersionDefault": "По умолчанию",
+      "pinnedPeerCert": "Пиннинг сертификата (SHA-256)",
+      "pinnedPeerCertPlaceholder": "SHA-256 отпечаток сертификата",
+      "verifyPeerCert": "Проверять сертификат по имени"
     },
     "detail": {
       "nodes": "Ноды"

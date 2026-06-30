@@ -532,7 +532,7 @@ def build_host_summary(host: dict, t: Callable[[str], str]) -> str:
     status_emoji = "⚠️" if status == "DISABLED" else "✅"
     address = f"{info.get('address', 'n/a')}:{info.get('port', 'n/a')}"
     remark = info.get("remark") or "n/a"
-    tag = info.get("tag") or "n/a"
+    tag = ", ".join(info.get("tags") or []) or info.get("tag") or "n/a"
     return t("host.summary").format(
         statusEmoji=status_emoji,
         remark=remark,

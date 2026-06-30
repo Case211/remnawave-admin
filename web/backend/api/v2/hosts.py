@@ -40,7 +40,10 @@ def _map_host(h: dict) -> dict:
         security_layer=h.get('securityLayer'),
         alpn=h.get('alpn'),
         fingerprint=h.get('fingerprint'),
-        tag=h.get('tag'),
+        tags=h.get('tags') or ([h['tag']] if h.get('tag') else None),
+        mihomo_ip_version=h.get('mihomoIpVersion'),
+        pinned_peer_cert_sha256=h.get('pinnedPeerCertSha256'),
+        verify_peer_cert_by_name=h.get('verifyPeerCertByName', False),
         server_description=h.get('serverDescription'),
         is_hidden=h.get('isHidden', False),
         shuffle_host=h.get('shuffleHost', False),
@@ -56,7 +59,6 @@ def _map_host_detail(h: dict) -> dict:
     base.update(
         created_at=h.get('createdAt'),
         updated_at=h.get('updatedAt'),
-        allow_insecure=h.get('allowInsecure', False),
         override_sni_from_address=h.get('overrideSniFromAddress', False),
         keep_sni_blank=h.get('keepSniBlank', False),
         vless_route_id=h.get('vlessRouteId'),
@@ -181,8 +183,10 @@ async def create_host(
         payload['alpn'] = data.alpn
     if data.fingerprint is not None:
         payload['fingerprint'] = data.fingerprint
-    if data.tag is not None:
-        payload['tag'] = data.tag
+    if data.tags is not None:
+        payload['tags'] = data.tags
+    if data.mihomo_ip_version is not None:
+        payload['mihomoIpVersion'] = data.mihomo_ip_version
     if data.security_layer is not None:
         payload['securityLayer'] = data.security_layer
     elif data.security is not None:
@@ -197,8 +201,10 @@ async def create_host(
         payload['overrideSniFromAddress'] = data.override_sni_from_address
     if data.keep_sni_blank:
         payload['keepSniBlank'] = data.keep_sni_blank
-    if data.allow_insecure:
-        payload['allowInsecure'] = data.allow_insecure
+    if data.pinned_peer_cert_sha256 is not None:
+        payload['pinnedPeerCertSha256'] = data.pinned_peer_cert_sha256
+    if data.verify_peer_cert_by_name:
+        payload['verifyPeerCertByName'] = data.verify_peer_cert_by_name
     if data.vless_route_id is not None:
         payload['vlessRouteId'] = data.vless_route_id
     if data.shuffle_host:
@@ -276,8 +282,10 @@ async def update_host(
         payload['alpn'] = data.alpn
     if data.fingerprint is not None:
         payload['fingerprint'] = data.fingerprint
-    if data.tag is not None:
-        payload['tag'] = data.tag
+    if data.tags is not None:
+        payload['tags'] = data.tags
+    if data.mihomo_ip_version is not None:
+        payload['mihomoIpVersion'] = data.mihomo_ip_version
     if data.security_layer is not None:
         payload['securityLayer'] = data.security_layer
     elif data.security is not None:
@@ -290,8 +298,10 @@ async def update_host(
         payload['overrideSniFromAddress'] = data.override_sni_from_address
     if data.keep_sni_blank is not None:
         payload['keepSniBlank'] = data.keep_sni_blank
-    if data.allow_insecure is not None:
-        payload['allowInsecure'] = data.allow_insecure
+    if data.pinned_peer_cert_sha256 is not None:
+        payload['pinnedPeerCertSha256'] = data.pinned_peer_cert_sha256
+    if data.verify_peer_cert_by_name is not None:
+        payload['verifyPeerCertByName'] = data.verify_peer_cert_by_name
     if data.vless_route_id is not None:
         payload['vlessRouteId'] = data.vless_route_id
     if data.shuffle_host is not None:

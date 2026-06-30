@@ -49,7 +49,8 @@ class TestMapHost:
         from web.backend.api.v2.hosts import _map_host_detail
         result = _map_host_detail(MOCK_HOST_API)
         assert result["created_at"] == "2026-01-01T00:00:00Z"
-        assert result["allow_insecure"] is False
+        assert result["verify_peer_cert_by_name"] is False
+        assert result["pinned_peer_cert_sha256"] is None
 
 
 class TestListHosts:

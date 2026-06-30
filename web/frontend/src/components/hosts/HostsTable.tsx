@@ -22,7 +22,8 @@ export interface HostRow {
   port: number
   is_disabled: boolean
   is_hidden: boolean
-  tag: string | null
+  tag?: string | null
+  tags: string[] | null
   inbound: { uuid: string; tag: string; type: string } | null
   security_layer: string | null
   security: string | null
@@ -73,7 +74,7 @@ export function HostsTable({ hosts, canEdit, canDelete, onEdit, onEnable, onDisa
       { key: 'address', sortAccessor: (h) => h.address },
       { key: 'security', sortAccessor: (h) => sec(h), filterAccessor: (h) => sec(h), filterType: 'select' },
       { key: 'inbound', filterAccessor: (h) => h.inbound?.tag ?? '', filterType: 'select' },
-      { key: 'tag', sortAccessor: (h) => h.tag ?? '', filterAccessor: (h) => h.tag ?? '', filterType: 'select' },
+      { key: 'tag', sortAccessor: (h) => (h.tags || []).join(', ') || h.tag || '', filterAccessor: (h) => (h.tags || []).join(', ') || h.tag || '', filterType: 'select' },
       { key: 'status', sortAccessor: (h) => ({ active: 0, hidden: 1, disabled: 2 })[hostStatus(h)], filterAccessor: (h) => hostStatus(h), filterType: 'select' },
     ],
     [],
@@ -86,7 +87,7 @@ export function HostsTable({ hosts, canEdit, canDelete, onEdit, onEnable, onDisa
   const uniq = (vals: (string | null | undefined)[]) => Array.from(new Set(vals.filter((v): v is string => !!v)))
   const securityOptions = useMemo(() => uniq(hosts.map((h) => sec(h))).map((s) => ({ value: s, label: secLabel(s) })), [hosts])
   const inboundOptions = useMemo(() => uniq(hosts.map((h) => h.inbound?.tag)).map((v) => ({ value: v, label: v })), [hosts])
-  const tagOptions = useMemo(() => uniq(hosts.map((h) => h.tag)).map((v) => ({ value: v, label: v })), [hosts])
+  const tagOptions = useMemo(() => uniq(hosts.flatMap((h) => h.tags || (h.tag ? [h.tag] : []))).map((v) => ({ value: v, label: v })), [hosts])
   const statusOptions = [
     { value: 'active', label: t('hosts.statusActive') },
     { value: 'disabled', label: t('hosts.statusDisabled') },
@@ -139,7 +140,7 @@ export function HostsTable({ hosts, canEdit, canDelete, onEdit, onEnable, onDisa
                 ) : <span className="text-dark-400">—</span>}
               </TableCell>
               <TableCell className="hidden md:table-cell">
-                {host.tag ? <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{host.tag}</span> : <span className="text-dark-400">—</span>}
+                {host.tags && host.tags.length > 0 ? <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{host.tags.join(', ')}</span> : <span className="text-dark-400">—</span>}
               </TableCell>
               <TableCell>
                 <span className="inline-flex items-center gap-1.5 text-xs text-dark-100">

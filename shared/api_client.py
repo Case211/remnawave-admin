@@ -550,7 +550,8 @@ class RemnawaveApiClient(BaseHttpClient):
         port: int,
         config_profile_uuid: str,
         config_profile_inbound_uuid: str,
-        tag: str | None = None,
+        tags: list[str] | None = None,
+        mihomo_ip_version: str | None = None,
         path: str | None = None,
         sni: str | None = None,
         host: str | None = None,
@@ -565,7 +566,8 @@ class RemnawaveApiClient(BaseHttpClient):
         is_hidden: bool = False,
         override_sni_from_address: bool = False,
         keep_sni_blank: bool = False,
-        allow_insecure: bool = False,
+        pinned_peer_cert_sha256: str | None = None,
+        verify_peer_cert_by_name: bool = False,
         vless_route_id: int | None = None,
         shuffle_host: bool = False,
         mihomo_x25519: bool = False,
@@ -583,8 +585,10 @@ class RemnawaveApiClient(BaseHttpClient):
                 "configProfileInboundUuid": config_profile_inbound_uuid,
             },
         }
-        if tag is not None:
-            payload["tag"] = tag
+        if tags is not None:
+            payload["tags"] = tags
+        if mihomo_ip_version is not None:
+            payload["mihomoIpVersion"] = mihomo_ip_version
         if path is not None:
             payload["path"] = path
         if sni is not None:
@@ -613,8 +617,10 @@ class RemnawaveApiClient(BaseHttpClient):
             payload["overrideSniFromAddress"] = override_sni_from_address
         if keep_sni_blank:
             payload["keepSniBlank"] = keep_sni_blank
-        if allow_insecure:
-            payload["allowInsecure"] = allow_insecure
+        if pinned_peer_cert_sha256 is not None:
+            payload["pinnedPeerCertSha256"] = pinned_peer_cert_sha256
+        if verify_peer_cert_by_name:
+            payload["verifyPeerCertByName"] = verify_peer_cert_by_name
         if vless_route_id is not None:
             payload["vlessRouteId"] = vless_route_id
         if shuffle_host:
@@ -645,7 +651,8 @@ class RemnawaveApiClient(BaseHttpClient):
         remark: str | None = None,
         address: str | None = None,
         port: int | None = None,
-        tag: str | None = None,
+        tags: list[str] | None = None,
+        mihomo_ip_version: str | None = None,
         inbound: dict | None = None,
         path: str | None = None,
         sni: str | None = None,
@@ -661,7 +668,8 @@ class RemnawaveApiClient(BaseHttpClient):
         is_hidden: bool | None = None,
         override_sni_from_address: bool | None = None,
         keep_sni_blank: bool | None = None,
-        allow_insecure: bool | None = None,
+        pinned_peer_cert_sha256: str | None = None,
+        verify_peer_cert_by_name: bool | None = None,
         vless_route_id: int | None = None,
         shuffle_host: bool | None = None,
         mihomo_x25519: bool | None = None,
@@ -677,8 +685,10 @@ class RemnawaveApiClient(BaseHttpClient):
             payload["address"] = address
         if port is not None:
             payload["port"] = port
-        if tag is not None:
-            payload["tag"] = tag
+        if tags is not None:
+            payload["tags"] = tags
+        if mihomo_ip_version is not None:
+            payload["mihomoIpVersion"] = mihomo_ip_version
         if inbound is not None:
             payload["inbound"] = inbound
         if path is not None:
@@ -709,8 +719,10 @@ class RemnawaveApiClient(BaseHttpClient):
             payload["overrideSniFromAddress"] = override_sni_from_address
         if keep_sni_blank is not None:
             payload["keepSniBlank"] = keep_sni_blank
-        if allow_insecure is not None:
-            payload["allowInsecure"] = allow_insecure
+        if pinned_peer_cert_sha256 is not None:
+            payload["pinnedPeerCertSha256"] = pinned_peer_cert_sha256
+        if verify_peer_cert_by_name is not None:
+            payload["verifyPeerCertByName"] = verify_peer_cert_by_name
         if vless_route_id is not None:
             payload["vlessRouteId"] = vless_route_id
         if shuffle_host is not None:

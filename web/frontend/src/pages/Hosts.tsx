@@ -74,6 +74,10 @@ interface Host {
   security: string | null
   alpn: string | null
   fingerprint: string | null
+  tags: string[] | null
+  mihomo_ip_version: string | null
+  pinned_peer_cert_sha256: string | null
+  verify_peer_cert_by_name: boolean
   shuffle_host: boolean
   mihomo_x25519: string | null
   nodes: { uuid: string; name: string }[] | null
@@ -103,6 +107,9 @@ interface HostEditFormData {
   alpn: string
   fingerprint: string
   tag: string
+  mihomo_ip_version: string
+  pinned_peer_cert_sha256: string
+  verify_peer_cert_by_name: boolean
   server_description: string
   is_hidden: boolean
 }
@@ -135,7 +142,10 @@ function HostEditModal({
     security: host.security_layer || host.security || 'none',
     alpn: host.alpn || '',
     fingerprint: host.fingerprint || '',
-    tag: host.tag || '',
+    tag: (host.tags || []).join(', '),
+    mihomo_ip_version: host.mihomo_ip_version || '',
+    pinned_peer_cert_sha256: host.pinned_peer_cert_sha256 || '',
+    verify_peer_cert_by_name: host.verify_peer_cert_by_name || false,
     server_description: host.server_description || '',
     is_hidden: host.is_hidden || false,
   })
@@ -151,7 +161,10 @@ function HostEditModal({
       security: host.security_layer || host.security || 'none',
       alpn: host.alpn || '',
       fingerprint: host.fingerprint || '',
-      tag: host.tag || '',
+      tag: (host.tags || []).join(', '),
+      mihomo_ip_version: host.mihomo_ip_version || '',
+      pinned_peer_cert_sha256: host.pinned_peer_cert_sha256 || '',
+      verify_peer_cert_by_name: host.verify_peer_cert_by_name || false,
       server_description: host.server_description || '',
       is_hidden: host.is_hidden || false,
     })
@@ -170,7 +183,11 @@ function HostEditModal({
     if (form.security !== curSecurity) updateData.security_layer = form.security
     if (form.alpn !== (host.alpn || '')) updateData.alpn = form.alpn || null
     if (form.fingerprint !== (host.fingerprint || '')) updateData.fingerprint = form.fingerprint || null
-    if (form.tag !== (host.tag || '')) updateData.tag = form.tag || null
+    const curTags = (host.tags || []).join(', ')
+    if (form.tag !== curTags) updateData.tags = form.tag ? form.tag.split(',').map((s) => s.trim()).filter(Boolean) : null
+    if (form.mihomo_ip_version !== (host.mihomo_ip_version || '')) updateData.mihomo_ip_version = form.mihomo_ip_version || null
+    if (form.pinned_peer_cert_sha256 !== (host.pinned_peer_cert_sha256 || '')) updateData.pinned_peer_cert_sha256 = form.pinned_peer_cert_sha256 || null
+    if (form.verify_peer_cert_by_name !== (host.verify_peer_cert_by_name || false)) updateData.verify_peer_cert_by_name = form.verify_peer_cert_by_name
     if (form.server_description !== (host.server_description || '')) updateData.server_description = form.server_description || null
     if (form.is_hidden !== (host.is_hidden || false)) updateData.is_hidden = form.is_hidden
 
@@ -279,21 +296,77 @@ function HostEditModal({
             <Label>{t('hosts.form.alpn')}</Label>
             <Input
               type="text"
+              list="host-alpn-options"
               value={form.alpn}
               onChange={(e) => setForm({ ...form, alpn: e.target.value })}
               placeholder={t('hosts.form.alpnPlaceholder')}
             />
+            <datalist id="host-alpn-options">
+              <option value="h3,h2,http/1.1" />
+              <option value="h3,h2" />
+              <option value="h2,http/1.1" />
+              <option value="h2" />
+              <option value="h3" />
+              <option value="http/1.1" />
+            </datalist>
           </div>
 
           <div className="space-y-2">
             <Label>{t('hosts.form.fingerprint')}</Label>
             <Input
               type="text"
+              list="host-fp-options"
               value={form.fingerprint}
               onChange={(e) => setForm({ ...form, fingerprint: e.target.value })}
               placeholder={t('hosts.form.fingerprintPlaceholder')}
             />
+            <datalist id="host-fp-options">
+              <option value="chrome" />
+              <option value="firefox" />
+              <option value="safari" />
+              <option value="ios" />
+              <option value="android" />
+              <option value="edge" />
+              <option value="randomized" />
+              <option value="random" />
+            </datalist>
           </div>
+
+          <div className="space-y-2">
+            <Label>{t('hosts.form.mihomoIpVersion')}</Label>
+            <select
+              value={form.mihomo_ip_version}
+              onChange={(e) => setForm({ ...form, mihomo_ip_version: e.target.value })}
+              className="flex h-9 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">{t('hosts.form.mihomoIpVersionDefault')}</option>
+              <option value="dual">dual</option>
+              <option value="ipv4">ipv4</option>
+              <option value="ipv6">ipv6</option>
+              <option value="ipv4-prefer">ipv4-prefer</option>
+              <option value="ipv6-prefer">ipv6-prefer</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t('hosts.form.pinnedPeerCert')}</Label>
+            <Input
+              type="text"
+              value={form.pinned_peer_cert_sha256}
+              onChange={(e) => setForm({ ...form, pinned_peer_cert_sha256: e.target.value })}
+              placeholder={t('hosts.form.pinnedPeerCertPlaceholder')}
+            />
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.verify_peer_cert_by_name}
+              onChange={(e) => setForm({ ...form, verify_peer_cert_by_name: e.target.checked })}
+              className="rounded border-[var(--glass-border)] accent-primary-500"
+            />
+            <span className="text-sm text-dark-100">{t('hosts.form.verifyPeerCert')}</span>
+          </label>
 
           <div className="space-y-2">
             <Label>{t('hosts.editHost.tag')}</Label>
@@ -373,6 +446,9 @@ function HostCreateModal({
     alpn: '',
     fingerprint: '',
     tag: '',
+    mihomo_ip_version: '',
+    pinned_peer_cert_sha256: '',
+    verify_peer_cert_by_name: false,
     server_description: '',
     is_hidden: false,
   })
@@ -390,7 +466,10 @@ function HostCreateModal({
     if (form.path.trim()) createData.path = form.path.trim()
     if (form.alpn.trim()) createData.alpn = form.alpn.trim()
     if (form.fingerprint.trim()) createData.fingerprint = form.fingerprint.trim()
-    if (form.tag.trim()) createData.tag = form.tag.trim()
+    if (form.tag.trim()) createData.tags = form.tag.split(',').map((s) => s.trim()).filter(Boolean)
+    if (form.mihomo_ip_version) createData.mihomo_ip_version = form.mihomo_ip_version
+    if (form.pinned_peer_cert_sha256.trim()) createData.pinned_peer_cert_sha256 = form.pinned_peer_cert_sha256.trim()
+    if (form.verify_peer_cert_by_name) createData.verify_peer_cert_by_name = true
     if (form.server_description.trim()) createData.server_description = form.server_description.trim()
     if (form.is_hidden) createData.is_hidden = true
     onSave(createData)
@@ -494,21 +573,77 @@ function HostCreateModal({
             <Label>{t('hosts.form.alpn')}</Label>
             <Input
               type="text"
+              list="host-alpn-options"
               value={form.alpn}
               onChange={(e) => setForm({ ...form, alpn: e.target.value })}
               placeholder={t('hosts.form.alpnPlaceholder')}
             />
+            <datalist id="host-alpn-options">
+              <option value="h3,h2,http/1.1" />
+              <option value="h3,h2" />
+              <option value="h2,http/1.1" />
+              <option value="h2" />
+              <option value="h3" />
+              <option value="http/1.1" />
+            </datalist>
           </div>
 
           <div className="space-y-2">
             <Label>{t('hosts.form.fingerprint')}</Label>
             <Input
               type="text"
+              list="host-fp-options"
               value={form.fingerprint}
               onChange={(e) => setForm({ ...form, fingerprint: e.target.value })}
               placeholder={t('hosts.form.fingerprintPlaceholder')}
             />
+            <datalist id="host-fp-options">
+              <option value="chrome" />
+              <option value="firefox" />
+              <option value="safari" />
+              <option value="ios" />
+              <option value="android" />
+              <option value="edge" />
+              <option value="randomized" />
+              <option value="random" />
+            </datalist>
           </div>
+
+          <div className="space-y-2">
+            <Label>{t('hosts.form.mihomoIpVersion')}</Label>
+            <select
+              value={form.mihomo_ip_version}
+              onChange={(e) => setForm({ ...form, mihomo_ip_version: e.target.value })}
+              className="flex h-9 w-full rounded-md border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">{t('hosts.form.mihomoIpVersionDefault')}</option>
+              <option value="dual">dual</option>
+              <option value="ipv4">ipv4</option>
+              <option value="ipv6">ipv6</option>
+              <option value="ipv4-prefer">ipv4-prefer</option>
+              <option value="ipv6-prefer">ipv6-prefer</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t('hosts.form.pinnedPeerCert')}</Label>
+            <Input
+              type="text"
+              value={form.pinned_peer_cert_sha256}
+              onChange={(e) => setForm({ ...form, pinned_peer_cert_sha256: e.target.value })}
+              placeholder={t('hosts.form.pinnedPeerCertPlaceholder')}
+            />
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.verify_peer_cert_by_name}
+              onChange={(e) => setForm({ ...form, verify_peer_cert_by_name: e.target.checked })}
+              className="rounded border-[var(--glass-border)] accent-primary-500"
+            />
+            <span className="text-sm text-dark-100">{t('hosts.form.verifyPeerCert')}</span>
+          </label>
 
           <div className="space-y-2">
             <Label>{t('hosts.editHost.tag')}</Label>
@@ -628,8 +763,8 @@ function HostCard({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <h3 className="font-semibold text-white truncate">{host.remark || t('hosts.statusNoName')}</h3>
-                {host.tag && (
-                  <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20 flex-shrink-0">{host.tag}</span>
+                {host.tags && host.tags.length > 0 && (
+                  <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20 flex-shrink-0">{host.tags.join(', ')}</span>
                 )}
                 {host.is_hidden && (
                   <span className="text-[10px] px-1 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 flex-shrink-0">{t('hosts.statusHidden')}</span>

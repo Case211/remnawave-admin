@@ -1403,7 +1403,12 @@
       "hostPlaceholder": "Host header",
       "pathPlaceholder": "/path",
       "alpnPlaceholder": "h2,http/1.1",
-      "fingerprintPlaceholder": "chrome, firefox, safari..."
+      "fingerprintPlaceholder": "chrome, firefox, safari...",
+      "mihomoIpVersion": "IP version (Mihomo)",
+      "mihomoIpVersionDefault": "Default",
+      "pinnedPeerCert": "Certificate pinning (SHA-256)",
+      "pinnedPeerCertPlaceholder": "SHA-256 certificate fingerprint",
+      "verifyPeerCert": "Verify certificate by name"
     },
     "detail": {
       "nodes": "Nodes"

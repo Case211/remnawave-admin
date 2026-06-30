@@ -4,6 +4,19 @@ from datetime import datetime
 from pydantic import BaseModel, field_validator
 
 
+def _normalize_str_list(v: Any) -> Optional[List[str]]:
+    """Accept a single string or a list; normalize to list[str] (or None).
+
+    Keeps backward compatibility with Remnawave < 2.8.0, which returned single
+    scalar values (``tag``, ``alpn``) where 2.8.0 returns arrays.
+    """
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return [v] if v else None
+    return v
+
+
 class HostBase(BaseModel):
     """Базовые поля хоста."""
     remark: str
@@ -24,7 +37,13 @@ class HostListItem(HostBase):
     security_layer: Optional[str] = None
     alpn: Optional[List[str]] = None
     fingerprint: Optional[str] = None
-    tag: Optional[str] = None
+    # 2.8.0: единичный `tag` заменён массивом `tags[]` (до 10, ^[A-Z0-9_:]+$)
+    tags: Optional[List[str]] = None
+    # 2.8.0: версия IP для Mihomo (dual / ipv4 / ipv6 / ipv4-prefer / ipv6-prefer)
+    mihomo_ip_version: Optional[str] = None
+    # 2.8.0: вместо булева allowInsecure — пиннинг сертификата
+    pinned_peer_cert_sha256: Optional[str] = None
+    verify_peer_cert_by_name: bool = False
     server_description: Optional[str] = None
     is_hidden: bool = False
     shuffle_host: bool = False
@@ -40,9 +59,13 @@ class HostListItem(HostBase):
     @field_validator('alpn', mode='before')
     @classmethod
     def parse_alpn(cls, v):
-        if isinstance(v, str):
-            return [v] if v else None
-        return v
+        return _normalize_str_list(v)
+
+    @field_validator('tags', mode='before')
+    @classmethod
+    def parse_tags(cls, v):
+        # 2.8.0 отдаёт tags[]; Remnawave < 2.8.0 — единичный tag-строкой.
+        return _normalize_str_list(v)
 
     class Config:
         from_attributes = True
@@ -53,7 +76,6 @@ class HostDetail(HostListItem):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     # Дополнительные настройки
-    allow_insecure: bool = False
     override_sni_from_address: bool = False
     keep_sni_blank: bool = False
     vless_route_id: Optional[int] = None
@@ -78,13 +100,15 @@ class HostCreate(BaseModel):
     security_layer: Optional[str] = None
     alpn: Optional[str] = None
     fingerprint: Optional[str] = None
-    tag: Optional[str] = None
+    tags: Optional[List[str]] = None
+    mihomo_ip_version: Optional[str] = None
     is_disabled: bool = False
     is_hidden: bool = False
     server_description: Optional[str] = None
     override_sni_from_address: bool = False
     keep_sni_blank: bool = False
-    allow_insecure: bool = False
+    pinned_peer_cert_sha256: Optional[str] = None
+    verify_peer_cert_by_name: bool = False
     vless_route_id: Optional[int] = None
     shuffle_host: bool = False
     mihomo_x25519: bool = False
@@ -110,12 +134,14 @@ class HostUpdate(BaseModel):
     security_layer: Optional[str] = None
     alpn: Optional[str] = None
     fingerprint: Optional[str] = None
-    tag: Optional[str] = None
+    tags: Optional[List[str]] = None
+    mihomo_ip_version: Optional[str] = None
     is_hidden: Optional[bool] = None
     server_description: Optional[str] = None
     override_sni_from_address: Optional[bool] = None
     keep_sni_blank: Optional[bool] = None
-    allow_insecure: Optional[bool] = None
+    pinned_peer_cert_sha256: Optional[str] = None
+    verify_peer_cert_by_name: Optional[bool] = None
     vless_route_id: Optional[int] = None
     shuffle_host: Optional[bool] = None
     mihomo_x25519: Optional[bool] = None
