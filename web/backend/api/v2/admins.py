@@ -180,7 +180,10 @@ async def update_admin(
 
     # Cannot edit own role / deactivate self
     if admin.account_id == admin_id:
-        if data.role_id is not None and data.role_id != existing.get("role_id"):
+        # model_fields_set catches an explicit null too — otherwise a null role_id
+        # (e.g. frontend sending NaN→null) would slip past and blank out the role,
+        # silently demoting the only superadmin to a roleless "admin".
+        if "role_id" in data.model_fields_set and data.role_id != existing.get("role_id"):
             raise api_error(400, E.CANNOT_MODIFY_SELF, "Cannot change your own role")
         if data.is_active is not None and not data.is_active:
             raise api_error(400, E.CANNOT_MODIFY_SELF, "Cannot deactivate yourself")
@@ -199,10 +202,14 @@ async def update_admin(
             raise api_error(400, E.INVALID_TELEGRAM_ID)
         fields["telegram_id"] = data.telegram_id
     if data.role_id is not None or "role_id" in data.model_fields_set:
-        if data.role_id is not None:
-            role = await get_role_by_id(data.role_id)
-            if not role:
-                raise api_error(400, E.ROLE_NOT_FOUND)
+        # role_id must never be cleared — an admin without a role loses all RBAC
+        # resolution (deps.py falls back to "admin"), which would silently strip a
+        # superadmin of their rights. Reject an explicit null outright.
+        if data.role_id is None:
+            raise api_error(400, E.ROLE_NOT_FOUND, "role_id cannot be cleared")
+        role = await get_role_by_id(data.role_id)
+        if not role:
+            raise api_error(400, E.ROLE_NOT_FOUND)
         fields["role_id"] = data.role_id
     # For numeric quota fields, accept null as "clear" (set to NULL → unlimited).
     if data.max_users is not None or "max_users" in data.model_fields_set:

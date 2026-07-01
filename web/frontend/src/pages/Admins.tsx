@@ -316,7 +316,9 @@ function AdminFormDialog({
       return {
         username: editingAdmin.username,
         telegram_id: editingAdmin.telegram_id?.toString() || '',
-        role_id: editingAdmin.role_id?.toString() || '',
+        role_id: editingAdmin.role_id != null
+          ? (editingAdmin.role_id === superadminRoleId ? 'superadmin' : String(editingAdmin.role_id))
+          : '',
         password: '',
         max_users: editingAdmin.max_users?.toString() || '',
         max_traffic_gb: editingAdmin.max_traffic_gb?.toString() || '',
@@ -340,7 +342,12 @@ function AdminFormDialog({
       // get re-sent (and accidentally clear via a null race).
       const tgId = form.telegram_id ? parseInt(form.telegram_id) : null
       if (tgId !== editingAdmin.telegram_id) update.telegram_id = tgId
-      const roleId = form.role_id ? parseInt(form.role_id) : null
+      // "superadmin" is a sentinel option value, not a numeric id — map it to the
+      // real role id, otherwise parseInt("superadmin") is NaN → serialized as null
+      // → backend blanks the role and demotes the superadmin.
+      const roleId = form.role_id === 'superadmin'
+        ? (superadminRoleId ?? null)
+        : (form.role_id ? parseInt(form.role_id) : null)
       if (roleId !== editingAdmin.role_id) update.role_id = roleId
       if (form.password) update.password = form.password
       const mu = form.max_users ? parseInt(form.max_users) : null
@@ -370,7 +377,7 @@ function AdminFormDialog({
     } else {
       const create: AdminAccountCreate = {
         username: form.username.trim(),
-        role_id: parseInt(form.role_id),
+        role_id: form.role_id === 'superadmin' ? (superadminRoleId as number) : parseInt(form.role_id),
         unlimited_traffic_policy: form.unlimited_traffic_policy || 'allowed',
         unrestricted_user_access: form.unrestricted_user_access,
       }

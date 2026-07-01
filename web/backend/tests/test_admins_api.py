@@ -246,6 +246,58 @@ class TestUpdateAdmin:
 
     @pytest.mark.asyncio
     @patch(
+        "web.backend.api.v2.admins.update_admin_account",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "web.backend.api.v2.admins.get_admin_account_by_id",
+        new_callable=AsyncMock,
+        return_value=MOCK_ACCOUNTS[0],
+    )
+    async def test_cannot_null_own_role(self, mock_get, mock_update, app, superadmin):
+        """Regression: the only superadmin blanking their own role via an explicit
+        null (frontend sending parseInt("superadmin")=NaN → JSON null) must be
+        rejected — otherwise role_id=NULL demotes them to a roleless "admin"."""
+        app.dependency_overrides[get_current_admin] = lambda: superadmin
+        from httpx import ASGITransport, AsyncClient
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.put(
+                "/api/v2/admins/1",  # self
+                json={"role_id": None},
+            )
+            assert resp.status_code == 400
+            detail = resp.json()["detail"]
+            msg = detail["detail"] if isinstance(detail, dict) else detail
+            assert "own role" in msg.lower()
+        mock_update.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch(
+        "web.backend.api.v2.admins.update_admin_account",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "web.backend.api.v2.admins.get_admin_account_by_id",
+        new_callable=AsyncMock,
+        return_value=MOCK_ACCOUNTS[1],
+    )
+    async def test_cannot_clear_role_of_other_admin(self, mock_get, mock_update, app, superadmin):
+        """role_id can never be cleared to null for anyone — a roleless admin loses
+        all RBAC resolution (deps.py falls back to "admin")."""
+        app.dependency_overrides[get_current_admin] = lambda: superadmin
+        from httpx import ASGITransport, AsyncClient
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.put(
+                "/api/v2/admins/2",  # another admin
+                json={"role_id": None},
+            )
+            assert resp.status_code == 400
+        mock_update.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch(
         "web.backend.api.v2.admins.get_admin_account_by_id",
         new_callable=AsyncMock,
         return_value=MOCK_ACCOUNTS[0],
