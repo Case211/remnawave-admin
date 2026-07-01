@@ -52,6 +52,25 @@ class TestMapHost:
         assert result["verify_peer_cert_by_name"] is False
         assert result["pinned_peer_cert_sha256"] is None
 
+    def test_null_bools_coerced_to_false(self):
+        """Remnawave 2.8.0 присылает null в булевых полях (напр. verifyPeerCertByName
+        без пиннинга) — валидация не должна падать, None приводится к False."""
+        from web.backend.schemas.host import HostListItem, HostDetail
+        raw = {
+            "uuid": "h-null", "remark": "r", "address": "a", "port": 443,
+            "is_disabled": None, "is_hidden": None, "shuffle_host": None,
+            "mihomo_x25519": None, "verify_peer_cert_by_name": None,
+        }
+        item = HostListItem(**raw)
+        assert item.verify_peer_cert_by_name is False
+        assert item.is_disabled is False
+        assert item.is_hidden is False
+        assert item.shuffle_host is False
+        assert item.mihomo_x25519 is False
+        detail = HostDetail(**raw, override_sni_from_address=None, keep_sni_blank=None)
+        assert detail.override_sni_from_address is False
+        assert detail.keep_sni_blank is False
+
 
 class TestListHosts:
     """GET /api/v2/hosts."""

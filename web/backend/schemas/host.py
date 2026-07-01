@@ -67,6 +67,17 @@ class HostListItem(HostBase):
         # 2.8.0 отдаёт tags[]; Remnawave < 2.8.0 — единичный tag-строкой.
         return _normalize_str_list(v)
 
+    @field_validator(
+        'is_disabled', 'is_hidden', 'shuffle_host', 'mihomo_x25519', 'verify_peer_cert_by_name',
+        mode='before',
+    )
+    @classmethod
+    def _bool_none_to_false(cls, v):
+        # Remnawave 2.8.0 может присылать null для булевых полей (напр. verifyPeerCertByName,
+        # когда пиннинг сертификата не настроен) — трактуем None как False, иначе pydantic
+        # роняет валидацию и вместе с ней весь список хостов.
+        return False if v is None else v
+
     class Config:
         from_attributes = True
 
@@ -83,6 +94,12 @@ class HostDetail(HostListItem):
     mux_params: Optional[Any] = None
     sockopt_params: Optional[Any] = None
     xray_json_template_uuid: Optional[str] = None
+
+    @field_validator('override_sni_from_address', 'keep_sni_blank', mode='before')
+    @classmethod
+    def _detail_bool_none_to_false(cls, v):
+        # 2.8.0 может присылать null и для этих булевых полей детального ответа.
+        return False if v is None else v
 
 
 class HostCreate(BaseModel):
