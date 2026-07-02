@@ -8,13 +8,25 @@ Provides granular per-endpoint rate limits via decorators.
 import logging
 
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 logger = logging.getLogger(__name__)
 
+
+def _client_ip_key(request) -> str:
+    """Ключ лимитера — реальный IP клиента за доверенным прокси.
+
+    Сокетный адрес (get_remote_address) за reverse-proxy складывал всех
+    клиентов в один bucket по IP прокси. get_client_ip безопасен для этого
+    с введением trusted-proxy gate (PR #257). Импорт ленивый, чтобы не
+    тянуть api.deps при загрузке core-модуля.
+    """
+    from web.backend.api.deps import get_client_ip
+    return get_client_ip(request)
+
+
 # Create limiter with default rate (global fallback)
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=_client_ip_key,
     default_limits=["200/minute"],
     storage_uri=None,  # in-memory by default, upgraded to Redis in configure_limiter()
 )

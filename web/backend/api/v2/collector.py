@@ -252,9 +252,8 @@ async def verify_agent_token(
     authorization: str = Header(..., alias="Authorization"),
 ) -> str:
     """Проверяет Bearer token агента. Возвращает node_uuid."""
-    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (
-        request.client.host if request.client else "unknown"
-    )
+    from web.backend.api.deps import get_client_ip
+    client_ip = get_client_ip(request)
 
     logger.debug("Verifying agent token (length: %d) from %s", len(authorization) if authorization else 0, client_ip)
 
