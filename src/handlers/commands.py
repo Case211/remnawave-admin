@@ -117,7 +117,7 @@ async def handle_pending(message: Message, state: FSMContext, admin: BotAdmin) -
     elif action.startswith("billing_nodes_"):
         await _handle_billing_nodes_input(message, ctx)
     elif action == "user_create":
-        await _handle_user_create_input(message, ctx)
+        await _handle_user_create_input(message, ctx, admin=admin)
     elif action == "user_edit":
         await _handle_user_edit_input(message, ctx, admin=admin)
     elif action.startswith("bulk_users_"):

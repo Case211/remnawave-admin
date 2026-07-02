@@ -1002,7 +1002,7 @@
     "invalid_format": "❌ Неверный формат",
     "unknown_action": "❌ Неизвестное действие: {action}",
     "error": "❌ Ошибка: {e}",
-    "user_info": "👤 <b>{username}</b>\nСтатус: <code>{status}</code>\nТрафик: <code>{traffic}</code>\nUUID: <code>{uuid}</code>",
+    "user_info": "👤 {username}\nСтатус: {status}\nТрафик: {traffic}\nUUID: {uuid}",
     "info_failed": "❌ Не удалось получить инфо: {e}",
     "blocked": "🔒 {username} заблокирован",
     "blocked_suffix": "\n\n✅ <i>Заблокирован ({name})</i>",

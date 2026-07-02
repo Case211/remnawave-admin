@@ -651,7 +651,7 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
     logger.info("👤 Sending success message: status=%s uuid=%s", status, info.get("uuid", ""))
     reply_markup = user_actions_keyboard(info.get("uuid", ""), status, admin=admin)
     detail = build_user_summary(user, _)
-    await _respond(detail, reply_markup)
+    await _send_clean_message(target, detail, reply_markup=reply_markup, parse_mode="HTML")
     logger.info("👤 Success message sent")
     
     # Persist to local DB (same as panel does)
@@ -1055,7 +1055,7 @@ async def _handle_user_edit_input(message: Message, ctx: dict, admin: BotAdmin |
     await _apply_user_update(message, user_uuid, payload, back_to=back_to, admin=admin)
 
 
-async def _handle_user_create_input(message: Message, ctx: dict) -> None:
+async def _handle_user_create_input(message: Message, ctx: dict, admin: BotAdmin | None = None) -> None:
     """Обрабатывает пошаговый ввод для создания пользователя."""
     user_id = message.from_user.id
     data = ctx.setdefault("data", {})
@@ -3685,7 +3685,7 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
             # Используем форматтер для красивого отображения устройств
             device_lines = format_hwid_devices_list(devices, max_devices=10)
             for line in device_lines:
-                lines.append(f"   {_esc(line)}")
+                lines.append(f"   {line}")
         
         text = "\n".join(lines)
         await callback.message.edit_text(
@@ -3770,7 +3770,7 @@ async def cb_hwid_delete(callback: CallbackQuery, admin: BotAdmin) -> None:
             # Используем форматтер для красивого отображения устройств
             device_lines = format_hwid_devices_list(devices, max_devices=10)
             for line in device_lines:
-                lines.append(f"   {_esc(line)}")
+                lines.append(f"   {line}")
 
         text = "\n".join(lines)
         await callback.message.edit_text(
@@ -3836,7 +3836,7 @@ async def cb_hwid_delete_all(callback: CallbackQuery, admin: BotAdmin) -> None:
             # Используем форматтер для красивого отображения устройств
             device_lines = format_hwid_devices_list(devices, max_devices=10)
             for line in device_lines:
-                lines.append(f"   {_esc(line)}")
+                lines.append(f"   {line}")
 
         text = "\n".join(lines)
         await callback.message.edit_text(

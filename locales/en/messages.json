@@ -1002,7 +1002,7 @@
     "invalid_format": "❌ Invalid format",
     "unknown_action": "❌ Unknown action: {action}",
     "error": "❌ Error: {e}",
-    "user_info": "👤 <b>{username}</b>\nStatus: <code>{status}</code>\nTraffic: <code>{traffic}</code>\nUUID: <code>{uuid}</code>",
+    "user_info": "👤 {username}\nStatus: {status}\nTraffic: {traffic}\nUUID: {uuid}",
     "info_failed": "❌ Failed to get info: {e}",
     "blocked": "🔒 {username} blocked",
     "blocked_suffix": "\n\n✅ <i>Blocked ({name})</i>",

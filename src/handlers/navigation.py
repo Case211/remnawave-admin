@@ -663,6 +663,7 @@ async def _handle_subs_search_input(message: Message, ctx: dict, admin: BotAdmin
             message,
             _("sub.search_no_results").format(query=_esc(query)),
             reply_markup=nav_keyboard(NavTarget.SUBS_LIST),
+            parse_mode="HTML",
         )
         asyncio.create_task(_cleanup_message(message, delay=0.5))
         return
@@ -693,7 +694,7 @@ async def _handle_subs_search_input(message: Message, ctx: dict, admin: BotAdmin
     if extra_line:
         text = f"{text}\n{extra_line}"
     
-    await _send_clean_message(message, text, reply_markup=keyboard)
+    await _send_clean_message(message, text, reply_markup=keyboard, parse_mode="HTML")
     asyncio.create_task(_cleanup_message(message, delay=0.5))
 
 

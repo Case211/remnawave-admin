@@ -75,8 +75,9 @@ async def _show_user_info(callback: CallbackQuery, user_uuid: str) -> None:
         else:
             traffic_str += " / ∞"
 
+        # callback.answer — это plain-text алерт, HTML тут не рендерится и эскейп не нужен
         text = _("vact.user_info").format(
-            username=_esc(username),
+            username=username,
             status=status,
             traffic=traffic_str,
             uuid=f"{user_uuid[:16]}...",
