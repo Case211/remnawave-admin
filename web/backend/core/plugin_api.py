@@ -58,9 +58,19 @@ class PluginDB:
     """Точка входа к PostgreSQL панели. Живой SQL — плагины наши,
     ограничивать нечего; фасад фиксирует только место входа."""
 
+    @property
+    def is_connected(self) -> bool:
+        from shared.database import db_service
+        return db_service.is_connected
+
     def acquire(self):
         from shared.database import db_service
         return db_service.acquire()
+
+    async def get_user_by_uuid(self, user_uuid: str):
+        """Прокси панельного хелпера чтения юзера из локального кэша."""
+        from shared.database import db_service
+        return await db_service.get_user_by_uuid(user_uuid)
 
     async def fetch(self, query: str, *args):
         async with self.acquire() as conn:
@@ -210,6 +220,51 @@ class PluginContext:
     cloud: CloudClient
     events: PluginEvents
     telemetry: PluginTelemetry
+
+
+# Модульный синглтон для data-слоёв плагинов: модульным функциям без
+# доступа к ctx нужен тот же вход в БД, что и у контекста.
+panel_db = PluginDB()
+
+
+async def panel_user_from_api(user_uuid: str) -> Optional[dict]:
+    """Юзер из Panel API (fallback, когда локальный кэш скуден)."""
+    try:
+        from shared.api_client import api_client
+        resp = await api_client.get_user_by_uuid(user_uuid)
+    except Exception:
+        return None
+    if isinstance(resp, dict) and isinstance(resp.get("response"), dict):
+        return resp["response"]
+    return resp if isinstance(resp, dict) else None
+
+
+def normalize_user(raw: dict) -> dict:
+    """Панельная нормализация ответа Panel API (camelCase → snake_case)."""
+    from web.backend.api.v2.users import _ensure_snake_case
+    return _ensure_snake_case(raw)
+
+
+def panel_api():
+    """Клиент Panel API (Remnawave) — мутации юзеров, ресеты, revoke."""
+    from shared.api_client import api_client
+    return api_client
+
+
+def geoip_service():
+    """GeoIP-сервис панели (lookup_batch и кэш ip_metadata)."""
+    from shared.geoip import get_geoip_service
+    return get_geoip_service()
+
+
+def auth_deps():
+    """Авторизационные зависимости для роутов плагина.
+
+    Возвращает ``(AdminUser, require_permission)`` — плагин не импортирует
+    ``web.backend.api.deps`` напрямую.
+    """
+    from web.backend.api.deps import AdminUser, require_permission
+    return AdminUser, require_permission
 
 
 def build_context(plugin_id: str) -> PluginContext:
