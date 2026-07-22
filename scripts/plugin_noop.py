@@ -9,31 +9,35 @@ Then ``GET /api/v2/plugins`` should list ``id=noop``, and
 
 This file lives in the open-source repo only as a developer aid — real
 plugins ship as separate pip packages with an ``rwa.plugin`` entry point.
+It doubles as the reference for manifest v2: declarative manifest +
+``build(ctx)`` factory returning the router bound to the PluginContext.
 """
 from __future__ import annotations
 
 from fastapi import APIRouter
 
-from web.backend.core.plugins import NavEntry, PluginManifest
+from web.backend.core.plugin_api import PluginContext
+from web.backend.core.plugins import NavEntry, PluginManifest, PluginParts
 
 
-def _build_router() -> APIRouter:
+def _build(ctx: PluginContext) -> PluginParts:
     r = APIRouter()
 
     @r.get("/ping")
     async def ping() -> dict:
-        return {"pong": True, "plugin": "noop"}
+        ctx.telemetry.count("ping")
+        return {"pong": True, "plugin": ctx.plugin_id}
 
-    return r
+    return PluginParts(router=r)
 
 
 def manifest() -> PluginManifest:
     return PluginManifest(
         id="noop",
         name="Noop Plugin (dev smoke)",
-        version="0.0.1",
-        license_state="not_required",
-        router=_build_router(),
+        version="0.0.2",
+        billing="free",
+        build=_build,
         navigation=[
             NavEntry(
                 path="/plugins/noop",

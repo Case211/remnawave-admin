@@ -1,16 +1,18 @@
-"""Plugin loader and registry for paid/optional addons.
+"""Загрузчик плагинов (манифест v2, Plugin API v1).
 
-Plugins register themselves through Python entry points (group ``rwa.plugin``)
-or, for development, through the ``RWA_DEV_PLUGINS`` env variable
-("module.path:factory_callable" entries separated by commas).
+Плагин регистрируется через entry point ``rwa.plugin`` (или
+``RWA_DEV_PLUGINS=module:factory,...`` для разработки) и возвращает
+декларативный :class:`PluginManifest`. Роутер и фоновые задачи плагин
+отдаёт фабрикой ``build(ctx)`` — панель зовёт её с готовым
+:class:`~web.backend.core.plugin_api.PluginContext`.
 
-A plugin returns a :class:`PluginManifest` describing its router, RBAC
-resources, navigation entries, scheduled tasks, and license state.
+Лицензирование — забота ядра, не плагина: роутер платного плагина
+монтируется всегда, но каждый запрос проходит через динамический гейт по
+entitlements-кэшу (core/entitlements.py). Покупка и истечение подписки
+применяются без рестарта; рестарт нужен только для установки/удаления
+wheel. Фоновые задачи проверяют entitlement на каждом тике.
 
-The loader is fail-soft: a broken plugin must not crash the panel. It is also
-license-aware — when a plugin reports ``license_state`` outside ``valid`` or
-``not_required``, its real router is replaced with a stub that returns
-HTTP 402 for every path under the plugin's prefix.
+Загрузчик fail-soft: сломанный плагин не должен уронить панель.
 """
 from __future__ import annotations
 
@@ -23,28 +25,27 @@ from typing import Any, Awaitable, Callable, Iterable, Literal, Optional
 
 from fastapi import APIRouter, FastAPI, HTTPException
 
+from web.backend.core.plugin_api import API_VERSION, PluginContext, build_context
+
 logger = logging.getLogger(__name__)
 
-LicenseState = Literal["valid", "expired", "missing", "not_required"]
+# Значения, которые понимает фронт (lib/plugins.ts): valid | expired |
+# missing | not_required. Семантика сохранена при переезде на онлайн-
+# лицензии: active/grace → valid.
+UiLicenseState = Literal["valid", "expired", "missing", "not_required"]
 
 API_PREFIX = "/api/v2/plugins"
 
 
 @dataclass(frozen=True)
 class NavEntry:
-    """A single navigation link contributed by a plugin.
-
-    ``path`` is the frontend route (relative to the panel root, e.g.
-    ``/plugins/debugger``). ``label_i18n`` is an i18n key the frontend will
-    translate. ``icon`` is a lucide icon name as used in Sidebar.tsx.
-    ``permission`` is an optional ``(resource, action)`` gate.
-    """
+    """Пункт навигации от плагина (см. Sidebar.tsx)."""
 
     path: str
     label_i18n: str
     icon: str
     permission: Optional[tuple[str, str]] = None
-    section_i18n: Optional[str] = None  # optional sidebar section header
+    section_i18n: Optional[str] = None
 
 
 @dataclass
@@ -55,31 +56,53 @@ class ScheduledTask:
 
 
 @dataclass
+class PluginParts:
+    """Что плагин собирает в ``build(ctx)``: роутер и фоновые задачи,
+    замкнутые на контекст."""
+
+    router: Optional[APIRouter] = None
+    scheduled_tasks: list[ScheduledTask] = field(default_factory=list)
+
+
+@dataclass
 class PluginManifest:
     id: str
     name: str
     version: str
-    license_state: LicenseState = "not_required"
-    router: Optional[APIRouter] = None
+    api_version: int = API_VERSION
+    billing: Literal["free", "subscription"] = "free"
+    build: Optional[Callable[[PluginContext], PluginParts]] = None
     rbac_resources: dict[str, list[str]] = field(default_factory=dict)
     navigation: list[NavEntry] = field(default_factory=list)
-    scheduled_tasks: list[ScheduledTask] = field(default_factory=list)
 
 
 # ── private state ────────────────────────────────────────────────
 
 _loaded: list[PluginManifest] = []
 _rbac_extras: dict[str, set[str]] = {}
+_parts: dict[str, PluginParts] = {}
 
 
 def loaded_plugins() -> list[PluginManifest]:
-    """Return manifests registered in the current process."""
     return list(_loaded)
 
 
 def get_extra_rbac_resources() -> dict[str, list[str]]:
-    """RBAC resources contributed by plugins (sorted, deterministic)."""
     return {res: sorted(actions) for res, actions in _rbac_extras.items()}
+
+
+def ui_license_state(manifest: PluginManifest) -> UiLicenseState:
+    """Состояние для фронта из entitlements-кэша."""
+    if manifest.billing == "free":
+        return "not_required"
+    from web.backend.core import entitlements
+
+    ent = entitlements.plugin_state(manifest.id)
+    if ent is None:
+        return "missing"
+    if ent.get("state") in entitlements.USABLE_STATES:
+        return "valid"
+    return "expired"
 
 
 # ── discovery ────────────────────────────────────────────────────
@@ -93,7 +116,6 @@ def _iter_entry_point_factories() -> Iterable[tuple[str, Callable[[], Any]]]:
 
     eps: list = []
     try:
-        # Python 3.10+: selectable interface
         eps = list(entry_points(group="rwa.plugin"))  # type: ignore[arg-type]
     except TypeError:  # pragma: no cover
         all_eps = entry_points()
@@ -113,10 +135,7 @@ def _iter_entry_point_factories() -> Iterable[tuple[str, Callable[[], Any]]]:
 
 
 def _iter_dev_factories() -> Iterable[tuple[str, Callable[[], Any]]]:
-    """Development-time plugins via ``RWA_DEV_PLUGINS=mod.path:callable,...``.
-
-    Useful for tests and local smoke runs without ``pip install``.
-    """
+    """Дев-плагины через ``RWA_DEV_PLUGINS=mod.path:callable,...``."""
     raw = os.environ.get("RWA_DEV_PLUGINS", "").strip()
     if not raw:
         return []
@@ -138,7 +157,7 @@ def _iter_dev_factories() -> Iterable[tuple[str, Callable[[], Any]]]:
 
 
 def discover_plugins() -> list[PluginManifest]:
-    """Discover and instantiate plugin manifests. Fail-soft."""
+    """Найти и инстанцировать манифесты. Fail-soft."""
     manifests: list[PluginManifest] = []
     seen_ids: set[str] = set()
 
@@ -157,6 +176,14 @@ def discover_plugins() -> list[PluginManifest]:
             )
             continue
 
+        if result.api_version != API_VERSION:
+            logger.error(
+                "plugins.api_version_mismatch",
+                extra={"plugin": result.id, "plugin_api": result.api_version,
+                       "panel_api": API_VERSION},
+            )
+            continue
+
         if result.id in seen_ids:
             logger.warning(
                 "plugins.duplicate_id_ignored",
@@ -168,71 +195,83 @@ def discover_plugins() -> list[PluginManifest]:
         manifests.append(result)
         logger.info(
             "plugins.discovered",
-            extra={
-                "plugin": result.id,
-                "version": result.version,
-                "license_state": result.license_state,
-                "source": source,
-            },
+            extra={"plugin": result.id, "version": result.version,
+                   "billing": result.billing, "source": source},
         )
 
     return manifests
 
 
-# ── registration ─────────────────────────────────────────────────
+# ── динамический лицензионный гейт ───────────────────────────────
 
-def _license_stub_router(plugin_id: str, state: LicenseState) -> APIRouter:
-    """Catch-all router that returns HTTP 402 for any path under the plugin.
+def _entitlement_gate(plugin_id: str) -> Callable[[], None]:
+    """FastAPI-dependency: 402 на каждый запрос без активной подписки.
 
-    Used for plugins whose license is expired or missing — UI shows the
-    pages but every API call fails with a structured 402 payload, letting
-    the frontend display a "buy/renew license" banner.
+    Проверка — O(1) по кэшу в памяти, поэтому её не стыдно вешать на
+    каждый запрос. Payload повторяет старый 402-стаб — фронт уже умеет
+    показывать по нему баннер «купить/продлить».
     """
-    r = APIRouter()
-    code = "license_expired" if state == "expired" else "license_required"
 
-    async def _stub() -> None:
+    def gate() -> None:
+        from web.backend.core import entitlements
+
+        if entitlements.is_usable(plugin_id):
+            return
+        ent = entitlements.plugin_state(plugin_id)
+        state = "expired" if ent else "missing"
+        code = "license_expired" if ent else "license_required"
         raise HTTPException(
             status_code=402,
             detail={"plugin": plugin_id, "license_state": state, "code": code},
         )
 
-    r.add_api_route(
-        "/{path:path}",
-        _stub,
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        include_in_schema=False,
-    )
-    return r
+    return gate
 
+
+# ── registration ─────────────────────────────────────────────────
 
 def register(app: FastAPI) -> list[PluginManifest]:
-    """Discover plugins and attach them to the FastAPI app.
+    """Открыть плагины и примонтировать их к приложению.
 
-    Idempotent within a process: subsequent calls reset the registry, so
-    tests can re-register without leaking state. Routers from previous
-    calls remain attached to the app — callers must not invoke ``register``
-    on the same app twice in production.
+    Идемпотентен в рамках процесса для тестов; в проде зовётся один раз
+    из lifespan.
     """
+    from fastapi import Depends
+
     _loaded.clear()
     _rbac_extras.clear()
+    _parts.clear()
 
     for manifest in discover_plugins():
-        prefix = f"{API_PREFIX}/{manifest.id}"
-        tags = [f"plugin:{manifest.id}"]
+        ctx = build_context(manifest.id)
+        try:
+            parts = manifest.build(ctx) if manifest.build else PluginParts()
+        except Exception:
+            logger.exception("plugins.build_failed", extra={"plugin": manifest.id})
+            continue
+        if not isinstance(parts, PluginParts):
+            logger.error(
+                "plugins.invalid_parts",
+                extra={"plugin": manifest.id, "got_type": type(parts).__name__},
+            )
+            continue
 
-        if manifest.license_state in ("valid", "not_required") and manifest.router is not None:
-            app.include_router(manifest.router, prefix=prefix, tags=tags)
-        else:
+        if parts.router is not None:
+            dependencies = (
+                [Depends(_entitlement_gate(manifest.id))]
+                if manifest.billing == "subscription" else []
+            )
             app.include_router(
-                _license_stub_router(manifest.id, manifest.license_state),
-                prefix=prefix,
-                tags=tags,
+                parts.router,
+                prefix=f"{API_PREFIX}/{manifest.id}",
+                tags=[f"plugin:{manifest.id}"],
+                dependencies=dependencies,
             )
 
         for resource, actions in manifest.rbac_resources.items():
             _rbac_extras.setdefault(resource, set()).update(actions)
 
+        _parts[manifest.id] = parts
         _loaded.append(manifest)
 
     if _loaded:
@@ -242,61 +281,48 @@ def register(app: FastAPI) -> list[PluginManifest]:
 
 # ── scheduled tasks ──────────────────────────────────────────────
 
-async def _safe_periodic_loop(
-    plugin_id: str,
-    task: ScheduledTask,
-) -> None:
-    """Drive one ScheduledTask forever, isolating each tick's failure.
+async def _safe_periodic_loop(manifest: PluginManifest, task: ScheduledTask) -> None:
+    """Крутить одну задачу вечно, изолируя падения тиков.
 
-    A crash inside the coroutine logs and waits one interval before
-    retrying — never propagates out, so a buggy plugin can't take down
-    the panel's lifespan.
+    Платные плагины: тик пропускается, пока entitlement не активен —
+    подписка кончилась → фоновая работа остановилась без рестарта,
+    оплатили → возобновилась.
     """
+    from web.backend.core import entitlements
+
     interval = max(1, int(task.interval_seconds))
     logger.info(
         "plugins.task_started",
-        extra={"plugin": plugin_id, "task": task.name, "interval_seconds": interval},
+        extra={"plugin": manifest.id, "task": task.name, "interval_seconds": interval},
     )
     while True:
         try:
-            await task.coro()
+            if manifest.billing == "free" or entitlements.is_usable(manifest.id):
+                await task.coro()
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception(
                 "plugins.task_iteration_failed",
-                extra={"plugin": plugin_id, "task": task.name},
+                extra={"plugin": manifest.id, "task": task.name},
             )
         try:
             await asyncio.sleep(interval)
         except asyncio.CancelledError:
             logger.info(
                 "plugins.task_cancelled",
-                extra={"plugin": plugin_id, "task": task.name},
+                extra={"plugin": manifest.id, "task": task.name},
             )
             raise
 
 
 def start_scheduled_tasks() -> list[asyncio.Task]:
-    """Spawn asyncio.Tasks for every scheduled task contributed by plugins.
-
-    Returns the task handles so the caller can register them in the panel's
-    central ``_bg_tasks`` list and cancel them on shutdown. Plugins whose
-    license is not active have their scheduled tasks skipped — the same
-    way the router is replaced with a 402 stub above.
-    """
+    """Поднять фоновые задачи всех плагинов (лицензия решается на тике)."""
     tasks: list[asyncio.Task] = []
     for manifest in _loaded:
-        if manifest.license_state not in ("valid", "not_required"):
-            if manifest.scheduled_tasks:
-                logger.info(
-                    "plugins.tasks_skipped_license",
-                    extra={"plugin": manifest.id, "license_state": manifest.license_state},
-                )
-            continue
-        for task in manifest.scheduled_tasks:
+        for task in _parts.get(manifest.id, PluginParts()).scheduled_tasks:
             handle = asyncio.create_task(
-                _safe_periodic_loop(manifest.id, task),
+                _safe_periodic_loop(manifest, task),
                 name=f"plugin:{manifest.id}:{task.name}",
             )
             tasks.append(handle)

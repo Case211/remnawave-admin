@@ -681,10 +681,11 @@ async def lifespan(app: FastAPI):
                             logger.exception("Plugin migrations replay failed")
 
                     try:
-                        from web.backend.core import plugin_licenses
-                        await plugin_licenses.prime_cache()
+                        from web.backend.core import entitlements
+                        await entitlements.startup()
+                        _bg("license_heartbeat", entitlements.heartbeat_loop())
                     except Exception:
-                        logger.exception("Plugin license cache priming failed")
+                        logger.exception("Entitlements startup failed")
 
                     try:
                         plugin_loader.register(app)
