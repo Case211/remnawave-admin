@@ -5380,49 +5380,93 @@
   },
   "adminPlugins": {
     "title": "Plugins",
-    "subtitle": "Manage paid add-ons: upload wheel, set license, uninstall.",
-    "refresh": "Refresh",
-    "install": "Install plugin",
-    "master_license": "Master key",
+    "subtitle": "Paid plugin store: purchase from the panel, install and quotas — no keys.",
+    "sync": "Sync",
+    "sync_ok": "Synced with the licensing server",
+    "redeem": "Enter code",
+    "upload": "Upload wheel",
     "restart": "Restart backend",
     "restart_started": "Restart in progress",
-    "restart_hint": "Restart the backend after any change to apply it.",
-    "empty": "No plugins installed. Upload a wheel from the vendor to start.",
-    "pending_wheel": "Wheel found but no license attached — provide a JWT via Install or Master key.",
-    "dir_label": "Plugins directory",
-    "update_license": "Update license",
-    "update_license_success": "License updated",
-    "uninstall_success": "Plugin removed",
-    "master_license_applied": "Applied to {{count}} plugins",
-    "license": {
-      "valid": "active",
-      "expired": "expired",
-      "missing": "missing",
-      "invalid": "invalid"
+    "restart_hint": "The installation takes effect after a backend restart.",
+    "copied": "Copied",
+    "catalog_empty": "The catalog is empty for now.",
+    "link": {
+      "registered": "Linked to the licensing server",
+      "not_registered": "Not linked to the licensing server",
+      "last_sync": "sync"
     },
-    "install_dialog": {
-      "title": "Install plugin",
-      "subtitle": "Upload the wheel file and paste the vendor-issued JWT. The plugin activates after a restart.",
-      "plugin_id": "Plugin ID",
-      "plugin_id_hint": "Same id the vendor uses (e.g. smart_support).",
-      "wheel": ".whl file",
-      "jwt": "License key (JWT)",
-      "submit": "Install"
+    "state": {
+      "none": "not purchased",
+      "active": "active",
+      "grace": "grace",
+      "expired": "expired"
     },
-    "master_dialog": {
-      "title": "Master key",
-      "subtitle": "A single JWT can cover several plugins. Paste it and the panel will fan it out to every plugin it licenses.",
-      "jwt": "Bundle JWT",
+    "update_available": "update {{version}}",
+    "per_month": "mo",
+    "ai_calls_limit": "{{n}} AI calls / mo",
+    "data_sent": "What is sent to the cloud",
+    "paid_until": "Paid until",
+    "buy": "Buy",
+    "renew": "Renew",
+    "buy_topup": "Buy quota pack",
+    "install": "Install",
+    "update": "Update",
+    "install_ok": "Plugin installed",
+    "quota": {
+      "title": "AI call quota",
+      "topup": "+{{n}} topped up"
+    },
+    "extra_installed": "Installed outside the catalog",
+    "purchase": {
+      "title_sub": "Subscription: {{name}}",
+      "title_topup": "Quota pack: {{name}}",
+      "subtitle_sub": "Pick a duration — the order is paid with a USDT transfer (TON network).",
+      "subtitle_topup": "A pack of {{n}} AI calls. Never expires — spent after the base quota.",
+      "subtitle_pay": "Transfer the exact amount with the comment (memo) — it matches the payment to the order.",
+      "months": "Duration, months",
+      "total": "Total",
+      "create": "Proceed to payment",
+      "address": "Address (USDT on TON)",
+      "amount": "Amount",
+      "memo": "Comment (memo)",
+      "memo_warning": "Always include the transfer comment — without it the payment cannot be matched to the order.",
+      "expires": "Order valid until",
+      "i_paid": "I have paid",
+      "polling": "Waiting for payment confirmation…",
+      "manual_note": "Confirmation usually takes up to an hour. You can close this window — the purchase applies automatically.",
+      "paid_title": "Payment confirmed",
+      "paid_body": "The subscription is applied without a restart. If the plugin code is not installed yet, hit \"Install\" on the card.",
+      "expired_title": "Order expired",
+      "expired_body": "Create a new order. If you have already sent the payment, contact support."
+    },
+    "redeem_ok": "Code applied",
+    "redeem_dialog": {
+      "title": "Promo or transfer code",
+      "subtitle": "The only place where you type anything: a transfer code from another server or a promo code.",
+      "code": "Code",
       "submit": "Apply"
     },
-    "license_dialog": {
-      "title": "Update license: {{name}}",
-      "subtitle": "Paste a new JWT for this plugin.",
-      "submit": "Save"
+    "transfer": {
+      "open": "Move to another server",
+      "title": "Transfer subscriptions",
+      "subtitle": "Issues a one-time code to activate the subscriptions on a new server.",
+      "warning": "This server will be detached from the subscriptions immediately — paid plugins stop working here. The code is valid for 72 hours and is entered on the new server via \"Enter code\".",
+      "confirm": "Issue code",
+      "done_subtitle": "Enter this code on the new server (\"Enter code\").",
+      "code": "Transfer code",
+      "valid_until": "Valid until"
     },
+    "upload_ok": "Wheel uploaded",
+    "upload_dialog": {
+      "title": "Manual wheel upload",
+      "subtitle": "Fallback for air-gapped servers: install a wheel file directly. Activates after a restart.",
+      "wheel": ".whl file",
+      "submit": "Upload"
+    },
+    "uninstall_success": "Plugin removed",
     "uninstall_dialog": {
-      "title": "Remove plugin",
-      "subtitle": "Plugin \"{{name}}\" will be removed together with its license. This is irreversible. Continue?",
+      "title": "Remove plugin code",
+      "subtitle": "The \"{{name}}\" code will be removed from this server. The subscription stays — you can reinstall the plugin anytime. Continue?",
       "confirm": "Remove"
     },
     "restart_dialog": {
@@ -5431,14 +5475,42 @@
       "confirm": "Restart"
     },
     "errors": {
-      "upload_failed": "Failed to install plugin",
-      "master_failed": "Failed to apply master key",
-      "update_license_failed": "Failed to update license",
-      "uninstall_failed": "Failed to remove plugin",
-      "restart_failed": "Failed to restart backend"
+      "sync_failed": "Failed to sync with the licensing server",
+      "catalog_failed": "Catalog unavailable — the licensing server is not responding",
+      "purchase_failed": "Failed to create the order",
+      "install_failed": "Failed to install the plugin",
+      "redeem_failed": "Failed to apply the code",
+      "transfer_failed": "Failed to issue a transfer code",
+      "upload_failed": "Failed to upload the wheel",
+      "uninstall_failed": "Failed to remove the plugin",
+      "restart_failed": "Failed to restart backend",
+      "copy_failed": "Failed to copy",
+      "server_code": "Licensing server error: {{code}}"
+    },
+    "server_errors": {
+      "server_unreachable": "The licensing server is unreachable — try again later",
+      "not_registered": "Instance is not registered — reload the store page",
+      "subscription_required": "An active subscription is required",
+      "quota_exceeded": "AI call quota exhausted — buy a top-up pack",
+      "order_not_found": "Order not found",
+      "nothing_to_transfer": "Nothing to transfer — no active subscriptions",
+      "transfer_to_self": "This code was issued by this very server",
+      "target_instance_not_clean": "This server already has subscriptions — transfer requires a clean instance",
+      "code_invalid": "Code not found or expired",
+      "unknown_tariff": "Unknown tariff — refresh the catalog",
+      "unknown_topup": "Unknown pack — refresh the catalog",
+      "wheel_not_found": "Wheel not found on the server",
+      "wheel_missing_on_server": "The wheel file is missing on the server — contact support",
+      "wheel_sha_mismatch": "Wheel checksum mismatch — installation aborted",
+      "invalid_wheel": "The file does not look like a valid wheel",
+      "pip_install_failed": "pip failed to install the package — check backend logs"
     }
   },
   "plugins": {
+    "billing": {
+      "grace": "The \"{{plugin}}\" subscription is in its grace period — renew to keep access.",
+      "expires_soon": "The \"{{plugin}}\" subscription expires {{date}}."
+    },
     "smart_support": {
       "nav": "Smart Support",
       "license": {
@@ -5607,31 +5679,18 @@
           "ai": "AI analysis"
         },
         "ai": {
-          "enabled": "Enable AI analysis in reports",
-          "chain": "Provider priority",
-          "chain_hint": "Comma-separated list. Allowed: gemini, groq, openrouter. When the first one runs out of free-tier limits, the request falls through to the next.",
-          "key_set": "key set",
-          "key_placeholder_set": "Enter a new key to replace it",
-          "key_placeholder_empty": "Enter API key",
-          "status_title": "Current provider status",
-          "status_ok": "available",
-          "status_cooldown": "paused {{seconds}}s",
-          "reset_cooldown": "reset",
-          "cooldown_reset": "Cooldowns cleared",
-          "providers": {
-            "gemini": {
-              "label": "Google Gemini",
-              "model_placeholder": "gemini-2.0-flash"
-            },
-            "groq": {
-              "label": "Groq",
-              "model_placeholder": "llama-3.3-70b-versatile"
-            },
-            "openrouter": {
-              "label": "OpenRouter",
-              "model_placeholder": "meta-llama/llama-3.3-70b-instruct:free"
-            }
-          }
+          "enabled": "Enable cloud AI analysis in reports",
+          "cloud_hint": "Analysis runs on the cloud core: no provider keys needed, calls are drawn from the subscription quota.",
+          "subscription": "Subscription",
+          "sub_state": {
+            "active": "active",
+            "grace": "grace period",
+            "expired": "expired",
+            "missing": "none"
+          },
+          "quota": "Call quota",
+          "quota_topup": "+{{n}} topped up",
+          "manage": "Manage subscription and quota →"
         },
         "fields": {
           "node_cpu_high": {

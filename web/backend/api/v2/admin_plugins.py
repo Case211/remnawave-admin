@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from web.backend.api.deps import AdminUser, require_superadmin
 from web.backend.core import entitlements, plugin_installer
 from web.backend.core.entitlements import LicenseServerError
-from web.backend.core.plugins import loaded_plugins, ui_license_state
+from web.backend.core.plugins import loaded_plugins
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
