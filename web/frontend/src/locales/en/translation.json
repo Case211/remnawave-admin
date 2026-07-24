@@ -5390,6 +5390,14 @@
     "restart_hint": "The installation takes effect after a backend restart.",
     "copied": "Copied",
     "catalog_empty": "The catalog is empty for now.",
+    "disconnect": "Disconnect",
+    "connect_ok": "Instance connected to the store",
+    "disconnect_ok": "Instance unlinked from the store",
+    "connect": {
+      "title": "Instance is not connected to the store",
+      "privacy": "The catalog is visible without connecting. Until you click Connect, the licensing server has no record of your instance — registration happens only on your action. Connecting is required to buy, start a trial, and activate plugins.",
+      "button": "Connect"
+    },
     "link": {
       "registered": "Linked to the licensing server",
       "not_registered": "Not linked to the licensing server",
@@ -5476,6 +5484,8 @@
     },
     "errors": {
       "sync_failed": "Failed to sync with the licensing server",
+      "connect_failed": "Failed to connect to the store",
+      "disconnect_failed": "Failed to disconnect from the store",
       "catalog_failed": "Catalog unavailable — the licensing server is not responding",
       "purchase_failed": "Failed to create the order",
       "install_failed": "Failed to install the plugin",

@@ -76,15 +76,33 @@ class SimpleResponse(BaseModel):
 
 @router.get("/catalog", summary="Каталог плагинов (прокси сервера с кэшем)")
 async def catalog(_admin: AdminUser = Depends(require_superadmin())) -> dict:
-    # Открытие витрины — момент тихой регистрации инстанса.
-    try:
-        await entitlements.ensure_registered()
-    except LicenseServerError:
-        pass  # каталог может отдаться из кэша и без регистрации
+    # Каталог публичный — открытие витрины НЕ регистрирует инстанс.
+    # Привязка к серверу лицензий — только явно, кнопкой «Подключиться»
+    # (приватность: пока не подключился, инстанс серверу не известен).
     try:
         return await entitlements.fetch_catalog()
     except LicenseServerError as e:
         _raise(e)
+
+
+@router.post("/connect", response_model=SimpleResponse, summary="Подключить инстанс к магазину")
+async def connect(_admin: AdminUser = Depends(require_superadmin())) -> SimpleResponse:
+    """Явная регистрация инстанса на сервере лицензий + первый heartbeat.
+    До этого шага панель не сообщает о себе серверу."""
+    try:
+        await entitlements.ensure_registered()
+        await entitlements.heartbeat_now()
+    except LicenseServerError as e:
+        _raise(e)
+    return SimpleResponse(ok=True, message="Подключено к магазину")
+
+
+@router.post("/disconnect", response_model=SimpleResponse, summary="Отвязать инстанс от магазина")
+async def disconnect(_admin: AdminUser = Depends(require_superadmin())) -> SimpleResponse:
+    """Забыть привязку к серверу лицензий (приватность). Купленные
+    подписки на сервере сохраняются — повторное «Подключиться» их вернёт."""
+    await entitlements.disconnect()
+    return SimpleResponse(ok=True, message="Отключено от магазина")
 
 
 @router.get("/status", response_model=StoreStatus, summary="Состояние связки и подписок")

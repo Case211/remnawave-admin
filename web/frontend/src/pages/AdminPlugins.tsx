@@ -46,6 +46,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import {
+  connectStore,
+  disconnectStore,
   fetchCatalog,
   fetchOrderStatus,
   fetchStoreStatus,
@@ -166,6 +168,22 @@ export default function AdminPlugins() {
     },
     onError: (err: unknown) => toast.error(serverError(err, 'adminPlugins.errors.sync_failed')),
   })
+  const connectMutation = useMutation({
+    mutationFn: connectStore,
+    onSuccess: () => {
+      toast.success(t('adminPlugins.connect_ok'))
+      refresh()
+    },
+    onError: (err: unknown) => toast.error(serverError(err, 'adminPlugins.errors.connect_failed')),
+  })
+  const disconnectMutation = useMutation({
+    mutationFn: disconnectStore,
+    onSuccess: () => {
+      toast.success(t('adminPlugins.disconnect_ok'))
+      refresh()
+    },
+    onError: () => toast.error(t('adminPlugins.errors.disconnect_failed')),
+  })
 
   const status = statusQ.data
   const catalog = catalogQ.data
@@ -229,11 +247,31 @@ export default function AdminPlugins() {
         </div>
       ))}
 
+      {status && !status.registered && (
+        <div className="glass-card border border-primary-500/40 bg-primary-500/5 p-4 flex items-start gap-3">
+          <ShieldCheck className="w-5 h-5 text-primary-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-sm text-white font-medium">{t('adminPlugins.connect.title')}</div>
+            <p className="mt-1 text-xs text-dark-300">{t('adminPlugins.connect.privacy')}</p>
+          </div>
+          <Button size="sm" onClick={() => connectMutation.mutate()} disabled={connectMutation.isPending}>
+            {connectMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <KeyRound className="w-4 h-4 mr-2" />
+            )}
+            {t('adminPlugins.connect.button')}
+          </Button>
+        </div>
+      )}
+
       <ConnectionCard
         status={status}
         loading={statusQ.isLoading}
         lang={lang}
         onTransfer={() => setTransferOpen(true)}
+        onDisconnect={() => disconnectMutation.mutate()}
+        disconnecting={disconnectMutation.isPending}
       />
 
       {catalogQ.isLoading ? (
@@ -309,11 +347,15 @@ function ConnectionCard({
   loading,
   lang,
   onTransfer,
+  onDisconnect,
+  disconnecting,
 }: {
   status: StoreStatus | undefined
   loading: boolean
   lang: string
   onTransfer: () => void
+  onDisconnect: () => void
+  disconnecting: boolean
 }) {
   const { t } = useTranslation()
   if (loading || !status) {
@@ -350,16 +392,29 @@ function ConnectionCard({
           {status.last_error}
         </span>
       )}
-      {hasSubs && (
-        <button
-          type="button"
-          onClick={onTransfer}
-          className="ml-auto inline-flex items-center gap-1.5 text-xs text-dark-300 hover:text-white transition-colors"
-        >
-          <ArrowLeftRight className="w-3.5 h-3.5" />
-          {t('adminPlugins.transfer.open')}
-        </button>
-      )}
+      <div className="ml-auto flex items-center gap-3">
+        {hasSubs && (
+          <button
+            type="button"
+            onClick={onTransfer}
+            className="inline-flex items-center gap-1.5 text-xs text-dark-300 hover:text-white transition-colors"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            {t('adminPlugins.transfer.open')}
+          </button>
+        )}
+        {status.registered && (
+          <button
+            type="button"
+            onClick={onDisconnect}
+            disabled={disconnecting}
+            className="inline-flex items-center gap-1.5 text-xs text-dark-300 hover:text-red-300 transition-colors disabled:opacity-50"
+          >
+            {disconnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" />}
+            {t('adminPlugins.disconnect')}
+          </button>
+        )}
+      </div>
     </div>
   )
 }

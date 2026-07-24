@@ -260,8 +260,29 @@ async def _request(
 
 # ── основные операции ────────────────────────────────────────────
 
+async def disconnect() -> None:
+    """Забыть привязку к серверу лицензий (приватность инстанса).
+
+    Инстанс на сервере остаётся, но панель перестаёт себя
+    идентифицировать: instance_id/token и entitlements стираются из
+    памяти и БД. Каталог (публичный) продолжит открываться. Повторное
+    ``ensure_registered`` создаст НОВЫЙ инстанс — прежние подписки
+    возвращаются transfer/redeem-кодом, если нужны.
+    """
+    global _cache
+    from shared.database import db_service
+
+    async with _lock:
+        _cache = EntitlementsCache()
+        if db_service.is_connected:
+            async with db_service.acquire() as conn:
+                await conn.execute(f"DELETE FROM {LINK_TABLE} WHERE id = 1")
+    logger.info("entitlements.disconnected")
+
+
 async def ensure_registered() -> None:
-    """Тихая регистрация инстанса (первое открытие витрины)."""
+    """Регистрация инстанса на сервере лицензий (только по явному
+    «Подключиться» или при покупке — витрина сама НЕ регистрирует)."""
     async with _lock:
         if _cache.instance_token:
             return

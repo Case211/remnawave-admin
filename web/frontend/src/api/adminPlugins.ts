@@ -137,6 +137,16 @@ export async function syncNow(): Promise<SimpleResponse> {
   return data
 }
 
+export async function connectStore(): Promise<SimpleResponse> {
+  const { data } = await client.post<SimpleResponse>(`${BASE}/connect`)
+  return data
+}
+
+export async function disconnectStore(): Promise<SimpleResponse> {
+  const { data } = await client.post<SimpleResponse>(`${BASE}/disconnect`)
+  return data
+}
+
 export async function purchase(items: PurchaseItem[]): Promise<PurchaseResponse> {
   const { data } = await client.post<PurchaseResponse>(`${BASE}/purchase`, { items })
   return data

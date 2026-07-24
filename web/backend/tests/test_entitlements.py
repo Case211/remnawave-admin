@@ -58,6 +58,21 @@ def clean_cache():
     entitlements._cache = entitlements.EntitlementsCache()
 
 
+async def test_disconnect_clears_identity(keypair):
+    # инстанс «подключён»
+    entitlements._cache.instance_id = "inst-123"
+    entitlements._cache.instance_token = "rwit_secret"
+    entitlements._adopt_jwt(make_jwt(keypair, {"smart_support": {"state": "active"}}))
+    assert entitlements.status_summary()["registered"] is True
+
+    await entitlements.disconnect()  # db_service не подключён в тестах — только память
+
+    summary = entitlements.status_summary()
+    assert summary["registered"] is False
+    assert summary["instance_id"] is None
+    assert summary["plugins"] == {}
+
+
 # ── верификация ──────────────────────────────────────────────────
 
 
