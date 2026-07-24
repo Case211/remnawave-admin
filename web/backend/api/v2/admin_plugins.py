@@ -216,7 +216,10 @@ async def install_plugin(
         )
 
     version = entry.get("latest_version", "0.0.0")
-    filename = f"rwa_plugin_{plugin_id}-{version}-py3-none-any.whl"
+    # Имя файла берём из самого wheel (иначе pip отвергает несовпадение
+    # имени с метаданными: пакет smart_support = rwa_plugin_smart_support_tool).
+    filename = (plugin_installer.wheel_filename_from_contents(contents)
+                or f"rwa_plugin_{plugin_id}-{version}-py3-none-any.whl")
     try:
         installed = plugin_installer.accept_uploaded_wheel(
             filename=filename, contents=contents
