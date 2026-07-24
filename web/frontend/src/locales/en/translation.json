@@ -5507,6 +5507,7 @@
       "quota_exceeded": "AI call quota exhausted — buy a top-up pack",
       "trial_already_used": "Trial period already used on this instance",
       "already_subscribed": "A subscription is already active — no trial needed",
+      "trial_disabled": "The trial period is currently disabled",
       "order_not_found": "Order not found",
       "nothing_to_transfer": "Nothing to transfer — no active subscriptions",
       "transfer_to_self": "This code was issued by this very server",
