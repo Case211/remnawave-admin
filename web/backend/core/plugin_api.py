@@ -72,6 +72,18 @@ class PluginDB:
         from shared.database import db_service
         return await db_service.get_user_by_uuid(user_uuid)
 
+    async def get_user_by_short_uuid(self, short_uuid: str):
+        from shared.database import db_service
+        return await db_service.get_user_by_short_uuid(short_uuid)
+
+    async def get_user_by_telegram_id(self, telegram_id):
+        from shared.database import db_service
+        return await db_service.get_user_by_telegram_id(telegram_id)
+
+    async def get_user_uuid_by_email(self, email: str):
+        from shared.database import db_service
+        return await db_service.get_user_uuid_by_email(email)
+
     async def fetch(self, query: str, *args):
         async with self.acquire() as conn:
             return await conn.fetch(query, *args)
