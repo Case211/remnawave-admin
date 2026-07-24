@@ -58,6 +58,17 @@ class PluginDB:
     """Точка входа к PostgreSQL панели. Живой SQL — плагины наши,
     ограничивать нечего; фасад фиксирует только место входа."""
 
+    def __getattr__(self, name: str):
+        """Любой не определённый здесь метод проксируем на панельный
+        db_service — плагин зовёт его хелперы (get_user_violations,
+        get_user_by_* и т.д.), дублировать их по одному хрупко.
+
+        __getattr__ вызывается только при промахе обычного поиска, так
+        что явные методы ниже (fetch/acquire/...) не затрагиваются.
+        """
+        from shared.database import db_service
+        return getattr(db_service, name)
+
     @property
     def is_connected(self) -> bool:
         from shared.database import db_service
