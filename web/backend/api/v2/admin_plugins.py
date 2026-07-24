@@ -105,6 +105,17 @@ async def disconnect(_admin: AdminUser = Depends(require_superadmin())) -> Simpl
     return SimpleResponse(ok=True, message="Отключено от магазина")
 
 
+@router.post("/trial", response_model=SimpleResponse, summary="Активировать пробный период")
+async def start_trial(_admin: AdminUser = Depends(require_superadmin())) -> SimpleResponse:
+    """Пробный период плагина (один раз на инстанс). Подключает к магазину,
+    если ещё не подключён."""
+    try:
+        await entitlements.start_trial()
+    except LicenseServerError as e:
+        _raise(e)
+    return SimpleResponse(ok=True, message="Пробный период активирован")
+
+
 @router.get("/status", response_model=StoreStatus, summary="Состояние связки и подписок")
 async def store_status(_admin: AdminUser = Depends(require_superadmin())) -> StoreStatus:
     summary = entitlements.status_summary()
@@ -117,6 +128,7 @@ async def sync_now(_admin: AdminUser = Depends(require_superadmin())) -> SimpleR
     try:
         await entitlements.ensure_registered()
         await entitlements.heartbeat_now()
+        await entitlements.fetch_catalog(force=True)  # подтянуть свежие версии/цены
     except LicenseServerError as e:
         _raise(e)
     return SimpleResponse(ok=True)

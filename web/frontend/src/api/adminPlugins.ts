@@ -147,6 +147,11 @@ export async function disconnectStore(): Promise<SimpleResponse> {
   return data
 }
 
+export async function startTrial(): Promise<SimpleResponse> {
+  const { data } = await client.post<SimpleResponse>(`${BASE}/trial`)
+  return data
+}
+
 export async function purchase(items: PurchaseItem[]): Promise<PurchaseResponse> {
   const { data } = await client.post<PurchaseResponse>(`${BASE}/purchase`, { items })
   return data

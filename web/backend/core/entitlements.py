@@ -45,6 +45,7 @@ LICENSE_SERVERS = ["https://license.nexuslink.ru"]
 HEARTBEAT_INTERVAL_S = 8 * 3600
 RETRY_INTERVAL_S = 15 * 60
 HTTP_TIMEOUT_S = 15.0
+CATALOG_TTL_S = 15 * 60  # каталог перечитывается живьём не реже этого
 
 LINK_TABLE = "license_link"
 
@@ -74,6 +75,7 @@ class EntitlementsCache:
     jwt_exp: int = 0
     messages: list[dict] = field(default_factory=list)
     catalog: Optional[dict] = None
+    catalog_fetched_at: float = 0.0
     last_sync_ok: Optional[float] = None
     last_error: Optional[str] = None
 
@@ -336,18 +338,35 @@ async def heartbeat_now(usage_stats: Optional[dict] = None) -> None:
 
 
 async def fetch_catalog(force: bool = False) -> dict:
-    """Каталог витрины: живой с сервера, фолбэк — последний удачный."""
-    if _cache.catalog is not None and not force:
+    """Каталог витрины: живой с сервера с TTL, фолбэк — последний удачный.
+
+    Кэш перечитывается не реже CATALOG_TTL_S (иначе новые версии/цены
+    не появлялись бы до рестарта). Персистентный catalog_cache в БД —
+    только фолбэк, когда сервер недоступен.
+    """
+    fresh = _cache.catalog is not None and (time.time() - _cache.catalog_fetched_at) < CATALOG_TTL_S
+    if fresh and not force:
         return _cache.catalog
     try:
         catalog = await _request("GET", "/v1/catalog", authed=False)
     except LicenseServerError:
         if _cache.catalog is not None:
-            return _cache.catalog
+            return _cache.catalog  # сервер лёг — отдаём последний удачный
         raise
     _cache.catalog = catalog
+    _cache.catalog_fetched_at = time.time()
     await _save_link(catalog=catalog)
     return catalog
+
+
+async def start_trial() -> None:
+    """Активировать пробный период (POST /v1/trial). Требует подключения —
+    сервер выдаёт триал один раз на инстанс."""
+    await ensure_registered()
+    data = await _request("POST", "/v1/trial")
+    if not _adopt_jwt(data.get("entitlements_jwt", "")):
+        raise LicenseServerError("bad_entitlements_jwt")
+    await _save_link(jwt_token=data["entitlements_jwt"])
 
 
 async def purchase(items: list[dict]) -> dict:

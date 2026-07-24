@@ -56,6 +56,7 @@ import {
   purchase,
   redeemCode,
   restartBackend,
+  startTrial,
   syncNow,
   transferOut,
   uninstallPlugin,
@@ -504,6 +505,14 @@ function PluginCard({
     },
     onError: (err: unknown) => toast.error(serverError(err, 'adminPlugins.errors.install_failed')),
   })
+  const trialMutation = useMutation({
+    mutationFn: startTrial,
+    onSuccess: () => {
+      toast.success(t('adminPlugins.trial_ok'))
+      onInstalled()
+    },
+    onError: (err: unknown) => toast.error(serverError(err, 'adminPlugins.errors.trial_failed')),
+  })
 
   return (
     <div className="glass-card p-5 flex flex-col gap-4">
@@ -576,10 +585,25 @@ function PluginCard({
 
       <div className="mt-auto flex items-center gap-2 flex-wrap">
         {!entitlement ? (
-          <Button size="sm" onClick={() => onBuy('subscription')}>
-            <CreditCard className="w-4 h-4 mr-2" />
-            {t('adminPlugins.buy')}
-          </Button>
+          <>
+            <Button size="sm" onClick={() => onBuy('subscription')}>
+              <CreditCard className="w-4 h-4 mr-2" />
+              {t('adminPlugins.buy')}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => trialMutation.mutate()}
+              disabled={trialMutation.isPending}
+            >
+              {trialMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Zap className="w-4 h-4 mr-2" />
+              )}
+              {t('adminPlugins.trial')}
+            </Button>
+          </>
         ) : (
           <>
             <Button
