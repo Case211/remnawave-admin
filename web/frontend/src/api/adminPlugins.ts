@@ -21,6 +21,12 @@ export interface CatalogTariff {
   period: string
   price: CatalogPrice
   limits: { ai_calls?: number | null }
+  /** Витринное имя плана; пусто — показываем код. */
+  title?: CatalogText | null
+  /** Чем отличается от соседних планов (на каком ИИ считается разбор). */
+  note?: CatalogText | null
+  /** Порядок кнопок в карточке. */
+  sort?: number
 }
 
 export interface CatalogTopup {

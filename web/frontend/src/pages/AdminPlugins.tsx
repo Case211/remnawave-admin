@@ -62,6 +62,7 @@ import {
   uninstallPlugin,
   uploadWheel,
   type CatalogPlugin,
+  type CatalogTariff,
   type CatalogText,
   type EntitlementQuota,
   type PluginEntitlement,
@@ -148,6 +149,8 @@ export default function AdminPlugins() {
   const [purchaseTarget, setPurchaseTarget] = useState<{
     plugin: CatalogPlugin
     mode: 'subscription' | 'topup'
+    /** План, выбранный в карточке; без него диалог берёт первый из каталога. */
+    tariff?: CatalogTariff
   } | null>(null)
   const [redeemOpen, setRedeemOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
@@ -292,7 +295,7 @@ export default function AdminPlugins() {
               entitlement={status?.plugins[p.id]}
               installedVersion={status?.installed[p.id]}
               lang={lang}
-              onBuy={(mode) => setPurchaseTarget({ plugin: p, mode })}
+              onBuy={(mode, tariff) => setPurchaseTarget({ plugin: p, mode, tariff })}
               onInstalled={() => {
                 setNeedsRestart(true)
                 refresh()
@@ -309,6 +312,7 @@ export default function AdminPlugins() {
         <PurchaseDialog
           plugin={purchaseTarget.plugin}
           mode={purchaseTarget.mode}
+          tariff={purchaseTarget.tariff}
           lang={lang}
           onClose={() => {
             setPurchaseTarget(null)
@@ -483,18 +487,24 @@ function PluginCard({
   entitlement: PluginEntitlement | undefined
   installedVersion: string | undefined
   lang: string
-  onBuy: (mode: 'subscription' | 'topup') => void
+  onBuy: (mode: 'subscription' | 'topup', tariff?: CatalogTariff) => void
   onInstalled: () => void
   onUninstall: () => void
 }) {
   const { t } = useTranslation()
   const serverError = useServerError()
   const [dataSentOpen, setDataSentOpen] = useState(false)
+  const [pickedTariff, setPickedTariff] = useState<string | null>(null)
 
   const usable = entitlement && (entitlement.state === 'active' || entitlement.state === 'grace')
   const updateAvailable =
     installedVersion !== undefined && cmpVersions(plugin.latest_version, installedVersion) > 0
-  const tariff = plugin.tariffs[0]
+  // Пока план не выбран руками, показываем оплаченный (tier) — иначе первый по sort.
+  const tariff =
+    plugin.tariffs.find((x) => x.code === (pickedTariff ?? entitlement?.tier)) ?? plugin.tariffs[0]
+  // Нулевая цена = пробный план: его не покупают, а активируют через /v1/trial.
+  const isTrial = !!tariff && tariff.price.rub === 0 && tariff.price.usdt === 0
+  const trialInCatalog = plugin.tariffs.some((x) => x.price.rub === 0 && x.price.usdt === 0)
   const topup = plugin.topups[0]
 
   const installMutation = useMutation({
@@ -535,12 +545,20 @@ function PluginCard({
         </div>
         {tariff && (
           <div className="text-right shrink-0">
-            <div className="text-lg font-bold text-white leading-tight">
-              {tariff.price.rub.toLocaleString('ru-RU')} ₽
-            </div>
-            <div className="text-xs text-dark-400">
-              {tariff.price.usdt} USDT / {t('adminPlugins.per_month')}
-            </div>
+            {isTrial ? (
+              <div className="text-lg font-bold text-emerald-300 leading-tight">
+                {t('adminPlugins.free')}
+              </div>
+            ) : (
+              <>
+                <div className="text-lg font-bold text-white leading-tight">
+                  {tariff.price.rub.toLocaleString('ru-RU')} ₽
+                </div>
+                <div className="text-xs text-dark-400">
+                  {tariff.price.usdt} USDT / {t('adminPlugins.per_month')}
+                </div>
+              </>
+            )}
             {tariff.limits.ai_calls != null && (
               <div className="mt-0.5 text-[11px] text-dark-400">
                 {t('adminPlugins.ai_calls_limit', { n: tariff.limits.ai_calls })}
@@ -549,6 +567,34 @@ function PluginCard({
           </div>
         )}
       </div>
+
+      {plugin.tariffs.length > 1 && (
+        <div>
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--glass-bg)] border border-[var(--glass-border)] w-fit max-w-full flex-wrap">
+            {plugin.tariffs.map((x) => {
+              const selected = x.code === tariff?.code
+              return (
+                <button
+                  key={x.code}
+                  type="button"
+                  onClick={() => setPickedTariff(x.code)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                    selected
+                      ? 'bg-primary-500/25 text-white'
+                      : 'text-dark-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {pickText(x.title ?? {}, lang) || x.code}
+                  {entitlement?.tier === x.code && <span className="ml-1 text-emerald-400">•</span>}
+                </button>
+              )
+            })}
+          </div>
+          {tariff && pickText(tariff.note ?? {}, lang) && (
+            <p className="mt-2 text-[11px] text-dark-300">{pickText(tariff.note ?? {}, lang)}</p>
+          )}
+        </div>
+      )}
 
       <ul className="space-y-1.5">
         {plugin.features.map((f, i) => (
@@ -586,33 +632,55 @@ function PluginCard({
       <div className="mt-auto flex items-center gap-2 flex-wrap">
         {!entitlement ? (
           <>
-            <Button size="sm" onClick={() => onBuy('subscription')}>
-              <CreditCard className="w-4 h-4 mr-2" />
-              {t('adminPlugins.buy')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => trialMutation.mutate()}
-              disabled={trialMutation.isPending}
-            >
-              {trialMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Zap className="w-4 h-4 mr-2" />
-              )}
-              {t('adminPlugins.trial')}
-            </Button>
+            {isTrial ? (
+              // Пробный план выбран кнопкой выше — покупать нечего, активируем.
+              <Button
+                size="sm"
+                onClick={() => trialMutation.mutate()}
+                disabled={trialMutation.isPending}
+              >
+                {trialMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4 mr-2" />
+                )}
+                {t('adminPlugins.trial')}
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => onBuy('subscription', tariff)}>
+                <CreditCard className="w-4 h-4 mr-2" />
+                {t('adminPlugins.buy')}
+              </Button>
+            )}
+            {/* Пробного плана нет в каталоге — кнопка всё равно нужна: сервер
+                может раздавать триал, просто не показывая его отдельным тарифом. */}
+            {!trialInCatalog && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => trialMutation.mutate()}
+                disabled={trialMutation.isPending}
+              >
+                {trialMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4 mr-2" />
+                )}
+                {t('adminPlugins.trial')}
+              </Button>
+            )}
           </>
         ) : (
           <>
             <Button
               size="sm"
               variant={entitlement.state === 'active' ? 'outline' : 'default'}
-              onClick={() => onBuy('subscription')}
+              onClick={() => onBuy('subscription', tariff)}
+              disabled={isTrial}
             >
               <CreditCard className="w-4 h-4 mr-2" />
-              {t('adminPlugins.renew')}
+              {/* Выбран пробный план — продлевать его нельзя, только сменить на платный. */}
+              {isTrial ? t('adminPlugins.pick_paid') : t('adminPlugins.renew')}
             </Button>
             {topup && (
               <Button size="sm" variant="outline" onClick={() => onBuy('topup')}>
@@ -689,11 +757,13 @@ function ExtraInstalled({
 function PurchaseDialog({
   plugin,
   mode,
+  tariff: pickedTariff,
   lang,
   onClose,
 }: {
   plugin: CatalogPlugin
   mode: 'subscription' | 'topup'
+  tariff?: CatalogTariff
   lang: string
   onClose: () => void
 }) {
@@ -706,7 +776,7 @@ function PurchaseDialog({
   )
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const tariff = plugin.tariffs[0]
+  const tariff = pickedTariff ?? plugin.tariffs[0]
   const topup = plugin.topups[0]
 
   useEffect(() => () => {
@@ -775,6 +845,26 @@ function PurchaseDialog({
 
         {orderState === 'configuring' && (
           <div className="space-y-4 py-2">
+            {mode === 'subscription' && (
+              // Планов несколько — покупатель должен видеть, за какой платит.
+              <div className="rounded-lg border border-[var(--glass-border)] p-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm text-white font-medium">
+                    {pickText(tariff.title ?? {}, lang) || tariff.code}
+                  </div>
+                  {pickText(tariff.note ?? {}, lang) && (
+                    <div className="text-[11px] text-dark-300 mt-0.5">
+                      {pickText(tariff.note ?? {}, lang)}
+                    </div>
+                  )}
+                </div>
+                {tariff.limits.ai_calls != null && (
+                  <span className="text-[11px] text-dark-400 shrink-0">
+                    {t('adminPlugins.ai_calls_limit', { n: tariff.limits.ai_calls })}
+                  </span>
+                )}
+              </div>
+            )}
             {mode === 'subscription' && (
               <div className="space-y-1.5">
                 <Label>{t('adminPlugins.purchase.months')}</Label>

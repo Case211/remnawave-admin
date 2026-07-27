@@ -5520,7 +5520,10 @@
       "wheel_sha_mismatch": "Контрольная сумма wheel не совпала — установка отменена",
       "invalid_wheel": "Файл не похож на валидный wheel",
       "pip_install_failed": "pip не смог установить пакет — смотрите логи backend"
-    }
+    },
+    "free": "Бесплатно",
+    "pick_paid": "Выберите платный план",
+    "plan": "План"
   },
   "plugins": {
     "billing": {

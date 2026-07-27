@@ -5520,7 +5520,10 @@
       "wheel_sha_mismatch": "Wheel checksum mismatch — installation aborted",
       "invalid_wheel": "The file does not look like a valid wheel",
       "pip_install_failed": "pip failed to install the package — check backend logs"
-    }
+    },
+    "free": "Free",
+    "pick_paid": "Choose a paid plan",
+    "plan": "Plan"
   },
   "plugins": {
     "billing": {
