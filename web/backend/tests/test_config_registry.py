@@ -24,3 +24,19 @@ def test_config_keys_unique():
     keys = [c["key"] for c in DEFAULT_CONFIG_DEFINITIONS]
     dupes = {k for k in keys if keys.count(k) > 1}
     assert not dupes, f"duplicate config keys: {dupes}"
+
+
+def test_all_telegram_notification_types_have_topic_and_toggle():
+    keys = {c["key"] for c in DEFAULT_CONFIG_DEFINITIONS}
+    for notification_type in (
+        "users",
+        "nodes",
+        "service",
+        "hwid",
+        "crm",
+        "errors",
+        "violations",
+        "finance",
+    ):
+        assert f"notifications_topic_{notification_type}" in keys
+        assert f"notifications_{notification_type}_enabled" in keys

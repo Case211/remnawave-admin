@@ -250,6 +250,7 @@ NOTIFICATIONS_TOPIC_NODES=789       # 🛰 События нод
 NOTIFICATIONS_TOPIC_SERVICE=101     # ⚙️ Сервисные события
 NOTIFICATIONS_TOPIC_HWID=102        # 💻 HWID устройства
 NOTIFICATIONS_TOPIC_CRM=103         # 💰 Биллинг
+NOTIFICATIONS_TOPIC_FINANCE=106     # 💳 Финансовые события
 NOTIFICATIONS_TOPIC_ERRORS=104      # ❌ Ошибки
 NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Нарушения
 ```
@@ -423,6 +424,7 @@ python -m src.main
 | `NOTIFICATIONS_TOPIC_SERVICE` | Сервисные уведомления |
 | `NOTIFICATIONS_TOPIC_HWID` | HWID уведомления |
 | `NOTIFICATIONS_TOPIC_CRM` | Биллинг уведомления |
+| `NOTIFICATIONS_TOPIC_FINANCE` | Финансовые уведомления |
 | `NOTIFICATIONS_TOPIC_ERRORS` | Ошибки |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | Нарушения |
 

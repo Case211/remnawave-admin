@@ -14,6 +14,10 @@ from aiogram import Bot
 
 from src.config import get_settings
 from shared.config_service import config_service
+from shared.notification_config import (
+    resolve_notification_topic,
+    resolve_notifications_chat_id,
+)
 from shared.database import db_service
 from src.services.violation_reports import ReportType, violation_report_service
 from shared.logger import logger
@@ -187,7 +191,7 @@ class ReportScheduler:
         settings = get_settings()
 
         # Получаем chat_id для отправки
-        chat_id = settings.notifications_chat_id
+        chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
         if not chat_id:
             logger.warning("Cannot send report: notifications_chat_id not configured")
             return
@@ -196,7 +200,11 @@ class ReportScheduler:
         topic_id = config_service.get("reports_topic_id", None)
         if not topic_id:
             # Используем топик нарушений как fallback
-            topic_id = settings.notifications_topic_violations
+            topic_id = resolve_notification_topic(
+                "violations",
+                type_fallback=settings.notifications_topic_violations,
+                general_fallback=settings.notifications_topic_id,
+            )
 
         # Настраиваем параметры генерации
         min_score = config_service.get("reports_min_score", 30.0)

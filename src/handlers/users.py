@@ -12,6 +12,11 @@ from aiogram.utils.i18n import gettext as _
 
 from src.config import get_settings
 from src.utils.auth import BotAdmin
+from shared.notification_config import (
+    is_notification_type_enabled,
+    resolve_notification_topic,
+    resolve_notifications_chat_id,
+)
 from shared.rbac import filter_by_scope
 
 from src.handlers.common import _cleanup_message, _edit_text_safe, _get_target_user_id, _not_admin, _send_clean_message, require_permission
@@ -691,10 +696,14 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
     # Отправляем уведомление в чат нотификаций (лог для менеджера)
     try:
         settings = get_settings()
-        notif_chat_id = settings.notifications_chat_id
-        if notif_chat_id is not None:
+        notif_chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+        if notif_chat_id is not None and is_notification_type_enabled("users"):
             bot = target.bot if isinstance(target, Message) else target.message.bot
-            topic_id = settings.get_topic_for_users()
+            topic_id = resolve_notification_topic(
+                "users",
+                type_fallback=settings.notifications_topic_users,
+                general_fallback=settings.notifications_topic_id,
+            )
             notification_lines = [
                 _("notification.user_created_title"),
                 "",
@@ -3906,5 +3915,3 @@ async def cb_hwid_delete_all(callback: CallbackQuery, admin: BotAdmin) -> None:
     except ApiClientError:
         logger.exception("Failed to delete all HWID devices user_uuid=%s actor_id=%s", user_uuid, callback.from_user.id)
         await callback.message.edit_text(_("errors.generic"), reply_markup=nav_keyboard(back_to))
-
-
