@@ -76,6 +76,10 @@ class EntitlementsCache:
     messages: list[dict] = field(default_factory=list)
     catalog: Optional[dict] = None
     catalog_fetched_at: float = 0.0
+    # Справочник клиентских приложений (версии + известные баги) — тот же TTL,
+    # что у каталога: меняется редко, но должен доезжать без рестарта панели.
+    client_apps: Optional[dict] = None
+    client_apps_fetched_at: float = 0.0
     last_sync_ok: Optional[float] = None
     last_error: Optional[str] = None
 
@@ -357,6 +361,31 @@ async def fetch_catalog(force: bool = False) -> dict:
     _cache.catalog_fetched_at = time.time()
     await _save_link(catalog=catalog)
     return catalog
+
+
+async def fetch_client_apps(force: bool = False) -> dict:
+    """Справочник клиентских приложений: версии и известные баги.
+
+    Раньше эти данные жили словарём внутри плагина и протухали с каждым
+    релизом любого клиента. Кэш держим тем же TTL, что и каталог, а при
+    недоступности сервера отдаём последний удачный ответ — справочные
+    данные устаревают медленно, и молчать из-за сети незачем.
+    """
+    fresh = (
+        _cache.client_apps is not None
+        and (time.time() - _cache.client_apps_fetched_at) < CATALOG_TTL_S
+    )
+    if fresh and not force:
+        return _cache.client_apps
+    try:
+        data = await _request("GET", "/v1/clients")
+    except LicenseServerError:
+        if _cache.client_apps is not None:
+            return _cache.client_apps
+        raise
+    _cache.client_apps = data
+    _cache.client_apps_fetched_at = time.time()
+    return data
 
 
 async def start_trial() -> None:

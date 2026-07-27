@@ -194,6 +194,19 @@ class CloudClient:
     def __init__(self, plugin_id: str):
         self._plugin_id = plugin_id
 
+    async def client_apps(self) -> dict:
+        """Справочник клиентских приложений с сервера: версии и баги версий.
+
+        Не rt-вызов: квоту не тратит, потому что это справочные данные, а не
+        работа ИИ-ядра. Кэш и фолбэк на последний удачный ответ — внутри
+        entitlements, так что вызывать можно на каждый отчёт.
+        """
+        from web.backend.core import entitlements
+        try:
+            return await entitlements.fetch_client_apps()
+        except entitlements.LicenseServerError as e:
+            raise CloudUnavailable(e.code, e.detail) from e
+
     async def call(self, method: str, payload: dict | None = None, *,
                    timeout: float = 30.0) -> dict:
         from web.backend.core import entitlements
