@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from pydantic import AnyHttpUrl, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, AnyUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,6 +14,7 @@ load_dotenv(BASE_DIR / ".env")
 class Settings(BaseSettings):
     bot_token: str = Field(..., alias="BOT_TOKEN")
     bot_api_root: str = Field(default="https://api.telegram.org", alias="BOT_API_ROOT")
+    bot_proxy_url: AnyUrl | None = Field(default=None, alias="BOT_PROXY_URL")
     api_base_url: AnyHttpUrl = Field(..., alias="API_BASE_URL")
     api_token: str | None = Field(default=None, alias="API_TOKEN")
     default_locale: str = Field("ru", alias="DEFAULT_LOCALE")
