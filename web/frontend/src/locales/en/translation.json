@@ -5679,6 +5679,10 @@
         "affected_by_cluster": {
           "title": "Mass incident",
           "detail": "User is part of an active incident cluster — several users affected at once."
+        },
+        "device_power_saving": {
+          "title": "Device firmware kills the VPN in background",
+          "detail": "Xiaomi, Huawei, Samsung and similar shells close background apps to save battery — the tunnel drops on its own."
         }
       },
       "settings": {
