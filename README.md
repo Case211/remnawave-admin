@@ -6,6 +6,11 @@
 
 **Telegram-бот и веб-панель для управления панелью Remnawave**
 
+[![Stars](https://img.shields.io/github/stars/Case211/remnawave-admin?style=flat&logo=github&color=f5c518)](https://github.com/Case211/remnawave-admin/stargazers)
+[![Forks](https://img.shields.io/github/forks/Case211/remnawave-admin?style=flat&logo=github)](https://github.com/Case211/remnawave-admin/forks)
+[![Release](https://img.shields.io/github/v/release/Case211/remnawave-admin?logo=github&color=blue)](https://github.com/Case211/remnawave-admin/releases/latest)
+[![Last commit](https://img.shields.io/github/last-commit/Case211/remnawave-admin/main?logo=git&logoColor=white)](https://github.com/Case211/remnawave-admin/commits/main)
+
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-green)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-1200%2B%20backend%20%2F%20260%2B%20frontend-brightgreen)](web/backend/tests)

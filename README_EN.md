@@ -4,6 +4,11 @@
 
 **Telegram bot and web panel for managing Remnawave panel**
 
+[![Stars](https://img.shields.io/github/stars/Case211/remnawave-admin?style=flat&logo=github&color=f5c518)](https://github.com/Case211/remnawave-admin/stargazers)
+[![Forks](https://img.shields.io/github/forks/Case211/remnawave-admin?style=flat&logo=github)](https://github.com/Case211/remnawave-admin/forks)
+[![Release](https://img.shields.io/github/v/release/Case211/remnawave-admin?logo=github&color=blue)](https://github.com/Case211/remnawave-admin/releases/latest)
+[![Last commit](https://img.shields.io/github/last-commit/Case211/remnawave-admin/main?logo=git&logoColor=white)](https://github.com/Case211/remnawave-admin/commits/main)
+
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.12+-green)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL%20v3-blue)](LICENSE)
