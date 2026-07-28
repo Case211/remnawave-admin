@@ -6,18 +6,15 @@
 
 **Telegram-бот и веб-панель для управления панелью Remnawave**
 
-[![Stars](https://img.shields.io/github/stars/Case211/remnawave-admin?style=flat&logo=github&color=f5c518)](https://github.com/Case211/remnawave-admin/stargazers)
-[![Forks](https://img.shields.io/github/forks/Case211/remnawave-admin?style=flat&logo=github)](https://github.com/Case211/remnawave-admin/forks)
-[![Release](https://img.shields.io/github/v/release/Case211/remnawave-admin?logo=github&color=blue)](https://github.com/Case211/remnawave-admin/releases/latest)
-[![Last commit](https://img.shields.io/github/last-commit/Case211/remnawave-admin/main?logo=git&logoColor=white)](https://github.com/Case211/remnawave-admin/commits/main)
+[![Stars](https://img.shields.io/github/stars/Case211/remnawave-admin?style=for-the-badge&logo=github&logoColor=white&labelColor=1f2430&color=f5c518)](https://github.com/Case211/remnawave-admin/stargazers) [![Forks](https://img.shields.io/github/forks/Case211/remnawave-admin?style=for-the-badge&logo=github&logoColor=white&labelColor=1f2430&color=6e7bf2)](https://github.com/Case211/remnawave-admin/forks) [![Release](https://img.shields.io/github/v/release/Case211/remnawave-admin?style=for-the-badge&logo=github&logoColor=white&labelColor=1f2430&color=3fb950)](https://github.com/Case211/remnawave-admin/releases/latest) [![Last commit](https://img.shields.io/github/last-commit/Case211/remnawave-admin/main?style=for-the-badge&logo=git&logoColor=white&labelColor=1f2430&color=8957e5)](https://github.com/Case211/remnawave-admin/commits/main)
 
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
-[![Python](https://img.shields.io/badge/Python-3.11+-green)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-1200%2B%20backend%20%2F%20260%2B%20frontend-brightgreen)](web/backend/tests)
-[![Prometheus](https://img.shields.io/badge/Prometheus-ready-e6522c?logo=prometheus&logoColor=white)](docs/README.md)
-[![License](https://img.shields.io/badge/License-AGPL%20v3-blue)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![Tests](https://img.shields.io/badge/tests-1200+_backend_/_260+_frontend-3fb950?style=flat-square&logo=pytest&logoColor=white)](web/backend/tests) [![Prometheus](https://img.shields.io/badge/Prometheus-ready-E6522C?style=flat-square&logo=prometheus&logoColor=white)](docs/README.md) [![License](https://img.shields.io/badge/License-AGPL_v3-blue?style=flat-square&logo=gnu&logoColor=white)](LICENSE)
 
 [English](README_EN.md) | [Русский](README.md)
+
+<a href="https://github.com/Case211/remnawave-admin/stargazers">
+  <img src="docs/star-history.svg" alt="История звёзд" width="720" />
+</a>
 
 </div>
 
