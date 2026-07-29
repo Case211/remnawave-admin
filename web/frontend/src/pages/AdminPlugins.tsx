@@ -502,6 +502,10 @@ function PluginCard({
   // Пока план не выбран руками, показываем оплаченный (tier) — иначе первый по sort.
   const tariff =
     plugin.tariffs.find((x) => x.code === (pickedTariff ?? entitlement?.tier)) ?? plugin.tariffs[0]
+  // Плагин снят с продажи: цен в каталоге нет, покупка и триал закрыты на
+  // сервере. Поля нет — сервер лицензирования старой версии, продаётся.
+  const salePaused = plugin.purchasable === false
+  const saleNote = pickText(plugin.sale_note ?? {}, lang) || t('adminPlugins.sale_paused')
   // Нулевая цена = пробный план: его не покупают, а активируют через /v1/trial.
   const isTrial = !!tariff && tariff.price.rub === 0 && tariff.price.usdt === 0
   const trialInCatalog = plugin.tariffs.some((x) => x.price.rub === 0 && x.price.usdt === 0)
@@ -543,7 +547,13 @@ function PluginCard({
           </div>
           <p className="mt-1.5 text-sm text-dark-300">{pickText(plugin.summary, lang)}</p>
         </div>
-        {tariff && (
+        {salePaused ? (
+          <div className="text-right shrink-0">
+            <span className="inline-block text-[11px] uppercase tracking-wider px-2 py-1 rounded bg-amber-500/15 text-amber-300">
+              {saleNote}
+            </span>
+          </div>
+        ) : tariff ? (
           <div className="text-right shrink-0">
             {isTrial ? (
               <div className="text-lg font-bold text-emerald-300 leading-tight">
@@ -565,7 +575,7 @@ function PluginCard({
               </div>
             )}
           </div>
-        )}
+        ) : null}
       </div>
 
       {plugin.tariffs.length > 1 && (
@@ -630,7 +640,12 @@ function PluginCard({
       )}
 
       <div className="mt-auto flex items-center gap-2 flex-wrap">
-        {!entitlement ? (
+        {salePaused ? (
+          // Покупка и пробный период закрыты на сервере — не показываем кнопки,
+          // которые гарантированно вернут ошибку. Установка, обновление и
+          // удаление ниже остаются: у оплативших плагин продолжает работать.
+          <span className="text-xs text-dark-300">{t('adminPlugins.sale_paused_hint')}</span>
+        ) : !entitlement ? (
           <>
             {isTrial ? (
               // Пробный план выбран кнопкой выше — покупать нечего, активируем.

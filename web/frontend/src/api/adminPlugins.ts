@@ -44,6 +44,14 @@ export interface CatalogPlugin {
   latest_version: string
   wheel_sha256?: string | null
   min_panel_version?: string | null
+  /**
+   * Плагин снят с продажи: карточка в витрине остаётся, но tariffs/topups
+   * приходят пустыми и сервер отказывает в покупке и пробном периоде.
+   * Оплаченное продолжает работать. Поля нет — сервер старой версии, продаётся.
+   */
+  purchasable?: boolean
+  /** Чем заменить цену («временно недоступно»); пусто — свой текст. */
+  sale_note?: CatalogText | null
   tariffs: CatalogTariff[]
   topups: CatalogTopup[]
 }
