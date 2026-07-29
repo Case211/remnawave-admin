@@ -41,6 +41,38 @@ def test_notification_type_toggle_defaults_to_enabled():
         assert is_notification_type_enabled("crm") is True
 
 
+def test_cleared_topic_falls_back_instead_of_empty_thread_id():
+    """Очищенное в UI поле хранится пустой строкой, а не NULL.
+
+    Без нормализации такой топик уходил в Telegram как
+    ``message_thread_id=""`` и уведомление молча терялось.
+    """
+    values = {"notifications_topic_errors": "", "notifications_topic_id": ""}
+    with patch("shared.notification_config.config_service.get", side_effect=lambda key, default=None: values.get(key, default)):
+        assert resolve_notification_topic(
+            "errors",
+            type_fallback=7,
+            general_fallback=9,
+        ) == 7
+
+
+def test_zero_topic_is_treated_as_no_topic():
+    """Ноль — не топик, а его отсутствие (поведение прежнего ``X or общий``)."""
+    values = {"notifications_topic_hwid": 0, "notifications_topic_id": 0}
+    with patch("shared.notification_config.config_service.get", side_effect=lambda key, default=None: values.get(key, default)):
+        assert resolve_notification_topic(
+            "hwid",
+            type_fallback=0,
+            general_fallback=9,
+        ) == 9
+
+
+def test_cleared_chat_id_falls_back_to_env():
+    """Пустое поле чата — «не задано», иначе уведомления глохнут молча."""
+    with patch("shared.notification_config.config_service.get", side_effect=lambda key, default=None: {"notifications_chat_id": ""}.get(key, default)):
+        assert resolve_notifications_chat_id(-100111) == -100111
+
+
 @pytest.mark.asyncio
 async def test_bot_sender_uses_dynamic_chat_and_topic():
     settings = SimpleNamespace(
