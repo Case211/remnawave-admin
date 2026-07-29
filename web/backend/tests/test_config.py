@@ -11,15 +11,23 @@ class TestWebSettings:
     """Configuration parsing and validation."""
 
     def _make_settings(self, **overrides):
-        """Create settings with required fields + overrides."""
+        """Create settings with required fields + overrides.
+
+        Окружение вычищается (``clear=True``), а чтение .env отключается
+        (``_env_file=None``): у разработчика в корне лежит рабочий .env, и
+        shared.config подтягивает его в os.environ прямо при импорте. От
+        этого проверка «database_url по умолчанию пуст» падала на любой
+        машине, где проект хоть раз запускали локально, — но не в CI, где
+        .env нет. Настройки должны собираться ровно из того, что передано.
+        """
         env = {
             "WEB_SECRET_KEY": "test-key",
             "BOT_TOKEN": "123:abc",
             "API_BASE_URL": "http://localhost:3000",
         }
         env.update(overrides)
-        with patch.dict(os.environ, env, clear=False):
-            return WebSettings(**env)
+        with patch.dict(os.environ, env, clear=True):
+            return WebSettings(**env, _env_file=None)
 
     def test_default_values(self):
         s = self._make_settings()

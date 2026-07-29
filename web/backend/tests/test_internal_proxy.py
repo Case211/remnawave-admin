@@ -17,21 +17,32 @@ RBAC_MODULE = "web.backend.core.rbac"
 PROXY_MODULE = "web.backend.api.v2.internal"
 
 
-def _setup_app():
-    import os
-    os.environ.setdefault("INTERNAL_API_SECRET", "test-secret")
-    os.environ.setdefault("WEB_SECRET_KEY", "test-secret-key-for-proxy-tests")
-    os.environ.setdefault("BOT_TOKEN", "123:abc")
-    os.environ.setdefault("API_BASE_URL", "http://panel:3000")
-    from web.backend.core.config import get_web_settings
-    get_web_settings.cache_clear()
-    from web.backend.main import create_app
-    return create_app()
+# Именно setenv, а не setdefault: у разработчика в корневом .env лежит
+# рабочий INTERNAL_API_SECRET, и приложение поднималось с ним, а тесты
+# продолжали слать заголовок "test-secret" — весь файл отвечал 401. На
+# чистой машине и в CI это не воспроизводится, поэтому тестовое окружение
+# задаём принудительно и откатываем после теста.
+TEST_ENV = {
+    "INTERNAL_API_SECRET": "test-secret",
+    "WEB_SECRET_KEY": "test-secret-key-for-proxy-tests",
+    "BOT_TOKEN": "123:abc",
+    "API_BASE_URL": "http://panel:3000",
+}
 
 
 @pytest.fixture
-def app():
-    return _setup_app()
+def app(monkeypatch):
+    for key, value in TEST_ENV.items():
+        monkeypatch.setenv(key, value)
+
+    from web.backend.core.config import get_web_settings
+    get_web_settings.cache_clear()
+    from web.backend.main import create_app
+
+    yield create_app()
+
+    # Настройки закэшированы с тестовым секретом — не оставляем их соседям.
+    get_web_settings.cache_clear()
 
 
 @pytest.fixture
