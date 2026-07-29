@@ -942,21 +942,43 @@ async def create_user(
                         "Traffic limit exceeds your quota. Please delete some users or contact your administrator."
                     )
 
-        # Persist full user data from Panel API response to local DB
+        # Persist full user data from Panel API response to local DB.
+        #
+        # created_by_admin_id — не украшение: по нему строится видимость
+        # (shared.rbac.get_visible_user_uuids). Если владелец не записан,
+        # создатель не увидит юзера в своём списке, хотя квота уже
+        # списалась и API ответил 201. Поэтому все осечки здесь логируются
+        # как ошибка, а не шёпотом в debug: молчащий сбой этой строки
+        # выглядит для оператора как «пользователь пропал».
         user_uuid = user.get('uuid', '') if isinstance(user, dict) else ''
         if user_uuid:
             try:
                 from shared.database import db_service
-                if db_service.is_connected:
+                if not db_service.is_connected:
+                    logger.error(
+                        "User %s created without owner: local DB is not connected. "
+                        "Creator %s will not see it until the next sync.",
+                        user_uuid, admin.username,
+                    )
+                else:
                     await db_service.upsert_user(user)
                     if admin.account_id is not None:
                         async with db_service.acquire() as conn:
-                            await conn.execute(
+                            result = await conn.execute(
                                 "UPDATE users SET created_by_admin_id = $1 WHERE uuid = $2",
                                 admin.account_id, user_uuid,
                             )
+                        if isinstance(result, str) and result.rsplit(" ", 1)[-1] == "0":
+                            logger.error(
+                                "User %s has no owner row after upsert — creator %s (id=%s) "
+                                "will not see it in the users list.",
+                                user_uuid, admin.username, admin.account_id,
+                            )
             except Exception as e:
-                logger.debug("Failed to persist user data: %s", e)
+                logger.error(
+                    "Failed to persist user %s (creator %s): %s",
+                    user_uuid, admin.username, e, exc_info=True,
+                )
 
         # Audit
         await write_audit_log(

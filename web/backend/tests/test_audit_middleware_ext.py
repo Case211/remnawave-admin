@@ -130,14 +130,19 @@ class TestExtractToken:
         request.headers = {"authorization": "bearer lower-case-token"}
         assert _extract_token(request) == "lower-case-token"
 
+    # cookies задаём явно: у MagicMock любой атрибут «существует», и
+    # request.cookies.get() вернул бы мок вместо None — токен нашёлся бы
+    # там, где его нет.
     def test_no_auth_header(self):
         request = MagicMock()
         request.headers = {"other": "value"}
+        request.cookies = {}
         assert _extract_token(request) is None
 
     def test_non_bearer_scheme(self):
         request = MagicMock()
         request.headers = {"authorization": "Basic abc123"}
+        request.cookies = {}
         assert _extract_token(request) is None
 
 

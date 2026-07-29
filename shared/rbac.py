@@ -241,7 +241,8 @@ async def get_visible_user_uuids(
 
     Superadmins / unknown admins see all users (return None).
     Creator scope is always applied when unrestricted_user_access = False.
-    Access policies further restrict (intersect with) creator scope.
+    Access policies расширяют видимость: к своим созданным добавляются
+    юзеры разрешённых нод и сквадов.
 
     Returns:
         None — no restrictions (superadmin, or unrestricted + no policies)
@@ -333,8 +334,13 @@ async def get_visible_user_uuids(
         if creator_uuids is None:
             return policy_uuids if policy_uuids else set()
 
-        result = creator_uuids & policy_uuids
-        return result if result else set()
+        # Объединение, а не пересечение (#261). Пересечение отбирало у
+        # админа его же свежесозданных юзеров: в policy_uuids юзер
+        # попадает через трафик по разрешённой ноде или через сквад, а
+        # только что созданный ещё ни разу не подключался и сквада может
+        # не иметь. Выходило «создал, квота списалась, а в списке пусто»
+        # — управлять юзером нельзя до его первого подключения.
+        return creator_uuids | policy_uuids
 
     except Exception as e:
         logger.warning("get_visible_user_uuids failed: %s", e)
