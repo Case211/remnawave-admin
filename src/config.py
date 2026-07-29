@@ -10,6 +10,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+# Что реально умеет aiohttp-socks, через который aiogram ходит в прокси.
+PROXY_SCHEMES = ("http", "socks4", "socks5")
+
 
 class Settings(BaseSettings):
     bot_token: str = Field(..., alias="BOT_TOKEN")
@@ -83,6 +86,30 @@ class Settings(BaseSettings):
     def get_topic_for_finance(self) -> int | None:
         """Возвращает топик для финансовых уведомлений."""
         return self.notifications_topic_finance or self.notifications_topic_id
+
+    @field_validator("bot_proxy_url", mode="after")
+    @classmethod
+    def validate_bot_proxy_scheme(cls, value):
+        """Отсекает схемы, которые бот не умеет, ещё на старте.
+
+        aiohttp-socks понимает только http/socks4/socks5; на https:// или
+        socks5h:// он падает уже внутри aiogram с «Invalid scheme
+        component», и по этой строчке невозможно догадаться, что дело в
+        одной букве в .env.
+        """
+        if value is None:
+            return value
+        if value.scheme not in PROXY_SCHEMES:
+            hint = ""
+            if value.scheme == "socks5h":
+                # socks5h пишут ради резолва DNS через прокси — в socks5
+                # это и так поведение по умолчанию (rdns=True).
+                hint = " Для socks5 имена и так резолвятся на стороне прокси — уберите «h»."
+            raise ValueError(
+                f"BOT_PROXY_URL: схема {value.scheme}:// не поддерживается. "
+                f"Допустимые: {', '.join(s + '://' for s in PROXY_SCHEMES)}.{hint}"
+            )
+        return value
 
     @field_validator("notifications_chat_id", mode="before")
     @classmethod

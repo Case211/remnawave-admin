@@ -399,6 +399,7 @@ python -m src.main
 | `ADMINS` | ✅ | — | Comma-separated administrator IDs |
 | `DEFAULT_LOCALE` | — | `ru` | Language (`ru` / `en`) |
 | `LOG_LEVEL` | — | `INFO` | Logging level |
+| `BOT_PROXY_URL` | — | — | Proxy for the Telegram API: `socks5://`, `socks4://` or `http://` (credentials allowed). Needed when the server runs on an IP that cannot reach Telegram. Schemes `socks5h://` and `https://` are not supported |
 
 ### 🗄 Database
 
