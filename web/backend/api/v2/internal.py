@@ -261,7 +261,10 @@ async def _proxy(request: Request, path: str):
                                             if key not in payload and value is not None:
                                                 payload[key] = value
 
-            elif request.method == "DELETE" and resource in _QUOTA_RESOURCES:
+            # users_created — счётчик созданных за всё время: удаление юзера
+            # слот не возвращает (см. shared.admin_quota). Для нод и хостов
+            # прежнее поведение сохраняется.
+            elif request.method == "DELETE" and resource in _QUOTA_RESOURCES and resource != "users":
                 counter = f"{resource}_created"
                 from web.backend.core.rbac import increment_usage_counter
                 await increment_usage_counter(admin_account_id, counter, -1)
