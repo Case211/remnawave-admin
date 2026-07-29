@@ -591,13 +591,22 @@ def resolve_backup_tg_destination() -> tuple:
     из UI, игнорировался — и отправка бэкапа падала NO_CHAT_ID, хотя
     обычные уведомления (их шлёт бот, читающий БД) в тот же чат доходили.
     """
-    from shared.config_service import config_service
+    from shared.notification_config import (
+        resolve_notification_topic,
+        resolve_notifications_chat_id,
+    )
     from web.backend.core.config import get_web_settings
 
     settings = get_web_settings()
-    chat_id = config_service.get("notifications_chat_id") or settings.notifications_chat_id
-    topic_raw = (config_service.get("notifications_topic_service")
-                 or settings.get_topic_for("service"))
+    # Та же цепочка, что у обычных уведомлений: свой топик из БД → общий
+    # из БД → env. Раньше общий топик, заданный через UI, здесь терялся —
+    # бэкап уходил в корень чата, хотя уведомления шли в топик.
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    topic_raw = resolve_notification_topic(
+        "service",
+        type_fallback=settings.get_topic_for("service"),
+        general_fallback=settings.notifications_topic_id,
+    )
     topic_id = None
     if topic_raw:
         try:
