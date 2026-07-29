@@ -20,6 +20,11 @@ from shared.db_schema import (
     NOTIFICATION_CHANNEL_CONFIGS_TABLE,
 )
 from shared.db_query import select_sql, insert_sql
+from shared.notification_config import (
+    is_notification_type_enabled,
+    resolve_notification_topic,
+    resolve_notifications_chat_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,18 +47,15 @@ def _get_global_telegram_config(topic_type: str = "service") -> tuple:
         settings = get_web_settings()
         bot_token = settings.telegram_bot_token or None
 
-        # Read chat_id and topics from config_service (DB-first, .env fallback)
-        from shared.config_service import config_service
-        chat_id = config_service.get("notifications_chat_id") or settings.notifications_chat_id
+        # Read chat_id and topics from the dynamic DB-first configuration.
+        chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
         chat_id = str(chat_id) if chat_id else None
 
-        topic_key = f"notifications_topic_{topic_type}"
-        topic_id = config_service.get(topic_key)
-        if topic_id is None:
-            topic_id = config_service.get("notifications_topic_id")
-        # Final fallback to .env via pydantic settings
-        if topic_id is None:
-            topic_id = settings.get_topic_for(topic_type)
+        topic_id = resolve_notification_topic(
+            topic_type,
+            type_fallback=settings.get_topic_for(topic_type),
+            general_fallback=settings.notifications_topic_id,
+        )
         topic_id = str(topic_id) if topic_id else None
 
         return bot_token, chat_id, topic_id
@@ -623,6 +625,10 @@ async def _send_to_global_telegram(
     ``topic_type`` selects the Telegram topic ("nodes", "service", etc.).
     """
     try:
+        if not is_notification_type_enabled(topic_type):
+            logger.debug("Global %s Telegram notifications disabled in dynamic settings", topic_type)
+            return
+
         bot_token, chat_id, topic_id = _get_global_telegram_config(topic_type)
         if not chat_id or not bot_token:
             logger.debug("No global NOTIFICATIONS_CHAT_ID configured, skipping global Telegram dispatch")

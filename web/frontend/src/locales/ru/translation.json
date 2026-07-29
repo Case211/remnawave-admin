@@ -3097,6 +3097,7 @@
     },
     "subcategories": {
       "topics": "💬 Топики уведомлений",
+      "types": "🔔 Типы Telegram-уведомлений",
       "thresholds": "📐 Пороги детекции",
       "patterns": "🔤 Паттерны User-Agent",
       "torrent": "🧲 Торрент-блокировщик",
@@ -3369,6 +3370,38 @@
         "label": "✨ Rich-оформление уведомлений",
         "description": "Отправлять Telegram-уведомления «документами» (Bot API 10.1): настоящие заголовки, списки полей, сворачиваемые секции. При отказе Telegram бот сам откатится на обычный HTML"
       },
+      "notifications_users_enabled": {
+        "label": "👤 Пользователи",
+        "description": "Отправлять Telegram-уведомления о пользователях"
+      },
+      "notifications_nodes_enabled": {
+        "label": "🖥️ Ноды",
+        "description": "Отправлять Telegram-уведомления о нодах"
+      },
+      "notifications_service_enabled": {
+        "label": "🔧 Сервис",
+        "description": "Отправлять сервисные Telegram-уведомления"
+      },
+      "notifications_hwid_enabled": {
+        "label": "🔑 HWID",
+        "description": "Отправлять Telegram-уведомления о HWID-устройствах"
+      },
+      "notifications_crm_enabled": {
+        "label": "💼 CRM",
+        "description": "Отправлять Telegram-уведомления CRM и биллинга инфраструктуры"
+      },
+      "notifications_errors_enabled": {
+        "label": "❗ Ошибки",
+        "description": "Отправлять Telegram-уведомления об ошибках"
+      },
+      "notifications_violations_enabled": {
+        "label": "🛡️ Нарушения",
+        "description": "Отправлять Telegram-уведомления о нарушениях"
+      },
+      "notifications_finance_enabled": {
+        "label": "💰 Финансы",
+        "description": "Отправлять финансовые Telegram-уведомления и напоминания"
+      },
       "notifications_topic_users": {
         "label": "👤 Топик: Пользователи",
         "description": "ID топика для уведомлений о пользователях"
@@ -3385,6 +3418,10 @@
         "label": "🔑 Топик: HWID",
         "description": "ID топика для HWID уведомлений"
       },
+      "notifications_topic_crm": {
+        "label": "💼 Топик: CRM",
+        "description": "ID топика для CRM и биллинга инфраструктуры"
+      },
       "notifications_topic_violations": {
         "label": "🛡️ Топик: Нарушения",
         "description": "ID топика для уведомлений о нарушениях"
@@ -3392,6 +3429,10 @@
       "notifications_topic_errors": {
         "label": "❗ Топик: Ошибки",
         "description": "ID топика для уведомлений об ошибках"
+      },
+      "notifications_topic_finance": {
+        "label": "💰 Топик: Финансы",
+        "description": "ID топика для финансовых уведомлений и напоминаний"
       },
       "sync_interval_seconds": {
         "label": "🔄 Интервал синхронизации",

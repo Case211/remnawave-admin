@@ -196,6 +196,7 @@ NOTIFICATIONS_TOPIC_NODES=789       # 🛰 Node events
 NOTIFICATIONS_TOPIC_SERVICE=101     # ⚙️ Service events
 NOTIFICATIONS_TOPIC_HWID=102        # 💻 HWID devices
 NOTIFICATIONS_TOPIC_CRM=103         # 💰 Billing
+NOTIFICATIONS_TOPIC_FINANCE=106     # 💳 Finance events
 NOTIFICATIONS_TOPIC_ERRORS=104      # ❌ Errors
 NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Violations
 ```
@@ -420,6 +421,7 @@ python -m src.main
 | `NOTIFICATIONS_TOPIC_SERVICE` | Service notifications |
 | `NOTIFICATIONS_TOPIC_HWID` | HWID notifications |
 | `NOTIFICATIONS_TOPIC_CRM` | Billing notifications |
+| `NOTIFICATIONS_TOPIC_FINANCE` | Finance notifications |
 | `NOTIFICATIONS_TOPIC_ERRORS` | Error notifications |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | Violation notifications |
 

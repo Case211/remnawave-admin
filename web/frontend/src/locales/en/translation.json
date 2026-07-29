@@ -3097,6 +3097,7 @@
     },
     "subcategories": {
       "topics": "💬 Notification topics",
+      "types": "🔔 Telegram notification types",
       "thresholds": "📐 Detection thresholds",
       "patterns": "🔤 User-Agent patterns",
       "torrent": "🧲 Torrent blocker",
@@ -3369,6 +3370,38 @@
         "label": "✨ Rich notification styling",
         "description": "Send Telegram notifications as Bot API 10.1 rich messages: real headings, field lists, collapsible sections. Falls back to plain HTML automatically if Telegram rejects it"
       },
+      "notifications_users_enabled": {
+        "label": "👤 Users",
+        "description": "Send Telegram notifications about users"
+      },
+      "notifications_nodes_enabled": {
+        "label": "🖥️ Nodes",
+        "description": "Send Telegram notifications about nodes"
+      },
+      "notifications_service_enabled": {
+        "label": "🔧 Service",
+        "description": "Send service Telegram notifications"
+      },
+      "notifications_hwid_enabled": {
+        "label": "🔑 HWID",
+        "description": "Send Telegram notifications about HWID devices"
+      },
+      "notifications_crm_enabled": {
+        "label": "💼 CRM",
+        "description": "Send Telegram notifications about CRM and infrastructure billing"
+      },
+      "notifications_errors_enabled": {
+        "label": "❗ Errors",
+        "description": "Send Telegram notifications about errors"
+      },
+      "notifications_violations_enabled": {
+        "label": "🛡️ Violations",
+        "description": "Send Telegram notifications about violations"
+      },
+      "notifications_finance_enabled": {
+        "label": "💰 Finance",
+        "description": "Send financial Telegram notifications and reminders"
+      },
       "notifications_topic_users": {
         "label": "👤 Topic: Users",
         "description": "Topic ID for user notifications"
@@ -3385,6 +3418,10 @@
         "label": "🔑 Topic: HWID",
         "description": "Topic ID for HWID notifications"
       },
+      "notifications_topic_crm": {
+        "label": "💼 Topic: CRM",
+        "description": "Topic ID for CRM and infrastructure billing"
+      },
       "notifications_topic_violations": {
         "label": "🛡️ Topic: Violations",
         "description": "Topic ID for violation notifications"
@@ -3392,6 +3429,10 @@
       "notifications_topic_errors": {
         "label": "❗ Topic: Errors",
         "description": "Topic ID for error notifications"
+      },
+      "notifications_topic_finance": {
+        "label": "💰 Topic: Finance",
+        "description": "Topic ID for financial notifications and reminders"
       },
       "sync_interval_seconds": {
         "label": "🔄 Sync interval",

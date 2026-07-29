@@ -117,6 +117,20 @@ class TestSendTelegram:
         assert result is False
 
 
+class TestGlobalTelegramSettings:
+
+    async def test_disabled_type_is_not_sent_to_fallback(self):
+        with (
+            patch("web.backend.core.notification_service.is_notification_type_enabled", return_value=False),
+            patch("web.backend.core.notification_service._get_global_telegram_config") as get_config,
+            patch("web.backend.core.notification_service.send_telegram", new_callable=AsyncMock) as send,
+        ):
+            await _send_to_global_telegram("HWID", "Body", "info", "hwid")
+
+        get_config.assert_not_called()
+        send.assert_not_awaited()
+
+
 # ── send_webhook ───────────────────────────────────────────────
 
 

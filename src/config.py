@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     notifications_topic_crm: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_CRM")
     notifications_topic_errors: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ERRORS")
     notifications_topic_violations: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_VIOLATIONS")
+    notifications_topic_finance: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_FINANCE")
     webhook_port: int = Field(default=8080, alias="WEBHOOK_PORT")
     webhook_secret: str | None = Field(default=None, alias="WEBHOOK_SECRET")
     
@@ -78,6 +79,10 @@ class Settings(BaseSettings):
         """Возвращает топик для уведомлений о нарушениях/подозреваемых пользователях."""
         return self.notifications_topic_violations or self.notifications_topic_id
 
+    def get_topic_for_finance(self) -> int | None:
+        """Возвращает топик для финансовых уведомлений."""
+        return self.notifications_topic_finance or self.notifications_topic_id
+
     @field_validator("notifications_chat_id", mode="before")
     @classmethod
     def parse_notifications_chat_id(cls, value):
@@ -101,6 +106,8 @@ class Settings(BaseSettings):
         "notifications_topic_hwid",
         "notifications_topic_crm",
         "notifications_topic_errors",
+        "notifications_topic_violations",
+        "notifications_topic_finance",
         mode="before",
     )
     @classmethod

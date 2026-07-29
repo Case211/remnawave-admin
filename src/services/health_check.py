@@ -5,7 +5,6 @@ from typing import Optional
 
 from aiogram import Bot
 
-from src.config import get_settings
 from shared.api_client import ApiClientError, api_client
 from shared.logger import logger
 from src.utils.notifications import send_service_notification
@@ -108,10 +107,6 @@ class PanelHealthChecker:
     async def _send_unavailable_notification(self, error_type: str, error_message: str) -> None:
         """Отправляет уведомление о недоступности панели."""
         try:
-            settings = get_settings()
-            if not settings.notifications_chat_id:
-                return
-            
             # Обрезаем длинные сообщения об ошибках
             if len(error_message) > 200:
                 error_message = error_message[:200] + "..."
