@@ -1524,6 +1524,29 @@ export default function Users() {
     },
     // Ниже — то, чего в таблице не было вовсе: по этим полям и просили
     // сортировать. По умолчанию скрыты, иначе таблица сразу разъезжается.
+    // Эти три поля раньше жили только в селекте сортировки: столбцов для них
+    // не было, и убрать селект без них значило бы отнять сортировку.
+    {
+      key: 'traffic_limit_bytes',
+      labelKey: 'users.sort.trafficLimit',
+      optional: true,
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.traffic_limit_bytes ? formatBytes(user.traffic_limit_bytes) : '∞'),
+    },
+    {
+      key: 'lifetime_used_traffic_bytes',
+      labelKey: 'users.sort.trafficLifetime',
+      optional: true,
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => formatBytes(user.lifetime_used_traffic_bytes || 0),
+    },
+    {
+      key: 'raw_used_traffic_bytes',
+      labelKey: 'users.sort.trafficRaw',
+      optional: true,
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.raw_used_traffic_bytes != null ? formatBytes(user.raw_used_traffic_bytes) : '—'),
+    },
     {
       key: 'tag',
       labelKey: 'users.table.tag',
@@ -1629,8 +1652,9 @@ export default function Users() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col gap-3">
-            {/* Row 1: Search */}
-            <div className="flex gap-2">
+            {/* Поиск нужен там, где нет таблицы: на узких экранах показываются
+                карточки, а фильтр столбца «Имя» живёт в шапке таблицы. */}
+            <div className="flex gap-2 md:hidden">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-200" />
                 <Input
@@ -1644,16 +1668,6 @@ export default function Users() {
                   }}
                 />
               </div>
-              <Button
-                variant="secondary"
-                size="icon"
-                disabled={!search.trim() || resolveMutation.isPending}
-                onClick={() => resolveMutation.mutate(search.trim())}
-                title={t('users.resolveButton')}
-                aria-label={t('users.resolveButton')}
-              >
-                <Crosshair className={cn("w-4 h-4", resolveMutation.isPending && "animate-spin")} />
-              </Button>
             </div>
 
             {/* Row 2: Filters | Sort | Refresh */}
@@ -1662,7 +1676,7 @@ export default function Users() {
                 variant="secondary"
                 onClick={() => setShowFilters(!showFilters)}
                 className={cn(
-                  "flex-1 sm:flex-none",
+                  "flex-1 sm:flex-none md:hidden",
                   activeFilterCount > 0 && "border-primary-500/50 text-primary-400"
                 )}
               >
@@ -1676,9 +1690,9 @@ export default function Users() {
                 {showFilters ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
               </Button>
 
-              <Separator orientation="vertical" className="hidden sm:block h-6" />
+              <Separator orientation="vertical" className="hidden sm:block md:hidden h-6" />
 
-              <div className="flex items-center gap-2 flex-1 sm:flex-none">
+              <div className="flex items-center gap-2 flex-1 sm:flex-none md:hidden">
                 <Button
                   variant="secondary"
                   size="icon"
@@ -1717,6 +1731,18 @@ export default function Users() {
               <Button
                 variant="secondary"
                 size="icon"
+                className="hidden md:inline-flex"
+                disabled={!search.trim() || resolveMutation.isPending}
+                onClick={() => resolveMutation.mutate(search.trim())}
+                title={t('users.resolveButton')}
+                aria-label={t('users.resolveButton')}
+              >
+                <Crosshair className={cn("w-4 h-4", resolveMutation.isPending && "animate-spin")} />
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="icon"
                 onClick={() => refetch()}
                 disabled={isLoading}
                 title={t('users.refresh')}
@@ -1737,6 +1763,7 @@ export default function Users() {
                 hasActiveFilters={hasActiveFilters}
               />
               <ColumnManager
+                className="hidden md:inline-flex"
                 columns={columns.ordered}
                 isVisible={columns.isVisible}
                 onToggle={columns.toggle}
@@ -1748,7 +1775,7 @@ export default function Users() {
 
             {/* Expandable filter panel */}
             {showFilters && (
-              <div className="pt-3 border-t border-[var(--glass-border)] space-y-3 animate-fade-in">
+              <div className="md:hidden pt-3 border-t border-[var(--glass-border)] space-y-3 animate-fade-in">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.status')}</Label>
@@ -1912,9 +1939,10 @@ export default function Users() {
               </div>
             )}
 
-            {/* Active filters chips */}
+            {/* Чипы — для мобильного: на десктопе выбранное значение видно
+                в самой шапке столбца, дублировать его под тулбаром незачем. */}
             {!showFilters && activeFilterCount > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap md:hidden">
                 {status && (
                   <FilterChip
                     label={`${t('users.filters.status')}: ${({ active: t('users.filters.statusActive'), disabled: t('users.filters.statusDisabled'), limited: t('users.filters.statusLimited'), expired: t('users.filters.statusExpired') } as Record<string, string>)[status] || status}`}
@@ -1967,6 +1995,16 @@ export default function Users() {
                   {t('users.resetAll')}
                 </button>
               </div>
+            )}
+
+            {activeFilterCount > 0 && (
+              <button
+                onClick={resetFilters}
+                className="hidden md:flex items-center gap-1 self-start text-[11px] text-dark-300 hover:text-primary-400"
+              >
+                <X className="w-3 h-3" />
+                {t('users.resetAllFilters')}
+              </button>
             )}
           </div>
         </CardContent>
