@@ -663,10 +663,10 @@ class UsersMixin:
                     "uuid", "short_uuid", "username", "subscription_uuid", "telegram_id",
                     "email", "status", "expire_at", "traffic_limit_bytes", "used_traffic_bytes",
                     "hwid_device_limit", "description", "created_at", "updated_at", "raw_data",
-                    "created_by_admin_id", "external_squad_uuid",
+                    "created_by_admin_id", "external_squad_uuid", "tag",
                 ],
                 values="$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14,\n"
-                "                NULL, $15::uuid",
+                "                NULL, $15::uuid, $16",
                 suffix=(
                     "ON CONFLICT (uuid) DO UPDATE SET "
                     "short_uuid = EXCLUDED.short_uuid, "
@@ -682,10 +682,12 @@ class UsersMixin:
                     "description = EXCLUDED.description, "
                     "updated_at = NOW(), "
                     "raw_data = EXCLUDED.raw_data, "
-                    # Панель — источник истины по внешнему скваду. Без этой
-                    # строки колонка навсегда оставалась NULL, и фильтр
-                    # «External squad» в витрине юзеров всегда давал 0 (#263).
+                    # Панель — источник истины по внешнему скваду и тегу. Без
+                    # этих строк колонки навсегда оставались NULL, и фильтры
+                    # «External squad» и «Tag» в витрине юзеров всегда давали
+                    # ноль результатов, а список тегов приходил пустым (#263).
                     "external_squad_uuid = EXCLUDED.external_squad_uuid, "
+                    "tag = EXCLUDED.tag, "
                     "created_by_admin_id = COALESCE(EXCLUDED.created_by_admin_id, users.created_by_admin_id)"
                 ),
             ),
@@ -704,6 +706,7 @@ class UsersMixin:
             _parse_timestamp(response.get("createdAt")),
             json.dumps(response),
             response.get("externalSquadUuid"),
+            response.get("tag"),
         )
 
     async def upsert_user(self, user_data: Dict[str, Any]) -> None:
@@ -750,6 +753,7 @@ class UsersMixin:
         created_ats = []
         raw_datas = []
         external_squads = []
+        tags = []
 
         for user_data in users_data:
             response = user_data.get("response", user_data)
@@ -780,6 +784,7 @@ class UsersMixin:
             raw_datas.append(json.dumps(response))
             esq = response.get("externalSquadUuid")
             external_squads.append(str(esq) if esq else None)
+            tags.append(response.get("tag"))
 
         if not uuids:
             return 0
@@ -792,19 +797,19 @@ class UsersMixin:
                         uuid, short_uuid, username, subscription_uuid, telegram_id,
                         email, status, expire_at, traffic_limit_bytes, used_traffic_bytes,
                         hwid_device_limit, description, created_at, updated_at, raw_data,
-                        created_by_admin_id, external_squad_uuid
+                        created_by_admin_id, external_squad_uuid, tag
                     )
                     SELECT
                         u::uuid, su, un, sub::uuid, tid::bigint,
                         em, st, ea, tl::bigint, ut::bigint,
                         hl::integer, descr, ca, NOW(), rd::jsonb,
-                        NULL::integer, esq::uuid
+                        NULL::integer, esq::uuid, tg
                     FROM UNNEST(
                         $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
                         $6::text[], $7::text[], $8::timestamptz[], $9::text[], $10::text[],
                         $11::text[], $12::text[], $13::timestamptz[], $14::text[],
-                        $15::text[]
-                    ) AS t(u, su, un, sub, tid, em, st, ea, tl, ut, hl, descr, ca, rd, esq)
+                        $15::text[], $16::text[]
+                    ) AS t(u, su, un, sub, tid, em, st, ea, tl, ut, hl, descr, ca, rd, esq, tg)
                     ON CONFLICT (uuid) DO UPDATE SET
                         short_uuid = EXCLUDED.short_uuid,
                         username = EXCLUDED.username,
@@ -820,12 +825,13 @@ class UsersMixin:
                         updated_at = NOW(),
                         raw_data = EXCLUDED.raw_data,
                         external_squad_uuid = EXCLUDED.external_squad_uuid,
+                        tag = EXCLUDED.tag,
                         created_by_admin_id = COALESCE(EXCLUDED.created_by_admin_id, {USERS_TABLE}.created_by_admin_id)
                     """,
                     uuids, short_uuids, usernames, subscription_uuids, telegram_ids,
                     emails, statuses, expire_ats, traffic_limits, used_traffics,
                     hwid_limits, descriptions, created_ats, raw_datas,
-                    external_squads,
+                    external_squads, tags,
                 )
                 return int(result.split()[-1]) if result else 0
         except Exception as e:
