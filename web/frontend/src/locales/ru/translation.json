@@ -129,7 +129,15 @@
     "resetAll": "Сбросить всё",
     "saved": "Сохранено",
     "showAll": "Показать все",
-    "status": "Статус"
+    "status": "Статус",
+    "columns": {
+      "button": "Столбцы",
+      "title": "Столбцы таблицы",
+      "reset": "Сбросить",
+      "moveUp": "Переместить левее",
+      "moveDown": "Переместить правее",
+      "hint": "Выбор и порядок столбцов сохраняются в этом браузере."
+    }
   },
   "nav": {
     "dashboard": "Дашборд",
@@ -594,7 +602,13 @@
       "activity": "Активность",
       "expires": "Истекает",
       "created": "Создан",
-      "createdBy": "Кем создан"
+      "createdBy": "Кем создан",
+      "tag": "Тег",
+      "telegram": "Telegram",
+      "email": "Email",
+      "externalSquad": "Внешний сквад",
+      "shortUuid": "Short UUID",
+      "description": "Описание"
     },
     "createModal": {
       "title": "Создание пользователя",

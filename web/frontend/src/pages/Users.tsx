@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
+import type { ReactNode } from 'react'
+import { ColumnManager } from '@/components/table/ColumnManager'
+import { useTableColumns, type TableColumn } from '@/lib/useTableColumns'
 import { useNavigate } from 'react-router-dom'
 import { useUrlParam } from '@/lib/useUrlParam'
 import { useDeferredAction } from '@/lib/useDeferredAction'
@@ -80,10 +83,23 @@ interface UserListItem {
   hwid_device_limit: number
   hwid_device_count: number
   external_squad_uuid: string | null
+  telegram_id: number | null
   created_at: string | null
   updated_at: string | null
   online_at: string | null
   created_by_admin_username: string | null
+}
+
+/**
+ * Колонка витрины юзеров: к общему описанию (видимость, порядок, подпись)
+ * добавлены отрисовка ячейки и её оформление. Ключ колонки одновременно
+ * служит полем сортировки на бэкенде.
+ */
+interface UserColumn extends TableColumn {
+  render: (user: UserListItem) => ReactNode
+  className?: string
+  /** Ячейка с интерактивом — клик не должен открывать карточку юзера. */
+  stopPropagation?: boolean
 }
 
 interface PaginatedResponse {
@@ -1345,6 +1361,145 @@ export default function Users() {
     })
   }, [scheduleAction, t, enableUser])
 
+  const externalSquadNames = useMemo(
+    () => new Map(externalSquadsList.map((s) => [String(s.uuid).toLowerCase(), s.name])),
+    [externalSquadsList],
+  )
+
+  // Колонки витрины: одна точка истины для заголовков и ячеек — раньше
+  // разметка ячеек дублировалась в виртуальном и обычном режимах и уже
+  // успела разойтись. `key` совпадает с полем сортировки на бэкенде
+  // (shared/db/users.py::_PAGINATED_SORT_MAP), иначе клик по заголовку
+  // молча сортировал бы по created_at.
+  const columnDefs = useMemo<UserColumn[]>(() => [
+    {
+      key: 'username',
+      labelKey: 'users.table.user',
+      locked: true,
+      render: (user) => (
+        <div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-white">{user.username || user.short_uuid}</span>
+            {user.tag && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
+            )}
+          </div>
+          {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
+          {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      labelKey: 'users.table.status',
+      stopPropagation: true,
+      render: (user) => <StatusBadge status={user.status} />,
+    },
+    {
+      key: 'used_traffic_bytes',
+      labelKey: 'users.table.traffic',
+      className: 'min-w-[140px]',
+      render: (user) => (
+        <>
+          <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
+          {user.raw_used_traffic_bytes != null && user.raw_used_traffic_bytes !== user.used_traffic_bytes && (
+            <div className="text-[10px] text-dark-300 mt-0.5 text-center" title={t('users.table.rawTrafficHint')}>
+              {t('users.table.rawTrafficPrefix')}{formatBytes(user.raw_used_traffic_bytes)}
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'hwid_device_limit',
+      labelKey: 'users.table.hwid',
+      className: 'text-center',
+      render: (user) => (
+        <span className="text-dark-100 text-sm tabular-nums">{user.hwid_device_count} / {user.hwid_device_limit || '∞'}</span>
+      ),
+    },
+    {
+      key: 'online_at',
+      labelKey: 'users.table.activity',
+      render: (user) => <OnlineIndicator onlineAt={user.online_at} />,
+    },
+    {
+      key: 'expire_at',
+      labelKey: 'users.table.expires',
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.expire_at ? formatDateShort(user.expire_at) : '—'),
+    },
+    {
+      key: 'created_at',
+      labelKey: 'users.table.created',
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.created_at ? formatDateShort(user.created_at) : '—'),
+    },
+    {
+      key: 'created_by_admin_username',
+      labelKey: 'users.table.createdBy',
+      className: 'hidden md:table-cell text-dark-300 text-sm',
+      render: (user) => user.created_by_admin_username || '—',
+    },
+    // Ниже — то, чего в таблице не было вовсе: по этим полям и просили
+    // сортировать. По умолчанию скрыты, иначе таблица сразу разъезжается.
+    {
+      key: 'tag',
+      labelKey: 'users.table.tag',
+      optional: true,
+      className: 'text-dark-200 text-sm',
+      render: (user) => user.tag || '—',
+    },
+    {
+      key: 'telegram_id',
+      labelKey: 'users.table.telegram',
+      optional: true,
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.telegram_id ? String(user.telegram_id) : '—'),
+    },
+    {
+      key: 'email',
+      labelKey: 'users.table.email',
+      optional: true,
+      className: 'text-dark-200 text-sm',
+      render: (user) => user.email || '—',
+    },
+    {
+      key: 'external_squad_uuid',
+      labelKey: 'users.table.externalSquad',
+      optional: true,
+      className: 'text-dark-200 text-sm',
+      // Имя берём из уже загруженного для фильтра списка сквадов: в самой
+      // выдаче юзеров бэкенд отдаёт только uuid, а он человеку ничего не говорит.
+      render: (user) => (user.external_squad_uuid
+        ? externalSquadNames.get(user.external_squad_uuid.toLowerCase()) || user.external_squad_uuid
+        : '—'),
+    },
+    {
+      key: 'short_uuid',
+      labelKey: 'users.table.shortUuid',
+      optional: true,
+      className: 'text-dark-300 text-xs font-mono',
+      render: (user) => user.short_uuid || '—',
+    },
+    {
+      key: 'description',
+      labelKey: 'users.table.description',
+      optional: true,
+      className: 'text-dark-300 text-sm',
+      render: (user) => (
+        <span className="block truncate max-w-[220px]" title={user.description || undefined}>
+          {user.description || '—'}
+        </span>
+      ),
+    },
+  ], [t, formatBytes, formatDateShort, externalSquadNames])
+
+  const columns = useTableColumns('users', columnDefs)
+  const visibleColumns = columns.visible as UserColumn[]
+  // Чекбокс массовых операций и меню действий живут вне выбора колонок.
+  const totalColumnCount = visibleColumns.length + (canBulk ? 1 : 0) + 1
+
   // Virtual scrolling for large page sizes (50+ rows)
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const useVirtual = users.length > 30
@@ -1487,6 +1642,14 @@ export default function Users() {
                 currentFilters={currentFilters}
                 onLoadFilter={handleLoadFilter}
                 hasActiveFilters={hasActiveFilters}
+              />
+              <ColumnManager
+                columns={columns.ordered}
+                isVisible={columns.isVisible}
+                onToggle={columns.toggle}
+                onMove={columns.move}
+                onReset={columns.reset}
+                isCustomized={columns.isCustomized}
               />
             </div>
 
@@ -1892,14 +2055,17 @@ export default function Users() {
                     />
                   </th>
                 )}
-                <th><SortHeader label={t('users.table.user')} field="username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.status')} field="status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.traffic')} field="used_traffic_bytes" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.hwid')} field="hwid_device_limit" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.activity')} field="online_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.expires')} field="expire_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.created')} field="created_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th className="hidden md:table-cell"><SortHeader label={t('users.table.createdBy')} field="created_by_admin_username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                {visibleColumns.map((column) => (
+                  <th key={column.key} className={column.className?.includes('hidden md:table-cell') ? 'hidden md:table-cell' : undefined}>
+                    <SortHeader
+                      label={t(column.labelKey)}
+                      field={column.key}
+                      currentSort={sortBy}
+                      currentOrder={sortOrder}
+                      onSort={handleSort}
+                    />
+                  </th>
+                ))}
                 <th className="w-10"></th>
               </tr>
             </thead>
@@ -1907,19 +2073,14 @@ export default function Users() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td><Skeleton className="h-4 w-32" /></td>
-                    <td><Skeleton className="h-5 w-20" /></td>
-                    <td><Skeleton className="h-4 w-24" /></td>
-                    <td><Skeleton className="h-4 w-8 mx-auto" /></td>
-                    <td><Skeleton className="h-4 w-20" /></td>
-                    <td><Skeleton className="h-4 w-20" /></td>
-                    <td><Skeleton className="h-4 w-20" /></td>
-                    <td></td>
+                    {Array.from({ length: totalColumnCount }).map((__, cell) => (
+                      <td key={cell}><Skeleton className="h-4 w-20" /></td>
+                    ))}
                   </tr>
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={totalColumnCount} className="text-center py-8 text-muted-foreground">
                     {hasAnyFilter ? t('users.usersNotFound') : t('users.noUsers')}
                   </td>
                 </tr>
@@ -1927,7 +2088,7 @@ export default function Users() {
                 <>
                   {/* Virtual spacer top */}
                   {rowVirtualizer.getVirtualItems()[0]?.start > 0 && (
-                    <tr><td colSpan={9} style={{ height: rowVirtualizer.getVirtualItems()[0].start, padding: 0 }} /></tr>
+                    <tr><td colSpan={totalColumnCount} style={{ height: rowVirtualizer.getVirtualItems()[0].start, padding: 0 }} /></tr>
                   )}
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const user = users[virtualRow.index]
@@ -1947,36 +2108,15 @@ export default function Users() {
                             />
                           </td>
                         )}
-                        <td>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-medium text-white">{user.username || user.short_uuid}</span>
-                              {user.tag && (
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
-                              )}
-                            </div>
-                            {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
-                            {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
-                          </div>
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <StatusBadge status={user.status} />
-                        </td>
-                        <td className="min-w-[140px]">
-                          <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
-                          {user.raw_used_traffic_bytes != null && user.raw_used_traffic_bytes !== user.used_traffic_bytes && (
-                            <div className="text-[10px] text-dark-300 mt-0.5 text-center" title={t('users.table.rawTrafficHint')}>
-                              {t('users.table.rawTrafficPrefix')}{formatBytes(user.raw_used_traffic_bytes)}
-                            </div>
-                          )}
-                        </td>
-                        <td className="text-center">
-                          <span className="text-dark-100 text-sm tabular-nums">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
-                        </td>
-                        <td><OnlineIndicator onlineAt={user.online_at} /></td>
-                        <td className="text-dark-200 text-sm tabular-nums">{user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</td>
-                        <td className="text-dark-200 text-sm tabular-nums">{user.created_at ? formatDateShort(user.created_at) : '\u2014'}</td>
-                        <td className="hidden md:table-cell text-dark-300 text-sm">{user.created_by_admin_username || '\u2014'}</td>
+                        {visibleColumns.map((column) => (
+                          <td
+                            key={column.key}
+                            className={column.className}
+                            onClick={column.stopPropagation ? (e) => e.stopPropagation() : undefined}
+                          >
+                            {column.render(user)}
+                          </td>
+                        ))}
                         <td onClick={(e) => e.stopPropagation()}>
                           <UserActions
                             user={user}
@@ -1993,7 +2133,7 @@ export default function Users() {
                     const items = rowVirtualizer.getVirtualItems()
                     const lastItem = items[items.length - 1]
                     const bottomPad = lastItem ? rowVirtualizer.getTotalSize() - lastItem.end : 0
-                    return bottomPad > 0 ? <tr><td colSpan={9} style={{ height: bottomPad, padding: 0 }} /></tr> : null
+                    return bottomPad > 0 ? <tr><td colSpan={totalColumnCount} style={{ height: bottomPad, padding: 0 }} /></tr> : null
                   })()}
                 </>
               ) : (
@@ -2011,36 +2151,15 @@ export default function Users() {
                         />
                       </td>
                     )}
-                    <td>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-white">{user.username || user.short_uuid}</span>
-                          {user.tag && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
-                          )}
-                        </div>
-                        {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
-                        {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
-                      </div>
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <StatusBadge status={user.status} />
-                    </td>
-                    <td className="min-w-[140px]">
-                      <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
-                      {user.raw_used_traffic_bytes != null && user.raw_used_traffic_bytes !== user.used_traffic_bytes && (
-                        <div className="text-[10px] text-dark-300 mt-0.5 text-center" title={t('users.table.rawTrafficHint')}>
-                          {t('users.table.rawTrafficPrefix')}{formatBytes(user.raw_used_traffic_bytes)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-center">
-                      <span className="text-dark-100 text-sm">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
-                    </td>
-                    <td><OnlineIndicator onlineAt={user.online_at} /></td>
-                    <td className="text-dark-200 text-sm">{user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</td>
-                    <td className="text-dark-200 text-sm">{user.created_at ? formatDateShort(user.created_at) : '\u2014'}</td>
-                    <td className="hidden md:table-cell text-dark-300 text-sm">{user.created_by_admin_username || '\u2014'}</td>
+                    {visibleColumns.map((column) => (
+                      <td
+                        key={column.key}
+                        className={column.className}
+                        onClick={column.stopPropagation ? (e) => e.stopPropagation() : undefined}
+                      >
+                        {column.render(user)}
+                      </td>
+                    ))}
                     <td onClick={(e) => e.stopPropagation()}>
                       <UserActions
                         user={user}

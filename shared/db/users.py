@@ -420,6 +420,13 @@ class UsersMixin:
         "traffic_limit_bytes": "COALESCE(traffic_limit_bytes, 0)",
         "hwid_device_limit": "COALESCE(hwid_device_limit, 0)",
         "online_at": "immutable_tstz(raw_data->'userTraffic'->>'onlineAt')",
+        # Колонки, которые витрина умеет показывать, обязаны быть и здесь —
+        # иначе клик по заголовку молча сортирует по created_at (#263).
+        "tag": "tag",
+        "telegram_id": "telegram_id",
+        "short_uuid": "short_uuid",
+        "description": "description",
+        "external_squad_uuid": "external_squad_uuid::text",
         "created_by_admin_username": (
             "(" + select_sql(ADMIN_TABLE, 'username', 'WHERE id = users.created_by_admin_id') + ")"
         ),

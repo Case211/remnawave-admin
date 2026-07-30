@@ -38,5 +38,15 @@ export function useWidgetVisibility(storageKey: string, defaultHidden: string[] 
 
   const reset = useCallback(() => persist(new Set()), [persist])
 
-  return { hidden, isVisible, toggle, reset, isCustomized: hidden.size > 0 }
+  /**
+   * Вернуть дефолтный набор скрытых, а не «показать всё»: там, где часть
+   * элементов спрятана по умолчанию (необязательные колонки таблиц),
+   * обычный reset делал их видимыми — это не сброс, а другая настройка.
+   */
+  const resetToDefaults = useCallback(
+    () => persist(new Set(defaultHidden)),
+    [persist, defaultHidden],
+  )
+
+  return { hidden, isVisible, toggle, reset, resetToDefaults, isCustomized: hidden.size > 0 }
 }

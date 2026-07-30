@@ -129,7 +129,15 @@
     "resetAll": "Reset all",
     "saved": "Saved",
     "showAll": "Show all",
-    "status": "Status"
+    "status": "Status",
+    "columns": {
+      "button": "Columns",
+      "title": "Table columns",
+      "reset": "Reset",
+      "moveUp": "Move left",
+      "moveDown": "Move right",
+      "hint": "Column choice and order are stored in this browser."
+    }
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -594,7 +602,13 @@
       "activity": "Activity",
       "expires": "Expires",
       "created": "Created",
-      "createdBy": "Created by"
+      "createdBy": "Created by",
+      "tag": "Tag",
+      "telegram": "Telegram",
+      "email": "Email",
+      "externalSquad": "External squad",
+      "shortUuid": "Short UUID",
+      "description": "Description"
     },
     "createModal": {
       "title": "Create user",
