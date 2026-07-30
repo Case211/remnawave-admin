@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
+import { ColumnFilter, type ColumnFilterProps } from '@/components/table/ColumnFilter'
 import { ColumnManager } from '@/components/table/ColumnManager'
 import { useTableColumns, type TableColumn } from '@/lib/useTableColumns'
 import { useNavigate } from 'react-router-dom'
@@ -100,6 +101,8 @@ interface UserColumn extends TableColumn {
   className?: string
   /** Ячейка с интерактивом — клик не должен открывать карточку юзера. */
   stopPropagation?: boolean
+  /** Фильтр в заголовке. Пишет в те же URL-параметры, что и панель сверху. */
+  filter?: ColumnFilterProps
 }
 
 interface PaginatedResponse {
@@ -1361,6 +1364,39 @@ export default function Users() {
     })
   }, [scheduleAction, t, enableUser])
 
+  // Фильтры в заголовках и панель сверху делят одни и те же URL-параметры,
+  // поэтому остаются согласованными сами собой: выбор в колонке подсвечивает
+  // соответствующий селект в панели и наоборот.
+  const singleFilter = useCallback(
+    (
+      value: string,
+      set: (v: string) => void,
+      options: { value: string; label: string }[],
+    ): ColumnFilterProps => ({
+      type: 'single',
+      options,
+      value: value ? [value] : [],
+      onChange: (v) => {
+        set(Array.isArray(v) && v.length > 0 ? v[0] : '')
+        setPage(1)
+      },
+    }),
+    [setPage],
+  )
+
+  const textFilter = useCallback(
+    (value: string, set: (v: string) => void, placeholder: string): ColumnFilterProps => ({
+      type: 'text',
+      value: value ? [value] : [],
+      placeholder,
+      onChange: (v) => {
+        set(Array.isArray(v) && v.length > 0 ? v[0] : '')
+        setPage(1)
+      },
+    }),
+    [setPage],
+  )
+
   const externalSquadNames = useMemo(
     () => new Map(externalSquadsList.map((s) => [String(s.uuid).toLowerCase(), s.name])),
     [externalSquadsList],
@@ -1376,6 +1412,7 @@ export default function Users() {
       key: 'username',
       labelKey: 'users.table.user',
       locked: true,
+      filter: textFilter(search, setSearch, t('users.searchPlaceholder')),
       render: (user) => (
         <div>
           <div className="flex items-center gap-1.5">
@@ -1393,12 +1430,24 @@ export default function Users() {
       key: 'status',
       labelKey: 'users.table.status',
       stopPropagation: true,
+      filter: singleFilter(status, setStatus, [
+        { value: 'active', label: t('users.filters.statusActive') },
+        { value: 'disabled', label: t('users.filters.statusDisabled') },
+        { value: 'limited', label: t('users.filters.statusLimited') },
+        { value: 'expired', label: t('users.filters.statusExpired') },
+      ]),
       render: (user) => <StatusBadge status={user.status} />,
     },
     {
       key: 'used_traffic_bytes',
       labelKey: 'users.table.traffic',
       className: 'min-w-[140px]',
+      filter: singleFilter(trafficUsage, setTrafficUsage, [
+        { value: 'above_90', label: t('users.filters.above90') },
+        { value: 'above_70', label: t('users.filters.above70') },
+        { value: 'above_50', label: t('users.filters.above50') },
+        { value: 'zero', label: t('users.filters.zeroTraffic') },
+      ]),
       render: (user) => (
         <>
           <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
@@ -1421,11 +1470,23 @@ export default function Users() {
     {
       key: 'online_at',
       labelKey: 'users.table.activity',
+      filter: singleFilter(onlineFilter, setOnlineFilter, [
+        { value: 'online_24h', label: t('users.filters.online24h') },
+        { value: 'online_7d', label: t('users.filters.online7d') },
+        { value: 'online_30d', label: t('users.filters.online30d') },
+        { value: 'never', label: t('users.filters.neverConnected') },
+      ]),
       render: (user) => <OnlineIndicator onlineAt={user.online_at} />,
     },
     {
       key: 'expire_at',
       labelKey: 'users.table.expires',
+      filter: singleFilter(expireFilter, setExpireFilter, [
+        { value: 'expiring_7d', label: t('users.filters.expiring7d') },
+        { value: 'expiring_30d', label: t('users.filters.expiring30d') },
+        { value: 'expired', label: t('users.filters.alreadyExpired') },
+        { value: 'no_expiry', label: t('users.filters.noExpiry') },
+      ]),
       className: 'text-dark-200 text-sm tabular-nums',
       render: (user) => (user.expire_at ? formatDateShort(user.expire_at) : '—'),
     },
@@ -1438,6 +1499,9 @@ export default function Users() {
     {
       key: 'created_by_admin_username',
       labelKey: 'users.table.createdBy',
+      filter: canChooseAdmin
+        ? singleFilter(adminId, setAdminId, admins.map((a) => ({ value: String(a.id), label: a.username })))
+        : undefined,
       className: 'hidden md:table-cell text-dark-300 text-sm',
       render: (user) => user.created_by_admin_username || '—',
     },
@@ -1447,6 +1511,7 @@ export default function Users() {
       key: 'tag',
       labelKey: 'users.table.tag',
       optional: true,
+      filter: singleFilter(userTag, setUserTag, userTagsList.map((tg) => ({ value: tg, label: tg }))),
       className: 'text-dark-200 text-sm',
       render: (user) => user.tag || '—',
     },
@@ -1468,6 +1533,11 @@ export default function Users() {
       key: 'external_squad_uuid',
       labelKey: 'users.table.externalSquad',
       optional: true,
+      filter: singleFilter(
+        externalSquad,
+        setExternalSquad,
+        externalSquadsList.map((sq: Squad) => ({ value: String(sq.uuid), label: sq.name || String(sq.uuid) })),
+      ),
       className: 'text-dark-200 text-sm',
       // Имя берём из уже загруженного для фильтра списка сквадов: в самой
       // выдаче юзеров бэкенд отдаёт только uuid, а он человеку ничего не говорит.
@@ -1493,7 +1563,13 @@ export default function Users() {
         </span>
       ),
     },
-  ], [t, formatBytes, formatDateShort, externalSquadNames])
+  ], [
+    t, formatBytes, formatDateShort, externalSquadNames,
+    singleFilter, textFilter, search, setSearch, status, setStatus,
+    trafficUsage, setTrafficUsage, onlineFilter, setOnlineFilter,
+    expireFilter, setExpireFilter, canChooseAdmin, adminId, setAdminId, admins,
+    userTag, setUserTag, userTagsList, externalSquad, setExternalSquad, externalSquadsList,
+  ])
 
   const columns = useTableColumns('users', columnDefs)
   const visibleColumns = columns.visible as UserColumn[]
@@ -2057,13 +2133,16 @@ export default function Users() {
                 )}
                 {visibleColumns.map((column) => (
                   <th key={column.key} className={column.className?.includes('hidden md:table-cell') ? 'hidden md:table-cell' : undefined}>
-                    <SortHeader
-                      label={t(column.labelKey)}
-                      field={column.key}
-                      currentSort={sortBy}
-                      currentOrder={sortOrder}
-                      onSort={handleSort}
-                    />
+                    <div className="flex items-center gap-0.5">
+                      <SortHeader
+                        label={t(column.labelKey)}
+                        field={column.key}
+                        currentSort={sortBy}
+                        currentOrder={sortOrder}
+                        onSort={handleSort}
+                      />
+                      {column.filter && <ColumnFilter {...column.filter} />}
+                    </div>
                   </th>
                 ))}
                 <th className="w-10"></th>
