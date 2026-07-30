@@ -134,9 +134,8 @@
       "button": "Columns",
       "title": "Table columns",
       "reset": "Reset",
-      "moveUp": "Move left",
-      "moveDown": "Move right",
-      "hint": "Column choice and order are stored in this browser."
+      "hint": "Drag rows to reorder. The choice is stored in this browser.",
+      "drag": "Drag to reorder"
     }
   },
   "nav": {

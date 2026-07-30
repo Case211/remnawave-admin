@@ -64,15 +64,20 @@ export function useTableColumns(tableId: string, columns: TableColumn[]) {
     [columns, visibility],
   )
 
-  /** Сдвинуть колонку на шаг влево/вправо в общем (не только видимом) порядке. */
-  const move = useCallback(
-    (key: string, direction: -1 | 1) => {
+  /**
+   * Поставить колонку `activeKey` на место `overKey` — то, что нужно
+   * перетаскиванию: dnd-kit сообщает ключи, а не индексы.
+   */
+  const reorder = useCallback(
+    (activeKey: string, overKey: string) => {
+      if (activeKey === overKey) return
       const keys = ordered.map((c) => c.key)
-      const from = keys.indexOf(key)
-      const to = from + direction
-      if (from < 0 || to < 0 || to >= keys.length) return
+      const from = keys.indexOf(activeKey)
+      const to = keys.indexOf(overKey)
+      if (from < 0 || to < 0) return
       const next = [...keys]
-      ;[next[from], next[to]] = [next[to], next[from]]
+      next.splice(from, 1)
+      next.splice(to, 0, activeKey)
       order.setCustomOrder(next)
     },
     [ordered, order],
@@ -102,7 +107,7 @@ export function useTableColumns(tableId: string, columns: TableColumn[]) {
     visible,
     isVisible,
     toggle,
-    move,
+    reorder,
     reset,
     isCustomized: visibilityCustomized || order.isCustomized,
   }

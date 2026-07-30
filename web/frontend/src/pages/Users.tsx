@@ -1723,7 +1723,7 @@ export default function Users() {
                 columns={columns.ordered}
                 isVisible={columns.isVisible}
                 onToggle={columns.toggle}
-                onMove={columns.move}
+                onReorder={columns.reorder}
                 onReset={columns.reset}
                 isCustomized={columns.isCustomized}
               />
