@@ -83,6 +83,9 @@ export function useTableColumns(tableId: string, columns: TableColumn[]) {
     [ordered, order],
   )
 
+  /** Показать все колонки, включая скрытые по умолчанию (пункт меню столбца). */
+  const showAll = useCallback(() => visibility.reset(), [visibility])
+
   const reset = useCallback(() => {
     // Именно к дефолту: часть колонок скрыта изначально, и «показать всё»
     // сбросом не является.
@@ -108,6 +111,7 @@ export function useTableColumns(tableId: string, columns: TableColumn[]) {
     isVisible,
     toggle,
     reorder,
+    showAll,
     reset,
     isCustomized: visibilityCustomized || order.isCustomized,
   }

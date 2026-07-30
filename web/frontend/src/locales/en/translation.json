@@ -135,7 +135,16 @@
       "title": "Table columns",
       "reset": "Reset",
       "hint": "Drag rows to reorder. The choice is stored in this browser.",
-      "drag": "Drag to reorder"
+      "drag": "Drag to reorder",
+      "menu": "Column menu: {{column}}",
+      "sortAsc": "Sort ascending",
+      "sortDesc": "Sort descending",
+      "clearSort": "Clear sort",
+      "clearFilter": "Clear filter",
+      "hide": "Hide {{column}} column",
+      "showAll": "Show all columns",
+      "filterBy": "Filter by {{column}}",
+      "filterAny": "Any value"
     }
   },
   "nav": {

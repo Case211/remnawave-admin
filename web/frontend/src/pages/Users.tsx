@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { ColumnFilter, type ColumnFilterProps } from '@/components/table/ColumnFilter'
+import { isFilterActive, type ColumnFilterProps } from '@/components/table/ColumnFilter'
+import { ColumnFilterCell } from '@/components/table/ColumnFilterCell'
+import { ColumnHeaderMenu } from '@/components/table/ColumnHeaderMenu'
 import { ColumnManager } from '@/components/table/ColumnManager'
 import { useTableColumns, type TableColumn } from '@/lib/useTableColumns'
 import { useNavigate } from 'react-router-dom'
@@ -1367,6 +1369,21 @@ export default function Users() {
   // Фильтры в заголовках и панель сверху делят одни и те же URL-параметры,
   // поэтому остаются согласованными сами собой: выбор в колонке подсвечивает
   // соответствующий селект в панели и наоборот.
+  // Меню столбца задаёт направление явно, а не переключает по кругу, как
+  // клик по заголовку. Сброс возвращает сортировку по умолчанию — «сначала
+  // новые», то же, что видит человек, впервые открывший витрину.
+  const applySort = useCallback((field: string, dir: 'asc' | 'desc') => {
+    setSortBy(field)
+    setSortOrder(dir)
+    setPage(1)
+  }, [setSortBy, setSortOrder, setPage])
+
+  const clearSort = useCallback(() => {
+    setSortBy('created_at')
+    setSortOrder('desc')
+    setPage(1)
+  }, [setSortBy, setSortOrder, setPage])
+
   const singleFilter = useCallback(
     (
       value: string,
@@ -2141,12 +2158,42 @@ export default function Users() {
                         currentOrder={sortOrder}
                         onSort={handleSort}
                       />
-                      {column.filter && <ColumnFilter {...column.filter} />}
+                      <ColumnHeaderMenu
+                        label={t(column.labelKey)}
+                        sortDir={sortBy === column.key ? (sortOrder === 'asc' ? 'asc' : 'desc') : null}
+                        onSort={(dir) => applySort(column.key, dir)}
+                        onClearSort={clearSort}
+                        hasFilter={isFilterActive(column.filter?.value)}
+                        onClearFilter={column.filter ? () => column.filter?.onChange(null) : undefined}
+                        onHide={column.locked ? undefined : () => columns.toggle(column.key)}
+                        onShowAll={columns.showAll}
+                      />
                     </div>
                   </th>
                 ))}
                 <th className="w-10"></th>
               </tr>
+              {/* Строка фильтров под заголовками: значение всегда на виду,
+                  не надо открывать меню, чтобы понять, что список сужен. */}
+              {visibleColumns.some((c) => c.filter) && (
+                <tr>
+                  {canBulk && <th className="w-10 px-3" />}
+                  {visibleColumns.map((column) => (
+                    <th
+                      key={column.key}
+                      className={cn(
+                        'pb-1.5 font-normal align-top',
+                        column.className?.includes('hidden md:table-cell') && 'hidden md:table-cell',
+                      )}
+                    >
+                      {column.filter && (
+                        <ColumnFilterCell filter={column.filter} label={t(column.labelKey)} />
+                      )}
+                    </th>
+                  ))}
+                  <th className="w-10" />
+                </tr>
+              )}
             </thead>
             <tbody>
               {isLoading ? (

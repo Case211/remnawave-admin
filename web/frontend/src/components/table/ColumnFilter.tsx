@@ -23,14 +23,15 @@ export interface ColumnFilterProps {
   placeholder?: string
 }
 
-function isActive(value?: FilterValue) {
+/** Фильтр задан? Нужно и заголовку столбца, чтобы подсветить меню. */
+export function isFilterActive(value?: FilterValue) {
   if (value == null) return false
   return Array.isArray(value) ? value.length > 0 : value.min != null || value.max != null
 }
 
 export function ColumnFilter({ type, options = [], value, onChange, rangeUnit, placeholder }: ColumnFilterProps) {
   const { t } = useTranslation()
-  const active = isActive(value)
+  const active = isFilterActive(value)
 
   return (
     <Popover>
