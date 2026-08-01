@@ -293,6 +293,43 @@ def geoip_service():
     return get_geoip_service()
 
 
+async def panel_notify(
+    *,
+    title: str,
+    body: str,
+    severity: str = "info",
+    topic_type: str = "service",
+    link: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    group_key: Optional[str] = None,
+) -> bool:
+    """Уведомление панели от плагина: in-app всем админам + Telegram
+    (глобальный чат и каналы админов) + push.
+
+    Эмодзи по severity ставит сам notification_service — в title его
+    не класть. body — телеграм-HTML карточки (строки с отступом «   »
+    конвертер раскладывает в список).
+    """
+    from web.backend.core import notification_service
+
+    try:
+        await notification_service.create_notification(
+            title=title,
+            body=body,
+            type="plugin",
+            severity=severity,
+            link=link,
+            source=plugin_id,
+            group_key=group_key,
+            channels=["in_app", "telegram", "push"],
+            topic_type=topic_type,
+        )
+        return True
+    except Exception:
+        logging.getLogger(__name__).warning("plugin_api.panel_notify_failed", exc_info=True)
+        return False
+
+
 def auth_deps():
     """Авторизационные зависимости для роутов плагина.
 

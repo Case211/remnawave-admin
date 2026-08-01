@@ -172,13 +172,10 @@ export interface ReportResponse {
 }
 
 /**
- * 402 payload shape returned by the plugin's license-stub router.
+ * 402 payload shape — общий для всех платных плагинов, реэкспорт для
+ * обратной совместимости импортов внутри smart-support.
  */
-export interface LicenseError {
-  plugin: string
-  license_state: 'expired' | 'missing'
-  code: 'license_expired' | 'license_required'
-}
+export type { LicenseError } from '@/components/plugins/license'
 
 /**
  * Mirrors ``ThresholdSettings`` in ``schemas.py`` — every key is optional

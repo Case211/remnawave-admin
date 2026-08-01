@@ -6,7 +6,7 @@ import { ArrowRight, History, Search, SearchX, Sliders } from '@/components/bran
 
 import { Input } from '@/components/ui/input'
 
-import LicenseBanner from './LicenseBanner'
+import LicenseBanner from '@/components/plugins/license'
 import { asLicenseError, searchUsers } from './api'
 import { EmptyState, Skeleton } from './primitives'
 import type { SearchHit } from './types'

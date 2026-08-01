@@ -21,7 +21,7 @@ import {
   Zap,
 } from '@/components/brand/icons'
 
-import LicenseBanner from './LicenseBanner'
+import LicenseBanner from '@/components/plugins/license'
 import {
   ActionLauncher,
   actionForSuggested,

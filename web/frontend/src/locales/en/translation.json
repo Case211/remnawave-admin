@@ -5596,14 +5596,76 @@
       "grace": "The \"{{plugin}}\" subscription is in its grace period — renew to keep access.",
       "expires_soon": "The \"{{plugin}}\" subscription expires {{date}}."
     },
+    "license": {
+      "missing_title": "License not active",
+      "missing_body": "Subscribe to the plugin on the Plugins page to continue.",
+      "expired_title": "License expired",
+      "expired_body": "Renew your subscription to get the plugin working again."
+    },
+    "block_radar": {
+      "nav": "Block Radar",
+      "title": "Block Radar",
+      "subtitle": "Collective censorship detection across the panel network: operator × hoster × transport",
+      "settings_link": "Settings",
+      "open_title": "Active incidents",
+      "all_quiet": "The radar is quiet — no blocks detected on your links.",
+      "history_title": "History",
+      "col_link": "Link",
+      "col_kind": "Kind",
+      "col_since": "Started",
+      "col_resolved": "Resolved",
+      "kind_block": "Block",
+      "kind_outage": "Operator outage",
+      "transport_mixed": "mixed transport",
+      "transport_other": "other transport",
+      "card_host": "Hoster",
+      "card_online": "Online / baseline",
+      "card_panels": "Panels",
+      "card_affected": "At risk",
+      "status": {
+        "title": "Collector",
+        "never": "The collector has not completed a tick yet — data appears within a couple of minutes after install.",
+        "ok": "running",
+        "last_tick": "Last slice",
+        "cells": "Cells",
+        "links": "Links / zero",
+        "nodes": "Nodes in matrix",
+        "alerts_locked": "Subscription inactive: slices are sent, but network alerts are locked.",
+        "errors": {
+          "db_disconnected": "no DB",
+          "subscription_required": "no subscription",
+          "server_unreachable": "server unreachable",
+          "exception": "error"
+        }
+      },
+      "settings": {
+        "title": "Radar settings",
+        "back": "Back to radar",
+        "save": "Save",
+        "saved": "Settings saved",
+        "save_error": "Failed to save settings",
+        "fields": {
+          "notify_enabled": {
+            "label": "Notify about new incidents",
+            "help": "Telegram and in-app notifications for confirmed blocks and operator outages."
+          },
+          "notify_resolved": {
+            "label": "Notify when resolved",
+            "help": "A separate message when the link comes back to life."
+          },
+          "send_org_names": {
+            "label": "Send network names",
+            "help": "Public operator and hoster names (ASN names) in the anonymized slice — for readable alerts only."
+          },
+          "online_window_minutes": {
+            "label": "Slice window, min",
+            "help": "How many minutes count as \"online now\" (1–60). Usually no need to change."
+          }
+        }
+      }
+    },
     "smart_support": {
       "nav": "Smart Support",
-      "license": {
-        "missing_title": "License not active",
-        "missing_body": "Install your Smart Support key in settings to continue.",
-        "expired_title": "License expired",
-        "expired_body": "Renew your subscription to use the debugger again."
-      },
       "search": {
         "title": "Smart Support — user lookup",
         "subtitle": "UUID, short_uuid, email, IP, Telegram ID or a chunk of the username — we'll find them.",

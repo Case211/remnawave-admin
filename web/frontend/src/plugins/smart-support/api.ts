@@ -15,12 +15,15 @@ import type {
   ActionExecuteIn,
   ActionExecuteOut,
   ActionListResponse,
-  LicenseError,
   ReportResponse,
   SearchResponse,
   SessionListResponse,
   ThresholdSettings,
 } from './types'
+
+// Общая для всех платных плагинов расшифровка 402 — реэкспорт, чтобы
+// страницы плагина продолжали импортировать из './api'.
+export { asLicenseError } from '@/components/plugins/license'
 
 const BASE = '/plugins/smart_support'
 
@@ -103,20 +106,4 @@ export async function fetchRecentSessions(
     { params },
   )
   return data
-}
-
-/**
- * Decode a 402 axios error into the plugin's structured payload, if it
- * matches. Returns ``null`` for other error shapes so callers can tell
- * "license blocked" apart from "user not found" or network errors.
- */
-export function asLicenseError(err: unknown): LicenseError | null {
-  if (typeof err !== 'object' || err === null) return null
-  const anyErr = err as { response?: { status?: number; data?: { detail?: unknown } } }
-  if (anyErr.response?.status !== 402) return null
-  const detail = anyErr.response.data?.detail
-  if (typeof detail !== 'object' || detail === null) return null
-  const d = detail as Partial<LicenseError>
-  if (typeof d.plugin !== 'string' || typeof d.license_state !== 'string') return null
-  return detail as LicenseError
 }
