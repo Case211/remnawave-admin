@@ -538,6 +538,14 @@ function PluginCard({
             <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--glass-bg)] text-dark-200">
               {installedVersion ? `v${installedVersion}` : `v${plugin.latest_version}`}
             </span>
+            {plugin.channel === 'dev' && (
+              <span
+                className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300"
+                title={t('adminPlugins.dev_channel_hint')}
+              >
+                dev
+              </span>
+            )}
             <StateBadge ent={entitlement} />
             {updateAvailable && (
               <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300">

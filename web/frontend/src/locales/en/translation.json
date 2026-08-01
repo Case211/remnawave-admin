@@ -5480,6 +5480,7 @@
     "buy": "Buy",
     "trial": "Try it",
     "trial_ok": "Trial period activated",
+    "dev_channel_hint": "This instance is on the plugin's dev release channel: versions come from the dev branch",
     "renew": "Renew",
     "buy_topup": "Buy quota pack",
     "sale_paused": "Temporarily unavailable",

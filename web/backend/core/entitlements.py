@@ -352,7 +352,12 @@ async def fetch_catalog(force: bool = False) -> dict:
     if fresh and not force:
         return _cache.catalog
     try:
-        catalog = await _request("GET", "/v1/catalog", authed=False)
+        # Зарегистрированный инстанс представляется: сервер подменяет в
+        # карточках версию/sha на dev-канал, если инстанс на него переведён.
+        # До регистрации каталог публичный — витрина видна без подключения.
+        catalog = await _request(
+            "GET", "/v1/catalog", authed=bool(_cache.instance_token)
+        )
     except LicenseServerError:
         if _cache.catalog is not None:
             return _cache.catalog  # сервер лёг — отдаём последний удачный

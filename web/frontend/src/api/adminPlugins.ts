@@ -52,6 +52,10 @@ export interface CatalogPlugin {
   purchasable?: boolean
   /** Чем заменить цену («временно недоступно»); пусто — свой текст. */
   sale_note?: CatalogText | null
+  /** Сколько дней даёт кнопка «Попробовать»; 0/нет — триала нет. */
+  trial_days?: number
+  /** 'dev' — инстанс переведён на dev-канал релизов этого плагина. */
+  channel?: 'dev'
   tariffs: CatalogTariff[]
   topups: CatalogTopup[]
 }
