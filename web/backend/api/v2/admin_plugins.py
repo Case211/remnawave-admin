@@ -105,12 +105,20 @@ async def disconnect(_admin: AdminUser = Depends(require_superadmin())) -> Simpl
     return SimpleResponse(ok=True, message="Отключено от магазина")
 
 
+class TrialIn(BaseModel):
+    # Дефолт — совместимость со старым фронтом, звавшим триал без тела.
+    plugin_id: str = Field(default="smart_support", max_length=64)
+
+
 @router.post("/trial", response_model=SimpleResponse, summary="Активировать пробный период")
-async def start_trial(_admin: AdminUser = Depends(require_superadmin())) -> SimpleResponse:
-    """Пробный период плагина (один раз на инстанс). Подключает к магазину,
-    если ещё не подключён."""
+async def start_trial(
+    payload: TrialIn = Body(default=TrialIn()),
+    _admin: AdminUser = Depends(require_superadmin()),
+) -> SimpleResponse:
+    """Пробный период плагина (один раз на пару инстанс+плагин). Подключает
+    к магазину, если ещё не подключён."""
     try:
-        await entitlements.start_trial()
+        await entitlements.start_trial(payload.plugin_id)
     except LicenseServerError as e:
         _raise(e)
     return SimpleResponse(ok=True, message="Пробный период активирован")

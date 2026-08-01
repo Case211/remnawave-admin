@@ -161,8 +161,8 @@ export async function disconnectStore(): Promise<SimpleResponse> {
   return data
 }
 
-export async function startTrial(): Promise<SimpleResponse> {
-  const { data } = await client.post<SimpleResponse>(`${BASE}/trial`)
+export async function startTrial(pluginId: string): Promise<SimpleResponse> {
+  const { data } = await client.post<SimpleResponse>(`${BASE}/trial`, { plugin_id: pluginId })
   return data
 }
 

@@ -520,7 +520,7 @@ function PluginCard({
     onError: (err: unknown) => toast.error(serverError(err, 'adminPlugins.errors.install_failed')),
   })
   const trialMutation = useMutation({
-    mutationFn: startTrial,
+    mutationFn: () => startTrial(plugin.id),
     onSuccess: () => {
       toast.success(t('adminPlugins.trial_ok'))
       onInstalled()

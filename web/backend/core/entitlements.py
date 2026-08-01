@@ -388,11 +388,11 @@ async def fetch_client_apps(force: bool = False) -> dict:
     return data
 
 
-async def start_trial() -> None:
+async def start_trial(plugin_id: str = "smart_support") -> None:
     """Активировать пробный период (POST /v1/trial). Требует подключения —
-    сервер выдаёт триал один раз на инстанс."""
+    сервер выдаёт триал один раз на пару (инстанс, плагин)."""
     await ensure_registered()
-    data = await _request("POST", "/v1/trial")
+    data = await _request("POST", "/v1/trial", json_body={"plugin_id": plugin_id})
     if not _adopt_jwt(data.get("entitlements_jwt", "")):
         raise LicenseServerError("bad_entitlements_jwt")
     await _save_link(jwt_token=data["entitlements_jwt"])
