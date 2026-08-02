@@ -23,10 +23,14 @@ async def _fetch_single(
     id_field: str = "uuid",
 ) -> Optional[Dict[str, Any]]:
     if db_service.is_connected:
-        result = await db_method(id_value)
-        if result and result.get(id_field):
-            logger.debug("%s %s fetched from DB", entity_name.title(), id_value)
-            return result
+        try:
+            result = await db_method(id_value)
+            if result and result.get(id_field):
+                logger.debug("%s %s fetched from DB", entity_name.title(), id_value)
+                return result
+        except Exception as e:
+            # e.g. numeric panel id passed as uuid — treat as DB miss
+            logger.debug("%s %s DB lookup failed: %s", entity_name, id_value, e)
     try:
         response = await api_method(id_value)
         data = response.get("response", {})
@@ -46,10 +50,14 @@ async def _fetch_single_wrapped(
     id_field: str = "uuid",
 ) -> Dict[str, Any]:
     if db_service.is_connected:
-        result = await db_method(id_value)
-        if result and result.get(id_field):
-            logger.debug("%s %s fetched from DB (wrapped)", entity_name.title(), id_value)
-            return {"response": result}
+        try:
+            result = await db_method(id_value)
+            if result and result.get(id_field):
+                logger.debug("%s %s fetched from DB (wrapped)", entity_name.title(), id_value)
+                return {"response": result}
+        except Exception as e:
+            # e.g. numeric panel id passed as uuid — treat as DB miss
+            logger.debug("%s %s DB lookup failed: %s", entity_name, id_value, e)
     return await api_method(id_value)
 
 
@@ -139,6 +147,32 @@ async def resolve_panel_user_ids(user_uuids: list[str]) -> list[str | int]:
         except Exception as e:
             logger.debug("resolve_panel_user_ids failed: %s", e)
     return list(user_uuids)
+
+
+async def resolve_local_user_uuid(info: dict) -> str | None:
+    """Local user uuid for a payload dict — v2 sends uuid, panel v3 sends numeric id.
+
+    Returns None when the identifier cannot be resolved to a local uuid
+    (e.g. v3 panel id with no synced local row).
+    """
+    if not isinstance(info, dict):
+        return None
+    uuid = info.get("uuid")
+    if uuid:
+        return str(uuid)
+    panel_id = info.get("id")
+    if panel_id is None:
+        return None
+    if db_service.is_connected:
+        try:
+            resolved = await db_service.get_user_uuid_by_panel_id(int(panel_id))
+            if resolved:
+                return str(resolved)
+        except (TypeError, ValueError):
+            pass
+        except Exception as e:
+            logger.debug("resolve_local_user_uuid(%s) failed: %s", panel_id, e)
+    return None
 
 
 # ==================== Template Access ====================

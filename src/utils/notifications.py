@@ -159,23 +159,8 @@ async def _resolve_squads_display(active_squads: list) -> str:
 
 async def _local_user_uuid(info: dict) -> Optional[str]:
     """Local user uuid for a payload — v2 sends uuid, panel v3 sends numeric id."""
-    uuid = info.get("uuid")
-    if uuid:
-        return str(uuid)
-    panel_id = info.get("id")
-    if panel_id is None:
-        return None
-    try:
-        from shared.database import db_service
-        if db_service.is_connected:
-            resolved = await db_service.get_user_uuid_by_panel_id(int(panel_id))
-            if resolved:
-                return str(resolved)
-    except (TypeError, ValueError):
-        pass
-    except Exception:
-        pass
-    return None
+    from shared.data_access import resolve_local_user_uuid
+    return await resolve_local_user_uuid(info)
 
 
 def _short_user_id(info: dict, local_uuid: Optional[str]) -> str:

@@ -289,7 +289,7 @@ class TestUserIdentifierHelpers:
     @pytest.mark.asyncio
     async def test_local_user_uuid_v3_id_resolves_to_local(self):
         from src.utils.notifications import _local_user_uuid
-        with patch("shared.database.db_service", is_connected=True) as db:
+        with patch("shared.data_access.db_service", is_connected=True) as db:
             db.get_user_uuid_by_panel_id = AsyncMock(return_value="local-uuid-9")
             assert await _local_user_uuid({"id": 42}) == "local-uuid-9"
             db.get_user_uuid_by_panel_id.assert_awaited_once_with(42)
@@ -297,14 +297,14 @@ class TestUserIdentifierHelpers:
     @pytest.mark.asyncio
     async def test_local_user_uuid_v3_unknown_returns_none(self):
         from src.utils.notifications import _local_user_uuid
-        with patch("shared.database.db_service", is_connected=True) as db:
+        with patch("shared.data_access.db_service", is_connected=True) as db:
             db.get_user_uuid_by_panel_id = AsyncMock(return_value=None)
             assert await _local_user_uuid({"id": 42}) is None
 
     @pytest.mark.asyncio
     async def test_local_user_uuid_v3_no_db_disconnected(self):
         from src.utils.notifications import _local_user_uuid
-        with patch("shared.database.db_service", is_connected=False):
+        with patch("shared.data_access.db_service", is_connected=False):
             assert await _local_user_uuid({"id": 42}) is None
 
     @pytest.mark.asyncio

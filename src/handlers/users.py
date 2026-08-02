@@ -112,6 +112,23 @@ def _user_matches_query(user: dict, normalized_query: str) -> bool:
     return any(needle in field for field in candidates if field)
 
 
+async def _user_detail_uuid(info: dict) -> str:
+    """Локальный uuid юзера для callback_data карточек действий.
+
+    v2 payload несёт uuid; панель v3 — числовой id (локальный uuid
+    генерируется отдельно). Резолвим id → локальный uuid, иначе отдаём
+    сам id как строку.
+    """
+    from shared.data_access import resolve_local_user_uuid
+    local_uuid = await resolve_local_user_uuid(info)
+    if local_uuid:
+        return local_uuid
+    panel_id = info.get("id")
+    if panel_id is not None:
+        return str(panel_id)
+    return str(info.get("uuid") or "")
+
+
 def _format_user_choice(user: dict) -> str:
     """Форматирует пользователя для отображения в списке."""
     status = user.get("status", "UNKNOWN")
@@ -260,7 +277,7 @@ async def _send_user_summary(target: Message | CallbackQuery, user: dict, back_t
     summary = build_user_summary(user, _)
     info = user.get("response", user)
     status = info.get("status", "UNKNOWN")
-    uuid = info.get("uuid")
+    uuid = await _user_detail_uuid(info)
     reply_markup = user_actions_keyboard(uuid, status, back_to=back_to, admin=admin)
     user_id = None
     if isinstance(target, CallbackQuery):
@@ -330,7 +347,7 @@ async def _show_user_search_results(target: Message | CallbackQuery, query: str,
     rows = []
     for user in results[:MAX_SEARCH_RESULTS]:
         info = user.get("response", user)
-        uuid = info.get("uuid")
+        uuid = await _user_detail_uuid(info)
         if not uuid:
             continue
         rows.append([InlineKeyboardButton(text=_format_user_choice(info), callback_data=f"user_search:view:{uuid}")])
@@ -658,8 +675,9 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
     logger.info("👤 User created successfully: %s", user)
     info = user.get("response", user)
     status = info.get("status", "UNKNOWN")
-    logger.info("👤 Sending success message: status=%s uuid=%s", status, info.get("uuid", ""))
-    reply_markup = user_actions_keyboard(info.get("uuid", ""), status, admin=admin)
+    user_uuid = await _user_detail_uuid(info)
+    logger.info("👤 Sending success message: status=%s uuid=%s", status, user_uuid)
+    reply_markup = user_actions_keyboard(user_uuid, status, admin=admin)
     detail = build_user_summary(user, _)
     await _send_clean_message(target, detail, reply_markup=reply_markup, parse_mode="HTML")
     logger.info("👤 Success message sent")
@@ -669,12 +687,19 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
         if db_service.is_connected:
             await db_service.upsert_user(user)
             if admin and admin.account_id:
-                async with db_service.acquire() as conn:
-                    user_uuid = info.get("uuid", "")
-                    if user_uuid:
+                # v3: панель не шлёт uuid — локальный uuid генерируется при
+                # upsert'е. Резолвим его по панельному id, чтобы записать владельца.
+                local_uuid = user_uuid
+                if not info.get("uuid") and info.get("id") is not None:
+                    try:
+                        local_uuid = await db_service.get_user_uuid_by_panel_id(int(info["id"])) or ""
+                    except (TypeError, ValueError):
+                        local_uuid = ""
+                if local_uuid:
+                    async with db_service.acquire() as conn:
                         await conn.execute(
                             "UPDATE users SET created_by_admin_id = $1 WHERE uuid = $2",
-                            admin.account_id, user_uuid,
+                            admin.account_id, local_uuid,
                         )
     except Exception:
         logger.exception("Failed to persist user to local DB")
@@ -683,13 +708,13 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
     if admin and admin.account_id:
         try:
             from shared.rbac import write_audit_log
-            user_uuid = info.get("uuid", "")
+            audit_uuid = user_uuid or info.get("uuid", "") or (info.get("id") if info.get("id") is not None else "")
             await write_audit_log(
                 admin_id=admin.account_id,
                 admin_username=admin.username,
                 action="user.create",
                 resource="users",
-                resource_id=str(user_uuid),
+                resource_id=str(audit_uuid),
                 details=json.dumps({"username": username}),
                 ip_address=None,  # Bot context doesn't have IP
             )
