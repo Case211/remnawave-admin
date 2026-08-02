@@ -594,10 +594,10 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
             if not quota_incremented:
                 # Rollback: delete the created user
                 info = user.get("response", user)
-                user_uuid = info.get("uuid", "")
-                if user_uuid:
+                panel_id = info.get("id") or info.get("uuid", "")
+                if panel_id:
                     try:
-                        await internal_api_client.delete_user(user_uuid)
+                        await internal_api_client.delete_user(panel_id)
                     except Exception:
                         pass
                 remaining = max(0, (admin.max_users or 0) - admin.users_created)
@@ -623,10 +623,10 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
                     # consistent. Same pattern as the `users_created`
                     # check above.
                     info = user.get("response", user)
-                    user_uuid = info.get("uuid", "")
-                    if user_uuid:
+                    panel_id = info.get("id") or info.get("uuid", "")
+                    if panel_id:
                         try:
-                            await internal_api_client.delete_user(user_uuid)
+                            await internal_api_client.delete_user(panel_id)
                         except Exception:
                             pass
                     remaining_gb = max(0, (admin.max_traffic_gb or 0) - (admin.traffic_used_bytes // 1073741824))
@@ -923,7 +923,8 @@ async def _apply_user_update(target: Message | CallbackQuery, user_uuid: str, pa
         except Exception:
             logger.debug("Failed to get old user data for notification user_uuid=%s", user_uuid)
         
-        await internal_api_client.update_user(user_uuid, **payload)
+        panel_user_id = await data_access.resolve_panel_user_id(user_uuid)
+        await internal_api_client.update_user(panel_user_id, **payload)
         user = await data_access.get_user_by_uuid_wrapped(user_uuid)
         info = user.get("response", user)
         text = _format_user_edit_snapshot(info, _)
@@ -1698,8 +1699,9 @@ async def cb_user_actions(callback: CallbackQuery, admin: BotAdmin) -> None:
         return
     
     try:
+        panel_user_id = await data_access.resolve_panel_user_id(user_uuid)
         if action == "enable":
-            await internal_api_client.enable_user(user_uuid)
+            await internal_api_client.enable_user(panel_user_id)
         elif action == "disable":
             if "confirm" not in callback.data:
                 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -1711,14 +1713,14 @@ async def cb_user_actions(callback: CallbackQuery, admin: BotAdmin) -> None:
                 ])
                 await _edit_text_safe(callback.message, f"⚠️ <b>{_('user.disable_confirm', default='Отключить пользователя?')}</b>", reply_markup=keyboard, parse_mode="HTML")
                 return
-            await internal_api_client.disable_user(user_uuid)
+            await internal_api_client.disable_user(panel_user_id)
         elif action == "reset":
             # Apply quota counter changes via shared helper
             try:
                 # Fetch used_traffic_bytes BEFORE the reset so the counter
                 # is incremented by the correct amount.
                 creator_id, _limit, used_bytes = await fetch_user_quota_data(user_uuid)
-                await internal_api_client.reset_user_traffic(user_uuid)
+                await internal_api_client.reset_user_traffic(panel_user_id)
                 await apply_user_reset_traffic_quotas(creator_id, used_bytes)
             except Exception:
                 logger.debug("Failed to update usage counters on single reset user_uuid=%s", user_uuid)
@@ -1754,7 +1756,7 @@ async def cb_user_actions(callback: CallbackQuery, admin: BotAdmin) -> None:
                 return
         elif action == "revoke_confirm":
             # Подтвержденное отзыв подписки
-            await internal_api_client.revoke_user_subscription(user_uuid)
+            await internal_api_client.revoke_user_subscription(panel_user_id)
         else:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
@@ -2000,7 +2002,7 @@ async def cb_user_configs(callback: CallbackQuery) -> None:
         
         # Получаем доступные ноды пользователя для формирования конфигов
         try:
-            nodes_data = await internal_api_client.get_user_accessible_nodes(user_uuid)
+            nodes_data = await internal_api_client.get_user_accessible_nodes(await data_access.resolve_panel_user_id(user_uuid))
             nodes_response = nodes_data.get("response", nodes_data)
             
             # Логируем структуру ответа для отладки
@@ -2410,7 +2412,7 @@ async def cb_user_node_configs(callback: CallbackQuery) -> None:
         user_info = user.get("response", user)
         
         # Получаем доступные ноды
-        nodes_data = await internal_api_client.get_user_accessible_nodes(user_uuid)
+        nodes_data = await internal_api_client.get_user_accessible_nodes(await data_access.resolve_panel_user_id(user_uuid))
         nodes_response = nodes_data.get("response", nodes_data)
         accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
         
@@ -2554,7 +2556,7 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
                 return
             
             # Получаем доступные ноды
-            nodes_data = await internal_api_client.get_user_accessible_nodes(user_uuid)
+            nodes_data = await internal_api_client.get_user_accessible_nodes(await data_access.resolve_panel_user_id(user_uuid))
             nodes_response = nodes_data.get("response", nodes_data)
             accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
             
@@ -2689,7 +2691,7 @@ async def cb_user_sub_link(callback: CallbackQuery) -> None:
             # Если ссылок нет, генерируем из доступных нод (как в cb_user_configs)
             if not subscription_links:
                 try:
-                    nodes_data = await internal_api_client.get_user_accessible_nodes(user_uuid)
+                    nodes_data = await internal_api_client.get_user_accessible_nodes(await data_access.resolve_panel_user_id(user_uuid))
                     nodes_response = nodes_data.get("response", nodes_data)
                     accessible_nodes = nodes_response.get("activeNodes", []) if isinstance(nodes_response, dict) else []
                     
@@ -3058,7 +3060,7 @@ async def cb_user_stats(callback: CallbackQuery) -> None:
     try:
         if action == "sub_history":
             # История запросов подписки
-            history_data = await internal_api_client.get_user_subscription_request_history(user_uuid)
+            history_data = await internal_api_client.get_user_subscription_request_history(await data_access.resolve_panel_user_id(user_uuid))
             history = history_data.get("response", {}).get("records", [])
 
             if not history:
@@ -3272,7 +3274,7 @@ async def cb_user_traffic_nodes_period(callback: CallbackQuery) -> None:
             return
         
         # Получаем статистику трафика
-        traffic_data = await internal_api_client.get_user_traffic_stats(user_uuid, start, end)
+        traffic_data = await internal_api_client.get_user_traffic_stats(await data_access.resolve_panel_user_id(user_uuid), start, end)
         response = traffic_data.get("response", {})
         total_traffic = response.get("totalTrafficBytes", 0)
         nodes_usage = response.get("nodesUsage", [])
@@ -3394,7 +3396,7 @@ async def cb_user_stats_traffic_period(callback: CallbackQuery) -> None:
             return
 
         # Получаем статистику трафика
-        traffic_data = await internal_api_client.get_user_traffic_stats(user_uuid, start, end)
+        traffic_data = await internal_api_client.get_user_traffic_stats(await data_access.resolve_panel_user_id(user_uuid), start, end)
         
         # Логируем структуру ответа для отладки
         logger.info("User traffic stats API response: type=%s, keys=%s", type(traffic_data).__name__, list(traffic_data.keys()) if isinstance(traffic_data, dict) else "N/A")
@@ -3494,7 +3496,7 @@ async def cb_user_stats_nodes_period(callback: CallbackQuery) -> None:
         user_info = user.get("response", user)
 
         # Получаем доступные ноды пользователя
-        nodes_data = await internal_api_client.get_user_accessible_nodes(user_uuid)
+        nodes_data = await internal_api_client.get_user_accessible_nodes(await data_access.resolve_panel_user_id(user_uuid))
         nodes = nodes_data.get("response", {}).get("nodes", [])
 
         if not nodes:
@@ -3665,7 +3667,7 @@ async def cb_user_hwid_menu(callback: CallbackQuery) -> None:
         hwid_limit_display = _("hwid.unlimited") if not hwid_limit else str(hwid_limit)
         
         # Получаем устройства пользователя
-        devices_data = await internal_api_client.get_user_hwid_devices(user_uuid)
+        devices_data = await internal_api_client.get_user_hwid_devices(await data_access.resolve_panel_user_id(user_uuid))
         devices = devices_data.get("response", {}).get("devices", [])
         
         lines = [
@@ -3730,7 +3732,7 @@ async def cb_user_hwid_devices(callback: CallbackQuery) -> None:
         hwid_limit_display = _("hwid.unlimited") if not hwid_limit else str(hwid_limit)
         
         # Получаем устройства пользователя
-        devices_data = await internal_api_client.get_user_hwid_devices(user_uuid)
+        devices_data = await internal_api_client.get_user_hwid_devices(await data_access.resolve_panel_user_id(user_uuid))
         devices = devices_data.get("response", {}).get("devices", [])
         
         lines = [
@@ -3794,7 +3796,7 @@ async def cb_hwid_delete(callback: CallbackQuery, admin: BotAdmin) -> None:
     
     try:
         # Получаем список устройств, чтобы найти HWID по индексу
-        devices_data = await internal_api_client.get_user_hwid_devices(user_uuid)
+        devices_data = await internal_api_client.get_user_hwid_devices(await data_access.resolve_panel_user_id(user_uuid))
         devices = devices_data.get("response", {}).get("devices", [])
         
         if device_idx < 0 or device_idx >= len(devices):
@@ -3806,7 +3808,7 @@ async def cb_hwid_delete(callback: CallbackQuery, admin: BotAdmin) -> None:
             await callback.answer(_("errors.generic"), show_alert=True)
             return
         
-        await internal_api_client.delete_user_hwid_device(user_uuid, hwid)
+        await internal_api_client.delete_user_hwid_device(await data_access.resolve_panel_user_id(user_uuid), hwid)
         await callback.answer(_("hwid.deleted"), show_alert=True)
         # Обновляем список устройств - вызываем функцию напрямую
         # Получаем информацию о пользователе
@@ -3817,7 +3819,7 @@ async def cb_hwid_delete(callback: CallbackQuery, admin: BotAdmin) -> None:
         hwid_limit_display = _("hwid.unlimited") if not hwid_limit else str(hwid_limit)
         
         # Получаем обновленный список устройств
-        devices_data = await internal_api_client.get_user_hwid_devices(user_uuid)
+        devices_data = await internal_api_client.get_user_hwid_devices(await data_access.resolve_panel_user_id(user_uuid))
         devices = devices_data.get("response", {}).get("devices", [])
         
         lines = [
@@ -3872,7 +3874,7 @@ async def cb_hwid_delete_all(callback: CallbackQuery, admin: BotAdmin) -> None:
     back_to = _get_user_detail_back_target(callback.from_user.id)
     
     try:
-        await internal_api_client.delete_all_user_hwid_devices(user_uuid)
+        await internal_api_client.delete_all_user_hwid_devices(await data_access.resolve_panel_user_id(user_uuid))
         await callback.answer(_("hwid.all_deleted"), show_alert=True)
         # Обновляем список устройств - вызываем функцию напрямую
         # Получаем информацию о пользователе
@@ -3883,7 +3885,7 @@ async def cb_hwid_delete_all(callback: CallbackQuery, admin: BotAdmin) -> None:
         hwid_limit_display = _("hwid.unlimited") if not hwid_limit else str(hwid_limit)
         
         # Получаем обновленный список устройств
-        devices_data = await internal_api_client.get_user_hwid_devices(user_uuid)
+        devices_data = await internal_api_client.get_user_hwid_devices(await data_access.resolve_panel_user_id(user_uuid))
         devices = devices_data.get("response", {}).get("devices", [])
         
         lines = [

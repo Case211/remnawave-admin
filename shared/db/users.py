@@ -997,6 +997,28 @@ class UsersMixin:
             )
             return int(row["id"]) if row and row["id"] is not None else None
 
+    async def get_panel_ids_by_uuids(self, user_uuids: list[str]) -> dict[str, int]:
+        """Batch resolve local user uuids to panel numeric ids (v3)."""
+        if not self.is_connected or not user_uuids:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                select_sql(USERS_TABLE, "uuid, id", "WHERE uuid::text = ANY($1::text[]) AND id IS NOT NULL"),
+                user_uuids,
+            )
+            return {str(r["uuid"]): int(r["id"]) for r in rows}
+
+    async def get_uuids_by_panel_ids(self, panel_ids: list[int]) -> dict[int, str]:
+        """Batch resolve panel numeric ids (v3) to local user uuids."""
+        if not self.is_connected or not panel_ids:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                select_sql(USERS_TABLE, "uuid, id", "WHERE id = ANY($1::bigint[])"),
+                panel_ids,
+            )
+            return {int(r["id"]): str(r["uuid"]) for r in rows}
+
     async def get_all_user_ids(self) -> set[int]:
         """Get set of all known panel numeric user ids (non-null)."""
         if not self.is_connected:

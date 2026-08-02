@@ -109,6 +109,38 @@ async def get_user_by_short_uuid(short_uuid: str) -> Optional[Dict[str, Any]]:
     return await _fetch_single(short_uuid, db_service.get_user_by_short_uuid, api_client.get_user_by_short_uuid, "user")
 
 
+# ==================== Panel Identifier Resolution ====================
+
+async def resolve_panel_user_id(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the panel API expects.
+
+    v3 panels identify users by numeric id (stored in users.id); v2 by the
+    user's uuid. When the local row carries a panel id we return it,
+    otherwise we fall back to the local uuid (v2).
+    """
+    if db_service.is_connected and user_uuid:
+        try:
+            panel_id = await db_service.get_user_panel_id_by_uuid(user_uuid)
+            if panel_id is not None:
+                return panel_id
+        except Exception as e:
+            logger.debug("resolve_panel_user_id(%s) failed: %s", user_uuid, e)
+    return user_uuid
+
+
+async def resolve_panel_user_ids(user_uuids: list[str]) -> list[str | int]:
+    """Batch version of resolve_panel_user_id for a list of local uuids."""
+    if not user_uuids:
+        return []
+    if db_service.is_connected:
+        try:
+            mapping = await db_service.get_panel_ids_by_uuids(user_uuids)
+            return [mapping.get(u, u) for u in user_uuids]
+        except Exception as e:
+            logger.debug("resolve_panel_user_ids failed: %s", e)
+    return list(user_uuids)
+
+
 # ==================== Template Access ====================
 
 async def get_all_templates() -> List[Dict[str, Any]]:
