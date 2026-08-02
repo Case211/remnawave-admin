@@ -59,6 +59,12 @@ async def _resolve_user_key(user_uuid: str) -> str | int:
     return await resolve_panel_user_id(user_uuid)
 
 
+async def _resolve_visible_user_uuid(payload: dict) -> str | None:
+    """Локальный uuid юзера из панельного payload для проверки видимости."""
+    from shared.data_access import resolve_local_user_uuid
+    return await resolve_local_user_uuid(payload)
+
+
 async def _lookup_user_by_email(email: str) -> dict:
     """Lookup a single user by email via the v3 users/stream endpoint."""
     from shared.api_client import api_client
@@ -729,7 +735,9 @@ async def resolve_user(
             result = await lookup_fn()
             payload = result.get("response", result) if isinstance(result, dict) else result
             if payload:
-                resolved_uuid = payload.get("uuid") if isinstance(payload, dict) else None
+                # v2 payload несёт uuid, панель v3 — числовой id. Резолвим
+                # локальный uuid, чтобы видимость (scope) проверялась и в v3.
+                resolved_uuid = await _resolve_visible_user_uuid(payload)
                 if resolved_uuid:
                     await _ensure_user_visible(admin, resolved_uuid)
                 return _ensure_snake_case(payload) if isinstance(payload, dict) else payload

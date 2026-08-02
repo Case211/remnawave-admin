@@ -546,6 +546,11 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
                 val = row_dict.get(field)
                 if val is not None:
                     result["createdByAdminId"] = val
+            # Panel v3 identifies users by numeric id and sends no uuid —
+            # overlay the local uuid column so the API contract (and the
+            # frontend's user-scoped routes) keeps working.
+            if "uuid" not in result and row_dict.get("uuid") is not None:
+                result["uuid"] = str(row_dict["uuid"])
             return result
 
     # Fallback: build from row fields (convert snake_case to camelCase)
