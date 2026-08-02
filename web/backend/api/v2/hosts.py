@@ -466,10 +466,7 @@ async def delete_host(
     """Удалить хост."""
     if not await check_access(admin, "host", host_uuid, "delete"):
         raise api_error(403, E.FORBIDDEN)
-    result = await api_client.delete_host(host_uuid)
-
-    if not result:
-        raise api_error(404, E.HOST_DELETE_FAILED)
+    await api_client.delete_host(host_uuid)
 
     # Increment the admin's quota counter (lifetime events: +1 per delete)
     if admin.account_id is not None:

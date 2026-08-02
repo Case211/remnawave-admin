@@ -89,6 +89,8 @@ class BaseHttpClient:
                 duration_ms = (time.time() - start_time) * 1000
                 response.raise_for_status()
                 log_api_call(method, path, status_code=response.status_code, duration_ms=duration_ms)
+                if not response.content:
+                    return {}
                 return response.json()
 
             except HTTPStatusError as exc:
