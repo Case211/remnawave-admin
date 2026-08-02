@@ -637,6 +637,17 @@ class NodesMixin:
             )
             return {r["uuid"]: int(r["used"]) for r in rows}
 
+    async def get_used_traffic_map_by_id(self, panel_ids: List[int]) -> Dict[int, int]:
+        """Get current used_traffic_bytes for a list of panel numeric user ids (Remnawave v3)."""
+        if not self.is_connected or not panel_ids:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                select_sql(USERS_TABLE, "id, COALESCE(used_traffic_bytes, 0) as used", "WHERE id = ANY($1::bigint[])"),
+                panel_ids,
+            )
+            return {int(r["id"]): int(r["used"]) for r in rows}
+
     async def reset_raw_traffic(self, user_uuids: List[str]) -> None:
         """Reset raw_used_traffic_bytes to 0 for specified users (traffic reset detected)."""
         if not self.is_connected or not user_uuids:
@@ -645,6 +656,16 @@ class NodesMixin:
             await conn.execute(
                 update_sql(USERS_TABLE, "raw_used_traffic_bytes = 0", "uuid = ANY($1::uuid[])"),
                 user_uuids,
+            )
+
+    async def reset_raw_traffic_by_id(self, panel_ids: List[int]) -> None:
+        """Reset raw_used_traffic_bytes to 0 for specified panel numeric user ids (Remnawave v3)."""
+        if not self.is_connected or not panel_ids:
+            return
+        async with self.acquire() as conn:
+            await conn.execute(
+                update_sql(USERS_TABLE, "raw_used_traffic_bytes = 0", "id = ANY($1::bigint[])"),
+                panel_ids,
             )
 
     async def get_user_node_traffic_snapshot(self) -> Dict[str, Dict[str, int]]:
