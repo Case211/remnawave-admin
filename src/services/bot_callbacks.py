@@ -121,7 +121,7 @@ async def panel_event(request: Request):
         if event.startswith("user."):
             from src.utils.notifications import send_user_notification
 
-            user_uuid = event_data.get("uuid")
+            user_uuid = event_data.get("uuid") or event_data.get("id")
             if not user_uuid:
                 logger.warning("User UUID not found in panel event data")
                 return JSONResponse(status_code=200, content={"status": "skipped", "reason": "no uuid"})

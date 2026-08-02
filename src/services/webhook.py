@@ -303,8 +303,8 @@ async def _handle_user_event(bot: Bot, event: str, event_data: dict, diff_result
         logger.warning("User data not found in webhook payload")
         return
     
-    # Извлекаем UUID пользователя
-    user_uuid = event_data.get("uuid")
+    # Извлекаем UUID пользователя (v2) или числовой id (panel v3)
+    user_uuid = event_data.get("uuid") or event_data.get("id")
     
     if not user_uuid:
         logger.warning("User UUID not found in webhook data")

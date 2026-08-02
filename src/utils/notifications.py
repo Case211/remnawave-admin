@@ -157,6 +157,33 @@ async def _resolve_squads_display(active_squads: list) -> str:
     return ", ".join(names) if names else "—"
 
 
+async def _local_user_uuid(info: dict) -> Optional[str]:
+    """Local user uuid for a payload — v2 sends uuid, panel v3 sends numeric id."""
+    uuid = info.get("uuid")
+    if uuid:
+        return str(uuid)
+    panel_id = info.get("id")
+    if panel_id is None:
+        return None
+    try:
+        from shared.database import db_service
+        if db_service.is_connected:
+            resolved = await db_service.get_user_uuid_by_panel_id(int(panel_id))
+            if resolved:
+                return str(resolved)
+    except (TypeError, ValueError):
+        pass
+    except Exception:
+        pass
+    return None
+
+
+def _short_user_id(info: dict, local_uuid: Optional[str]) -> str:
+    """Короткий идентификатор юзера для карточки уведомления."""
+    display = local_uuid or info.get("uuid") or info.get("id") or ""
+    return str(display)[:8]
+
+
 async def send_user_notification(
     bot: Bot,
     action: str,  # "created", "updated", "deleted", "expired", "expires_in_*", etc.
@@ -192,6 +219,7 @@ async def send_user_notification(
     
     try:
         info = user_info.get("response", user_info)
+        local_uuid = await _local_user_uuid(info)
 
         lines = []
 
@@ -205,7 +233,7 @@ async def send_user_notification(
         lines.append("")
 
         # Идентификация
-        lines.append(f"👤 <code>{_esc(info.get('username', 'n/a'))}</code>  <code>{info.get('uuid', '')[:8]}</code>")
+        lines.append(f"👤 <code>{_esc(info.get('username', 'n/a'))}</code>  <code>{_short_user_id(info, local_uuid)}</code>")
         lines.append("")
 
         # Для updated: показываем только изменившиеся поля (diff)
@@ -376,10 +404,10 @@ async def send_user_notification(
             push_title = tr("notify.push.user.fallback", action=action)
         _push_dispatch(
             title=push_title,
-            body=info.get("username") or info.get("uuid", "")[:8],
+            body=info.get("username") or _short_user_id(info, local_uuid),
             notification_type="info",
             source="panel.webhook",
-            source_id=info.get("uuid"),
+            source_id=local_uuid,
             event=event_id,
         )
 
@@ -387,7 +415,7 @@ async def send_user_notification(
         logger.exception(
             "Failed to send user notification action=%s user_uuid=%s chat_id=%s topic_id=%s error=%s",
             action,
-            info.get("uuid", "unknown"),
+            local_uuid or info.get("id", "unknown"),
             chat_id,
             topic_id,
             exc,
@@ -684,15 +712,17 @@ async def send_hwid_notification(
         # Webhook может прислать hwidDevice или hwidUserDevice
         hwid_data = event_data.get("hwidDevice", {}) or event_data.get("hwidUserDevice", {})
 
+        user_local_uuid = await _local_user_uuid(user_data) if user_data else None
+
         if user_data:
             username = user_data.get("username", "n/a")
-            user_uuid = user_data.get("uuid", "n/a")
+            user_uuid = user_data.get("uuid") or user_local_uuid or user_data.get("id", "n/a")
             telegram_id = user_data.get("telegramId")
             status = user_data.get("status", "—")
             description = user_data.get("description", "")
             hwid_device_limit = user_data.get("hwidDeviceLimit", 0)
 
-            lines.append(f"{tr('notify.hwid.label.user', username=_esc(username))}  <code>{user_uuid[:8]}</code>")
+            lines.append(f"{tr('notify.hwid.label.user', username=_esc(username))}  <code>{_short_user_id(user_data, user_local_uuid)}</code>")
             if telegram_id is not None:
                 lines.append(f"   {tr('notify.hwid.label.tg_id', telegram_id=telegram_id)}")
 
@@ -750,6 +780,8 @@ async def send_hwid_notification(
         # не подходит под startsWith("user.") (нет точки после user).
         username = user_data.get("username") if user_data else None
         user_uuid = user_data.get("uuid") if user_data else None
+        if not user_uuid:
+            user_uuid = user_local_uuid
         platform = hwid_data.get("platform") if hwid_data else None
         if event == "user_hwid_devices.added":
             action_label = tr("notify.hwid.action.added")
