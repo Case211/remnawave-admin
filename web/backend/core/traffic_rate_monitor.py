@@ -14,6 +14,12 @@ from shared.db_query import select_sql
 
 logger = logging.getLogger(__name__)
 
+
+async def _resolve_user_key(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the Panel API expects."""
+    from shared.data_access import resolve_panel_user_id
+    return await resolve_panel_user_id(user_uuid)
+
 # (timestamp, raw_used_traffic_bytes) per user
 _UserSnapshot = Tuple[float, int]
 
@@ -111,6 +117,15 @@ class TrafficRateMonitor:
                     break
                 for u in users_list:
                     uid = u.get("uuid")
+                    if not uid:
+                        # Panel v3 identifies users by numeric id — resolve to local uuid
+                        panel_id = u.get("id")
+                        if panel_id is None:
+                            continue
+                        try:
+                            uid = await db_service.get_user_uuid_by_panel_id(int(panel_id))
+                        except (TypeError, ValueError):
+                            continue
                     if not uid:
                         continue
                     ut = u.get("userTraffic") or {}
@@ -217,7 +232,7 @@ class TrafficRateMonitor:
             if auto_action == "block_user" and v["delta_gb"] >= auto_block_gb:
                 try:
                     from shared.api_client import api_client
-                    await api_client.disable_user(v["user_uuid"])
+                    await api_client.disable_user(await _resolve_user_key(v["user_uuid"]))
                     logger.info(
                         "Auto-blocked user %s for excessive traffic: %.1f GB (threshold: %.1f GB)",
                         v["username"], v["delta_gb"], auto_block_gb,

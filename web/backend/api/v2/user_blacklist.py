@@ -14,6 +14,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _resolve_user_key(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the Panel API expects."""
+    from shared.data_access import resolve_panel_user_id
+    return await resolve_panel_user_id(user_uuid)
+
+
 def _parse_blacklist_text(text: str, source: str) -> list[tuple[int, str, str]]:
     """Parse a blacklist file into (telegram_id, reason, source) tuples.
 
@@ -202,7 +208,7 @@ async def _auto_block_user(telegram_id: int):
         if not user or user.get("status") == "DISABLED":
             return
         from shared.api_client import api_client
-        await api_client.disable_user(user["uuid"])
+        await api_client.disable_user(await _resolve_user_key(user["uuid"]))
         logger.info("Auto-blocked blacklisted user: tg_id=%d uuid=%s", telegram_id, user["uuid"])
     except Exception as e:
         logger.error("Auto-block failed for tg_id=%d: %s", telegram_id, e)
@@ -223,7 +229,7 @@ async def _auto_block_blacklisted_users():
             user = await db_service.get_user_by_telegram_id(tg_id)
             if user and user.get("status") != "DISABLED":
                 try:
-                    await api_client.disable_user(user["uuid"])
+                    await api_client.disable_user(await _resolve_user_key(user["uuid"]))
                     blocked += 1
                     logger.info("Auto-blocked blacklisted user: tg_id=%d", tg_id)
                 except Exception:

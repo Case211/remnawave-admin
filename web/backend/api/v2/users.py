@@ -49,6 +49,16 @@ async def _ensure_user_visible(admin: AdminUser, user_uuid: str) -> None:
         raise api_error(403, E.FORBIDDEN)
 
 
+async def _resolve_user_key(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the Panel API expects.
+
+    v3 panels identify users by numeric id (stored in users.id); v2 by the
+    user's uuid. Falls back to the local uuid when no panel id is known.
+    """
+    from shared.data_access import resolve_panel_user_id
+    return await resolve_panel_user_id(user_uuid)
+
+
 async def _lookup_user_by_email(email: str) -> dict:
     """Lookup a single user by email via the v3 users/stream endpoint."""
     from shared.api_client import api_client
@@ -778,7 +788,7 @@ async def get_user(
         if not user_data:
             try:
                 from shared.api_client import api_client
-                resp = await api_client.get_user_by_id(user_uuid)
+                resp = await api_client.get_user_by_id(await _resolve_user_key(user_uuid))
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
                 raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -926,7 +936,9 @@ async def create_user(
             if not await increment_usage_counter(admin.account_id, "users_created"):
                 # Roll back the user we just created to keep counters honest
                 try:
-                    await api_client.delete_user(user.get("uuid", ""))
+                    panel_id = user.get("id") or user.get("uuid", "")
+                    if panel_id:
+                        await api_client.delete_user(panel_id)
                 except Exception:
                     pass
                 raise api_error(409, E.USERS_QUOTA_EXCEEDED,
@@ -942,7 +954,9 @@ async def create_user(
                     admin.account_id, "traffic_used_bytes", data.traffic_limit_bytes
                 ):
                     try:
-                        await api_client.delete_user(user.get("uuid", ""))
+                        panel_id = user.get("id") or user.get("uuid", "")
+                        if panel_id:
+                            await api_client.delete_user(panel_id)
                     except Exception:
                         pass
                     raise api_error(
@@ -1099,7 +1113,7 @@ async def update_user(
                     pass
                 if old_limit is None:
                     try:
-                        resp = await api_client.get_user_by_id(user_uuid)
+                        resp = await api_client.get_user_by_id(await _resolve_user_key(user_uuid))
                         user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
                         old_limit = user_data.get('traffic_limit_bytes')
                         if old_limit is None:
@@ -1167,7 +1181,7 @@ async def update_user(
         for k, v in update_data.items():
             camel_data[snake_to_camel.get(k, k)] = v
         try:
-            resp = await api_client.update_user(user_uuid, **camel_data)
+            resp = await api_client.update_user(await _resolve_user_key(user_uuid), **camel_data)
         except Exception as panel_exc:
             code, msg = _classify_panel_error(panel_exc)
             logger.error("update_user(%s) panel error: %s [%s]", user_uuid, msg, code.value, exc_info=True)
@@ -1232,7 +1246,7 @@ async def delete_user(
                 traffic_limit = existing.get("trafficLimitBytes") or 0
 
         try:
-            await api_client.delete_user(user_uuid)
+            await api_client.delete_user(await _resolve_user_key(user_uuid))
         except Exception as panel_exc:
             code, msg = _classify_panel_error(panel_exc)
             logger.error("delete_user(%s) panel error: %s [%s]", user_uuid, msg, code.value, exc_info=True)
@@ -1287,7 +1301,7 @@ async def enable_user(
     try:
         from shared.api_client import api_client
 
-        await api_client.enable_user(user_uuid)
+        await api_client.enable_user(await _resolve_user_key(user_uuid))
 
         await write_audit_log(
             admin_id=admin.account_id, admin_username=admin.username,
@@ -1320,7 +1334,7 @@ async def disable_user(
     try:
         from shared.api_client import api_client
 
-        await api_client.disable_user(user_uuid)
+        await api_client.disable_user(await _resolve_user_key(user_uuid))
 
         await write_audit_log(
             admin_id=admin.account_id, admin_username=admin.username,
@@ -1356,7 +1370,7 @@ async def reset_user_traffic(
         # Fetch used_traffic_bytes BEFORE the reset
         creator_admin_id, _limit, used_bytes = await fetch_user_quota_data(user_uuid)
 
-        await api_client.reset_user_traffic(user_uuid)
+        await api_client.reset_user_traffic(await _resolve_user_key(user_uuid))
 
         # Apply quota counter changes via shared helper
         await apply_user_reset_traffic_quotas(creator_admin_id, used_bytes)
@@ -1387,7 +1401,7 @@ async def revoke_user_subscription(
     try:
         from shared.api_client import api_client
 
-        await api_client.revoke_user_subscription(user_uuid, revoke_only_passwords=passwords_only)
+        await api_client.revoke_user_subscription(await _resolve_user_key(user_uuid), revoke_only_passwords=passwords_only)
 
         action = "user.revoke_passwords" if passwords_only else "user.revoke"
         await write_audit_log(
@@ -1419,7 +1433,7 @@ async def get_hwid_device_counts(
     async def _get_count(uuid: str) -> tuple:
         try:
             from shared.api_client import api_client
-            result = await api_client.get_user_hwid_devices(uuid)
+            result = await api_client.get_user_hwid_devices(await _resolve_user_key(uuid))
             response = result.get("response", result) if isinstance(result, dict) else result
             devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
             return (uuid, len(devices))
@@ -1464,7 +1478,7 @@ async def get_user_traffic_stats(
         if not user_data:
             try:
                 from shared.api_client import api_client as _api
-                resp = await _api.get_user_by_id(user_uuid)
+                resp = await _api.get_user_by_id(await _resolve_user_key(user_uuid))
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
                 raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -1502,7 +1516,7 @@ async def get_user_traffic_stats(
         try:
             from shared.api_client import api_client
             result = await api_client.get_user_traffic_stats(
-                user_uuid, start=start_str, end=end_str, top_nodes_limit=50
+                await _resolve_user_key(user_uuid), start=start_str, end=end_str, top_nodes_limit=50
             )
             # Parse response - API returns { response: { topNodes: [...], series: [...], ... } }
             response = result.get('response', result) if isinstance(result, dict) else result
@@ -1601,7 +1615,7 @@ async def sync_user_hwid_devices(
     await _ensure_user_visible(admin, user_uuid)
     try:
         from shared.sync import sync_service
-        synced = await sync_service.sync_user_hwid_devices(user_uuid)
+        synced = await sync_service.sync_user_hwid_devices(await _resolve_user_key(user_uuid))
         return {"success": True, "synced": synced}
     except Exception as e:
         logger.error("Error syncing HWID devices for %s: %s", user_uuid, e)
@@ -1631,7 +1645,7 @@ async def get_user_deeplinks(
     if not user_data:
         try:
             from shared.api_client import api_client
-            resp = await api_client.get_user_by_id(user_uuid)
+            resp = await api_client.get_user_by_id(await _resolve_user_key(user_uuid))
             user_data = resp.get("response", resp) if isinstance(resp, dict) else resp
         except ImportError:
             raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -1689,7 +1703,7 @@ async def get_user_hwid_devices(
     # DB empty — trigger sync from Panel API (uses same logic as manual sync button)
     try:
         from shared.sync import sync_service
-        synced = await sync_service.sync_user_hwid_devices(user_uuid)
+        synced = await sync_service.sync_user_hwid_devices(await _resolve_user_key(user_uuid))
         if synced:
             from shared.database import db_service
             if db_service.is_connected:
@@ -1720,7 +1734,7 @@ async def delete_user_hwid_device(
 
         # Also delete from main API
         try:
-            await api_client.delete_user_hwid_device(user_uuid, device_id)
+            await api_client.delete_user_hwid_device(await _resolve_user_key(user_uuid), device_id)
         except Exception as e:
             logger.warning("Failed to delete HWID device %s from API for %s: %s", device_id, user_uuid, e)
 
@@ -1747,7 +1761,7 @@ async def delete_all_user_hwid_devices(
 
         # Also delete from main API
         try:
-            await api_client.delete_all_user_hwid_devices(user_uuid)
+            await api_client.delete_all_user_hwid_devices(await _resolve_user_key(user_uuid))
         except Exception as e:
             logger.warning("Failed to delete all HWID devices from API for %s: %s", user_uuid, e)
 
@@ -1780,7 +1794,7 @@ async def bulk_enable_users(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api_client.enable_user(uuid)
+            await api_client.enable_user(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
@@ -1815,7 +1829,7 @@ async def bulk_disable_users(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api_client.disable_user(uuid)
+            await api_client.disable_user(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
@@ -1861,7 +1875,7 @@ async def bulk_delete_users(
                     used_bytes = existing.get("usedTrafficBytes") or 0
                     traffic_limit = existing.get("trafficLimitBytes") or 0
 
-            await api_client.delete_user(uuid)
+            await api_client.delete_user(await _resolve_user_key(uuid))
             if db_service.is_connected:
                 try:
                     await db_service.delete_user(uuid)
@@ -1913,7 +1927,7 @@ async def bulk_reset_traffic(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api_client.reset_user_traffic(uuid)
+            await api_client.reset_user_traffic(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
