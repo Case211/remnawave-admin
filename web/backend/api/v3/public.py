@@ -151,6 +151,16 @@ def _get_api_client():
     return api_client
 
 
+async def _resolve_user_key(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the Panel API expects.
+
+    The public API exposes local DB uuids (see GET /users), but panel v3
+    identifies users by numeric id — resolve before forwarding to the panel.
+    """
+    from shared.data_access import resolve_panel_user_id
+    return await resolve_panel_user_id(user_uuid)
+
+
 # ══════════════════════════════════════════════════════════════════
 # Users — Read
 # ══════════════════════════════════════════════════════════════════
@@ -272,7 +282,7 @@ async def enable_user(
     """Enable a user."""
     try:
         api = _get_api_client()
-        await api.enable_user(uuid)
+        await api.enable_user(await _resolve_user_key(uuid))
         return SuccessResult(success=True, message="User enabled")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -286,7 +296,7 @@ async def disable_user(
     """Disable a user."""
     try:
         api = _get_api_client()
-        await api.disable_user(uuid)
+        await api.disable_user(await _resolve_user_key(uuid))
         return SuccessResult(success=True, message="User disabled")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -300,7 +310,7 @@ async def reset_user_traffic(
     """Reset user traffic counter."""
     try:
         api = _get_api_client()
-        await api.reset_user_traffic(uuid)
+        await api.reset_user_traffic(await _resolve_user_key(uuid))
         return SuccessResult(success=True, message="Traffic reset")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -314,7 +324,7 @@ async def delete_user(
     """Delete a user."""
     try:
         api = _get_api_client()
-        await api.delete_user(uuid)
+        await api.delete_user(await _resolve_user_key(uuid))
         return SuccessResult(success=True, message="User deleted")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -622,7 +632,7 @@ async def bulk_enable_users(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api.enable_user(uuid)
+            await api.enable_user(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
@@ -640,7 +650,7 @@ async def bulk_disable_users(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api.disable_user(uuid)
+            await api.disable_user(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
@@ -661,7 +671,7 @@ async def bulk_delete_users(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api.delete_user(uuid)
+            await api.delete_user(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
@@ -679,7 +689,7 @@ async def bulk_reset_traffic(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api.reset_user_traffic(uuid)
+            await api.reset_user_traffic(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
