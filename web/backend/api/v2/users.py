@@ -49,6 +49,15 @@ async def _ensure_user_visible(admin: AdminUser, user_uuid: str) -> None:
         raise api_error(403, E.FORBIDDEN)
 
 
+async def _lookup_user_by_email(email: str) -> dict:
+    """Lookup a single user by email via the v3 users/stream endpoint."""
+    from shared.api_client import api_client
+    result = await api_client.get_users_stream(email=email, size=1)
+    payload = result.get("response", result) if isinstance(result, dict) else result
+    users = payload.get("users", []) if isinstance(payload, dict) else []
+    return {"response": users[0]} if users else {}
+
+
 def _extract_panel_error(exc: Exception) -> Optional[str]:
     """
     Достаёт человекочитаемое описание ошибки из ответа Panel API.
@@ -695,16 +704,14 @@ async def resolve_user(
 
     # Build ordered list of lookup methods to try
     lookups = []
-    if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', query, re.IGNORECASE):
-        lookups.append(("uuid", lambda: api_client.get_user_by_uuid(query)))
-    elif query.isdigit():
+    if query.isdigit():
         lookups.append(("id", lambda: api_client.get_user_by_id(int(query))))
+    elif "@" in query:
+        lookups.append(("email", lambda: _lookup_user_by_email(query)))
     else:
         # Could be username or short_uuid — try both
         lookups.append(("username", lambda: api_client.get_user_by_username(query)))
         lookups.append(("short_uuid", lambda: api_client.get_user_by_short_uuid(query)))
-        if "@" in query:
-            lookups.insert(0, ("email", lambda: api_client.get_users_by_email(query)))
 
     last_error = None
     for method_name, lookup_fn in lookups:
@@ -720,30 +727,31 @@ async def resolve_user(
             last_error = e
             logger.debug("Resolve by %s failed for '%s': %s", method_name, query, e)
 
-    # Fallback: search local DB (description, notes, etc.)
+    # Fallback: search local DB (uuid, description, notes, etc.)
     try:
         from shared.database import db_service
         if db_service.is_connected:
             async with db_service.acquire() as conn:
                 row = await conn.fetchrow(
                     """
-                    SELECT uuid, username FROM users
-                    WHERE LOWER(raw_data->>'description') LIKE $1
-                       OR LOWER(raw_data->>'note') LIKE $1
+                    SELECT uuid, username, short_uuid FROM users
+                    WHERE uuid = $1
+                       OR LOWER(raw_data->>'description') LIKE $2
+                       OR LOWER(raw_data->>'note') LIKE $2
                     LIMIT 1
                     """,
+                    query.lower(),
                     f"%{query.lower()}%",
                 )
                 if row:
                     await _ensure_user_visible(admin, str(row["uuid"]))
-                    # Found in local DB — fetch full data from Panel
-                    try:
-                        result = await api_client.get_user_by_uuid(str(row["uuid"]))
-                        payload = result.get("response", result) if isinstance(result, dict) else result
-                        if payload:
-                            return payload
-                    except Exception:
-                        return {"uuid": str(row["uuid"]), "username": row["username"]}
+                    # Panel v3 can no longer look users up by uuid; the local
+                    # synced row carries the data the panel used to return.
+                    return {
+                        "uuid": str(row["uuid"]),
+                        "username": row["username"],
+                        "shortUuid": row["short_uuid"],
+                    }
     except Exception as e:
         logger.debug("Resolve local DB search failed for '%s': %s", query, e)
 
@@ -770,7 +778,7 @@ async def get_user(
         if not user_data:
             try:
                 from shared.api_client import api_client
-                resp = await api_client.get_user_by_uuid(user_uuid)
+                resp = await api_client.get_user_by_id(user_uuid)
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
                 raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -1091,7 +1099,7 @@ async def update_user(
                     pass
                 if old_limit is None:
                     try:
-                        resp = await api_client.get_user_by_uuid(user_uuid)
+                        resp = await api_client.get_user_by_id(user_uuid)
                         user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
                         old_limit = user_data.get('traffic_limit_bytes')
                         if old_limit is None:
@@ -1456,7 +1464,7 @@ async def get_user_traffic_stats(
         if not user_data:
             try:
                 from shared.api_client import api_client as _api
-                resp = await _api.get_user_by_uuid(user_uuid)
+                resp = await _api.get_user_by_id(user_uuid)
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
                 raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -1623,7 +1631,7 @@ async def get_user_deeplinks(
     if not user_data:
         try:
             from shared.api_client import api_client
-            resp = await api_client.get_user_by_uuid(user_uuid)
+            resp = await api_client.get_user_by_id(user_uuid)
             user_data = resp.get("response", resp) if isinstance(resp, dict) else resp
         except ImportError:
             raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -2323,7 +2331,7 @@ async def drop_user_connections(
 
     try:
         result = await api_client.drop_connections(
-            drop_by={"by": "userUuids", "userUuids": [user_uuid]},
+            drop_by={"by": "userIds", "userIds": [user_uuid]},
             target_nodes=target_nodes,
         )
         payload = result.get("response", result) if isinstance(result, dict) else result

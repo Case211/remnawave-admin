@@ -267,7 +267,7 @@ async def panel_user_from_api(user_uuid: str) -> Optional[dict]:
     """Юзер из Panel API (fallback, когда локальный кэш скуден)."""
     try:
         from shared.api_client import api_client
-        resp = await api_client.get_user_by_uuid(user_uuid)
+        resp = await api_client.get_user_by_id(user_uuid)
     except Exception:
         return None
     if isinstance(resp, dict) and isinstance(resp.get("response"), dict):

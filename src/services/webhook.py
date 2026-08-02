@@ -484,7 +484,7 @@ async def test_webhook(request: Request):
         
         # Получаем данные пользователя из API
         try:
-            user = await api_client.get_user_by_uuid(user_uuid)
+            user = await api_client.get_user_by_id(user_uuid)
         except NotFoundError:
             raise HTTPException(status_code=404, detail="User not found")
         

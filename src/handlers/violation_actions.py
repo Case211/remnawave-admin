@@ -78,7 +78,7 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
 async def _show_user_info(callback: CallbackQuery, user_uuid: str) -> None:
     """Show brief user info."""
     try:
-        result = await internal_api_client.get_user_by_uuid(user_uuid)
+        result = await internal_api_client.get_user_by_id(user_uuid)
         user = result.get("response", result)
         username = user.get("username", "?")
         status = user.get("status", "?")
@@ -116,7 +116,7 @@ async def _block_user(callback: CallbackQuery, user_uuid: str) -> None:
         # Get username for confirmation
         username = user_uuid[:8]
         try:
-            result = await internal_api_client.get_user_by_uuid(user_uuid)
+            result = await internal_api_client.get_user_by_id(user_uuid)
             username = result.get("response", result).get("username", username)
         except Exception:
             pass
@@ -146,7 +146,7 @@ async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
         # 2. Drop all connections
         try:
             await internal_api_client.drop_connections(
-                drop_by={"by": "userUuids", "userUuids": [user_uuid]},
+                drop_by={"by": "userIds", "userIds": [user_uuid]},
                 target_nodes={"target": "allNodes"},
             )
         except Exception as e:
@@ -154,7 +154,7 @@ async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
 
         username = user_uuid[:8]
         try:
-            result = await internal_api_client.get_user_by_uuid(user_uuid)
+            result = await internal_api_client.get_user_by_id(user_uuid)
             username = result.get("response", result).get("username", username)
         except Exception:
             pass
@@ -210,7 +210,7 @@ async def _reset_traffic(callback: CallbackQuery, user_uuid: str) -> None:
     try:
         username = user_uuid[:8]
         try:
-            result = await internal_api_client.get_user_by_uuid(user_uuid)
+            result = await internal_api_client.get_user_by_id(user_uuid)
             info = result.get("response", result)
             username = info.get("username", username)
         except Exception:

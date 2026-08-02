@@ -90,12 +90,19 @@ async def _fetch_list_wrapped(
 
 # ==================== User Access ====================
 
+async def _api_user_by_id_fallback(identifier: str) -> dict:
+    """Panel v3 has no uuid lookup — the API fallback only works for numeric ids."""
+    if isinstance(identifier, str) and identifier.isdigit():
+        return await api_client.get_user_by_id(int(identifier))
+    return {}
+
+
 async def get_user_by_uuid(uuid: str) -> Optional[Dict[str, Any]]:
-    return await _fetch_single(uuid, db_service.get_user_by_uuid, api_client.get_user_by_uuid, "user")
+    return await _fetch_single(uuid, db_service.get_user_by_uuid, _api_user_by_id_fallback, "user")
 
 
 async def get_user_by_uuid_wrapped(uuid: str) -> Dict[str, Any]:
-    return await _fetch_single_wrapped(uuid, db_service.get_user_by_uuid, api_client.get_user_by_uuid, "user")
+    return await _fetch_single_wrapped(uuid, db_service.get_user_by_uuid, _api_user_by_id_fallback, "user")
 
 
 async def get_user_by_short_uuid(short_uuid: str) -> Optional[Dict[str, Any]]:

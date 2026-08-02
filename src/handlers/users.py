@@ -166,7 +166,12 @@ async def _fetch_user(query: str) -> dict:
     
     # Fallback на API
     if query.isdigit():
-        return await internal_api_client.get_user_by_telegram_id(int(query))
+        result = await internal_api_client.get_users_stream(telegram_id=int(query))
+        payload = result.get("response", result) if isinstance(result, dict) else result
+        users = payload.get("users", []) if isinstance(payload, dict) else payload
+        if users:
+            return {"response": users[0]}
+        raise ValueError(f"User with telegram id {query} not found")
     return await internal_api_client.get_user_by_username(query)
 
 
@@ -3594,7 +3599,7 @@ async def cb_user_stats_nodes_period(callback: CallbackQuery) -> None:
                             if not isinstance(top_user, dict):
                                 continue
                             # Пробуем разные поля для UUID пользователя
-                            top_user_uuid = top_user.get("userUuid", top_user.get("uuid", ""))
+                            top_user_uuid = top_user.get("id", top_user.get("userId", top_user.get("userUuid", top_user.get("uuid", ""))))
                             if top_user_uuid == user_uuid:
                                 # Пробуем разные поля для трафика
                                 user_traffic = top_user.get("trafficBytes", top_user.get("traffic", top_user.get("total", 0)))

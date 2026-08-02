@@ -878,7 +878,7 @@ class SyncService:
         user_data = event_data.get("user") or {}
         hwid_data = event_data.get("hwidDevice") or event_data.get("hwidUserDevice") or {}
 
-        user_uuid = user_data.get("uuid") or hwid_data.get("userUuid")
+        user_uuid = user_data.get("uuid") or hwid_data.get("userUuid") or hwid_data.get("userId") or user_data.get("id")
         hwid = hwid_data.get("hwid")
 
         if not user_uuid or not hwid:
@@ -971,19 +971,20 @@ class SyncService:
             for node in active_nodes:
                 node_uuid = str(node["uuid"])
                 try:
-                    result = await api_client.get_node_users_usage_legacy(
+                    result = await api_client.get_node_users_usage(
                         node_uuid, start=start_str, end=end_str
                     )
                     response = result.get("response", result) if isinstance(result, dict) else result
-                    rows = response if isinstance(response, list) else []
+                    rows = response.get("users", []) if isinstance(response, dict) else (response if isinstance(response, list) else [])
 
-                    # Legacy endpoint returns one row per user-per-day with userUuid — aggregate per user
+                    # Endpoint returns one entry per user; v2 keys rows by
+                    # userUuid, v3 by numeric id — accept both.
                     user_totals: dict[str, int] = {}
                     for row in rows:
-                        uuid = (row.get("userUuid") or "").strip()
-                        if not uuid:
+                        uuid = str(row.get("userUuid") or row.get("id") or row.get("userId") or "").strip()
+                        if not uuid or uuid == "None":
                             continue
-                        user_totals[uuid] = user_totals.get(uuid, 0) + int(row.get("total", 0) or 0)
+                        user_totals[uuid] = user_totals.get(uuid, 0) + int(row.get("trafficBytes") or row.get("total", 0) or 0)
 
                     logger.debug(
                         "Node %s: %d rows, %d unique users",
@@ -1063,7 +1064,7 @@ class SyncService:
             return False
         
         try:
-            user = await api_client.get_user_by_uuid(uuid)
+            user = await api_client.get_user_by_id(uuid)
             await db_service.upsert_user(user)
             logger.debug("Synced single user %s", uuid)
             return True
@@ -1191,7 +1192,7 @@ class SyncService:
                 # Группируем устройства по пользователям
                 devices_by_user: Dict[str, List[Dict]] = {}
                 for device in devices:
-                    user_uuid = device.get("userUuid")
+                    user_uuid = device.get("userUuid") or device.get("userId")
                     if user_uuid:
                         if user_uuid not in devices_by_user:
                             devices_by_user[user_uuid] = []

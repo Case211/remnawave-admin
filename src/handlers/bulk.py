@@ -66,7 +66,7 @@ async def _run_bulk_action(
             if uuids:
                 for user_uuid in uuids:
                     try:
-                        user = await internal_api_client.get_user_by_uuid(user_uuid)
+                        user = await internal_api_client.get_user_by_id(user_uuid)
                         users_to_notify.append(user)
                     except Exception:
                         logger.debug("Failed to get user data for notification user_uuid=%s", user_uuid)

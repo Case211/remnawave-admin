@@ -981,7 +981,7 @@ async def resolve_violation(
                     # для блокировки это успех, а не «Сервис API недоступен»
                     # (без этого нарушение по отключённому юзеру нельзя закрыть)
                     try:
-                        u = await api_client.get_user_by_uuid(user_uuid)
+                        u = await api_client.get_user_by_id(user_uuid)
                         u = u.get("response") if isinstance(u.get("response"), dict) else u
                     except Exception:
                         u = None
