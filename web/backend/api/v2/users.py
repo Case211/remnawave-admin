@@ -798,6 +798,11 @@ async def get_user(
                 from shared.api_client import api_client
                 resp = await api_client.get_user_by_id(await _resolve_user_key(user_uuid))
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
+                # Панель 3.x отвечает без uuid, а он обязателен в UserDetail —
+                # подставляем локальный из маршрута, иначе вместо карточки
+                # прилетит 500 на валидации ответа.
+                if isinstance(user_data, dict) and not user_data.get('uuid'):
+                    user_data['uuid'] = user_uuid
             except ImportError:
                 raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
