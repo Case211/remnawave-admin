@@ -160,6 +160,16 @@ class RemnawaveApiClient(BaseHttpClient):
     async def reset_user_traffic(self, user_id: int) -> dict:
         return await self._post(f"/api/users/{user_id}/actions/reset-traffic")
 
+    async def extend_user_expiration(self, user_id: int, days: int) -> dict:
+        """Продлевает подписку одного юзера (Remnawave 3.2.0+).
+
+        Панель сама решает, от чего считать: истёкшему срок отсчитывается
+        от сегодня и статус возвращается в ACTIVE, активному дни
+        прибавляются к текущей дате. DISABLED и LIMITED продлеваются
+        без смены статуса.
+        """
+        return await self._post(f"/api/users/{user_id}/actions/extend", json={"days": days})
+
     async def revoke_user_subscription(self, user_id: int, short_uuid: str | None = None, revoke_only_passwords: bool = False) -> dict:
         """Отзывает подписку пользователя. short_uuid опционален - если не указан, будет сгенерирован автоматически.
         revoke_only_passwords=True перегенерирует только пароли подключения, URL подписки останется прежним."""
@@ -291,6 +301,16 @@ class RemnawaveApiClient(BaseHttpClient):
     async def get_nodes_metrics(self) -> dict:
         """Получает метрики нод (inbounds/outbounds stats)."""
         return await self._get("/api/system/nodes/metrics")
+
+    async def get_system_configuration(self) -> dict:
+        """Конфигурация панели (Remnawave 3.2.0+).
+
+        Отдаёт часть env панели: включён ли вебхук, сервисные тумблеры
+        (история запросов подписки, записи трафика юзеров) и мелочи вроде
+        длины short uuid. Админка сверяет по ним свои ожидания — без вебхука
+        или с выключенной историей часть её функций работает вхолостую.
+        """
+        return await self._get("/api/system/configuration")
 
     async def generate_x25519_keypairs(self) -> dict:
         """Генерирует 30 X25519 ключевых пар."""

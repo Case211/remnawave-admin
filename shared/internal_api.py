@@ -68,6 +68,7 @@ _ROUTE_DEFS: list[dict[str, Any]] = [
     dict(name="enable_user", method="POST", path="/users/{user_id}/actions/enable"),
     dict(name="disable_user", method="POST", path="/users/{user_id}/actions/disable"),
     dict(name="reset_user_traffic", method="POST", path="/users/{user_id}/actions/reset-traffic"),
+    dict(name="extend_user_expiration", method="POST", path="/users/{user_id}/actions/extend", body="kwargs"),
     dict(name="revoke_user_subscription", method="POST", path="/users/{user_id}/actions/revoke", body="kwargs"),
     dict(name="get_user_subscription_request_history", method="GET", path="/users/{user_id}/subscription-request-history"),
     dict(name="get_user_accessible_nodes", method="GET", path="/users/{user_id}/accessible-nodes"),

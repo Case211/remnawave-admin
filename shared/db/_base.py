@@ -434,6 +434,20 @@ class DatabaseBase:
                 logger.warning("Migration: skip user_id column on %s: %s", table, e)
         await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_id ON users(id)")
 
+        # v3.1.0: правило SRR, обработавшее запрос подписки.
+        # Аналог alembic-миграции 0093 для инсталляций без alembic.
+        try:
+            await conn.execute(
+                "ALTER TABLE subscription_request_history "
+                "ADD COLUMN IF NOT EXISTS srr_response_type VARCHAR(64)"
+            )
+            await conn.execute(
+                "ALTER TABLE subscription_request_history "
+                "ADD COLUMN IF NOT EXISTS srr_rule_name VARCHAR(255)"
+            )
+        except Exception as e:
+            logger.warning("Migration: skip SRR columns on subscription_request_history: %s", e)
+
         # v2.6.0: Add new indexes (safe with IF NOT EXISTS)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_tag ON users(tag) WHERE tag IS NOT NULL")

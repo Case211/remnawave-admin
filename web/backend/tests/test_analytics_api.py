@@ -99,3 +99,60 @@ class TestOverviewModels:
         delta = DeltaStats()
         assert delta.users_delta is None
         assert delta.traffic_delta is None
+
+
+class TestPanelConfiguration:
+    """GET /api/v2/analytics/system/panel-configuration."""
+
+    @pytest.mark.asyncio
+    async def test_warnings_from_panel_config(self, client):
+        """Выключенные в панели тумблеры превращаются в предупреждения."""
+        from shared.api_client import api_client
+
+        config = {
+            "response": {
+                "notifications": {"webhook": False},
+                "service": {"disableSrhRecords": True, "disableUserUsageRecords": False},
+                "misc": {"shortUuidLength": 16},
+            }
+        }
+        with patch.object(api_client, "get_system_configuration", new_callable=AsyncMock,
+                          return_value=config):
+            resp = await client.get("/api/v2/analytics/system/panel-configuration")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["available"] is True
+        keys = {w["key"] for w in data["warnings"]}
+        assert keys == {"webhook_disabled", "srh_disabled"}
+
+    @pytest.mark.asyncio
+    async def test_no_warnings_when_everything_enabled(self, client):
+        from shared.api_client import api_client
+
+        config = {
+            "response": {
+                "notifications": {"webhook": True},
+                "service": {"disableSrhRecords": False, "disableUserUsageRecords": False},
+            }
+        }
+        with patch.object(api_client, "get_system_configuration", new_callable=AsyncMock,
+                          return_value=config):
+            resp = await client.get("/api/v2/analytics/system/panel-configuration")
+
+        assert resp.status_code == 200
+        assert resp.json()["warnings"] == []
+
+    @pytest.mark.asyncio
+    async def test_old_panel_reports_unavailable(self, client):
+        """У панелей до 3.2.0 эндпоинта нет — отвечаем available=False, а не ошибкой."""
+        from shared.api_client import api_client
+
+        with patch.object(api_client, "get_system_configuration", new_callable=AsyncMock,
+                          side_effect=Exception("404 Not Found")):
+            resp = await client.get("/api/v2/analytics/system/panel-configuration")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["available"] is False
+        assert data["warnings"] == []

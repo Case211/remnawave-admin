@@ -1729,7 +1729,8 @@ class ViolationsMixin:
                     """
                     SELECT sub.* FROM unnest($1::text[]) AS t(uid)
                     CROSS JOIN LATERAL (
-                        SELECT id, user_uuid::text, request_ip, user_agent, request_at
+                        SELECT id, user_uuid::text, request_ip, user_agent, request_at,
+                               srr_response_type, srr_rule_name
                         FROM subscription_request_history
                         WHERE user_uuid = t.uid::uuid
                         ORDER BY request_at DESC

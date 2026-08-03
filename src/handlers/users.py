@@ -3097,14 +3097,20 @@ async def cb_user_stats(callback: CallbackQuery) -> None:
                     date = format_datetime(record.get("requestAt"))
                     user_agent = record.get("userAgent", "—")
                     request_ip = record.get("requestIp", "—")
-                    lines.append(
-                        _("user.stats.subscription_history_item").format(
-                            index=i,
-                            date=date,
-                            userAgent=_esc(user_agent[:50]) if user_agent else "—",
-                            ip=_esc(request_ip) if request_ip else "—",
-                        )
+                    item = _("user.stats.subscription_history_item").format(
+                        index=i,
+                        date=date,
+                        userAgent=_esc(user_agent[:50]) if user_agent else "—",
+                        ip=_esc(request_ip) if request_ip else "—",
                     )
+                    # Панель 3.1.0+ говорит, какое правило SRR обработало запрос.
+                    # На 2.x полей нет — строка просто не добавляется.
+                    rule = record.get("srrRuleName") or record.get("srrResponseType")
+                    if rule:
+                        item += _("user.stats.subscription_history_rule").format(
+                            rule=_esc(str(rule)[:40])
+                        )
+                    lines.append(item)
                 text = "\n".join(lines)
 
             keyboard = InlineKeyboardMarkup(

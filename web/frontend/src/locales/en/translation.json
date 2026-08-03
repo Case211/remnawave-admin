@@ -381,6 +381,11 @@
     "collectorOverloaded": "Overloaded",
     "systemStatus": "System status",
     "systemStatusTooltip": "Current status of system components",
+    "panelConfigWarning": {
+      "webhook_disabled": "Webhook is disabled in the panel — events will only arrive with the next sync",
+      "srh_disabled": "Subscription request history is disabled in the panel — device analysis is not at full strength",
+      "user_usage_disabled": "User traffic records are disabled in the panel — per-node stats will stay empty"
+    },
     "statusOnline": "Online",
     "statusOffline": "Offline",
     "statusDegraded": "Degraded",
