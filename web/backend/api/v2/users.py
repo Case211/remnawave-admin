@@ -926,7 +926,8 @@ async def create_user(
                 trojan_password=data.trojan_password,
                 vless_uuid=data.vless_uuid,
                 ss_password=data.ss_password,
-                uuid=data.uuid,
+                # uuid панели не передаём: с 3.0.0 идентификатор выдаёт сама
+                # панель, задать свой при создании больше нельзя.
                 created_at=data.created_at.isoformat() if data.created_at else None,
                 last_traffic_reset_at=data.last_traffic_reset_at.isoformat() if data.last_traffic_reset_at else None,
             )
@@ -980,19 +981,31 @@ async def create_user(
         # списалась и API ответил 201. Поэтому все осечки здесь логируются
         # как ошибка, а не шёпотом в debug: молчащий сбой этой строки
         # выглядит для оператора как «пользователь пропал».
+        # Панель 3.0.0+ отвечает без uuid — там идентификатор числовой, а
+        # локальный uuid появляется только после upsert'а, поэтому владельца
+        # проставляем уже по нему.
         user_uuid = user.get('uuid', '') if isinstance(user, dict) else ''
-        if user_uuid:
+        panel_id = user.get('id') if isinstance(user, dict) else None
+        if user_uuid or panel_id is not None:
             try:
                 from shared.database import db_service
                 if not db_service.is_connected:
                     logger.error(
                         "User %s created without owner: local DB is not connected. "
                         "Creator %s will not see it until the next sync.",
-                        user_uuid, admin.username,
+                        user_uuid or panel_id, admin.username,
                     )
                 else:
                     await db_service.upsert_user(user)
-                    if admin.account_id is not None:
+                    if not user_uuid and panel_id is not None:
+                        user_uuid = await db_service.get_user_uuid_by_panel_id(int(panel_id)) or ''
+                        if not user_uuid:
+                            logger.error(
+                                "User id=%s created without owner: local row not found after "
+                                "upsert. Creator %s will not see it until the next sync.",
+                                panel_id, admin.username,
+                            )
+                    if user_uuid and admin.account_id is not None:
                         async with db_service.acquire() as conn:
                             result = await conn.execute(
                                 "UPDATE users SET created_by_admin_id = $1 WHERE uuid = $2",
@@ -2076,7 +2089,7 @@ async def get_user_connection_keys(
         if not u:
             raise api_error(404, E.USER_NOT_FOUND)
     try:
-        result = await api_client.get_subscription_connection_keys(user_uuid)
+        result = await api_client.get_subscription_connection_keys(await _resolve_user_key(user_uuid))
         payload = result.get("response", result) if isinstance(result, dict) else result
         return payload
     except Exception as e:
@@ -2096,7 +2109,7 @@ async def fetch_user_ips(
     from shared.api_client import api_client
 
     try:
-        result = await api_client.fetch_user_ips(user_uuid)
+        result = await api_client.fetch_user_ips(await _resolve_user_key(user_uuid))
         payload = result.get("response", result) if isinstance(result, dict) else result
         return payload
     except Exception as e:
@@ -2353,7 +2366,7 @@ async def drop_user_connections(
 
     try:
         result = await api_client.drop_connections(
-            drop_by={"by": "userIds", "userIds": [user_uuid]},
+            drop_by={"by": "userIds", "userIds": [await _resolve_user_key(user_uuid)]},
             target_nodes=target_nodes,
         )
         payload = result.get("response", result) if isinstance(result, dict) else result

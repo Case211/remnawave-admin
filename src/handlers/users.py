@@ -597,7 +597,8 @@ async def _create_user(target: Message | CallbackQuery, data: dict, admin: BotAd
             tag=data.get("tag"),
             email=data.get("email"),
             short_uuid=data.get("short_uuid"),
-            uuid=data.get("uuid"),
+            # uuid панели не передаём: с 3.0.0 идентификатор выдаёт сама
+            # панель, задать свой при создании больше нельзя.
             vless_uuid=data.get("vless_uuid"),
             ss_password=data.get("ss_password"),
             trojan_password=data.get("trojan_password"),
