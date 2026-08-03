@@ -199,12 +199,38 @@ async def _proxy(request: Request, path: str):
         if not is_superadmin and not unrestricted:
             visible_uuids = await get_visible_user_uuids(admin_account_id, admin_info.get("role_name") if admin_info else None)
             if visible_uuids is not None:
+                # Panel v3 отдаёт в payload числовой id вместо uuid —
+                # резолвим видимые локальные uuid в панельные id и
+                # фильтруем и по id (v3), и по uuid (v2).
+                from shared.database import db_service
+                visible_ids: set[int] = set()
+                if db_service.is_connected:
+                    try:
+                        async with db_service.acquire() as conn:
+                            rows = await conn.fetch(
+                                "SELECT id FROM users WHERE id IS NOT NULL AND uuid::text = ANY($1::text[])",
+                                [str(u) for u in visible_uuids],
+                            )
+                        visible_ids = {int(r["id"]) for r in rows}
+                    except Exception as e:
+                        logger.warning("Failed to resolve visible panel ids: %s", e)
                 # Filter the response users
                 if isinstance(response, dict):
                     payload = response.get("response", response)
                     if isinstance(payload, dict) and "users" in payload:
                         users = payload.get("users") or []
-                        filtered = [u for u in users if u.get("uuid") and str(u["uuid"]).lower() in visible_uuids]
+                        filtered = []
+                        for u in users:
+                            pid = u.get("id")
+                            if pid is not None:
+                                try:
+                                    if int(pid) in visible_ids:
+                                        filtered.append(u)
+                                        continue
+                                except (TypeError, ValueError):
+                                    pass
+                            if u.get("uuid") and str(u["uuid"]).lower() in visible_uuids:
+                                filtered.append(u)
                         payload["users"] = filtered
                         if "total" in payload:
                             payload["total"] = len(filtered)
@@ -219,10 +245,13 @@ async def _proxy(request: Request, path: str):
                     # Atomic check failed — another request hit the limit first.
                     # Roll back by deleting the created resource.
                     entity = response.get("response", {}) if isinstance(response, dict) else {}
-                    entity_uuid = entity.get("uuid") if isinstance(entity, dict) else None
-                    if entity_uuid:
+                    # v3 удаляет юзера по числовому id, v2 — по uuid.
+                    entity_ident = entity.get("id") if isinstance(entity, dict) else None
+                    if entity_ident is None and isinstance(entity, dict):
+                        entity_ident = entity.get("uuid")
+                    if entity_ident:
                         try:
-                            await api_client.request("DELETE", f"/api/{resource}/{entity_uuid}")
+                            await api_client.request("DELETE", f"/api/{resource}/{entity_ident}")
                         except Exception:
                             pass
                     raise HTTPException(status_code=409, detail=f"Quota exceeded: {resource}")
@@ -230,10 +259,29 @@ async def _proxy(request: Request, path: str):
                 # For user creation, also update the local DB with created_by_admin_id and sync from panel
                 if resource == "users":
                     user = response.get("response", {}) if isinstance(response, dict) else {}
+                    user_panel_id = user.get("id") if isinstance(user, dict) else None
                     user_uuid = user.get("uuid") if isinstance(user, dict) else None
-                    if user_uuid:
-                        from shared.database import db_service
-                        if db_service.is_connected:
+                    from shared.database import db_service
+                    if db_service.is_connected:
+                        if user_panel_id is not None:
+                            async with db_service.acquire() as conn:
+                                # v3: панель не шлёт uuid — локальный uuid генерируется
+                                # DEFAULT'ом, ключ записи — панельный id.
+                                await conn.execute(
+                                    """
+                                    INSERT INTO users (id, created_by_admin_id, created_at)
+                                    VALUES ($1, $2, NOW())
+                                    ON CONFLICT (id) DO UPDATE SET
+                                        created_by_admin_id = EXCLUDED.created_by_admin_id
+                                    """,
+                                    user_panel_id, admin_account_id,
+                                )
+                            # Sync single user from panel to get created_at and other fields
+                            from shared.sync import sync_service
+                            await sync_service.sync_single_user(str(user_panel_id))
+                            # Fetch the synced user from DB to return accurate createdAt
+                            synced_user = await db_service.get_user_by_id(user_panel_id)
+                        elif user_uuid:
                             async with db_service.acquire() as conn:
                                 # UPSERT to handle case where user not yet synced to local DB
                                 await conn.execute(
@@ -250,16 +298,18 @@ async def _proxy(request: Request, path: str):
                             await sync_service.sync_single_user(user_uuid)
                             # Fetch the synced user from DB to return accurate createdAt
                             synced_user = await db_service.get_user_by_uuid(user_uuid)
-                            if synced_user and synced_user.get("created_at"):
-                                # Update response with synced data including createdAt
-                                if isinstance(response, dict):
-                                    payload = response.get("response", response)
-                                    if isinstance(payload, dict):
-                                        payload["createdAt"] = synced_user["created_at"].isoformat()
-                                        # Also update other fields from DB
-                                        for key, value in synced_user.items():
-                                            if key not in payload and value is not None:
-                                                payload[key] = value
+                        else:
+                            synced_user = None
+                        if synced_user and synced_user.get("created_at"):
+                            # Update response with synced data including createdAt
+                            if isinstance(response, dict):
+                                payload = response.get("response", response)
+                                if isinstance(payload, dict):
+                                    payload["createdAt"] = synced_user["created_at"].isoformat()
+                                    # Also update other fields from DB
+                                    for key, value in synced_user.items():
+                                        if key not in payload and value is not None:
+                                            payload[key] = value
 
             # users_created — счётчик созданных за всё время: удаление юзера
             # слот не возвращает (см. shared.admin_quota). Для нод и хостов

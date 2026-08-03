@@ -19,6 +19,7 @@ from shared.admin_quota import (
     apply_users_reset_traffic_quotas_batch,
     fetch_users_quota_data_batch,
 )
+from src.services import data_access
 from src.utils.notifications import send_user_notification
 
 from src.handlers.hosts import _fetch_hosts_text
@@ -47,6 +48,10 @@ async def _run_bulk_action(
 ) -> None:
     """Выполняет массовую операцию над пользователями."""
     try:
+        # Local uuids may differ from the panel identifier under v3,
+        # so resolve them once for the API calls below. Quota helpers
+        # keep working with local uuids.
+        panel_ids = await data_access.resolve_panel_user_ids(uuids or [])
         if action == "reset":
             # Apply quota counter changes via shared helper
             if uuids:
@@ -54,7 +59,7 @@ async def _run_bulk_action(
                     # Fetch used_traffic_bytes BEFORE the reset so the counter
                     # is incremented by the correct amount.
                     users_data = await fetch_users_quota_data_batch(uuids)
-                    await internal_api_client.bulk_reset_traffic_users(uuids or [])
+                    await internal_api_client.bulk_reset_traffic_users(panel_ids)
                     await apply_users_reset_traffic_quotas_batch(users_data)
                 except Exception:
                     logger.debug("Failed to update usage counters on bulk reset")
@@ -64,14 +69,14 @@ async def _run_bulk_action(
             # Получаем информацию о пользователях перед удалением для уведомлений
             users_to_notify = []
             if uuids:
-                for user_uuid in uuids:
+                for user_uuid, panel_id in zip(uuids, panel_ids):
                     try:
-                        user = await internal_api_client.get_user_by_uuid(user_uuid)
+                        user = await internal_api_client.get_user_by_id(panel_id)
                         users_to_notify.append(user)
                     except Exception:
                         logger.debug("Failed to get user data for notification user_uuid=%s", user_uuid)
             
-            await internal_api_client.bulk_delete_users(uuids or [])
+            await internal_api_client.bulk_delete_users(panel_ids)
 
             # Apply quota counter changes via shared helper.
             # Fetch the creator admin from the local DB so the counter is
@@ -102,6 +107,7 @@ async def _run_bulk_action(
             
             # Получаем информацию о пользователях перед удалением для уведомлений
             users_to_notify = []
+            matched_panel_ids: list[int] = []
             try:
                 start = 0
                 while True:
@@ -112,8 +118,10 @@ async def _run_bulk_action(
                     
                     for user in users:
                         user_info = user.get("response", user)
-                        if user_info.get("status") == status and user_info.get("uuid"):
+                        if user_info.get("status") == status and (user_info.get("uuid") or user_info.get("id") is not None):
                             users_to_notify.append(user)
+                            if user_info.get("id") is not None:
+                                matched_panel_ids.append(int(user_info.get("id")))
                     
                     start += SEARCH_PAGE_SIZE
                     if start >= total or not users:
@@ -123,8 +131,19 @@ async def _run_bulk_action(
             
             await internal_api_client.bulk_delete_users_by_status(status)
 
-            # Apply quota counter changes via shared helper
-            if uuids_for_delete := [u.get("uuid") for u in users_to_notify if u.get("uuid")]:
+            # Apply quota counter changes via shared helper.
+            # The quota helpers work on LOCAL uuids; the v3 API only exposes
+            # panel numeric ids, so reverse-map them when needed.
+            uuids_for_delete: list[str] = []
+            try:
+                if matched_panel_ids:
+                    id_to_uuid = await db_service.get_uuids_by_panel_ids(matched_panel_ids)
+                    uuids_for_delete = [id_to_uuid[i] for i in matched_panel_ids if i in id_to_uuid]
+            except Exception:
+                logger.debug("Failed to reverse-map panel ids for quota counters")
+            if not uuids_for_delete:
+                uuids_for_delete = [u.get("response", u).get("uuid") for u in users_to_notify if u.get("response", u).get("uuid")]
+            if uuids_for_delete:
                 try:
                     users_data = await fetch_users_quota_data_batch(uuids_for_delete)
                     await apply_users_delete_quotas_batch(users_data)
@@ -139,12 +158,12 @@ async def _run_bulk_action(
             except Exception:
                 logger.exception("Failed to send user deletion notifications")
         elif action == "revoke":
-            await internal_api_client.bulk_revoke_subscriptions(uuids or [])
+            await internal_api_client.bulk_revoke_subscriptions(panel_ids)
         elif action == "extend":
             if days is None:
                 await _reply(target, _("bulk.usage_extend"))
                 return
-            await internal_api_client.bulk_extend_users(uuids or [], days)
+            await internal_api_client.bulk_extend_users(panel_ids, days)
         elif action == "extend_all":
             if days is None:
                 await _reply(target, _("bulk.usage_extend_all"))
@@ -154,7 +173,7 @@ async def _run_bulk_action(
             if status not in ALLOWED_STATUSES:
                 await _reply(target, _("bulk.usage_status"))
                 return
-            await internal_api_client.bulk_update_users_status(uuids or [], status)
+            await internal_api_client.bulk_update_users_status(panel_ids, status)
         else:
             await _reply(target, _("errors.generic"))
             return
@@ -202,7 +221,7 @@ async def _handle_bulk_users_input(message: Message, ctx: dict, admin: BotAdmin 
 
         try:
             # Получаем всех активных пользователей с пагинацией
-            active_uuids: list[str] = []
+            active_panel_ids: list[int | str] = []
             start = 0
             while True:
                 users_data = await internal_api_client.get_users(start=start, size=SEARCH_PAGE_SIZE, admin_id=admin_id_for_api)
@@ -213,21 +232,21 @@ async def _handle_bulk_users_input(message: Message, ctx: dict, admin: BotAdmin 
                 # Фильтруем активных пользователей
                 for user in users:
                     user_info = user.get("response", user)
-                    if user_info.get("status") == "ACTIVE" and user_info.get("uuid"):
-                        active_uuids.append(user_info.get("uuid"))
+                    if user_info.get("status") == "ACTIVE" and (user_info.get("id") is not None or user_info.get("uuid")):
+                        active_panel_ids.append(user_info.get("id") if user_info.get("id") is not None else user_info.get("uuid"))
 
                 start += SEARCH_PAGE_SIZE
                 if start >= total or not users:
                     break
 
-            if not active_uuids:
+            if not active_panel_ids:
                 await _send_clean_message(message, _("bulk.no_active_users"), reply_markup=bulk_users_keyboard(admin=admin))
                 PENDING_INPUT.pop(user_id, None)
                 return
 
             # Продлеваем активным
-            await internal_api_client.bulk_extend_users(active_uuids, days)
-            result_text = _("bulk.done_extend_active").format(count=len(active_uuids), days=days)
+            await internal_api_client.bulk_extend_users(active_panel_ids, days)
+            result_text = _("bulk.done_extend_active").format(count=len(active_panel_ids), days=days)
             await _send_clean_message(message, result_text, reply_markup=bulk_users_keyboard(admin=admin))
             PENDING_INPUT.pop(user_id, None)
         except UnauthorizedError:
@@ -340,7 +359,7 @@ async def cb_bulk_users_actions(callback: CallbackQuery, admin: BotAdmin) -> Non
                     
                     for user in users:
                         user_info = user.get("response", user)
-                        if user_info.get("status") == status and user_info.get("uuid"):
+                        if user_info.get("status") == status and (user_info.get("id") is not None or user_info.get("uuid")):
                             users_to_notify.append(user)
                     
                     start += SEARCH_PAGE_SIZE

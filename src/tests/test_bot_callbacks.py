@@ -263,6 +263,63 @@ class TestPanelEvent:
         assert resp.status_code == 200
         mock_notif.assert_not_called()
 
+    async def test_user_event_v3_numeric_id_not_skipped(self, set_secret):
+        from src.services.bot_callbacks import panel_event
+        bot = AsyncMock()
+        req = MagicMock()
+        req.app.state.bot = bot
+        req.headers.get.return_value = "test-secret-123"
+        req.json = AsyncMock(return_value={
+            "event": "user.modified",
+            "data": {"id": 42, "username": "alice", "status": "ACTIVE"},
+        })
+        with patch("src.utils.notifications.send_user_notification", new=AsyncMock()) as mock_notif:
+            resp = await panel_event(req)
+        assert resp.status_code == 200
+        mock_notif.assert_called_once()
+        assert mock_notif.call_args.kwargs["action"] == "updated"
+
+
+class TestUserIdentifierHelpers:
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_v2_uuid_present(self):
+        from src.utils.notifications import _local_user_uuid
+        assert await _local_user_uuid({"uuid": "abc-123", "id": 7}) == "abc-123"
+
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_v3_id_resolves_to_local(self):
+        from src.utils.notifications import _local_user_uuid
+        with patch("shared.data_access.db_service", is_connected=True) as db:
+            db.get_user_uuid_by_panel_id = AsyncMock(return_value="local-uuid-9")
+            assert await _local_user_uuid({"id": 42}) == "local-uuid-9"
+            db.get_user_uuid_by_panel_id.assert_awaited_once_with(42)
+
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_v3_unknown_returns_none(self):
+        from src.utils.notifications import _local_user_uuid
+        with patch("shared.data_access.db_service", is_connected=True) as db:
+            db.get_user_uuid_by_panel_id = AsyncMock(return_value=None)
+            assert await _local_user_uuid({"id": 42}) is None
+
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_v3_no_db_disconnected(self):
+        from src.utils.notifications import _local_user_uuid
+        with patch("shared.data_access.db_service", is_connected=False):
+            assert await _local_user_uuid({"id": 42}) is None
+
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_empty_payload(self):
+        from src.utils.notifications import _local_user_uuid
+        assert await _local_user_uuid({}) is None
+
+    def test_short_user_id_prefers_local_uuid(self):
+        from src.utils.notifications import _short_user_id
+        assert _short_user_id({"uuid": "abcdefgh", "id": 99}, "xyz") == "xyz"
+
+    def test_short_user_id_falls_back_to_id(self):
+        from src.utils.notifications import _short_user_id
+        assert _short_user_id({"id": 42}, None) == "42"
+
     async def test_node_event(self, set_secret):
         from src.services.bot_callbacks import panel_event
         bot = AsyncMock()

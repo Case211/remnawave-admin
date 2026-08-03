@@ -41,6 +41,12 @@ router = APIRouter()
 get_severity = ViolationListItem.get_severity
 
 
+async def _resolve_user_key(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the Panel API expects."""
+    from shared.data_access import resolve_panel_user_id
+    return await resolve_panel_user_id(user_uuid)
+
+
 def _parse_hwid_matched(raw) -> list | None:
     """Parse hwid_matched_users from DB (JSONB or JSON string)."""
     if raw is None:
@@ -845,7 +851,7 @@ async def _handle_blacklisted_hwid_users(
         for user in affected_users:
             try:
                 from shared.api_client import api_client
-                await api_client.disable_user(str(user["user_uuid"]))
+                await api_client.disable_user(await _resolve_user_key(str(user["user_uuid"])))
                 logger.info(
                     "Auto-blocked user %s (HWID blacklist: %s)",
                     user.get("username") or user["user_uuid"], hwid,
@@ -974,14 +980,15 @@ async def resolve_violation(
         if user_uuid:
             try:
                 from shared.api_client import api_client
+                panel_user_id = await _resolve_user_key(str(user_uuid))
                 try:
-                    await api_client.disable_user(user_uuid)
+                    await api_client.disable_user(panel_user_id)
                 except Exception as disable_err:
                     # Панель отвечает ошибкой на disable УЖЕ отключённого юзера —
                     # для блокировки это успех, а не «Сервис API недоступен»
                     # (без этого нарушение по отключённому юзеру нельзя закрыть)
                     try:
-                        u = await api_client.get_user_by_uuid(user_uuid)
+                        u = await api_client.get_user_by_id(panel_user_id)
                         u = u.get("response") if isinstance(u.get("response"), dict) else u
                     except Exception:
                         u = None
