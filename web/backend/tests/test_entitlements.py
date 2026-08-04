@@ -184,8 +184,9 @@ def test_noop_plugin_discovery(monkeypatch, keypair):
     loaded = loader.register(app)
     assert [m.id for m in loaded] == ["noop"]
     assert loader.ui_license_state(loaded[0]) == "not_required"
-    # С 0.130 FastAPI держит в app.routes ещё и служебный _IncludedRouter
-    # без .path — из-за него тест падал на свежих версиях, хотя роут
-    # монтировался нормально.
-    paths = {getattr(route, "path", None) for route in app.routes}
+    # Спрашиваем схему, а не обходим app.routes: с 0.130 FastAPI держит
+    # включённые роутеры лениво (_IncludedRouter), и плоского списка
+    # путей там больше нет — обход находил только /docs и /openapi.json,
+    # хотя роут монтировался нормально.
+    paths = set(app.openapi().get("paths") or {})
     assert "/api/v2/plugins/noop/ping" in paths
