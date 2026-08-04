@@ -175,6 +175,30 @@ def _pip_install(wheel: Path) -> None:
     subprocess.run(cmd, check=True, timeout=120)
 
 
+def wheel_filename_from_contents(contents: bytes) -> Optional[str]:
+    """Каноничное имя wheel из его собственных метаданных (папка
+    ``<name>-<version>.dist-info`` внутри архива).
+
+    pip требует, чтобы имя файла совпадало с дистрибутивом внутри wheel.
+    Store-установка не знает реального имени пакета (оно != rwa_plugin_<id>
+    у smart_support — там ..._tool), поэтому имя берём из самого wheel,
+    а не угадываем.
+    """
+    import io
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(contents)) as zf:
+            for name in zf.namelist():
+                if name.endswith(".dist-info/METADATA") or name.endswith(".dist-info/WHEEL"):
+                    dist = name.split("/", 1)[0]  # ``<name>-<version>.dist-info``
+                    stem = dist[: -len(".dist-info")]
+                    return f"{stem}-py3-none-any.whl"
+    except (zipfile.BadZipFile, ValueError, IndexError):
+        return None
+    return None
+
+
 def accept_uploaded_wheel(*, filename: str, contents: bytes) -> InstalledWheel:
     """Persist an uploaded wheel into the plugins directory and pip-install it.
 

@@ -262,6 +262,7 @@ class SyncService:
         start = 0
         page_size = 1000  # API max
         api_user_uuids: set[str] = set()
+        api_user_ids: set[int] = set()
 
         try:
             while True:
@@ -293,35 +294,41 @@ class SyncService:
                 if not users:
                     break
 
-                # Collect UUIDs for reconciliation
+                # Collect identifiers for reconciliation (v2: uuid, v3: numeric id)
                 for user in users:
                     user_uuid = user.get("uuid")
                     if user_uuid:
                         api_user_uuids.add(user_uuid)
+                    panel_id = user.get("id")
+                    if panel_id is not None:
+                        api_user_ids.add(int(panel_id))
 
                 # Detect traffic resets: lastTrafficResetAt > last_sync, with
                 # delta-fallback when Panel didn't expose the timestamp.
+                # v3 responses carry a numeric id instead of uuid.
                 try:
-                    batch_uuids = [u["uuid"] for u in users if u.get("uuid")]
-                    if batch_uuids:
-                        old_traffic = await db_service.get_used_traffic_map(batch_uuids)
-                        users_meta = await db_service.get_sync_metadata("users")
-                        last_traffic_sync = users_meta["last_sync_at"] if users_meta else None
-                        if last_traffic_sync is not None and last_traffic_sync.tzinfo is None:
-                            last_traffic_sync = last_traffic_sync.replace(tzinfo=timezone.utc)
+                    users_meta = await db_service.get_sync_metadata("users")
+                    last_traffic_sync = users_meta["last_sync_at"] if users_meta else None
+                    if last_traffic_sync is not None and last_traffic_sync.tzinfo is None:
+                        last_traffic_sync = last_traffic_sync.replace(tzinfo=timezone.utc)
 
-                        reset_uuids = []
+                    page_uses_ids = (
+                        not any(u.get("uuid") for u in users)
+                        and all(u.get("id") is not None for u in users)
+                    )
+                    if page_uses_ids:
+                        batch_ids = [int(u["id"]) for u in users if u.get("id") is not None]
+                        old_traffic = await db_service.get_used_traffic_map_by_id(batch_ids)
+
+                        reset_ids = []
                         for u in users:
-                            uid = u.get("uuid")
-                            if not uid:
-                                continue
+                            uid = int(u["id"])
                             ut = u.get("userTraffic") or {}
                             ut_val = ut.get("usedTrafficBytes")
                             new_used = int(ut_val if ut_val is not None else (u.get("usedTrafficBytes") or 0))
                             old_used = old_traffic.get(uid, 0)
                             last_reset_s = u.get("lastTrafficResetAt")
 
-                            # Primary: Panel явно прислал timestamp ресета — сравниваем с последним sync'ом.
                             primary_hit = False
                             if last_reset_s and last_traffic_sync is not None:
                                 try:
@@ -329,24 +336,65 @@ class SyncService:
                                 except ValueError:
                                     last_reset = None
                                 if last_reset is not None and last_traffic_sync < last_reset:
-                                    reset_uuids.append(uid)
+                                    reset_ids.append(uid)
                                     primary_hit = True
                                     logger.debug(
-                                        "TRAFFIC RESET via timestamp uuid=%s last_sync=%s last_reset=%s",
+                                        "TRAFFIC RESET via timestamp id=%s last_sync=%s last_reset=%s",
                                         uid, last_traffic_sync, last_reset_s,
                                     )
 
-                            # Fallback: timestamp пустой/кривой, но used_traffic явно упал.
                             if not primary_hit and old_used > 0 and new_used < old_used:
-                                reset_uuids.append(uid)
+                                reset_ids.append(uid)
                                 logger.debug(
-                                    "TRAFFIC RESET via delta uuid=%s old=%d new=%d",
+                                    "TRAFFIC RESET via delta id=%s old=%d new=%d",
                                     uid, old_used, new_used,
                                 )
 
-                        if reset_uuids:
-                            await db_service.reset_raw_traffic(reset_uuids)
-                            logger.info("Traffic reset detected for %d users, raw counters zeroed", len(reset_uuids))
+                        if reset_ids:
+                            await db_service.reset_raw_traffic_by_id(reset_ids)
+                            logger.info("Traffic reset detected for %d users, raw counters zeroed", len(reset_ids))
+                    else:
+                        batch_uuids = [u["uuid"] for u in users if u.get("uuid")]
+                        if batch_uuids:
+                            old_traffic = await db_service.get_used_traffic_map(batch_uuids)
+
+                            reset_uuids = []
+                            for u in users:
+                                uid = u.get("uuid")
+                                if not uid:
+                                    continue
+                                ut = u.get("userTraffic") or {}
+                                ut_val = ut.get("usedTrafficBytes")
+                                new_used = int(ut_val if ut_val is not None else (u.get("usedTrafficBytes") or 0))
+                                old_used = old_traffic.get(uid, 0)
+                                last_reset_s = u.get("lastTrafficResetAt")
+
+                                # Primary: Panel явно прислал timestamp ресета — сравниваем с последним sync'ом.
+                                primary_hit = False
+                                if last_reset_s and last_traffic_sync is not None:
+                                    try:
+                                        last_reset = datetime.fromisoformat(last_reset_s.replace("Z", "+00:00"))
+                                    except ValueError:
+                                        last_reset = None
+                                    if last_reset is not None and last_traffic_sync < last_reset:
+                                        reset_uuids.append(uid)
+                                        primary_hit = True
+                                        logger.debug(
+                                            "TRAFFIC RESET via timestamp uuid=%s last_sync=%s last_reset=%s",
+                                            uid, last_traffic_sync, last_reset_s,
+                                        )
+
+                                # Fallback: timestamp пустой/кривой, но used_traffic явно упал.
+                                if not primary_hit and old_used > 0 and new_used < old_used:
+                                    reset_uuids.append(uid)
+                                    logger.debug(
+                                        "TRAFFIC RESET via delta uuid=%s old=%d new=%d",
+                                        uid, old_used, new_used,
+                                    )
+
+                            if reset_uuids:
+                                await db_service.reset_raw_traffic(reset_uuids)
+                                logger.info("Traffic reset detected for %d users, raw counters zeroed", len(reset_uuids))
                 except Exception as e:
                     logger.warning("Failed to detect traffic resets: %s", e)
 
@@ -369,7 +417,21 @@ class SyncService:
                 if start >= total or len(users) < page_size:
                     break
 
-            # Remove local users that no longer exist in API
+            # Remove local users that no longer exist in API.
+            # v3: reconcile by panel numeric id (rows without a panel id are
+            # never deleted — the panel can't verify them without a uuid).
+            if api_user_ids:
+                try:
+                    local_ids = await db_service.get_all_user_ids()
+                    stale_ids = local_ids - api_user_ids
+                    removed = 0
+                    for panel_id in stale_ids:
+                        await db_service.delete_user_by_id(panel_id)
+                        removed += 1
+                    if removed:
+                        logger.info("Removed %d stale users from local DB (not in API)", removed)
+                except Exception as e:
+                    logger.warning("Failed to reconcile stale users (by id): %s", e)
             if api_user_uuids:
                 try:
                     # Используем lightweight запрос — только UUID, без raw_data
@@ -761,26 +823,34 @@ class SyncService:
     async def _handle_user_webhook_with_diff(self, event: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle user webhook events with diff tracking."""
         uuid = event_data.get("uuid")
+        panel_id = event_data.get("id")
         result = {
             "old_data": None,
             "new_data": event_data,
             "changes": [],
             "is_new": False
         }
-        
-        if not uuid:
-            logger.warning("User webhook event without UUID: %s", event)
+
+        if not uuid and panel_id is None:
+            logger.warning("User webhook event without UUID or id: %s", event)
             return result
-        
+
         # Get old data from DB before updating
         # Данные из БД уже в формате API (через _db_row_to_api_format)
-        old_db_record = await db_service.get_user_by_uuid(uuid)
+        if uuid:
+            old_db_record = await db_service.get_user_by_uuid(uuid)
+        else:
+            old_db_record = await db_service.get_user_by_id(int(panel_id))
         if old_db_record and old_db_record.get("uuid"):
             result["old_data"] = old_db_record
 
         if event == "user.deleted":
-            await db_service.delete_user(uuid)
-            logger.debug("Deleted user %s from database (webhook)", uuid)
+            if uuid:
+                await db_service.delete_user(uuid)
+                logger.debug("Deleted user %s from database (webhook)", uuid)
+            else:
+                await db_service.delete_user_by_id(int(panel_id))
+                logger.debug("Deleted user %s from database (webhook)", panel_id)
         else:
             # Upsert new data
             await db_service.upsert_user({"response": event_data})
@@ -790,11 +860,11 @@ class SyncService:
             if result["old_data"]:
                 result["changes"] = _compare_user_data(result["old_data"], event_data)
                 logger.debug("Webhook %s: user %s, %d change(s)",
-                             event, uuid, len(result["changes"]))
+                             event, uuid or panel_id, len(result["changes"]))
             else:
                 result["is_new"] = True
-                logger.debug("Webhook %s: user %s (new)", event, uuid)
-        
+                logger.debug("Webhook %s: user %s (new)", event, uuid or panel_id)
+
         return result
     
     async def _handle_node_webhook_with_diff(self, event: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -878,11 +948,17 @@ class SyncService:
         user_data = event_data.get("user") or {}
         hwid_data = event_data.get("hwidDevice") or event_data.get("hwidUserDevice") or {}
 
-        user_uuid = user_data.get("uuid") or hwid_data.get("userUuid")
+        user_key = user_data.get("uuid") or hwid_data.get("userUuid") or hwid_data.get("userId") or user_data.get("id")
         hwid = hwid_data.get("hwid")
 
-        if not user_uuid or not hwid:
+        if not user_key or not hwid:
             logger.warning("HWID webhook event without user UUID or HWID: %s", event)
+            return result
+
+        # v3 panel шлёт числовой id пользователя — резолвим в локальный uuid.
+        user_uuid = await self._resolve_local_user_uuid(user_key)
+        if not user_uuid:
+            logger.warning("HWID webhook: unknown panel user %s (user not synced yet)", user_key)
             return result
 
         if event == "user_hwid_devices.added":
@@ -971,19 +1047,36 @@ class SyncService:
             for node in active_nodes:
                 node_uuid = str(node["uuid"])
                 try:
-                    result = await api_client.get_node_users_usage_legacy(
+                    result = await api_client.get_node_users_usage(
                         node_uuid, start=start_str, end=end_str
                     )
                     response = result.get("response", result) if isinstance(result, dict) else result
-                    rows = response if isinstance(response, list) else []
+                    rows = response.get("users", []) if isinstance(response, dict) else (response if isinstance(response, list) else [])
 
-                    # Legacy endpoint returns one row per user-per-day with userUuid — aggregate per user
+                    # Endpoint returns one entry per user; v2 keys rows by
+                    # userUuid, v3 by numeric id — accept both.
                     user_totals: dict[str, int] = {}
                     for row in rows:
-                        uuid = (row.get("userUuid") or "").strip()
-                        if not uuid:
+                        uuid = str(row.get("userUuid") or row.get("id") or row.get("userId") or "").strip()
+                        if not uuid or uuid == "None":
                             continue
-                        user_totals[uuid] = user_totals.get(uuid, 0) + int(row.get("total", 0) or 0)
+                        user_totals[uuid] = user_totals.get(uuid, 0) + int(row.get("trafficBytes") or row.get("total", 0) or 0)
+
+                    # v3 rows carry the numeric panel id — resolve to local
+                    # uuid (DB deltas/snapshots are keyed on local uuid).
+                    resolved_totals: dict[str, int] = {}
+                    for key, val in user_totals.items():
+                        if key.isdigit():
+                            local_uuid = await db_service.get_user_uuid_by_panel_id(int(key))
+                            if local_uuid:
+                                resolved_totals[local_uuid] = val
+                            else:
+                                logger.debug(
+                                    "Traffic for unknown panel user id %s (not synced yet), skipping", key,
+                                )
+                        else:
+                            resolved_totals[key] = val
+                    user_totals = resolved_totals
 
                     logger.debug(
                         "Node %s: %d rows, %d unique users",
@@ -1061,9 +1154,17 @@ class SyncService:
         """
         if not db_service.is_connected:
             return False
-        
+
         try:
-            user = await api_client.get_user_by_uuid(uuid)
+            identifier: Any = uuid
+            if isinstance(identifier, str) and not identifier.isdigit():
+                # Локальный uuid → панельный id (v3 не умеет искать по uuid).
+                panel_id = await db_service.get_user_panel_id_by_uuid(identifier)
+                if panel_id is None:
+                    logger.warning("Cannot sync single user %s: unknown panel id", uuid)
+                    return False
+                identifier = panel_id
+            user = await api_client.get_user_by_id(identifier)
             await db_service.upsert_user(user)
             logger.debug("Synced single user %s", uuid)
             return True
@@ -1105,16 +1206,17 @@ class SyncService:
             logger.warning("Failed to sync single host %s: %s", uuid, e)
             return False
 
-    async def sync_user_hwid_devices(self, user_uuid: str) -> int:
+    async def sync_user_hwid_devices(self, user_key: str) -> int:
         """
         Sync HWID devices for a single user from API to database.
+        user_key — panel identifier (uuid in v2, numeric id in v3).
         Returns number of synced devices.
         """
         if not db_service.is_connected:
             return 0
 
         try:
-            result = await api_client.get_user_hwid_devices(user_uuid)
+            result = await api_client.get_user_hwid_devices(user_key)
 
             # Handle various API response formats (same logic as GET endpoint)
             response = result.get("response", result) if isinstance(result, dict) else result
@@ -1131,6 +1233,12 @@ class SyncService:
             else:
                 devices = []
 
+            # DB keyed on local uuid — resolve the panel identifier first.
+            user_uuid = await self._resolve_local_user_uuid(user_key)
+            if not user_uuid:
+                logger.warning("Cannot sync HWID devices: unknown user %s", user_key)
+                return 0
+
             if not devices:
                 # Если устройств нет - удаляем все из БД
                 await db_service.delete_all_user_hwid_devices(user_uuid)
@@ -1140,7 +1248,7 @@ class SyncService:
             if not isinstance(devices, list):
                 logger.warning(
                     "Unexpected devices type %s for user %s, skipping sync",
-                    type(devices).__name__, user_uuid,
+                    type(devices).__name__, user_key,
                 )
                 return 0
 
@@ -1149,8 +1257,20 @@ class SyncService:
             return synced
 
         except Exception as e:
-            logger.warning("Failed to sync HWID devices for user %s: %s", user_uuid, e)
+            logger.warning("Failed to sync HWID devices for user %s: %s", user_key, e)
             return 0
+
+    @staticmethod
+    async def _resolve_local_user_uuid(user_key: Any) -> Optional[str]:
+        """Resolve a panel user identifier (uuid or numeric id) to the local user uuid."""
+        if not user_key:
+            return None
+        if isinstance(user_key, str) and not user_key.isdigit():
+            return user_key
+        try:
+            return await db_service.get_user_uuid_by_panel_id(int(user_key))
+        except (TypeError, ValueError):
+            return None
 
     async def sync_all_hwid_devices(self) -> int:
         """
@@ -1188,23 +1308,28 @@ class SyncService:
                 if not devices:
                     break
 
-                # Группируем устройства по пользователям
-                devices_by_user: Dict[str, List[Dict]] = {}
+                # Группируем устройства по панельному ключу (uuid в v2, числовой id в v3)
+                devices_by_key: Dict[Any, List[Dict]] = {}
                 for device in devices:
-                    user_uuid = device.get("userUuid")
-                    if user_uuid:
-                        if user_uuid not in devices_by_user:
-                            devices_by_user[user_uuid] = []
-                        devices_by_user[user_uuid].append(device)
+                    user_key = device.get("userUuid") or device.get("userId")
+                    if user_key:
+                        if user_key not in devices_by_key:
+                            devices_by_key[user_key] = []
+                        devices_by_key[user_key].append(device)
 
                 # Синхронизируем устройства по пользователям
-                for user_uuid, user_devices in devices_by_user.items():
+                for user_key, user_devices in devices_by_key.items():
+                    # В БД ключ — локальный uuid; v3 присылает числовой id.
+                    user_uuid = await self._resolve_local_user_uuid(user_key)
+                    if not user_uuid:
+                        logger.debug("Skipping HWID sync: no local user for panel key %s", user_key)
+                        continue
+                    users_seen.add(user_uuid)
                     try:
                         synced = await db_service.sync_user_hwid_devices(user_uuid, user_devices)
                         total_synced += synced
                     except Exception as e:
                         logger.warning("Failed to sync HWID devices for user %s: %s", user_uuid, e)
-                users_seen.update(devices_by_user)
 
                 # Проверяем, достигли ли конца
                 start += page_size
@@ -1216,9 +1341,16 @@ class SyncService:
             # Только после полного прохода и непустой выдачи (защита от wipe
             # на пустом/битом ответе API).
             if users_seen:
-                removed = await db_service.delete_hwid_devices_except_users(list(users_seen))
-                if removed:
-                    logger.info("Removed %d stale HWID device rows (users no longer in panel HWID list)", removed)
+                # v3 шлёт числовые id — резолвим в локальные uuid перед сравнением.
+                local_uuids = set()
+                for uk in users_seen:
+                    local = await self._resolve_local_user_uuid(uk)
+                    if local:
+                        local_uuids.add(local)
+                if local_uuids:
+                    removed = await db_service.delete_hwid_devices_except_users(list(local_uuids))
+                    if removed:
+                        logger.info("Removed %d stale HWID device rows (users no longer in panel HWID list)", removed)
 
             # Обновляем метаданные синхронизации
             await db_service.update_sync_metadata(

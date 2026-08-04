@@ -35,6 +35,12 @@ from web.backend.core.webhook_security import fire_event
 
 logger = logging.getLogger(__name__)
 
+
+async def _resolve_user_key(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the Panel API expects."""
+    from shared.data_access import resolve_panel_user_id
+    return await resolve_panel_user_id(user_uuid)
+
 # Инициализируем сервисы (синглтоны на уровне модуля)
 connection_monitor = ConnectionMonitor(db_service)
 violation_detector = IntelligentViolationDetector(db_service, connection_monitor)
@@ -743,7 +749,7 @@ async def _process_torrent_violations(
                 if auto_action == "block_user":
                     try:
                         from shared.api_client import api_client
-                        await api_client.disable_user(user_uuid)
+                        await api_client.disable_user(await _resolve_user_key(user_uuid))
                         logger.info("Auto-blocked user %s for torrent usage", user_uuid)
                         fire_event("user.blocked", {
                             "uuid": user_uuid,
@@ -907,7 +913,7 @@ async def _run_violation_detection(affected_user_uuids: set):
                         if bl_entry and config_service.get("user_blacklist_auto_block", False):
                             try:
                                 from shared.api_client import api_client
-                                await api_client.disable_user(uid)
+                                await api_client.disable_user(await _resolve_user_key(uid))
                                 logger.info("Auto-blocked blacklisted user: %s (tg_id=%d)", uid, tg_id)
                                 fire_event("user.blocked", {
                                     "uuid": uid,
@@ -1064,7 +1070,7 @@ async def _handle_violation(
             if config_service.get("violation_auto_hard_block", True):
                 try:
                     from shared.api_client import api_client
-                    await api_client.disable_user(user_uuid)
+                    await api_client.disable_user(await _resolve_user_key(user_uuid))
                     logger.warning("Auto-blocked user %s score=%.1f", user_uuid[:8], violation_score.total)
                     fire_event("user.blocked", {
                         "uuid": user_uuid,

@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react'
+import type { ReactNode } from 'react'
+import { isFilterActive, type ColumnFilterProps } from '@/components/table/ColumnFilter'
+import { ColumnFilterCell } from '@/components/table/ColumnFilterCell'
+import { ColumnHeaderMenu } from '@/components/table/ColumnHeaderMenu'
+import { ColumnManager } from '@/components/table/ColumnManager'
+import { useTableColumns, type TableColumn } from '@/lib/useTableColumns'
 import { useNavigate } from 'react-router-dom'
 import { useUrlParam } from '@/lib/useUrlParam'
 import { useDeferredAction } from '@/lib/useDeferredAction'
@@ -80,10 +86,25 @@ interface UserListItem {
   hwid_device_limit: number
   hwid_device_count: number
   external_squad_uuid: string | null
+  telegram_id: number | null
   created_at: string | null
   updated_at: string | null
   online_at: string | null
   created_by_admin_username: string | null
+}
+
+/**
+ * Колонка витрины юзеров: к общему описанию (видимость, порядок, подпись)
+ * добавлены отрисовка ячейки и её оформление. Ключ колонки одновременно
+ * служит полем сортировки на бэкенде.
+ */
+interface UserColumn extends TableColumn {
+  render: (user: UserListItem) => ReactNode
+  className?: string
+  /** Ячейка с интерактивом — клик не должен открывать карточку юзера. */
+  stopPropagation?: boolean
+  /** Фильтр в заголовке. Пишет в те же URL-параметры, что и панель сверху. */
+  filter?: ColumnFilterProps
 }
 
 interface PaginatedResponse {
@@ -1345,6 +1366,256 @@ export default function Users() {
     })
   }, [scheduleAction, t, enableUser])
 
+  // Фильтры в заголовках и панель сверху делят одни и те же URL-параметры,
+  // поэтому остаются согласованными сами собой: выбор в колонке подсвечивает
+  // соответствующий селект в панели и наоборот.
+  // Меню столбца задаёт направление явно, а не переключает по кругу, как
+  // клик по заголовку. Сброс возвращает сортировку по умолчанию — «сначала
+  // новые», то же, что видит человек, впервые открывший витрину.
+  const applySort = useCallback((field: string, dir: 'asc' | 'desc') => {
+    setSortBy(field)
+    setSortOrder(dir)
+    setPage(1)
+  }, [setSortBy, setSortOrder, setPage])
+
+  const clearSort = useCallback(() => {
+    setSortBy('created_at')
+    setSortOrder('desc')
+    setPage(1)
+  }, [setSortBy, setSortOrder, setPage])
+
+  const singleFilter = useCallback(
+    (
+      value: string,
+      set: (v: string) => void,
+      options: { value: string; label: string }[],
+    ): ColumnFilterProps => ({
+      type: 'single',
+      options,
+      value: value ? [value] : [],
+      onChange: (v) => {
+        set(Array.isArray(v) && v.length > 0 ? v[0] : '')
+        setPage(1)
+      },
+    }),
+    [setPage],
+  )
+
+  const textFilter = useCallback(
+    (value: string, set: (v: string) => void, placeholder: string): ColumnFilterProps => ({
+      type: 'text',
+      value: value ? [value] : [],
+      placeholder,
+      onChange: (v) => {
+        set(Array.isArray(v) && v.length > 0 ? v[0] : '')
+        setPage(1)
+      },
+    }),
+    [setPage],
+  )
+
+  const externalSquadNames = useMemo(
+    () => new Map(externalSquadsList.map((s) => [String(s.uuid).toLowerCase(), s.name])),
+    [externalSquadsList],
+  )
+
+  // Колонки витрины: одна точка истины для заголовков и ячеек — раньше
+  // разметка ячеек дублировалась в виртуальном и обычном режимах и уже
+  // успела разойтись. `key` совпадает с полем сортировки на бэкенде
+  // (shared/db/users.py::_PAGINATED_SORT_MAP), иначе клик по заголовку
+  // молча сортировал бы по created_at.
+  const columnDefs = useMemo<UserColumn[]>(() => [
+    {
+      key: 'username',
+      labelKey: 'users.table.user',
+      locked: true,
+      filter: textFilter(search, setSearch, t('users.searchPlaceholder')),
+      render: (user) => (
+        <div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-white">{user.username || user.short_uuid}</span>
+            {user.tag && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
+            )}
+          </div>
+          {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
+          {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      labelKey: 'users.table.status',
+      stopPropagation: true,
+      filter: singleFilter(status, setStatus, [
+        { value: 'active', label: t('users.filters.statusActive') },
+        { value: 'disabled', label: t('users.filters.statusDisabled') },
+        { value: 'limited', label: t('users.filters.statusLimited') },
+        { value: 'expired', label: t('users.filters.statusExpired') },
+      ]),
+      render: (user) => <StatusBadge status={user.status} />,
+    },
+    {
+      key: 'used_traffic_bytes',
+      labelKey: 'users.table.traffic',
+      className: 'min-w-[140px]',
+      filter: singleFilter(trafficUsage, setTrafficUsage, [
+        { value: 'above_90', label: t('users.filters.above90') },
+        { value: 'above_70', label: t('users.filters.above70') },
+        { value: 'above_50', label: t('users.filters.above50') },
+        { value: 'zero', label: t('users.filters.zeroTraffic') },
+      ]),
+      render: (user) => (
+        <>
+          <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
+          {user.raw_used_traffic_bytes != null && user.raw_used_traffic_bytes !== user.used_traffic_bytes && (
+            <div className="text-[10px] text-dark-300 mt-0.5 text-center" title={t('users.table.rawTrafficHint')}>
+              {t('users.table.rawTrafficPrefix')}{formatBytes(user.raw_used_traffic_bytes)}
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'hwid_device_limit',
+      labelKey: 'users.table.hwid',
+      className: 'text-center',
+      render: (user) => (
+        <span className="text-dark-100 text-sm tabular-nums">{user.hwid_device_count} / {user.hwid_device_limit || '∞'}</span>
+      ),
+    },
+    {
+      key: 'online_at',
+      labelKey: 'users.table.activity',
+      filter: singleFilter(onlineFilter, setOnlineFilter, [
+        { value: 'online_24h', label: t('users.filters.online24h') },
+        { value: 'online_7d', label: t('users.filters.online7d') },
+        { value: 'online_30d', label: t('users.filters.online30d') },
+        { value: 'never', label: t('users.filters.neverConnected') },
+      ]),
+      render: (user) => <OnlineIndicator onlineAt={user.online_at} />,
+    },
+    {
+      key: 'expire_at',
+      labelKey: 'users.table.expires',
+      filter: singleFilter(expireFilter, setExpireFilter, [
+        { value: 'expiring_7d', label: t('users.filters.expiring7d') },
+        { value: 'expiring_30d', label: t('users.filters.expiring30d') },
+        { value: 'expired', label: t('users.filters.alreadyExpired') },
+        { value: 'no_expiry', label: t('users.filters.noExpiry') },
+      ]),
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.expire_at ? formatDateShort(user.expire_at) : '—'),
+    },
+    {
+      key: 'created_at',
+      labelKey: 'users.table.created',
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.created_at ? formatDateShort(user.created_at) : '—'),
+    },
+    {
+      key: 'created_by_admin_username',
+      labelKey: 'users.table.createdBy',
+      filter: canChooseAdmin
+        ? singleFilter(adminId, setAdminId, admins.map((a) => ({ value: String(a.id), label: a.username })))
+        : undefined,
+      className: 'hidden md:table-cell text-dark-300 text-sm',
+      render: (user) => user.created_by_admin_username || '—',
+    },
+    // Ниже — то, чего в таблице не было вовсе: по этим полям и просили
+    // сортировать. По умолчанию скрыты, иначе таблица сразу разъезжается.
+    // Эти три поля раньше жили только в селекте сортировки: столбцов для них
+    // не было, и убрать селект без них значило бы отнять сортировку.
+    {
+      key: 'traffic_limit_bytes',
+      labelKey: 'users.sort.trafficLimit',
+      optional: true,
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.traffic_limit_bytes ? formatBytes(user.traffic_limit_bytes) : '∞'),
+    },
+    {
+      key: 'lifetime_used_traffic_bytes',
+      labelKey: 'users.sort.trafficLifetime',
+      optional: true,
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => formatBytes(user.lifetime_used_traffic_bytes || 0),
+    },
+    {
+      key: 'raw_used_traffic_bytes',
+      labelKey: 'users.sort.trafficRaw',
+      optional: true,
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.raw_used_traffic_bytes != null ? formatBytes(user.raw_used_traffic_bytes) : '—'),
+    },
+    {
+      key: 'tag',
+      labelKey: 'users.table.tag',
+      optional: true,
+      filter: singleFilter(userTag, setUserTag, userTagsList.map((tg) => ({ value: tg, label: tg }))),
+      className: 'text-dark-200 text-sm',
+      render: (user) => user.tag || '—',
+    },
+    {
+      key: 'telegram_id',
+      labelKey: 'users.table.telegram',
+      optional: true,
+      className: 'text-dark-200 text-sm tabular-nums',
+      render: (user) => (user.telegram_id ? String(user.telegram_id) : '—'),
+    },
+    {
+      key: 'email',
+      labelKey: 'users.table.email',
+      optional: true,
+      className: 'text-dark-200 text-sm',
+      render: (user) => user.email || '—',
+    },
+    {
+      key: 'external_squad_uuid',
+      labelKey: 'users.table.externalSquad',
+      optional: true,
+      filter: singleFilter(
+        externalSquad,
+        setExternalSquad,
+        externalSquadsList.map((sq: Squad) => ({ value: String(sq.uuid), label: sq.name || String(sq.uuid) })),
+      ),
+      className: 'text-dark-200 text-sm',
+      // Имя берём из уже загруженного для фильтра списка сквадов: в самой
+      // выдаче юзеров бэкенд отдаёт только uuid, а он человеку ничего не говорит.
+      render: (user) => (user.external_squad_uuid
+        ? externalSquadNames.get(user.external_squad_uuid.toLowerCase()) || user.external_squad_uuid
+        : '—'),
+    },
+    {
+      key: 'short_uuid',
+      labelKey: 'users.table.shortUuid',
+      optional: true,
+      className: 'text-dark-300 text-xs font-mono',
+      render: (user) => user.short_uuid || '—',
+    },
+    {
+      key: 'description',
+      labelKey: 'users.table.description',
+      optional: true,
+      className: 'text-dark-300 text-sm',
+      render: (user) => (
+        <span className="block truncate max-w-[220px]" title={user.description || undefined}>
+          {user.description || '—'}
+        </span>
+      ),
+    },
+  ], [
+    t, formatBytes, formatDateShort, externalSquadNames,
+    singleFilter, textFilter, search, setSearch, status, setStatus,
+    trafficUsage, setTrafficUsage, onlineFilter, setOnlineFilter,
+    expireFilter, setExpireFilter, canChooseAdmin, adminId, setAdminId, admins,
+    userTag, setUserTag, userTagsList, externalSquad, setExternalSquad, externalSquadsList,
+  ])
+
+  const columns = useTableColumns('users', columnDefs)
+  const visibleColumns = columns.visible as UserColumn[]
+  // Чекбокс массовых операций и меню действий живут вне выбора колонок.
+  const totalColumnCount = visibleColumns.length + (canBulk ? 1 : 0) + 1
+
   // Virtual scrolling for large page sizes (50+ rows)
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const useVirtual = users.length > 30
@@ -1381,8 +1652,9 @@ export default function Users() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col gap-3">
-            {/* Row 1: Search */}
-            <div className="flex gap-2">
+            {/* Поиск нужен там, где нет таблицы: на узких экранах показываются
+                карточки, а фильтр столбца «Имя» живёт в шапке таблицы. */}
+            <div className="flex gap-2 md:hidden">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-200" />
                 <Input
@@ -1396,16 +1668,6 @@ export default function Users() {
                   }}
                 />
               </div>
-              <Button
-                variant="secondary"
-                size="icon"
-                disabled={!search.trim() || resolveMutation.isPending}
-                onClick={() => resolveMutation.mutate(search.trim())}
-                title={t('users.resolveButton')}
-                aria-label={t('users.resolveButton')}
-              >
-                <Crosshair className={cn("w-4 h-4", resolveMutation.isPending && "animate-spin")} />
-              </Button>
             </div>
 
             {/* Row 2: Filters | Sort | Refresh */}
@@ -1414,7 +1676,7 @@ export default function Users() {
                 variant="secondary"
                 onClick={() => setShowFilters(!showFilters)}
                 className={cn(
-                  "flex-1 sm:flex-none",
+                  "flex-1 sm:flex-none md:hidden",
                   activeFilterCount > 0 && "border-primary-500/50 text-primary-400"
                 )}
               >
@@ -1428,9 +1690,9 @@ export default function Users() {
                 {showFilters ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
               </Button>
 
-              <Separator orientation="vertical" className="hidden sm:block h-6" />
+              <Separator orientation="vertical" className="hidden sm:block md:hidden h-6" />
 
-              <div className="flex items-center gap-2 flex-1 sm:flex-none">
+              <div className="flex items-center gap-2 flex-1 sm:flex-none md:hidden">
                 <Button
                   variant="secondary"
                   size="icon"
@@ -1469,6 +1731,18 @@ export default function Users() {
               <Button
                 variant="secondary"
                 size="icon"
+                className="hidden md:inline-flex"
+                disabled={!search.trim() || resolveMutation.isPending}
+                onClick={() => resolveMutation.mutate(search.trim())}
+                title={t('users.resolveButton')}
+                aria-label={t('users.resolveButton')}
+              >
+                <Crosshair className={cn("w-4 h-4", resolveMutation.isPending && "animate-spin")} />
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="icon"
                 onClick={() => refetch()}
                 disabled={isLoading}
                 title={t('users.refresh')}
@@ -1488,11 +1762,20 @@ export default function Users() {
                 onLoadFilter={handleLoadFilter}
                 hasActiveFilters={hasActiveFilters}
               />
+              <ColumnManager
+                className="hidden md:inline-flex"
+                columns={columns.ordered}
+                isVisible={columns.isVisible}
+                onToggle={columns.toggle}
+                onReorder={columns.reorder}
+                onReset={columns.reset}
+                isCustomized={columns.isCustomized}
+              />
             </div>
 
             {/* Expandable filter panel */}
             {showFilters && (
-              <div className="pt-3 border-t border-[var(--glass-border)] space-y-3 animate-fade-in">
+              <div className="md:hidden pt-3 border-t border-[var(--glass-border)] space-y-3 animate-fade-in">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.status')}</Label>
@@ -1656,9 +1939,10 @@ export default function Users() {
               </div>
             )}
 
-            {/* Active filters chips */}
+            {/* Чипы — для мобильного: на десктопе выбранное значение видно
+                в самой шапке столбца, дублировать его под тулбаром незачем. */}
             {!showFilters && activeFilterCount > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap md:hidden">
                 {status && (
                   <FilterChip
                     label={`${t('users.filters.status')}: ${({ active: t('users.filters.statusActive'), disabled: t('users.filters.statusDisabled'), limited: t('users.filters.statusLimited'), expired: t('users.filters.statusExpired') } as Record<string, string>)[status] || status}`}
@@ -1711,6 +1995,16 @@ export default function Users() {
                   {t('users.resetAll')}
                 </button>
               </div>
+            )}
+
+            {activeFilterCount > 0 && (
+              <button
+                onClick={resetFilters}
+                className="hidden md:flex items-center gap-1 self-start text-[11px] text-dark-300 hover:text-primary-400"
+              >
+                <X className="w-3 h-3" />
+                {t('users.resetAllFilters')}
+              </button>
             )}
           </div>
         </CardContent>
@@ -1892,34 +2186,65 @@ export default function Users() {
                     />
                   </th>
                 )}
-                <th><SortHeader label={t('users.table.user')} field="username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.status')} field="status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.traffic')} field="used_traffic_bytes" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.hwid')} field="hwid_device_limit" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.activity')} field="online_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.expires')} field="expire_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th><SortHeader label={t('users.table.created')} field="created_at" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
-                <th className="hidden md:table-cell"><SortHeader label={t('users.table.createdBy')} field="created_by_admin_username" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} /></th>
+                {visibleColumns.map((column) => (
+                  <th key={column.key} className={column.className?.includes('hidden md:table-cell') ? 'hidden md:table-cell' : undefined}>
+                    <div className="flex items-center gap-0.5">
+                      <SortHeader
+                        label={t(column.labelKey)}
+                        field={column.key}
+                        currentSort={sortBy}
+                        currentOrder={sortOrder}
+                        onSort={handleSort}
+                      />
+                      <ColumnHeaderMenu
+                        label={t(column.labelKey)}
+                        sortDir={sortBy === column.key ? (sortOrder === 'asc' ? 'asc' : 'desc') : null}
+                        onSort={(dir) => applySort(column.key, dir)}
+                        onClearSort={clearSort}
+                        hasFilter={isFilterActive(column.filter?.value)}
+                        onClearFilter={column.filter ? () => column.filter?.onChange(null) : undefined}
+                        onHide={column.locked ? undefined : () => columns.toggle(column.key)}
+                        onShowAll={columns.showAll}
+                      />
+                    </div>
+                  </th>
+                ))}
                 <th className="w-10"></th>
               </tr>
+              {/* Строка фильтров под заголовками: значение всегда на виду,
+                  не надо открывать меню, чтобы понять, что список сужен. */}
+              {visibleColumns.some((c) => c.filter) && (
+                <tr>
+                  {canBulk && <th className="w-10 px-3" />}
+                  {visibleColumns.map((column) => (
+                    <th
+                      key={column.key}
+                      className={cn(
+                        'pb-1.5 font-normal align-top',
+                        column.className?.includes('hidden md:table-cell') && 'hidden md:table-cell',
+                      )}
+                    >
+                      {column.filter && (
+                        <ColumnFilterCell filter={column.filter} label={t(column.labelKey)} />
+                      )}
+                    </th>
+                  ))}
+                  <th className="w-10" />
+                </tr>
+              )}
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td><Skeleton className="h-4 w-32" /></td>
-                    <td><Skeleton className="h-5 w-20" /></td>
-                    <td><Skeleton className="h-4 w-24" /></td>
-                    <td><Skeleton className="h-4 w-8 mx-auto" /></td>
-                    <td><Skeleton className="h-4 w-20" /></td>
-                    <td><Skeleton className="h-4 w-20" /></td>
-                    <td><Skeleton className="h-4 w-20" /></td>
-                    <td></td>
+                    {Array.from({ length: totalColumnCount }).map((__, cell) => (
+                      <td key={cell}><Skeleton className="h-4 w-20" /></td>
+                    ))}
                   </tr>
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={totalColumnCount} className="text-center py-8 text-muted-foreground">
                     {hasAnyFilter ? t('users.usersNotFound') : t('users.noUsers')}
                   </td>
                 </tr>
@@ -1927,7 +2252,7 @@ export default function Users() {
                 <>
                   {/* Virtual spacer top */}
                   {rowVirtualizer.getVirtualItems()[0]?.start > 0 && (
-                    <tr><td colSpan={9} style={{ height: rowVirtualizer.getVirtualItems()[0].start, padding: 0 }} /></tr>
+                    <tr><td colSpan={totalColumnCount} style={{ height: rowVirtualizer.getVirtualItems()[0].start, padding: 0 }} /></tr>
                   )}
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const user = users[virtualRow.index]
@@ -1947,36 +2272,15 @@ export default function Users() {
                             />
                           </td>
                         )}
-                        <td>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-medium text-white">{user.username || user.short_uuid}</span>
-                              {user.tag && (
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
-                              )}
-                            </div>
-                            {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
-                            {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
-                          </div>
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <StatusBadge status={user.status} />
-                        </td>
-                        <td className="min-w-[140px]">
-                          <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
-                          {user.raw_used_traffic_bytes != null && user.raw_used_traffic_bytes !== user.used_traffic_bytes && (
-                            <div className="text-[10px] text-dark-300 mt-0.5 text-center" title={t('users.table.rawTrafficHint')}>
-                              {t('users.table.rawTrafficPrefix')}{formatBytes(user.raw_used_traffic_bytes)}
-                            </div>
-                          )}
-                        </td>
-                        <td className="text-center">
-                          <span className="text-dark-100 text-sm tabular-nums">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
-                        </td>
-                        <td><OnlineIndicator onlineAt={user.online_at} /></td>
-                        <td className="text-dark-200 text-sm tabular-nums">{user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</td>
-                        <td className="text-dark-200 text-sm tabular-nums">{user.created_at ? formatDateShort(user.created_at) : '\u2014'}</td>
-                        <td className="hidden md:table-cell text-dark-300 text-sm">{user.created_by_admin_username || '\u2014'}</td>
+                        {visibleColumns.map((column) => (
+                          <td
+                            key={column.key}
+                            className={column.className}
+                            onClick={column.stopPropagation ? (e) => e.stopPropagation() : undefined}
+                          >
+                            {column.render(user)}
+                          </td>
+                        ))}
                         <td onClick={(e) => e.stopPropagation()}>
                           <UserActions
                             user={user}
@@ -1993,7 +2297,7 @@ export default function Users() {
                     const items = rowVirtualizer.getVirtualItems()
                     const lastItem = items[items.length - 1]
                     const bottomPad = lastItem ? rowVirtualizer.getTotalSize() - lastItem.end : 0
-                    return bottomPad > 0 ? <tr><td colSpan={9} style={{ height: bottomPad, padding: 0 }} /></tr> : null
+                    return bottomPad > 0 ? <tr><td colSpan={totalColumnCount} style={{ height: bottomPad, padding: 0 }} /></tr> : null
                   })()}
                 </>
               ) : (
@@ -2011,36 +2315,15 @@ export default function Users() {
                         />
                       </td>
                     )}
-                    <td>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-white">{user.username || user.short_uuid}</span>
-                          {user.tag && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
-                          )}
-                        </div>
-                        {user.description && <p className="text-xs text-dark-300 truncate max-w-[200px]" title={user.description}>{user.description}</p>}
-                        {user.email && <p className="text-xs text-dark-200">{user.email}</p>}
-                      </div>
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <StatusBadge status={user.status} />
-                    </td>
-                    <td className="min-w-[140px]">
-                      <TrafficBar used={user.used_traffic_bytes} limit={user.traffic_limit_bytes} />
-                      {user.raw_used_traffic_bytes != null && user.raw_used_traffic_bytes !== user.used_traffic_bytes && (
-                        <div className="text-[10px] text-dark-300 mt-0.5 text-center" title={t('users.table.rawTrafficHint')}>
-                          {t('users.table.rawTrafficPrefix')}{formatBytes(user.raw_used_traffic_bytes)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-center">
-                      <span className="text-dark-100 text-sm">{user.hwid_device_count} / {user.hwid_device_limit || '\u221E'}</span>
-                    </td>
-                    <td><OnlineIndicator onlineAt={user.online_at} /></td>
-                    <td className="text-dark-200 text-sm">{user.expire_at ? formatDateShort(user.expire_at) : '\u2014'}</td>
-                    <td className="text-dark-200 text-sm">{user.created_at ? formatDateShort(user.created_at) : '\u2014'}</td>
-                    <td className="hidden md:table-cell text-dark-300 text-sm">{user.created_by_admin_username || '\u2014'}</td>
+                    {visibleColumns.map((column) => (
+                      <td
+                        key={column.key}
+                        className={column.className}
+                        onClick={column.stopPropagation ? (e) => e.stopPropagation() : undefined}
+                      >
+                        {column.render(user)}
+                      </td>
+                    ))}
                     <td onClick={(e) => e.stopPropagation()}>
                       <UserActions
                         user={user}

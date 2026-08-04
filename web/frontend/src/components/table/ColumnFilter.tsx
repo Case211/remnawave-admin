@@ -7,23 +7,31 @@ import { cn } from '@/lib/utils'
 import type { FilterValue, RangeValue } from '@/lib/useTableControls'
 
 export interface ColumnFilterProps {
-  type: 'select' | 'range'
-  /** Options for `select` type. */
+  /**
+   * `select` — несколько значений, `range` — числовой диапазон (оба про
+   * списки, загруженные целиком). `single` и `text` добавлены для таблиц,
+   * которые фильтруются на сервере: там у параметра одно значение.
+   */
+  type: 'select' | 'range' | 'single' | 'text'
+  /** Options for `select` and `single` types. */
   options?: { value: string; label: string }[]
   value?: FilterValue
   onChange: (v: FilterValue | null) => void
   /** Show range inputs in friendly units, e.g. { label: 'ГБ', factor: 1e9 } for bytes. */
   rangeUnit?: { label: string; factor: number }
+  /** Подсказка для `text`. */
+  placeholder?: string
 }
 
-function isActive(value?: FilterValue) {
+/** Фильтр задан? Нужно и заголовку столбца, чтобы подсветить меню. */
+export function isFilterActive(value?: FilterValue) {
   if (value == null) return false
   return Array.isArray(value) ? value.length > 0 : value.min != null || value.max != null
 }
 
-export function ColumnFilter({ type, options = [], value, onChange, rangeUnit }: ColumnFilterProps) {
+export function ColumnFilter({ type, options = [], value, onChange, rangeUnit, placeholder }: ColumnFilterProps) {
   const { t } = useTranslation()
-  const active = isActive(value)
+  const active = isFilterActive(value)
 
   return (
     <Popover>
@@ -42,11 +50,18 @@ export function ColumnFilter({ type, options = [], value, onChange, rangeUnit }:
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-56 p-2" onClick={(e) => e.stopPropagation()}>
-        {type === 'select' ? (
+        {type === 'select' || type === 'single' ? (
           <SelectFilter
             options={options}
             value={Array.isArray(value) ? value : []}
             onChange={onChange}
+            single={type === 'single'}
+          />
+        ) : type === 'text' ? (
+          <TextFilter
+            value={Array.isArray(value) ? value[0] || '' : ''}
+            onChange={onChange}
+            placeholder={placeholder}
           />
         ) : (
           <RangeFilter
@@ -64,13 +79,20 @@ function SelectFilter({
   options,
   value,
   onChange,
+  single = false,
 }: {
   options: { value: string; label: string }[]
   value: string[]
   onChange: (v: FilterValue | null) => void
+  /** Одно значение: выбор заменяет предыдущее, повторный клик снимает фильтр. */
+  single?: boolean
 }) {
   const { t } = useTranslation()
   const toggle = (v: string) => {
+    if (single) {
+      onChange(value.includes(v) ? null : [v])
+      return
+    }
     const set = new Set(value)
     if (set.has(v)) set.delete(v)
     else set.add(v)
@@ -142,6 +164,39 @@ function RangeFilter({
       </div>
       {unit && <div className="text-[10px] text-dark-400 px-0.5">{unit.label}</div>}
       {(min != null || max != null) && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="w-full text-left text-xs text-dark-300 hover:text-white"
+        >
+          {t('common.reset', 'Сбросить')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TextFilter({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: FilterValue | null) => void
+  placeholder?: string
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="space-y-2">
+      <Input
+        autoFocus
+        value={value}
+        placeholder={placeholder || t('common.search', 'Поиск')}
+        aria-label={placeholder || t('common.search', 'Поиск')}
+        onChange={(e) => onChange(e.target.value ? [e.target.value] : null)}
+        className="h-8 text-sm"
+      />
+      {value && (
         <button
           type="button"
           onClick={() => onChange(null)}

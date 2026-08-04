@@ -22,9 +22,14 @@ class ClientLogger {
 
     // Capture unhandled errors
     window.addEventListener('error', (event) => {
+      // Браузерный шум, не являющийся ошибками приложения: ResizeObserver
+      // штатно кидает это событие, когда не успевает доставить нотификации
+      // за один кадр (спека допускает) — в логах это ложный ERROR.
+      const msg = event.message || ''
+      if (msg.includes('ResizeObserver loop')) return
       this.capture({
         level: 'ERROR',
-        message: event.message || 'Unknown error',
+        message: msg || 'Unknown error',
         source: 'window.onerror',
         stack: event.error?.stack,
         url: event.filename ? `${event.filename}:${event.lineno}:${event.colno}` : undefined,

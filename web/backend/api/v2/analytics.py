@@ -143,6 +143,19 @@ class SystemComponentsResponse(BaseModel):
     version: str = ""
 
 
+class PanelConfigWarning(BaseModel):
+    """Настройка панели, из-за которой часть админки работает вхолостую."""
+    key: str  # ключ для локализации на фронте
+    severity: str = "warning"
+
+
+class PanelConfigurationResponse(BaseModel):
+    """Конфигурация панели и разбор её последствий для админки."""
+    available: bool = False  # False — панель старее 3.2.0 либо недоступна
+    configuration: Dict[str, Any] = {}
+    warnings: List[PanelConfigWarning] = []
+
+
 async def _get_users_data() -> List[Dict[str, Any]]:
     """Get users from DB (normalized), fall back to API if DB is empty/unavailable."""
     try:
@@ -1270,3 +1283,44 @@ async def release_history(
     """Get all GitHub releases newer than the currently installed version."""
     from web.backend.core.update_checker import get_release_history
     return await get_release_history()
+
+
+@router.get("/system/panel-configuration", response_model=PanelConfigurationResponse)
+@limiter.limit(RATE_ANALYTICS)
+async def get_panel_configuration(
+    request: Request,
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Конфигурация панели (Remnawave 3.2.0+) и её последствия для админки.
+
+    В панелях старее 3.2.0 эндпоинта нет — тогда отдаём available=False, и
+    фронт просто не показывает блок вместо того, чтобы ронять ошибку.
+    """
+    from shared.api_client import api_client
+
+    try:
+        result = await api_client.get_system_configuration()
+    except Exception as e:
+        logger.debug("Panel configuration is unavailable: %s", e)
+        return PanelConfigurationResponse()
+
+    config = result.get("response", result) if isinstance(result, dict) else {}
+    if not isinstance(config, dict) or not config:
+        return PanelConfigurationResponse()
+
+    notifications = config.get("notifications") or {}
+    service = config.get("service") or {}
+
+    warnings: List[PanelConfigWarning] = []
+    # Без вебхука админка узнаёт об изменениях только на следующем синке:
+    # уведомления и мгновенное обновление карточек работать не будут.
+    if notifications.get("webhook") is False:
+        warnings.append(PanelConfigWarning(key="webhook_disabled"))
+    # История запросов подписки — источник для анализа устройств и user-agent
+    # в детекторе нарушений; выключена в панели — детектор частично слеп.
+    if service.get("disableSrhRecords") is True:
+        warnings.append(PanelConfigWarning(key="srh_disabled"))
+    if service.get("disableUserUsageRecords") is True:
+        warnings.append(PanelConfigWarning(key="user_usage_disabled"))
+
+    return PanelConfigurationResponse(available=True, configuration=config, warnings=warnings)

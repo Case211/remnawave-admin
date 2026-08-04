@@ -23,10 +23,14 @@ async def _fetch_single(
     id_field: str = "uuid",
 ) -> Optional[Dict[str, Any]]:
     if db_service.is_connected:
-        result = await db_method(id_value)
-        if result and result.get(id_field):
-            logger.debug("%s %s fetched from DB", entity_name.title(), id_value)
-            return result
+        try:
+            result = await db_method(id_value)
+            if result and result.get(id_field):
+                logger.debug("%s %s fetched from DB", entity_name.title(), id_value)
+                return result
+        except Exception as e:
+            # e.g. numeric panel id passed as uuid — treat as DB miss
+            logger.debug("%s %s DB lookup failed: %s", entity_name, id_value, e)
     try:
         response = await api_method(id_value)
         data = response.get("response", {})
@@ -46,10 +50,14 @@ async def _fetch_single_wrapped(
     id_field: str = "uuid",
 ) -> Dict[str, Any]:
     if db_service.is_connected:
-        result = await db_method(id_value)
-        if result and result.get(id_field):
-            logger.debug("%s %s fetched from DB (wrapped)", entity_name.title(), id_value)
-            return {"response": result}
+        try:
+            result = await db_method(id_value)
+            if result and result.get(id_field):
+                logger.debug("%s %s fetched from DB (wrapped)", entity_name.title(), id_value)
+                return {"response": result}
+        except Exception as e:
+            # e.g. numeric panel id passed as uuid — treat as DB miss
+            logger.debug("%s %s DB lookup failed: %s", entity_name, id_value, e)
     return await api_method(id_value)
 
 
@@ -90,16 +98,103 @@ async def _fetch_list_wrapped(
 
 # ==================== User Access ====================
 
+async def _api_user_by_id_fallback(identifier: str) -> dict:
+    """Panel v3 has no uuid lookup — the API fallback only works for numeric ids."""
+    if isinstance(identifier, str) and identifier.isdigit():
+        return await api_client.get_user_by_id(int(identifier))
+    return {}
+
+
 async def get_user_by_uuid(uuid: str) -> Optional[Dict[str, Any]]:
-    return await _fetch_single(uuid, db_service.get_user_by_uuid, api_client.get_user_by_uuid, "user")
+    return await _fetch_single(uuid, db_service.get_user_by_uuid, _api_user_by_id_fallback, "user")
 
 
 async def get_user_by_uuid_wrapped(uuid: str) -> Dict[str, Any]:
-    return await _fetch_single_wrapped(uuid, db_service.get_user_by_uuid, api_client.get_user_by_uuid, "user")
+    return await _fetch_single_wrapped(uuid, db_service.get_user_by_uuid, _api_user_by_id_fallback, "user")
 
 
 async def get_user_by_short_uuid(short_uuid: str) -> Optional[Dict[str, Any]]:
     return await _fetch_single(short_uuid, db_service.get_user_by_short_uuid, api_client.get_user_by_short_uuid, "user")
+
+
+# ==================== Panel Identifier Resolution ====================
+
+async def resolve_panel_user_id(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the panel API expects.
+
+    v3 panels identify users by numeric id (stored in users.id); v2 by the
+    user's uuid. When the local row carries a panel id we return it,
+    otherwise we fall back to the local uuid (v2).
+    """
+    if db_service.is_connected and user_uuid:
+        try:
+            panel_id = await db_service.get_user_panel_id_by_uuid(user_uuid)
+            if panel_id is not None:
+                _mark_numeric_ids_seen()
+                return panel_id
+        except Exception as e:
+            logger.debug("resolve_panel_user_id(%s) failed: %s", user_uuid, e)
+    return user_uuid
+
+
+_numeric_ids_seen = False
+
+
+def _mark_numeric_ids_seen() -> None:
+    global _numeric_ids_seen
+    _numeric_ids_seen = True
+
+
+def panel_uses_numeric_ids() -> bool:
+    """True когда панель идентифицирует юзеров числовым id (v3+).
+
+    Версию панель по API не сообщает, поэтому судим по факту: если резолв хоть
+    раз вернул числовой id — панель точно v3. Нужно, чтобы отличать «панель v2,
+    где uuid и есть ключ» от «v3, где юзера в панели уже нет»: во втором случае
+    запрос по uuid гарантированно даст 400.
+    """
+    return _numeric_ids_seen
+
+
+async def resolve_panel_user_ids(user_uuids: list[str]) -> list[str | int]:
+    """Batch version of resolve_panel_user_id for a list of local uuids."""
+    if not user_uuids:
+        return []
+    if db_service.is_connected:
+        try:
+            mapping = await db_service.get_panel_ids_by_uuids(user_uuids)
+            if mapping:
+                _mark_numeric_ids_seen()
+            return [mapping.get(u, u) for u in user_uuids]
+        except Exception as e:
+            logger.debug("resolve_panel_user_ids failed: %s", e)
+    return list(user_uuids)
+
+
+async def resolve_local_user_uuid(info: dict) -> str | None:
+    """Local user uuid for a payload dict — v2 sends uuid, panel v3 sends numeric id.
+
+    Returns None when the identifier cannot be resolved to a local uuid
+    (e.g. v3 panel id with no synced local row).
+    """
+    if not isinstance(info, dict):
+        return None
+    uuid = info.get("uuid")
+    if uuid:
+        return str(uuid)
+    panel_id = info.get("id")
+    if panel_id is None:
+        return None
+    if db_service.is_connected:
+        try:
+            resolved = await db_service.get_user_uuid_by_panel_id(int(panel_id))
+            if resolved:
+                return str(resolved)
+        except (TypeError, ValueError):
+            pass
+        except Exception as e:
+            logger.debug("resolve_local_user_uuid(%s) failed: %s", panel_id, e)
+    return None
 
 
 # ==================== Template Access ====================

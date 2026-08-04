@@ -364,7 +364,7 @@ class TestResolveBlockIdempotent:
 
         with patch("shared.api_client.api_client.disable_user",
                    AsyncMock(side_effect=Exception("User is already disabled"))), \
-             patch("shared.api_client.api_client.get_user_by_uuid",
+             patch("shared.api_client.api_client.get_user_by_id",
                    AsyncMock(return_value={"response": {"status": "DISABLED"}})), \
              patch("web.backend.core.rbac.get_visible_user_uuids",
                    AsyncMock(return_value=None)):
@@ -384,7 +384,7 @@ class TestResolveBlockIdempotent:
 
         with patch("shared.api_client.api_client.disable_user",
                    AsyncMock(side_effect=Exception("boom"))), \
-             patch("shared.api_client.api_client.get_user_by_uuid",
+             patch("shared.api_client.api_client.get_user_by_id",
                    AsyncMock(return_value={"response": {"status": "ACTIVE"}})), \
              patch("web.backend.core.rbac.get_visible_user_uuids",
                    AsyncMock(return_value=None)):

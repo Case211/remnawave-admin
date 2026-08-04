@@ -10,18 +10,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
-import LicenseBanner from './LicenseBanner'
+import LicenseBanner from '@/components/plugins/license'
 import {
   asLicenseError,
   fetchAISettings,
   fetchAIStatus,
   fetchSettings,
-  resetAICooldown,
   updateAISettings,
   updateSettings,
 } from './api'
 import { CardSkeleton, Skeleton } from './primitives'
-import type { AISettingsIn, ThresholdSettings } from './types'
+import type { ThresholdSettings } from './types'
 
 /**
  * /plugins/smart-support/settings — operator-tunable thresholds.
@@ -179,9 +178,9 @@ export default function SettingsPage() {
 
 
 /**
- * AI configuration block. Lives inside SettingsPage (separate save
- * button — the AI keys are sensitive and we don't want to bundle them
- * into the threshold-save flow).
+ * Cloud AI block: a single on/off toggle plus subscription and quota
+ * state from entitlements. Provider keys and chains live on the
+ * licensing server — the operator has nothing to configure here.
  */
 function AISettingsSection() {
   const { t } = useTranslation()
@@ -199,25 +198,14 @@ function AISettingsSection() {
     queryFn: fetchAIStatus,
     retry: false,
     staleTime: 10_000,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
 
-  const [draft, setDraft] = useState<AISettingsIn>({})
-  const [chainText, setChainText] = useState('')
-
-  useEffect(() => {
-    if (data) {
-      setChainText(data.provider_chain.join(', '))
-    }
-  }, [data])
-
   const mutation = useMutation({
-    mutationFn: (patch: AISettingsIn) => updateAISettings(patch),
+    mutationFn: (enabled: boolean) => updateAISettings({ enabled }),
     onSuccess: (fresh) => {
       qc.setQueryData(['smart-support-ai-settings'], fresh)
       qc.invalidateQueries({ queryKey: ['smart-support-ai-status'] })
-      setDraft({})
-      setChainText(fresh.provider_chain.join(', '))
       toast.success(t('plugins.smart_support.settings.saved'))
     },
     onError: () => {
@@ -233,196 +221,84 @@ function AISettingsSection() {
     )
   }
 
-  const onSave = () => {
-    const patch: AISettingsIn = { ...draft }
-    const chain = chainText
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-    if (
-      JSON.stringify(chain) !== JSON.stringify(data.provider_chain) &&
-      chain.every((p) => ['gemini', 'groq', 'openrouter'].includes(p))
-    ) {
-      patch.provider_chain = chain
-    }
-    mutation.mutate(patch)
+  const sub = status?.subscription_state ?? 'missing'
+  const subStyles: Record<string, string> = {
+    active: 'bg-emerald-500/15 text-emerald-300',
+    grace: 'bg-amber-500/15 text-amber-300',
+    expired: 'bg-red-500/15 text-red-300',
+    missing: 'bg-[var(--glass-bg)] text-dark-300',
   }
-
-  const setKey = (k: keyof AISettingsIn, v: string | boolean) => {
-    setDraft((d) => ({ ...d, [k]: v as never }))
-  }
+  const quota = status?.quota
+  const quotaPct =
+    quota && quota.period_limit > 0 ? Math.min(100, (quota.used / quota.period_limit) * 100) : 0
+  const quotaColor =
+    quotaPct < 75 ? 'bg-emerald-400' : quotaPct < 95 ? 'bg-amber-400' : 'bg-red-400'
 
   return (
     <div className="glass-card p-5 space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-cyan-400" />
-          <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
-            {t('plugins.smart_support.settings.sections.ai')}
-          </h2>
-        </div>
-        <Button onClick={onSave} disabled={mutation.isPending} variant="outline" size="sm">
-          <Save className="w-4 h-4 mr-2" />
-          {t('plugins.smart_support.settings.save')}
-        </Button>
+      <div className="flex items-center gap-2">
+        <Bot className="w-4 h-4 text-cyan-400" />
+        <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
+          {t('plugins.smart_support.settings.sections.ai')}
+        </h2>
       </div>
+
+      <p className="text-xs text-dark-400">{t('plugins.smart_support.settings.ai.cloud_hint')}</p>
 
       <div className="flex items-center gap-3">
         <Switch
           id="ai-enabled"
-          checked={draft.enabled ?? data.enabled}
-          onCheckedChange={(v) => setKey('enabled', v)}
+          checked={data.enabled}
+          disabled={mutation.isPending}
+          onCheckedChange={(v) => mutation.mutate(v)}
         />
         <Label htmlFor="ai-enabled" className="text-sm text-white">
           {t('plugins.smart_support.settings.ai.enabled')}
         </Label>
       </div>
 
-      <div className="space-y-1.5">
-        <Label className="text-xs text-dark-300">
-          {t('plugins.smart_support.settings.ai.chain')}
-        </Label>
-        <Input
-          value={chainText}
-          onChange={(e) => setChainText(e.target.value)}
-          placeholder="gemini, groq, openrouter"
-          className="h-9 font-mono text-xs"
-        />
-        <p className="text-[11px] text-dark-400">
-          {t('plugins.smart_support.settings.ai.chain_hint')}
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ProviderKeyField
-          provider="gemini"
-          isSet={data.gemini_key_set}
-          value={draft.gemini_api_key}
-          onChange={(v) => setKey('gemini_api_key', v)}
-          model={draft.gemini_model ?? data.gemini_model ?? ''}
-          onModelChange={(v) => setKey('gemini_model', v)}
-        />
-        <ProviderKeyField
-          provider="groq"
-          isSet={data.groq_key_set}
-          value={draft.groq_api_key}
-          onChange={(v) => setKey('groq_api_key', v)}
-          model={draft.groq_model ?? data.groq_model ?? ''}
-          onModelChange={(v) => setKey('groq_model', v)}
-        />
-        <ProviderKeyField
-          provider="openrouter"
-          isSet={data.openrouter_key_set}
-          value={draft.openrouter_api_key}
-          onChange={(v) => setKey('openrouter_api_key', v)}
-          model={draft.openrouter_model ?? data.openrouter_model ?? ''}
-          onModelChange={(v) => setKey('openrouter_model', v)}
-        />
-      </div>
-
-      {status && status.chain.length > 0 && (
-        <div className="rounded-lg border border-[var(--glass-border)] p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[11px] uppercase tracking-wider text-dark-400">
-              {t('plugins.smart_support.settings.ai.status_title')}
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await resetAICooldown()
-                  qc.invalidateQueries({ queryKey: ['smart-support-ai-status'] })
-                  toast.success(t('plugins.smart_support.settings.ai.cooldown_reset'))
-                } catch {
-                  toast.error(t('plugins.smart_support.settings.save_error'))
-                }
-              }}
-              className="text-[10px] uppercase tracking-wider text-dark-300 hover:text-white transition-colors"
-            >
-              {t('plugins.smart_support.settings.ai.reset_cooldown')}
-            </button>
-          </div>
-          <ul className="space-y-2">
-            {status.chain.map((s) => (
-              <li key={s.name} className="text-xs">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-white font-mono">{s.name}</span>
-                  <span
-                    className={
-                      s.available ? 'text-emerald-400 shrink-0' : 'text-amber-400 shrink-0'
-                    }
-                  >
-                    {s.available
-                      ? t('plugins.smart_support.settings.ai.status_ok')
-                      : t('plugins.smart_support.settings.ai.status_cooldown', {
-                          seconds: s.cooldown_seconds_remaining,
-                        })}
-                  </span>
-                </div>
-                {s.last_error && (
-                  <div className="mt-0.5 text-[11px] text-dark-300 break-all">
-                    {s.last_error}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  )
-}
-
-
-function ProviderKeyField({
-  provider,
-  isSet,
-  value,
-  onChange,
-  model,
-  onModelChange,
-}: {
-  provider: 'gemini' | 'groq' | 'openrouter'
-  isSet: boolean
-  value: string | undefined
-  onChange: (v: string) => void
-  model: string
-  onModelChange: (v: string) => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs text-dark-300">
-          {t(`plugins.smart_support.settings.ai.providers.${provider}.label`)}
-        </Label>
-        {isSet && (
-          <span className="text-[10px] uppercase tracking-wider text-emerald-400">
-            {t('plugins.smart_support.settings.ai.key_set')}
+      <div className="rounded-lg border border-[var(--glass-border)] p-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] uppercase tracking-wider text-dark-400">
+            {t('plugins.smart_support.settings.ai.subscription')}
           </span>
+          <span
+            className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${subStyles[sub]}`}
+          >
+            {t(`plugins.smart_support.settings.ai.sub_state.${sub}`)}
+          </span>
+        </div>
+
+        {quota && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-dark-300">{t('plugins.smart_support.settings.ai.quota')}</span>
+              <span className="text-white font-mono">
+                {quota.used} / {quota.period_limit}
+                {quota.topup_left > 0 && (
+                  <span className="text-emerald-300">
+                    {' '}
+                    {t('plugins.smart_support.settings.ai.quota_topup', { n: quota.topup_left })}
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[var(--glass-bg)] overflow-hidden">
+              <div
+                className={`h-full rounded-full ${quotaColor}`}
+                style={{ width: `${quotaPct}%` }}
+              />
+            </div>
+          </div>
         )}
+
+        <Link
+          to="/admin/plugins"
+          className="inline-flex items-center gap-1.5 text-xs text-dark-300 hover:text-white transition-colors"
+        >
+          {t('plugins.smart_support.settings.ai.manage')}
+        </Link>
       </div>
-      <Input
-        type="password"
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={
-          isSet
-            ? t('plugins.smart_support.settings.ai.key_placeholder_set')
-            : t('plugins.smart_support.settings.ai.key_placeholder_empty')
-        }
-        className="h-9 font-mono text-xs"
-        autoComplete="new-password"
-      />
-      <Input
-        type="text"
-        value={model}
-        onChange={(e) => onModelChange(e.target.value)}
-        placeholder={t(
-          `plugins.smart_support.settings.ai.providers.${provider}.model_placeholder`,
-        )}
-        className="h-9 text-xs"
-      />
     </div>
   )
 }

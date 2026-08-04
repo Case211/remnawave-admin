@@ -805,10 +805,12 @@ class AutomationEngine:
         target_id = target_id or config.get("user_uuid")
         if not target_id:
             raise ValueError("No target user specified (target_id and action_config.user_uuid are empty)")
+        from shared.data_access import resolve_panel_user_id
+        panel_user_id = await resolve_panel_user_id(target_id)
         from web.backend.core.api_helper import _get_client
         client = _get_client()
         resp = await client.post(
-            f"/api/users/{target_id}/actions/disable",
+            f"/api/users/{panel_user_id}/actions/disable",
             json={},
         )
         resp.raise_for_status()
@@ -829,11 +831,13 @@ class AutomationEngine:
         target_id = target_id or config.get("user_uuid")
         if not target_id:
             raise ValueError("No target user specified (target_id and action_config.user_uuid are empty)")
+        from shared.data_access import resolve_panel_user_id
+        panel_user_id = await resolve_panel_user_id(target_id)
         from web.backend.core.api_helper import _get_client
         reason = config.get("reason", "Blocked by automation")
         client = _get_client()
         resp = await client.post(
-            f"/api/users/{target_id}/actions/disable",
+            f"/api/users/{panel_user_id}/actions/disable",
             json={"reason": reason},
         )
         resp.raise_for_status()
@@ -1088,11 +1092,12 @@ class AutomationEngine:
                     expire_dt = expire_dt.replace(tzinfo=timezone.utc)
 
                 if expire_dt < cutoff and not user.get("is_disabled", False):
-                    uuid = user.get("uuid", user.get("short_uuid", ""))
-                    if uuid:
+                    # Панельный идентификатор для URL: v2 шлёт uuid, v3 — числовой id.
+                    user_ident = user.get("uuid") or user.get("id")
+                    if user_ident:
                         try:
                             resp = await client.post(
-                                f"/api/users/{uuid}/actions/disable",
+                                f"/api/users/{user_ident}/actions/disable",
                                 json={},
                             )
                             if resp.status_code < 400:
@@ -1115,10 +1120,12 @@ class AutomationEngine:
         target_id = target_id or config.get("user_uuid")
         if not target_id:
             raise ValueError("No target user specified (target_id and action_config.user_uuid are empty)")
+        from shared.data_access import resolve_panel_user_id
+        panel_user_id = await resolve_panel_user_id(target_id)
         from web.backend.core.api_helper import _get_client
         client = _get_client()
         resp = await client.post(
-            f"/api/users/{target_id}/actions/reset-traffic",
+            f"/api/users/{panel_user_id}/actions/reset-traffic",
             json={},
         )
         resp.raise_for_status()

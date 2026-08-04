@@ -15,6 +15,7 @@ from shared.admin_quota import (
     apply_user_reset_traffic_quotas,
     fetch_user_quota_data,
 )
+from src.services import data_access
 from src.utils.auth import BotAdmin
 
 logger = logging.getLogger(__name__)
@@ -58,16 +59,19 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
         return
 
     try:
+        # The panel identifies users by numeric id under v3; local DB rows
+        # carry the panel id so resolve it once for all API calls below.
+        panel_user_id = await data_access.resolve_panel_user_id(user_uuid)
         if action == "info":
-            await _show_user_info(callback, user_uuid)
+            await _show_user_info(callback, user_uuid, panel_user_id)
         elif action == "block":
-            await _block_user(callback, user_uuid)
+            await _block_user(callback, user_uuid, panel_user_id)
         elif action == "kill":
-            await _kill_user(callback, user_uuid)
+            await _kill_user(callback, user_uuid, panel_user_id)
         elif action == "dismiss":
             await _annul(callback, user_uuid)
         elif action == "reset":
-            await _reset_traffic(callback, user_uuid)
+            await _reset_traffic(callback, user_uuid, panel_user_id)
         else:
             await callback.answer(_("vact.unknown_action").format(action=action), show_alert=True)
     except Exception as e:
@@ -75,10 +79,10 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
         await callback.answer(_("vact.error").format(e=e), show_alert=True)
 
 
-async def _show_user_info(callback: CallbackQuery, user_uuid: str) -> None:
+async def _show_user_info(callback: CallbackQuery, user_uuid: str, panel_user_id: str | int) -> None:
     """Show brief user info."""
     try:
-        result = await internal_api_client.get_user_by_uuid(user_uuid)
+        result = await internal_api_client.get_user_by_id(panel_user_id)
         user = result.get("response", result)
         username = user.get("username", "?")
         status = user.get("status", "?")
@@ -108,15 +112,15 @@ async def _show_user_info(callback: CallbackQuery, user_uuid: str) -> None:
         await callback.answer(_("vact.info_failed").format(e=e), show_alert=True)
 
 
-async def _block_user(callback: CallbackQuery, user_uuid: str) -> None:
+async def _block_user(callback: CallbackQuery, user_uuid: str, panel_user_id: str | int) -> None:
     """Disable (block) user via Panel API."""
     try:
-        await internal_api_client.disable_user(user_uuid)
+        await internal_api_client.disable_user(panel_user_id)
 
         # Get username for confirmation
         username = user_uuid[:8]
         try:
-            result = await internal_api_client.get_user_by_uuid(user_uuid)
+            result = await internal_api_client.get_user_by_id(panel_user_id)
             username = result.get("response", result).get("username", username)
         except Exception:
             pass
@@ -137,16 +141,16 @@ async def _block_user(callback: CallbackQuery, user_uuid: str) -> None:
         await callback.answer(_("vact.block_error").format(e=e), show_alert=True)
 
 
-async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
+async def _kill_user(callback: CallbackQuery, user_uuid: str, panel_user_id: str | int) -> None:
     """Disable user AND drop all connections via Panel API."""
     try:
         # 1. Disable user
-        await internal_api_client.disable_user(user_uuid)
+        await internal_api_client.disable_user(panel_user_id)
 
         # 2. Drop all connections
         try:
             await internal_api_client.drop_connections(
-                drop_by={"by": "userUuids", "userUuids": [user_uuid]},
+                drop_by={"by": "userIds", "userIds": [panel_user_id]},
                 target_nodes={"target": "allNodes"},
             )
         except Exception as e:
@@ -154,7 +158,7 @@ async def _kill_user(callback: CallbackQuery, user_uuid: str) -> None:
 
         username = user_uuid[:8]
         try:
-            result = await internal_api_client.get_user_by_uuid(user_uuid)
+            result = await internal_api_client.get_user_by_id(panel_user_id)
             username = result.get("response", result).get("username", username)
         except Exception:
             pass
@@ -205,12 +209,12 @@ async def _annul(callback: CallbackQuery, user_uuid: str) -> None:
         pass
 
 
-async def _reset_traffic(callback: CallbackQuery, user_uuid: str) -> None:
+async def _reset_traffic(callback: CallbackQuery, user_uuid: str, panel_user_id: str | int) -> None:
     """Reset user traffic via Panel API."""
     try:
         username = user_uuid[:8]
         try:
-            result = await internal_api_client.get_user_by_uuid(user_uuid)
+            result = await internal_api_client.get_user_by_id(panel_user_id)
             info = result.get("response", result)
             username = info.get("username", username)
         except Exception:
@@ -220,7 +224,7 @@ async def _reset_traffic(callback: CallbackQuery, user_uuid: str) -> None:
         try:
             # Fetch used_traffic_bytes BEFORE the reset
             creator_id, _limit, used_bytes = await fetch_user_quota_data(user_uuid)
-            await internal_api_client.reset_user_traffic(user_uuid)
+            await internal_api_client.reset_user_traffic(panel_user_id)
             await apply_user_reset_traffic_quotas(creator_id, used_bytes)
         except Exception:
             logger.debug("Failed to update usage counters on violation reset user_uuid=%s", user_uuid)

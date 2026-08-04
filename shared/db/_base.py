@@ -20,7 +20,8 @@ from shared.metrics import VIOLATIONS_DETECTED, SYNC_RUNS
 SCHEMA_SQL = """
 -- Пользователи (основные данные для быстрого поиска)
 CREATE TABLE IF NOT EXISTS users (
-    uuid UUID PRIMARY KEY,
+    uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BIGINT,
     short_uuid VARCHAR(16),
     username VARCHAR(255),
     subscription_uuid UUID,
@@ -47,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_short_uuid ON users(short_uuid);
 CREATE INDEX IF NOT EXISTS idx_users_subscription_uuid ON users(subscription_uuid);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_id ON users(id);
 
 -- Ноды
 CREATE TABLE IF NOT EXISTS nodes (
@@ -103,6 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_nms_node_created ON node_metrics_snapshots(node_u
 CREATE TABLE IF NOT EXISTS torrent_events (
     id BIGSERIAL PRIMARY KEY,
     user_uuid UUID NOT NULL,
+    user_id BIGINT,
     node_uuid UUID NOT NULL,
     ip_address VARCHAR(45) NOT NULL,
     destination VARCHAR(255) NOT NULL,
@@ -142,6 +145,7 @@ CREATE TABLE IF NOT EXISTS config_profiles (
 -- Трафик пользователей по нодам (синхронизируется из Remnawave API)
 CREATE TABLE IF NOT EXISTS user_node_traffic (
     user_uuid UUID REFERENCES users(uuid) ON DELETE CASCADE,
+    user_id BIGINT,
     node_uuid UUID REFERENCES nodes(uuid) ON DELETE CASCADE,
     traffic_bytes BIGINT NOT NULL DEFAULT 0,
     synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -164,6 +168,7 @@ CREATE TABLE IF NOT EXISTS sync_metadata (
 CREATE TABLE IF NOT EXISTS user_connections (
     id SERIAL PRIMARY KEY,
     user_uuid UUID REFERENCES users(uuid) ON DELETE CASCADE,
+    user_id BIGINT,
     ip_address INET,
     node_uuid UUID REFERENCES nodes(uuid) ON DELETE SET NULL,
     connected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -180,6 +185,7 @@ CREATE INDEX IF NOT EXISTS idx_user_connections_user_active ON user_connections(
 CREATE TABLE IF NOT EXISTS user_hwid_devices (
     id SERIAL PRIMARY KEY,
     user_uuid UUID NOT NULL,
+    user_id BIGINT,
     hwid VARCHAR(255) NOT NULL,
     platform VARCHAR(50),
     os_version VARCHAR(100),
@@ -407,6 +413,41 @@ class DatabaseBase:
                 await conn.execute(f"ALTER TABLE hosts ADD COLUMN {col} {col_type}")
                 logger.info("Migration: added column %s to hosts", col)
 
+        # v3.0.0: Panel numeric user id (users.id + user_id on children).
+        # Аналог alembic-миграции 0092 для инсталляций без alembic.
+        user_id_tables = (
+            "user_connections", "user_hwid_devices", "violations",
+            "violation_whitelist", "torrent_events", "subscription_request_history",
+            "user_baselines", "user_node_traffic_history", "user_node_traffic",
+        )
+        for table in user_id_tables:
+            try:
+                exists = await conn.fetchval(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = $1 AND column_name = 'user_id'",
+                    table,
+                )
+                if not exists:
+                    await conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS user_id BIGINT")
+                    logger.info("Migration: added column user_id to %s", table)
+            except Exception as e:
+                logger.warning("Migration: skip user_id column on %s: %s", table, e)
+        await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_id ON users(id)")
+
+        # v3.1.0: правило SRR, обработавшее запрос подписки.
+        # Аналог alembic-миграции 0093 для инсталляций без alembic.
+        try:
+            await conn.execute(
+                "ALTER TABLE subscription_request_history "
+                "ADD COLUMN IF NOT EXISTS srr_response_type VARCHAR(64)"
+            )
+            await conn.execute(
+                "ALTER TABLE subscription_request_history "
+                "ADD COLUMN IF NOT EXISTS srr_rule_name VARCHAR(255)"
+            )
+        except Exception as e:
+            logger.warning("Migration: skip SRR columns on subscription_request_history: %s", e)
+
         # v2.6.0: Add new indexes (safe with IF NOT EXISTS)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_tag ON users(tag) WHERE tag IS NOT NULL")
@@ -519,6 +560,11 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
                 val = row_dict.get(field)
                 if val is not None:
                     result["createdByAdminId"] = val
+            # Panel v3 identifies users by numeric id and sends no uuid —
+            # overlay the local uuid column so the API contract (and the
+            # frontend's user-scoped routes) keeps working.
+            if "uuid" not in result and row_dict.get("uuid") is not None:
+                result["uuid"] = str(row_dict["uuid"])
             return result
 
     # Fallback: build from row fields (convert snake_case to camelCase)

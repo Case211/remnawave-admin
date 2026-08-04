@@ -256,6 +256,7 @@
     "stats.subscription_history_title": "📜 История запросов подписки",
     "stats.subscription_history_empty": "История запросов пуста.",
     "stats.subscription_history_item": "{index}. {date}\n   IP: {ip}\n   UA: {userAgent}",
+    "stats.subscription_history_rule": "\n   Правило: {rule}",
     "stats.traffic_title": "📶 Статистика трафика",
     "stats.traffic_period": "Период: {start} — {end}",
     "stats.traffic_total": "Всего: {total}",

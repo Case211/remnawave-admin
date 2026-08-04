@@ -68,27 +68,16 @@ class RemnawaveApiClient(BaseHttpClient):
         safe_username = username.lstrip("@")
         return await self._get(f"/api/users/by-username/{safe_username}")
 
-    async def get_user_by_telegram_id(self, telegram_id: int) -> dict:
-        return await self._get(f"/api/users/by-telegram-id/{telegram_id}")
-
-    async def get_user_by_uuid(self, user_uuid: str) -> dict:
-        return await self._get(f"/api/users/{user_uuid}")
+    async def get_user_by_id(self, user_id: int) -> dict:
+        return await self._get(f"/api/users/{user_id}")
 
     async def get_user_by_short_uuid(self, short_uuid: str) -> dict:
         return await self._get(f"/api/users/by-short-uuid/{short_uuid}")
 
-    async def get_user_by_id(self, user_id: int) -> dict:
-        return await self._get(f"/api/users/by-id/{user_id}")
-
-    async def get_users_by_email(self, email: str) -> dict:
-        return await self._get(f"/api/users/by-email/{email}")
-
-    async def resolve_user(self, *, uuid: str | None = None, id: int | None = None,
+    async def resolve_user(self, *, id: int | None = None,
                            short_uuid: str | None = None, username: str | None = None) -> dict:
         """Универсальный поиск пользователя по любому идентификатору."""
         body = {}
-        if uuid:
-            body["uuid"] = uuid
         if id is not None:
             body["id"] = id
         if short_uuid:
@@ -97,8 +86,35 @@ class RemnawaveApiClient(BaseHttpClient):
             body["username"] = username
         return await self._post("/api/users/resolve", json=body)
 
-    async def get_users_by_tag(self, tag: str) -> dict:
-        return await self._get(f"/api/users/by-tag/{tag}")
+    async def get_users_stream(
+        self,
+        *,
+        cursor: int | None = None,
+        size: int = 250,
+        status: str | None = None,
+        traffic_limit_strategy: str | None = None,
+        telegram_id: int | None = None,
+        email: str | None = None,
+        tag: str | None = None,
+        external_squad_uuid: str | None = None,
+    ) -> dict:
+        """Cursor-paginated listing with filters (Remnawave v3 users/stream)."""
+        params: dict = {"size": size}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if status:
+            params["status"] = status
+        if traffic_limit_strategy:
+            params["trafficLimitStrategy"] = traffic_limit_strategy
+        if telegram_id is not None:
+            params["telegramId"] = telegram_id
+        if email:
+            params["email"] = email
+        if tag:
+            params["tag"] = tag
+        if external_squad_uuid:
+            params["externalSquadUuid"] = external_squad_uuid
+        return await self._get("/api/users/stream", params=params)
 
     async def get_all_user_tags(self) -> dict:
         return await self._get("/api/users/tags")
@@ -124,27 +140,37 @@ class RemnawaveApiClient(BaseHttpClient):
             params={"start": start, "size": size},
         )
 
-    async def update_user(self, user_uuid: str, **fields) -> dict:
-        payload = {"uuid": user_uuid}
+    async def update_user(self, user_id: int, **fields) -> dict:
+        payload = {"id": user_id}
         payload.update({k: v for k, v in fields.items() if v is not None})
         return await self._patch("/api/users", json=payload)
 
-    async def disable_user(self, user_uuid: str) -> dict:
-        return await self._post(f"/api/users/{user_uuid}/actions/disable")
+    async def disable_user(self, user_id: int) -> dict:
+        return await self._post(f"/api/users/{user_id}/actions/disable")
 
-    async def enable_user(self, user_uuid: str) -> dict:
-        return await self._post(f"/api/users/{user_uuid}/actions/enable")
+    async def enable_user(self, user_id: int) -> dict:
+        return await self._post(f"/api/users/{user_id}/actions/enable")
 
-    async def delete_user(self, user_uuid: str) -> dict:
-        """Delete a single user by UUID."""
-        result = await self._delete(f"/api/users/{user_uuid}")
+    async def delete_user(self, user_id: int) -> dict:
+        """Delete a single user by numeric ID."""
+        result = await self._delete(f"/api/users/{user_id}")
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def reset_user_traffic(self, user_uuid: str) -> dict:
-        return await self._post(f"/api/users/{user_uuid}/actions/reset-traffic")
+    async def reset_user_traffic(self, user_id: int) -> dict:
+        return await self._post(f"/api/users/{user_id}/actions/reset-traffic")
 
-    async def revoke_user_subscription(self, user_uuid: str, short_uuid: str | None = None, revoke_only_passwords: bool = False) -> dict:
+    async def extend_user_expiration(self, user_id: int, days: int) -> dict:
+        """Продлевает подписку одного юзера (Remnawave 3.2.0+).
+
+        Панель сама решает, от чего считать: истёкшему срок отсчитывается
+        от сегодня и статус возвращается в ACTIVE, активному дни
+        прибавляются к текущей дате. DISABLED и LIMITED продлеваются
+        без смены статуса.
+        """
+        return await self._post(f"/api/users/{user_id}/actions/extend", json={"days": days})
+
+    async def revoke_user_subscription(self, user_id: int, short_uuid: str | None = None, revoke_only_passwords: bool = False) -> dict:
         """Отзывает подписку пользователя. short_uuid опционален - если не указан, будет сгенерирован автоматически.
         revoke_only_passwords=True перегенерирует только пароли подключения, URL подписки останется прежним."""
         payload: dict[str, object] = {}
@@ -152,7 +178,7 @@ class RemnawaveApiClient(BaseHttpClient):
             payload["shortUuid"] = short_uuid
         if revoke_only_passwords:
             payload["revokeOnlyPasswords"] = True
-        return await self._post(f"/api/users/{user_uuid}/actions/revoke", json=payload)
+        return await self._post(f"/api/users/{user_id}/actions/revoke", json=payload)
 
     async def get_internal_squads(self) -> dict:
         """Получает список внутренних squads с увеличенным таймаутом и retry."""
@@ -184,7 +210,6 @@ class RemnawaveApiClient(BaseHttpClient):
         trojan_password: str | None = None,
         vless_uuid: str | None = None,
         ss_password: str | None = None,
-        uuid: str | None = None,
         created_at: str | None = None,
         last_traffic_reset_at: str | None = None,
     ) -> dict:
@@ -218,8 +243,6 @@ class RemnawaveApiClient(BaseHttpClient):
             payload["vlessUuid"] = vless_uuid
         if ss_password is not None:
             payload["ssPassword"] = ss_password
-        if uuid is not None:
-            payload["uuid"] = uuid
         if created_at is not None:
             payload["createdAt"] = created_at
         if last_traffic_reset_at is not None:
@@ -278,6 +301,16 @@ class RemnawaveApiClient(BaseHttpClient):
     async def get_nodes_metrics(self) -> dict:
         """Получает метрики нод (inbounds/outbounds stats)."""
         return await self._get("/api/system/nodes/metrics")
+
+    async def get_system_configuration(self) -> dict:
+        """Конфигурация панели (Remnawave 3.2.0+).
+
+        Отдаёт часть env панели: включён ли вебхук, сервисные тумблеры
+        (история запросов подписки, записи трафика юзеров) и мелочи вроде
+        длины short uuid. Админка сверяет по ним свои ожидания — без вебхука
+        или с выключенной историей часть её функций работает вхолостую.
+        """
+        return await self._get("/api/system/configuration")
 
     async def generate_x25519_keypairs(self) -> dict:
         """Генерирует 30 X25519 ключевых пар."""
@@ -500,13 +533,6 @@ class RemnawaveApiClient(BaseHttpClient):
         return await self._get(
             "/api/bandwidth-stats/nodes",
             params={"start": start, "end": end, "topNodesLimit": top_nodes_limit}
-        )
-
-    async def get_node_users_usage_legacy(self, node_uuid: str, start: str, end: str) -> dict:
-        """Получает статистику использования ноды пользователями (legacy)."""
-        return await self._get(
-            f"/api/bandwidth-stats/nodes/{node_uuid}/users/legacy",
-            params={"start": start, "end": end}
         )
 
     # --- Hosts ---
@@ -789,27 +815,20 @@ class RemnawaveApiClient(BaseHttpClient):
         return await self._post("/api/system/tools/happ/encrypt", json={"linkToEncrypt": link_to_encrypt})
 
     # --- User Statistics ---
-    async def get_user_subscription_request_history(self, user_uuid: str) -> dict:
+    async def get_user_subscription_request_history(self, user_id: int) -> dict:
         """Получает историю запросов подписки пользователя (последние 24 записи)."""
-        return await self._get(f"/api/users/{user_uuid}/subscription-request-history")
+        return await self._get(f"/api/users/{user_id}/subscription-request-history")
 
-    async def get_user_traffic_stats(self, user_uuid: str, start: str, end: str, top_nodes_limit: int = 10) -> dict:
+    async def get_user_traffic_stats(self, user_id: int, start: str, end: str, top_nodes_limit: int = 10) -> dict:
         """Получает статистику трафика пользователя по нодам за период."""
         return await self._get(
-            f"/api/bandwidth-stats/users/{user_uuid}",
+            f"/api/bandwidth-stats/users/{user_id}",
             params={"start": start, "end": end, "topNodesLimit": top_nodes_limit}
         )
 
-    async def get_user_traffic_stats_legacy(self, user_uuid: str, start: str, end: str) -> dict:
-        """Получает статистику трафика пользователя (legacy формат)."""
-        return await self._get(
-            f"/api/bandwidth-stats/users/{user_uuid}/legacy",
-            params={"start": start, "end": end}
-        )
-
-    async def get_user_accessible_nodes(self, user_uuid: str) -> dict:
+    async def get_user_accessible_nodes(self, user_id: int) -> dict:
         """Получает список доступных нод для пользователя."""
-        return await self._get(f"/api/users/{user_uuid}/accessible-nodes")
+        return await self._get(f"/api/users/{user_id}/accessible-nodes")
 
     async def get_node_users_usage(self, node_uuid: str, start: str, end: str, top_users_limit: int = 10) -> dict:
         """Получает статистику использования ноды пользователями."""
@@ -826,46 +845,46 @@ class RemnawaveApiClient(BaseHttpClient):
         """Получает все HWID устройства всех пользователей."""
         return await self._get("/api/hwid/devices", params={"start": start, "size": size})
 
-    async def get_user_hwid_devices(self, user_uuid: str) -> dict:
+    async def get_user_hwid_devices(self, user_id: int) -> dict:
         """Получает HWID устройства конкретного пользователя."""
-        return await self._get(f"/api/hwid/devices/{user_uuid}")
+        return await self._get(f"/api/hwid/devices/{user_id}")
 
-    async def create_user_hwid_device(self, user_uuid: str, hwid: str) -> dict:
+    async def create_user_hwid_device(self, user_id: int, hwid: str) -> dict:
         """Создает HWID устройство для пользователя."""
-        return await self._post("/api/hwid/devices", json={"userUuid": user_uuid, "hwid": hwid})
+        return await self._post("/api/hwid/devices", json={"userId": user_id, "hwid": hwid})
 
-    async def delete_user_hwid_device(self, user_uuid: str, hwid: str) -> dict:
+    async def delete_user_hwid_device(self, user_id: int, hwid: str) -> dict:
         """Удаляет конкретное HWID устройство пользователя."""
-        return await self._post("/api/hwid/devices/delete", json={"userUuid": user_uuid, "hwid": hwid})
+        return await self._post("/api/hwid/devices/delete", json={"userId": user_id, "hwid": hwid})
 
-    async def delete_all_user_hwid_devices(self, user_uuid: str) -> dict:
+    async def delete_all_user_hwid_devices(self, user_id: int) -> dict:
         """Удаляет все HWID устройства пользователя."""
-        return await self._post("/api/hwid/devices/delete-all", json={"userUuid": user_uuid})
+        return await self._post("/api/hwid/devices/delete-all", json={"userId": user_id})
 
     async def get_top_users_by_hwid_devices(self, limit: int = 10) -> dict:
         """Получает топ пользователей по количеству HWID устройств."""
         return await self._get("/api/hwid/devices/top-users", params={"limit": limit})
 
-    # --- IP Control ---
-    async def fetch_user_ips(self, user_uuid: str) -> dict:
+    # --- Connections (was IP Control) ---
+    async def fetch_user_ips(self, user_id: int) -> dict:
         """Запускает сбор IP-адресов пользователя. Возвращает jobId."""
-        return await self._post(f"/api/ip-control/fetch-ips/{user_uuid}")
+        return await self._post(f"/api/connections/by-user/{user_id}")
 
     async def get_fetch_ips_result(self, job_id: str) -> dict:
         """Получает результат сбора IP-адресов по jobId."""
-        return await self._get(f"/api/ip-control/fetch-ips/result/{job_id}")
+        return await self._get(f"/api/connections/by-user/{job_id}")
 
     async def fetch_users_ips_by_node(self, node_uuid: str) -> dict:
         """Запускает сбор IP всех пользователей на ноде. Возвращает jobId."""
-        return await self._post(f"/api/ip-control/fetch-users-ips/{node_uuid}")
+        return await self._post(f"/api/connections/by-node/{node_uuid}")
 
     async def get_fetch_users_ips_result(self, job_id: str) -> dict:
         """Получает результат сбора IP пользователей по jobId."""
-        return await self._get(f"/api/ip-control/fetch-users-ips/result/{job_id}")
+        return await self._get(f"/api/connections/by-node/{job_id}")
 
     async def drop_connections(self, drop_by: dict, target_nodes: dict) -> dict:
-        """Сбрасывает активные соединения пользователя."""
-        return await self._post("/api/ip-control/drop-connections", json={
+        """Сбрасывает активные соединения."""
+        return await self._post("/api/connections/drop", json={
             "dropBy": drop_by,
             "targetNodes": target_nodes,
         })
@@ -1091,16 +1110,16 @@ class RemnawaveApiClient(BaseHttpClient):
     async def get_subscription_by_short_uuid_protected(self, short_uuid: str) -> dict:
         return await self._get(f"/api/subscriptions/by-short-uuid/{short_uuid}")
 
-    async def get_subscription_by_uuid(self, uuid: str) -> dict:
-        return await self._get(f"/api/subscriptions/by-uuid/{uuid}")
+    async def get_subscription_by_id(self, user_id: int) -> dict:
+        return await self._get(f"/api/subscriptions/by-id/{user_id}")
 
-    async def get_subscription_connection_keys(self, uuid: str) -> dict:
+    async def get_subscription_connection_keys(self, user_id: int) -> dict:
         """Полные ключи подключения (vless://… по хостам), сгруппированные
         enabledKeys/hiddenKeys/disabledKeys. Админский источник Panel API —
         не гейтится HWID (в отличие от /sub/{short}/info).
 
-        Путь по контракту Remnawave: uuid ИДЁТ ПОСЛЕ connection-keys."""
-        return await self._get(f"/api/subscriptions/connection-keys/{uuid}")
+        Путь по контракту Remnawave: id ИДЁТ ПОСЛЕ connection-keys."""
+        return await self._get(f"/api/subscriptions/connection-keys/{user_id}")
 
     async def get_raw_subscription_by_short_uuid(self, short_uuid: str) -> dict:
         return await self._get(f"/api/subscriptions/by-short-uuid/{short_uuid}/raw")
@@ -1272,23 +1291,23 @@ class RemnawaveApiClient(BaseHttpClient):
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def bulk_delete_users(self, uuids: list[str]) -> dict:
-        result = await self._post("/api/users/bulk/delete", json={"uuids": uuids})
+    async def bulk_delete_users(self, user_ids: list[int]) -> dict:
+        result = await self._post("/api/users/bulk/delete", json={"userIds": user_ids})
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def bulk_revoke_subscriptions(self, uuids: list[str]) -> dict:
-        result = await self._post("/api/users/bulk/revoke-subscription", json={"uuids": uuids})
+    async def bulk_revoke_subscriptions(self, user_ids: list[int]) -> dict:
+        result = await self._post("/api/users/bulk/revoke-subscription", json={"userIds": user_ids})
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def bulk_reset_traffic_users(self, uuids: list[str]) -> dict:
-        result = await self._post("/api/users/bulk/reset-traffic", json={"uuids": uuids})
+    async def bulk_reset_traffic_users(self, user_ids: list[int]) -> dict:
+        result = await self._post("/api/users/bulk/reset-traffic", json={"userIds": user_ids})
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def bulk_extend_users(self, uuids: list[str], days: int) -> dict:
-        result = await self._post("/api/users/bulk/extend-expiration-date", json={"uuids": uuids, "extendDays": days})
+    async def bulk_extend_users(self, user_ids: list[int], days: int) -> dict:
+        result = await self._post("/api/users/bulk/extend-expiration-date", json={"userIds": user_ids, "extendDays": days})
         await cache.invalidate(CacheKeys.STATS)
         return result
 
@@ -1297,22 +1316,22 @@ class RemnawaveApiClient(BaseHttpClient):
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def bulk_update_users_status(self, uuids: list[str], status: str) -> dict:
-        result = await self._post("/api/users/bulk/update", json={"uuids": uuids, "fields": {"status": status}})
+    async def bulk_update_users_status(self, user_ids: list[int], status: str) -> dict:
+        result = await self._post("/api/users/bulk/update", json={"userIds": user_ids, "fields": {"status": status}})
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def bulk_update_users(self, uuids: list[str], fields: dict) -> dict:
+    async def bulk_update_users(self, user_ids: list[int], fields: dict) -> dict:
         """Массовое обновление пользователей с произвольными полями."""
-        result = await self._post("/api/users/bulk/update", json={"uuids": uuids, "fields": fields})
+        result = await self._post("/api/users/bulk/update", json={"userIds": user_ids, "fields": fields})
         await cache.invalidate(CacheKeys.STATS)
         return result
 
-    async def bulk_update_users_squads(self, uuids: list[str], active_internal_squads: list[str]) -> dict:
+    async def bulk_update_users_squads(self, user_ids: list[int], active_internal_squads: list[str]) -> dict:
         """Массовое обновление internal squads пользователей."""
         result = await self._post(
             "/api/users/bulk/update-squads",
-            json={"uuids": uuids, "activeInternalSquads": active_internal_squads},
+            json={"userIds": user_ids, "activeInternalSquads": active_internal_squads},
         )
         await cache.invalidate(CacheKeys.STATS)
         return result

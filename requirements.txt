@@ -1,4 +1,5 @@
 aiogram==3.12.0
+aiohttp-socks==0.11.0
 httpx==0.27.2
 python-dotenv==1.0.1
 pydantic==2.8.2

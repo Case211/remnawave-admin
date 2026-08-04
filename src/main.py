@@ -242,12 +242,12 @@ async def main() -> None:
     # Проверяем подключение к API перед стартом
     if not await check_api_connection():
         logger.error(
-            "🚨 Cannot start bot: API is unavailable. " 
+            "🚨 Cannot start bot: API is unavailable. "
             "Please check API_BASE_URL and API_TOKEN in your .env file. "
             "Make sure the API server is running and accessible."
         )
         sys.exit(1)
-    
+
     # Подключаемся к базе данных (если настроена)
     db_connected = False
     if settings.database_enabled:
@@ -269,8 +269,11 @@ async def main() -> None:
         logger.info("🗄️ Database not configured, running without cache")
 
     # parse_mode is left as default (None) to avoid HTML parsing issues with plain text translations
+    # proxy=None — штатное значение aiogram, поэтому ветвиться незачем:
+    # без BOT_PROXY_URL сессия создаётся ровно как раньше.
     session = AiohttpSession(
-        api=TelegramAPIServer.from_base(settings.bot_api_root)
+        api=TelegramAPIServer.from_base(settings.bot_api_root),
+        proxy=settings.bot_proxy_url.unicode_string() if settings.bot_proxy_url else None,
     )
     bot = Bot(token=settings.bot_token, session=session)
     dp = Dispatcher(storage=MemoryStorage())

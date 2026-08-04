@@ -735,8 +735,7 @@ export default function SystemLogs() {
 function formatFileSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B'
   const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  if (i < 0 || i >= sizes.length) return '0 B'
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.min(Math.max(Math.floor(Math.log(bytes) / Math.log(k)), 0), sizes.length - 1)
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
 }

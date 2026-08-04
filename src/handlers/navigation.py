@@ -221,6 +221,23 @@ def _pop_navigation_history(user_id: int | None) -> str | None:
     return None
 
 
+async def _user_callback_id(info: dict) -> str:
+    """Идентификатор юзера для callback_data — локальный uuid, иначе панельный id.
+
+    v2 payload несёт uuid, панель v3 — числовой id (в локальной БД uuid
+    генерируется отдельно). Резолвим id → локальный uuid, чтобы callback
+    открывал карточку юзера и в v2, и в v3.
+    """
+    from shared.data_access import resolve_local_user_uuid
+    local_uuid = await resolve_local_user_uuid(info)
+    if local_uuid:
+        return local_uuid
+    panel_id = info.get("id")
+    if panel_id is not None:
+        return str(panel_id)
+    return str(info.get("uuid") or "")
+
+
 async def _send_subscriptions_page(target: Message | CallbackQuery, page: int = 0, admin: BotAdmin | None = None) -> None:
     """Отправляет страницу со списком подписок с поддержкой фильтрации (из БД, fallback на API)."""
     user_id = _get_target_user_id(target)
@@ -336,7 +353,7 @@ async def _send_subscriptions_page(target: Message | CallbackQuery, page: int = 
     rows: list[list[InlineKeyboardButton]] = []
     for user in users:
         info = user.get("response", user)
-        uuid = info.get("uuid")
+        uuid = await _user_callback_id(info)
         if not uuid:
             continue
         rows.append([InlineKeyboardButton(text=_format_user_choice(info), callback_data=f"subs:view:{uuid}")])
@@ -675,7 +692,7 @@ async def _handle_subs_search_input(message: Message, ctx: dict, admin: BotAdmin
     rows = []
     for user in matches[:MAX_SEARCH_RESULTS]:
         info = user.get("response", user)
-        uuid = info.get("uuid")
+        uuid = await _user_callback_id(info)
         if not uuid:
             continue
         rows.append([InlineKeyboardButton(text=_format_user_choice(info), callback_data=f"subs:view:{uuid}")])

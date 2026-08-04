@@ -103,79 +103,73 @@ class TestTelegramSend:
         assert exc.value.status_code == 401
         os.environ.pop("INTERNAL_API_SECRET", None)
 
-    async def test_successful_send(self, set_secret):
-        from src.services.bot_callbacks import telegram_send
-        bot = AsyncMock()
+    # Транспорт сменился в 3.1.0: rich-уведомления уходят через
+    # shared.tg_rich (raw httpx), а не через aiogram. Тесты этого не
+    # заметили — они продолжали ждать bot.send_message и молча краснели,
+    # то есть отправку из bot_callbacks вообще ничто не проверяло.
+    @pytest.fixture
+    def rich_send(self):
+        with patch("shared.tg_rich.send_rich_or_html", new_callable=AsyncMock) as mock:
+            mock.return_value = True
+            yield mock
+
+    @staticmethod
+    def _request(payload: dict):
         req = MagicMock()
-        req.app.state.bot = bot
+        req.app.state.bot = AsyncMock()
+        req.app.state.bot.token = "123:abc"
         req.headers.get.return_value = "test-secret-123"
-        req.json = AsyncMock(return_value={"chat_id": "456", "title": "Hello", "body": "World"})
+        req.json = AsyncMock(return_value=payload)
+        return req
+
+    async def test_successful_send(self, set_secret, rich_send):
+        from src.services.bot_callbacks import telegram_send
+        req = self._request({"chat_id": "456", "title": "Hello", "body": "World"})
         resp = await telegram_send(req)
         assert resp.status_code == 200
-        bot.send_message.assert_called_once_with(
-            chat_id="456",
-            text="<b>Hello</b>\n\nWorld",
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
+        rich_send.assert_awaited_once()
+        token, chat_id, text = rich_send.await_args.args
+        assert token == "123:abc"
+        assert chat_id == "456"
+        assert text == "<b>Hello</b>\n\nWorld"
+        assert rich_send.await_args.kwargs["message_thread_id"] is None
 
-    async def test_with_topic_id(self, set_secret):
+    async def test_with_topic_id(self, set_secret, rich_send):
         from src.services.bot_callbacks import telegram_send
-        bot = AsyncMock()
-        req = MagicMock()
-        req.app.state.bot = bot
-        req.headers.get.return_value = "test-secret-123"
-        req.json = AsyncMock(return_value={"chat_id": "456", "title": "T", "body": "B", "topic_id": "789"})
+        req = self._request({"chat_id": "456", "title": "T", "body": "B", "topic_id": "789"})
         resp = await telegram_send(req)
         assert resp.status_code == 200
-        bot.send_message.assert_called_once()
-        kwargs = bot.send_message.call_args.kwargs
-        assert kwargs["message_thread_id"] == 789
+        assert rich_send.await_args.kwargs["message_thread_id"] == 789
 
-    async def test_topic_id_zero_ignored(self, set_secret):
+    async def test_topic_id_zero_ignored(self, set_secret, rich_send):
+        """Ноль — не топик, а его отсутствие."""
         from src.services.bot_callbacks import telegram_send
-        bot = AsyncMock()
-        req = MagicMock()
-        req.app.state.bot = bot
-        req.headers.get.return_value = "test-secret-123"
-        req.json = AsyncMock(return_value={"chat_id": "456", "title": "T", "body": "B", "topic_id": "0"})
+        req = self._request({"chat_id": "456", "title": "T", "body": "B", "topic_id": "0"})
         resp = await telegram_send(req)
         assert resp.status_code == 200
-        assert "message_thread_id" not in bot.send_message.call_args.kwargs
+        assert rich_send.await_args.kwargs["message_thread_id"] is None
 
-    async def test_html_escaping_in_title(self, set_secret):
+    async def test_html_escaping_in_title(self, set_secret, rich_send):
         """Title should be html.escape()'d before wrapping in <b> tags."""
         from src.services.bot_callbacks import telegram_send
-        bot = AsyncMock()
-        req = MagicMock()
-        req.app.state.bot = bot
-        req.headers.get.return_value = "test-secret-123"
-        req.json = AsyncMock(return_value={"chat_id": "1", "title": "<script>alert('xss')</script>", "body": "safe"})
+        req = self._request({"chat_id": "1", "title": "<script>alert('xss')</script>", "body": "safe"})
         resp = await telegram_send(req)
         assert resp.status_code == 200
-        sent = bot.send_message.call_args.kwargs["text"]
+        sent = rich_send.await_args.args[2]
         assert "<script>" not in sent
         assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in sent
 
-    async def test_no_title_skips_b_tag(self, set_secret):
+    async def test_no_title_skips_b_tag(self, set_secret, rich_send):
         from src.services.bot_callbacks import telegram_send
-        bot = AsyncMock()
-        req = MagicMock()
-        req.app.state.bot = bot
-        req.headers.get.return_value = "test-secret-123"
-        req.json = AsyncMock(return_value={"chat_id": "1", "body": "Just body"})
+        req = self._request({"chat_id": "1", "body": "Just body"})
         resp = await telegram_send(req)
         assert resp.status_code == 200
-        assert bot.send_message.call_args.kwargs["text"] == "Just body"
+        assert rich_send.await_args.args[2] == "Just body"
 
-    async def test_bot_send_failure_returns_500(self, set_secret):
+    async def test_bot_send_failure_returns_500(self, set_secret, rich_send):
         from src.services.bot_callbacks import telegram_send
-        bot = AsyncMock()
-        bot.send_message.side_effect = Exception("TG API down")
-        req = MagicMock()
-        req.app.state.bot = bot
-        req.headers.get.return_value = "test-secret-123"
-        req.json = AsyncMock(return_value={"chat_id": "1", "title": "T", "body": "B"})
+        rich_send.side_effect = Exception("TG API down")
+        req = self._request({"chat_id": "1", "title": "T", "body": "B"})
         with pytest.raises(HTTPException) as exc:
             await telegram_send(req)
         assert exc.value.status_code == 500
@@ -268,6 +262,63 @@ class TestPanelEvent:
             resp = await panel_event(req)
         assert resp.status_code == 200
         mock_notif.assert_not_called()
+
+    async def test_user_event_v3_numeric_id_not_skipped(self, set_secret):
+        from src.services.bot_callbacks import panel_event
+        bot = AsyncMock()
+        req = MagicMock()
+        req.app.state.bot = bot
+        req.headers.get.return_value = "test-secret-123"
+        req.json = AsyncMock(return_value={
+            "event": "user.modified",
+            "data": {"id": 42, "username": "alice", "status": "ACTIVE"},
+        })
+        with patch("src.utils.notifications.send_user_notification", new=AsyncMock()) as mock_notif:
+            resp = await panel_event(req)
+        assert resp.status_code == 200
+        mock_notif.assert_called_once()
+        assert mock_notif.call_args.kwargs["action"] == "updated"
+
+
+class TestUserIdentifierHelpers:
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_v2_uuid_present(self):
+        from src.utils.notifications import _local_user_uuid
+        assert await _local_user_uuid({"uuid": "abc-123", "id": 7}) == "abc-123"
+
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_v3_id_resolves_to_local(self):
+        from src.utils.notifications import _local_user_uuid
+        with patch("shared.data_access.db_service", is_connected=True) as db:
+            db.get_user_uuid_by_panel_id = AsyncMock(return_value="local-uuid-9")
+            assert await _local_user_uuid({"id": 42}) == "local-uuid-9"
+            db.get_user_uuid_by_panel_id.assert_awaited_once_with(42)
+
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_v3_unknown_returns_none(self):
+        from src.utils.notifications import _local_user_uuid
+        with patch("shared.data_access.db_service", is_connected=True) as db:
+            db.get_user_uuid_by_panel_id = AsyncMock(return_value=None)
+            assert await _local_user_uuid({"id": 42}) is None
+
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_v3_no_db_disconnected(self):
+        from src.utils.notifications import _local_user_uuid
+        with patch("shared.data_access.db_service", is_connected=False):
+            assert await _local_user_uuid({"id": 42}) is None
+
+    @pytest.mark.asyncio
+    async def test_local_user_uuid_empty_payload(self):
+        from src.utils.notifications import _local_user_uuid
+        assert await _local_user_uuid({}) is None
+
+    def test_short_user_id_prefers_local_uuid(self):
+        from src.utils.notifications import _short_user_id
+        assert _short_user_id({"uuid": "abcdefgh", "id": 99}, "xyz") == "xyz"
+
+    def test_short_user_id_falls_back_to_id(self):
+        from src.utils.notifications import _short_user_id
+        assert _short_user_id({"id": 42}, None) == "42"
 
     async def test_node_event(self, set_secret):
         from src.services.bot_callbacks import panel_event

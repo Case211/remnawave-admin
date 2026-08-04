@@ -256,6 +256,7 @@
     "stats.subscription_history_title": "📜 Subscription request history",
     "stats.subscription_history_empty": "Request history is empty.",
     "stats.subscription_history_item": "{index}. {date}\n   IP: {ip}\n   UA: {userAgent}",
+    "stats.subscription_history_rule": "\n   Rule: {rule}",
     "stats.traffic_title": "📶 Traffic statistics",
     "stats.traffic_period": "Period: {start} — {end}",
     "stats.traffic_total": "Total: {total}",

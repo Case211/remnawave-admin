@@ -127,27 +127,49 @@ class TestBuildDetails:
 
 
 class TestExtractToken:
-    """Tests for JWT extraction from Authorization header."""
+    """Tests for JWT extraction from the Authorization header or cookie."""
 
     def test_bearer_token(self):
         req = MagicMock()
         req.headers = {"authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.test"}
+        req.cookies = {}
         assert _extract_token(req) == "eyJhbGciOiJIUzI1NiJ9.test"
 
     def test_bearer_case_insensitive(self):
         req = MagicMock()
         req.headers = {"authorization": "bearer my-token"}
+        req.cookies = {}
         assert _extract_token(req) == "my-token"
 
     def test_no_authorization_header(self):
         req = MagicMock()
         req.headers = {}
+        req.cookies = {}
         assert _extract_token(req) is None
 
     def test_wrong_scheme(self):
         req = MagicMock()
         req.headers = {"authorization": "Basic dXNlcjpwYXNz"}
+        req.cookies = {}
         assert _extract_token(req) is None
+
+    def test_session_cookie_used_when_header_absent(self):
+        """Веб-фронт живёт на httpOnly-cookie: без этого автор действия
+        терялся и аудит писал «unknown» (#261)."""
+        from web.backend.core.auth_cookies import ACCESS_COOKIE
+
+        req = MagicMock()
+        req.headers = {}
+        req.cookies = {ACCESS_COOKIE: "cookie-token"}
+        assert _extract_token(req) == "cookie-token"
+
+    def test_header_wins_over_cookie(self):
+        from web.backend.core.auth_cookies import ACCESS_COOKIE
+
+        req = MagicMock()
+        req.headers = {"authorization": "Bearer header-token"}
+        req.cookies = {ACCESS_COOKIE: "cookie-token"}
+        assert _extract_token(req) == "header-token"
 
 
 # ── Middleware dispatch tests ─────────────────────────────────

@@ -476,14 +476,16 @@ export function ProfileEditorDialog({ profile, onClose }: Props) {
             <p className="text-[11px] text-muted-foreground">{t('resources.editor.keysDialogHint')}</p>
           </DialogHeader>
           {keypair && (
-            <div className="space-y-3">
+            /* min-w-0: DialogContent — grid, и без него item расширяется по
+               содержимому (длинный ключ) — кнопки уезжали за границу диалога */
+            <div className="space-y-3 min-w-0">
               {([['privateKey', keypair.privateKey], ['publicKey', keypair.publicKey]] as const).map(([label, value]) => (
                 <div key={label}>
                   <p className="text-xs text-muted-foreground mb-1">{t(`resources.editor.${label}`)}</p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 min-w-0 truncate text-xs font-mono px-2.5 py-2 rounded-md bg-[var(--glass-bg)] border border-[var(--glass-border)]">{value}</code>
-                    <Button variant="outline" size="sm" onClick={() => copyText(value)}>{t('common.copy')}</Button>
-                    <Button variant="outline" size="sm" onClick={() => insertAtCursor(value)}
+                    <Button variant="outline" size="sm" className="shrink-0" onClick={() => copyText(value)}>{t('common.copy')}</Button>
+                    <Button variant="outline" size="sm" className="shrink-0" onClick={() => insertAtCursor(value)}
                       title={t('resources.editor.insertAtCursor')}>
                       {t('resources.editor.insert')}
                     </Button>

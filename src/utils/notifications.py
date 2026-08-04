@@ -13,6 +13,11 @@ from src.config import get_settings
 from src.utils.formatters import format_bytes, format_datetime, format_provider_name
 from src.utils.i18n import tr
 from shared.logger import logger
+from shared.notification_config import (
+    is_notification_type_enabled,
+    resolve_notification_topic,
+    resolve_notifications_chat_id,
+)
 
 
 def _strip_html(text: str) -> str:
@@ -152,6 +157,18 @@ async def _resolve_squads_display(active_squads: list) -> str:
     return ", ".join(names) if names else "—"
 
 
+async def _local_user_uuid(info: dict) -> Optional[str]:
+    """Local user uuid for a payload — v2 sends uuid, panel v3 sends numeric id."""
+    from shared.data_access import resolve_local_user_uuid
+    return await resolve_local_user_uuid(info)
+
+
+def _short_user_id(info: dict, local_uuid: Optional[str]) -> str:
+    """Короткий идентификатор юзера для карточки уведомления."""
+    display = local_uuid or info.get("uuid") or info.get("id") or ""
+    return str(display)[:8]
+
+
 async def send_user_notification(
     bot: Bot,
     action: str,  # "created", "updated", "deleted", "expired", "expires_in_*", etc.
@@ -163,21 +180,31 @@ async def send_user_notification(
 ) -> None:
     """Отправляет уведомление о действии с пользователем в Telegram топик."""
     settings = get_settings()
-    
-    if not settings.notifications_chat_id:
+
+    if not is_notification_type_enabled("users"):
+        logger.debug("User notifications disabled in dynamic settings")
+        return
+
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return  # Уведомления отключены
-    
-    topic_id = settings.get_topic_for_users()
+
+    topic_id = resolve_notification_topic(
+        "users",
+        type_fallback=settings.notifications_topic_users,
+        general_fallback=settings.notifications_topic_id,
+    )
     logger.debug(
         "Sending user notification action=%s chat_id=%s topic_id=%s",
         action,
-        settings.notifications_chat_id,
+        chat_id,
         topic_id,
     )
     
     try:
         info = user_info.get("response", user_info)
+        local_uuid = await _local_user_uuid(info)
 
         lines = []
 
@@ -191,7 +218,7 @@ async def send_user_notification(
         lines.append("")
 
         # Идентификация
-        lines.append(f"👤 <code>{_esc(info.get('username', 'n/a'))}</code>  <code>{info.get('uuid', '')[:8]}</code>")
+        lines.append(f"👤 <code>{_esc(info.get('username', 'n/a'))}</code>  <code>{_short_user_id(info, local_uuid)}</code>")
         lines.append("")
 
         # Для updated: показываем только изменившиеся поля (diff)
@@ -314,7 +341,7 @@ async def send_user_notification(
                 qrcode.make(subscription_url, box_size=8, border=2).save(qr_buf, format='PNG')
                 qr_buf.seek(0)
                 photo_kwargs = {
-                    "chat_id": settings.notifications_chat_id,
+                    "chat_id": chat_id,
                     "photo": BufferedInputFile(qr_buf.read(), filename="subscription.png"),
                     "caption": text,
                     "parse_mode": "HTML",
@@ -322,7 +349,7 @@ async def send_user_notification(
                 if topic_id is not None:
                     photo_kwargs["message_thread_id"] = topic_id
                 await bot.send_photo(**photo_kwargs)
-                logger.info("User created notification with QR sent successfully chat_id=%s", settings.notifications_chat_id)
+                logger.info("User created notification with QR sent successfully chat_id=%s", chat_id)
                 return
             except Exception as e:
                 logger.warning("Failed to send QR photo, falling back to text: %s", e)
@@ -330,7 +357,7 @@ async def send_user_notification(
 
         # Отправляем в топик
         message_kwargs = {
-            "chat_id": settings.notifications_chat_id,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
@@ -340,7 +367,7 @@ async def send_user_notification(
             message_kwargs["message_thread_id"] = topic_id
 
         await _send_card(bot, message_kwargs)
-        logger.info("User notification sent successfully action=%s chat_id=%s", action, settings.notifications_chat_id)
+        logger.info("User notification sent successfully action=%s chat_id=%s", action, chat_id)
 
         # Маппинг коротких action-имён → event_id из catalog
         # (shared/notification_events.py). Без этого fallback `user.{action}`
@@ -362,10 +389,10 @@ async def send_user_notification(
             push_title = tr("notify.push.user.fallback", action=action)
         _push_dispatch(
             title=push_title,
-            body=info.get("username") or info.get("uuid", "")[:8],
+            body=info.get("username") or _short_user_id(info, local_uuid),
             notification_type="info",
             source="panel.webhook",
-            source_id=info.get("uuid"),
+            source_id=local_uuid,
             event=event_id,
         )
 
@@ -373,8 +400,8 @@ async def send_user_notification(
         logger.exception(
             "Failed to send user notification action=%s user_uuid=%s chat_id=%s topic_id=%s error=%s",
             action,
-            info.get("uuid", "unknown"),
-            settings.notifications_chat_id,
+            local_uuid or info.get("id", "unknown"),
+            chat_id,
             topic_id,
             exc,
         )
@@ -395,26 +422,36 @@ async def send_generic_notification(
     """
     settings = get_settings()
 
-    if not settings.notifications_chat_id:
+    notification_type = topic_type or "service"
+    if not is_notification_type_enabled(notification_type):
+        logger.debug("Generic %s notifications disabled in dynamic settings", notification_type)
+        return
+
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
 
-    # Определяем топик по типу
-    topic_getters = {
-        "users": settings.get_topic_for_users,
-        "nodes": settings.get_topic_for_nodes,
-        "service": settings.get_topic_for_service,
-        "hwid": settings.get_topic_for_hwid,
-        "crm": settings.get_topic_for_crm,
-        "errors": settings.get_topic_for_errors,
+    topic_fallbacks = {
+        "users": settings.notifications_topic_users,
+        "nodes": settings.notifications_topic_nodes,
+        "service": settings.notifications_topic_service,
+        "hwid": settings.notifications_topic_hwid,
+        "crm": settings.notifications_topic_crm,
+        "errors": settings.notifications_topic_errors,
+        "violations": settings.notifications_topic_violations,
     }
-    topic_id = topic_getters.get(topic_type, lambda: settings.notifications_topic_id)()
+    topic_id = resolve_notification_topic(
+        notification_type,
+        type_fallback=topic_fallbacks.get(notification_type),
+        general_fallback=settings.notifications_topic_id,
+    )
 
     try:
         text = f"{emoji} <b>{title}</b>\n\n{message}"
 
         message_kwargs = {
-            "chat_id": settings.notifications_chat_id,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
@@ -439,11 +476,20 @@ async def send_node_notification(
     """Отправляет уведомление о событии с нодой с поддержкой изменений."""
     settings = get_settings()
 
-    if not settings.notifications_chat_id:
+    if not is_notification_type_enabled("nodes"):
+        logger.debug("Node notifications disabled in dynamic settings")
+        return
+
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
 
-    topic_id = settings.get_topic_for_nodes()
+    topic_id = resolve_notification_topic(
+        "nodes",
+        type_fallback=settings.notifications_topic_nodes,
+        general_fallback=settings.notifications_topic_id,
+    )
 
     try:
         node_info = node_data.get("response", node_data) if isinstance(node_data, dict) else node_data
@@ -487,7 +533,7 @@ async def send_node_notification(
         text = "\n".join(lines)
 
         message_kwargs = {
-            "chat_id": settings.notifications_chat_id,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
@@ -528,11 +574,20 @@ async def send_service_notification(
     """Отправляет уведомление о событии сервиса."""
     settings = get_settings()
 
-    if not settings.notifications_chat_id:
+    if not is_notification_type_enabled("service"):
+        logger.debug("Service notifications disabled in dynamic settings")
+        return
+
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
 
-    topic_id = settings.get_topic_for_service()
+    topic_id = resolve_notification_topic(
+        "service",
+        type_fallback=settings.notifications_topic_service,
+        general_fallback=settings.notifications_topic_id,
+    )
 
     try:
         lines = []
@@ -577,7 +632,7 @@ async def send_service_notification(
         text = "\n".join(lines)
 
         message_kwargs = {
-            "chat_id": settings.notifications_chat_id,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
@@ -612,11 +667,20 @@ async def send_hwid_notification(
     """Отправляет уведомление о HWID устройстве."""
     settings = get_settings()
 
-    if not settings.notifications_chat_id:
+    if not is_notification_type_enabled("hwid"):
+        logger.debug("HWID notifications disabled in dynamic settings")
+        return
+
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
 
-    topic_id = settings.get_topic_for_hwid()
+    topic_id = resolve_notification_topic(
+        "hwid",
+        type_fallback=settings.notifications_topic_hwid,
+        general_fallback=settings.notifications_topic_id,
+    )
 
     try:
         lines = []
@@ -633,15 +697,17 @@ async def send_hwid_notification(
         # Webhook может прислать hwidDevice или hwidUserDevice
         hwid_data = event_data.get("hwidDevice", {}) or event_data.get("hwidUserDevice", {})
 
+        user_local_uuid = await _local_user_uuid(user_data) if user_data else None
+
         if user_data:
             username = user_data.get("username", "n/a")
-            user_uuid = user_data.get("uuid", "n/a")
+            user_uuid = user_data.get("uuid") or user_local_uuid or user_data.get("id", "n/a")
             telegram_id = user_data.get("telegramId")
             status = user_data.get("status", "—")
             description = user_data.get("description", "")
             hwid_device_limit = user_data.get("hwidDeviceLimit", 0)
 
-            lines.append(f"{tr('notify.hwid.label.user', username=_esc(username))}  <code>{user_uuid[:8]}</code>")
+            lines.append(f"{tr('notify.hwid.label.user', username=_esc(username))}  <code>{_short_user_id(user_data, user_local_uuid)}</code>")
             if telegram_id is not None:
                 lines.append(f"   {tr('notify.hwid.label.tg_id', telegram_id=telegram_id)}")
 
@@ -681,7 +747,7 @@ async def send_hwid_notification(
         text = "\n".join(lines)
 
         message_kwargs = {
-            "chat_id": settings.notifications_chat_id,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
@@ -699,6 +765,8 @@ async def send_hwid_notification(
         # не подходит под startsWith("user.") (нет точки после user).
         username = user_data.get("username") if user_data else None
         user_uuid = user_data.get("uuid") if user_data else None
+        if not user_uuid:
+            user_uuid = user_local_uuid
         platform = hwid_data.get("platform") if hwid_data else None
         if event == "user_hwid_devices.added":
             action_label = tr("notify.hwid.action.added")
@@ -734,11 +802,20 @@ async def send_error_notification(
     """Отправляет уведомление об ошибке."""
     settings = get_settings()
 
-    if not settings.notifications_chat_id:
+    if not is_notification_type_enabled("errors"):
+        logger.debug("Error notifications disabled in dynamic settings")
+        return
+
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
 
-    topic_id = settings.get_topic_for_errors()
+    topic_id = resolve_notification_topic(
+        "errors",
+        type_fallback=settings.notifications_topic_errors,
+        general_fallback=settings.notifications_topic_id,
+    )
 
     try:
         lines = []
@@ -755,7 +832,7 @@ async def send_error_notification(
         text = "\n".join(lines)
 
         message_kwargs = {
-            "chat_id": settings.notifications_chat_id,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
@@ -789,11 +866,20 @@ async def send_crm_notification(
     """Отправляет уведомление о событиях CRM (биллинг инфраструктуры)."""
     settings = get_settings()
 
-    if not settings.notifications_chat_id:
+    if not is_notification_type_enabled("crm"):
+        logger.debug("CRM notifications disabled in dynamic settings")
+        return
+
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    if not chat_id:
         logger.debug("Notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
 
-    topic_id = settings.get_topic_for_crm()
+    topic_id = resolve_notification_topic(
+        "crm",
+        type_fallback=settings.notifications_topic_crm,
+        general_fallback=settings.notifications_topic_id,
+    )
 
     try:
         lines = []
@@ -889,7 +975,7 @@ async def send_crm_notification(
         text = "\n".join(lines)
 
         message_kwargs = {
-            "chat_id": settings.notifications_chat_id,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
         }
@@ -928,7 +1014,12 @@ async def send_violation_notification(
     """
     settings = get_settings()
 
-    if not settings.notifications_chat_id:
+    if not is_notification_type_enabled("violations"):
+        logger.debug("Violation notifications disabled in dynamic settings")
+        return
+
+    chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
+    if not chat_id:
         logger.debug("Violation notifications disabled: NOTIFICATIONS_CHAT_ID not set")
         return
 
@@ -949,7 +1040,11 @@ async def send_violation_notification(
     _cleanup_notification_cache()
 
     # Используем топик для нарушений (подозреваемых пользователей)
-    topic_id = settings.get_topic_for_violations()
+    topic_id = resolve_notification_topic(
+        "violations",
+        type_fallback=settings.notifications_topic_violations,
+        general_fallback=settings.notifications_topic_id,
+    )
 
     try:
         # Получаем информацию о пользователе если не передана
@@ -1175,7 +1270,7 @@ async def send_violation_notification(
         ])
 
         message_kwargs = {
-            "chat_id": settings.notifications_chat_id,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
             "reply_markup": keyboard,

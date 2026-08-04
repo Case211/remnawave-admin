@@ -143,15 +143,20 @@ async def apply_user_delete_quotas(
 ) -> None:
     """Apply quota counter changes for a single user deletion.
 
-    - users_created: +1 (lifetime event)
+    - users_created: не меняется. Счётчик считает созданные аккаунты за
+      всё время, поэтому удаление не возвращает слот. Раньше здесь стоял
+      +1 — удаление не просто не освобождало слот, а съедало ещё один, и
+      админ с лимитом выбирал квоту вдвое быстрее.
     - traffic_used_bytes: -unused (free up the user's unused traffic)
+
+    Переназначение владельца — другой случай: там юзер жив и у прежнего
+    владельца слот действительно освобождается (apply_user_reassign_quotas).
 
     If creator_admin_id is None, no counter changes are applied.
     """
     if creator_admin_id is None:
         return
     try:
-        await increment_usage_counter(creator_admin_id, "users_created", 1)
         unused = max(0, traffic_limit_bytes - used_traffic_bytes)
         if unused > 0:
             await increment_usage_counter(creator_admin_id, "traffic_used_bytes", -unused)
@@ -166,25 +171,23 @@ async def apply_users_delete_quotas_batch(
 
     Each tuple: (creator_admin_id, traffic_limit_bytes, used_traffic_bytes).
     Aggregates per creator admin and updates in one call each.
+
+    users_created не трогаем — см. apply_user_delete_quotas.
     """
     if not users_data:
         return
     # Aggregate per creator admin
-    per_admin: Dict[int, Dict[str, int]] = {}
+    per_admin: Dict[int, int] = {}
     for creator_id, limit, used in users_data:
         if creator_id is None:
             continue
-        bucket = per_admin.setdefault(creator_id, {"count": 0, "unused": 0})
-        bucket["count"] += 1
         unused = max(0, limit - used)
         if unused > 0:
-            bucket["unused"] += unused
+            per_admin[creator_id] = per_admin.get(creator_id, 0) + unused
     try:
-        for admin_id, bucket in per_admin.items():
-            if bucket["count"] > 0:
-                await increment_usage_counter(admin_id, "users_created", bucket["count"])
-            if bucket["unused"] > 0:
-                await increment_usage_counter(admin_id, "traffic_used_bytes", -bucket["unused"])
+        for admin_id, unused_total in per_admin.items():
+            if unused_total > 0:
+                await increment_usage_counter(admin_id, "traffic_used_bytes", -unused_total)
     except Exception as e:
         logger.warning("apply_users_delete_quotas_batch failed: %s", e)
 

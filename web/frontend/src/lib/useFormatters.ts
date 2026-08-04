@@ -112,8 +112,9 @@ export function useFormatters() {
         t('common.bytes.mb'),
         t('common.bytes.gb'),
         t('common.bytes.tb'),
+        t('common.bytes.pb'),
       ]
-      const i = Math.floor(Math.log(bytes) / Math.log(k))
+      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
       const value = bytes / Math.pow(k, i)
       return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value)} ${sizes[i]}`
     },
@@ -130,7 +131,7 @@ export function useFormatters() {
         t('common.speed.mbps'),
         t('common.speed.gbps'),
       ]
-      const i = Math.floor(Math.log(bytesPerSec) / Math.log(k))
+      const i = Math.min(Math.floor(Math.log(bytesPerSec) / Math.log(k)), sizes.length - 1)
       const value = bytesPerSec / Math.pow(k, i)
       return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)} ${sizes[i]}`
     },

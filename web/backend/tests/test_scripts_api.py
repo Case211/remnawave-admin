@@ -447,3 +447,47 @@ class TestScriptsRBAC:
                 "script_id": 1, "node_uuid": "node-111",
             })
             assert resp.status_code == 403
+
+
+class TestResolvePendingUpdateCommands:
+    """Реконнект агента закрывает зависшие running-команды update_agent.
+
+    Кейс из сообщества: обновление агента прошло штатно, но перекат убил
+    агента до отправки command_result — команда зависала в running и позже
+    показывалась как Error при фактически успешном обновлении.
+    """
+
+    @pytest.mark.asyncio
+    async def test_marks_running_update_completed(self):
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from web.backend.api.v2 import agent_ws
+
+        conn = AsyncMock()
+        conn.execute.return_value = "UPDATE 1"
+        acquire_cm = MagicMock()
+        acquire_cm.__aenter__ = AsyncMock(return_value=conn)
+        acquire_cm.__aexit__ = AsyncMock(return_value=False)
+        mock_svc = MagicMock()
+        mock_svc.is_connected = True
+        mock_svc.acquire.return_value = acquire_cm
+
+        with patch("shared.database.db_service", mock_svc):
+            await agent_ws._resolve_pending_update_commands("node-1")
+
+        conn.execute.assert_awaited_once()
+        sql = conn.execute.call_args.args[0]
+        assert "status = 'completed'" in sql
+        assert "status = 'running'" in sql
+        assert "script=update_agent" in sql
+        assert conn.execute.call_args.args[1] == "node-1"
+
+    @pytest.mark.asyncio
+    async def test_silent_when_db_down(self):
+        from unittest.mock import MagicMock, patch
+        from web.backend.api.v2 import agent_ws
+
+        mock_svc = MagicMock()
+        mock_svc.is_connected = False
+        with patch("shared.database.db_service", mock_svc):
+            await agent_ws._resolve_pending_update_commands("node-1")
+        mock_svc.acquire.assert_not_called()

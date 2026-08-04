@@ -99,3 +99,48 @@ def test_bulk_delete_subtracts_unused_per_user():
     recorded = {(c[0], c[2]) for c in calls if c[1] == "traffic_used_bytes"}
     assert (1, -70 * 1073741824) in recorded, f"Expected admin 1: -70GB, got: {recorded}"
     assert (2, -50 * 1073741824) in recorded, f"Expected admin 2: -50GB, got: {recorded}"
+
+
+# ── users_created: удаление слот не возвращает ──────────────────
+
+
+def test_single_delete_does_not_touch_users_created():
+    """Удаление не трогает счётчик созданных.
+
+    Здесь стоял +1: удаление не просто не освобождало слот, а съедало
+    ещё один, и админ с лимитом выбирал квоту вдвое быстрее.
+    """
+    calls = []
+    with _patched_inc(calls):
+        from shared.admin_quota import apply_user_delete_quotas
+        import asyncio
+        asyncio.run(apply_user_delete_quotas(1, 100 * 1073741824, 30 * 1073741824))
+    assert [c for c in calls if c[1] == "users_created"] == []
+    assert (1, "traffic_used_bytes", -70 * 1073741824) in calls
+
+
+def test_bulk_delete_does_not_touch_users_created():
+    calls = []
+    users_data = [
+        (1, 100 * 1073741824, 30 * 1073741824),
+        (1, 50 * 1073741824, 0),
+    ]
+    with _patched_inc(calls):
+        from shared.admin_quota import apply_users_delete_quotas_batch
+        import asyncio
+        asyncio.run(apply_users_delete_quotas_batch(users_data))
+    assert [c for c in calls if c[1] == "users_created"] == []
+    # оба юзера одного владельца — освобождённый трафик суммируется
+    assert (1, "traffic_used_bytes", -120 * 1073741824) in calls
+
+
+def test_reassign_still_moves_users_created():
+    """Переназначение — другой случай: юзер жив, слот переезжает."""
+    calls = []
+    with _patched_inc(calls):
+        from shared.admin_quota import apply_user_reassign_quotas
+        import asyncio
+        asyncio.run(apply_user_reassign_quotas(1, 2, 10 * 1073741824, 0))
+    moved = {(c[0], c[2]) for c in calls if c[1] == "users_created"}
+    assert (1, -1) in moved, f"прежний владелец должен освободить слот: {moved}"
+    assert (2, 1) in moved, f"новый владелец должен занять слот: {moved}"

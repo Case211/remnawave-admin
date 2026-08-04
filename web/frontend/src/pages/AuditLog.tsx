@@ -131,6 +131,7 @@ function tryParseJSON(str: string | null): Record<string, unknown> | null {
 function formatBytesRaw(bytes: unknown): string {
   const num = Number(bytes)
   if (isNaN(num) || num === 0) return '0'
+  if (num >= 1125899906842624) return `${(num / 1125899906842624).toFixed(1)} PB`
   if (num >= 1099511627776) return `${(num / 1099511627776).toFixed(1)} TB`
   if (num >= 1073741824) return `${(num / 1073741824).toFixed(1)} GB`
   if (num >= 1048576) return `${(num / 1048576).toFixed(1)} MB`

@@ -208,9 +208,12 @@ class TestResolveBackupTgDestination:
     """Баг: web-backend читал notifications_chat_id только из env — значение,
     заданное через UI (БД bot_config), игнорировалось, бэкап падал NO_CHAT_ID."""
 
-    def _settings(self, chat_id=None, topic=None):
+    def _settings(self, chat_id=None, topic=None, general_topic=None):
         s = MagicMock()
         s.notifications_chat_id = chat_id
+        # Задаём явно: у MagicMock любой атрибут «существует», а int() от
+        # него молча даёт 1 — незаданный общий топик выглядел бы как топик №1.
+        s.notifications_topic_id = general_topic
         s.get_topic_for.return_value = topic
         return s
 
@@ -224,17 +227,30 @@ class TestResolveBackupTgDestination:
 
         cfg = self._cfg({"notifications_chat_id": -100123,
                          "notifications_topic_service": 42})
-        with patch("shared.config_service.config_service", cfg), \
+        with patch("shared.notification_config.config_service", cfg), \
              patch("web.backend.core.config.get_web_settings",
                    return_value=self._settings(chat_id="-100999", topic="7")):
             chat_id, topic_id = backup_service.resolve_backup_tg_destination()
         assert chat_id == "-100123"
         assert topic_id == 42
 
+    def test_general_db_topic_used_when_service_topic_unset(self):
+        """Общий топик из UI раньше терялся — бэкап уходил в корень чата."""
+        from web.backend.core import backup_service
+
+        cfg = self._cfg({"notifications_chat_id": -100123,
+                         "notifications_topic_id": 55})
+        with patch("shared.notification_config.config_service", cfg), \
+             patch("web.backend.core.config.get_web_settings",
+                   return_value=self._settings(chat_id="-100999")):
+            chat_id, topic_id = backup_service.resolve_backup_tg_destination()
+        assert chat_id == "-100123"
+        assert topic_id == 55
+
     def test_env_fallback_when_db_empty(self):
         from web.backend.core import backup_service
 
-        with patch("shared.config_service.config_service", self._cfg({})), \
+        with patch("shared.notification_config.config_service", self._cfg({})), \
              patch("web.backend.core.config.get_web_settings",
                    return_value=self._settings(chat_id="-100999", topic="7")):
             chat_id, topic_id = backup_service.resolve_backup_tg_destination()
@@ -244,7 +260,7 @@ class TestResolveBackupTgDestination:
     def test_none_when_nothing_configured(self):
         from web.backend.core import backup_service
 
-        with patch("shared.config_service.config_service", self._cfg({})), \
+        with patch("shared.notification_config.config_service", self._cfg({})), \
              patch("web.backend.core.config.get_web_settings",
                    return_value=self._settings()):
             chat_id, topic_id = backup_service.resolve_backup_tg_destination()

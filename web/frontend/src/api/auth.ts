@@ -137,7 +137,13 @@ function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError<ApiError>
     if (axiosError.response?.data?.detail) {
-      return axiosError.response.data.detail
+      const d = axiosError.response.data.detail as unknown
+      // detail может прийти объектом {detail, code} — не показываем [object Object]
+      if (typeof d === 'string') return d
+      if (typeof d === 'object' && d !== null) {
+        const nested = (d as { detail?: unknown }).detail
+        if (typeof nested === 'string') return nested
+      }
     }
     if (axiosError.response?.status === 401) {
       return 'Authentication failed. Please try again.'

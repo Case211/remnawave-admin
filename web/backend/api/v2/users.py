@@ -49,6 +49,31 @@ async def _ensure_user_visible(admin: AdminUser, user_uuid: str) -> None:
         raise api_error(403, E.FORBIDDEN)
 
 
+async def _resolve_user_key(user_uuid: str) -> str | int:
+    """Resolve a local user uuid to the identifier the Panel API expects.
+
+    v3 panels identify users by numeric id (stored in users.id); v2 by the
+    user's uuid. Falls back to the local uuid when no panel id is known.
+    """
+    from shared.data_access import resolve_panel_user_id
+    return await resolve_panel_user_id(user_uuid)
+
+
+async def _resolve_visible_user_uuid(payload: dict) -> str | None:
+    """Локальный uuid юзера из панельного payload для проверки видимости."""
+    from shared.data_access import resolve_local_user_uuid
+    return await resolve_local_user_uuid(payload)
+
+
+async def _lookup_user_by_email(email: str) -> dict:
+    """Lookup a single user by email via the v3 users/stream endpoint."""
+    from shared.api_client import api_client
+    result = await api_client.get_users_stream(email=email, size=1)
+    payload = result.get("response", result) if isinstance(result, dict) else result
+    users = payload.get("users", []) if isinstance(payload, dict) else []
+    return {"response": users[0]} if users else {}
+
+
 def _extract_panel_error(exc: Exception) -> Optional[str]:
     """
     Достаёт человекочитаемое описание ошибки из ответа Panel API.
@@ -695,16 +720,14 @@ async def resolve_user(
 
     # Build ordered list of lookup methods to try
     lookups = []
-    if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', query, re.IGNORECASE):
-        lookups.append(("uuid", lambda: api_client.get_user_by_uuid(query)))
-    elif query.isdigit():
+    if query.isdigit():
         lookups.append(("id", lambda: api_client.get_user_by_id(int(query))))
+    elif "@" in query:
+        lookups.append(("email", lambda: _lookup_user_by_email(query)))
     else:
         # Could be username or short_uuid — try both
         lookups.append(("username", lambda: api_client.get_user_by_username(query)))
         lookups.append(("short_uuid", lambda: api_client.get_user_by_short_uuid(query)))
-        if "@" in query:
-            lookups.insert(0, ("email", lambda: api_client.get_users_by_email(query)))
 
     last_error = None
     for method_name, lookup_fn in lookups:
@@ -712,7 +735,9 @@ async def resolve_user(
             result = await lookup_fn()
             payload = result.get("response", result) if isinstance(result, dict) else result
             if payload:
-                resolved_uuid = payload.get("uuid") if isinstance(payload, dict) else None
+                # v2 payload несёт uuid, панель v3 — числовой id. Резолвим
+                # локальный uuid, чтобы видимость (scope) проверялась и в v3.
+                resolved_uuid = await _resolve_visible_user_uuid(payload)
                 if resolved_uuid:
                     await _ensure_user_visible(admin, resolved_uuid)
                 return _ensure_snake_case(payload) if isinstance(payload, dict) else payload
@@ -720,30 +745,31 @@ async def resolve_user(
             last_error = e
             logger.debug("Resolve by %s failed for '%s': %s", method_name, query, e)
 
-    # Fallback: search local DB (description, notes, etc.)
+    # Fallback: search local DB (uuid, description, notes, etc.)
     try:
         from shared.database import db_service
         if db_service.is_connected:
             async with db_service.acquire() as conn:
                 row = await conn.fetchrow(
                     """
-                    SELECT uuid, username FROM users
-                    WHERE LOWER(raw_data->>'description') LIKE $1
-                       OR LOWER(raw_data->>'note') LIKE $1
+                    SELECT uuid, username, short_uuid FROM users
+                    WHERE uuid = $1
+                       OR LOWER(raw_data->>'description') LIKE $2
+                       OR LOWER(raw_data->>'note') LIKE $2
                     LIMIT 1
                     """,
+                    query.lower(),
                     f"%{query.lower()}%",
                 )
                 if row:
                     await _ensure_user_visible(admin, str(row["uuid"]))
-                    # Found in local DB — fetch full data from Panel
-                    try:
-                        result = await api_client.get_user_by_uuid(str(row["uuid"]))
-                        payload = result.get("response", result) if isinstance(result, dict) else result
-                        if payload:
-                            return payload
-                    except Exception:
-                        return {"uuid": str(row["uuid"]), "username": row["username"]}
+                    # Panel v3 can no longer look users up by uuid; the local
+                    # synced row carries the data the panel used to return.
+                    return {
+                        "uuid": str(row["uuid"]),
+                        "username": row["username"],
+                        "shortUuid": row["short_uuid"],
+                    }
     except Exception as e:
         logger.debug("Resolve local DB search failed for '%s': %s", query, e)
 
@@ -770,8 +796,13 @@ async def get_user(
         if not user_data:
             try:
                 from shared.api_client import api_client
-                resp = await api_client.get_user_by_uuid(user_uuid)
+                resp = await api_client.get_user_by_id(await _resolve_user_key(user_uuid))
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
+                # Панель 3.x отвечает без uuid, а он обязателен в UserDetail —
+                # подставляем локальный из маршрута, иначе вместо карточки
+                # прилетит 500 на валидации ответа.
+                if isinstance(user_data, dict) and not user_data.get('uuid'):
+                    user_data['uuid'] = user_uuid
             except ImportError:
                 raise api_error(503, E.API_SERVICE_UNAVAILABLE)
 
@@ -900,7 +931,8 @@ async def create_user(
                 trojan_password=data.trojan_password,
                 vless_uuid=data.vless_uuid,
                 ss_password=data.ss_password,
-                uuid=data.uuid,
+                # uuid панели не передаём: с 3.0.0 идентификатор выдаёт сама
+                # панель, задать свой при создании больше нельзя.
                 created_at=data.created_at.isoformat() if data.created_at else None,
                 last_traffic_reset_at=data.last_traffic_reset_at.isoformat() if data.last_traffic_reset_at else None,
             )
@@ -918,7 +950,9 @@ async def create_user(
             if not await increment_usage_counter(admin.account_id, "users_created"):
                 # Roll back the user we just created to keep counters honest
                 try:
-                    await api_client.delete_user(user.get("uuid", ""))
+                    panel_id = user.get("id") or user.get("uuid", "")
+                    if panel_id:
+                        await api_client.delete_user(panel_id)
                 except Exception:
                     pass
                 raise api_error(409, E.USERS_QUOTA_EXCEEDED,
@@ -934,7 +968,9 @@ async def create_user(
                     admin.account_id, "traffic_used_bytes", data.traffic_limit_bytes
                 ):
                     try:
-                        await api_client.delete_user(user.get("uuid", ""))
+                        panel_id = user.get("id") or user.get("uuid", "")
+                        if panel_id:
+                            await api_client.delete_user(panel_id)
                     except Exception:
                         pass
                     raise api_error(
@@ -942,21 +978,55 @@ async def create_user(
                         "Traffic limit exceeds your quota. Please delete some users or contact your administrator."
                     )
 
-        # Persist full user data from Panel API response to local DB
+        # Persist full user data from Panel API response to local DB.
+        #
+        # created_by_admin_id — не украшение: по нему строится видимость
+        # (shared.rbac.get_visible_user_uuids). Если владелец не записан,
+        # создатель не увидит юзера в своём списке, хотя квота уже
+        # списалась и API ответил 201. Поэтому все осечки здесь логируются
+        # как ошибка, а не шёпотом в debug: молчащий сбой этой строки
+        # выглядит для оператора как «пользователь пропал».
+        # Панель 3.0.0+ отвечает без uuid — там идентификатор числовой, а
+        # локальный uuid появляется только после upsert'а, поэтому владельца
+        # проставляем уже по нему.
         user_uuid = user.get('uuid', '') if isinstance(user, dict) else ''
-        if user_uuid:
+        panel_id = user.get('id') if isinstance(user, dict) else None
+        if user_uuid or panel_id is not None:
             try:
                 from shared.database import db_service
-                if db_service.is_connected:
+                if not db_service.is_connected:
+                    logger.error(
+                        "User %s created without owner: local DB is not connected. "
+                        "Creator %s will not see it until the next sync.",
+                        user_uuid or panel_id, admin.username,
+                    )
+                else:
                     await db_service.upsert_user(user)
-                    if admin.account_id is not None:
+                    if not user_uuid and panel_id is not None:
+                        user_uuid = await db_service.get_user_uuid_by_panel_id(int(panel_id)) or ''
+                        if not user_uuid:
+                            logger.error(
+                                "User id=%s created without owner: local row not found after "
+                                "upsert. Creator %s will not see it until the next sync.",
+                                panel_id, admin.username,
+                            )
+                    if user_uuid and admin.account_id is not None:
                         async with db_service.acquire() as conn:
-                            await conn.execute(
+                            result = await conn.execute(
                                 "UPDATE users SET created_by_admin_id = $1 WHERE uuid = $2",
                                 admin.account_id, user_uuid,
                             )
+                        if isinstance(result, str) and result.rsplit(" ", 1)[-1] == "0":
+                            logger.error(
+                                "User %s has no owner row after upsert — creator %s (id=%s) "
+                                "will not see it in the users list.",
+                                user_uuid, admin.username, admin.account_id,
+                            )
             except Exception as e:
-                logger.debug("Failed to persist user data: %s", e)
+                logger.error(
+                    "Failed to persist user %s (creator %s): %s",
+                    user_uuid, admin.username, e, exc_info=True,
+                )
 
         # Audit
         await write_audit_log(
@@ -1069,7 +1139,7 @@ async def update_user(
                     pass
                 if old_limit is None:
                     try:
-                        resp = await api_client.get_user_by_uuid(user_uuid)
+                        resp = await api_client.get_user_by_id(await _resolve_user_key(user_uuid))
                         user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
                         old_limit = user_data.get('traffic_limit_bytes')
                         if old_limit is None:
@@ -1137,7 +1207,7 @@ async def update_user(
         for k, v in update_data.items():
             camel_data[snake_to_camel.get(k, k)] = v
         try:
-            resp = await api_client.update_user(user_uuid, **camel_data)
+            resp = await api_client.update_user(await _resolve_user_key(user_uuid), **camel_data)
         except Exception as panel_exc:
             code, msg = _classify_panel_error(panel_exc)
             logger.error("update_user(%s) panel error: %s [%s]", user_uuid, msg, code.value, exc_info=True)
@@ -1202,7 +1272,7 @@ async def delete_user(
                 traffic_limit = existing.get("trafficLimitBytes") or 0
 
         try:
-            await api_client.delete_user(user_uuid)
+            await api_client.delete_user(await _resolve_user_key(user_uuid))
         except Exception as panel_exc:
             code, msg = _classify_panel_error(panel_exc)
             logger.error("delete_user(%s) panel error: %s [%s]", user_uuid, msg, code.value, exc_info=True)
@@ -1257,7 +1327,7 @@ async def enable_user(
     try:
         from shared.api_client import api_client
 
-        await api_client.enable_user(user_uuid)
+        await api_client.enable_user(await _resolve_user_key(user_uuid))
 
         await write_audit_log(
             admin_id=admin.account_id, admin_username=admin.username,
@@ -1290,7 +1360,7 @@ async def disable_user(
     try:
         from shared.api_client import api_client
 
-        await api_client.disable_user(user_uuid)
+        await api_client.disable_user(await _resolve_user_key(user_uuid))
 
         await write_audit_log(
             admin_id=admin.account_id, admin_username=admin.username,
@@ -1326,7 +1396,7 @@ async def reset_user_traffic(
         # Fetch used_traffic_bytes BEFORE the reset
         creator_admin_id, _limit, used_bytes = await fetch_user_quota_data(user_uuid)
 
-        await api_client.reset_user_traffic(user_uuid)
+        await api_client.reset_user_traffic(await _resolve_user_key(user_uuid))
 
         # Apply quota counter changes via shared helper
         await apply_user_reset_traffic_quotas(creator_admin_id, used_bytes)
@@ -1357,7 +1427,7 @@ async def revoke_user_subscription(
     try:
         from shared.api_client import api_client
 
-        await api_client.revoke_user_subscription(user_uuid, revoke_only_passwords=passwords_only)
+        await api_client.revoke_user_subscription(await _resolve_user_key(user_uuid), revoke_only_passwords=passwords_only)
 
         action = "user.revoke_passwords" if passwords_only else "user.revoke"
         await write_audit_log(
@@ -1389,7 +1459,7 @@ async def get_hwid_device_counts(
     async def _get_count(uuid: str) -> tuple:
         try:
             from shared.api_client import api_client
-            result = await api_client.get_user_hwid_devices(uuid)
+            result = await api_client.get_user_hwid_devices(await _resolve_user_key(uuid))
             response = result.get("response", result) if isinstance(result, dict) else result
             devices = response if isinstance(response, list) else response.get("devices", []) if isinstance(response, dict) else []
             return (uuid, len(devices))
@@ -1434,7 +1504,7 @@ async def get_user_traffic_stats(
         if not user_data:
             try:
                 from shared.api_client import api_client as _api
-                resp = await _api.get_user_by_uuid(user_uuid)
+                resp = await _api.get_user_by_id(await _resolve_user_key(user_uuid))
                 user_data = resp.get('response', resp) if isinstance(resp, dict) else resp
             except ImportError:
                 raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -1472,7 +1542,7 @@ async def get_user_traffic_stats(
         try:
             from shared.api_client import api_client
             result = await api_client.get_user_traffic_stats(
-                user_uuid, start=start_str, end=end_str, top_nodes_limit=50
+                await _resolve_user_key(user_uuid), start=start_str, end=end_str, top_nodes_limit=50
             )
             # Parse response - API returns { response: { topNodes: [...], series: [...], ... } }
             response = result.get('response', result) if isinstance(result, dict) else result
@@ -1571,7 +1641,7 @@ async def sync_user_hwid_devices(
     await _ensure_user_visible(admin, user_uuid)
     try:
         from shared.sync import sync_service
-        synced = await sync_service.sync_user_hwid_devices(user_uuid)
+        synced = await sync_service.sync_user_hwid_devices(await _resolve_user_key(user_uuid))
         return {"success": True, "synced": synced}
     except Exception as e:
         logger.error("Error syncing HWID devices for %s: %s", user_uuid, e)
@@ -1601,7 +1671,7 @@ async def get_user_deeplinks(
     if not user_data:
         try:
             from shared.api_client import api_client
-            resp = await api_client.get_user_by_uuid(user_uuid)
+            resp = await api_client.get_user_by_id(await _resolve_user_key(user_uuid))
             user_data = resp.get("response", resp) if isinstance(resp, dict) else resp
         except ImportError:
             raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -1659,7 +1729,7 @@ async def get_user_hwid_devices(
     # DB empty — trigger sync from Panel API (uses same logic as manual sync button)
     try:
         from shared.sync import sync_service
-        synced = await sync_service.sync_user_hwid_devices(user_uuid)
+        synced = await sync_service.sync_user_hwid_devices(await _resolve_user_key(user_uuid))
         if synced:
             from shared.database import db_service
             if db_service.is_connected:
@@ -1690,7 +1760,7 @@ async def delete_user_hwid_device(
 
         # Also delete from main API
         try:
-            await api_client.delete_user_hwid_device(user_uuid, device_id)
+            await api_client.delete_user_hwid_device(await _resolve_user_key(user_uuid), device_id)
         except Exception as e:
             logger.warning("Failed to delete HWID device %s from API for %s: %s", device_id, user_uuid, e)
 
@@ -1717,7 +1787,7 @@ async def delete_all_user_hwid_devices(
 
         # Also delete from main API
         try:
-            await api_client.delete_all_user_hwid_devices(user_uuid)
+            await api_client.delete_all_user_hwid_devices(await _resolve_user_key(user_uuid))
         except Exception as e:
             logger.warning("Failed to delete all HWID devices from API for %s: %s", user_uuid, e)
 
@@ -1750,7 +1820,7 @@ async def bulk_enable_users(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api_client.enable_user(uuid)
+            await api_client.enable_user(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
@@ -1785,7 +1855,7 @@ async def bulk_disable_users(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api_client.disable_user(uuid)
+            await api_client.disable_user(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
@@ -1831,7 +1901,7 @@ async def bulk_delete_users(
                     used_bytes = existing.get("usedTrafficBytes") or 0
                     traffic_limit = existing.get("trafficLimitBytes") or 0
 
-            await api_client.delete_user(uuid)
+            await api_client.delete_user(await _resolve_user_key(uuid))
             if db_service.is_connected:
                 try:
                     await db_service.delete_user(uuid)
@@ -1883,7 +1953,7 @@ async def bulk_reset_traffic(
     success, failed, errors = 0, 0, []
     for uuid in body.uuids:
         try:
-            await api_client.reset_user_traffic(uuid)
+            await api_client.reset_user_traffic(await _resolve_user_key(uuid))
             success += 1
         except Exception as e:
             failed += 1
@@ -2024,7 +2094,7 @@ async def get_user_connection_keys(
         if not u:
             raise api_error(404, E.USER_NOT_FOUND)
     try:
-        result = await api_client.get_subscription_connection_keys(user_uuid)
+        result = await api_client.get_subscription_connection_keys(await _resolve_user_key(user_uuid))
         payload = result.get("response", result) if isinstance(result, dict) else result
         return payload
     except Exception as e:
@@ -2044,7 +2114,7 @@ async def fetch_user_ips(
     from shared.api_client import api_client
 
     try:
-        result = await api_client.fetch_user_ips(user_uuid)
+        result = await api_client.fetch_user_ips(await _resolve_user_key(user_uuid))
         payload = result.get("response", result) if isinstance(result, dict) else result
         return payload
     except Exception as e:
@@ -2301,7 +2371,7 @@ async def drop_user_connections(
 
     try:
         result = await api_client.drop_connections(
-            drop_by={"by": "userUuids", "userUuids": [user_uuid]},
+            drop_by={"by": "userIds", "userIds": [await _resolve_user_key(user_uuid)]},
             target_nodes=target_nodes,
         )
         payload = result.get("response", result) if isinstance(result, dict) else result

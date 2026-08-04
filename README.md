@@ -6,13 +6,15 @@
 
 **Telegram-бот и веб-панель для управления панелью Remnawave**
 
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
-[![Python](https://img.shields.io/badge/Python-3.11+-green)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-1200%2B%20backend%20%2F%20260%2B%20frontend-brightgreen)](web/backend/tests)
-[![Prometheus](https://img.shields.io/badge/Prometheus-ready-e6522c?logo=prometheus&logoColor=white)](docs/README.md)
-[![License](https://img.shields.io/badge/License-AGPL%20v3-blue)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=f5c518)](https://github.com/Case211/remnawave-admin/stargazers) [![Forks](https://img.shields.io/github/forks/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=6e7bf2)](https://github.com/Case211/remnawave-admin/forks) [![Release](https://img.shields.io/github/v/release/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=3fb950)](https://github.com/Case211/remnawave-admin/releases/latest) [![Last commit](https://img.shields.io/github/last-commit/Case211/remnawave-admin/main?style=flat-square&logo=git&logoColor=white&labelColor=1f2430&color=8957e5)](https://github.com/Case211/remnawave-admin/commits/main)
+
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![Tests](https://img.shields.io/badge/tests-2000+-3fb950?style=flat-square&logo=pytest&logoColor=white)](web/backend/tests) [![Prometheus](https://img.shields.io/badge/Prometheus-ready-E6522C?style=flat-square&logo=prometheus&logoColor=white)](docs/README.md) [![License](https://img.shields.io/badge/License-AGPL_v3-blue?style=flat-square&logo=gnu&logoColor=white)](LICENSE)
 
 [English](README_EN.md) | [Русский](README.md)
+
+<a href="https://github.com/Case211/remnawave-admin/stargazers">
+  <img src="docs/star-history.svg" alt="История звёзд" width="720" />
+</a>
 
 </div>
 
@@ -250,6 +252,7 @@ NOTIFICATIONS_TOPIC_NODES=789       # 🛰 События нод
 NOTIFICATIONS_TOPIC_SERVICE=101     # ⚙️ Сервисные события
 NOTIFICATIONS_TOPIC_HWID=102        # 💻 HWID устройства
 NOTIFICATIONS_TOPIC_CRM=103         # 💰 Биллинг
+NOTIFICATIONS_TOPIC_FINANCE=106     # 💳 Финансовые события
 NOTIFICATIONS_TOPIC_ERRORS=104      # ❌ Ошибки
 NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Нарушения
 ```
@@ -401,6 +404,7 @@ python -m src.main
 | `ADMINS` | ✅ | — | ID администраторов через запятую |
 | `DEFAULT_LOCALE` | — | `ru` | Язык (`ru` / `en`) |
 | `LOG_LEVEL` | — | `INFO` | Уровень логирования |
+| `BOT_PROXY_URL` | — | — | Прокси для Telegram API: `socks5://`, `socks4://` или `http://` (можно с логином и паролем). Нужен, когда сервер стоит на IP, с которого Telegram недоступен. Схемы `socks5h://` и `https://` не поддерживаются |
 
 ### 🗄 База данных
 
@@ -423,6 +427,7 @@ python -m src.main
 | `NOTIFICATIONS_TOPIC_SERVICE` | Сервисные уведомления |
 | `NOTIFICATIONS_TOPIC_HWID` | HWID уведомления |
 | `NOTIFICATIONS_TOPIC_CRM` | Биллинг уведомления |
+| `NOTIFICATIONS_TOPIC_FINANCE` | Финансовые уведомления |
 | `NOTIFICATIONS_TOPIC_ERRORS` | Ошибки |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | Нарушения |
 

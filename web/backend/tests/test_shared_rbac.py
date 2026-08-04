@@ -270,3 +270,97 @@ class TestGetScope:
         with patch("shared.rbac.db_service", mock_db):
             result = await get_scope(1, 1, "admin", "node", "view")
         assert result is None
+
+
+# ── get_visible_user_uuids ──────────────────────────────────────
+
+
+class TestGetVisibleUserUuids:
+    """Видимость юзеров: свои созданные + разрешённые политиками (#261)."""
+
+    OWN = "11111111-1111-1111-1111-111111111111"
+    FOREIGN = "22222222-2222-2222-2222-222222222222"
+
+    def _db(self, creator_rows, policy_rows, unrestricted=False):
+        from contextlib import asynccontextmanager
+
+        conn = AsyncMock()
+        conn.fetchrow = AsyncMock(
+            return_value={"unrestricted_user_access": unrestricted, "role_id": 5}
+        )
+        calls = {"n": 0}
+
+        async def fetch(*args, **kwargs):
+            calls["n"] += 1
+            return creator_rows if calls["n"] == 1 else policy_rows
+
+        conn.fetch = fetch
+
+        db = AsyncMock()
+        db.is_connected = True
+
+        @asynccontextmanager
+        async def acquire():
+            yield conn
+
+        db.acquire = acquire
+        return db
+
+    @staticmethod
+    def _scope(node=None, squad=None):
+        async def fake_scope(account_id, role_id, role, resource, action):
+            return node if resource == "node" else squad
+        return fake_scope
+
+    async def test_own_user_visible_before_first_connection(self):
+        """Создал юзера — видишь сразу.
+
+        Юзер попадает в policy-набор только через трафик по разрешённой
+        ноде или через сквад, а только что созданный ещё ни разу не
+        подключался. При пересечении он выпадал, и создатель видел
+        пустой список, уже потратив квоту.
+        """
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[{"uuid": self.OWN}], policy_rows=[])
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", self._scope(node={"node-1"})):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == {self.OWN}
+
+    async def test_policy_users_added_to_own(self):
+        """Политика расширяет видимость, а не сужает её."""
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(
+            creator_rows=[{"uuid": self.OWN}],
+            policy_rows=[{"user_uuid": self.FOREIGN}],
+        )
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", self._scope(node={"node-1"})):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == {self.OWN, self.FOREIGN}
+
+    async def test_without_policies_creator_scope_applies(self):
+        from shared.rbac import get_visible_user_uuids
+
+        db = self._db(creator_rows=[{"uuid": self.OWN}], policy_rows=[])
+        with patch("shared.rbac.db_service", db), \
+             patch("shared.rbac.get_scope", self._scope()):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == {self.OWN}
+
+    async def test_superadmin_unrestricted(self):
+        from shared.rbac import get_visible_user_uuids
+
+        assert await get_visible_user_uuids(1, "superadmin") is None
+
+    async def test_db_down_fails_closed(self):
+        """Недоступная БД не должна открывать доступ ко всем юзерам."""
+        from shared.rbac import get_visible_user_uuids
+
+        db = AsyncMock()
+        db.is_connected = False
+        with patch("shared.rbac.db_service", db):
+            result = await get_visible_user_uuids(42, "manager")
+        assert result == set()

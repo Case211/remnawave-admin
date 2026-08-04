@@ -256,11 +256,11 @@ async def _relay_agent_to_browser(
             await asyncio.sleep(30)
             # Добить даже простаивающий терминал (нет ввода из браузера) после
             # отзыва токена/сессии — иначе он висел бы до input-таймаута.
-            reason = ws_auth_invalid(websocket)
+            reason = ws_auth_invalid(browser_ws)
             if reason:
                 logger.info("Terminal relay closing (%s): node=%s", reason, node_uuid)
                 try:
-                    await websocket.close(code=4001, reason=reason)
+                    await browser_ws.close(code=4001, reason=reason)
                 except Exception as e:  # noqa: BLE001
                     logger.debug("Non-critical: %s", e)
                 break

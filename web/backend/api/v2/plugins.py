@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from web.backend.api.deps import AdminUser, get_current_admin
-from web.backend.core.plugins import loaded_plugins
+from web.backend.core.plugins import loaded_plugins, ui_license_state
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -53,7 +53,7 @@ async def list_plugins(_: AdminUser = Depends(get_current_admin)) -> List[Plugin
                 id=m.id,
                 name=m.name,
                 version=m.version,
-                license_state=m.license_state,
+                license_state=ui_license_state(m),
                 api_prefix=f"/api/v2/plugins/{m.id}",
                 navigation=[
                     PluginNavEntry(

@@ -106,6 +106,12 @@ async def agent_websocket(
     await _set_agent_v2_status(node_uuid, True)
     await _broadcast_agent_status(node_uuid, True)
 
+    # Реконнект агента = подтверждение успешного «Обновления агента»: сам
+    # скрипт умирает вместе со старым контейнером и не всегда успевает
+    # доложить финальный статус — команда зависала в running и позже падала
+    # в «Timed out»/Error при фактически УСПЕШНОМ обновлении.
+    await _resolve_pending_update_commands(node_uuid)
+
     # Push blocked IPs to newly connected agent (always send, even if empty — clears stale rules)
     try:
         from shared.database import db_service
@@ -181,6 +187,34 @@ async def agent_websocket(
         await _set_agent_v2_status(node_uuid, False)
         await _broadcast_agent_status(node_uuid, False)
         logger.info("Agent v2 disconnected: %s", node_uuid)
+
+
+async def _resolve_pending_update_commands(node_uuid: str) -> None:
+    """Закрыть зависшие running-команды update_agent при реконнекте агента.
+
+    Перекат убивает агента до/во время отправки command_result — реконнект
+    с новой версией и есть фактическое подтверждение успеха обновления.
+    """
+    try:
+        from shared.database import db_service
+        if not db_service.is_connected:
+            return
+        async with db_service.acquire() as conn:
+            updated = await conn.execute(
+                update_sql(
+                    NODE_COMMAND_LOG_TABLE,
+                    "status = 'completed', exit_code = 0, finished_at = NOW(), "
+                    "duration_ms = EXTRACT(EPOCH FROM (NOW() - started_at))::INTEGER * 1000, "
+                    "output = COALESCE(output, '') || E'\\n[агент переподключился — обновление применено]'",
+                    "node_uuid = $1 AND status = 'running' "
+                    "AND command_data LIKE 'script=update_agent%'",
+                ),
+                node_uuid,
+            )
+        if updated and not str(updated).endswith(" 0"):
+            logger.info("Resolved pending update_agent command for %s (agent reconnected)", node_uuid)
+    except Exception as e:
+        logger.debug("Failed to resolve pending update commands for %s: %s", node_uuid, e)
 
 
 async def _handle_command_result(node_uuid: str, msg: dict) -> None:

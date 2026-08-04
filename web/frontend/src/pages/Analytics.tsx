@@ -1009,7 +1009,7 @@ function TrendsCard() {
   const formatBytesShort = (bytes: number): string => {
     if (bytes <= 0) return '0'
     const k = 1024
-    const sizes = ['B', 'K', 'M', 'G', 'T']
+    const sizes = ['B', 'K', 'M', 'G', 'T', 'P']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     if (i < 0 || i >= sizes.length) return '0'
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i]

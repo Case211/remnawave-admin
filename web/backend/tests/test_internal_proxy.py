@@ -17,21 +17,32 @@ RBAC_MODULE = "web.backend.core.rbac"
 PROXY_MODULE = "web.backend.api.v2.internal"
 
 
-def _setup_app():
-    import os
-    os.environ.setdefault("INTERNAL_API_SECRET", "test-secret")
-    os.environ.setdefault("WEB_SECRET_KEY", "test-secret-key-for-proxy-tests")
-    os.environ.setdefault("BOT_TOKEN", "123:abc")
-    os.environ.setdefault("API_BASE_URL", "http://panel:3000")
-    from web.backend.core.config import get_web_settings
-    get_web_settings.cache_clear()
-    from web.backend.main import create_app
-    return create_app()
+# Именно setenv, а не setdefault: у разработчика в корневом .env лежит
+# рабочий INTERNAL_API_SECRET, и приложение поднималось с ним, а тесты
+# продолжали слать заголовок "test-secret" — весь файл отвечал 401. На
+# чистой машине и в CI это не воспроизводится, поэтому тестовое окружение
+# задаём принудительно и откатываем после теста.
+TEST_ENV = {
+    "INTERNAL_API_SECRET": "test-secret",
+    "WEB_SECRET_KEY": "test-secret-key-for-proxy-tests",
+    "BOT_TOKEN": "123:abc",
+    "API_BASE_URL": "http://panel:3000",
+}
 
 
 @pytest.fixture
-def app():
-    return _setup_app()
+def app(monkeypatch):
+    for key, value in TEST_ENV.items():
+        monkeypatch.setenv(key, value)
+
+    from web.backend.core.config import get_web_settings
+    get_web_settings.cache_clear()
+    from web.backend.main import create_app
+
+    yield create_app()
+
+    # Настройки закэшированы с тестовым секретом — не оставляем их соседям.
+    get_web_settings.cache_clear()
 
 
 @pytest.fixture
@@ -153,7 +164,13 @@ async def test_quota_race_rolls_back_created_resource(client, app):
                     assert mock_req.call_count >= 2
 
 
-async def test_quota_decrement_on_delete(client, app):
+async def test_user_delete_keeps_users_created(client, app):
+    """users_created считает созданные за всё время — удаление слот не возвращает.
+
+    Раньше здесь был декремент, а bot-путь (shared.admin_quota) на том же
+    событии, наоборот, прибавлял: два способа удалить юзера двигали счётчик
+    в противоположные стороны.
+    """
     headers = _admin_headers(account_id=1)
     with patch.object(api_client, "request", new_callable=AsyncMock) as mock_req:
         mock_req.return_value = {"response": {}}
@@ -163,7 +180,21 @@ async def test_quota_decrement_on_delete(client, app):
                 mock_inc.return_value = True
                 resp = await client.delete("/api/v2/internal/proxy/api/users/abc-123", headers=headers)
                 assert resp.status_code == 200
-                mock_inc.assert_called_once_with(1, "users_created", -1)
+                mock_inc.assert_not_called()
+
+
+async def test_node_delete_still_decrements(client, app):
+    """Для нод и хостов прежнее поведение сохраняется."""
+    headers = _admin_headers(account_id=1)
+    with patch.object(api_client, "request", new_callable=AsyncMock) as mock_req:
+        mock_req.return_value = {"response": {}}
+        with patch(f"{RBAC_MODULE}.get_admin_account_by_id", new_callable=AsyncMock) as mock_admin:
+            mock_admin.return_value = {"role_name": "superadmin", "role_id": 1}
+            with patch(f"{RBAC_MODULE}.increment_usage_counter", new_callable=AsyncMock) as mock_inc:
+                mock_inc.return_value = True
+                resp = await client.delete("/api/v2/internal/proxy/api/nodes/abc-123", headers=headers)
+                assert resp.status_code == 200
+                mock_inc.assert_called_once_with(1, "nodes_created", -1)
 
 
 # ── Error mapping tests ──────────────────────────────────────────

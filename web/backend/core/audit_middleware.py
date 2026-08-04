@@ -152,11 +152,24 @@ def _match_route(method: str, path: str) -> Optional[Tuple[str, str, Optional[st
 
 
 def _extract_token(request: Request) -> Optional[str]:
-    """Extract JWT from Authorization header."""
+    """Extract JWT from the Authorization header or the session cookie.
+
+    Веб-фронт живёт на httpOnly-cookie (rw_access), Bearer-заголовок он
+    ставит, только пока access-токен лежит в памяти — после перезагрузки
+    страницы остаётся одна cookie. Пока здесь читался лишь заголовок,
+    аудит таких запросов писался с admin_id=None и именем «unknown», а
+    в WebSocket-уведомлении это выглядело как «unknown: users.create:
+    users». Порядок тот же, что в deps.get_current_admin.
+    """
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:]
-    return None
+
+    try:
+        from web.backend.core.auth_cookies import ACCESS_COOKIE
+    except ImportError:
+        return None
+    return request.cookies.get(ACCESS_COOKIE)
 
 
 class AuditMiddleware(BaseHTTPMiddleware):

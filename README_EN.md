@@ -4,11 +4,15 @@
 
 **Telegram bot and web panel for managing Remnawave panel**
 
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue)](https://www.docker.com/)
-[![Python](https://img.shields.io/badge/Python-3.12+-green)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-AGPL%20v3-blue)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=f5c518)](https://github.com/Case211/remnawave-admin/stargazers) [![Forks](https://img.shields.io/github/forks/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=6e7bf2)](https://github.com/Case211/remnawave-admin/forks) [![Release](https://img.shields.io/github/v/release/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=3fb950)](https://github.com/Case211/remnawave-admin/releases/latest) [![Last commit](https://img.shields.io/github/last-commit/Case211/remnawave-admin/main?style=flat-square&logo=git&logoColor=white&labelColor=1f2430&color=8957e5)](https://github.com/Case211/remnawave-admin/commits/main)
+
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![License](https://img.shields.io/badge/License-AGPL_v3-blue?style=flat-square&logo=gnu&logoColor=white)](LICENSE)
 
 [English](README_EN.md) | [Русский](README.md)
+
+<a href="https://github.com/Case211/remnawave-admin/stargazers">
+  <img src="docs/star-history.svg" alt="Star history" width="720" />
+</a>
 
 </div>
 
@@ -192,6 +196,7 @@ NOTIFICATIONS_TOPIC_NODES=789       # 🛰 Node events
 NOTIFICATIONS_TOPIC_SERVICE=101     # ⚙️ Service events
 NOTIFICATIONS_TOPIC_HWID=102        # 💻 HWID devices
 NOTIFICATIONS_TOPIC_CRM=103         # 💰 Billing
+NOTIFICATIONS_TOPIC_FINANCE=106     # 💳 Finance events
 NOTIFICATIONS_TOPIC_ERRORS=104      # ❌ Errors
 NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Violations
 ```
@@ -394,6 +399,7 @@ python -m src.main
 | `ADMINS` | ✅ | — | Comma-separated administrator IDs |
 | `DEFAULT_LOCALE` | — | `ru` | Language (`ru` / `en`) |
 | `LOG_LEVEL` | — | `INFO` | Logging level |
+| `BOT_PROXY_URL` | — | — | Proxy for the Telegram API: `socks5://`, `socks4://` or `http://` (credentials allowed). Needed when the server runs on an IP that cannot reach Telegram. Schemes `socks5h://` and `https://` are not supported |
 
 ### 🗄 Database
 
@@ -416,6 +422,7 @@ python -m src.main
 | `NOTIFICATIONS_TOPIC_SERVICE` | Service notifications |
 | `NOTIFICATIONS_TOPIC_HWID` | HWID notifications |
 | `NOTIFICATIONS_TOPIC_CRM` | Billing notifications |
+| `NOTIFICATIONS_TOPIC_FINANCE` | Finance notifications |
 | `NOTIFICATIONS_TOPIC_ERRORS` | Error notifications |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | Violation notifications |
 

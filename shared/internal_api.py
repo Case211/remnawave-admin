@@ -52,28 +52,26 @@ PANEL_PREFIX = "/api"
 #   path   — URL template with {param} placeholders for path params
 #   body   — body handling: None (no body), "kwargs" (snake_to_camel),
 #            "update" (uuid+kwargs), "payload" (dict as-is)
-#   body_id — for "update" type, which kwarg maps to body "uuid"
+#   body_id — for "update" type, which kwarg maps to body id field (default "uuid", use body_key to override)
+#   body_key — body field name for the update identifier (default "uuid")
 
 _ROUTE_DEFS: list[dict[str, Any]] = [
     # ── Users ──
     dict(name="get_user_by_username", method="GET", path="/users/by-username/{username}"),
-    dict(name="get_user_by_telegram_id", method="GET", path="/users/by-telegram-id/{telegram_id}"),
-    dict(name="get_user_by_uuid", method="GET", path="/users/{user_uuid}"),
+    dict(name="get_user_by_id", method="GET", path="/users/{user_id}"),
     dict(name="get_user_by_short_uuid", method="GET", path="/users/by-short-uuid/{short_uuid}"),
-    dict(name="get_user_by_id", method="GET", path="/users/by-id/{user_id}"),
-    dict(name="get_users_by_email", method="GET", path="/users/by-email/{email}"),
     dict(name="resolve_user", method="POST", path="/users/resolve", body="kwargs"),
-    dict(name="get_users_by_tag", method="GET", path="/users/by-tag/{tag}"),
     dict(name="get_all_user_tags", method="GET", path="/users/tags"),
     dict(name="create_user", method="POST", path="/users", body="kwargs"),
-    dict(name="update_user", method="PATCH", path="/users", body="update", body_id="user_uuid"),
-    dict(name="delete_user", method="DELETE", path="/users/{user_uuid}"),
-    dict(name="enable_user", method="POST", path="/users/{user_uuid}/actions/enable"),
-    dict(name="disable_user", method="POST", path="/users/{user_uuid}/actions/disable"),
-    dict(name="reset_user_traffic", method="POST", path="/users/{user_uuid}/actions/reset-traffic"),
-    dict(name="revoke_user_subscription", method="POST", path="/users/{user_uuid}/actions/revoke", body="kwargs"),
-    dict(name="get_user_subscription_request_history", method="GET", path="/users/{user_uuid}/subscription-request-history"),
-    dict(name="get_user_accessible_nodes", method="GET", path="/users/{user_uuid}/accessible-nodes"),
+    dict(name="update_user", method="PATCH", path="/users", body="update", body_id="user_id", body_key="id"),
+    dict(name="delete_user", method="DELETE", path="/users/{user_id}"),
+    dict(name="enable_user", method="POST", path="/users/{user_id}/actions/enable"),
+    dict(name="disable_user", method="POST", path="/users/{user_id}/actions/disable"),
+    dict(name="reset_user_traffic", method="POST", path="/users/{user_id}/actions/reset-traffic"),
+    dict(name="extend_user_expiration", method="POST", path="/users/{user_id}/actions/extend", body="kwargs"),
+    dict(name="revoke_user_subscription", method="POST", path="/users/{user_id}/actions/revoke", body="kwargs"),
+    dict(name="get_user_subscription_request_history", method="GET", path="/users/{user_id}/subscription-request-history"),
+    dict(name="get_user_accessible_nodes", method="GET", path="/users/{user_id}/accessible-nodes"),
     # ── Nodes ──
     dict(name="get_nodes", method="GET", path="/nodes"),
     dict(name="get_node", method="GET", path="/nodes/{node_uuid}"),
@@ -147,7 +145,7 @@ _ROUTE_DEFS: list[dict[str, Any]] = [
     dict(name="get_nodes_metrics", method="GET", path="/system/nodes/metrics"),
     # ── HWID ──
     dict(name="get_hwid_devices_stats", method="GET", path="/hwid/devices/stats"),
-    dict(name="get_user_hwid_devices", method="GET", path="/hwid/devices/{user_uuid}"),
+    dict(name="get_user_hwid_devices", method="GET", path="/hwid/devices/{user_id}"),
 
     # ── Subscription Page Configs ──
     dict(name="get_subscription_page_configs", method="GET", path="/subscription-page-configs"),
@@ -161,7 +159,7 @@ _ROUTE_DEFS: list[dict[str, Any]] = [
     dict(name="get_all_subscriptions", method="GET", path="/subscriptions"),
     dict(name="get_subscription_by_username", method="GET", path="/subscriptions/by-username/{username}"),
     dict(name="get_subscription_by_short_uuid_protected", method="GET", path="/subscriptions/by-short-uuid/{short_uuid}"),
-    dict(name="get_subscription_by_uuid", method="GET", path="/subscriptions/by-uuid/{uuid}"),
+    dict(name="get_subscription_by_id", method="GET", path="/subscriptions/by-id/{user_id}"),
     dict(name="get_raw_subscription_by_short_uuid", method="GET", path="/subscriptions/by-short-uuid/{short_uuid}/raw"),
     dict(name="get_subpage_config_by_short_uuid", method="GET", path="/subscriptions/subpage-config/{short_uuid}"),
     # ── Subscription Request History ──
@@ -170,12 +168,12 @@ _ROUTE_DEFS: list[dict[str, Any]] = [
     dict(name="get_torrent_blocker_stats", method="GET", path="/node-plugins/torrent-blocker/stats"),
     # ── Keygen ──
     dict(name="generate_ssl_cert_key", method="GET", path="/keygen"),
-    # ── IP Control ──
-    dict(name="fetch_user_ips", method="POST", path="/ip-control/fetch-ips/{user_uuid}"),
-    dict(name="get_fetch_ips_result", method="GET", path="/ip-control/fetch-ips/result/{job_id}"),
-    dict(name="fetch_users_ips_by_node", method="POST", path="/ip-control/fetch-users-ips/{node_uuid}"),
-    dict(name="get_fetch_users_ips_result", method="GET", path="/ip-control/fetch-users-ips/result/{job_id}"),
-    dict(name="drop_connections", method="POST", path="/ip-control/drop-connections", body="kwargs"),
+    # ── Connections (was IP Control) ──
+    dict(name="fetch_user_ips", method="POST", path="/connections/by-user/{user_id}"),
+    dict(name="get_fetch_ips_result", method="GET", path="/connections/by-user/{job_id}"),
+    dict(name="fetch_users_ips_by_node", method="POST", path="/connections/by-node/{node_uuid}"),
+    dict(name="get_fetch_users_ips_result", method="GET", path="/connections/by-node/{job_id}"),
+    dict(name="drop_connections", method="POST", path="/connections/drop", body="kwargs"),
     # ── Bulk Users ──
     dict(name="bulk_reset_traffic_all_users", method="POST", path="/users/bulk/all/reset-traffic"),
     dict(name="bulk_update_users", method="POST", path="/users/bulk/update", body="kwargs"),
@@ -211,10 +209,11 @@ def _make_route(defn: dict[str, Any]):
                     json_body[snake_to_camel(k)] = v
         elif body_type == "update":
             json_body = {}
+            body_key = defn.get("body_key", "uuid")
             if body_id and len(remaining_args) > 0 and not path_param_names:
-                json_body["uuid"] = remaining_args[0]
+                json_body[body_key] = remaining_args[0]
             elif body_id and body_id in kwargs:
-                json_body["uuid"] = kwargs.pop(body_id)
+                json_body[body_key] = kwargs.pop(body_id)
             for k, v in kwargs.items():
                 if v is not None:
                     json_body[snake_to_camel(k)] = v
@@ -252,11 +251,30 @@ class BaseInternalApiClient(BaseHttpClient):
             params["admin_id"] = admin_id
         return await self._get("/users", params=params)
 
-    async def get_user_traffic_stats(self, user_uuid: str, start: str, end: str, top_nodes_limit: int = 10) -> dict:
-        return await self._get(f"/bandwidth-stats/users/{user_uuid}", params={"start": start, "end": end, "topNodesLimit": top_nodes_limit})
+    async def get_users_stream(self, *, cursor: int | None = None, size: int = 250, status: str | None = None,
+                               traffic_limit_strategy: str | None = None, telegram_id: int | None = None,
+                               email: str | None = None, tag: str | None = None,
+                               external_squad_uuid: str | None = None) -> dict:
+        """Cursor-paginated user listing with filters (Remnawave v3 users/stream)."""
+        params: dict = {"size": size}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if status:
+            params["status"] = status
+        if traffic_limit_strategy:
+            params["trafficLimitStrategy"] = traffic_limit_strategy
+        if telegram_id is not None:
+            params["telegramId"] = telegram_id
+        if email:
+            params["email"] = email
+        if tag:
+            params["tag"] = tag
+        if external_squad_uuid:
+            params["externalSquadUuid"] = external_squad_uuid
+        return await self._get("/users/stream", params=params)
 
-    async def get_user_traffic_stats_legacy(self, user_uuid: str, start: str, end: str) -> dict:
-        return await self._get(f"/bandwidth-stats/users/{user_uuid}/legacy", params={"start": start, "end": end})
+    async def get_user_traffic_stats(self, user_id: int, start: str, end: str, top_nodes_limit: int = 10) -> dict:
+        return await self._get(f"/bandwidth-stats/users/{user_id}", params={"start": start, "end": end, "topNodesLimit": top_nodes_limit})
 
     async def get_nodes_usage_range(self, start: str, end: str, top_nodes_limit: int = 10) -> dict:
         return await self._get("/bandwidth-stats/nodes", params={"start": start, "end": end, "topNodesLimit": top_nodes_limit})
@@ -341,14 +359,14 @@ class BaseInternalApiClient(BaseHttpClient):
     async def get_all_hwid_devices(self, start: int = 0, size: int = 100) -> dict:
         return await self._get("/hwid/devices", params={"start": start, "size": size})
 
-    async def create_user_hwid_device(self, user_uuid: str, hwid: str) -> dict:
-        return await self._post("/hwid/devices", json={"userUuid": user_uuid, "hwid": hwid})
+    async def create_user_hwid_device(self, user_id: int, hwid: str) -> dict:
+        return await self._post("/hwid/devices", json={"userId": user_id, "hwid": hwid})
 
-    async def delete_user_hwid_device(self, user_uuid: str, hwid: str) -> dict:
-        return await self._post("/hwid/devices/delete", json={"userUuid": user_uuid, "hwid": hwid})
+    async def delete_user_hwid_device(self, user_id: int, hwid: str) -> dict:
+        return await self._post("/hwid/devices/delete", json={"userId": user_id, "hwid": hwid})
 
-    async def delete_all_user_hwid_devices(self, user_uuid: str) -> dict:
-        return await self._post("/hwid/devices/delete-all", json={"userUuid": user_uuid})
+    async def delete_all_user_hwid_devices(self, user_id: int) -> dict:
+        return await self._post("/hwid/devices/delete-all", json={"userId": user_id})
 
     async def get_top_users_by_hwid_devices(self, limit: int = 10) -> dict:
         return await self._get("/hwid/devices/top-users", params={"limit": limit})
@@ -362,23 +380,23 @@ class BaseInternalApiClient(BaseHttpClient):
     async def bulk_delete_users_by_status(self, status: str) -> dict:
         return await self._post("/users/bulk/delete-by-status", json={"status": status})
 
-    async def bulk_delete_users(self, uuids: list[str]) -> dict:
-        return await self._post("/users/bulk/delete", json={"uuids": uuids})
+    async def bulk_delete_users(self, user_ids: list[int]) -> dict:
+        return await self._post("/users/bulk/delete", json={"userIds": user_ids})
 
-    async def bulk_revoke_subscriptions(self, uuids: list[str]) -> dict:
-        return await self._post("/users/bulk/revoke-subscription", json={"uuids": uuids})
+    async def bulk_revoke_subscriptions(self, user_ids: list[int]) -> dict:
+        return await self._post("/users/bulk/revoke-subscription", json={"userIds": user_ids})
 
-    async def bulk_reset_traffic_users(self, uuids: list[str]) -> dict:
-        return await self._post("/users/bulk/reset-traffic", json={"uuids": uuids})
+    async def bulk_reset_traffic_users(self, user_ids: list[int]) -> dict:
+        return await self._post("/users/bulk/reset-traffic", json={"userIds": user_ids})
 
-    async def bulk_extend_users(self, uuids: list[str], days: int) -> dict:
-        return await self._post("/users/bulk/extend-expiration-date", json={"uuids": uuids, "extendDays": days})
+    async def bulk_extend_users(self, user_ids: list[int], days: int) -> dict:
+        return await self._post("/users/bulk/extend-expiration-date", json={"userIds": user_ids, "extendDays": days})
 
     async def bulk_extend_all_users(self, days: int) -> dict:
         return await self._post("/users/bulk/all/extend-expiration-date", json={"extendDays": days})
 
-    async def bulk_update_users_status(self, uuids: list[str], status: str) -> dict:
-        return await self._post("/users/bulk/update", json={"uuids": uuids, "fields": {"status": status}})
+    async def bulk_update_users_status(self, user_ids: list[int], status: str) -> dict:
+        return await self._post("/users/bulk/update", json={"userIds": user_ids, "fields": {"status": status}})
 
     async def bulk_update_all_users(self, fields: dict) -> dict:
         return await self._post("/users/bulk/all/update", json=fields)

@@ -643,7 +643,7 @@ async def activate_alert_template(
                 "title_template", "body_template"
             ]),
             template["name"], template["description"], True, "threshold", template["metric"], template["operator"], template["threshold"],
-            template["duration_minutes"], channels_json, template["severity"], template["cooldown_minutes"], aid,
+            template["duration_minutes"], channels_json, template["severity"], template["cooldown_minutes"], admin.account_id,
             template["id"], template["title_template"], template["body_template"],
         )
 

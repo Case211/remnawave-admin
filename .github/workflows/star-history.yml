@@ -1,0 +1,41 @@
+# График звёзд в README перерисовывается сам.
+#
+# Картинка лежит в репозитории, а не тянется со стороннего сервиса:
+# публичные генераторы (star-history.com, starchart.cc) регулярно отвечают
+# ошибками, и вместо графика в шапке появляется битая иконка.
+name: Star history
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'   # раз в неделю, ночь понедельника
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  redraw:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Перерисовать график
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/star_history.py
+
+      - name: Закоммитить, если изменился
+        run: |
+          if git diff --quiet -- docs/star-history.svg; then
+            echo "звёзд не прибавилось — коммитить нечего"
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add docs/star-history.svg
+          git commit -m 'chore: обновление графика звёзд'
+          git push

@@ -172,13 +172,10 @@ export interface ReportResponse {
 }
 
 /**
- * 402 payload shape returned by the plugin's license-stub router.
+ * 402 payload shape — общий для всех платных плагинов, реэкспорт для
+ * обратной совместимости импортов внутри smart-support.
  */
-export interface LicenseError {
-  plugin: string
-  license_state: 'expired' | 'missing'
-  code: 'license_expired' | 'license_required'
-}
+export type { LicenseError } from '@/components/plugins/license'
 
 /**
  * Mirrors ``ThresholdSettings`` in ``schemas.py`` — every key is optional
@@ -203,38 +200,29 @@ export interface ThresholdSettings {
   correlation_max_age_minutes?: number | null
 }
 
+/**
+ * AI moved to the cloud rt-core: the operator only toggles it on/off,
+ * provider keys and chains live on the licensing server.
+ */
 export interface AISettingsOut {
   enabled: boolean
-  provider_chain: string[]
-  gemini_key_set: boolean
-  groq_key_set: boolean
-  openrouter_key_set: boolean
-  gemini_model?: string | null
-  groq_model?: string | null
-  openrouter_model?: string | null
 }
 
 export interface AISettingsIn {
   enabled?: boolean
-  provider_chain?: string[]
-  gemini_api_key?: string
-  groq_api_key?: string
-  openrouter_api_key?: string
-  gemini_model?: string
-  groq_model?: string
-  openrouter_model?: string
 }
 
-export interface AIProviderStatus {
-  name: string
-  available: boolean
-  cooldown_seconds_remaining: number
-  last_error?: string | null
+/** Quota snapshot from entitlements — for the progress bar. */
+export interface AIQuota {
+  period_limit: number
+  used: number
+  topup_left: number
 }
 
 export interface AIStatusResponse {
   enabled: boolean
-  chain: AIProviderStatus[]
+  subscription_state: 'active' | 'grace' | 'expired' | 'missing'
+  quota?: AIQuota | null
 }
 
 export interface ActionParamSpec {

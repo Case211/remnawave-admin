@@ -573,7 +573,14 @@ class IntelligentViolationDetector:
         # 2. Fallback — Panel API (первый запуск до полного sync)
         try:
             from shared.api_client import api_client
-            result = await api_client.get_user_subscription_request_history(user_uuid)
+            from shared.data_access import panel_uses_numeric_ids, resolve_panel_user_id
+            panel_key = await resolve_panel_user_id(user_uuid)
+            if panel_key == user_uuid and panel_uses_numeric_ids():
+                # v3 знает юзеров по числовому id; раз резолв не дал его —
+                # юзера в панели больше нет, и запрос по uuid вернёт 400.
+                self._srh_cache[user_uuid] = (now, [])
+                return None
+            result = await api_client.get_user_subscription_request_history(panel_key)
         except Exception as e:
             logger.debug("Failed to fetch SRH for user %s: %s", user_uuid, e)
             return None

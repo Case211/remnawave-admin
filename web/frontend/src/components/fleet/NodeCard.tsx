@@ -61,7 +61,7 @@ export function getNodeStatus(node: FleetNode): NodeStatus {
 
 function formatSpeedCompact(bps: number): string {
   if (bps === 0) return '0 B/s'
-  const units = ['B/s', 'K/s', 'M/s', 'G/s']
+  const units = ['B/s', 'K/s', 'M/s', 'G/s', 'T/s']
   let value = bps
   let unitIndex = 0
   while (value >= 1024 && unitIndex < units.length - 1) {

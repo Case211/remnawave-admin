@@ -21,6 +21,10 @@ export function exportJSON(data: unknown, filename: string) {
  */
 export function formatBytesForExport(bytes: number | null | undefined): string {
   if (!bytes) return '0'
+  const pb = bytes / (1024 ** 5)
+  if (pb >= 1) return `${pb.toFixed(2)} PB`
+  const tb = bytes / (1024 ** 4)
+  if (tb >= 1) return `${tb.toFixed(2)} TB`
   const gb = bytes / (1024 * 1024 * 1024)
   if (gb >= 1) return `${gb.toFixed(2)} GB`
   const mb = bytes / (1024 * 1024)

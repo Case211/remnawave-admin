@@ -173,6 +173,19 @@ const fetchPanelRecap = async (): Promise<PanelRecap> => {
   return data
 }
 
+interface PanelConfigurationResponse {
+  available: boolean
+  configuration: Record<string, unknown>
+  warnings: { key: string; severity: string }[]
+}
+
+// Панели старее 3.2.0 такого эндпоинта не знают — бэкенд отдаёт
+// available=false, и блок предупреждений просто не появляется.
+const fetchPanelConfiguration = async (): Promise<PanelConfigurationResponse> => {
+  const { data } = await client.get('/analytics/system/panel-configuration')
+  return data
+}
+
 interface CollectorStats {
   queue: { pending_users: number; peak_queue_size: number; health: string }
   processing: {
@@ -285,9 +298,8 @@ function createFormatBytes(t: (key: string) => string) {
     const sign = bytes < 0 ? '-' : ''
     const abs = Math.abs(bytes)
     const k = 1024
-    const sizes = [t('common.bytes.b'), t('common.bytes.kb'), t('common.bytes.mb'), t('common.bytes.gb'), t('common.bytes.tb')]
-    const i = Math.floor(Math.log(abs) / Math.log(k))
-    if (i < 0 || i >= sizes.length) return `0 ${t('common.bytes.b')}`
+    const sizes = [t('common.bytes.b'), t('common.bytes.kb'), t('common.bytes.mb'), t('common.bytes.gb'), t('common.bytes.tb'), t('common.bytes.pb')]
+    const i = Math.min(Math.max(Math.floor(Math.log(abs) / Math.log(k)), 0), sizes.length - 1)
     return sign + parseFloat((abs / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
   }
 }
@@ -298,9 +310,8 @@ function createFormatBytesShort(t: (key: string) => string) {
     const sign = bytes < 0 ? '-' : ''
     const abs = Math.abs(bytes)
     const k = 1024
-    const sizes = [t('common.bytes.b'), t('common.bytes.kb_short'), t('common.bytes.mb_short'), t('common.bytes.gb_short'), t('common.bytes.tb_short')]
-    const i = Math.floor(Math.log(abs) / Math.log(k))
-    if (i < 0 || i >= sizes.length) return '0'
+    const sizes = [t('common.bytes.b'), t('common.bytes.kb_short'), t('common.bytes.mb_short'), t('common.bytes.gb_short'), t('common.bytes.tb_short'), t('common.bytes.pb_short')]
+    const i = Math.min(Math.max(Math.floor(Math.log(abs) / Math.log(k)), 0), sizes.length - 1)
     return sign + parseFloat((abs / Math.pow(k, i)).toFixed(1)) + sizes[i]
   }
 }
@@ -884,12 +895,14 @@ function SystemStatusCard({
   version,
   loading,
   panelRecap,
+  panelWarnings = [],
 }: {
   components: SystemComponent[]
   uptime: number | null
   version: string
   loading: boolean
   panelRecap?: PanelRecap
+  panelWarnings?: string[]
 }) {
   const { t } = useTranslation()
   const formatUptime = createFormatUptime(t)
@@ -981,6 +994,16 @@ function SystemStatusCard({
                 </div>
               )
             })}
+          </div>
+        )}
+        {panelWarnings.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-[var(--glass-border)] space-y-1">
+            {panelWarnings.map((key) => (
+              <div key={key} className="flex items-start gap-1.5 text-[10px] text-amber-400">
+                <ShieldAlert className="w-3 h-3 mt-px shrink-0" />
+                <span>{t(`dashboard.panelConfigWarning.${key}`)}</span>
+              </div>
+            ))}
           </div>
         )}
         {panelRecap && (panelRecap.total.distinctCountries > 0 || panelRecap.initDate) && (
@@ -1905,6 +1928,14 @@ export default function Dashboard() {
     enabled: canViewAnalytics,
   })
 
+  const { data: panelConfiguration } = useQuery({
+    queryKey: ['panelConfiguration'],
+    queryFn: fetchPanelConfiguration,
+    staleTime: 300_000,
+    refetchInterval: 600_000,
+    enabled: canViewAnalytics,
+  })
+
   const { data: panelRecap } = useQuery({
     queryKey: ['panelRecap'],
     queryFn: fetchPanelRecap,
@@ -2393,6 +2424,7 @@ export default function Dashboard() {
             version={systemComponents?.version || ''}
             loading={componentsLoading}
             panelRecap={panelRecap}
+            panelWarnings={panelConfiguration?.warnings?.map((w) => w.key) || []}
           />
         )}
 

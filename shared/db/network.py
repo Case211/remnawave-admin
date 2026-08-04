@@ -660,10 +660,29 @@ class NetworkMixin:
         """Сохранить записи Subscription Request History. Возвращает число новых/обновлённых."""
         if not self.is_connected or not records:
             return 0
+
+        # Панель 3.x шлёт запись с числовым userId вместо userUuid. Колонка
+        # user_uuid здесь NOT NULL, поэтому резолвим id в локальные uuid одним
+        # запросом — иначе вся история молча перестала бы наполняться, а вместе
+        # с ней ослеп бы детектор нарушений, который на ней и работает.
+        pending_ids = {
+            int(r["userId"])
+            for r in records
+            if r.get("userId") is not None and not (r.get("userUuid") or r.get("user_uuid"))
+        }
+        id_to_uuid = await self.get_uuids_by_panel_ids(list(pending_ids)) if pending_ids else {}
+
         rows = []
+        unresolved = 0
         for r in records:
             rid = r.get("id") or r.get("request_id")
             uuid_val = r.get("userUuid") or r.get("user_uuid")
+            panel_id = r.get("userId") if r.get("userId") is not None else r.get("user_id")
+            if not uuid_val and panel_id is not None:
+                uuid_val = id_to_uuid.get(int(panel_id))
+                if not uuid_val:
+                    unresolved += 1
+                    continue
             request_at = r.get("requestAt") or r.get("request_at")
             if rid is None or not uuid_val or request_at is None:
                 continue
@@ -675,23 +694,33 @@ class NetworkMixin:
             rows.append((
                 int(rid),
                 str(uuid_val),
+                int(panel_id) if panel_id is not None else None,
                 r.get("requestIp") or r.get("request_ip"),
                 r.get("userAgent") or r.get("user_agent"),
                 request_at,
+                r.get("srrResponseType") or r.get("srr_response_type"),
+                r.get("srrRuleName") or r.get("srr_rule_name"),
             ))
+        if unresolved:
+            logger.debug("SRH: %d records skipped — panel user not synced yet", unresolved)
         if not rows:
             return 0
         try:
             async with self.acquire() as conn:
                 await conn.executemany(
                     f"""
-                    INSERT INTO {SUBSCRIPTION_REQUEST_HISTORY_TABLE} (id, user_uuid, request_ip, user_agent, request_at)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO {SUBSCRIPTION_REQUEST_HISTORY_TABLE}
+                        (id, user_uuid, user_id, request_ip, user_agent, request_at,
+                         srr_response_type, srr_rule_name)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (id) DO UPDATE SET
                         user_uuid = EXCLUDED.user_uuid,
+                        user_id = COALESCE(EXCLUDED.user_id, {SUBSCRIPTION_REQUEST_HISTORY_TABLE}.user_id),
                         request_ip = EXCLUDED.request_ip,
                         user_agent = EXCLUDED.user_agent,
                         request_at = EXCLUDED.request_at,
+                        srr_response_type = EXCLUDED.srr_response_type,
+                        srr_rule_name = EXCLUDED.srr_rule_name,
                         synced_at = NOW()
                     """,
                     rows,
@@ -716,7 +745,8 @@ class NetworkMixin:
                     rows = await conn.fetch(
                         select_sql(
                             SUBSCRIPTION_REQUEST_HISTORY_TABLE,
-                            "id, user_uuid, request_ip, user_agent, request_at",
+                            "id, user_uuid, request_ip, user_agent, request_at,"
+                            " srr_response_type, srr_rule_name",
                             "WHERE user_uuid = $1 AND request_at >= NOW() - $2::interval ORDER BY request_at DESC LIMIT $3",
                         ),
                         user_uuid, f"{max_age_days} days", limit,
@@ -725,7 +755,8 @@ class NetworkMixin:
                     rows = await conn.fetch(
                         select_sql(
                             SUBSCRIPTION_REQUEST_HISTORY_TABLE,
-                            "id, user_uuid, request_ip, user_agent, request_at",
+                            "id, user_uuid, request_ip, user_agent, request_at,"
+                            " srr_response_type, srr_rule_name",
                             "WHERE user_uuid = $1 ORDER BY request_at DESC LIMIT $2",
                         ),
                         user_uuid, limit,
