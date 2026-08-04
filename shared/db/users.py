@@ -4,7 +4,7 @@ Users mixin — user baselines, CRUD, search, bulk operations.
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from shared.logger import logger
 from shared.db._base import _db_row_to_api_format, _parse_timestamp
@@ -650,6 +650,42 @@ class UsersMixin:
             )
             return [_db_row_to_api_format(row) for row in rows]
     
+    @staticmethod
+    async def _adopt_legacy_rows(conn, pairs: Sequence[Tuple[int, Optional[str]]]) -> None:
+        """Привязывает строки от панели v2 к их панельным id по short_uuid.
+
+        v3 не присылает uuid, поэтому апсерт матчится по users.id. У строк,
+        заведённых до обновления панели, id пустой: ON CONFLICT (id) не
+        срабатывает и вместо обновления появляется вторая строка с uuid из
+        дефолта gen_random_uuid(). short_uuid панель при обновлении
+        сохраняет — по нему и находим своих.
+        """
+        ids = [int(pid) for pid, su in pairs if pid is not None and su]
+        short_uuids = [su for pid, su in pairs if pid is not None and su]
+        if not ids:
+            return
+        if not await conn.fetchval(select_sql(USERS_TABLE, "1", "WHERE id IS NULL LIMIT 1")):
+            return
+
+        # Привязываем только однозначные совпадения: два кандидата на один
+        # панельный id — это уже ручной разбор, а не работа синка.
+        await conn.execute(
+            f"""
+            WITH candidates AS (
+                SELECT t.i AS panel_id, u.uuid
+                FROM UNNEST($1::bigint[], $2::text[]) AS t(i, su)
+                JOIN {USERS_TABLE} u ON u.short_uuid = t.su AND u.id IS NULL
+                WHERE NOT EXISTS (SELECT 1 FROM {USERS_TABLE} x WHERE x.id = t.i)
+            ), unambiguous AS (
+                SELECT panel_id, min(uuid::text)::uuid AS uuid
+                FROM candidates GROUP BY panel_id HAVING count(*) = 1
+            )
+            UPDATE {USERS_TABLE} u SET id = c.panel_id
+            FROM unambiguous c WHERE u.uuid = c.uuid
+            """,
+            ids, short_uuids,
+        )
+
     async def _upsert_user_with_conn(self, conn, user_data: Dict[str, Any]) -> None:
         """Insert or update a user using provided connection (for batch operations).
 
@@ -730,6 +766,7 @@ class UsersMixin:
                 *shared_args,
             )
         else:
+            await self._adopt_legacy_rows(conn, [(panel_id, response.get("shortUuid"))])
             await conn.execute(
                 insert_sql(
                     USERS_TABLE,
@@ -885,6 +922,9 @@ class UsersMixin:
 
                 if v3_records:
                     rows = _collect(v3_records)
+                    await self._adopt_legacy_rows(
+                        conn, [(r["id"], r["short_uuid"]) for r in rows]
+                    )
                     result = await conn.execute(
                         f"""
                         INSERT INTO {USERS_TABLE} (
