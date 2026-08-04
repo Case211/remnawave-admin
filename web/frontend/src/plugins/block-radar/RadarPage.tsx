@@ -7,7 +7,7 @@ import { Activity, CheckCircle, Settings, ShieldBan, Zap } from '@/components/br
 import LicenseBanner from '@/components/plugins/license'
 
 import { asLicenseError, fetchAlerts, fetchStatus } from './api'
-import type { RadarAlert, RadarTick } from './types'
+import type { RadarAlert, RadarNodeDip, RadarTick } from './types'
 
 const TRANSPORT_LABELS: Record<string, string> = {
   reality: 'Reality',
@@ -87,6 +87,20 @@ export default function RadarPage() {
       {licenseError && <LicenseBanner error={licenseError} />}
 
       {!licenseError && <StatusCard tick={status.data?.last_tick ?? null} />}
+
+      {(status.data?.open_dips?.length ?? 0) > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+            <ShieldBan className="w-4 h-4 text-amber-400" aria-hidden />
+            {t('plugins.block_radar.dips_title')}
+          </h2>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {(status.data?.open_dips ?? []).map((dip) => (
+              <NodeDipCard key={dip.node_uuid} dip={dip} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {!licenseError && (
         <section className="space-y-3">
@@ -270,6 +284,45 @@ function AlertCard({ alert }: { alert: RadarAlert }) {
           <span className="text-white">{alert.affected.nodes!.join(', ')}</span>
         </p>
       )}
+    </div>
+  )
+}
+
+
+function NodeDipCard({ dip }: { dip: RadarNodeDip }) {
+  const { t } = useTranslation()
+  const pct = (v: number) => `${(v * 100).toFixed(1)}%`
+
+  return (
+    <div className="glass-card p-4 border-l-4 border-amber-500/70 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
+          {t('plugins.block_radar.dip_badge')}
+        </span>
+        <span className="text-xs text-dark-400 ml-auto whitespace-nowrap">
+          {formatTs(dip.since)}
+        </span>
+      </div>
+      <div className="text-sm text-white font-medium">
+        {dip.node_name || dip.node_uuid.slice(0, 8)}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dark-300">
+        <span>
+          {t('plugins.block_radar.card_online')}:{' '}
+          <span className="text-white font-mono">
+            {dip.online} / {Math.round(dip.baseline_online)}
+          </span>
+        </span>
+        <span>
+          {t('plugins.block_radar.dip_share')}:{' '}
+          <span className="text-white font-mono">
+            {pct(dip.share)} / {pct(dip.baseline_share)}
+          </span>
+        </span>
+      </div>
+      <p className="text-xs text-dark-300">
+        {t(dip.node_alive ? 'plugins.block_radar.dip_alive' : 'plugins.block_radar.dip_offline')}
+      </p>
     </div>
   )
 }

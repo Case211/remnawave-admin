@@ -21,10 +21,27 @@ export interface RadarTick {
   notified?: number
 }
 
+/**
+ * Локальная просадка: онлайн ноды обвалился, а панель в целом жива.
+ * Считается по доле ноды в общем онлайне, поэтому ночной спад — когда
+ * проседают все ноды разом — сюда не попадает.
+ */
+export interface RadarNodeDip {
+  node_uuid: string
+  node_name: string | null
+  since: string
+  online: number
+  baseline_online: number
+  share: number
+  baseline_share: number
+  node_alive: boolean
+}
+
 export interface RadarStatus {
   last_tick: RadarTick | null
   open_alerts: number
   license_usable: boolean
+  open_dips: RadarNodeDip[]
 }
 
 export interface RadarAffected {
