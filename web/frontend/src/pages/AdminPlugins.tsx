@@ -79,8 +79,12 @@ import {
  * Superadmin-only — enforced server-side, sidebar hides the entry.
  */
 
-function pickText(text: CatalogText | undefined, lang: string): string {
+export function pickText(text: CatalogText | string | undefined, lang: string): string {
   if (!text) return ''
+  // Каталог может отдать простую строку вместо словаря локалей. Без этой
+  // ветки Object.values разбирает её на символы и в буллет попадает одна
+  // буква — так карточка block_radar показывала «✓ r», «✓ r», «✓ t».
+  if (typeof text === 'string') return text
   const short = lang.split('-')[0]
   return text[short] ?? text.en ?? text.ru ?? Object.values(text)[0] ?? ''
 }
