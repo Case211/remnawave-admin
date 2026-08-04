@@ -173,6 +173,17 @@ class PluginLicense:
         return ent.get("tier") if ent else None
 
     @property
+    def paid_until(self) -> Optional[int]:
+        """Unix-время окончания подписки (None — подписки нет).
+
+        Сервер присылает его вместе с состоянием; плагину нужно, чтобы
+        предупредить владельца заранее, а не встретить его молчаливым 402.
+        """
+        ent = self._ent
+        value = ent.get("paid_until") if ent else None
+        return int(value) if value is not None else None
+
+    @property
     def quota(self) -> Optional[dict]:
         ent = self._ent
         return ent.get("quota") if ent else None

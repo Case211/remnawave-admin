@@ -42,6 +42,10 @@ export interface RadarStatus {
   open_alerts: number
   license_usable: boolean
   open_dips: RadarNodeDip[]
+  license_state: string | null
+  license_tier: string | null
+  /** Unix-время окончания подписки: нужно, чтобы предупредить до отключения. */
+  license_paid_until: number | null
 }
 
 export interface RadarAffected {

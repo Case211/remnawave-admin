@@ -7,7 +7,7 @@ import { Activity, CheckCircle, Settings, ShieldBan, Zap } from '@/components/br
 import LicenseBanner from '@/components/plugins/license'
 
 import { asLicenseError, fetchAlerts, fetchStatus } from './api'
-import type { RadarAlert, RadarNodeDip, RadarTick } from './types'
+import type { RadarAlert, RadarNodeDip, RadarStatus, RadarTick } from './types'
 
 const TRANSPORT_LABELS: Record<string, string> = {
   reality: 'Reality',
@@ -85,6 +85,8 @@ export default function RadarPage() {
       </div>
 
       {licenseError && <LicenseBanner error={licenseError} />}
+
+      {!licenseError && <ExpiryNotice status={status.data ?? null} />}
 
       {!licenseError && <StatusCard tick={status.data?.last_tick ?? null} />}
 
@@ -284,6 +286,43 @@ function AlertCard({ alert }: { alert: RadarAlert }) {
           <span className="text-white">{alert.affected.nodes!.join(', ')}</span>
         </p>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * Плашка «подписка на исходе». Загорается за неделю до конца, чтобы
+ * владелец успел продлить — иначе радар просто однажды замолкает.
+ */
+function ExpiryNotice({ status }: { status: RadarStatus | null }) {
+  const { t } = useTranslation()
+  if (!status?.license_paid_until) return null
+
+  const days = Math.floor((status.license_paid_until * 1000 - Date.now()) / 86_400_000)
+  if (days > 7) return null
+
+  const trial = status.license_tier === 'trial'
+  const urgent = days <= 1
+  const key =
+    days > 1 ? 'expiry_days' : days === 1 ? 'expiry_tomorrow' : days === 0 ? 'expiry_today' : 'expiry_over'
+
+  return (
+    <div
+      className={`glass-card p-4 flex items-start gap-3 border-l-4 ${
+        urgent ? 'border-red-500/70' : 'border-amber-500/70'
+      }`}
+    >
+      <Zap className={`w-5 h-5 shrink-0 ${urgent ? 'text-red-400' : 'text-amber-400'}`} aria-hidden />
+      <div className="space-y-1">
+        <p className="text-sm text-white font-medium">
+          {t(`plugins.block_radar.${key}`, {
+            days,
+            what: t(trial ? 'plugins.block_radar.expiry_trial' : 'plugins.block_radar.expiry_sub'),
+          })}
+        </p>
+        <p className="text-xs text-dark-300">{t('plugins.block_radar.expiry_hint')}</p>
+      </div>
     </div>
   )
 }
