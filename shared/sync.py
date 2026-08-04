@@ -1308,23 +1308,28 @@ class SyncService:
                 if not devices:
                     break
 
-                # Группируем устройства по пользователям
-                devices_by_user: Dict[str, List[Dict]] = {}
+                # Группируем устройства по панельному ключу (uuid в v2, числовой id в v3)
+                devices_by_key: Dict[Any, List[Dict]] = {}
                 for device in devices:
-                    user_uuid = device.get("userUuid") or device.get("userId")
-                    if user_uuid:
-                        if user_uuid not in devices_by_user:
-                            devices_by_user[user_uuid] = []
-                        devices_by_user[user_uuid].append(device)
+                    user_key = device.get("userUuid") or device.get("userId")
+                    if user_key:
+                        if user_key not in devices_by_key:
+                            devices_by_key[user_key] = []
+                        devices_by_key[user_key].append(device)
 
                 # Синхронизируем устройства по пользователям
-                for user_uuid, user_devices in devices_by_user.items():
+                for user_key, user_devices in devices_by_key.items():
+                    # В БД ключ — локальный uuid; v3 присылает числовой id.
+                    user_uuid = await self._resolve_local_user_uuid(user_key)
+                    if not user_uuid:
+                        logger.debug("Skipping HWID sync: no local user for panel key %s", user_key)
+                        continue
+                    users_seen.add(user_uuid)
                     try:
                         synced = await db_service.sync_user_hwid_devices(user_uuid, user_devices)
                         total_synced += synced
                     except Exception as e:
                         logger.warning("Failed to sync HWID devices for user %s: %s", user_uuid, e)
-                users_seen.update(devices_by_user)
 
                 # Проверяем, достигли ли конца
                 start += page_size

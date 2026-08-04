@@ -130,10 +130,30 @@ async def resolve_panel_user_id(user_uuid: str) -> str | int:
         try:
             panel_id = await db_service.get_user_panel_id_by_uuid(user_uuid)
             if panel_id is not None:
+                _mark_numeric_ids_seen()
                 return panel_id
         except Exception as e:
             logger.debug("resolve_panel_user_id(%s) failed: %s", user_uuid, e)
     return user_uuid
+
+
+_numeric_ids_seen = False
+
+
+def _mark_numeric_ids_seen() -> None:
+    global _numeric_ids_seen
+    _numeric_ids_seen = True
+
+
+def panel_uses_numeric_ids() -> bool:
+    """True когда панель идентифицирует юзеров числовым id (v3+).
+
+    Версию панель по API не сообщает, поэтому судим по факту: если резолв хоть
+    раз вернул числовой id — панель точно v3. Нужно, чтобы отличать «панель v2,
+    где uuid и есть ключ» от «v3, где юзера в панели уже нет»: во втором случае
+    запрос по uuid гарантированно даст 400.
+    """
+    return _numeric_ids_seen
 
 
 async def resolve_panel_user_ids(user_uuids: list[str]) -> list[str | int]:
@@ -143,6 +163,8 @@ async def resolve_panel_user_ids(user_uuids: list[str]) -> list[str | int]:
     if db_service.is_connected:
         try:
             mapping = await db_service.get_panel_ids_by_uuids(user_uuids)
+            if mapping:
+                _mark_numeric_ids_seen()
             return [mapping.get(u, u) for u in user_uuids]
         except Exception as e:
             logger.debug("resolve_panel_user_ids failed: %s", e)
