@@ -184,5 +184,8 @@ def test_noop_plugin_discovery(monkeypatch, keypair):
     loaded = loader.register(app)
     assert [m.id for m in loaded] == ["noop"]
     assert loader.ui_license_state(loaded[0]) == "not_required"
-    paths = {route.path for route in app.routes}
+    # С 0.130 FastAPI держит в app.routes ещё и служебный _IncludedRouter
+    # без .path — из-за него тест падал на свежих версиях, хотя роут
+    # монтировался нормально.
+    paths = {getattr(route, "path", None) for route in app.routes}
     assert "/api/v2/plugins/noop/ping" in paths
