@@ -5678,6 +5678,14 @@
           "online_window_minutes": {
             "label": "Slice window, min",
             "help": "How many minutes count as \"online now\" (1–60). Usually no need to change."
+          },
+          "dip_enabled": {
+            "label": "Detect online drops",
+            "help": "Local rule: a node's share of total online collapses while the others hold. Works without the cloud."
+          },
+          "dip_notify_offline": {
+            "label": "Notify when the node is offline too",
+            "help": "A disconnected node is usually reported by the panel itself, so the radar stays quiet during planned reboots. The drop is still recorded."
           }
         }
       }

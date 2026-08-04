@@ -18,6 +18,8 @@ const TOGGLES: Array<keyof RadarSettings> = [
   'notify_enabled',
   'notify_resolved',
   'send_org_names',
+  'dip_enabled',
+  'dip_notify_offline',
 ]
 
 /**

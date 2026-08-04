@@ -81,6 +81,14 @@ export interface RadarSettings {
   notify_resolved: boolean
   online_window_minutes: number
   send_org_names: boolean
+  /** Быстрое локальное правило по просадке доли ноды. */
+  dip_enabled: boolean
+  /** Слать ли уведомление, когда просевшая нода не на связи (плановый ребут). */
+  dip_notify_offline: boolean
+  dip_frac: number
+  dip_min_users: number
+  dip_confirm_ticks: number
+  dip_history_days: number
 }
 
 export type RadarSettingsPatch = Partial<RadarSettings>
