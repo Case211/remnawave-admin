@@ -11,6 +11,30 @@ from shared.api_client import api_client
 from shared.database import db_service
 from shared.logger import logger
 
+# Сколько юзеров запрашивать у панели в срезе трафика ноды. Панель
+# отдаёт ровно топ-N, поэтому лимит должен покрывать всех живых на
+# ноде; недобор ловится сверкой с общим итогом ноды.
+NODE_USAGE_TOP_USERS = 1000
+
+
+def _node_total_bytes(response: Any, day: str, fallback: int) -> int:
+    """Итог ноды за день из ответа панели.
+
+    3.2.0 отдаёт ``categories`` (даты) и парный ``sparklineData``.
+    Панели постарше такого не присылают — тогда остаётся сумма по
+    юзерам, которую и передал вызывающий.
+    """
+    if not isinstance(response, dict):
+        return fallback
+    cats = response.get("categories")
+    spark = response.get("sparklineData")
+    if not isinstance(cats, list) or not isinstance(spark, list):
+        return fallback
+    try:
+        return int(spark[cats.index(day)])
+    except (ValueError, IndexError, TypeError):
+        return fallback
+
 
 class SyncService:
     """
@@ -1048,10 +1072,17 @@ class SyncService:
                 node_uuid = str(node["uuid"])
                 try:
                     result = await api_client.get_node_users_usage(
-                        node_uuid, start=start_str, end=end_str
+                        node_uuid, start=start_str, end=end_str,
+                        top_users_limit=NODE_USAGE_TOP_USERS,
                     )
                     response = result.get("response", result) if isinstance(result, dict) else result
-                    rows = response.get("users", []) if isinstance(response, dict) else (response if isinstance(response, list) else [])
+                    # 3.2.0 переименовала список в topUsers и режет его
+                    # topUsersLimit — отсюда и большой лимит выше. Старый
+                    # ключ оставлен для панелей постарше.
+                    if isinstance(response, dict):
+                        rows = response.get("topUsers") or response.get("users") or []
+                    else:
+                        rows = response if isinstance(response, list) else []
 
                     # Endpoint returns one entry per user; v2 keys rows by
                     # userUuid, v3 by numeric id — accept both.
@@ -1103,7 +1134,11 @@ class SyncService:
 
                         traffic_upserts.append((user_uuid, node_uuid, new_bytes))
 
-                    node_totals[node_uuid] = node_traffic_sum
+                    # Итог ноды берём у панели: сумма по юзерам занизит
+                    # его, если их на ноде больше запрошенного лимита.
+                    node_totals[node_uuid] = _node_total_bytes(
+                        response, start_str, fallback=node_traffic_sum,
+                    )
                 except Exception as e:
                     logger.warning(
                         "Failed to sync traffic for node %s: %s",
