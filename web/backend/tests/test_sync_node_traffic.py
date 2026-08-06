@@ -92,7 +92,10 @@ class TestSyncNodeTraffic:
         api.get_node_users_usage.return_value = _panel_320(
             "2026-08-05", 5000, [{"userId": 561, "total": 500}],
         )
-        with patch("shared.sync.db_service", db), patch("shared.sync.api_client", api):
+        with patch("shared.sync.db_service", db), \
+             patch("shared.sync.api_client", api), \
+             patch("shared.sync.datetime") as dt:
+            dt.now.return_value.replace.return_value.strftime.return_value = "2026-08-05"
             await svc.sync_node_traffic()
         assert db.insert_node_traffic_snapshots.await_args.args[0] == [("N1", 5000)]
 
