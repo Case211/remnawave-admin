@@ -50,6 +50,7 @@ Inter-|   Receive                                                |  Transmit
     lo: 1000 10 0 0 0 0 0 0 1000 10 0 0 0 0 0 0
   eth0: 2000 20 1 3 0 0 0 0 4000 40 2 5 0 0 0 0
   ens3: 500 5 0 1 0 0 0 0 700 7 0 2 0 0 0 0
+eth0.100: 1500 15 0 0 0 0 0 0 3000 30 0 0 0 0 0 0
 docker0: 999999 9999 0 0 0 0 0 0 999999 9999 0 0 0 0 0 0
 veth9a1b2: 888 88 0 0 0 0 0 0 888 88 0 0 0 0 0 0
 """
@@ -112,10 +113,10 @@ def collector(net_root: Path, clock: FakeClock, monkeypatch: pytest.MonkeyPatch)
 
 
 def test_dev_sums_physical_interfaces_only(collector):
-    """Бридж докера и veth — это уже посчитанный трафик, их считать нельзя."""
+    """Бридж докера, veth и VLAN — это уже посчитанный трафик, их считать нельзя."""
     totals = collector._read_dev()
 
-    assert totals["rx_bytes"] == 2500      # eth0 + ens3, без lo/docker0/veth
+    assert totals["rx_bytes"] == 2500      # eth0 + ens3, без lo/docker0/veth/eth0.100
     assert totals["rx_packets"] == 25
     assert totals["rx_drop"] == 4
     assert totals["tx_bytes"] == 4700

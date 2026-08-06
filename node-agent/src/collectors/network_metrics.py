@@ -38,7 +38,9 @@ _RATE_FIELDS = (
 
 
 def _is_virtual(iface: str) -> bool:
-    return iface.startswith(_VIRTUAL_PREFIXES)
+    # Точка в имени — VLAN поверх физического интерфейса (eth0.100). Тот же
+    # пакет считается и там, и на носителе, так что цифры удвоились бы.
+    return "." in iface or iface.startswith(_VIRTUAL_PREFIXES)
 
 
 def _in_container() -> bool:
