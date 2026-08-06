@@ -161,6 +161,46 @@ class TestListUsersRBAC:
         assert resp.status_code == 401
 
 
+class TestDetailFromPanel:
+    """Ответ панели 3.0.0+ приходит без uuid — схема должна собираться всё равно."""
+
+    def test_panel_v3_response_without_uuid(self):
+        """Боевой случай: панель ответила 201, а панель показала «внутреннюю ошибку»."""
+        from web.backend.api.v2.users import _detail_from_panel
+
+        panel_response = {
+            "id": 3823,
+            "shortUuid": "aBcD1234",
+            "username": "someone",
+            "status": "ACTIVE",
+            "hwid_device_count": 0,
+        }
+
+        detail = _detail_from_panel(panel_response, "11111111-2222-3333-4444-555555555555")
+
+        assert detail.uuid == "11111111-2222-3333-4444-555555555555"
+        assert detail.short_uuid == "aBcD1234"
+
+    def test_panel_v2_uuid_wins(self):
+        """У панели 2.x uuid свой — подменять его локальным нельзя."""
+        from web.backend.api.v2.users import _detail_from_panel
+
+        panel_response = {"uuid": "aaaaaaaa-0000-0000-0000-000000000000", "username": "someone"}
+
+        detail = _detail_from_panel(panel_response, "99999999-9999-9999-9999-999999999999")
+
+        assert detail.uuid == "aaaaaaaa-0000-0000-0000-000000000000"
+
+    def test_unknown_uuid_does_not_break_the_response(self):
+        """Пользователь создан. Ронять ответ из-за неизвестного uuid — худший исход."""
+        from web.backend.api.v2.users import _detail_from_panel
+
+        detail = _detail_from_panel({"id": 7, "username": "someone"}, "")
+
+        assert detail.uuid == ""
+        assert detail.username == "someone"
+
+
 class TestEnsureSnakeCase:
     """Tests for _ensure_snake_case helper."""
 

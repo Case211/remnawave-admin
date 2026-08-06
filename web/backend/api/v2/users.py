@@ -246,6 +246,21 @@ def _validate_user_update_input(data) -> None:
         raise api_error(400, E.DESCRIPTION_TOO_LONG)
 
 
+def _detail_from_panel(user: dict, user_uuid: str) -> UserDetail:
+    """Собрать ответ об одном пользователе по данным панели.
+
+    Панель 3.0.0+ идентифицирует пользователя числовым id и uuid в ответе не
+    присылает вовсе. Схема ответа без него не собирается — и на успешно
+    созданного пользователя (панель ответила 201) оператор получал
+    «внутреннюю ошибку сервера». Локальный uuid к этому моменту уже известен,
+    его и подставляем.
+    """
+    payload = _ensure_snake_case(user)
+    if not payload.get("uuid"):
+        payload["uuid"] = str(user_uuid or "")
+    return UserDetail(**payload)
+
+
 def _ensure_snake_case(user: dict) -> dict:
     """Ensure user dict has snake_case keys for pydantic schemas."""
     result = dict(user)
@@ -1048,7 +1063,7 @@ async def create_user(
             "created_by": admin.username,
         })
 
-        return UserDetail(**_ensure_snake_case(user))
+        return _detail_from_panel(user, user_uuid)
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
@@ -1237,7 +1252,7 @@ async def update_user(
             "updated_by": admin.username,
         })
 
-        return UserDetail(**_ensure_snake_case(user))
+        return _detail_from_panel(user, user_uuid)
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
