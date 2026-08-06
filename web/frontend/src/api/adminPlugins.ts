@@ -107,11 +107,22 @@ export interface PurchaseItem {
   pack?: string
 }
 
+/** Сеть приёма USDT. `memo_supported: false` — комментарий переводом не
+ *  передаётся (TRC-20), платёж сверяется по сумме. */
+export interface PaymentOption {
+  method: string
+  network: string
+  address: string
+  memo_supported: boolean
+}
+
 export interface OrderPayment {
   method: string
   address: string
   amount: string
   memo: string
+  /** Все включённые сети. Нет поля — сервер старой версии, платим method/address. */
+  options?: PaymentOption[]
 }
 
 export interface PurchaseResponse {

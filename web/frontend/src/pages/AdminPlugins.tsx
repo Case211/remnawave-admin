@@ -67,6 +67,8 @@ import {
   type EntitlementQuota,
   type PluginEntitlement,
   type PurchaseItem,
+  type OrderPayment,
+  type PaymentOption,
   type PurchaseResponse,
   type StoreStatus,
   type TransferOutResponse,
@@ -798,6 +800,7 @@ function PurchaseDialog({
   const serverError = useServerError()
   const [months, setMonths] = useState(1)
   const [order, setOrder] = useState<PurchaseResponse | null>(null)
+  const [network, setNetwork] = useState(0)
   const [orderState, setOrderState] = useState<'configuring' | 'waiting' | 'polling' | 'paid' | 'expired'>(
     'configuring',
   )
@@ -820,6 +823,7 @@ function PurchaseDialog({
     },
     onSuccess: (res) => {
       setOrder(res)
+      setNetwork(0)
       setOrderState('waiting')
     },
     onError: (err: unknown) => toast.error(serverError(err, 'adminPlugins.errors.purchase_failed')),
@@ -922,9 +926,37 @@ function PurchaseDialog({
           </div>
         )}
 
-        {order && (orderState === 'waiting' || orderState === 'polling') && (
+        {order && (orderState === 'waiting' || orderState === 'polling') && (() => {
+          const options = paymentOptions(order.payment)
+          const active = options[network] ?? options[0]
+          return (
           <div className="space-y-3 py-2">
-            <PaymentRow label={t('adminPlugins.purchase.address')} value={order.payment.address} mono />
+            {options.length > 1 && (
+              <div className="space-y-1.5">
+                <Label>{t('adminPlugins.purchase.network')}</Label>
+                <div className="flex gap-2">
+                  {options.map((o, i) => (
+                    <button
+                      key={o.method}
+                      type="button"
+                      onClick={() => setNetwork(i)}
+                      className={`flex-1 py-2 rounded-lg border text-sm transition-colors ${
+                        i === network
+                          ? 'border-primary-400 bg-primary-500/15 text-white'
+                          : 'border-[var(--glass-border)] text-dark-300 hover:text-white'
+                      }`}
+                    >
+                      {o.network}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <PaymentRow
+              label={t('adminPlugins.purchase.address_in', { network: active.network })}
+              value={active.address}
+              mono
+            />
             <PaymentRow
               label={t('adminPlugins.purchase.amount')}
               value={`${order.payment.amount} USDT`}
@@ -932,7 +964,11 @@ function PurchaseDialog({
             />
             <PaymentRow label={t('adminPlugins.purchase.memo')} value={order.payment.memo} mono />
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-100">
-              {t('adminPlugins.purchase.memo_warning')}
+              {/* В TRC-20 комментария нет — требовать memo там бессмысленно
+                  и вредно: покупатель будет искать несуществующее поле. */}
+              {active.memo_supported
+                ? t('adminPlugins.purchase.memo_warning')
+                : t('adminPlugins.purchase.memo_unsupported')}
             </div>
             <div className="text-[11px] text-dark-400">
               {t('adminPlugins.purchase.expires')}: {formatTs(order.expires_at, lang)}
@@ -945,7 +981,8 @@ function PurchaseDialog({
             )}
             <p className="text-[11px] text-dark-400">{t('adminPlugins.purchase.manual_note')}</p>
           </div>
-        )}
+          )
+        })()}
 
         {orderState === 'paid' && (
           <div className="py-6 flex flex-col items-center gap-3 text-center">
@@ -994,6 +1031,19 @@ function PurchaseDialog({
   )
 }
 
+
+/** Сети оплаты из заказа. Сервер до v1.3 отдаёт только плоские поля —
+ *  разворачиваем их в одну сеть, чтобы экран не разветвлялся дважды. */
+function paymentOptions(p: OrderPayment): PaymentOption[] {
+  if (p.options?.length) return p.options
+  const trc20 = p.method === 'usdt_trc20'
+  return [{
+    method: p.method,
+    network: trc20 ? 'TRC20' : 'TON',
+    address: p.address,
+    memo_supported: !trc20,
+  }]
+}
 
 function PaymentRow({
   label,

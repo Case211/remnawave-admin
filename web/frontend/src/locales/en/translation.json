@@ -5502,16 +5502,19 @@
     "purchase": {
       "title_sub": "Subscription: {{name}}",
       "title_topup": "Quota pack: {{name}}",
-      "subtitle_sub": "Pick a duration — the order is paid with a USDT transfer (TON network).",
+      "subtitle_sub": "Pick a duration — the order is paid with a USDT transfer.",
       "subtitle_topup": "A pack of {{n}} AI calls. Never expires — spent after the base quota.",
-      "subtitle_pay": "Transfer the exact amount with the comment (memo) — it matches the payment to the order.",
+      "subtitle_pay": "Transfer the exact amount to the address of the chosen network — the order applies once confirmed.",
       "months": "Duration, months",
       "total": "Total",
       "create": "Proceed to payment",
+      "network": "Network",
       "address": "Address (USDT on TON)",
+      "address_in": "Address (USDT · {{network}})",
       "amount": "Amount",
       "memo": "Comment (memo)",
       "memo_warning": "Always include the transfer comment — without it the payment cannot be matched to the order.",
+      "memo_unsupported": "This network does not carry a transfer comment. Send exactly the amount shown — the order is matched by amount and transfer time. Keep the order code in case you need to reach the panel developer.",
       "expires": "Order valid until",
       "i_paid": "I have paid",
       "polling": "Waiting for payment confirmation…",
@@ -5519,7 +5522,7 @@
       "paid_title": "Payment confirmed",
       "paid_body": "The subscription is applied without a restart. If the plugin code is not installed yet, hit \"Install\" on the card.",
       "expired_title": "Order expired",
-      "expired_body": "Create a new order. If you have already sent the payment, contact support."
+      "expired_body": "Create a new order. If you have already sent the payment, reach out to the panel developer."
     },
     "redeem_ok": "Code applied",
     "redeem_dialog": {
@@ -5589,7 +5592,7 @@
       "unknown_tariff": "Unknown tariff — refresh the catalog",
       "unknown_topup": "Unknown pack — refresh the catalog",
       "wheel_not_found": "Wheel not found on the server",
-      "wheel_missing_on_server": "The wheel file is missing on the server — contact support",
+      "wheel_missing_on_server": "The wheel file is missing on the server — reach out to the panel developer",
       "wheel_sha_mismatch": "Wheel checksum mismatch — installation aborted",
       "invalid_wheel": "The file does not look like a valid wheel",
       "pip_install_failed": "pip failed to install the package — check backend logs"

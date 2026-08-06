@@ -362,9 +362,18 @@ async def fetch_catalog(force: bool = False) -> dict:
         if _cache.catalog is not None:
             return _cache.catalog  # сервер лёг — отдаём последний удачный
         raise
+    # Сравнение делаем до перезаписи кэша: предыдущий каталог — это и есть
+    # «что панель видела в прошлый раз». Отдельного снимка не заводим.
+    previous = _cache.catalog
     _cache.catalog = catalog
     _cache.catalog_fetched_at = time.time()
     await _save_link(catalog=catalog)
+    try:
+        from web.backend.core.plugin_announcer import announce_catalog_change
+
+        asyncio.create_task(announce_catalog_change(previous, catalog))
+    except Exception:  # noqa: BLE001 — витрина важнее уведомления о ней
+        logger.warning("catalog.announce_failed", exc_info=True)
     return catalog
 
 
@@ -476,6 +485,13 @@ async def heartbeat_loop() -> None:
             if _cache.instance_token:
                 from web.backend.core.plugin_api import drain_telemetry
                 await heartbeat_now(usage_stats=drain_telemetry())
+                # Заодно перечитываем витрину: без этого о новом плагине или
+                # свежей версии владелец узнавал бы, только зайдя на страницу
+                # «Плагины» — то есть уже увидев их глазами.
+                try:
+                    await fetch_catalog(force=True)
+                except LicenseServerError as e:
+                    logger.debug("catalog.refresh_skipped", extra={"code": e.code})
                 delay: float = HEARTBEAT_INTERVAL_S * random.uniform(0.75, 1.25)
             else:
                 delay = RETRY_INTERVAL_S  # не зарегистрированы — ждём открытия витрины
