@@ -141,6 +141,28 @@ def test_conntrack_entries_are_hex(collector):
     assert count == 300  # 0x12c
 
 
+def test_conntrack_skipped_when_host_table_unreachable(collector, monkeypatch: pytest.MonkeyPatch):
+    """Потолок без занятого места не отдаём: это читалось бы как «таблица пуста».
+
+    Боевой случай: ядро без CONFIG_NF_CONNTRACK_PROCFS (типовое Ubuntu 5.15) —
+    файла со статистикой нет, а nf_conntrack_max контейнер наследует от хоста
+    и прочитал бы успешно.
+    """
+    (collector._net_root / "stat" / "nf_conntrack").unlink()
+    monkeypatch.setattr(net_metrics, "_read_int", lambda path: 262144)
+
+    assert collector._read_conntrack() == (None, None)
+
+
+def test_conntrack_from_sysctl_in_host_netns(collector, monkeypatch: pytest.MonkeyPatch):
+    """В сети хоста sysctl честный — берём занятое и потолок оттуда."""
+    collector._own_netns = True
+    sysctl = {"nf_conntrack_count": 178, "nf_conntrack_max": 262144}
+    monkeypatch.setattr(net_metrics, "_read_int", lambda path: sysctl[path.name])
+
+    assert collector._read_conntrack() == (178, 262144)
+
+
 def test_first_collect_reports_zero_rates(collector):
     """Первый замер сравнивать не с чем — отдаём нули, а не мгновенный счётчик."""
     rates = collector._rates({"rx_bytes": 1000})

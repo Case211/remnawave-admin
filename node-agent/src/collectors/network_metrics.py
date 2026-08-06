@@ -88,6 +88,14 @@ def _resolve_net_root() -> Path | None:
     return None
 
 
+def _read_int(path: Path) -> int | None:
+    """Прочитать файл с единственным числом (sysctl)."""
+    try:
+        return int(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
 def _read_kv_table(path: Path, section: str, wanted: dict[str, str]) -> dict[str, int]:
     """Разобрать /proc/net/{snmp,netstat}: пары строк «заголовок / значения».
 
@@ -115,9 +123,13 @@ class NetworkMetricsCollector:
 
     def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         self._net_root = _resolve_net_root()
+        # Свой netns или чужой (хостовый, прочитанный через /proc/1/net) —
+        # от этого зависит, можно ли верить sysctl: он всегда про наш namespace
+        self._own_netns = self._net_root == Path("/proc/net")
         self._clock = clock
         self._prev: dict[str, int] = {}
         self._prev_ts: float | None = None
+        self._conntrack_warned = False
 
         if self._net_root is None:
             logger.warning(
@@ -233,23 +245,44 @@ class NetworkMetricsCollector:
     def _read_conntrack(self) -> tuple[int | None, int | None]:
         """Заполнение таблицы conntrack: (занято, потолок).
 
-        Занято — первая колонка <net>/stat/nf_conntrack (hex, одинакова во всех
-        строках: дальше идёт per-CPU статистика). Потолок — sysctl текущего
-        namespace: значение общее для модуля, контейнер наследует хостовое.
+        Таблица своя у каждого network namespace, а sysctl отдаёт значения того
+        namespace, где выполняется процесс. Из сети контейнера цифры были бы про
+        сам контейнер: на проде это 8 записей против 178 у хоста.
+
+        Когда namespace хоста нам чужой, занятое место остаётся только в
+        <net>/stat/nf_conntrack — а этот файл существует лишь при
+        CONFIG_NF_CONNTRACK_PROCFS, которого в типовых ядрах Ubuntu нет. Тогда
+        метрику не отдаём совсем: потолок без занятого места читался бы как
+        «таблица пуста», то есть как отсутствие проблемы.
         """
+        limit = _read_int(Path("/proc/sys/net/netfilter/nf_conntrack_max"))
+
+        if self._own_netns:
+            count = _read_int(Path("/proc/sys/net/netfilter/nf_conntrack_count"))
+        else:
+            count = self._read_conntrack_entries()
+
+        if count is None:
+            self._warn_conntrack_once()
+            return (None, None)
+
+        return (count, limit)
+
+    def _read_conntrack_entries(self) -> int | None:
+        """Занятые записи из <net>/stat/nf_conntrack: первая колонка, в hex."""
         assert self._net_root is not None
-        count: int | None = None
         try:
             rows = (self._net_root / "stat" / "nf_conntrack").read_text().splitlines()
-            if len(rows) > 1:
-                count = int(rows[1].split()[0], 16)
+            return int(rows[1].split()[0], 16)
         except (OSError, ValueError, IndexError):
-            pass
+            return None
 
-        limit: int | None = None
-        try:
-            limit = int(Path("/proc/sys/net/netfilter/nf_conntrack_max").read_text().strip())
-        except (OSError, ValueError):
-            pass
-
-        return count, limit
+    def _warn_conntrack_once(self) -> None:
+        if self._conntrack_warned:
+            return
+        self._conntrack_warned = True
+        logger.info(
+            "conntrack не собирается: таблица хоста не видна из сети контейнера "
+            "(ядро без CONFIG_NF_CONNTRACK_PROCFS). Поможет network_mode: host "
+            "в docker-compose агента. Остальные метрики не затронуты."
+        )
