@@ -390,11 +390,14 @@ class ASNParser:
                 'lod': 1  # Level of detail: 1 = ASN only
             }
             
-            response = await client.get(url, params=params)
+            # Список всех ASN страны RIPE отдаёт заметно медленнее одиночных
+            # запросов — на общих 30 секундах он регулярно не укладывается,
+            # и синк тихо заканчивался строкой «ASN для России не найдены»
+            response = await client.get(url, params=params, timeout=httpx.Timeout(120.0))
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             asn_list = []
             if 'data' in data and 'resources' in data['data']:
                 resources = data['data']['resources']

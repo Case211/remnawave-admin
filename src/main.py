@@ -374,9 +374,17 @@ async def main() -> None:
     _watch("webhook_server", webhook_task)
     _watch("health_checker", health_checker_task)
 
-    # Run polling in a task so we can cancel it on signal
+    # Run polling in a task so we can cancel it on signal.
+    # handle_signals=False обязателен: иначе aiogram ставит СВОИ обработчики
+    # поверх наших, shutdown_event по SIGTERM не срабатывает — и штатная
+    # остановка контейнера выглядит в логах как «Polling stopped unexpectedly»
+    # с критическим уровнем, а следом падает stop_polling.
     polling_task = asyncio.create_task(
-        dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        dp.start_polling(
+            bot,
+            allowed_updates=dp.resolve_used_update_types(),
+            handle_signals=False,
+        )
     )
 
     # Ждём сигнал ИЛИ падение поллинга. Раньше main() ждал только
@@ -405,7 +413,15 @@ async def main() -> None:
     except asyncio.CancelledError:
         pass
 
-    await dp.stop_polling()
+    # Поллинг мог остановиться сам — упасть или завершиться. Тогда aiogram
+    # отвечает на stop_polling исключением, и оно вылетало наружу, затирая
+    # в логах настоящую причину остановки.
+    if not polling_task.done():
+        try:
+            await dp.stop_polling()
+        except RuntimeError as e:
+            logger.debug("Polling already stopped: %s", e)
+
     polling_task.cancel()
     try:
         await polling_task
