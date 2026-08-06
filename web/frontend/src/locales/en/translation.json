@@ -3259,6 +3259,7 @@
         "squads": "Squads",
         "hwid_devices": "HWID Devices",
         "node_traffic": "Node Traffic",
+        "subscription_request_history": "Subscription Requests",
         "asn": "ASN Database"
       }
     },

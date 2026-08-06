@@ -3259,6 +3259,7 @@
         "squads": "Сквады",
         "hwid_devices": "HWID устройства",
         "node_traffic": "Трафик по нодам",
+        "subscription_request_history": "Запросы подписки",
         "asn": "ASN база"
       }
     },
