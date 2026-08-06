@@ -36,6 +36,31 @@ def _node_total_bytes(response: Any, day: str, fallback: int) -> int:
         return fallback
 
 
+def _srh_is_new(record: Any, since: Optional[datetime]) -> bool:
+    """Запись истории подписки свежее той, что уже лежит локально.
+
+    Сравниваем по времени запроса: номера панель переиспользует после
+    пересоздания своей таблицы, а время идёт только вперёд. Записи без
+    разбираемого времени пропускаем в синк — там они отсеются, зато
+    сломанный формат не остановит наполнение целиком.
+    """
+    if since is None:
+        return True
+    raw = record.get("requestAt") or record.get("request_at") if isinstance(record, dict) else None
+    if isinstance(raw, str):
+        try:
+            raw = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+    if not isinstance(raw, datetime):
+        return True
+    if raw.tzinfo is None:
+        raw = raw.replace(tzinfo=timezone.utc)
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    return raw > since
+
+
 class SyncService:
     """
     Service for synchronizing data from Remnawave API to local PostgreSQL database.
@@ -1410,15 +1435,19 @@ class SyncService:
         """
         Инкрементально синхронизировать SRH из Panel API в локальную БД.
 
-        Пагинированный запрос с остановкой на первом уже известном id
-        (инкрементальный pull — добавляются только новые записи с последней синхронизации).
+        Пагинированный запрос с остановкой на первой уже известной записи.
+        Точка отсчёта — время последнего запроса, а не максимальный id:
+        панель нумерует историю автоинкрементом и при пересоздании таблицы
+        начинает счёт заново, после чего правило «id больше локального
+        максимума» отбрасывает вообще всё, что приходит (так история и
+        встала 1 июля, молча и без единой ошибки в логах).
 
         Returns: количество новых/обновлённых записей.
         """
         if not db_service.is_connected:
             return 0
 
-        max_local_id = await db_service.get_srh_max_id()
+        since = await db_service.get_srh_max_request_at()
         total_synced = 0
         start = 0
         page_size = 100
@@ -1435,7 +1464,7 @@ class SyncService:
                     break
 
                 # Инкрементальный stop: если все записи страницы уже известны — останавливаемся
-                new_records = [r for r in records if int(r.get("id", 0)) > max_local_id]
+                new_records = [r for r in records if _srh_is_new(r, since)]
                 if not new_records:
                     break
 
