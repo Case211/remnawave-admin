@@ -1263,7 +1263,10 @@
       "cores": "Cores",
       "network": "Network",
       "disk": "Disk",
-      "lastSeen": "Last seen {{ago}}"
+      "lastSeen": "Last seen {{ago}}",
+      "underAttack": "Under attack",
+      "underAttackHint": "Inbound traffic is far above this node's usual level and does not look legitimate",
+      "packetsHint": "Packets per second on the node's interface — including those that never reach Xray"
     },
     "sort": {
       "label": "Sort",

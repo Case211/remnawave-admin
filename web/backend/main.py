@@ -580,6 +580,9 @@ async def lifespan(app: FastAPI):
                     from web.backend.core.bscheck_scheduler import bscheck_scheduler_loop
                     _bg("bscheck_scheduler", bscheck_scheduler_loop())
 
+                    from web.backend.core.attack_detector import attack_detector_loop
+                    _bg("attack_detector", attack_detector_loop())
+
                     from web.backend.core.finance.rates import rates_update_loop
                     _bg("finance_rates", rates_update_loop())
 

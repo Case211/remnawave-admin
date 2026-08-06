@@ -9,6 +9,8 @@ from web.backend.api.deps import get_current_admin, AdminUser, require_permissio
 from web.backend.core.cache import cached, CACHE_TTL_SHORT, CACHE_TTL_MEDIUM, CACHE_TTL_LONG
 from web.backend.core.rate_limit import limiter, RATE_ANALYTICS
 from web.backend.core.update_checker import get_latest_version
+from shared.db_query import select_sql
+from shared.db_schema import NODE_ATTACK_EVENTS_TABLE
 from web.backend.core.api_helper import (
     fetch_users_from_api, fetch_nodes_from_api, fetch_hosts_from_api,
     fetch_bandwidth_stats, fetch_nodes_realtime_usage,
@@ -116,6 +118,20 @@ class NodeFleetItem(BaseModel):
     upload_speed_bps: int = 0
     metrics_updated_at: Optional[str] = None
     agent_version: Optional[str] = None
+    # Сетевые метрики хоста — есть только у агента 1.3.0+
+    net_rx_bps: Optional[int] = None
+    net_tx_bps: Optional[int] = None
+    net_rx_pps: Optional[int] = None
+    net_tx_pps: Optional[int] = None
+    net_rx_drop_ps: Optional[int] = None
+    net_tx_drop_ps: Optional[int] = None
+    conntrack_count: Optional[int] = None
+    conntrack_max: Optional[int] = None
+    tcp_established: Optional[int] = None
+    tcp_syncookies_ps: Optional[int] = None
+    tcp_listen_drop_ps: Optional[int] = None
+    under_attack: bool = False
+    attack_severity: Optional[str] = None
 
 
 class NodeFleetResponse(BaseModel):
@@ -982,8 +998,36 @@ async def get_node_fleet(
                             n['metrics_updated_at'] = mua.isoformat() if hasattr(mua, 'isoformat') else str(mua)
                         if db_node.get('agent_version'):
                             n['agent_version'] = db_node['agent_version']
+                        # Сетевые метрики хоста (агент 1.3.0+). NULL значит «агент
+                        # столько не умеет» — тогда поле не трогаем вовсе
+                        for field in (
+                            'net_rx_bps', 'net_tx_bps', 'net_rx_pps', 'net_tx_pps',
+                            'net_rx_drop_ps', 'net_tx_drop_ps',
+                            'conntrack_count', 'conntrack_max',
+                            'tcp_established', 'tcp_syncookies_ps', 'tcp_listen_drop_ps',
+                        ):
+                            if db_node.get(field) is not None:
+                                n[field] = db_node[field]
         except Exception as e:
             logger.debug("Fleet: DB metrics enrichment failed: %s", e)
+
+        # Ноды, по которым прямо сейчас открыто событие атаки
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                async with db_service.acquire() as conn:
+                    rows = await conn.fetch(
+                        select_sql(NODE_ATTACK_EVENTS_TABLE, "node_uuid, severity",
+                                   "WHERE ended_at IS NULL")
+                    )
+                attacks = {str(r['node_uuid']): r['severity'] for r in rows}
+                for n in nodes:
+                    severity = attacks.get(str(n.get('uuid')))
+                    if severity:
+                        n['under_attack'] = True
+                        n['attack_severity'] = severity
+        except Exception as e:
+            logger.debug("Fleet: attack state fetch failed: %s", e)
 
         # Build response items
         fleet_items = []

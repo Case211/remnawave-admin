@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ArrowDown,
   Terminal,
+  ShieldAlert,
 } from '@/components/brand/icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +48,14 @@ export interface FleetNode {
   upload_speed_bps: number
   metrics_updated_at: string | null
   agent_version?: string | null
+  // Сырые счётчики интерфейса — приходят только от агента 1.3.0+
+  net_rx_bps?: number | null
+  net_rx_pps?: number | null
+  net_rx_drop_ps?: number | null
+  conntrack_count?: number | null
+  conntrack_max?: number | null
+  under_attack?: boolean
+  attack_severity?: string | null
 }
 
 export type NodeStatus = 'online' | 'offline' | 'disabled'
@@ -163,6 +172,16 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
                 {t('fleet.terminal.label')}
               </Button>
             )}
+            {node.under_attack && (
+              <Badge
+                variant={node.attack_severity === 'critical' ? 'destructive' : 'warning'}
+                className="text-[10px] gap-1 px-2 py-0.5"
+                title={t('fleet.card.underAttackHint')}
+              >
+                <ShieldAlert className="w-3 h-3" />
+                {t('fleet.card.underAttack')}
+              </Badge>
+            )}
             <StatusBadge status={status} />
           </div>
         </div>
@@ -234,6 +253,18 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
                 <ArrowDown className="w-3 h-3 text-blue-400 shrink-0" />
                 <span className="text-xs font-mono text-white">{formatSpeedCompact(node.download_speed_bps)}</span>
               </div>
+              {/* Пакеты с самого интерфейса: атаку видно здесь, а не в трафике Xray */}
+              {node.net_rx_pps != null && (
+                <div
+                  className="flex items-center gap-1.5"
+                  title={t('fleet.card.packetsHint')}
+                >
+                  <span className="text-[10px] text-dark-400 font-mono shrink-0">pps</span>
+                  <span className="text-xs font-mono text-dark-100">
+                    {node.net_rx_pps.toLocaleString()}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
