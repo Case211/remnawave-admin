@@ -53,6 +53,34 @@ class SystemMetrics(BaseModel):
     uptime_seconds: int = 0
 
 
+class NetworkMetrics(BaseModel):
+    """Сетевые метрики хоста: сырой трафик интерфейсов и давление на TCP-стек.
+
+    Панель уже знает трафик из статистики Xray, но там виден только трафик,
+    который прошёл через прокси. Атака бьёт по интерфейсу и до Xray не доходит,
+    поэтому её видно только здесь.
+
+    Метрики отправляются, только если агент дотянулся до сетевого namespace
+    хоста. Иначе поле остаётся пустым: ноль вместо данных читался бы как
+    «на ноде тишина».
+    """
+
+    rx_bps: int = 0
+    tx_bps: int = 0
+    rx_pps: int = 0
+    tx_pps: int = 0
+    # Дропы на интерфейсах: очередь не справляется с потоком
+    rx_drop_ps: int = 0
+    tx_drop_ps: int = 0
+    # Таблица conntrack: забита под завязку — новые соединения не проходят
+    conntrack_count: Optional[int] = None
+    conntrack_max: Optional[int] = None
+    # Давление на TCP: живые соединения, syncookies и отказы accept-очереди
+    tcp_established: int = 0
+    tcp_syncookies_ps: int = 0
+    tcp_listen_drop_ps: int = 0
+
+
 class BatchReport(BaseModel):
     """Батч от одной ноды — тело POST /api/v2/collector/batch."""
 
@@ -61,5 +89,6 @@ class BatchReport(BaseModel):
     connections: list[ConnectionReport] = Field(default_factory=list)
     torrent_events: list[TorrentEvent] = Field(default_factory=list)
     system_metrics: Optional[SystemMetrics] = None
+    network_metrics: Optional[NetworkMetrics] = None
     # Версия агента — панель сравнивает с эталоном и подсказывает обновление
     agent_version: Optional[str] = None

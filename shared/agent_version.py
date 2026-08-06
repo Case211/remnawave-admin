@@ -6,4 +6,4 @@ AGENT_VERSION) — панель сравнивает её с LATEST_AGENT_VERSIO
 значения синхронно.
 """
 
-LATEST_AGENT_VERSION = "1.2.0"
+LATEST_AGENT_VERSION = "1.3.0"

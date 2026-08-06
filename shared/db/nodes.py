@@ -16,6 +16,23 @@ from shared.db_schema import (
 )
 from shared.db_query import select_sql, insert_sql, update_sql, delete_sql
 
+# Сетевые метрики хоста (агент 1.3.0+): колонка БД → поле в отчёте агента.
+# Агенты старых версий их не шлют, поэтому колонки обновляются только когда
+# метрики реально пришли — иначе бы затирали последнее известное значение.
+_NETWORK_METRIC_COLUMNS: dict[str, str] = {
+    "net_rx_bps": "rx_bps",
+    "net_tx_bps": "tx_bps",
+    "net_rx_pps": "rx_pps",
+    "net_tx_pps": "tx_pps",
+    "net_rx_drop_ps": "rx_drop_ps",
+    "net_tx_drop_ps": "tx_drop_ps",
+    "conntrack_count": "conntrack_count",
+    "conntrack_max": "conntrack_max",
+    "tcp_established": "tcp_established",
+    "tcp_syncookies_ps": "tcp_syncookies_ps",
+    "tcp_listen_drop_ps": "tcp_listen_drop_ps",
+}
+
 
 class NodesMixin:
     # ==================== Nodes ====================
@@ -253,43 +270,51 @@ class NodesMixin:
         disk_read_speed_bps: int | None = None,
         disk_write_speed_bps: int | None = None,
         uptime_seconds: int | None = None,
+        network: dict[str, Any] | None = None,
     ) -> bool:
         """Update system metrics for a node (from Node Agent)."""
         if not self.is_connected:
             return False
 
+        assignments = [
+            "cpu_usage = $2",
+            "cpu_cores = $3",
+            "memory_usage = $4",
+            "memory_total_bytes = $5",
+            "memory_used_bytes = $6",
+            "disk_usage = $7",
+            "disk_total_bytes = $8",
+            "disk_used_bytes = $9",
+            "disk_read_speed_bps = $10",
+            "disk_write_speed_bps = $11",
+            "uptime_seconds = $12",
+        ]
+        params: list[Any] = [
+            node_uuid,
+            cpu_usage,
+            cpu_cores,
+            memory_usage,
+            memory_total_bytes,
+            memory_used_bytes,
+            disk_usage,
+            disk_total_bytes,
+            disk_used_bytes,
+            disk_read_speed_bps,
+            disk_write_speed_bps,
+            uptime_seconds,
+        ]
+
+        if network is not None:
+            for column, field in _NETWORK_METRIC_COLUMNS.items():
+                params.append(network.get(field))
+                assignments.append(f"{column} = ${len(params)}")
+
+        assignments.append("metrics_updated_at = NOW()")
+
         async with self.acquire() as conn:
             result = await conn.execute(
-                update_sql(
-                    NODES_TABLE,
-                    """
-                        cpu_usage = $2,
-                        cpu_cores = $3,
-                        memory_usage = $4,
-                        memory_total_bytes = $5,
-                        memory_used_bytes = $6,
-                        disk_usage = $7,
-                        disk_total_bytes = $8,
-                        disk_used_bytes = $9,
-                        disk_read_speed_bps = $10,
-                        disk_write_speed_bps = $11,
-                        uptime_seconds = $12,
-                        metrics_updated_at = NOW()
-                    """,
-                    "uuid = $1",
-                ),
-                node_uuid,
-                cpu_usage,
-                cpu_cores,
-                memory_usage,
-                memory_total_bytes,
-                memory_used_bytes,
-                disk_usage,
-                disk_total_bytes,
-                disk_used_bytes,
-                disk_read_speed_bps,
-                disk_write_speed_bps,
-                uptime_seconds,
+                update_sql(NODES_TABLE, ", ".join(assignments), "uuid = $1"),
+                *params,
             )
             return result == "UPDATE 1"
 
@@ -329,26 +354,35 @@ class NodesMixin:
         disk_read_speed_bps: int | None = None,
         disk_write_speed_bps: int | None = None,
         uptime_seconds: int | None = None,
+        network: dict[str, Any] | None = None,
     ) -> bool:
         """Insert a snapshot of node metrics for historical tracking."""
         if not self.is_connected:
             return False
+
+        columns = [
+            "node_uuid", "cpu_usage", "cpu_cores", "memory_usage",
+            "memory_total_bytes", "memory_used_bytes",
+            "disk_usage", "disk_total_bytes", "disk_used_bytes",
+            "disk_read_speed_bps", "disk_write_speed_bps", "uptime_seconds",
+        ]
+        values: list[Any] = [
+            node_uuid, cpu_usage, cpu_cores, memory_usage,
+            memory_total_bytes, memory_used_bytes,
+            disk_usage, disk_total_bytes, disk_used_bytes,
+            disk_read_speed_bps, disk_write_speed_bps, uptime_seconds,
+        ]
+
+        if network is not None:
+            for column, field in _NETWORK_METRIC_COLUMNS.items():
+                columns.append(column)
+                values.append(network.get(field))
+
         try:
             async with self.acquire() as conn:
                 await conn.execute(
-                    insert_sql(
-                        NODE_METRICS_SNAPSHOTS_TABLE,
-                        [
-                            "node_uuid", "cpu_usage", "cpu_cores", "memory_usage",
-                            "memory_total_bytes", "memory_used_bytes",
-                            "disk_usage", "disk_total_bytes", "disk_used_bytes",
-                            "disk_read_speed_bps", "disk_write_speed_bps", "uptime_seconds",
-                        ],
-                    ),
-                    node_uuid, cpu_usage, cpu_cores, memory_usage,
-                    memory_total_bytes, memory_used_bytes,
-                    disk_usage, disk_total_bytes, disk_used_bytes,
-                    disk_read_speed_bps, disk_write_speed_bps, uptime_seconds,
+                    insert_sql(NODE_METRICS_SNAPSHOTS_TABLE, columns),
+                    *values,
                 )
                 return True
         except Exception as e:

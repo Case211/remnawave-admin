@@ -202,6 +202,44 @@ class TestReceiveBatch:
         db.batch_upsert_connections.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_network_metrics_reach_db(self, anon_client):
+        """Сетевые метрики агента 1.3.0+ доезжают и до ноды, и до истории."""
+        db = make_db_mock()
+        batch = make_batch()
+        batch["system_metrics"] = {"cpu_percent": 5.0}
+        batch["network_metrics"] = {"rx_bps": 1_250_000, "rx_pps": 90_000, "conntrack_count": 42}
+
+        with patch.object(collector, "db_service", db), \
+             patch.object(collector, "get_node_by_token", AsyncMock(return_value=NODE_UUID)):
+            resp = await anon_client.post(
+                "/api/v2/collector/batch", json=batch, headers=AGENT_HEADERS,
+            )
+
+        assert resp.status_code == 200
+        network = db.update_node_metrics.await_args.kwargs["network"]
+        assert network["rx_bps"] == 1_250_000
+        assert network["rx_pps"] == 90_000
+        assert network["conntrack_count"] == 42
+        assert db.insert_node_metrics_snapshot.await_args.kwargs["network"] == network
+
+    @pytest.mark.asyncio
+    async def test_agent_without_network_metrics_leaves_columns_alone(self, anon_client):
+        """Агент до 1.3.0 сетевого не шлёт — колонки нельзя перетирать нулями."""
+        db = make_db_mock()
+        batch = make_batch()
+        batch["system_metrics"] = {"cpu_percent": 5.0}
+
+        with patch.object(collector, "db_service", db), \
+             patch.object(collector, "get_node_by_token", AsyncMock(return_value=NODE_UUID)):
+            resp = await anon_client.post(
+                "/api/v2/collector/batch", json=batch, headers=AGENT_HEADERS,
+            )
+
+        assert resp.status_code == 200
+        assert db.update_node_metrics.await_args.kwargs["network"] is None
+        assert db.insert_node_metrics_snapshot.await_args.kwargs["network"] is None
+
+    @pytest.mark.asyncio
     async def test_oversized_batch_rejected(self, anon_client):
         batch = make_batch(connections=[make_connection() for _ in range(5001)])
         with patch.object(collector, "get_node_by_token", AsyncMock(return_value=NODE_UUID)):

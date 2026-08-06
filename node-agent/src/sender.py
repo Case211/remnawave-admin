@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import httpx
 
 from .config import Settings
-from .models import BatchReport, ConnectionReport, SystemMetrics, TorrentEvent
+from .models import BatchReport, ConnectionReport, NetworkMetrics, SystemMetrics, TorrentEvent
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ class CollectorSender:
         connections: list[ConnectionReport],
         torrent_events: list[TorrentEvent] | None = None,
         system_metrics: SystemMetrics | None = None,
+        network_metrics: NetworkMetrics | None = None,
     ) -> bool:
         """Отправить батч подключений, торрент-событий и метрик. Возвращает True при успехе."""
         if not connections and not system_metrics and not torrent_events:
@@ -69,6 +70,7 @@ class CollectorSender:
             connections=connections,
             torrent_events=torrent_events or [],
             system_metrics=system_metrics,
+            network_metrics=network_metrics,
             agent_version=AGENT_VERSION,
         )
         payload = report.model_dump(mode="json")

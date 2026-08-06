@@ -220,6 +220,26 @@ class SystemMetricsReport(BaseModel):
     uptime_seconds: int = 0
 
 
+class NetworkMetricsReport(BaseModel):
+    """Сетевые метрики хоста ноды (агент 1.3.0+).
+
+    Приходят, только если агент дотянулся до network namespace хоста — иначе
+    поле пустое. Пустое и «нули» тут значат разное: первое — нет данных,
+    второе — на ноде действительно тихо.
+    """
+    rx_bps: int = 0
+    tx_bps: int = 0
+    rx_pps: int = 0
+    tx_pps: int = 0
+    rx_drop_ps: int = 0
+    tx_drop_ps: int = 0
+    conntrack_count: Optional[int] = None
+    conntrack_max: Optional[int] = None
+    tcp_established: int = 0
+    tcp_syncookies_ps: int = 0
+    tcp_listen_drop_ps: int = 0
+
+
 class TorrentEventReport(BaseModel):
     """Торрент-событие от агента."""
     user_email: str
@@ -238,6 +258,7 @@ class BatchReport(BaseModel):
     connections: list[ConnectionReport] = Field(default=[], max_length=5000)
     torrent_events: list[TorrentEventReport] = Field(default=[], max_length=1000)
     system_metrics: Optional[SystemMetricsReport] = None
+    network_metrics: Optional[NetworkMetricsReport] = None
     agent_version: Optional[str] = Field(default=None, max_length=32)
 
 
@@ -407,6 +428,8 @@ async def receive_connections(
 
     # System metrics
     if report.system_metrics:
+        # Агенты до 1.3.0 сетевых метрик не шлют — тогда None, и колонки не трогаем
+        network = report.network_metrics.model_dump() if report.network_metrics else None
         try:
             await db_service.update_node_metrics(
                 node_uuid=node_uuid,
@@ -421,6 +444,7 @@ async def receive_connections(
                 disk_read_speed_bps=report.system_metrics.disk_read_speed_bps,
                 disk_write_speed_bps=report.system_metrics.disk_write_speed_bps,
                 uptime_seconds=report.system_metrics.uptime_seconds,
+                network=network,
             )
             logger.debug("System metrics updated for node %s", node_uuid)
 
@@ -439,6 +463,7 @@ async def receive_connections(
                     disk_read_speed_bps=report.system_metrics.disk_read_speed_bps,
                     disk_write_speed_bps=report.system_metrics.disk_write_speed_bps,
                     uptime_seconds=report.system_metrics.uptime_seconds,
+                    network=network,
                 )
             except Exception as e:
                 logger.debug("Failed to save metrics snapshot for node %s: %s", node_uuid, e)

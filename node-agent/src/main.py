@@ -12,8 +12,13 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from .config import Settings
-from .collectors import XrayLogCollector, XrayLogRealtimeCollector, SystemMetricsCollector
-from .models import ConnectionReport, TorrentEvent
+from .collectors import (
+    NetworkMetricsCollector,
+    SystemMetricsCollector,
+    XrayLogCollector,
+    XrayLogRealtimeCollector,
+)
+from .models import ConnectionReport, NetworkMetrics, SystemMetrics, TorrentEvent
 from .sender import CollectorSender
 
 # ── Logging setup ─────────────────────────────────────────────────
@@ -121,9 +126,17 @@ async def run_agent() -> None:
 
     sender = CollectorSender(settings)
     system_metrics_collector = SystemMetricsCollector()
+    network_metrics_collector = NetworkMetricsCollector()
 
-    # Инициализация CPU baseline
-    await system_metrics_collector.collect()
+    async def collect_metrics() -> tuple[SystemMetrics, NetworkMetrics | None]:
+        """Системные и сетевые метрики одним снимком."""
+        return (
+            await system_metrics_collector.collect(),
+            await network_metrics_collector.collect(),
+        )
+
+    # Инициализация baseline: скорости считаются по дельте с прошлого замера
+    await collect_metrics()
 
     # Проверяем связь
     if not await sender.check_connectivity():
@@ -208,12 +221,13 @@ async def run_agent() -> None:
                         # Отправка по таймеру
                         current_time = time.monotonic()
                         if (accumulated_connections or accumulated_torrent_events) and (current_time - last_send_time >= send_interval):
-                            metrics = await system_metrics_collector.collect()
+                            metrics, net_metrics = await collect_metrics()
                             count = len(accumulated_connections)
                             ok = await sender.send_batch(
                                 accumulated_connections,
                                 torrent_events=accumulated_torrent_events if accumulated_torrent_events else None,
                                 system_metrics=metrics,
+                                network_metrics=net_metrics,
                             )
                             if ok:
                                 total_sent += count
@@ -223,12 +237,13 @@ async def run_agent() -> None:
                                 logger.debug("Batch sent: %d connections", count)
                     else:
                         # polling — отправляем сразу
-                        metrics = await system_metrics_collector.collect()
+                        metrics, net_metrics = await collect_metrics()
                         count = len(connections)
                         ok = await sender.send_batch(
                             connections,
                             torrent_events=torrent_events if torrent_events else None,
                             system_metrics=metrics,
+                            network_metrics=net_metrics,
                         )
                         if ok:
                             total_sent += count
@@ -237,8 +252,10 @@ async def run_agent() -> None:
                     # Метрики без подключений
                     current_time = time.monotonic()
                     if current_time - last_send_time >= send_interval:
-                        metrics = await system_metrics_collector.collect()
-                        ok = await sender.send_batch([], system_metrics=metrics)
+                        metrics, net_metrics = await collect_metrics()
+                        ok = await sender.send_batch(
+                            [], system_metrics=metrics, network_metrics=net_metrics
+                        )
                         if ok:
                             last_send_time = current_time
 
