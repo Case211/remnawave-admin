@@ -713,7 +713,7 @@ class NetworkMixin:
                         (id, user_uuid, user_id, request_ip, user_agent, request_at,
                          srr_response_type, srr_rule_name)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    ON CONFLICT (id) DO UPDATE SET
+                    ON CONFLICT (id, request_at) DO UPDATE SET
                         user_uuid = EXCLUDED.user_uuid,
                         user_id = COALESCE(EXCLUDED.user_id, {SUBSCRIPTION_REQUEST_HISTORY_TABLE}.user_id),
                         request_ip = EXCLUDED.request_ip,
@@ -766,16 +766,22 @@ class NetworkMixin:
             logger.debug("Failed to get SRH records for %s: %s", user_uuid, e)
             return []
 
-    async def get_srh_max_id(self) -> int:
-        """Максимальный id в локальном SRH — точка остановки инкрементального sync."""
+    async def get_srh_max_request_at(self) -> Optional[datetime]:
+        """Момент последнего known-запроса — точка отсчёта инкрементального sync.
+
+        По времени, а не по id: панель обнуляет нумерацию при пересоздании
+        своей таблицы, и правило «id больше локального максимума» после
+        такого отката отбрасывает вообще все свежие записи.
+        """
         if not self.is_connected:
-            return 0
+            return None
         try:
             async with self.acquire() as conn:
-                val = await conn.fetchval(select_sql(SUBSCRIPTION_REQUEST_HISTORY_TABLE, "COALESCE(MAX(id), 0)"))
-                return int(val or 0)
+                return await conn.fetchval(
+                    select_sql(SUBSCRIPTION_REQUEST_HISTORY_TABLE, "MAX(request_at)")
+                )
         except Exception:
-            return 0
+            return None
 
     async def cleanup_old_srh(self, keep_days: int = 90) -> int:
         """Удалить SRH записи старше keep_days. Возвращает число удалённых."""
