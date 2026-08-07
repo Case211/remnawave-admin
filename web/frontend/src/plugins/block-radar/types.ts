@@ -92,3 +92,31 @@ export interface RadarSettings {
 }
 
 export type RadarSettingsPatch = Partial<RadarSettings>
+
+/** Один хостер в рейтинге. Аварии и блокировки разведены намеренно:
+ *  за первое отвечает хостер, за второе — нет, но выбирать площадку
+ *  приходится с оглядкой на оба. */
+export interface RadarHoster {
+  asn: number
+  org: string | null
+  mine: boolean
+  panels: number
+  observed_hours: number
+  operators: number
+  outages: number
+  blocks: number
+  blocked_operators: number
+  outages_per_month: number
+  blocks_per_month: number
+  median_recovery_minutes: number | null
+}
+
+export interface RadarHosters {
+  window_days: number
+  min_panels: number
+  hosters: RadarHoster[]
+  /** Хостеры, которых пока видит слишком мало панелей. Без этого числа
+   *  пустая таблица читается как «данных нет», а не «сеть копится». */
+  pending: number
+  locked?: boolean
+}

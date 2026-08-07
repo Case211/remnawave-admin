@@ -2,11 +2,11 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, CheckCircle, Settings, ShieldBan, Zap } from '@/components/brand/icons'
+import { Activity, CheckCircle, Server, Settings, ShieldBan, Zap } from '@/components/brand/icons'
 
 import LicenseBanner from '@/components/plugins/license'
 
-import { asLicenseError, fetchAlerts, fetchStatus } from './api'
+import { asLicenseError, fetchAlerts, fetchHosters, fetchStatus } from './api'
 import type { RadarAlert, RadarNodeDip, RadarStatus, RadarTick } from './types'
 
 const TRANSPORT_LABELS: Record<string, string> = {
@@ -169,7 +169,106 @@ export default function RadarPage() {
           </div>
         </section>
       )}
+
+      {!licenseError && <HosterRating />}
     </div>
+  )
+}
+
+
+/**
+ * Рейтинг хостеров по данным всей сети панелей.
+ *
+ * Показываем только тех, кого достаточно долго видят несколько независимых
+ * панелей. Пока сеть копится, таблица пуста — и тогда важнее показать, что
+ * данные идут, чем нарисовать рейтинг из одного наблюдателя.
+ */
+function HosterRating() {
+  const { t } = useTranslation()
+
+  const rating = useQuery({
+    queryKey: ['block-radar-hosters'],
+    queryFn: fetchHosters,
+    retry: false,
+    refetchInterval: 300_000,
+  })
+
+  if (rating.isError || rating.data?.locked) return null
+
+  const data = rating.data
+  const items = data?.hosters ?? []
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+        <Server className="w-4 h-4 text-sky-400" aria-hidden />
+        {t('plugins.block_radar.hosters_title')}
+      </h2>
+
+      {items.length === 0 ? (
+        <div className="glass-card p-5">
+          <p className="text-sm text-dark-300">
+            {t('plugins.block_radar.hosters_pending', {
+              count: data?.pending ?? 0,
+              panels: data?.min_panels ?? 3,
+            })}
+          </p>
+        </div>
+      ) : (
+        <div className="glass-card p-2 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wider text-dark-400">
+                <th className="px-3 py-2">{t('plugins.block_radar.col_hoster')}</th>
+                <th className="px-3 py-2">{t('plugins.block_radar.col_panels')}</th>
+                <th className="px-3 py-2">{t('plugins.block_radar.col_outages')}</th>
+                <th className="px-3 py-2">{t('plugins.block_radar.col_blocks')}</th>
+                <th className="px-3 py-2">{t('plugins.block_radar.col_recovery')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((h) => (
+                <tr
+                  key={h.asn}
+                  className={`border-t border-[var(--glass-border)] text-dark-200 ${
+                    h.mine ? 'bg-emerald-500/5' : ''
+                  }`}
+                >
+                  <td className="px-3 py-2">
+                    {asnLabel(h.org, h.asn)}
+                    {h.mine && (
+                      <span className="ml-2 text-[10px] uppercase tracking-wider text-emerald-400">
+                        {t('plugins.block_radar.hoster_mine')}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">{h.panels}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {h.outages_per_month.toFixed(1)}
+                    <span className="text-dark-400 text-xs"> /мес</span>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {h.blocks_per_month.toFixed(1)}
+                    <span className="text-dark-400 text-xs"> /мес</span>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {h.median_recovery_minutes != null
+                      ? t('plugins.block_radar.minutes', { count: h.median_recovery_minutes })
+                      : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="px-3 py-2 text-xs text-dark-400">
+            {t('plugins.block_radar.hosters_note', {
+              days: data?.window_days ?? 30,
+              panels: data?.min_panels ?? 3,
+            })}
+          </p>
+        </div>
+      )}
+    </section>
   )
 }
 
