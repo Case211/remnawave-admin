@@ -78,17 +78,64 @@ export interface InboxItem {
   has_attachments: boolean
   attachment_count: number
   created_at: string | null
+  spf_result: string | null
+  dkim_result: string | null
+  dmarc_result: string | null
+  spam_score: number
+}
+
+export interface MailAttachment {
+  id: number
+  filename: string
+  content_type: string
+  size_bytes: number
+  is_inline: boolean
 }
 
 export interface InboxDetail extends InboxItem {
   to_header: string | null
   message_id: string | null
   in_reply_to: string | null
+  refs_header: string | null
   body_text: string | null
   body_html: string | null
   remote_ip: string | null
   remote_hostname: string | null
-  spam_score: number
+  auth_details: Record<string, any>
+  attachments: MailAttachment[]
+}
+
+export interface SuppressedAddress {
+  id: number
+  email: string
+  reason: string
+  detail: string | null
+  smtp_code: string | null
+  hits: number
+  expires_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface DmarcReport {
+  id: number
+  report_id: string
+  org_name: string | null
+  domain: string
+  date_begin: string
+  date_end: string
+  total_messages: number
+  passed_messages: number
+  failed_messages: number
+  created_at: string | null
+}
+
+export interface DmarcSummary {
+  reports: number
+  total_messages: number
+  passed_messages: number
+  failed_messages: number
+  top_failing_sources: { source_ip: string; messages: number; header_from: string | null }[]
 }
 
 export interface SmtpCredential {
@@ -184,10 +231,19 @@ export const mailserverApi = {
   // ── Inbox ─────────────────────────────────────────────────────
   listInbox: async (params?: {
     is_read?: boolean
+    is_spam?: boolean
+    has_attachments?: boolean
+    rcpt_to?: string
+    q?: string
     limit?: number
     offset?: number
   }): Promise<InboxItem[]> => {
     const { data } = await client.get('/mailserver/inbox', { params })
+    return data
+  },
+
+  getUnreadCount: async (): Promise<{ unread: number }> => {
+    const { data } = await client.get('/mailserver/inbox/unread-count')
     return data
   },
 
@@ -202,6 +258,62 @@ export const mailserverApi = {
 
   deleteInboxItem: async (id: number): Promise<void> => {
     await client.delete(`/mailserver/inbox/${id}`)
+  },
+
+  replyToMessage: async (id: number, payload: {
+    body_text?: string
+    body_html?: string
+    subject?: string
+    from_email?: string
+    from_name?: string
+    quote_original?: boolean
+  }): Promise<{ ok: boolean; queue_id: number }> => {
+    const { data } = await client.post(`/mailserver/inbox/${id}/reply`, payload)
+    return data
+  },
+
+  // Ссылка на скачивание, а не запрос: файл забирает сам браузер, и мегабайты
+  // вложения не проходят через память вкладки.
+  attachmentUrl: (attachmentId: number): string =>
+    `${client.defaults.baseURL || ''}/mailserver/attachments/${attachmentId}/download`,
+
+  // ── Suppression ───────────────────────────────────────────────
+  listSuppression: async (params?: {
+    q?: string
+    reason?: string
+    limit?: number
+    offset?: number
+  }): Promise<SuppressedAddress[]> => {
+    const { data } = await client.get('/mailserver/suppression', { params })
+    return data
+  },
+
+  addSuppression: async (payload: {
+    email: string
+    reason?: string
+    detail?: string
+  }): Promise<SuppressedAddress> => {
+    const { data } = await client.post('/mailserver/suppression', payload)
+    return data
+  },
+
+  deleteSuppression: async (id: number): Promise<void> => {
+    await client.delete(`/mailserver/suppression/${id}`)
+  },
+
+  // ── DMARC ─────────────────────────────────────────────────────
+  listDmarcReports: async (params?: {
+    domain?: string
+    limit?: number
+    offset?: number
+  }): Promise<DmarcReport[]> => {
+    const { data } = await client.get('/mailserver/dmarc/reports', { params })
+    return data
+  },
+
+  getDmarcSummary: async (days?: number): Promise<DmarcSummary> => {
+    const { data } = await client.get('/mailserver/dmarc/summary', { params: { days: days || 30 } })
+    return data
   },
 
   // ── Compose / Send ────────────────────────────────────────────

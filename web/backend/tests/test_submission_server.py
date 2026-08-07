@@ -10,6 +10,7 @@ import pytest_asyncio
 from web.backend.core.mail.submission_server import (
     _hash_password,
     hash_password_for_storage,
+    is_trusted_network,
     verify_password,
     SubmissionAuthenticator,
     SubmissionHandler,
@@ -377,3 +378,81 @@ class TestSubmissionHandler:
             result = await handler.handle_DATA(None, session, envelope)
 
         assert result.startswith("250")
+
+# ── Требование TLS ───────────────────────────────────────────
+
+
+class TestTrustedNetwork:
+    def test_private_ranges(self):
+        for ip in ("10.0.0.5", "192.168.1.10", "172.16.0.1", "127.0.0.1"):
+            assert is_trusted_network(ip) is True, ip
+
+    def test_shared_address_space(self):
+        """100.64.0.0/10 — сети вроде Netbird и Tailscale.
+
+        ipaddress.is_private для этого диапазона отвечает False, хотя ходят
+        оттуда свои же контейнеры через шифрованный туннель.
+        """
+        assert is_trusted_network("100.108.221.37") is True
+        assert is_trusted_network("100.64.0.1") is True
+        assert is_trusted_network("100.128.0.1") is False  # уже за границей /10
+
+    def test_public_addresses(self):
+        for ip in ("8.8.8.8", "144.31.0.210", "82.38.65.201"):
+            assert is_trusted_network(ip) is False, ip
+
+    def test_garbage_is_not_trusted(self):
+        assert is_trusted_network("") is False
+        assert is_trusted_network("not-an-ip") is False
+
+
+class TestAuthRequiresTls:
+    """Пароль по незашифрованному каналу принимается только изнутри."""
+
+    def _auth_with(self, require_tls: bool):
+        auth = SubmissionAuthenticator(require_tls=require_tls)
+        auth._credentials = {
+            "svc": {
+                "id": 7,
+                "username": "svc",
+                "password_hash": hash_password_for_storage("pass"),
+                "is_active": True,
+                "max_send_per_hour": 100,
+                "allowed_from_domains": [],
+            }
+        }
+        return auth
+
+    def _session(self, ip: str, encrypted: bool):
+        session = MagicMock()
+        session.peer = (ip, 40000)
+        session.ssl = object() if encrypted else None
+        return session
+
+    def _login(self, auth, session):
+        from aiosmtpd.smtp import LoginPassword
+        data = LoginPassword(login=b"svc", password=b"pass")
+        with patch.object(auth, "_update_last_login", new_callable=AsyncMock):
+            return auth(None, session, None, "LOGIN", data)
+
+    def test_plain_auth_from_internet_refused(self):
+        auth = self._auth_with(require_tls=True)
+        result = self._login(auth, self._session("8.8.8.8", encrypted=False))
+        assert result.success is False
+
+    def test_plain_auth_from_overlay_network_allowed(self):
+        """Бот в соседнем контейнере ходит через Netbird без TLS — включение
+        требования не должно его отрезать."""
+        auth = self._auth_with(require_tls=True)
+        result = self._login(auth, self._session("100.108.221.37", encrypted=False))
+        assert result.success is True
+
+    def test_encrypted_auth_from_internet_allowed(self):
+        auth = self._auth_with(require_tls=True)
+        result = self._login(auth, self._session("8.8.8.8", encrypted=True))
+        assert result.success is True
+
+    def test_requirement_off_keeps_old_behaviour(self):
+        auth = self._auth_with(require_tls=False)
+        result = self._login(auth, self._session("8.8.8.8", encrypted=False))
+        assert result.success is True

@@ -24,6 +24,39 @@ from datetime import datetime, timedelta, timezone
 _CRED_COUNTER: dict = defaultdict(lambda: {"count": 0, "reset_at": datetime.min.replace(tzinfo=timezone.utc)})
 
 
+def _config(key: str, default):
+    """Настройка из config_service с запасным значением."""
+    try:
+        from shared.config_service import config_service
+        return config_service.get(key, default)
+    except Exception:
+        return default
+
+
+# Разделяемое адресное пространство (RFC 6598). Формально это не приватная
+# сеть, и ipaddress.is_private для него отвечает False, но именно отсюда
+# приходят клиенты через Netbird, Tailscale и прочие overlay-сети.
+_SHARED_ADDRESS_SPACE = "100.64.0.0/10"
+
+
+def is_trusted_network(ip: str) -> bool:
+    """Пришёл ли клиент из сети, где пароль не гуляет по интернету.
+
+    Требовать TLS от соседа по внутренней сети — значит сломать рабочие
+    интеграции ради шифрования поверх уже зашифрованного туннеля. Снаружи
+    же незашифрованный AUTH недопустим: SMTP AUTH PLAIN — это base64,
+    то есть пароль открытым текстом.
+    """
+    import ipaddress
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if addr.is_private or addr.is_loopback or addr.is_link_local:
+        return True
+    return addr.version == 4 and addr in ipaddress.ip_network(_SHARED_ADDRESS_SPACE)
+
+
 def _hash_password(password: str, salt: str) -> str:
     """Hash password with SHA-256 + salt."""
     return hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
@@ -59,9 +92,10 @@ class SubmissionAuthenticator:
 
     REFRESH_INTERVAL = 60  # seconds between automatic credential reloads
 
-    def __init__(self):
+    def __init__(self, require_tls: bool = False):
         self._credentials: dict = {}  # username -> row dict
         self._refresh_task: Optional[asyncio.Task] = None
+        self.require_tls = require_tls
 
     # ── cache management ─────────────────────────────────────────
 
@@ -109,6 +143,21 @@ class SubmissionAuthenticator:
         username = auth_data.login.decode() if isinstance(auth_data.login, bytes) else auth_data.login
         password = auth_data.password.decode() if isinstance(auth_data.password, bytes) else auth_data.password
 
+        peer = session.peer
+        remote_ip = peer[0] if peer else ""
+
+        # Требование шифрования проверяем здесь, а не флагом aiosmtpd:
+        # встроенный auth_require_tls рубит всех подряд, включая клиентов
+        # из внутренней сети, которые ходят через приватный туннель и
+        # настроены без TLS. Такие продолжают работать, для остальных
+        # незашифрованный пароль недопустим.
+        if self.require_tls and session.ssl is None and not is_trusted_network(remote_ip):
+            logger.warning(
+                "SMTP AUTH refused for '%s' from %s: TLS required outside trusted networks",
+                username, remote_ip or "unknown",
+            )
+            return AuthResult(success=False, handled=False)
+
         cred = self._credentials.get(username)
         if not cred:
             logger.warning("SMTP AUTH failed: unknown user '%s'", username)
@@ -134,14 +183,13 @@ class SubmissionAuthenticator:
         session.smtp_max_per_hour = cred["max_send_per_hour"]
         session.smtp_allowed_domains = cred.get("allowed_from_domains") or []
 
-        peer = session.peer
-        remote_ip = peer[0] if peer else "unknown"
-        logger.info("SMTP AUTH success: user='%s' from=%s", username, remote_ip)
+        logger.info("SMTP AUTH success: user='%s' from=%s tls=%s",
+                    username, remote_ip or "unknown", session.ssl is not None)
 
         # Fire-and-forget: update last_login_at in DB
         try:
             loop = asyncio.get_event_loop()
-            loop.create_task(self._update_last_login(cred["id"], remote_ip))
+            loop.create_task(self._update_last_login(cred["id"], remote_ip or "unknown"))
         except Exception:
             pass
 
@@ -290,17 +338,35 @@ class SubmissionServer:
     Runs on port 587 (configurable) with required AUTH.
     """
 
-    def __init__(self, hostname: str = "0.0.0.0", port: int = 587):
+    def __init__(self, hostname: str = "0.0.0.0", port: int = 587,
+                 tls_hostname: str = "localhost"):
         self.hostname = hostname
         self.port = port
+        self.tls_hostname = tls_hostname
         self._server: Optional[asyncio.AbstractServer] = None
         self.authenticator: Optional[SubmissionAuthenticator] = None
 
     async def start(self):
         """Start the SMTP submission server."""
         try:
+            from web.backend.core.mail.tls import get_tls_context
+
             handler = SubmissionHandler()
-            self.authenticator = SubmissionAuthenticator()
+
+            # AUTH PLAIN/LOGIN передаёт пароль в base64, то есть открытым
+            # текстом. Требовать TLS можно только когда сертификат есть —
+            # иначе порт превратился бы в наглухо закрытый.
+            tls_context = get_tls_context(self.tls_hostname)
+            require_tls = bool(tls_context) and bool(
+                _config("mailserver_submission_require_tls", True)
+            )
+            if not tls_context:
+                logger.warning(
+                    "Submission server has no TLS certificate — SMTP passwords will "
+                    "be sent unencrypted. Set mailserver_tls_cert_path/key_path."
+                )
+
+            self.authenticator = SubmissionAuthenticator(require_tls=require_tls)
 
             # Load credentials into memory before accepting connections
             await self.authenticator.refresh_credentials()
@@ -311,16 +377,22 @@ class SubmissionServer:
             self._server = await loop.create_server(
                 lambda: SMTPProtocol(
                     handler,
-                    hostname="remnawave-submission",
+                    hostname=self.tls_hostname or "remnawave-submission",
                     authenticator=authenticator,
                     auth_required=True,
+                    # Само требование проверяет аутентификатор: встроенный
+                    # флаг не различает, откуда пришёл клиент, и отрезал бы
+                    # соседей по внутренней сети вместе с чужаками.
                     auth_require_tls=False,
+                    tls_context=tls_context,
                     data_size_limit=25 * 1024 * 1024,  # 25 MB for submissions
                 ),
                 host=self.hostname,
                 port=self.port,
             )
-            logger.info("SMTP Submission server started on %s:%d", self.hostname, self.port)
+            logger.info("SMTP Submission server started on %s:%d (TLS: %s, required: %s)",
+                        self.hostname, self.port,
+                        "on" if tls_context else "off", require_tls)
         except Exception as e:
             logger.error("Failed to start SMTP submission server: %s", e)
 

@@ -120,6 +120,10 @@ services:
       - geoip_data:/app/geoip
       - ./backups:/app/backups
       - ./plugins:/app/plugins
+      # Сертификат почтовых портов. Тут же оседает самоподписанный, если
+      # своего не задали — иначе он выписывался бы заново на каждый рестарт,
+      # и принимающие серверы видели бы у нас каждый раз новый ключ.
+      - mail_certs:/app/certs
     ports:
       - "${WEB_BACKEND_PORT:-8081}:${WEB_BACKEND_PORT:-8081}"
       - "${MAIL_INBOUND_PORT:-2525}:${MAIL_INBOUND_PORT:-2525}"
@@ -261,6 +265,7 @@ volumes:
   geoip_data:
   prometheus_data:
   redis_data:
+  mail_certs:
 
 networks:
   remnawave-network:
