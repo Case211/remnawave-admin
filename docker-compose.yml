@@ -32,7 +32,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      # Бот применяет миграции сам, до подъёма вебхук-сервера. На большой базе
+      # это минуты — за 30 секунд контейнер успевал стать unhealthy, пока
+      # честно ждал собственную миграцию. web-backend с теми же миграциями
+      # получает 120 с, боту нужно не меньше.
+      start_period: 180s
 
   remnawave-admin-db:
     container_name: remnawave-admin-db
