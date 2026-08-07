@@ -180,6 +180,15 @@ async def agent_websocket(
 
     except WebSocketDisconnect:
         pass
+    except RuntimeError as e:
+        # «Cannot call send once a close message has been sent» — агент разорвал
+        # соединение между чтением и ответом: перекат агента, рестарт ноды,
+        # обрыв связи. Писать уже некуда, но это обычная жизнь соединения,
+        # а не сбой сервера — в ошибках ему делать нечего.
+        if "close message has been sent" in str(e):
+            logger.debug("Agent WS closed mid-write (%s)", node_uuid)
+        else:
+            logger.error("Agent WS error (%s): %s", node_uuid, e)
     except Exception as e:
         logger.error("Agent WS error (%s): %s", node_uuid, e)
     finally:
