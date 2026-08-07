@@ -8,6 +8,12 @@ services:
     # Host mode: позволяет выполнять скрипты и терминал на хосте.
     # Включите AGENT_HOST_MODE=true в .env для активации.
     pid: "host"
+    # Сеть хоста нужна для полноты сетевых метрик: таблица соединений
+    # (conntrack) своя у каждого network namespace, и из собственной сети
+    # контейнера видно его пару соединений вместо хостовых тысяч.
+    # ⚠️ В этом режиме host.docker.internal не резолвится — в AGENT_COLLECTOR_URL
+    # указывайте внешний адрес панели или IP хоста.
+    network_mode: "host"
     privileged: true
     volumes:
       - /var/log/remnanode:/var/log/remnanode:ro

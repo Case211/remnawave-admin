@@ -416,6 +416,10 @@ docker compose --profile web up -d
 AGENT_COLLECTOR_URL=https://admin.yourdomain.com
 # или
 AGENT_COLLECTOR_URL=http://host.docker.internal:8080
+# ⚠️ Агент работает в сети хоста (network_mode: host). Там не резолвятся ни
+# host.docker.internal, ни имена контейнеров (remnawave-web-backend): в сети
+# хоста нет docker-DNS. Годится внешний адрес панели или 127.0.0.1 с портом,
+# опубликованным на хосте.
 
 # Стало (если агент в Docker на том же хосте):
 AGENT_COLLECTOR_URL=http://remnawave-web-backend:8081
