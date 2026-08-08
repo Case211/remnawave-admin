@@ -5673,6 +5673,7 @@
       "settings_link": "Settings",
       "open_title": "Active incidents",
       "all_quiet": "The radar is quiet — no blocks detected on your links.",
+      "all_operators": "all operators",
       "expiry_trial": "Trial",
       "expiry_sub": "Subscription",
       "expiry_days": "{{what}} ends in {{days}} days",

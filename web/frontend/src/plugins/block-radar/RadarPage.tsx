@@ -29,6 +29,14 @@ function asnLabel(org: string | null | undefined, asn: number): string {
   return org ? `${org} (AS${asn})` : `AS${asn}`
 }
 
+/** Оператор алерта: у агрегата по хостеру его нет, там нулевой ASN. */
+function opLabel(t: (k: string) => string, alert: RadarAlert): string {
+  if (alert.scope === 'hoster' || !alert.op_asn) {
+    return t('plugins.block_radar.all_operators')
+  }
+  return asnLabel(alert.op_org, alert.op_asn)
+}
+
 /**
  * /plugins/block-radar — сеть панелей и её инциденты.
  *
@@ -148,7 +156,7 @@ export default function RadarPage() {
                 {history.data!.items.map((a) => (
                   <tr key={a.id} className="border-t border-[var(--glass-border)] text-dark-200">
                     <td className="px-3 py-2">
-                      {asnLabel(a.op_org, a.op_asn)} → {asnLabel(a.host_org, a.host_asn)} ·{' '}
+                      {opLabel(t, a)} → {asnLabel(a.host_org, a.host_asn)} ·{' '}
                       {transportLabel(t, a.transport)}
                     </td>
                     <td className="px-3 py-2">
@@ -355,7 +363,7 @@ function AlertCard({ alert }: { alert: RadarAlert }) {
         </span>
       </div>
       <div className="text-sm text-white font-medium">
-        {transportLabel(t, alert.transport)} · {asnLabel(alert.op_org, alert.op_asn)}
+        {transportLabel(t, alert.transport)} · {opLabel(t, alert)}
       </div>
       <div className="text-xs text-dark-300">
         {t('plugins.block_radar.card_host')}: {asnLabel(alert.host_org, alert.host_asn)}

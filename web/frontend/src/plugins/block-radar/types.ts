@@ -56,7 +56,13 @@ export interface RadarAffected {
 
 export interface RadarAlert {
   id: number
-  kind: 'block' | 'operator_outage'
+  kind: 'block' | 'operator_outage' | 'hoster_outage'
+  /**
+   * operator — известно, у чьих абонентов пропал доступ; hoster — просел весь
+   * хостер, а разбор по операторам не набрал людей. Старый плагин поля не
+   * шлёт, такие алерты считаем операторскими.
+   */
+  scope?: 'operator' | 'hoster'
   op_asn: number
   op_org?: string | null
   host_asn: number
