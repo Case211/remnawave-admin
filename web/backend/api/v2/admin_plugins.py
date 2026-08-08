@@ -25,6 +25,7 @@ from web.backend.api.deps import AdminUser, require_superadmin
 from web.backend.core import entitlements, plugin_installer
 from web.backend.core.entitlements import LicenseServerError
 from web.backend.core.plugins import loaded_plugins
+from web.backend.core.update_checker import _detect_local_version, _parse_version
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -194,6 +195,27 @@ async def transfer_out(_admin: AdminUser = Depends(require_superadmin())) -> dic
         _raise(e)
 
 
+def panel_too_old(required: str, current: Optional[str] = None) -> bool:
+    """Хватает ли версии панели для плагина.
+
+    Плагин умеет больше, чем панель, в которой он живёт: свежий wheel может
+    слать поля, которых старый интерфейс не знает, и владелец просто не
+    увидит часть событий. Поэтому обновление панели идёт первым.
+
+    Версии выравниваются по длине — «4.2» и «4.2.0» одно и то же. Пустое
+    требование или неизвестная версия панели ничего не запрещают: гейт
+    существует ради предупреждения, а не ради лишней стены.
+    """
+    current = current if current is not None else _detect_local_version()
+    if not required or not current or current == "unknown":
+        return False
+    cur, req = _parse_version(current), _parse_version(required)
+    width = max(len(cur), len(req))
+    cur += (0,) * (width - len(cur))
+    req += (0,) * (width - len(req))
+    return cur < req
+
+
 # ── установка кода ───────────────────────────────────────────────
 
 
@@ -207,13 +229,30 @@ async def install_plugin(
 ) -> SimpleResponse:
     try:
         catalog_data = await entitlements.fetch_catalog()
-        contents = await entitlements.download_wheel(plugin_id)
     except LicenseServerError as e:
         _raise(e)
 
     entry = next(
         (p for p in catalog_data.get("plugins", []) if p.get("id") == plugin_id), {}
     )
+
+    # Сверяем до скачивания: незачем тянуть wheel, который ставить нельзя.
+    required = str(entry.get("min_panel_version") or "")
+    if panel_too_old(required):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "panel_update_required",
+                "min_panel_version": required,
+                "panel_version": _detect_local_version(),
+            },
+        )
+
+    try:
+        contents = await entitlements.download_wheel(plugin_id)
+    except LicenseServerError as e:
+        _raise(e)
+
     expected_sha = entry.get("wheel_sha256") or ""
     actual_sha = hashlib.sha256(contents).hexdigest()
     if expected_sha and actual_sha != expected_sha:

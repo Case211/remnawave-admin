@@ -5631,6 +5631,7 @@
     },
     "server_errors": {
       "server_unreachable": "The licensing server is unreachable — try again later",
+      "panel_update_required": "This plugin needs a newer panel — update the panel first, then install the plugin",
       "not_registered": "Instance is not registered — reload the store page",
       "subscription_required": "An active subscription is required",
       "quota_exceeded": "AI call quota exhausted — buy a top-up pack",
