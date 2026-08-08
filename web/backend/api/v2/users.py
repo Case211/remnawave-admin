@@ -16,7 +16,6 @@ from shared.admin_quota import (
     apply_user_delete_quotas,
     apply_user_reassign_quotas,
     apply_user_reset_traffic_quotas,
-    apply_users_delete_quotas_batch,
     apply_users_reassign_quotas_batch,
     apply_users_reset_traffic_quotas_batch,
     fetch_user_quota_data,
@@ -26,7 +25,13 @@ from shared.admin_quota import (
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from web.backend.api.deps import get_current_admin, require_permission, require_quota, AdminUser, get_client_ip
+from web.backend.api.deps import (  # noqa: F401  get_current_admin — точка патча в тестах
+    require_permission,
+    require_quota,
+    AdminUser,
+    get_client_ip,
+    get_current_admin,
+)
 from web.backend.core.api_helper import fetch_users_from_api
 from web.backend.core.audit import write_audit_log
 from web.backend.core.admin_accounts import get_admin_account_by_id
@@ -731,7 +736,6 @@ async def resolve_user(
     if not query:
         raise HTTPException(status_code=400, detail="Query is required")
 
-    import re
 
     # Build ordered list of lookup methods to try
     lookups = []
@@ -788,6 +792,12 @@ async def resolve_user(
     except Exception as e:
         logger.debug("Resolve local DB search failed for '%s': %s", query, e)
 
+    if last_error is not None:
+        # Все способы поиска упали с ошибкой: «не найден» здесь может означать
+        # «панель недоступна», а причина до сих пор оседала только в debug.
+        logger.warning(
+            "Resolve '%s' failed on every lookup, last error: %s", query, last_error
+        )
     raise api_error(404, E.USER_NOT_FOUND, "User not found")
 
 
@@ -1360,7 +1370,7 @@ async def enable_user(
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=400, detail="Internal server error")
 
 
@@ -1393,7 +1403,7 @@ async def disable_user(
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=400, detail="Internal server error")
 
 
@@ -1426,7 +1436,7 @@ async def reset_user_traffic(
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=400, detail="Internal server error")
 
 
@@ -1456,7 +1466,7 @@ async def revoke_user_subscription(
 
     except ImportError:
         raise api_error(503, E.API_SERVICE_UNAVAILABLE)
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=400, detail="Internal server error")
 
 
