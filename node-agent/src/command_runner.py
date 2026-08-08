@@ -11,7 +11,7 @@ import json
 import logging
 import re
 import time
-from typing import Any, Callable, Awaitable, Dict, Optional
+from typing import Any, Callable, Awaitable, Dict
 
 from .config import Settings
 

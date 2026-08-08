@@ -12,7 +12,6 @@ from aiogram import Bot
 from src.config import get_settings
 from src.handlers.state import BOT_CREATING_USERS
 from shared.api_client import api_client, NotFoundError
-from shared.database import db_service
 from shared.sync import sync_service
 from shared.logger import logger
 from src.utils.notifications import (
@@ -261,6 +260,8 @@ async def remnawave_webhook(request: Request):
             await _handle_error_event(bot, event, event_data)
         elif event.startswith("crm."):
             await _handle_crm_event(bot, event, event_data)
+        elif event.startswith("torrent_blocker."):
+            await _handle_torrent_blocker_event(bot, event, event_data)
         else:
             logger.debug("Unknown event type: %s", event)
             await send_generic_notification(
@@ -401,6 +402,39 @@ async def _handle_node_event(bot: Bot, event: str, event_data: dict, diff_result
         node_data=node_data,
         old_node_data=old_node_data,
         changes=changes,
+    )
+
+
+async def _handle_torrent_blocker_event(bot: Bot, event: str, event_data: dict) -> None:
+    """Отчёты плагина torrent-blocker с ноды.
+
+    Панель шлёт их вебхуком, а под наши префиксы событие не подходило и
+    падало в общую ветку: владелец получал «Неизвестное событие» с куском
+    сырого словаря вместо человеческого текста.
+    """
+    node = event_data.get("node") if isinstance(event_data, dict) else None
+    node_name = ""
+    if isinstance(node, dict):
+        node_name = str(node.get("name") or "").strip()
+
+    lines = []
+    if node_name:
+        lines.append(f"Нода: <b>{_esc(node_name)}</b>")
+
+    # Состав отчёта у плагина меняется от версии к версии, поэтому берём то,
+    # что есть, и не пытаемся угадать полную схему.
+    for key, label in (("username", "Пользователь"), ("email", "Пользователь"),
+                       ("ip", "IP"), ("destination", "Назначение"),
+                       ("action", "Действие"), ("reason", "Причина")):
+        value = event_data.get(key) if isinstance(event_data, dict) else None
+        if value:
+            lines.append(f"{label}: <code>{_esc(str(value))}</code>")
+
+    await send_generic_notification(
+        bot=bot,
+        title="Торрент-блокировщик",
+        message=chr(10).join(lines) if lines else "Нода прислала отчёт торрент-блокировщика.",
+        emoji="🚫",
     )
 
 

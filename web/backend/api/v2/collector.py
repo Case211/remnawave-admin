@@ -23,7 +23,7 @@ from shared.database import db_service
 from shared.db_schema import NODES_TABLE
 from shared.db_query import select_sql
 from shared.connection_monitor import ConnectionMonitor
-from shared.violation_detector import IntelligentViolationDetector, ViolationAction
+from shared.violation_detector import IntelligentViolationDetector
 from shared.agent_tokens import get_node_by_token
 from shared.config_service import config_service
 from shared.metrics import (
@@ -203,6 +203,9 @@ class ConnectionReport(BaseModel):
     disconnected_at: Optional[datetime] = None
     bytes_sent: int = 0
     bytes_received: int = 0
+    # Агенты постарше поля не шлют — тогда транспорт подключения остаётся
+    # неизвестным и определяется по ноде целиком, как раньше.
+    inbound_tag: str = ""
 
 
 class SystemMetricsReport(BaseModel):
@@ -570,6 +573,7 @@ async def receive_connections(
                 "node_uuid": conn.node_uuid,
                 "device_info": {
                     "user_email": conn.user_email,
+                    "inbound_tag": conn.inbound_tag or None,
                     "bytes_sent": conn.bytes_sent,
                     "bytes_received": conn.bytes_received,
                     "connected_at": conn.connected_at.isoformat() if conn.connected_at else None,

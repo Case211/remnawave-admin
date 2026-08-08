@@ -955,7 +955,8 @@
         "24h": "24 hours",
         "7d": "Week",
         "30d": "Month"
-      }
+      },
+      "inboundHint": "Inbound used on the latest connection from this address"
     },
     "history": {
       "title": "Change history"

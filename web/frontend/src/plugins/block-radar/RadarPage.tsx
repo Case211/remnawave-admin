@@ -6,6 +6,8 @@ import { Activity, CheckCircle, Server, Settings, ShieldBan, Zap } from '@/compo
 
 import LicenseBanner from '@/components/plugins/license'
 
+import DataList from './DataList'
+
 import { asLicenseError, fetchAlerts, fetchHosters, fetchOverview, fetchStatus } from './api'
 import type {
   RadarAlert,
@@ -164,39 +166,41 @@ export default function RadarPage() {
           <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
             {t('plugins.block_radar.history_title')}
           </h2>
-          <div className="glass-card p-2 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-dark-400">
-                  <th className="px-3 py-2">{t('plugins.block_radar.col_link')}</th>
-                  <th className="px-3 py-2">{t('plugins.block_radar.col_kind')}</th>
-                  <th className="px-3 py-2">{t('plugins.block_radar.col_since')}</th>
-                  <th className="px-3 py-2">{t('plugins.block_radar.col_resolved')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.data!.items.map((a) => (
-                  <tr key={a.id} className="border-t border-[var(--glass-border)] text-dark-200">
-                    <td className="px-3 py-2">
-                      {opLabel(t, a)} → {asnLabel(a.host_org, a.host_asn)} ·{' '}
-                      {transportLabel(t, a.transport)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {t(
-                        a.kind === 'operator_outage'
-                          ? 'plugins.block_radar.kind_outage'
-                          : 'plugins.block_radar.kind_block',
-                      )}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatTs(a.since)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {a.resolved_at ? formatTs(a.resolved_at) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataList
+            rows={history.data!.items}
+            rowKey={(a) => a.id}
+            columns={[
+              {
+                title: t('plugins.block_radar.col_link'),
+                primary: true,
+                cell: (a) => (
+                  <>
+                    {opLabel(t, a)} → {asnLabel(a.host_org, a.host_asn)} ·{' '}
+                    {transportLabel(t, a.transport)}
+                  </>
+                ),
+              },
+              {
+                title: t('plugins.block_radar.col_kind'),
+                cell: (a) =>
+                  t(
+                    a.kind === 'operator_outage'
+                      ? 'plugins.block_radar.kind_outage'
+                      : 'plugins.block_radar.kind_block',
+                  ),
+              },
+              {
+                title: t('plugins.block_radar.col_since'),
+                nowrap: true,
+                cell: (a) => formatTs(a.since),
+              },
+              {
+                title: t('plugins.block_radar.col_resolved'),
+                nowrap: true,
+                cell: (a) => (a.resolved_at ? formatTs(a.resolved_at) : '—'),
+              },
+            ]}
+          />
         </section>
       )}
 
@@ -245,58 +249,63 @@ function HosterRating() {
           </p>
         </div>
       ) : (
-        <div className="glass-card p-2 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider text-dark-400">
-                <th className="px-3 py-2">{t('plugins.block_radar.col_hoster')}</th>
-                <th className="px-3 py-2">{t('plugins.block_radar.col_panels')}</th>
-                <th className="px-3 py-2">{t('plugins.block_radar.col_outages')}</th>
-                <th className="px-3 py-2">{t('plugins.block_radar.col_blocks')}</th>
-                <th className="px-3 py-2">{t('plugins.block_radar.col_recovery')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((h) => (
-                <tr
-                  key={h.asn}
-                  className={`border-t border-[var(--glass-border)] text-dark-200 ${
-                    h.mine ? 'bg-emerald-500/5' : ''
-                  }`}
-                >
-                  <td className="px-3 py-2">
-                    {asnLabel(h.org, h.asn)}
-                    {h.mine && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wider text-emerald-400">
-                        {t('plugins.block_radar.hoster_mine')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">{h.panels}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {h.outages_per_month.toFixed(1)}
-                    <span className="text-dark-400 text-xs"> /мес</span>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {h.blocks_per_month.toFixed(1)}
-                    <span className="text-dark-400 text-xs"> /мес</span>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {h.median_recovery_minutes != null
-                      ? t('plugins.block_radar.minutes', { count: h.median_recovery_minutes })
-                      : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="px-3 py-2 text-xs text-dark-400">
-            {t('plugins.block_radar.hosters_note', {
-              days: data?.window_days ?? 30,
-              panels: data?.min_panels ?? 3,
-            })}
-          </p>
-        </div>
+        <DataList
+          rows={items}
+          rowKey={(h) => h.asn}
+          columns={[
+            {
+              title: t('plugins.block_radar.col_hoster'),
+              primary: true,
+              cell: (h) => (
+                <>
+                  {asnLabel(h.org, h.asn)}
+                  {h.mine && (
+                    <span className="ml-2 text-[10px] uppercase tracking-wider text-emerald-400">
+                      {t('plugins.block_radar.hoster_mine')}
+                    </span>
+                  )}
+                </>
+              ),
+            },
+            { title: t('plugins.block_radar.col_panels'), nowrap: true, cell: (h) => h.panels },
+            {
+              title: t('plugins.block_radar.col_outages'),
+              nowrap: true,
+              cell: (h) => (
+                <>
+                  {h.outages_per_month.toFixed(1)}
+                  <span className="text-dark-400 text-xs"> /мес</span>
+                </>
+              ),
+            },
+            {
+              title: t('plugins.block_radar.col_blocks'),
+              nowrap: true,
+              cell: (h) => (
+                <>
+                  {h.blocks_per_month.toFixed(1)}
+                  <span className="text-dark-400 text-xs"> /мес</span>
+                </>
+              ),
+            },
+            {
+              title: t('plugins.block_radar.col_recovery'),
+              nowrap: true,
+              cell: (h) =>
+                h.median_recovery_minutes != null
+                  ? t('plugins.block_radar.minutes', { count: h.median_recovery_minutes })
+                  : '—',
+            },
+          ]}
+        />
+      )}
+      {items.length > 0 && (
+        <p className="px-1 text-xs text-dark-400">
+          {t('plugins.block_radar.hosters_note', {
+            days: data?.window_days ?? 30,
+            panels: data?.min_panels ?? 3,
+          })}
+        </p>
       )}
     </section>
   )
@@ -570,45 +579,46 @@ function SitesTable({ sites }: { sites: RadarSite[] }) {
         <Server className="w-4 h-4 text-emerald-400" aria-hidden />
         {t('plugins.block_radar.sites_title')}
       </h2>
-      <div className="glass-card p-2 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wider text-dark-300">
-            <tr>
-              <th className="px-3 py-2">{t('plugins.block_radar.col_hoster')}</th>
-              <th className="px-3 py-2">{t('plugins.block_radar.col_transport')}</th>
-              <th className="px-3 py-2">{t('plugins.block_radar.col_online')}</th>
-              <th className="px-3 py-2">{t('plugins.block_radar.col_norm')}</th>
-              <th className="px-3 py-2">{t('plugins.block_radar.col_watchers')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sites.map((s) => (
-              <tr
-                key={`${s.host_asn}-${s.transport}`}
-                className="border-t border-[var(--glass-border)] text-dark-200"
-              >
-                <td className="px-3 py-2 text-white">{asnLabel(s.host_org, s.host_asn)}</td>
-                <td className="px-3 py-2">{transportLabel(t, s.transport)}</td>
-                <td className="px-3 py-2 tabular-nums">{s.online ?? '—'}</td>
-                <td className="px-3 py-2 tabular-nums">
-                  {s.baseline != null ? Math.round(s.baseline) : (
-                    <span className="text-dark-400">
-                      {t('plugins.block_radar.norm_pending')}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 tabular-nums">
-                  {s.panels > 1 ? s.panels : (
-                    <span className="text-dark-400">
-                      {t('plugins.block_radar.only_you')}
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataList
+        rows={sites}
+        rowKey={(s) => `${s.host_asn}-${s.transport}`}
+        columns={[
+          {
+            title: t('plugins.block_radar.col_hoster'),
+            primary: true,
+            cell: (s) => asnLabel(s.host_org, s.host_asn),
+          },
+          {
+            title: t('plugins.block_radar.col_transport'),
+            cell: (s) => transportLabel(t, s.transport),
+          },
+          {
+            title: t('plugins.block_radar.col_online'),
+            nowrap: true,
+            cell: (s) => s.online ?? '—',
+          },
+          {
+            title: t('plugins.block_radar.col_norm'),
+            nowrap: true,
+            cell: (s) =>
+              s.baseline != null ? (
+                Math.round(s.baseline)
+              ) : (
+                <span className="text-dark-400">{t('plugins.block_radar.norm_pending')}</span>
+              ),
+          },
+          {
+            title: t('plugins.block_radar.col_watchers'),
+            nowrap: true,
+            cell: (s) =>
+              s.panels > 1 ? (
+                s.panels
+              ) : (
+                <span className="text-dark-400">{t('plugins.block_radar.only_you')}</span>
+              ),
+          },
+        ]}
+      />
     </section>
   )
 }
@@ -643,40 +653,33 @@ function NetworkPulse({ pulse }: { pulse: RadarOverview['pulse'] }) {
               hosters: pulse.hosters,
             })}
           </p>
-          <div className="glass-card p-2 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wider text-dark-300">
-                <tr>
-                  <th className="px-3 py-2">{t('plugins.block_radar.col_hoster')}</th>
-                  <th className="px-3 py-2">{t('plugins.block_radar.col_blocks')}</th>
-                  <th className="px-3 py-2">{t('plugins.block_radar.col_outages')}</th>
-                  <th className="px-3 py-2">{t('plugins.block_radar.col_last')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {top.map((h) => (
-                  <tr
-                    key={h.host_asn}
-                    className="border-t border-[var(--glass-border)] text-dark-200"
-                  >
-                    <td className="px-3 py-2 text-white">
-                      {asnLabel(h.host_org, h.host_asn)}
-                      {h.is_mine && (
-                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">
-                          {t('plugins.block_radar.hoster_mine')}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">{h.blocks}</td>
-                    <td className="px-3 py-2 tabular-nums">{h.outages}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {h.last_at ? formatTs(h.last_at) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataList
+            rows={top}
+            rowKey={(h) => h.host_asn}
+            columns={[
+              {
+                title: t('plugins.block_radar.col_hoster'),
+                primary: true,
+                cell: (h) => (
+                  <>
+                    {asnLabel(h.host_org, h.host_asn)}
+                    {h.is_mine && (
+                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">
+                        {t('plugins.block_radar.hoster_mine')}
+                      </span>
+                    )}
+                  </>
+                ),
+              },
+              { title: t('plugins.block_radar.col_blocks'), nowrap: true, cell: (h) => h.blocks },
+              { title: t('plugins.block_radar.col_outages'), nowrap: true, cell: (h) => h.outages },
+              {
+                title: t('plugins.block_radar.col_last'),
+                nowrap: true,
+                cell: (h) => (h.last_at ? formatTs(h.last_at) : '—'),
+              },
+            ]}
+          />
           <p className="text-[11px] text-dark-400">{t('plugins.block_radar.pulse_note')}</p>
         </>
       )}

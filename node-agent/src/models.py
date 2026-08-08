@@ -23,6 +23,10 @@ class ConnectionReport(BaseModel):
     disconnected_at: Optional[datetime] = None
     bytes_sent: int = 0
     bytes_received: int = 0
+    # Тег инбаунда, через который зашёл клиент. Панель по нему определяет
+    # транспорт подключения: у ноды с несколькими инбаундами иначе не понять,
+    # каким именно классом пользовался человек.
+    inbound_tag: str = ""
 
 
 class TorrentEvent(BaseModel):

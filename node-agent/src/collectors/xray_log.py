@@ -120,14 +120,16 @@ def _parse_lines(
                 ))
                 continue  # Торрент-подключения не добавляем в обычные connections
 
-            # Обычное подключение
+            # Обычное подключение. Тег инбаунда несём дальше: у ноды с
+            # несколькими инбаундами иначе не понять, каким классом
+            # (reality/ws/xhttp) человек реально пользовался.
             key = (user_identifier, client_ip)
             if key not in connections_map:
-                connections_map[key] = (detected_at, user_identifier)
+                connections_map[key] = (detected_at, user_identifier, inbound_tag.strip())
             else:
-                existing_time, _ = connections_map[key]
+                existing_time, _, _ = connections_map[key]
                 if detected_at > existing_time:
-                    connections_map[key] = (detected_at, user_identifier)
+                    connections_map[key] = (detected_at, user_identifier, inbound_tag.strip())
             continue
 
         # Fallback: базовый regex (4 группы, без destination/tags)
@@ -146,11 +148,11 @@ def _parse_lines(
             connected_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if key not in connections_map:
-            connections_map[key] = (connected_at, user_identifier)
+            connections_map[key] = (connected_at, user_identifier, "")
         else:
-            existing_time, _ = connections_map[key]
+            existing_time, _, prev_tag = connections_map[key]
             if connected_at > existing_time:
-                connections_map[key] = (connected_at, user_identifier)
+                connections_map[key] = (connected_at, user_identifier, prev_tag)
 
     # Преобразуем в список ConnectionReport
     connections = [
@@ -162,8 +164,9 @@ def _parse_lines(
             disconnected_at=None,
             bytes_sent=0,
             bytes_received=0,
+            inbound_tag=inbound_tag,
         )
-        for (user_identifier, client_ip), (connected_at, _) in connections_map.items()
+        for (user_identifier, client_ip), (connected_at, _, inbound_tag) in connections_map.items()
     ]
 
     return connections, torrent_events, lines_count, accepted_lines, matched_lines
