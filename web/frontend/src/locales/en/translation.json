@@ -5758,7 +5758,28 @@
             "help": "A disconnected node is usually reported by the panel itself, so the radar stays quiet during planned reboots. The drop is still recorded."
           }
         }
-      }
+      },
+      "stat_links": "Routes watched",
+      "stat_links_hint": "a path «subscriber network → your site → protocol»; the radar learns a baseline for each",
+      "stat_armed": "{{count}} with enough users",
+      "stat_operators": "Subscriber networks",
+      "stat_operators_hint": "operators your users connect from",
+      "stat_sites": "Your sites",
+      "stat_sites_hint": "hosters where your nodes run",
+      "stat_network": "Panels in the network",
+      "stat_network_hint": "sharing observations; {{hosters}} hosters watched in total",
+      "sites_title": "Sites under watch",
+      "col_transport": "Protocol",
+      "col_online": "Online",
+      "col_norm": "Baseline",
+      "col_watchers": "Watchers",
+      "norm_pending": "collecting",
+      "only_you": "only you",
+      "pulse_title": "What the network sees in {{days}} days",
+      "pulse_calm": "The panel network has recorded no blocks in this period.",
+      "pulse_summary": "Blocks: {{blocks}}, hoster outages: {{outages}}. Sites affected: {{hosters}}.",
+      "pulse_note": "Data from the whole panel network — including sites you don't run. Handy when picking a new hoster.",
+      "col_last": "Last seen"
     },
     "smart_support": {
       "nav": "Smart Support",

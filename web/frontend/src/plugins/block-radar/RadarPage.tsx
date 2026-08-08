@@ -6,8 +6,15 @@ import { Activity, CheckCircle, Server, Settings, ShieldBan, Zap } from '@/compo
 
 import LicenseBanner from '@/components/plugins/license'
 
-import { asLicenseError, fetchAlerts, fetchHosters, fetchStatus } from './api'
-import type { RadarAlert, RadarNodeDip, RadarStatus, RadarTick } from './types'
+import { asLicenseError, fetchAlerts, fetchHosters, fetchOverview, fetchStatus } from './api'
+import type {
+  RadarAlert,
+  RadarNodeDip,
+  RadarOverview,
+  RadarSite,
+  RadarStatus,
+  RadarTick,
+} from './types'
 
 const TRANSPORT_LABELS: Record<string, string> = {
   reality: 'Reality',
@@ -66,6 +73,13 @@ export default function RadarPage() {
     refetchInterval: 60_000,
   })
 
+  const overview = useQuery({
+    queryKey: ['block-radar-overview'],
+    queryFn: fetchOverview,
+    retry: false,
+    refetchInterval: 120_000,
+  })
+
   const licenseError = useMemo(
     () => (status.error ? asLicenseError(status.error) : null),
     [status.error],
@@ -96,7 +110,15 @@ export default function RadarPage() {
 
       {!licenseError && <ExpiryNotice status={status.data ?? null} />}
 
+      {!licenseError && <OverviewCards data={overview.data ?? null} />}
+
       {!licenseError && <StatusCard tick={status.data?.last_tick ?? null} />}
+
+      {!licenseError && (overview.data?.sites.length ?? 0) > 0 && (
+        <SitesTable sites={overview.data!.sites} />
+      )}
+
+      {!licenseError && overview.data && <NetworkPulse pulse={overview.data.pulse} />}
 
       {(status.data?.open_dips?.length ?? 0) > 0 && (
         <section className="space-y-3">
@@ -479,4 +501,185 @@ function formatTs(iso?: string | null): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleString()
+}
+
+/** Одна цифра сводки: значение, короткое имя и пояснение под ним. */
+function StatCard({
+  value,
+  label,
+  hint,
+  extra,
+}: {
+  value: string
+  label: string
+  hint: string
+  extra?: string | null
+}) {
+  return (
+    <div className="glass-card p-4 flex flex-col gap-1">
+      <div className="flex items-baseline gap-2">
+        <span className="text-2xl font-bold text-white tabular-nums">{value}</span>
+        {extra && <span className="text-xs text-emerald-300">{extra}</span>}
+      </div>
+      <div className="text-xs uppercase tracking-wider text-dark-300">{label}</div>
+      {/* Без пояснения «маршруты» и «сети абонентов» — внутренний жаргон. */}
+      <div className="text-[11px] text-dark-400 leading-snug">{hint}</div>
+    </div>
+  )
+}
+
+function OverviewCards({ data }: { data: RadarOverview | null }) {
+  const { t } = useTranslation()
+  if (!data) return null
+
+  const armed = data.links.armed
+  return (
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <StatCard
+        value={String(data.links.measured)}
+        extra={armed > 0 ? t('plugins.block_radar.stat_armed', { count: armed }) : null}
+        label={t('plugins.block_radar.stat_links')}
+        hint={t('plugins.block_radar.stat_links_hint')}
+      />
+      <StatCard
+        value={String(data.operators)}
+        label={t('plugins.block_radar.stat_operators')}
+        hint={t('plugins.block_radar.stat_operators_hint')}
+      />
+      <StatCard
+        value={String(data.hosters)}
+        label={t('plugins.block_radar.stat_sites')}
+        hint={t('plugins.block_radar.stat_sites_hint')}
+      />
+      <StatCard
+        value={String(data.network.panels)}
+        label={t('plugins.block_radar.stat_network')}
+        hint={t('plugins.block_radar.stat_network_hint', {
+          hosters: data.network.hosters,
+        })}
+      />
+    </section>
+  )
+}
+
+function SitesTable({ sites }: { sites: RadarSite[] }) {
+  const { t } = useTranslation()
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+        <Server className="w-4 h-4 text-emerald-400" aria-hidden />
+        {t('plugins.block_radar.sites_title')}
+      </h2>
+      <div className="glass-card p-2 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase tracking-wider text-dark-300">
+            <tr>
+              <th className="px-3 py-2">{t('plugins.block_radar.col_hoster')}</th>
+              <th className="px-3 py-2">{t('plugins.block_radar.col_transport')}</th>
+              <th className="px-3 py-2">{t('plugins.block_radar.col_online')}</th>
+              <th className="px-3 py-2">{t('plugins.block_radar.col_norm')}</th>
+              <th className="px-3 py-2">{t('plugins.block_radar.col_watchers')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sites.map((s) => (
+              <tr
+                key={`${s.host_asn}-${s.transport}`}
+                className="border-t border-[var(--glass-border)] text-dark-200"
+              >
+                <td className="px-3 py-2 text-white">{asnLabel(s.host_org, s.host_asn)}</td>
+                <td className="px-3 py-2">{transportLabel(t, s.transport)}</td>
+                <td className="px-3 py-2 tabular-nums">{s.online ?? '—'}</td>
+                <td className="px-3 py-2 tabular-nums">
+                  {s.baseline != null ? Math.round(s.baseline) : (
+                    <span className="text-dark-400">
+                      {t('plugins.block_radar.norm_pending')}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 tabular-nums">
+                  {s.panels > 1 ? s.panels : (
+                    <span className="text-dark-400">
+                      {t('plugins.block_radar.only_you')}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Пульс сети — то, за что, собственно, платят: чужой опыт по площадкам,
+ * которых у владельца может и не быть. Только агрегаты по ASN, без указания
+ * чьи панели видели провал.
+ */
+function NetworkPulse({ pulse }: { pulse: RadarOverview['pulse'] }) {
+  const { t } = useTranslation()
+  const top = pulse.hosters_top
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+        <Zap className="w-4 h-4 text-emerald-400" aria-hidden />
+        {t('plugins.block_radar.pulse_title', { days: pulse.days })}
+      </h2>
+
+      {pulse.incidents === 0 ? (
+        <div className="glass-card p-5 flex items-center gap-3">
+          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" aria-hidden />
+          <p className="text-sm text-dark-200">{t('plugins.block_radar.pulse_calm')}</p>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-dark-300">
+            {t('plugins.block_radar.pulse_summary', {
+              blocks: pulse.blocks,
+              outages: pulse.outages,
+              hosters: pulse.hosters,
+            })}
+          </p>
+          <div className="glass-card p-2 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wider text-dark-300">
+                <tr>
+                  <th className="px-3 py-2">{t('plugins.block_radar.col_hoster')}</th>
+                  <th className="px-3 py-2">{t('plugins.block_radar.col_blocks')}</th>
+                  <th className="px-3 py-2">{t('plugins.block_radar.col_outages')}</th>
+                  <th className="px-3 py-2">{t('plugins.block_radar.col_last')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {top.map((h) => (
+                  <tr
+                    key={h.host_asn}
+                    className="border-t border-[var(--glass-border)] text-dark-200"
+                  >
+                    <td className="px-3 py-2 text-white">
+                      {asnLabel(h.host_org, h.host_asn)}
+                      {h.is_mine && (
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">
+                          {t('plugins.block_radar.hoster_mine')}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums">{h.blocks}</td>
+                    <td className="px-3 py-2 tabular-nums">{h.outages}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {h.last_at ? formatTs(h.last_at) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-dark-400">{t('plugins.block_radar.pulse_note')}</p>
+        </>
+      )}
+    </section>
+  )
 }
