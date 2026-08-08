@@ -23,7 +23,7 @@ from shared.database import db_service
 from shared.db_schema import NODES_TABLE
 from shared.db_query import select_sql
 from shared.connection_monitor import ConnectionMonitor
-from shared.violation_detector import IntelligentViolationDetector, ViolationAction
+from shared.violation_detector import IntelligentViolationDetector
 from shared.agent_tokens import get_node_by_token
 from shared.config_service import config_service
 from shared.metrics import (

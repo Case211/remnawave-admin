@@ -793,6 +793,8 @@ interface IpHistoryItem {
   country: string
   city: string
   asn_org: string
+  /** Инбаунд последнего подключения с этого адреса; пусто у старых агентов. */
+  inbound_tag?: string
   connections: number
   last_seen: string | null
 }
@@ -889,9 +891,19 @@ function IpHistoryCard({ userUuid }: { userUuid: string }) {
                       item.ip
                     )}
                   </button>
-                  {item.asn_org && (
-                    <span className="text-[10px] text-dark-300 truncate">{item.asn_org}</span>
-                  )}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {item.asn_org && (
+                      <span className="text-[10px] text-dark-300 truncate">{item.asn_org}</span>
+                    )}
+                    {item.inbound_tag && (
+                      <span
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-primary-500/15 text-primary-300 shrink-0"
+                        title={t('userDetail.ips.inboundHint')}
+                      >
+                        {item.inbound_tag}
+                      </span>
+                    )}
+                  </div>
                   {/* Mobile-only city */}
                   {(item.city || item.country) && (
                     <span className="text-[10px] text-dark-300 sm:hidden">

@@ -1617,7 +1617,14 @@ async def get_user_ip_history(
                     im.city,
                     im.asn_org,
                     COUNT(uc.id) as connections,
-                    MAX(uc.connected_at) as last_seen
+                    MAX(uc.connected_at) as last_seen,
+                    -- Инбаунд последнего подключения с этого адреса: у ноды с
+                    -- несколькими инбаундами иначе не видно, каким именно
+                    -- человек входил. Старые агенты тег не шлют — тогда NULL.
+                    (ARRAY_AGG(uc.device_info->>'inbound_tag'
+                               ORDER BY uc.connected_at DESC)
+                     FILTER (WHERE uc.device_info->>'inbound_tag' IS NOT NULL))[1]
+                        AS inbound_tag
                 FROM user_connections uc
                 LEFT JOIN ip_metadata im
                     ON SPLIT_PART(uc.ip_address::text, '/', 1) = TRIM(im.ip_address)
@@ -1636,6 +1643,7 @@ async def get_user_ip_history(
                     "country": r["country"] or "",
                     "city": r["city"] or "",
                     "asn_org": r["asn_org"] or "",
+                    "inbound_tag": r["inbound_tag"] or "",
                     "connections": r["connections"],
                     "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
                 }

@@ -12,7 +12,6 @@ from aiogram import Bot
 from src.config import get_settings
 from src.handlers.state import BOT_CREATING_USERS
 from shared.api_client import api_client, NotFoundError
-from shared.database import db_service
 from shared.sync import sync_service
 from shared.logger import logger
 from src.utils.notifications import (
