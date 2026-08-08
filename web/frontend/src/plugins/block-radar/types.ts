@@ -152,4 +152,24 @@ export interface RadarOverview {
   hosters: number
   sites: RadarSite[]
   network: { panels: number; hosters: number; operators: number }
+  /** Пульс сети: чужой опыт по площадкам, которых у вас может и не быть. */
+  pulse: {
+    days: number
+    incidents: number
+    hosters: number
+    blocks: number
+    outages: number
+    hosters_top: RadarProblemHoster[]
+  }
+}
+
+export interface RadarProblemHoster {
+  host_asn: number
+  host_org?: string | null
+  incidents: number
+  blocks: number
+  outages: number
+  last_at?: string | null
+  /** Площадка самого владельца — повод присмотреться, а не «не переезжать». */
+  is_mine: boolean
 }

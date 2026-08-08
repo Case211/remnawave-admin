@@ -5774,7 +5774,12 @@
       "col_norm": "Baseline",
       "col_watchers": "Watchers",
       "norm_pending": "collecting",
-      "only_you": "only you"
+      "only_you": "only you",
+      "pulse_title": "What the network sees in {{days}} days",
+      "pulse_calm": "The panel network has recorded no blocks in this period.",
+      "pulse_summary": "Blocks: {{blocks}}, hoster outages: {{outages}}. Sites affected: {{hosters}}.",
+      "pulse_note": "Data from the whole panel network — including sites you don't run. Handy when picking a new hoster.",
+      "col_last": "Last seen"
     },
     "smart_support": {
       "nav": "Smart Support",
