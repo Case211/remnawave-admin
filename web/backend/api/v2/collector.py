@@ -203,6 +203,9 @@ class ConnectionReport(BaseModel):
     disconnected_at: Optional[datetime] = None
     bytes_sent: int = 0
     bytes_received: int = 0
+    # Агенты постарше поля не шлют — тогда транспорт подключения остаётся
+    # неизвестным и определяется по ноде целиком, как раньше.
+    inbound_tag: str = ""
 
 
 class SystemMetricsReport(BaseModel):
@@ -570,6 +573,7 @@ async def receive_connections(
                 "node_uuid": conn.node_uuid,
                 "device_info": {
                     "user_email": conn.user_email,
+                    "inbound_tag": conn.inbound_tag or None,
                     "bytes_sent": conn.bytes_sent,
                     "bytes_received": conn.bytes_received,
                     "connected_at": conn.connected_at.isoformat() if conn.connected_at else None,
