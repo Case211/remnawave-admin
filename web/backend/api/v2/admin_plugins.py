@@ -322,13 +322,23 @@ async def uninstall_plugin(
     plugin_id: str, _admin: AdminUser = Depends(require_superadmin())
 ) -> SimpleResponse:
     removed_any = False
-    for wheel in plugin_installer.list_wheel_files():
+    # Имя пакета берём из самого wheel, а не из шаблона по plugin_id:
+    # у smart_support дистрибутив зовётся rwa-plugin-smart-support-tool,
+    # и удаление по угаданному имени молча не находило ничего.
+    packages: set[str] = set()
+    for wheel in plugin_installer.wheels_of_plugin(plugin_id):
         meta = plugin_installer.parse_wheel_name(wheel.name)
-        if meta and meta.package_name == f"rwa-plugin-{plugin_id.replace('_', '-')}":
-            plugin_installer.remove_wheel(wheel.name)
+        if meta:
+            packages.add(meta.package_name)
+        if plugin_installer.remove_wheel(wheel.name):
             removed_any = True
-    if plugin_installer.pip_uninstall(f"rwa-plugin-{plugin_id.replace('_', '-')}"):
-        removed_any = True
+
+    # Пакет мог остаться установленным и без wheel на диске.
+    packages.add(f"rwa-plugin-{plugin_id.replace('_', '-')}")
+    for package in packages:
+        if plugin_installer.is_distribution_installed(package) and \
+                plugin_installer.pip_uninstall(package):
+            removed_any = True
 
     logger.info("admin_plugins.uninstalled", extra={"plugin": plugin_id})
     return SimpleResponse(
