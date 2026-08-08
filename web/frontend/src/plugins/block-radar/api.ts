@@ -4,7 +4,14 @@
  */
 import client from '@/api/client'
 
-import type { RadarAlerts, RadarHosters, RadarSettings, RadarSettingsPatch, RadarStatus } from './types'
+import type {
+  RadarAlerts,
+  RadarHosters,
+  RadarOverview,
+  RadarSettings,
+  RadarSettingsPatch,
+  RadarStatus,
+} from './types'
 
 export { asLicenseError } from '@/components/plugins/license'
 
@@ -34,5 +41,10 @@ export async function updateSettings(patch: RadarSettingsPatch): Promise<RadarSe
 
 export async function fetchHosters(): Promise<RadarHosters> {
   const { data } = await client.get<RadarHosters>(`${BASE}/hosters`)
+  return data
+}
+
+export async function fetchOverview(): Promise<RadarOverview> {
+  const { data } = await client.get<RadarOverview>(`${BASE}/overview`)
   return data
 }

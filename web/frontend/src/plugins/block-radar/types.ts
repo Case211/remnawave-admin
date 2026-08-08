@@ -126,3 +126,30 @@ export interface RadarHosters {
   pending: number
   locked?: boolean
 }
+
+/** Сводка «что радар сейчас наблюдает» — агрегат с сервера сети. */
+export interface RadarSite {
+  host_asn: number
+  host_org?: string | null
+  transport: string
+  /** Онлайн площадки в последнем часе; null — вердикта ещё нет. */
+  online?: number | null
+  /** Норма, с которой сравнивается онлайн; null — не набралось истории. */
+  baseline?: number | null
+  /** Сколько панелей сети наблюдают этот же ASN. */
+  panels: number
+}
+
+export interface RadarOverview {
+  links: {
+    total: number
+    /** Норма посчитана — маршрут под настоящим наблюдением. */
+    measured: number
+    /** Нормы хватает, чтобы детектор мог сработать. */
+    armed: number
+  }
+  operators: number
+  hosters: number
+  sites: RadarSite[]
+  network: { panels: number; hosters: number; operators: number }
+}
