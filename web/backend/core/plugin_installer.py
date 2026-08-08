@@ -110,6 +110,54 @@ def list_wheel_files() -> List[Path]:
     return sorted(p for p in d.glob("*.whl") if p.is_file())
 
 
+def version_key(version: str) -> tuple:
+    """Числовой ключ версии для сравнения: «0.10.0» новее «0.2.0».
+
+    Сортировка по имени файла тут не годится — как строки «0.10.0» меньше
+    «0.2.0», и старый wheel перебивал бы свежий.
+    """
+    parts = []
+    for chunk in version.split("."):
+        digits = "".join(c for c in chunk if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def wheels_of_plugin(plugin_id: str) -> List[Path]:
+    """Wheel-файлы, принадлежащие плагину.
+
+    Имя дистрибутива не всегда равно ``rwa-plugin-<id>``: у smart_support
+    это ``rwa-plugin-smart-support-tool``, и удаление по точному совпадению
+    молча не находило ни одного файла.
+    """
+    prefix = f"rwa-plugin-{plugin_id.replace('_', '-').lower()}"
+    found: List[Path] = []
+    for wheel in list_wheel_files():
+        meta = parse_wheel_name(wheel.name)
+        if meta is None:
+            continue
+        if meta.package_name == prefix or meta.package_name.startswith(f"{prefix}-"):
+            found.append(wheel)
+    return found
+
+
+def drop_other_versions(package_name: str, keep: Optional[str] = None) -> List[str]:
+    """Убрать wheel того же пакета, кроме ``keep``. Возвращает удалённое.
+
+    Старые файлы не просто занимают место: их видит
+    ``scan_and_install_wheels`` и переустанавливает при каждом запуске.
+    """
+    dropped: List[str] = []
+    for wheel in list_wheel_files():
+        if keep and wheel.name == keep:
+            continue
+        meta = parse_wheel_name(wheel.name)
+        if meta and meta.package_name == package_name:
+            if remove_wheel(wheel.name):
+                dropped.append(wheel.name)
+    return dropped
+
+
 def is_distribution_installed(package_name: str, version: Optional[str] = None) -> bool:
     """True if the *running* Python has this distribution importable.
 
@@ -145,12 +193,21 @@ def scan_and_install_wheels() -> List[str]:
     Idempotent: when the distribution is already present at the wheel's
     version we skip pip entirely.
     """
-    installed: List[str] = []
+    # На пакет берём только самый новый wheel: в каталоге могли осесть
+    # прежние версии, и, ставя подряд все, мы оставили бы установленной ту,
+    # что просто оказалась последней в списке.
+    newest: dict[str, tuple] = {}
     for wheel in list_wheel_files():
         meta = parse_wheel_name(wheel.name)
         if meta is None:
             logger.warning("plugin_installer.unrecognised_wheel", extra={"wheel": wheel.name})
             continue
+        key = version_key(meta.version)
+        if meta.package_name not in newest or key > newest[meta.package_name][0]:
+            newest[meta.package_name] = (key, wheel, meta)
+
+    installed: List[str] = []
+    for _, wheel, meta in newest.values():
         if is_distribution_installed(meta.package_name, version=meta.version):
             continue
         try:
@@ -219,9 +276,6 @@ def accept_uploaded_wheel(*, filename: str, contents: bytes) -> InstalledWheel:
         raise ValueError("filename is not a recognised wheel")
 
     target = plugins_dir() / safe_name
-    # Replace any existing copy with the same filename (typical re-upload
-    # of the same version), but if a *different* version of the same
-    # package exists we leave both — uninstall is an explicit operation.
     target.write_bytes(contents)
     try:
         _pip_install(target)
@@ -234,6 +288,14 @@ def accept_uploaded_wheel(*, filename: str, contents: bytes) -> InstalledWheel:
             pass
         raise RuntimeError(f"pip install failed (rc={exc.returncode})") from exc
     mark_installed(target)
+    # Прежние версии этого же пакета больше не нужны: pip их не использует,
+    # а при следующем запуске они снова прошли бы через установщик.
+    dropped = drop_other_versions(meta.package_name, keep=safe_name)
+    if dropped:
+        logger.info(
+            "plugin_installer.old_wheels_dropped",
+            extra={"package": meta.package_name, "wheels": dropped},
+        )
     return InstalledWheel(path=target, package_name=meta.package_name, version=meta.version)
 
 
