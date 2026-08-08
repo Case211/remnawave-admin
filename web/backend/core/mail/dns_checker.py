@@ -42,10 +42,36 @@ class DnsRecord:
     current_value: Optional[str] = None
 
 
-def check_mx_records(domain: str) -> Tuple[bool, List[str]]:
-    """Check if MX records exist for the domain."""
+def check_mx_records(domain: str, server_ip: str = "",
+                     expected_host: str = "") -> Tuple[bool, List[str]]:
+    """Проверить, что почта домена приходит именно к нам.
+
+    Раньше здесь стояло `len(records) > 0`, и любая MX-запись считалась
+    правильной настройкой. На домене, переехавшем от старого хостера, это
+    выглядело так: галка «MX ✓» горит зелёным, а вся входящая почта уходит
+    к прежнему провайдеру и отбивается там с «550 Disabled». Полгода можно
+    не замечать.
+
+    Сверяем по IP, а не по имени хоста: MX вправе называться как угодно —
+    важно, что он резолвится в адрес этого сервера.
+    """
     records = _resolve(domain, "MX")
-    return (len(records) > 0, records)
+    if not records:
+        return (False, [])
+
+    hosts = [rec.split()[-1].rstrip(".").lower() for rec in records if rec.split()]
+
+    if expected_host and expected_host.rstrip(".").lower() in hosts:
+        return (True, records)
+
+    if server_ip:
+        for host in hosts:
+            if server_ip in _resolve(host, "A"):
+                return (True, records)
+        return (False, records)
+
+    # Не с чем сравнивать — довольствуемся самим фактом наличия записи.
+    return (True, records)
 
 
 def check_spf_record(domain: str, server_ip: str) -> Tuple[bool, Optional[str]]:
@@ -126,13 +152,26 @@ def get_required_dns_records(
     dkim_value = get_dkim_dns_record(selector, public_key_pem)
 
     records: List[DnsRecord] = []
+    mail_host = f"mail.{domain}"
 
-    # MX record
-    mx_ok, mx_vals = check_mx_records(domain)
+    # A record for the mail host — без него MX указывает в пустоту
+    mail_a = _resolve(mail_host, "A")
+    records.append(DnsRecord(
+        record_type="A",
+        host=mail_host,
+        value=server_ip,
+        purpose="A",
+        is_configured=server_ip in mail_a,
+        current_value=", ".join(mail_a) if mail_a else None,
+    ))
+
+    mx_ok, mx_vals = check_mx_records(domain, server_ip=server_ip, expected_host=mail_host)
     records.append(DnsRecord(
         record_type="MX",
         host=domain,
-        value=f"10 {domain}.",
+        # Отдельное имя, а не сам домен: апекс часто занят A-записью сайта,
+        # и на него же нельзя выписать PTR почтового сервера.
+        value=f"10 {mail_host}.",
         purpose="MX",
         is_configured=mx_ok,
         current_value=", ".join(mx_vals) if mx_vals else None,

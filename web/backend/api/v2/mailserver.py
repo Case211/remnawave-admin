@@ -1,12 +1,21 @@
 """Mail server API endpoints."""
 import json
 import logging
+import re
 from email.header import decode_header as _decode_mime_header
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from shared.db_schema import DOMAIN_CONFIG_TABLE, EMAIL_QUEUE_TABLE, EMAIL_INBOX_TABLE, SMTP_CREDENTIALS_TABLE
+from shared.db_schema import (
+    DMARC_REPORTS_TABLE,
+    DOMAIN_CONFIG_TABLE,
+    EMAIL_ATTACHMENTS_TABLE,
+    EMAIL_INBOX_TABLE,
+    EMAIL_QUEUE_TABLE,
+    EMAIL_SUPPRESSION_TABLE,
+    SMTP_CREDENTIALS_TABLE,
+)
 from shared.db_query import select_sql, insert_sql, update_sql, delete_sql
 
 from web.backend.core.errors import api_error, E
@@ -30,7 +39,11 @@ def _decode_subject(raw: str | None) -> str:
 from web.backend.api.deps import AdminUser, get_client_ip, require_permission
 from web.backend.core.audit import write_audit_log
 from web.backend.schemas.mailserver import (
+    AttachmentItem,
     ComposeEmail,
+    DmarcReportDetail,
+    DmarcReportItem,
+    DmarcSummary,
     DnsCheckResult,
     DnsRecordItem,
     DomainCreate,
@@ -42,9 +55,13 @@ from web.backend.schemas.mailserver import (
     InboxItem,
     InboxMarkRead,
     QueueStats,
+    ReplyEmail,
     SmtpCredentialCreate,
     SmtpCredentialRead,
     SmtpCredentialUpdate,
+    SuppressionCreate,
+    SuppressionItem,
+    UnreadCount,
 )
 
 logger = logging.getLogger(__name__)
@@ -324,6 +341,10 @@ async def clear_old_queue(
 @router.get("/inbox", response_model=List[InboxItem])
 async def list_inbox(
     is_read: Optional[bool] = None,
+    is_spam: Optional[bool] = None,
+    has_attachments: Optional[bool] = None,
+    rcpt_to: Optional[str] = None,
+    q: Optional[str] = Query(None, description="Поиск по теме, отправителю и тексту"),
     limit: int = Query(50, le=200),
     offset: int = 0,
     admin: AdminUser = Depends(require_permission("mailserver", "view")),
@@ -339,12 +360,34 @@ async def list_inbox(
         conditions.append(f"is_read = ${idx}")
         params.append(is_read)
         idx += 1
+    if is_spam is not None:
+        conditions.append(f"is_spam = ${idx}")
+        params.append(is_spam)
+        idx += 1
+    if has_attachments is not None:
+        conditions.append(f"has_attachments = ${idx}")
+        params.append(has_attachments)
+        idx += 1
+    if rcpt_to:
+        conditions.append(f"lower(rcpt_to) = lower(${idx})")
+        params.append(rcpt_to)
+        idx += 1
+    if q:
+        # Тема в письме бывает закодирована (=?utf-8?B?...?=), поэтому поиск
+        # по ней одной ненадёжен — ищем заодно по отправителю и телу.
+        conditions.append(
+            f"(subject ILIKE ${idx} OR from_header ILIKE ${idx} OR body_text ILIKE ${idx})"
+        )
+        params.append(f"%{q}%")
+        idx += 1
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     params.extend([limit, offset])
 
     query = select_sql(EMAIL_INBOX_TABLE,
-        "id, mail_from, rcpt_to, from_header, subject, date_header, is_read, is_spam, has_attachments, attachment_count, created_at",
+        "id, mail_from, rcpt_to, from_header, subject, date_header, is_read, is_spam, "
+        "has_attachments, attachment_count, created_at, spf_result, dkim_result, "
+        "dmarc_result, spam_score",
         f"{where} ORDER BY created_at DESC LIMIT ${idx} OFFSET ${idx + 1}")
 
     async with db_service.acquire() as conn:
@@ -357,6 +400,19 @@ async def list_inbox(
     return result
 
 
+@router.get("/inbox/unread-count", response_model=UnreadCount)
+async def get_unread_count(
+    admin: AdminUser = Depends(require_permission("mailserver", "view")),
+):
+    """Сколько писем не прочитано — для счётчика в меню."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        count = await conn.fetchval(
+            select_sql(EMAIL_INBOX_TABLE, "COUNT(*)", "WHERE is_read = false AND is_spam = false")
+        )
+    return {"unread": count or 0}
+
+
 @router.get("/inbox/{item_id}", response_model=InboxDetail)
 async def get_inbox_item(
     item_id: int,
@@ -366,11 +422,150 @@ async def get_inbox_item(
     from shared.database import db_service
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(select_sql(EMAIL_INBOX_TABLE, "*", "WHERE id = $1"), item_id)
-    if not row:
-        raise api_error(404, E.MESSAGE_NOT_FOUND)
+        if not row:
+            raise api_error(404, E.MESSAGE_NOT_FOUND)
+        attachments = await conn.fetch(
+            select_sql(EMAIL_ATTACHMENTS_TABLE,
+                "id, filename, content_type, size_bytes, is_inline",
+                "WHERE inbox_id = $1 ORDER BY id"),
+            item_id,
+        )
     d = dict(row)
     d["subject"] = _decode_subject(d.get("subject"))
+    # Само содержимое письма наружу не отдаём: в raw лежит base64 вложений,
+    # и на письме с картинками ответ распухает до мегабайтов без всякой пользы.
+    d.pop("raw_message", None)
+    if isinstance(d.get("auth_details"), str):
+        try:
+            d["auth_details"] = json.loads(d["auth_details"])
+        except ValueError:
+            d["auth_details"] = {}
+    d["attachments"] = [dict(a) for a in attachments]
     return d
+
+
+@router.get("/inbox/{item_id}/attachments", response_model=List[AttachmentItem])
+async def list_inbox_attachments(
+    item_id: int,
+    admin: AdminUser = Depends(require_permission("mailserver", "view")),
+):
+    """Файлы, приложенные к письму."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            select_sql(EMAIL_ATTACHMENTS_TABLE,
+                "id, filename, content_type, size_bytes, is_inline",
+                "WHERE inbox_id = $1 ORDER BY id"),
+            item_id,
+        )
+    return [dict(r) for r in rows]
+
+
+@router.get("/attachments/{attachment_id}/download")
+async def download_attachment(
+    attachment_id: int,
+    admin: AdminUser = Depends(require_permission("mailserver", "view")),
+):
+    """Скачать вложение."""
+    from fastapi.responses import Response
+    from shared.database import db_service
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            select_sql(EMAIL_ATTACHMENTS_TABLE, "filename, content_type, content",
+                "WHERE id = $1"),
+            attachment_id,
+        )
+    if not row:
+        raise api_error(404, E.ATTACHMENT_NOT_FOUND)
+
+    # Имя файла приходит из письма, то есть от постороннего. Кавычки и
+    # переводы строк в нём позволяют дописать свои заголовки ответа, поэтому
+    # в Content-Disposition уезжает только очищенное имя.
+    safe_name = re.sub(r'[^\w\s.\-()\[\]]', "_", row["filename"] or "attachment")[:200]
+    return Response(
+        content=row["content"],
+        media_type=row["content_type"] or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+    )
+
+
+@router.post("/inbox/{item_id}/reply")
+async def reply_to_message(
+    item_id: int,
+    payload: ReplyEmail,
+    admin: AdminUser = Depends(require_permission("mailserver", "create")),
+):
+    """Ответить на письмо из ящика.
+
+    Ответ уходит с теми же заголовками ветки, что и у исходного письма, —
+    иначе у получателя он открывается отдельным сообщением, оторванным от
+    переписки.
+    """
+    from email.utils import parseaddr
+    from shared.database import db_service
+    from web.backend.core.mail.mail_service import mail_service
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            select_sql(EMAIL_INBOX_TABLE,
+                "from_header, mail_from, rcpt_to, subject, message_id, refs_header, "
+                "body_text, date_header, created_at",
+                "WHERE id = $1"),
+            item_id,
+        )
+    if not row:
+        raise api_error(404, E.MESSAGE_NOT_FOUND)
+
+    to_email = parseaddr(row["from_header"] or "")[1] or row["mail_from"]
+    if not to_email:
+        raise api_error(400, E.NO_OUTBOUND_DOMAIN)
+
+    original_subject = _decode_subject(row["subject"]) or ""
+    subject = payload.subject or (
+        original_subject if original_subject.lower().startswith("re:")
+        else f"Re: {original_subject}"
+    )
+
+    body_text = payload.body_text or ""
+    if payload.quote_original and row["body_text"]:
+        when = row["date_header"] or row["created_at"]
+        quoted = "\n".join(f"> {line}" for line in (row["body_text"] or "").splitlines()[:200])
+        body_text = f"{body_text}\n\n{when:%d.%m.%Y %H:%M}, {row['from_header']}:\n{quoted}"
+
+    # References копит всю цепочку, In-Reply-To указывает на прямого
+    # предшественника — почтовые клиенты собирают ветку по обоим.
+    references = " ".join(filter(None, [row["refs_header"], row["message_id"]]))[:2000]
+    headers = {}
+    if row["message_id"]:
+        headers["In-Reply-To"] = row["message_id"]
+    if references:
+        headers["References"] = references
+
+    queue_id = await mail_service.send_email(
+        to_email=to_email,
+        subject=subject,
+        body_text=body_text,
+        body_html=payload.body_html,
+        # По умолчанию отвечаем с адреса, на который написали: человек ждёт
+        # ответа оттуда же, куда обращался.
+        from_email=payload.from_email or row["rcpt_to"],
+        from_name=payload.from_name,
+        category="reply",
+        priority=2,
+        headers=headers,
+        # Ответ конкретному человеку — осознанное действие администратора,
+        # список подавленных адресов тут ни при чём.
+        ignore_suppression=True,
+    )
+    if queue_id is None:
+        raise api_error(400, E.NO_OUTBOUND_DOMAIN)
+
+    async with db_service.acquire() as conn:
+        await conn.execute(
+            update_sql(EMAIL_INBOX_TABLE, "is_read = true", "id = $1"), item_id,
+        )
+    return {"ok": True, "queue_id": queue_id}
 
 
 @router.post("/inbox/mark-read")
@@ -574,6 +769,159 @@ async def update_smtp_credential(
         ip_address=get_client_ip(request),
     )
     return dict(row)
+
+
+# ── Подавленные адреса ────────────────────────────────────────────
+
+@router.get("/suppression", response_model=List[SuppressionItem])
+async def list_suppression(
+    q: Optional[str] = None,
+    reason: Optional[str] = None,
+    limit: int = Query(100, le=500),
+    offset: int = 0,
+    admin: AdminUser = Depends(require_permission("mailserver", "view")),
+):
+    """Адреса, которым письма не уходят."""
+    from shared.database import db_service
+
+    conditions = []
+    params = []
+    idx = 1
+    if q:
+        conditions.append(f"email ILIKE ${idx}")
+        params.append(f"%{q}%")
+        idx += 1
+    if reason:
+        conditions.append(f"reason = ${idx}")
+        params.append(reason)
+        idx += 1
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    params.extend([limit, offset])
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            select_sql(EMAIL_SUPPRESSION_TABLE, "*",
+                f"{where} ORDER BY updated_at DESC LIMIT ${idx} OFFSET ${idx + 1}"),
+            *params,
+        )
+    return [dict(r) for r in rows]
+
+
+@router.post("/suppression", response_model=SuppressionItem)
+async def add_suppression(
+    payload: SuppressionCreate,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("mailserver", "create")),
+):
+    """Добавить адрес вручную."""
+    from shared.database import db_service
+    from web.backend.core.mail.processor import suppress
+
+    await suppress(payload.email, reason=payload.reason, detail=payload.detail or "")
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            select_sql(EMAIL_SUPPRESSION_TABLE, "*", "WHERE lower(email) = lower($1)"),
+            payload.email,
+        )
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="mailserver.suppress_address", resource="mailserver",
+        resource_id=payload.email,
+        details=json.dumps({"reason": payload.reason}),
+        ip_address=get_client_ip(request),
+    )
+    return dict(row)
+
+
+@router.delete("/suppression/{item_id}")
+async def delete_suppression(
+    item_id: int,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("mailserver", "delete")),
+):
+    """Снять запрет — писать по адресу снова можно."""
+    from shared.database import db_service
+    async with db_service.acquire() as conn:
+        removed = await conn.fetchval(
+            f"{delete_sql(EMAIL_SUPPRESSION_TABLE, 'id = $1')} RETURNING email", item_id,
+        )
+    if not removed:
+        raise api_error(404, E.SUPPRESSION_NOT_FOUND)
+    await write_audit_log(
+        admin_id=admin.account_id, admin_username=admin.username,
+        action="mailserver.unsuppress_address", resource="mailserver",
+        resource_id=str(removed),
+        details=json.dumps({"email": removed}),
+        ip_address=get_client_ip(request),
+    )
+    return {"ok": True}
+
+
+# ── DMARC-отчёты ──────────────────────────────────────────────────
+
+@router.get("/dmarc/reports", response_model=List[DmarcReportItem])
+async def list_dmarc_reports(
+    domain: Optional[str] = None,
+    limit: int = Query(50, le=200),
+    offset: int = 0,
+    admin: AdminUser = Depends(require_permission("mailserver", "view")),
+):
+    """Отчёты почтовых систем о письмах от имени наших доменов."""
+    from shared.database import db_service
+
+    where = "WHERE domain = $1" if domain else ""
+    params = ([domain] if domain else []) + [limit, offset]
+    idx = 2 if domain else 1
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch(
+            select_sql(DMARC_REPORTS_TABLE,
+                "id, report_id, org_name, domain, date_begin, date_end, total_messages, "
+                "passed_messages, failed_messages, created_at",
+                f"{where} ORDER BY date_begin DESC LIMIT ${idx} OFFSET ${idx + 1}"),
+            *params,
+        )
+    return [dict(r) for r in rows]
+
+
+@router.get("/dmarc/summary", response_model=DmarcSummary)
+async def get_dmarc_summary(
+    days: int = Query(30, ge=1, le=365),
+    admin: AdminUser = Depends(require_permission("mailserver", "view")),
+):
+    """Сводка за период: сколько писем прошло проверку и кто заваливает её чаще всех."""
+    from shared.database import db_service
+
+    async with db_service.acquire() as conn:
+        totals = await conn.fetchrow(
+            f"""SELECT COUNT(*) AS reports,
+                       COALESCE(SUM(total_messages), 0) AS total_messages,
+                       COALESCE(SUM(passed_messages), 0) AS passed_messages,
+                       COALESCE(SUM(failed_messages), 0) AS failed_messages
+                FROM {DMARC_REPORTS_TABLE}
+                WHERE date_begin > NOW() - ($1 || ' days')::INTERVAL""",
+            str(days),
+        )
+        # Записи отчёта лежат массивом JSON — разворачиваем и складываем
+        # непрошедшие по адресам источников.
+        sources = await conn.fetch(
+            f"""SELECT rec->>'source_ip' AS source_ip,
+                       SUM((rec->>'count')::INT) AS messages,
+                       MAX(rec->>'header_from') AS header_from
+                FROM {DMARC_REPORTS_TABLE},
+                     LATERAL jsonb_array_elements(records) AS rec
+                WHERE date_begin > NOW() - ($1 || ' days')::INTERVAL
+                  AND rec->>'dkim' IS DISTINCT FROM 'pass'
+                  AND rec->>'spf' IS DISTINCT FROM 'pass'
+                GROUP BY rec->>'source_ip'
+                ORDER BY messages DESC
+                LIMIT 10""",
+            str(days),
+        )
+
+    return {
+        **dict(totals),
+        "top_failing_sources": [dict(s) for s in sources],
+    }
 
 
 @router.delete("/smtp-credentials/{cred_id}")

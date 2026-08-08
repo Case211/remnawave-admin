@@ -86,6 +86,38 @@ class TestCheckMxRecords:
         assert ok is False
         assert records == []
 
+    @patch(f"{MODULE}._resolve", return_value=["10 mx1.otherhost.ru.", "10 mx2.otherhost.ru."])
+    def test_mx_pointing_elsewhere_is_not_ok(self, mock_resolve):
+        """Главная проверка модуля.
+
+        Домен переехал к нам, а MX остались у прежнего хостера — почта туда и
+        уходит, отбиваясь с «550 Disabled». Раньше здесь было достаточно
+        самого факта наличия записи, и панель бодро показывала зелёную галку,
+        пока входящие письма месяцами не доходили.
+        """
+        ok, records = check_mx_records("example.com", server_ip="1.2.3.4",
+                                       expected_host="mail.example.com")
+        assert ok is False
+        assert len(records) == 2
+
+    @patch(f"{MODULE}._resolve", return_value=["10 mail.example.com."])
+    def test_mx_matching_expected_host(self, mock_resolve):
+        ok, _ = check_mx_records("example.com", server_ip="1.2.3.4",
+                                 expected_host="mail.example.com")
+        assert ok is True
+
+    def test_mx_host_resolving_to_our_ip(self):
+        """MX вправе называться как угодно — важно, куда он резолвится."""
+        def fake_resolve(qname, rdtype):
+            if rdtype == "MX":
+                return ["10 smtp.some-relay.net."]
+            return ["1.2.3.4"] if qname == "smtp.some-relay.net" else []
+
+        with patch(f"{MODULE}._resolve", side_effect=fake_resolve):
+            ok, _ = check_mx_records("example.com", server_ip="1.2.3.4",
+                                     expected_host="mail.example.com")
+        assert ok is True
+
 
 # ── check_spf_record ─────────────────────────────────────────
 
@@ -260,30 +292,50 @@ class TestGetRequiredDnsRecords:
     PEM = "-----BEGIN PUBLIC KEY-----\nABC\n-----END PUBLIC KEY-----"
     SERVER_IP = "1.2.3.4"
 
+    @patch(f"{MODULE}._resolve", return_value=["1.2.3.4"])
     @patch(f"{MODULE}.check_ptr_record", return_value=(True, "mail.example.com"))
     @patch(f"{MODULE}.check_dmarc_record", return_value=(True, "v=DMARC1; p=quarantine"))
     @patch(f"{MODULE}.check_dkim_record", return_value=(True, "v=DKIM1; k=rsa; p=KEY"))
     @patch(f"{MODULE}.check_spf_record", return_value=(True, "v=spf1 ip4:1.2.3.4 -all"))
-    @patch(f"{MODULE}.check_mx_records", return_value=(True, ["10 example.com."]))
+    @patch(f"{MODULE}.check_mx_records", return_value=(True, ["10 mail.example.com."]))
     @patch("web.backend.core.mail.dkim_manager.get_dkim_dns_record", return_value="v=DKIM1; k=rsa; p=PUBKEY")
-    def test_all_configured(self, mock_dkim_dns, mock_mx, mock_spf, mock_dkim, mock_dmarc, mock_ptr):
+    def test_all_configured(self, mock_dkim_dns, mock_mx, mock_spf, mock_dkim, mock_dmarc,
+                            mock_ptr, mock_resolve):
         records = get_required_dns_records(self.DOMAIN, self.SELECTOR, self.PEM, self.SERVER_IP)
-        assert len(records) == 5
+        assert len(records) == 6
         purposes = [r.purpose for r in records]
-        assert purposes == ["MX", "SPF", "DKIM", "DMARC", "PTR"]
+        assert purposes == ["A", "MX", "SPF", "DKIM", "DMARC", "PTR"]
         assert all(r.is_configured for r in records)
 
+    @patch(f"{MODULE}._resolve", return_value=[])
     @patch(f"{MODULE}.check_ptr_record", return_value=(False, None))
     @patch(f"{MODULE}.check_dmarc_record", return_value=(False, None))
     @patch(f"{MODULE}.check_dkim_record", return_value=(False, None))
     @patch(f"{MODULE}.check_spf_record", return_value=(False, None))
     @patch(f"{MODULE}.check_mx_records", return_value=(False, []))
     @patch("web.backend.core.mail.dkim_manager.get_dkim_dns_record", return_value="v=DKIM1; k=rsa; p=PUBKEY")
-    def test_none_configured(self, mock_dkim_dns, mock_mx, mock_spf, mock_dkim, mock_dmarc, mock_ptr):
+    def test_none_configured(self, mock_dkim_dns, mock_mx, mock_spf, mock_dkim, mock_dmarc,
+                             mock_ptr, mock_resolve):
         records = get_required_dns_records(self.DOMAIN, self.SELECTOR, self.PEM, self.SERVER_IP)
-        assert len(records) == 5
+        assert len(records) == 6
         assert not any(r.is_configured for r in records)
 
+    @patch(f"{MODULE}._resolve", return_value=[])
+    @patch(f"{MODULE}.check_ptr_record", return_value=(False, None))
+    @patch(f"{MODULE}.check_dmarc_record", return_value=(False, None))
+    @patch(f"{MODULE}.check_dkim_record", return_value=(False, None))
+    @patch(f"{MODULE}.check_spf_record", return_value=(False, None))
+    @patch(f"{MODULE}.check_mx_records", return_value=(False, []))
+    @patch("web.backend.core.mail.dkim_manager.get_dkim_dns_record", return_value="v=DKIM1; k=rsa; p=PUBKEY")
+    def test_mx_record_points_to_mail_subdomain(self, mock_dkim_dns, mock_mx, mock_spf, mock_dkim,
+                                                mock_dmarc, mock_ptr, mock_resolve):
+        """Рекомендуем MX на mail.<домен>, а не на апекс: на апексе обычно
+        висит A-запись сайта, и PTR почтового сервера туда не повесить."""
+        records = get_required_dns_records(self.DOMAIN, self.SELECTOR, self.PEM, self.SERVER_IP)
+        mx = next(r for r in records if r.purpose == "MX")
+        assert mx.value == "10 mail.example.com."
+
+    @patch(f"{MODULE}._resolve", return_value=[])
     @patch(f"{MODULE}.get_server_ip", return_value="10.20.30.40")
     @patch(f"{MODULE}.check_ptr_record", return_value=(False, None))
     @patch(f"{MODULE}.check_dmarc_record", return_value=(False, None))
@@ -291,6 +343,7 @@ class TestGetRequiredDnsRecords:
     @patch(f"{MODULE}.check_spf_record", return_value=(False, None))
     @patch(f"{MODULE}.check_mx_records", return_value=(False, []))
     @patch("web.backend.core.mail.dkim_manager.get_dkim_dns_record", return_value="v=DKIM1; k=rsa; p=PUBKEY")
-    def test_auto_detect_server_ip(self, mock_dkim_dns, mock_mx, mock_spf, mock_dkim, mock_dmarc, mock_ptr, mock_ip):
+    def test_auto_detect_server_ip(self, mock_dkim_dns, mock_mx, mock_spf, mock_dkim, mock_dmarc,
+                                   mock_ptr, mock_ip, mock_resolve):
         records = get_required_dns_records(self.DOMAIN, self.SELECTOR, self.PEM)
         mock_ip.assert_called_once()

@@ -121,21 +121,113 @@ class InboxItem(BaseModel):
     has_attachments: bool = False
     attachment_count: int = 0
     created_at: Optional[datetime] = None
+    # Результаты проверки отправителя — по ним в списке видно подделку
+    # раньше, чем письмо откроют.
+    spf_result: Optional[str] = None
+    dkim_result: Optional[str] = None
+    dmarc_result: Optional[str] = None
+    spam_score: float = 0
 
 
 class InboxDetail(InboxItem):
     to_header: Optional[str] = None
     message_id: Optional[str] = None
     in_reply_to: Optional[str] = None
+    refs_header: Optional[str] = None
     body_text: Optional[str] = None
     body_html: Optional[str] = None
     remote_ip: Optional[str] = None
     remote_hostname: Optional[str] = None
-    spam_score: float = 0
+    auth_details: Dict[str, Any] = Field(default_factory=dict)
+    attachments: List["AttachmentItem"] = Field(default_factory=list)
 
 
 class InboxMarkRead(BaseModel):
     ids: List[int] = Field(default_factory=list)
+
+
+class UnreadCount(BaseModel):
+    unread: int = 0
+
+
+# ── Вложения ─────────────────────────────────────────────────────
+
+class AttachmentItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    content_type: str = "application/octet-stream"
+    size_bytes: int = 0
+    is_inline: bool = False
+
+
+# ── Ответ на письмо ──────────────────────────────────────────────
+
+class ReplyEmail(BaseModel):
+    body_text: Optional[str] = None
+    body_html: Optional[str] = None
+    subject: Optional[str] = None
+    # Адрес, с которого отвечаем. Пусто — тот, на который письмо пришло:
+    # человек ждёт ответа оттуда же, куда писал.
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    quote_original: bool = True
+
+
+# ── Подавленные адреса ───────────────────────────────────────────
+
+class SuppressionItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    reason: str
+    detail: Optional[str] = None
+    smtp_code: Optional[str] = None
+    hits: int = 1
+    expires_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class SuppressionCreate(BaseModel):
+    email: str
+    reason: str = "manual"
+    detail: Optional[str] = None
+
+
+# ── DMARC ────────────────────────────────────────────────────────
+
+class DmarcReportItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    report_id: str
+    org_name: Optional[str] = None
+    domain: str
+    date_begin: datetime
+    date_end: datetime
+    total_messages: int = 0
+    passed_messages: int = 0
+    failed_messages: int = 0
+    created_at: Optional[datetime] = None
+
+
+class DmarcReportDetail(DmarcReportItem):
+    org_email: Optional[str] = None
+    policy: Dict[str, Any] = Field(default_factory=dict)
+    records: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class DmarcSummary(BaseModel):
+    reports: int = 0
+    total_messages: int = 0
+    passed_messages: int = 0
+    failed_messages: int = 0
+    # Отправители, чьи письма не прошли проверку — здесь виден и чужой
+    # спуфинг, и собственный сервис, забывший про DKIM.
+    top_failing_sources: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # ── SMTP Credentials ─────────────────────────────────────────────
@@ -181,3 +273,8 @@ class ComposeEmail(BaseModel):
     from_email: Optional[str] = None
     from_name: Optional[str] = None
     domain_id: Optional[int] = None
+
+
+# AttachmentItem объявлен после InboxDetail, который на него ссылается —
+# без пересборки pydantic оставит ссылку неразрешённой.
+InboxDetail.model_rebuild()

@@ -1239,6 +1239,99 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "env_var_name": "MAIL_SUBMISSION_PORT",
         "sort_order": 8,
     },
+    {
+        "key": "mailserver_tls_cert_path",
+        "value_type": "string",
+        "category": "mailserver",
+        "display_name": "Путь к TLS-сертификату",
+        "description": "Сертификат для STARTTLS на почтовых портах. Пусто — будет "
+                       "выписан самоподписанный (для приёма почты этого достаточно, "
+                       "но почтовые клиенты на порту 587 будут ругаться)",
+        "default_value": "",
+        "env_var_name": "MAIL_TLS_CERT_PATH",
+        "sort_order": 9,
+    },
+    {
+        "key": "mailserver_tls_key_path",
+        "value_type": "string",
+        "category": "mailserver",
+        "display_name": "Путь к TLS-ключу",
+        "description": "Приватный ключ к сертификату выше",
+        "default_value": "",
+        "env_var_name": "MAIL_TLS_KEY_PATH",
+        "sort_order": 10,
+    },
+    {
+        "key": "mailserver_tls_hostname",
+        "value_type": "string",
+        "category": "mailserver",
+        "display_name": "Имя почтового сервера",
+        "description": "Чем сервер представляется в SMTP и на что выписан сертификат. "
+                       "Должно совпадать с PTR-записью IP. Пусто — mail.<первый домен>",
+        "default_value": "",
+        "sort_order": 11,
+    },
+    {
+        "key": "mailserver_submission_require_tls",
+        "value_type": "bool",
+        "category": "mailserver",
+        "display_name": "Требовать TLS на порту 587",
+        "description": "Не принимать логин и пароль по незашифрованному соединению. "
+                       "Клиенты из внутренних сетей (10.x, 192.168.x, 100.64.x — "
+                       "Netbird и подобные) исключение: там трафик и так в туннеле. "
+                       "Работает только при наличии сертификата",
+        "default_value": "true",
+        "sort_order": 12,
+    },
+    {
+        "key": "mailserver_spam_threshold",
+        "value_type": "int",
+        "category": "mailserver",
+        "display_name": "Порог спама",
+        "description": "Оценка, начиная с которой письмо помечается подозрительным. "
+                       "5 баллов = домен объявил политику DMARC, а письмо её не прошло",
+        "default_value": "5",
+        "sort_order": 13,
+    },
+    {
+        "key": "mailserver_reject_spam",
+        "value_type": "bool",
+        "category": "mailserver",
+        "display_name": "Отклонять подозрительные письма",
+        "description": "Отказывать на приёме письмам, набравшим порог. Выключено — "
+                       "письмо принимается, но помечается в списке",
+        "default_value": "false",
+        "sort_order": 14,
+    },
+    {
+        "key": "mailserver_inbox_retention_days",
+        "value_type": "int",
+        "category": "mailserver",
+        "display_name": "Хранить входящие, дней",
+        "description": "Через сколько дней удалять полученные письма. 0 = хранить вечно",
+        "default_value": "0",
+        "sort_order": 15,
+    },
+    {
+        "key": "mailserver_queue_retention_days",
+        "value_type": "int",
+        "category": "mailserver",
+        "display_name": "Хранить историю отправки, дней",
+        "description": "Через сколько дней удалять отправленные и отклонённые письма "
+                       "из очереди. Ожидающие отправки не трогаются. 0 = хранить вечно",
+        "default_value": "90",
+        "sort_order": 16,
+    },
+    {
+        "key": "mailserver_notify_new_mail",
+        "value_type": "bool",
+        "category": "mailserver",
+        "display_name": "Уведомлять о новых письмах",
+        "description": "Присылать уведомление при получении письма (кроме служебных: "
+                       "отказов доставки, отписок и DMARC-отчётов)",
+        "default_value": "false",
+        "sort_order": 17,
+    },
 
     # === SECURITY ===
     {

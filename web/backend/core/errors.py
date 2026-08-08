@@ -137,6 +137,8 @@ class ErrorCode(str, Enum):
     NO_OUTBOUND_DOMAIN = "NO_OUTBOUND_DOMAIN"
     QUEUE_ITEM_NOT_FOUND = "QUEUE_ITEM_NOT_FOUND"
     MESSAGE_NOT_FOUND = "MESSAGE_NOT_FOUND"
+    ATTACHMENT_NOT_FOUND = "ATTACHMENT_NOT_FOUND"
+    SUPPRESSION_NOT_FOUND = "SUPPRESSION_NOT_FOUND"
 
     # ── Reports / ASN ─────────────────────────────────────────
     REPORT_NOT_FOUND = "REPORT_NOT_FOUND"
@@ -214,6 +216,8 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.CHANNEL_NOT_FOUND: "Channel not found",
     E.ALERT_RULE_NOT_FOUND: "Alert rule not found",
     E.DOMAIN_NOT_FOUND: "Domain not found",
+    E.ATTACHMENT_NOT_FOUND: "Attachment not found",
+    E.SUPPRESSION_NOT_FOUND: "Suppressed address not found",
     E.REPORT_NOT_FOUND: "Report not found",
     E.ASN_NOT_FOUND: "ASN not found",
     E.BLOCKED_IP_NOT_FOUND: "Blocked IP not found",

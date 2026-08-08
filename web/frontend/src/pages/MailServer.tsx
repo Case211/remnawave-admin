@@ -13,6 +13,7 @@ import {
   Globe, Send, Inbox, ListOrdered, Plus, Trash2, RefreshCw,
   CheckCircle2, XCircle, Copy, Mail, MailOpen, X, Ban,
   RotateCcw, KeyRound, Pencil, Gauge,
+  Search, Download, ShieldCheck, ShieldAlert, ShieldBan, BarChart3,
 } from '@/components/brand/icons'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -58,6 +59,14 @@ export default function MailServer() {
   const canCreate = useHasPermission('mailserver', 'create')
   const canDelete = useHasPermission('mailserver', 'delete')
 
+  // Счётчик непрочитанных на самой вкладке: иначе о письме узнаёшь, только
+  // если специально зайдёшь в ящик.
+  const { data: unread } = useQuery({
+    queryKey: ['mailserver-unread'],
+    queryFn: mailserverApi.getUnreadCount,
+    refetchInterval: 60000,
+  })
+
   const [tab, setTab] = useState('domains')
 
   return (
@@ -80,10 +89,23 @@ export default function MailServer() {
           <TabsTrigger value="inbox" className="gap-1.5">
             <Inbox className="w-4 h-4" />
             <span className="hidden sm:inline">{t('mailServer.tabs.inbox')}</span>
+            {!!unread?.unread && (
+              <Badge variant="outline" className="ml-1 px-1.5 py-0 text-[10px] bg-primary/20 text-primary border-primary/30">
+                {unread.unread}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="compose" className="gap-1.5">
             <Send className="w-4 h-4" />
             <span className="hidden sm:inline">{t('mailServer.tabs.compose')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="suppression" className="gap-1.5">
+            <ShieldBan className="w-4 h-4" />
+            <span className="hidden sm:inline">{t('mailServer.tabs.suppression')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="dmarc" className="gap-1.5">
+            <BarChart3 className="w-4 h-4" />
+            <span className="hidden sm:inline">{t('mailServer.tabs.dmarc')}</span>
           </TabsTrigger>
           <TabsTrigger value="credentials" className="gap-1.5">
             <KeyRound className="w-4 h-4" />
@@ -93,8 +115,10 @@ export default function MailServer() {
 
         <TabsContent value="domains"><DomainsTab canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} /></TabsContent>
         <TabsContent value="queue"><QueueTab canEdit={canEdit} canDelete={canDelete} /></TabsContent>
-        <TabsContent value="inbox"><InboxTab canEdit={canEdit} canDelete={canDelete} /></TabsContent>
+        <TabsContent value="inbox"><InboxTab canEdit={canEdit} canDelete={canDelete} canCreate={canCreate} /></TabsContent>
         <TabsContent value="compose"><ComposeTab /></TabsContent>
+        <TabsContent value="suppression"><SuppressionTab canCreate={canCreate} canDelete={canDelete} /></TabsContent>
+        <TabsContent value="dmarc"><DmarcTab /></TabsContent>
         <TabsContent value="credentials"><CredentialsTab canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} /></TabsContent>
       </Tabs>
     </div>
@@ -704,15 +728,78 @@ function QueueTab({ canEdit }: { canEdit: boolean; canDelete: boolean }) {
 
 // ── Inbox Tab ─────────────────────────────────────────────────
 
-function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean }) {
+/**
+ * Результаты проверки отправителя.
+ *
+ * Показываем провал, а не успех: зелёные галки у каждого письма — это шум,
+ * на который перестают смотреть через день. Заметным должно быть исключение.
+ */
+function AuthBadges({ item }: { item: InboxItem }) {
+  const { t } = useTranslation()
+  const failed: string[] = []
+  if (item.dmarc_result === 'fail') failed.push('DMARC')
+  if (item.spf_result === 'fail' || item.spf_result === 'softfail') failed.push('SPF')
+  if (item.dkim_result === 'fail') failed.push('DKIM')
+
+  if (!failed.length) {
+    if (item.dmarc_result === 'pass') {
+      return (
+        <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/20 gap-1">
+          <ShieldCheck className="w-3 h-3" /> {t('mailServer.auth.verified')}
+        </Badge>
+      )
+    }
+    return null
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className="text-xs bg-orange-500/20 text-orange-400 border-orange-500/30 gap-1"
+      title={t('mailServer.auth.failedHint')}
+    >
+      <ShieldAlert className="w-3 h-3" /> {failed.join(' · ')}
+    </Badge>
+  )
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+const INBOX_FILTERS = ['all', 'unread', 'spam', 'attachments'] as const
+type InboxFilter = (typeof INBOX_FILTERS)[number]
+
+function InboxTab({ canEdit, canDelete, canCreate }: { canEdit: boolean; canDelete: boolean; canCreate: boolean }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
+  const [filter, setFilter] = useState<InboxFilter>('all')
+  const [replyOpen, setReplyOpen] = useState(false)
+  const [replyText, setReplyText] = useState('')
+
+  const filterParams = {
+    unread: { is_read: false },
+    spam: { is_spam: true },
+    attachments: { has_attachments: true },
+    all: {},
+  }[filter]
 
   const { data: inbox, isLoading, isError, refetch } = useQuery({
-    queryKey: ['mailserver-inbox'],
-    queryFn: () => mailserverApi.listInbox({ limit: 100 }),
+    queryKey: ['mailserver-inbox', filter, appliedSearch],
+    // Спам в общем списке не показываем: письма с проваленной проверкой
+    // подлинности лежат в своей вкладке и не мешают читать настоящую почту.
+    queryFn: () => mailserverApi.listInbox({
+      limit: 100,
+      ...filterParams,
+      ...(filter === 'all' ? { is_spam: false } : {}),
+      ...(appliedSearch ? { q: appliedSearch } : {}),
+    }),
     refetchInterval: 30000,
   })
 
@@ -739,8 +826,26 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => toast.error(err.response?.data?.detail || t('common.error')),
   })
 
+  const replyMut = useMutation({
+    mutationFn: (body: string) => mailserverApi.replyToMessage(selectedId!, {
+      body_text: body,
+      quote_original: true,
+    }),
+    onSuccess: () => {
+      setReplyOpen(false)
+      setReplyText('')
+      queryClient.invalidateQueries({ queryKey: ['mailserver-inbox'] })
+      queryClient.invalidateQueries({ queryKey: ['mailserver-queue'] })
+      toast.success(t('mailServer.replySent'))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) =>
+      toast.error(err.response?.data?.detail || t('common.error')),
+  })
+
   const openMessage = (item: InboxItem) => {
     setSelectedId(item.id)
+    setReplyOpen(false)
+    setReplyText('')
     if (!item.is_read && canEdit) {
       markReadMut.mutate([item.id])
     }
@@ -752,7 +857,45 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
   return (
     <div className="space-y-4">
       {/* Actions bar */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => { e.preventDefault(); setAppliedSearch(search.trim()) }}
+        >
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('mailServer.searchPlaceholder')}
+            className="h-9 w-56"
+          />
+          <Button size="sm" variant="outline" type="submit" className="gap-1.5">
+            <Search className="w-4 h-4" />
+          </Button>
+          {appliedSearch && (
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              onClick={() => { setSearch(''); setAppliedSearch('') }}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </form>
+
+        <div className="flex items-center gap-1">
+          {INBOX_FILTERS.map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={filter === value ? 'default' : 'ghost'}
+              onClick={() => setFilter(value)}
+            >
+              {t(`mailServer.filters.${value}`)}
+            </Button>
+          ))}
+        </div>
+
         {canEdit && inbox && inbox.some(m => !m.is_read) && (
           <Button size="sm" variant="outline" onClick={() => markReadMut.mutate([])} className="gap-1.5">
             <MailOpen className="w-4 h-4" /> {t('mailServer.markAllRead')}
@@ -793,13 +936,18 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
                   </span>
                 </div>
                 <p className="text-sm text-dark-200 truncate">{item.subject || t('mailServer.noSubject')}</p>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   {item.has_attachments && (
-                    <Badge variant="outline" className="text-xs">{item.attachment_count} att.</Badge>
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <Download className="w-3 h-3" /> {item.attachment_count}
+                    </Badge>
                   )}
                   {item.is_spam && (
-                    <Badge variant="outline" className="text-xs bg-red-500/20 text-red-400 border-red-500/30">spam</Badge>
+                    <Badge variant="outline" className="text-xs bg-red-500/20 text-red-400 border-red-500/30">
+                      {t('mailServer.auth.suspicious')}
+                    </Badge>
                   )}
+                  <AuthBadges item={item} />
                 </div>
               </div>
             ))
@@ -813,6 +961,11 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base text-white truncate">{detail.subject || t('mailServer.noSubject')}</CardTitle>
                 <div className="flex items-center gap-1">
+                  {canCreate && (
+                    <Button size="sm" variant="ghost" onClick={() => setReplyOpen(v => !v)} title={t('mailServer.reply')}>
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  )}
                   {canDelete && (
                     <Button size="sm" variant="ghost" className="text-red-400" onClick={() => setDeleteId(detail.id)}>
                       <Trash2 className="w-4 h-4" />
@@ -832,7 +985,42 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
                 {detail.remote_ip && (
                   <p><span className="text-muted-foreground">{t('mailServer.ip')}</span> <span className="text-dark-100">{detail.remote_ip}</span></p>
                 )}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <AuthBadges item={detail} />
+                  {['spf', 'dkim', 'dmarc'].map((kind) => {
+                    const value = detail[`${kind}_result` as keyof typeof detail] as string | null
+                    if (!value) return null
+                    return (
+                      <span key={kind} className="text-[11px] text-muted-foreground">
+                        {kind.toUpperCase()}: <span className={cn(
+                          value === 'pass' ? 'text-green-400'
+                            : value === 'fail' ? 'text-red-400' : 'text-dark-200'
+                        )}>{value}</span>
+                      </span>
+                    )
+                  })}
+                </div>
               </div>
+
+              {!!detail.attachments?.filter(a => !a.is_inline).length && (
+                <div className="border-t border-[var(--glass-border)] pt-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">{t('mailServer.attachments')}</p>
+                  {detail.attachments.filter(a => !a.is_inline).map((att) => (
+                    <a
+                      key={att.id}
+                      href={mailserverApi.attachmentUrl(att.id)}
+                      // Скачивание идёт обычной ссылкой: браузер сам приложит
+                      // сессионную cookie, а файл не проходит через память вкладки.
+                      className="flex items-center gap-2 text-sm text-primary hover:underline"
+                    >
+                      <Download className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{att.filename}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{formatBytes(att.size_bytes)}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+
               <div className="border-t border-[var(--glass-border)] pt-3">
                 {detail.body_html ? (
                   <iframe
@@ -845,6 +1033,36 @@ function InboxTab({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean
                   <pre className="text-sm text-dark-100 whitespace-pre-wrap break-words">{detail.body_text || t('mailServer.noContent')}</pre>
                 )}
               </div>
+
+              {replyOpen && canCreate && (
+                <div className="border-t border-[var(--glass-border)] pt-3 space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    {t('mailServer.replyTo', { address: detail.from_header || detail.mail_from })}
+                  </Label>
+                  <Textarea
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    rows={5}
+                    placeholder={t('mailServer.replyPlaceholder')}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={!replyText.trim() || replyMut.isPending}
+                      onClick={() => replyMut.mutate(replyText)}
+                      className="gap-1.5"
+                    >
+                      <Send className="w-4 h-4" /> {t('mailServer.send')}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setReplyOpen(false)}>
+                      {t('common.cancel')}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {t('mailServer.replyQuoted')}
+                    </span>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -1000,6 +1218,278 @@ function ComposeTab() {
 }
 
 // ── Credentials Tab ──────────────────────────────────────────
+
+// ── Suppression Tab ───────────────────────────────────────────
+
+/**
+ * Адреса, которым письма больше не уходят.
+ *
+ * Список наполняется сам: жёсткий отказ доставки и письмо на unsubscribe@
+ * попадают сюда без участия человека. Руками добавляют редко — обычно
+ * наоборот, снимают запрет, когда адресат починил свой ящик.
+ */
+function SuppressionTab({ canCreate, canDelete }: { canCreate: boolean; canDelete: boolean }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [applied, setApplied] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+
+  const { data: items, isLoading, isError, refetch } = useQuery({
+    queryKey: ['mailserver-suppression', applied],
+    queryFn: () => mailserverApi.listSuppression({ limit: 200, ...(applied ? { q: applied } : {}) }),
+  })
+
+  const addMut = useMutation({
+    mutationFn: (email: string) => mailserverApi.addSuppression({ email, reason: 'manual' }),
+    onSuccess: () => {
+      setNewEmail('')
+      queryClient.invalidateQueries({ queryKey: ['mailserver-suppression'] })
+      toast.success(t('mailServer.suppression.added'))
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) =>
+      toast.error(err.response?.data?.detail || t('common.error')),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: mailserverApi.deleteSuppression,
+    onSuccess: () => {
+      setDeleteId(null)
+      queryClient.invalidateQueries({ queryKey: ['mailserver-suppression'] })
+      toast.success(t('mailServer.suppression.removed'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const REASON_BADGE: Record<string, string> = {
+    hard_bounce: 'bg-red-500/20 text-red-400 border-red-500/30',
+    soft_bounce: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    unsubscribe: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    complaint: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    manual: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  }
+
+  if (isLoading) return <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+  if (isError) return <QueryError onRetry={refetch} />
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => { e.preventDefault(); setApplied(search.trim()) }}
+        >
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('mailServer.suppression.searchPlaceholder')}
+            className="h-9 w-56"
+          />
+          <Button size="sm" variant="outline" type="submit"><Search className="w-4 h-4" /></Button>
+        </form>
+
+        {canCreate && (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => { e.preventDefault(); if (newEmail.trim()) addMut.mutate(newEmail.trim()) }}
+          >
+            <Input
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder={t('mailServer.suppression.addPlaceholder')}
+              className="h-9 w-56"
+              type="email"
+            />
+            <Button size="sm" type="submit" disabled={!newEmail.trim() || addMut.isPending} className="gap-1.5">
+              <Plus className="w-4 h-4" /> {t('mailServer.suppression.add')}
+            </Button>
+          </form>
+        )}
+      </div>
+
+      {!items?.length ? (
+        <Card className="bg-[var(--glass-bg)] border-[var(--glass-border)]">
+          <CardContent className="py-12 text-center">
+            <ShieldBan className="w-12 h-12 mx-auto text-dark-300 mb-3" />
+            <p className="text-muted-foreground">{t('mailServer.suppression.empty')}</p>
+            <p className="text-xs text-muted-foreground mt-1">{t('mailServer.suppression.emptyHint')}</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-1">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-3 p-3 rounded-lg border bg-[var(--glass-bg)] border-[var(--glass-border)]"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-white truncate">{item.email}</p>
+                  <Badge variant="outline" className={cn('text-xs', REASON_BADGE[item.reason] || REASON_BADGE.manual)}>
+                    {t(`mailServer.suppression.reasons.${item.reason}`, item.reason)}
+                  </Badge>
+                  {item.hits > 1 && (
+                    <span className="text-xs text-muted-foreground">×{item.hits}</span>
+                  )}
+                </div>
+                {item.detail && (
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    {item.smtp_code ? `${item.smtp_code} · ` : ''}{item.detail}
+                  </p>
+                )}
+                {item.expires_at && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t('mailServer.suppression.expiresAt', { date: formatDate(item.expires_at) })}
+                  </p>
+                )}
+              </div>
+              {canDelete && (
+                <Button size="sm" variant="ghost" className="text-red-400 shrink-0" onClick={() => setDeleteId(item.id)}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        onOpenChange={() => setDeleteId(null)}
+        title={t('mailServer.suppression.removeTitle')}
+        description={t('mailServer.suppression.removeConfirm')}
+        onConfirm={() => deleteId && deleteMut.mutate(deleteId)}
+      />
+    </div>
+  )
+}
+
+// ── DMARC Tab ─────────────────────────────────────────────────
+
+/**
+ * Что почтовые системы видели от имени наших доменов.
+ *
+ * Отчёты приходят на адрес из DNS-записи _dmarc и раньше просто лежали в
+ * ящике вложением, которое нечем открыть. Здесь из них собирается ответ на
+ * единственный важный вопрос: не рассылает ли кто-то письма, подписываясь
+ * нашим доменом.
+ */
+function DmarcTab() {
+  const { t } = useTranslation()
+  const [days, setDays] = useState('30')
+
+  const { data: summary, isLoading, isError, refetch } = useQuery({
+    queryKey: ['mailserver-dmarc-summary', days],
+    queryFn: () => mailserverApi.getDmarcSummary(Number(days)),
+  })
+
+  const { data: reports } = useQuery({
+    queryKey: ['mailserver-dmarc-reports'],
+    queryFn: () => mailserverApi.listDmarcReports({ limit: 50 }),
+  })
+
+  if (isLoading) return <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}</div>
+  if (isError) return <QueryError onRetry={refetch} />
+
+  if (!summary?.reports) {
+    return (
+      <Card className="bg-[var(--glass-bg)] border-[var(--glass-border)]">
+        <CardContent className="py-12 text-center">
+          <BarChart3 className="w-12 h-12 mx-auto text-dark-300 mb-3" />
+          <p className="text-muted-foreground">{t('mailServer.dmarc.empty')}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('mailServer.dmarc.emptyHint')}</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const stats = [
+    { label: t('mailServer.dmarc.reports'), value: summary.reports, tone: 'text-white' },
+    { label: t('mailServer.dmarc.messages'), value: summary.total_messages, tone: 'text-white' },
+    { label: t('mailServer.dmarc.passed'), value: summary.passed_messages, tone: 'text-green-400' },
+    { label: t('mailServer.dmarc.failed'), value: summary.failed_messages, tone: 'text-red-400' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Select value={days} onValueChange={setDays}>
+          <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">{t('mailServer.dmarc.period', { days: 7 })}</SelectItem>
+            <SelectItem value="30">{t('mailServer.dmarc.period', { days: 30 })}</SelectItem>
+            <SelectItem value="90">{t('mailServer.dmarc.period', { days: 90 })}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {stats.map((stat) => (
+          <Card key={stat.label} className="bg-[var(--glass-bg)] border-[var(--glass-border)]">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{stat.label}</p>
+              <p className={cn('text-2xl font-semibold mt-1', stat.tone)}>{stat.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {!!summary.top_failing_sources?.length && (
+        <Card className="bg-[var(--glass-bg)] border-[var(--glass-border)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-white">{t('mailServer.dmarc.failingSources')}</CardTitle>
+            <p className="text-xs text-muted-foreground">{t('mailServer.dmarc.failingSourcesHint')}</p>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {summary.top_failing_sources.map((source) => (
+              <div key={source.source_ip} className="flex items-center justify-between gap-3 py-1.5 border-b border-[var(--glass-border)] last:border-0">
+                <div className="min-w-0">
+                  <p className="text-sm text-white font-mono truncate">{source.source_ip}</p>
+                  {source.header_from && (
+                    <p className="text-xs text-muted-foreground truncate">{source.header_from}</p>
+                  )}
+                </div>
+                <Badge variant="outline" className="text-xs bg-red-500/20 text-red-400 border-red-500/30 shrink-0">
+                  {source.messages}
+                </Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {!!reports?.length && (
+        <Card className="bg-[var(--glass-bg)] border-[var(--glass-border)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base text-white">{t('mailServer.dmarc.reportList')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {reports.map((report) => (
+              <div key={report.id} className="flex items-center justify-between gap-3 py-1.5 border-b border-[var(--glass-border)] last:border-0">
+                <div className="min-w-0">
+                  <p className="text-sm text-white truncate">{report.org_name || report.report_id}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {report.domain} · {formatDate(report.date_begin)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-green-400">{report.passed_messages}</span>
+                  <span className="text-xs text-muted-foreground">/</span>
+                  <span className={cn('text-xs', report.failed_messages ? 'text-red-400' : 'text-muted-foreground')}>
+                    {report.failed_messages}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ── Credentials Tab ───────────────────────────────────────────
 
 function CredentialsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; canEdit: boolean; canDelete: boolean }) {
   const { t } = useTranslation()

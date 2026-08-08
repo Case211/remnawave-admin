@@ -82,9 +82,21 @@ class OutboundMailQueue:
         category: Optional[str] = None,
         priority: int = 0,
         domain_id: Optional[int] = None,
+        ignore_suppression: bool = False,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Optional[int]:
         """Add an email to the outbound queue. Returns the queue row id."""
         try:
+            # Адрес, который уже ответил жёстким отказом или отписался, письма
+            # не получит. Повторные попытки не просто бесполезны: почтовые
+            # системы считают настойчивую отправку в мёртвые ящики признаком
+            # спамера и портят репутацию домена целиком.
+            if not ignore_suppression:
+                from web.backend.core.mail.processor import is_suppressed
+                if await is_suppressed(to_email):
+                    logger.info("Skipped suppressed address: %s", to_email)
+                    return None
+
             from shared.database import db_service
             async with db_service.acquire() as conn:
                 # Auto-resolve domain_id from sender address
@@ -107,14 +119,17 @@ class OutboundMailQueue:
                         )
                         return None
 
+                import json as _json
                 row_id = await conn.fetchval(
                     insert_sql(EMAIL_QUEUE_TABLE,
                         ["domain_id", "from_email", "from_name", "to_email", "subject",
-                         "body_text", "body_html", "category", "priority", "status", "next_attempt_at"],
-                        values="$1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW()",
+                         "body_text", "body_html", "category", "priority", "headers",
+                         "status", "next_attempt_at"],
+                        values="$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', NOW()",
                         returning="id"),
                     domain_id, from_email, from_name, to_email, subject,
                     body_text, body_html, category, priority,
+                    _json.dumps(headers or {}),
                 )
                 logger.info("Enqueued email id=%s to=%s subj=%s", row_id, to_email, subject[:60])
                 return row_id
@@ -187,7 +202,8 @@ class OutboundMailQueue:
 
         try:
             # Build the email message
-            msg = self._build_message(row)
+            attachments = await self._load_attachments(queue_id)
+            msg = self._build_message(row, attachments)
             raw_bytes = msg.as_bytes()
 
             # DKIM sign if domain config available
@@ -242,7 +258,29 @@ class OutboundMailQueue:
             logger.warning("Email delivery failed: id=%s err=%s (attempt %d/%d)",
                            queue_id, error_msg[:100], attempts, max_attempts)
 
-    def _build_message(self, row: Dict[str, Any]) -> EmailMessage:
+    async def _load_attachments(self, queue_id: int) -> List[Dict[str, Any]]:
+        """Файлы, прикреплённые к письму при отправке."""
+        from shared.db_schema import EMAIL_ATTACHMENTS_TABLE
+        from shared.database import db_service
+        try:
+            async with db_service.acquire() as conn:
+                rows = await conn.fetch(
+                    select_sql(EMAIL_ATTACHMENTS_TABLE,
+                        "filename, content_type, content", "WHERE queue_id = $1"),
+                    queue_id,
+                )
+            return [dict(r) for r in rows]
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Failed to load attachments for queue id=%s: %s", queue_id, e)
+            return []
+
+    # Заголовки, которые разрешено задавать вызывающему. Список закрытый:
+    # через произвольные заголовки можно подменить получателя или подделать
+    # результаты проверок, а письмо уходит уже с нашей DKIM-подписью.
+    _ALLOWED_EXTRA_HEADERS = ("In-Reply-To", "References", "Reply-To")
+
+    def _build_message(self, row: Dict[str, Any],
+                       attachments: Optional[List[Dict[str, Any]]] = None) -> EmailMessage:
         """Build an EmailMessage from a queue row."""
         msg = EmailMessage()
         msg["Subject"] = row["subject"]
@@ -280,6 +318,34 @@ class OutboundMailQueue:
             msg.add_alternative(body_html, subtype="html", charset="utf-8")
         else:
             msg.set_content(body_text, subtype="plain", charset="utf-8")
+
+        # Заголовки ветки переписки: без них ответ у получателя открывается
+        # отдельным письмом, а не под исходным сообщением.
+        extra = row.get("headers") or {}
+        if isinstance(extra, str):
+            try:
+                import json
+                extra = json.loads(extra)
+            except ValueError:
+                extra = {}
+        if isinstance(extra, dict):
+            for name in self._ALLOWED_EXTRA_HEADERS:
+                value = extra.get(name) or extra.get(name.lower())
+                if value and name not in msg:
+                    msg[name] = str(value)[:2000]
+
+        for att in attachments or []:
+            content_type = att.get("content_type") or "application/octet-stream"
+            maintype, _, subtype = content_type.partition("/")
+            try:
+                msg.add_attachment(
+                    att["content"],
+                    maintype=maintype or "application",
+                    subtype=subtype or "octet-stream",
+                    filename=att.get("filename") or "attachment",
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Failed to attach %s: %s", att.get("filename"), e)
 
         return msg
 

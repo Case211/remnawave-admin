@@ -40,19 +40,31 @@ class MailService:
             # Always start outbound queue
             await self.queue.start()
 
+            # Имя, которым сервер представляется в SMTP и на которое
+            # выписывается сертификат. Приезжает из PTR-записи сервера, а не
+            # из имени контейнера — иначе в EHLO уезжает хеш вроде cfe04705b6d4,
+            # и принимающая сторона считает такого отправителя подозрительным.
+            tls_hostname = await self.get_mail_hostname()
+
             # Start inbound server if configured
             inbound_port = config_service.get("mailserver_inbound_port", 2525)
             mail_hostname = config_service.get("mailserver_hostname", "0.0.0.0")
             if inbound_port:
-                self.inbound = InboundMailServer(hostname=mail_hostname, port=inbound_port)
+                self.inbound = InboundMailServer(hostname=mail_hostname, port=inbound_port,
+                                                 tls_hostname=tls_hostname)
                 await self.inbound.start()
 
             # Start submission (relay) server if configured
             submission_enabled = config_service.get("mailserver_submission_enabled", False)
             if submission_enabled:
                 submission_port = config_service.get("mailserver_submission_port", 587)
-                self.submission = SubmissionServer(hostname=mail_hostname, port=submission_port)
+                self.submission = SubmissionServer(hostname=mail_hostname, port=submission_port,
+                                                   tls_hostname=tls_hostname)
                 await self.submission.start()
+
+            # Разбор отказов, отписок и DMARC-отчётов плюс уборка старых писем
+            from web.backend.core.mail.processor import mail_processor
+            await mail_processor.start()
 
             logger.debug("Mail service started")
         except Exception as e:
@@ -62,6 +74,11 @@ class MailService:
         """Stop all mail subsystems."""
         try:
             await self.queue.stop()
+        except Exception:
+            pass
+        try:
+            from web.backend.core.mail.processor import mail_processor
+            await mail_processor.stop()
         except Exception:
             pass
         try:
@@ -86,6 +103,9 @@ class MailService:
         from_name: Optional[str] = None,
         category: Optional[str] = None,
         priority: int = 0,
+        headers: Optional[Dict[str, str]] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        ignore_suppression: bool = False,
     ) -> Optional[int]:
         """Send an email via the outbound queue.
 
@@ -101,7 +121,7 @@ class MailService:
                 logger.warning("No active outbound domain configured")
                 return None
 
-        return await self.queue.enqueue(
+        queue_id = await self.queue.enqueue(
             from_email=from_email,
             to_email=to_email,
             subject=subject,
@@ -110,7 +130,33 @@ class MailService:
             from_name=from_name,
             category=category,
             priority=priority,
+            headers=headers,
+            ignore_suppression=ignore_suppression,
         )
+
+        if queue_id and attachments:
+            await self._store_attachments(queue_id, attachments)
+
+        return queue_id
+
+    async def _store_attachments(self, queue_id: int,
+                                 attachments: List[Dict[str, Any]]) -> None:
+        """Приложить файлы к письму в очереди."""
+        from shared.db_schema import EMAIL_ATTACHMENTS_TABLE
+        from shared.database import db_service
+        try:
+            async with db_service.acquire() as conn:
+                for att in attachments:
+                    content = att["content"]
+                    await conn.execute(
+                        insert_sql(EMAIL_ATTACHMENTS_TABLE,
+                            ["queue_id", "filename", "content_type", "size_bytes", "content"]),
+                        queue_id, att.get("filename") or "attachment",
+                        att.get("content_type") or "application/octet-stream",
+                        len(content), content,
+                    )
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed to store attachments for queue id=%s: %s", queue_id, e)
 
     async def setup_domain(self, domain: str) -> Dict[str, Any]:
         """Set up a new domain with DKIM keys.
@@ -157,7 +203,8 @@ class MailService:
             selector = row["dkim_selector"] or "rw"
             server_ip = get_server_ip()
 
-            mx_ok, _ = check_mx_records(domain)
+            mx_ok, _ = check_mx_records(domain, server_ip=server_ip,
+                                        expected_host=f"mail.{domain}")
             spf_ok, _ = check_spf_record(domain, server_ip)
             dkim_ok, _ = check_dkim_record(domain, selector)
             dmarc_ok, _ = check_dmarc_record(domain)
@@ -179,6 +226,22 @@ class MailService:
             "dmarc_ok": dmarc_ok,
             "ptr_ok": ptr_ok,
         }
+
+    async def get_mail_hostname(self) -> str:
+        """Имя почтового сервера: настройка, иначе mail.<первый активный домен>.
+
+        Оно же уходит в EHLO и в имя сертификата, поэтому должно совпадать с
+        PTR-записью — принимающие серверы это сверяют.
+        """
+        try:
+            from shared.config_service import config_service
+            explicit = str(config_service.get("mailserver_tls_hostname", "") or "").strip()
+            if explicit:
+                return explicit
+        except Exception:
+            pass
+        domain = await self.get_active_outbound_domain()
+        return f"mail.{domain['domain']}" if domain else "localhost"
 
     async def get_active_outbound_domain(self) -> Optional[Dict[str, Any]]:
         """Return the first active outbound domain config, or None."""
