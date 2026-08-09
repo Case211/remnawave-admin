@@ -30,6 +30,9 @@ export const PLUGIN_ROUTES: Record<string, PluginRoute[]> = {
     { path: '/plugins/smart-support/settings', Component: lazy(() => import('./smart-support/SettingsPage')) },
     { path: '/plugins/smart-support/audit', Component: lazy(() => import('./smart-support/AuditPage')) },
   ],
+  live_flow: [
+    { path: '/plugins/live-flow', Component: lazy(() => import('./live-flow/FlowPage')) },
+  ],
   block_radar: [
     { path: '/plugins/block-radar', Component: lazy(() => import('./block-radar/RadarPage')) },
     { path: '/plugins/block-radar/settings', Component: lazy(() => import('./block-radar/SettingsPage')) },

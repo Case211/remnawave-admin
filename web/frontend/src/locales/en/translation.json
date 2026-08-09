@@ -5668,6 +5668,26 @@
       "expired_title": "License expired",
       "expired_body": "Renew your subscription to get the plugin working again."
     },
+    "live_flow": {
+      "nav": "Traffic flow",
+      "title": "Traffic flow",
+      "subtitle": "Live flow: users → nodes → exit",
+      "col_users": "Users",
+      "col_nodes": "Nodes",
+      "col_sink": "Exit",
+      "users_box": "Users",
+      "users_online": "{{count}} online",
+      "nodes_count": "{{count}} nodes",
+      "mbps": "Mbps",
+      "node_idle": "no users",
+      "sink_internet": "internet exit",
+      "sink_no_data": "no measurements",
+      "load_error": "Failed to load flow data",
+      "legend_live": "traffic flowing — dashes animate",
+      "legend_idle": "connected but idle",
+      "legend_badge": "number in the circle — users on the node",
+      "legend_no_numbers": "branches {{sinks}} exist in config, but the panel has no numbers for them"
+    },
     "block_radar": {
       "nav": "Block Radar",
       "title": "Block Radar",
