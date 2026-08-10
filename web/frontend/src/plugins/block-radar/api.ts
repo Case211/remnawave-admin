@@ -11,6 +11,7 @@ import type {
   RadarSettings,
   RadarSettingsPatch,
   RadarStatus,
+  RadarVerdict,
 } from './types'
 
 export { asLicenseError } from '@/components/plugins/license'
@@ -26,6 +27,16 @@ export async function fetchAlerts(
   params: { active?: boolean; limit?: number; offset?: number } = {},
 ): Promise<RadarAlerts> {
   const { data } = await client.get<RadarAlerts>(`${BASE}/alerts`, { params })
+  return data
+}
+
+/** Отметить инцидент: блокировка была или радар ошибся. Плагин отвезёт
+ *  голос на сервер ближайшим тиком, поэтому ответ приходит сразу. */
+export async function sendAlertFeedback(
+  alertId: number,
+  verdict: RadarVerdict,
+): Promise<{ id: number; feedback: RadarVerdict; feedback_at: string }> {
+  const { data } = await client.post(`${BASE}/alerts/${alertId}/feedback`, { verdict })
   return data
 }
 

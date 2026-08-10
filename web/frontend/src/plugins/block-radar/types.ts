@@ -75,7 +75,16 @@ export interface RadarAlert {
   baseline?: number | null
   outage_summary?: string | null
   affected: RadarAffected
+  /**
+   * Ответ владельца: была блокировка на самом деле или радар ошибся.
+   * null — ещё не отвечали. Голос уезжает на сервер тиком плагина и
+   * идёт в счёт точности детектора.
+   */
+  feedback?: RadarVerdict | null
+  feedback_at?: string | null
 }
+
+export type RadarVerdict = 'confirmed' | 'false_positive'
 
 export interface RadarAlerts {
   items: RadarAlert[]

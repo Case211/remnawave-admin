@@ -1,14 +1,22 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, CheckCircle, Server, Settings, ShieldBan, Zap } from '@/components/brand/icons'
 
 import LicenseBanner from '@/components/plugins/license'
+import { useHasPermission } from '@/components/PermissionGate'
 
 import DataList from './DataList'
 
-import { asLicenseError, fetchAlerts, fetchHosters, fetchOverview, fetchStatus } from './api'
+import {
+  asLicenseError,
+  fetchAlerts,
+  fetchHosters,
+  fetchOverview,
+  fetchStatus,
+  sendAlertFeedback,
+} from './api'
 import type {
   RadarAlert,
   RadarNodeDip,
@@ -16,6 +24,7 @@ import type {
   RadarSite,
   RadarStatus,
   RadarTick,
+  RadarVerdict,
 } from './types'
 
 const TRANSPORT_LABELS: Record<string, string> = {
@@ -198,6 +207,11 @@ export default function RadarPage() {
                 title: t('plugins.block_radar.col_resolved'),
                 nowrap: true,
                 cell: (a) => (a.resolved_at ? formatTs(a.resolved_at) : '—'),
+              },
+              {
+                title: t('plugins.block_radar.col_feedback'),
+                nowrap: true,
+                cell: (a) => <FeedbackButtons alert={a} compact />,
               },
             ]}
           />
@@ -423,6 +437,99 @@ function AlertCard({ alert }: { alert: RadarAlert }) {
           {t('plugins.block_radar.card_affected')}:{' '}
           <span className="text-white">{alert.affected.nodes!.join(', ')}</span>
         </p>
+      )}
+      <FeedbackButtons alert={alert} />
+    </div>
+  )
+}
+
+
+/**
+ * «Блокировка была?» — единственный способ измерить, насколько радар точен.
+ * Сам детектор видит только просевший онлайн; была ли то блокировка, знает
+ * лишь тот, у кого она случилась.
+ *
+ * Кнопки парные: одна «ложная тревога» не отличала бы «всё верно» от
+ * «нажать некому». Ответ можно переменить — подсвечен текущий.
+ */
+function FeedbackButtons({ alert, compact = false }: { alert: RadarAlert; compact?: boolean }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const canEdit = useHasPermission('block_radar', 'edit')
+
+  const mark = useMutation({
+    mutationFn: (verdict: RadarVerdict) => sendAlertFeedback(alert.id, verdict),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['block-radar-alerts-open'] })
+      queryClient.invalidateQueries({ queryKey: ['block-radar-alerts-history'] })
+    },
+  })
+
+  // Пока запрос в пути, показываем выбранное: ждать инвалидации ради
+  // подсветки кнопки — лишняя секунда сомнения.
+  const current = mark.isPending ? mark.variables : (alert.feedback ?? null)
+
+  if (!canEdit) {
+    if (!current) return compact ? <span className="text-dark-500">—</span> : null
+    const label = t(
+      current === 'confirmed'
+        ? 'plugins.block_radar.feedback_marked_yes'
+        : 'plugins.block_radar.feedback_marked_no',
+    )
+    return compact ? (
+      <span className="text-xs text-dark-300">{label}</span>
+    ) : (
+      <p className="text-xs text-dark-400">{label}</p>
+    )
+  }
+
+  const button = (verdict: RadarVerdict, label: string, tone: string) => (
+    <button
+      type="button"
+      onClick={() => mark.mutate(verdict)}
+      disabled={mark.isPending}
+      aria-pressed={current === verdict}
+      className={`text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
+        current === verdict
+          ? tone
+          : 'border-white/10 text-dark-300 hover:text-white hover:border-white/25'
+      }`}
+    >
+      {label}
+    </button>
+  )
+
+  const buttons = (
+    <>
+      {button(
+        'confirmed',
+        t('plugins.block_radar.feedback_yes'),
+        'border-red-500/40 bg-red-500/15 text-red-300',
+      )}
+      {button(
+        'false_positive',
+        t('plugins.block_radar.feedback_no'),
+        'border-emerald-500/40 bg-emerald-500/15 text-emerald-300',
+      )}
+    </>
+  )
+
+  // В истории места на подсказку нет — там ценно само действие: инцидент
+  // часто становится понятен уже после того, как закончился.
+  if (compact) {
+    return <div className="flex flex-wrap gap-1 justify-end">{buttons}</div>
+  }
+
+  return (
+    <div className="pt-1 border-t border-white/5 space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-dark-400">{t('plugins.block_radar.feedback_prompt')}</span>
+        {buttons}
+      </div>
+      {mark.isError ? (
+        <p className="text-xs text-red-300">{t('plugins.block_radar.feedback_failed')}</p>
+      ) : (
+        !current && <p className="text-[11px] text-dark-500">{t('plugins.block_radar.feedback_hint')}</p>
       )}
     </div>
   )
