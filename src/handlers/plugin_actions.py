@@ -52,7 +52,7 @@ async def handle_plugin_action(callback: CallbackQuery, admin: BotAdmin) -> None
     try:
         await handler(callback, action, ref)
     except Exception as e:
-        if _is_missing_table(e):
+        if _is_plugin_too_old(e):
             await callback.answer(_("pact.plugin_missing"), show_alert=True)
             return
         logger.error("Plugin action %s/%s failed: %s", plugin_id, action, e)
@@ -108,12 +108,18 @@ async def _seal(callback: CallbackQuery, mark: str) -> None:
         logger.debug("pact.seal_failed", exc_info=True)
 
 
-def _is_missing_table(exc: Exception) -> bool:
+def _is_plugin_too_old(exc: Exception) -> bool:
+    """Плагин не установлен (нет таблицы) или старее кнопки (нет колонок).
+
+    Панель и плагины обновляются порознь, так что второе — обычное дело:
+    админку накатили, wheel ещё нет. Обе беды лечатся одинаково —
+    обновлением плагина, поэтому и ответ человеку один.
+    """
     try:
-        from asyncpg.exceptions import UndefinedTableError
+        from asyncpg.exceptions import UndefinedColumnError, UndefinedTableError
     except ImportError:
         return False
-    return isinstance(exc, UndefinedTableError)
+    return isinstance(exc, (UndefinedTableError, UndefinedColumnError))
 
 
 _HANDLERS: Dict[str, Callable[[CallbackQuery, str, str], Awaitable[None]]] = {
