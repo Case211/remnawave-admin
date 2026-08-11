@@ -695,6 +695,18 @@ async def lifespan(app: FastAPI):
                     except Exception:
                         logger.exception("Plugin loader failed during startup")
 
+                    # Plugin RBAC resources only exist after register() ran, so the
+                    # earlier sync could not see them: a freshly installed plugin
+                    # never got its permission on the superadmin role, and the
+                    # sidebar hides nav entries whose permission is missing.
+                    # The call is idempotent — it only inserts what is absent.
+                    try:
+                        from web.backend.core.rbac import sync_superadmin_permissions
+
+                        await sync_superadmin_permissions()
+                    except Exception:
+                        logger.exception("Superadmin permission sync after plugin load failed")
+
                     try:
                         plugin_tasks = plugin_loader.start_scheduled_tasks()
                         if plugin_tasks:
