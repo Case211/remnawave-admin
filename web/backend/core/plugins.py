@@ -64,6 +64,28 @@ class PluginParts:
     scheduled_tasks: list[ScheduledTask] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class PluginUI:
+    """How to render the page of a plugin that ships outside this repo.
+
+    Built-in plugin pages live in ``web/frontend/src/plugins/<id>/`` and are
+    wired through ``PLUGIN_ROUTES``. A plugin distributed as a standalone
+    wheel cannot add itself there, so it declares its UI here instead and the
+    frontend mounts it on the generic ``/plugins/:pluginId`` route.
+
+    ``kind="module"`` — the frontend loads ``api_prefix + path`` as a script;
+    the script registers ``window.rwaPluginUI[<plugin id>] = {mount, unmount}``
+    and renders into the element it is given. Same-origin, so it passes the
+    panel CSP (``script-src 'self'``).
+
+    ``kind="iframe"`` — the frontend embeds ``api_prefix + path`` in an
+    iframe; the plugin must serve that page with ``frame-ancestors 'self'``.
+    """
+
+    kind: Literal["module", "iframe"] = "module"
+    path: str = "/app"
+
+
 @dataclass
 class PluginManifest:
     id: str
@@ -74,6 +96,7 @@ class PluginManifest:
     build: Optional[Callable[[PluginContext], PluginParts]] = None
     rbac_resources: dict[str, list[str]] = field(default_factory=dict)
     navigation: list[NavEntry] = field(default_factory=list)
+    ui: Optional[PluginUI] = None
 
 
 # ── private state ────────────────────────────────────────────────

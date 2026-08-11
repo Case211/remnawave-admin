@@ -5675,6 +5675,12 @@
       "expired_title": "License expired",
       "expired_body": "Renew your subscription to get the plugin working again."
     },
+    "external": {
+      "loading": "Loading the plugin interface…",
+      "unknown": "Unknown plugin",
+      "no_ui": "This plugin does not provide a page",
+      "failed": "Could not load the plugin interface"
+    },
     "block_radar": {
       "nav": "Block Radar",
       "title": "Block Radar",

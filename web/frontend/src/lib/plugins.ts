@@ -49,6 +49,15 @@ export interface PluginNavEntry {
   section_i18n?: string | null
 }
 
+/**
+ * How to render the page of a plugin that ships outside this repository.
+ * See ``ExternalPluginPage`` and ``PluginUI`` in the backend manifest.
+ */
+export interface PluginUI {
+  kind: 'module' | 'iframe'
+  path: string
+}
+
 export interface PluginInfo {
   id: string
   name: string
@@ -56,6 +65,7 @@ export interface PluginInfo {
   license_state: LicenseState
   api_prefix: string
   navigation: PluginNavEntry[]
+  ui?: PluginUI | null
 }
 
 /**

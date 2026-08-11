@@ -30,6 +30,13 @@ class PluginNavEntry(BaseModel):
     section_i18n: Optional[str] = None
 
 
+class PluginUIInfo(BaseModel):
+    """How the frontend should render the page of an out-of-tree plugin."""
+
+    kind: Literal["module", "iframe"]
+    path: str
+
+
 class PluginInfo(BaseModel):
     id: str
     name: str
@@ -37,6 +44,7 @@ class PluginInfo(BaseModel):
     license_state: Literal["valid", "expired", "missing", "not_required"]
     api_prefix: str
     navigation: List[PluginNavEntry]
+    ui: Optional[PluginUIInfo] = None
 
 
 @router.get("", response_model=List[PluginInfo])
@@ -65,6 +73,7 @@ async def list_plugins(_: AdminUser = Depends(get_current_admin)) -> List[Plugin
                     )
                     for n in m.navigation
                 ],
+                ui=PluginUIInfo(kind=m.ui.kind, path=m.ui.path) if m.ui else None,
             )
         )
     return out
