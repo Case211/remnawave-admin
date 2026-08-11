@@ -305,6 +305,42 @@ def geoip_service():
     return get_geoip_service()
 
 
+PLUGIN_ACTION_PREFIX = "pact"
+# Предел Telegram на callback_data — 64 байта. Кнопка длиннее не отправится
+# вовсе и утащит с собой всё сообщение, поэтому режем её здесь.
+_CALLBACK_LIMIT = 64
+
+
+def plugin_actions_markup(
+    plugin_id: Optional[str], actions: Optional[list[dict[str, Any]]]
+) -> Optional[dict[str, Any]]:
+    """Кнопки плагина под телеграм-сообщением.
+
+    Плагин описывает действие тройкой ``{text, action, ref}`` и ничего не
+    знает про Telegram; панель собирает из неё callback_data вида
+    ``pact:<плагин>:<действие>:<ref>``, а бот по этому же формату находит,
+    кому нажатие отдать. Двоеточие — разделитель, поэтому в служебных
+    частях его быть не должно.
+    """
+    if not actions or not plugin_id or ":" in plugin_id:
+        return None
+    row: list[dict[str, str]] = []
+    for a in actions:
+        text = str(a.get("text") or "").strip()
+        action = str(a.get("action") or "").strip()
+        ref = str(a.get("ref") or "").strip()
+        if not text or not action or ":" in action or ":" in ref:
+            continue
+        data = f"{PLUGIN_ACTION_PREFIX}:{plugin_id}:{action}:{ref}"
+        if len(data.encode()) > _CALLBACK_LIMIT:
+            logging.getLogger(__name__).warning(
+                "plugin_api.action_too_long: %s/%s", plugin_id, action
+            )
+            continue
+        row.append({"text": text, "callback_data": data})
+    return {"inline_keyboard": [row]} if row else None
+
+
 async def panel_notify(
     *,
     title: str,
@@ -314,6 +350,7 @@ async def panel_notify(
     link: Optional[str] = None,
     plugin_id: Optional[str] = None,
     group_key: Optional[str] = None,
+    actions: Optional[list[dict[str, Any]]] = None,
 ) -> bool:
     """Уведомление панели от плагина: in-app всем админам + Telegram
     (глобальный чат и каналы админов) + push.
@@ -321,6 +358,10 @@ async def panel_notify(
     Эмодзи по severity ставит сам notification_service — в title его
     не класть. body — телеграм-HTML карточки (строки с отступом «   »
     конвертер раскладывает в список).
+
+    ``actions`` — кнопки быстрого ответа под телеграм-сообщением, по
+    ``{text, action, ref}`` на каждую; нажатие приходит боту. Требуют
+    ``plugin_id``: без него нажатие некому адресовать.
     """
     from web.backend.core import notification_service
 
@@ -335,6 +376,7 @@ async def panel_notify(
             group_key=group_key,
             channels=["in_app", "telegram", "push"],
             topic_type=topic_type,
+            reply_markup=plugin_actions_markup(plugin_id, actions),
         )
         return True
     except Exception:

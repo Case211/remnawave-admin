@@ -1011,6 +1011,18 @@
     "traffic_reset_suffix": "\n\n🔄 <i>Traffic reset ({name})</i>",
     "reset_error": "❌ Reset error: {e}"
   },
+  "pact": {
+    "invalid_format": "Invalid button format",
+    "unknown_action": "Unknown action: {action}",
+    "unknown_plugin": "Button from an unknown plugin",
+    "plugin_missing": "Plugin is not installed in the panel",
+    "no_permission": "⛔️ Not enough permissions for this action",
+    "error": "Error: {e}",
+    "mark_suffix": "\n\n<i>{mark} — {name}</i>",
+    "radar_not_found": "Incident not found (history cleared?)",
+    "radar_confirmed": "✅ Marked: it was a block",
+    "radar_false": "🚫 Marked: false positive"
+  },
   "fin": {
     "invalid_format": "Invalid button format",
     "unknown_action": "Unknown action: {action}",

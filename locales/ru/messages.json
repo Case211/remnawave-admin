@@ -1011,6 +1011,18 @@
     "traffic_reset_suffix": "\n\n🔄 <i>Трафик сброшен ({name})</i>",
     "reset_error": "❌ Ошибка сброса: {e}"
   },
+  "pact": {
+    "invalid_format": "Неверный формат кнопки",
+    "unknown_action": "Неизвестное действие: {action}",
+    "unknown_plugin": "Кнопка от неизвестного плагина",
+    "plugin_missing": "Плагин не установлен в панели",
+    "no_permission": "⛔️ Недостаточно прав для этого действия",
+    "error": "Ошибка: {e}",
+    "mark_suffix": "\n\n<i>{mark} — {name}</i>",
+    "radar_not_found": "Инцидент не найден (история очищена?)",
+    "radar_confirmed": "✅ Отмечено: блокировка была",
+    "radar_false": "🚫 Отмечено: ложная тревога"
+  },
   "fin": {
     "invalid_format": "Неверный формат кнопки",
     "unknown_action": "Неизвестное действие: {action}",
