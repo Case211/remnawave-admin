@@ -71,6 +71,25 @@ class TestMapHost:
         assert detail.override_sni_from_address is False
         assert detail.keep_sni_blank is False
 
+    def test_empty_string_bools_coerced_to_false(self):
+        """Remnawave может присылать '' в булевых полях (напр. verifyPeerCertByName) —
+        пустая строка приводится к False, иначе валидация падает и роняет список хостов."""
+        from web.backend.schemas.host import HostListItem, HostDetail
+        raw = {
+            "uuid": "h-empty", "remark": "r", "address": "a", "port": 443,
+            "is_disabled": "", "is_hidden": "", "shuffle_host": "",
+            "mihomo_x25519": "", "verify_peer_cert_by_name": "",
+        }
+        item = HostListItem(**raw)
+        assert item.verify_peer_cert_by_name is False
+        assert item.is_disabled is False
+        assert item.is_hidden is False
+        assert item.shuffle_host is False
+        assert item.mihomo_x25519 is False
+        detail = HostDetail(**raw, override_sni_from_address="", keep_sni_blank="")
+        assert detail.override_sni_from_address is False
+        assert detail.keep_sni_blank is False
+
 
 class TestListHosts:
     """GET /api/v2/hosts."""

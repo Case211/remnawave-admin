@@ -73,10 +73,13 @@ class HostListItem(HostBase):
     )
     @classmethod
     def _bool_none_to_false(cls, v):
-        # Remnawave 2.8.0 может присылать null для булевых полей (напр. verifyPeerCertByName,
-        # когда пиннинг сертификата не настроен) — трактуем None как False, иначе pydantic
-        # роняет валидацию и вместе с ней весь список хостов.
-        return False if v is None else v
+        # Remnawave может присылать null или пустую строку для булевых полей
+        # (напр. verifyPeerCertByName, когда пиннинг сертификата не настроен) —
+        # трактуем None/'' как False, иначе pydantic роняет валидацию и вместе
+        # с ней весь список хостов.
+        if v is None or v == '':
+            return False
+        return v
 
     class Config:
         from_attributes = True
@@ -98,8 +101,8 @@ class HostDetail(HostListItem):
     @field_validator('override_sni_from_address', 'keep_sni_blank', mode='before')
     @classmethod
     def _detail_bool_none_to_false(cls, v):
-        # 2.8.0 может присылать null и для этих булевых полей детального ответа.
-        return False if v is None else v
+        # Remnawave может присылать null и пустую строку для булевых полей детального ответа.
+        return False if v is None or v == '' else v
 
 
 class HostCreate(BaseModel):
