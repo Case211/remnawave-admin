@@ -696,6 +696,18 @@ async def lifespan(app: FastAPI):
                         logger.exception("Plugin loader failed during startup")
 
                     try:
+                        # RBAC-ресурсы плагинов появляются в реестре только после register(),
+                        # а синхронизация прав суперадмина отработала намного раньше (см. выше)
+                        # и их ещё не видела. Без повторного прохода право плагина не попадает
+                        # даже суперадмину, NavEntry фильтруется по нему и пункт меню не рисуется
+                        # вообще — со стороны выглядит как «плагин установился, но его нет».
+                        # Проход идемпотентен: добавляет только недостающие права.
+                        from web.backend.core.rbac import sync_superadmin_permissions as _sync_rbac
+                        await _sync_rbac()
+                    except Exception:
+                        logger.exception("Superadmin permission sync after plugin registration failed")
+
+                    try:
                         plugin_tasks = plugin_loader.start_scheduled_tasks()
                         if plugin_tasks:
                             _bg_tasks.extend(plugin_tasks)
