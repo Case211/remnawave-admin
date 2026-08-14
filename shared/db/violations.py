@@ -1615,9 +1615,23 @@ class ViolationsMixin:
     async def batch_get_shared_hwids(
         self, user_uuids: List[str]
     ) -> Dict[str, List[Dict[str, Any]]]:
-        """Batch get shared HWIDs for multiple users."""
+        """Batch get shared HWIDs for multiple users.
+
+        Держит тот же контракт, что и ``get_shared_hwids_for_user``: email для
+        группировки подписок одного человека без Telegram, ``is_trial`` и
+        ``is_active`` для отсечки апгрейда «пробная → платная» от абуза
+        параллельных триалов. Это горячий путь (коллектор и HWID-скан идут
+        через ``check_users_batch``), поэтому расхождение с одиночным методом
+        означало бы, что анализатор в проде работает вслепую.
+        """
         if not self.is_connected or not user_uuids:
             return {}
+
+        from shared.db.network import (
+            _load_trial_settings, _is_trial_user, _subscription_is_active,
+        )
+
+        trial_tags, trial_squads = _load_trial_settings()
 
         try:
             async with self.acquire() as conn:
@@ -1627,7 +1641,13 @@ class ViolationsMixin:
                            h2.hwid,
                            u.uuid::text AS user_uuid,
                            u.username, u.status, u.telegram_id,
-                           me.telegram_id AS self_telegram_id
+                           u.email, u.tag, u.expire_at, u.raw_data,
+                           me.telegram_id AS self_telegram_id,
+                           me.email       AS self_email,
+                           me.status      AS self_status,
+                           me.tag         AS self_tag,
+                           me.expire_at   AS self_expire_at,
+                           me.raw_data    AS self_raw_data
                     FROM {USER_HWID_DEVICES_TABLE} h1
                     JOIN {USERS_TABLE} me ON me.uuid = h1.user_uuid
                     JOIN {USER_HWID_DEVICES_TABLE} h2
@@ -1650,6 +1670,13 @@ class ViolationsMixin:
                     temp[src][hwid] = {
                         "hwid": hwid,
                         "self_telegram_id": r["self_telegram_id"],
+                        "self_email": r["self_email"],
+                        "self_is_trial": _is_trial_user(
+                            r["self_tag"], r["self_raw_data"], trial_tags, trial_squads,
+                        ),
+                        "self_is_active": _subscription_is_active(
+                            r["self_expire_at"], r["self_status"],
+                        ),
                         "other_users": [],
                     }
                 temp[src][hwid]["other_users"].append({
@@ -1657,6 +1684,9 @@ class ViolationsMixin:
                     "username": r["username"],
                     "status": r["status"],
                     "telegram_id": r["telegram_id"],
+                    "email": r["email"],
+                    "is_trial": _is_trial_user(r["tag"], r["raw_data"], trial_tags, trial_squads),
+                    "is_active": _subscription_is_active(r["expire_at"], r["status"]),
                 })
 
             for src, hwid_groups in temp.items():
