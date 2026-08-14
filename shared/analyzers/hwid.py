@@ -99,6 +99,7 @@ class HwidCrossAccountAnalyzer:
         max_distinct_accounts_per_hwid = 1
         max_uuids_in_account_per_hwid = 1
         max_active_trial_accounts_per_hwid = 0
+        trial_groups_per_hwid: List[Dict[str, Any]] = []
 
         all_other_uuids: set = set()
         all_other_usernames: List[str] = []
@@ -114,6 +115,7 @@ class HwidCrossAccountAnalyzer:
             # подпискам: два триала одного человека — это мультитариф (его ловит
             # max_per_account), а абуз — это триалы РАЗНЫХ аккаунтов на одном устройстве.
             active_trial_accounts_local: Set[Any] = set()
+            active_trial_members_local: List[Dict[str, str]] = []
             if self_is_trial and self_is_active:
                 active_trial_accounts_local.add(self_account_key)
 
@@ -126,6 +128,10 @@ class HwidCrossAccountAnalyzer:
 
                 if user.get("is_trial") and user.get("is_active"):
                     active_trial_accounts_local.add(key)
+                    active_trial_members_local.append({
+                        "uuid": uid,
+                        "username": user.get("username") or uid[:8],
+                    })
 
                 if uid not in seen_other_uuid:
                     seen_other_uuid.add(uid)
@@ -153,6 +159,11 @@ class HwidCrossAccountAnalyzer:
                     "hwid": hwid_value,
                     "active_trials": len(active_trial_accounts_local),
                 }
+
+            trial_groups_per_hwid.append({
+                "accounts": len(active_trial_accounts_local),
+                "members": active_trial_members_local,
+            })
 
             for key, uids in uuids_by_account_local.items():
                 if len(uids) > max_uuids_in_account_per_hwid:
@@ -215,6 +226,8 @@ class HwidCrossAccountAnalyzer:
                 f"(порог: {max_per_account}) — возможный абуз мультитарифа"
             )
 
+        accomplices: List[str] = []
+        accomplice_usernames: List[str] = []
         if active_trials_threshold_hit:
             score = max(score, 100.0)
             # Формулировка совпадает с extreme-abuse причиной детектора дословно:
@@ -224,6 +237,27 @@ class HwidCrossAccountAnalyzer:
                 f"Абуз пробных подписок: {max_active_trial_accounts_per_hwid} аккаунтов "
                 f"с активным триалом на одном устройстве (порог: {max_active_trials})"
             )
+
+            # Соучастники — чужие подписки с живым триалом на тех же HWID, где порог
+            # пробит. Блокировка одного лишь проверяемого оставляла бы связку рабочей:
+            # после его бана остальные видят уже один живой триал и под правило не
+            # попадают, то есть накрутка стоила бы абузеру ровно один аккаунт.
+            seen_accomplice: Set[str] = set()
+            for grp in trial_groups_per_hwid:
+                if grp["accounts"] <= max_active_trials:
+                    continue
+                for member in grp["members"]:
+                    if member["uuid"] in seen_accomplice:
+                        continue
+                    seen_accomplice.add(member["uuid"])
+                    accomplices.append(member["uuid"])
+                    accomplice_usernames.append(member["username"])
+
+            if accomplice_usernames:
+                shown = ", ".join(accomplice_usernames[:5])
+                if len(accomplice_usernames) > 5:
+                    shown += f" (+{len(accomplice_usernames) - 5})"
+                reasons.append(f"Связанные аккаунты с живым триалом: {shown}")
 
         if shared_hwid_count > 1:
             reasons.append(f"{shared_hwid_count} HWID используются совместно")
@@ -238,6 +272,7 @@ class HwidCrossAccountAnalyzer:
             per_account_abuse=per_account_threshold_hit,
             max_accounts_per_hwid=max_distinct_accounts_per_hwid,
             max_active_trials_per_hwid=max_active_trial_accounts_per_hwid,
+            active_trial_accomplices=accomplices,
         )
 
 

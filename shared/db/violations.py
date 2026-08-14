@@ -773,7 +773,7 @@ class ViolationsMixin:
         self,
         violation_id: int,
         action_taken: str,
-        admin_telegram_id: int,
+        admin_telegram_id: Optional[int] = None,
         admin_comment: Optional[str] = None,
     ) -> bool:
         """
@@ -782,7 +782,8 @@ class ViolationsMixin:
         Args:
             violation_id: ID нарушения
             action_taken: Принятое действие
-            admin_telegram_id: Telegram ID администратора
+            admin_telegram_id: Telegram ID администратора; None — действие
+                выполнила система (автоблокировка), человека за ним нет
             admin_comment: Примечание администратора
 
         Returns:

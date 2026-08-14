@@ -105,6 +105,23 @@ def _score(action=ViolationAction.HARD_BLOCK):
     )
 
 
+def _trial_score(accomplices: list[str]):
+    """Нарушение по абузу пробных подписок со списком соучастников от анализатора."""
+    return SimpleNamespace(
+        total=100.0,
+        recommended_action=ViolationAction.HARD_BLOCK,
+        reasons=["Абуз пробных подписок: 2 аккаунтов с активным триалом на одном устройстве (порог: 1)"],
+        breakdown={
+            "hwid": SimpleNamespace(
+                score=100.0,
+                matched_details=None,
+                active_trial_accomplices=accomplices,
+            ),
+        },
+        confidence=0.3,
+    )
+
+
 def _handle_violation_mocks(save_result, config: dict | None = None):
     """Общий набор патчей для collector._handle_violation."""
     cfg = {"violation_auto_hard_block": True}
@@ -112,6 +129,10 @@ def _handle_violation_mocks(save_result, config: dict | None = None):
         cfg.update(config)
     db = MagicMock()
     db.save_violation = AsyncMock(return_value=save_result)
+    # Обе отметки идут через await: обычный MagicMock тут падает в except и вызов
+    # выглядит «прошедшим», хотя ничего не произошло
+    db.mark_violation_notified = AsyncMock(return_value=True)
+    db.update_violation_action = AsyncMock(return_value=True)
     monitor = MagicMock()
     monitor.get_user_active_connections = AsyncMock(return_value=[])
     return db, monitor, [
@@ -161,6 +182,51 @@ class TestHandleViolationCreatedGate:
         assert "violation.created" in fired_events
         assert "user.blocked" not in fired_events
         disable.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_trial_abuse_blocks_accomplices_and_resolves(self):
+        """Абуз триалов: блокируется вся связка, а не только проверяемый, и запись
+        помечается решённой — систему уже отработала, ручного решения не ждёт."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(46, True))
+        with patches[0], patches[1], patches[2] as fire, patches[3], patches[4], patches[5] as disable, patches[6]:
+            await collector._handle_violation(
+                USER_UUID, _trial_score(["acc-uuid-1", "acc-uuid-2"]), None, [], False,
+            )
+        disabled = [c.args[0] for c in disable.await_args_list]
+        assert disabled == [USER_UUID, "acc-uuid-1", "acc-uuid-2"]
+        assert [c.args[0] for c in fire.call_args_list].count("user.blocked") == 3
+        db.update_violation_action.assert_awaited_once()
+        assert db.update_violation_action.await_args.kwargs["action_taken"] == "hard_block"
+        assert db.update_violation_action.await_args.kwargs["admin_telegram_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_accomplice_failure_does_not_stop_the_rest(self):
+        """Падение блокировки одного соучастника не должно ронять остальных."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(47, True))
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5] as disable, patches[6]:
+            disable.side_effect = [None, RuntimeError("panel down"), None]
+            await collector._handle_violation(
+                USER_UUID, _trial_score(["acc-bad", "acc-good"]), None, [], False,
+            )
+        assert [c.args[0] for c in disable.await_args_list] == [USER_UUID, "acc-bad", "acc-good"]
+        db.update_violation_action.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_sent_notification_is_marked(self):
+        """Уведомление уходит до сохранения записи, поэтому отметку ставит пайплайн —
+        на ней держится кулдаун повторных уведомлений."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(48, True))
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+            await collector._handle_violation(USER_UUID, _score(), None, [], False)
+        db.mark_violation_notified.assert_awaited_once_with(48)
+
+    @pytest.mark.asyncio
+    async def test_whitelisted_violation_is_not_marked_notified(self):
+        """Юзеру из белого списка уведомление не отправляли — отметки быть не должно."""
+        db, monitor, patches = _handle_violation_mocks(save_result=(49, True))
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+            await collector._handle_violation(USER_UUID, _score(), None, [], True)
+        db.mark_violation_notified.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_non_hard_block_never_disables(self):

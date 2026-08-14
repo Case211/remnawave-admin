@@ -236,6 +236,50 @@ async def test_hwid_parallel_active_trials_hard_blocks():
 
 
 @pytest.mark.asyncio
+async def test_hwid_trial_abuse_collects_accomplices():
+    """В соучастники попадают только чужие подписки с ЖИВЫМ триалом на том же HWID:
+    их блокируют вместе с проверяемым, иначе связка остаётся рабочей. Платный и
+    истёкший аккаунты рядом на устройстве под блокировку не идут."""
+    geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
+                               connection_type="residential")}
+    shared = [{
+        "hwid": "HW1", "self_telegram_id": 100, "self_email": None,
+        "self_is_trial": True, "self_is_active": True,
+        "other_users": [
+            {"uuid": "U-trial", "telegram_id": 201, "email": None, "username": "trial2",
+             "status": "ACTIVE", "is_trial": True, "is_active": True},
+            {"uuid": "U-paid", "telegram_id": 202, "email": None, "username": "payer",
+             "status": "ACTIVE", "is_trial": False, "is_active": True},
+            {"uuid": "U-old", "telegram_id": 203, "email": None, "username": "old",
+             "status": "EXPIRED", "is_trial": True, "is_active": False},
+        ],
+    }]
+    det = make_detector(geo_map, recent_violations=0)
+    res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
+    assert res.breakdown["hwid"].active_trial_accomplices == ["U-trial"]
+    assert res.recommended_action.value == "hard_block"
+    assert any("Связанные аккаунты" in r for r in res.reasons)
+
+
+@pytest.mark.asyncio
+async def test_hwid_no_accomplices_when_threshold_not_hit():
+    """Порог не пробит — список соучастников пуст, блокировать некого."""
+    geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
+                               connection_type="residential")}
+    shared = [{
+        "hwid": "HW1", "self_telegram_id": 100, "self_email": None,
+        "self_is_trial": True, "self_is_active": True,
+        "other_users": [
+            {"uuid": "U-paid", "telegram_id": 202, "email": None, "username": "payer",
+             "status": "ACTIVE", "is_trial": False, "is_active": True},
+        ],
+    }]
+    det = make_detector(geo_map, recent_violations=0)
+    res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
+    assert not res.breakdown["hwid"].active_trial_accomplices
+
+
+@pytest.mark.asyncio
 async def test_hwid_expired_trial_next_to_active_is_clean():
     """Истёкший триал рядом с живой подпиской — обычный жизненный цикл, а не абуз:
     живой триал на устройстве один, порог не пробит."""
