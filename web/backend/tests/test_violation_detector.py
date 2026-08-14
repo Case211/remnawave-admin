@@ -188,6 +188,77 @@ async def test_hwid_below_hard_block_accounts_stays_temp_block():
 
 
 @pytest.mark.asyncio
+async def test_hwid_email_grouping_keeps_multitariff_clean():
+    """Мультитариф без Telegram: две подписки одного email на общем устройстве — это
+    ОДИН аккаунт, нарушения быть не должно. До группировки по email каждый UUID без
+    telegram_id считался отдельным аккаунтом, и легальный апгрейд выглядел как
+    кросс-аккаунт."""
+    geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
+                               connection_type="residential")}
+    shared = [{
+        "hwid": "HW1", "self_telegram_id": None, "self_email": "Dacx@Mail.Ru",
+        "self_is_trial": False, "self_is_active": True,
+        "other_users": [
+            {"uuid": "U1", "telegram_id": None, "email": "dacx@mail.ru", "username": "dacx-trial",
+             "status": "EXPIRED", "is_trial": True, "is_active": False},
+        ],
+    }]
+    det = make_detector(geo_map, recent_violations=0)
+    res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
+    assert res.breakdown["hwid"].max_accounts_per_hwid == 1
+    assert res.breakdown["hwid"].score == 0.0
+
+
+@pytest.mark.asyncio
+async def test_hwid_parallel_active_trials_hard_blocks():
+    """Два РАЗНЫХ аккаунта с живым триалом на одном устройстве -> extreme abuse,
+    hard_block. Порога по числу аккаунтов (дефолт 2) двух аккаунтов не хватает —
+    срабатывает именно триальная проверка."""
+    geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
+                               connection_type="residential")}
+    shared = [{
+        "hwid": "HW1", "self_telegram_id": 7948421388, "self_email": None,
+        "self_is_trial": True, "self_is_active": True,
+        "other_users": [
+            {"uuid": "U1", "telegram_id": 6283030269, "email": None, "username": "trial2",
+             "status": "ACTIVE", "is_trial": True, "is_active": True},
+        ],
+    }]
+    det = make_detector(geo_map, recent_violations=0)
+    res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
+    assert res.breakdown["hwid"].max_active_trials_per_hwid == 2
+    assert res.breakdown["hwid"].max_accounts_per_hwid == 2
+    assert res.total == 100.0
+    assert res.recommended_action.value == "hard_block"
+    # Ровно одна строка: анализатор и детектор формулируют находку одинаково,
+    # дедупликация причин схлопывает их в одну — админ не должен видеть дубль
+    assert len([r for r in res.reasons if "активным триалом" in r]) == 1
+
+
+@pytest.mark.asyncio
+async def test_hwid_expired_trial_next_to_active_is_clean():
+    """Истёкший триал рядом с живой подпиской — обычный жизненный цикл, а не абуз:
+    живой триал на устройстве один, порог не пробит."""
+    geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
+                               connection_type="residential")}
+    shared = [{
+        "hwid": "HW1", "self_telegram_id": 100, "self_email": None,
+        "self_is_trial": True, "self_is_active": True,
+        "other_users": [
+            {"uuid": "U1", "telegram_id": 201, "email": None, "username": "paid",
+             "status": "ACTIVE", "is_trial": False, "is_active": True},
+            {"uuid": "U2", "telegram_id": 201, "email": None, "username": "old-trial",
+             "status": "DISABLED", "is_trial": True, "is_active": False},
+        ],
+    }]
+    det = make_detector(geo_map, recent_violations=0)
+    res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
+    assert res.breakdown["hwid"].max_active_trials_per_hwid == 1
+    assert res.breakdown["hwid"].score == 0.0
+    assert res.recommended_action.value != "hard_block"
+
+
+@pytest.mark.asyncio
 async def test_hwid_multitariff_creates_violation():
     """C2: один telegram_id с 11 подписками на 1 HWID -> per_account_abuse, нарушение.
     other_accounts_count=0, поэтому раньше floor не срабатывал и нарушения не было."""

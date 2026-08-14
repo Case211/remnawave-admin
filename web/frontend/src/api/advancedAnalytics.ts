@@ -75,6 +75,7 @@ export interface SharedHwidsData {
   items: SharedHwidGroup[]
   total_shared_hwids: number
   hard_block_accounts_threshold?: number
+  active_trials_threshold?: number
 }
 
 export interface TimeseriesPoint {

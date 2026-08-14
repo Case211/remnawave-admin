@@ -471,6 +471,27 @@ class IntelligentViolationDetector:
                     f"Массовый кросс-аккаунт: {hwid_accounts} аккаунтов на одном HWID (порог: {hb_hwid_accounts})"
                 )
 
+            # 6) Несколько РАЗНЫХ аккаунтов с живым триалом на одном устройстве.
+            # Проверка №5 меряет аккаунты любого типа и на «двое платящих делят планшет»
+            # даёт такой же сигнал, как на реальный абуз, поэтому её порог приходится
+            # держать высоким. Живые триалы — сигнал однозначный: апгрейд «пробная
+            # истекла → куплена платная» сюда не попадает (истёкшая не активна), два
+            # платящих человека тоже. Порог берётся из настройки анализатора, чтобы
+            # не заводить третье место с той же семантикой.
+            max_active_trials = config_service.get("violations_hwid_max_active_trials", 1)
+            try:
+                max_active_trials = int(max_active_trials)
+            except (TypeError, ValueError):
+                max_active_trials = 1
+            hwid_active_trials = getattr(hwid_score, 'max_active_trials_per_hwid', 0)
+            if max_active_trials > 0 and hwid_active_trials > max_active_trials:
+                # Текст дословно повторяет причину HwidCrossAccountAnalyzer — причины
+                # дедуплицируются по строке, так что в уведомление уйдёт одна запись.
+                extreme_abuse_reasons.append(
+                    f"Абуз пробных подписок: {hwid_active_trials} аккаунтов "
+                    f"с активным триалом на одном устройстве (порог: {max_active_trials})"
+                )
+
             if extreme_abuse_reasons:
                 raw_score = 100.0
                 all_reasons_extra = extreme_abuse_reasons  # Will be added below

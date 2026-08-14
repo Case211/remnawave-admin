@@ -64,6 +64,10 @@ function activeCount(group: SharedHwidGroup): number {
   return group.users.filter((u) => u.is_active).length
 }
 
+function activeTrialCount(group: SharedHwidGroup): number {
+  return group.users.filter((u) => u.is_active && u.is_trial).length
+}
+
 function hasRecentAccount(group: SharedHwidGroup): boolean {
   return lastSeenTs(group) > Date.now() - NEW_ACCOUNT_WINDOW_MS
 }
@@ -87,6 +91,7 @@ export function SharedHwidsCard() {
 
   const items: SharedHwidGroup[] = data?.items || []
   const banThreshold = data?.hard_block_accounts_threshold || 0
+  const trialThreshold = data?.active_trials_threshold || 0
 
   const platforms = useMemo(
     () => [...new Set(items.map((g) => g.platform).filter(Boolean))] as string[],
@@ -98,7 +103,10 @@ export function SharedHwidsCard() {
     accounts: items.reduce((s, g) => s + g.user_count, 0),
     withActive: items.filter((g) => activeCount(g) > 0).length,
     overThreshold: banThreshold > 0 ? items.filter((g) => g.user_count >= banThreshold).length : 0,
-  }), [items, banThreshold])
+    trialAbuse: trialThreshold > 0
+      ? items.filter((g) => activeTrialCount(g) > trialThreshold).length
+      : 0,
+  }), [items, banThreshold, trialThreshold])
 
   const filtered = useMemo(() => {
     let result = items
@@ -221,6 +229,12 @@ export function SharedHwidsCard() {
                 {t('violations.sharedHwids.stats.overThreshold', { thr: banThreshold })}: <b className="text-red-400">{stats.overThreshold}</b>
               </span>
             )}
+            {trialThreshold > 0 && (
+              <span className="flex items-center gap-1.5">
+                <ShieldBan className="w-3.5 h-3.5 text-orange-400" />
+                {t('violations.sharedHwids.stats.trialAbuse', { thr: trialThreshold })}: <b className="text-orange-400">{stats.trialAbuse}</b>
+              </span>
+            )}
           </div>
         )}
 
@@ -273,6 +287,7 @@ export function SharedHwidsCard() {
               const active = activeCount(group)
               const lastSeen = lastSeenTs(group)
               const overThreshold = banThreshold > 0 && group.user_count >= banThreshold
+              const trialAbuse = trialThreshold > 0 && activeTrialCount(group) > trialThreshold
               return (
                 <Fragment key={group.hwid}>
                   <div
@@ -338,6 +353,15 @@ export function SharedHwidsCard() {
                         >
                           <ShieldBan className="w-3 h-3" />
                           {t('violations.sharedHwids.overThresholdBadge', { thr: banThreshold })}
+                        </Badge>
+                      )}
+                      {trialAbuse && (
+                        <Badge
+                          className="bg-orange-600/30 text-orange-200 text-[10px] gap-1"
+                          title={t('violations.sharedHwids.trialAbuseTooltip', { thr: trialThreshold })}
+                        >
+                          <ShieldBan className="w-3 h-3" />
+                          {t('violations.sharedHwids.trialAbuseBadge', { count: activeTrialCount(group) })}
                         </Badge>
                       )}
                       {active > 0 && (

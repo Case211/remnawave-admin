@@ -1650,11 +1650,14 @@
       "lastActivityTooltip": "Most recent appearance of this HWID on a new account",
       "overThresholdBadge": "≥{{thr}} → ban",
       "overThresholdTooltip": "Account count has reached the hard-block threshold ({{thr}}) — the next violation gets hard_block",
+      "trialAbuseBadge": "{{count}} live trials → ban",
+      "trialAbuseTooltip": "More distinct accounts with a live trial than the threshold ({{thr}}) — this is trial farming, the violation gets hard_block",
       "stats": {
         "groups": "Devices",
         "accounts": "Accounts",
         "withActive": "With active",
-        "overThreshold": "Over ban threshold ({{thr}}+)"
+        "overThreshold": "Over ban threshold ({{thr}}+)",
+        "trialAbuse": "Trial farming (>{{thr}} live)"
       },
       "sort": {
         "accounts": "By accounts",
@@ -3644,7 +3647,11 @@
       },
       "violations_hwid_max_accounts": {
         "label": "👥 Max accounts per HWID",
-        "description": "Number of accounts sharing one HWID that triggers a violation (default 2)"
+        "description": "How many distinct accounts may share one HWID WITHOUT triggering — a violation starts at the next account (value 2 → fires on the third). Subscriptions of the same person count as one account: grouped by telegram_id, or by email when the user signed up without Telegram"
+      },
+      "violations_hwid_max_active_trials": {
+        "label": "🎁 Max active trials per HWID",
+        "description": "How many distinct accounts with a LIVE trial subscription may share one device without triggering. Catches trial farming via fresh accounts while ignoring both the normal «trial expired → paid plan purchased» upgrade and two paying people sharing a device. Trial status is determined by the tag and internal squad settings below. 0 = disabled"
       },
       "violations_mobile_cgnat_buffer": {
         "label": "📱 Mobile CGNAT buffer (IPs)",
