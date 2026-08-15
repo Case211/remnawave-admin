@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import i18n from '@/i18n'
 
 import ExternalPluginPage, { loadScript } from '@/plugins/ExternalPluginPage'
@@ -123,6 +123,56 @@ describe('ExternalPluginPage', () => {
     await fire(retryTag!, 'load')
     await waitFor(() => expect(mount).toHaveBeenCalledTimes(1))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('gives the next plugin a fresh container when switching between two external pages', async () => {
+    const OTHER: PluginInfo = {
+      ...PLUGIN,
+      id: 'other_plugin',
+      name: 'Other',
+      api_prefix: '/api/v2/plugins/other_plugin',
+      navigation: [
+        { path: '/plugins/other-plugin', label_i18n: 'Other', icon: 'Zap', permission: ['other_plugin', 'view'] },
+      ],
+    }
+    useActivePlugins.mockReturnValue({ data: [PLUGIN, OTHER], isLoading: false })
+    const firstMount = vi.fn((el: HTMLElement) => {
+      el.appendChild(Object.assign(document.createElement('div'), { id: 'leftover' }))
+    })
+    const firstUnmount = vi.fn() // deliberately leaves #leftover behind
+    const secondMount = vi.fn()
+    window.rwaPluginUI = {
+      my_plugin: { mount: firstMount, unmount: firstUnmount },
+      other_plugin: { mount: secondMount },
+    }
+
+    // Both routes render the same component; only :pluginId changes.
+    const router = createMemoryRouter(
+      [{ path: '/plugins/:pluginId', element: <ExternalPluginPage /> }],
+      { initialEntries: ['/plugins/my-plugin'] },
+    )
+    render(<RouterProvider router={router} />)
+    await fire(pluginScript()!, 'load')
+    await waitFor(() => expect(firstMount).toHaveBeenCalledTimes(1))
+    const firstHost = screen.getByTestId('plugin-host')
+    expect(firstHost.querySelector('#leftover')).not.toBeNull()
+
+    await act(async () => {
+      await router.navigate('/plugins/other-plugin')
+    })
+    const otherTag = document.head.querySelector<HTMLScriptElement>(
+      'script[data-plugin-ui="/api/v2/plugins/other_plugin/app"]',
+    )
+    expect(otherTag).not.toBeNull()
+    await fire(otherTag!, 'load')
+    await waitFor(() => expect(secondMount).toHaveBeenCalledTimes(1))
+
+    expect(firstUnmount).toHaveBeenCalledTimes(1)
+    const secondHost = screen.getByTestId('plugin-host')
+    expect(secondHost).not.toBe(firstHost)
+    expect(secondMount.mock.calls[0][0]).toBe(secondHost)
+    // Whatever the previous plugin failed to clean up must not leak into the next page.
+    expect(secondHost.querySelector('#leftover')).toBeNull()
   })
 
   it('reports when the script loads but never registers a handle', async () => {

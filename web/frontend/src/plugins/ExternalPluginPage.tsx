@@ -142,7 +142,9 @@ export default function ExternalPluginPage() {
           {t('plugins.external.failed')}
         </div>
       )}
-      <div ref={hostRef} data-testid="plugin-host" />
+      {/* keyed by plugin id: switching between two external plugins must give the
+          next one a fresh container even if the previous mount left nodes behind */}
+      <div key={plugin.id} ref={hostRef} data-testid="plugin-host" />
     </>
   )
 }
