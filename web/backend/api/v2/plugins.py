@@ -33,7 +33,7 @@ class PluginNavEntry(BaseModel):
 class PluginUIInfo(BaseModel):
     """How the frontend should render the page of an out-of-tree plugin."""
 
-    kind: Literal["module", "iframe"]
+    kind: Literal["module"]
     path: str
 
 

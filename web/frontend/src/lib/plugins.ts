@@ -54,7 +54,8 @@ export interface PluginNavEntry {
  * See ``ExternalPluginPage`` and ``PluginUI`` in the backend manifest.
  */
 export interface PluginUI {
-  kind: 'module' | 'iframe'
+  /** Only ``module`` for now; kept as a field so new kinds can be added. */
+  kind: 'module'
   path: string
 }
 

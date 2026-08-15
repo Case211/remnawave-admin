@@ -73,16 +73,20 @@ class PluginUI:
     wheel cannot add itself there, so it declares its UI here instead and the
     frontend mounts it on the generic ``/plugins/:pluginId`` route.
 
-    ``kind="module"`` — the frontend loads ``api_prefix + path`` as a script;
-    the script registers ``window.rwaPluginUI[<plugin id>] = {mount, unmount}``
-    and renders into the element it is given. Same-origin, so it passes the
-    panel CSP (``script-src 'self'``).
+    ``kind="module"`` (the only kind for now) — the frontend loads
+    ``api_prefix + path`` as a script; the script registers
+    ``window.rwaPluginUI[<plugin id>] = {mount, unmount}`` and renders into
+    the element it is given. Same-origin, so it passes the panel CSP
+    (``script-src 'self'``).
 
-    ``kind="iframe"`` — the frontend embeds ``api_prefix + path`` in an
-    iframe; the plugin must serve that page with ``frame-ancestors 'self'``.
+    An iframe kind is deliberately not offered: ``add_security_headers`` in
+    ``main.py`` stamps ``X-Frame-Options: DENY`` / ``frame-ancestors 'none'``
+    on every response, plugin routers included, so a plugin page could never
+    be framed. ``kind`` stays a field so a new kind can be added without
+    breaking manifests.
     """
 
-    kind: Literal["module", "iframe"] = "module"
+    kind: Literal["module"] = "module"
     path: str = "/app"
 
 

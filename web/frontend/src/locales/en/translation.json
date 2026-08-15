@@ -5677,7 +5677,6 @@
     },
     "external": {
       "loading": "Loading the plugin interface…",
-      "unknown": "Unknown plugin",
       "no_ui": "This plugin does not provide a page",
       "failed": "Could not load the plugin interface"
     },
