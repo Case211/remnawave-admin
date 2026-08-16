@@ -213,7 +213,16 @@
     "logout": "Logout",
     "logoutConfirmTitle": "Log out of the panel?",
     "logoutConfirmDescription": "You'll need to sign in again. Any unsaved changes will be lost.",
-    "toggleCollapse": "Toggle sidebar"
+    "toggleCollapse": "Toggle sidebar",
+    "customize": {
+      "button": "Customize menu",
+      "title": "Menu order",
+      "description": "Drag an entry by the handle on the left — the menu updates instantly.",
+      "hint": "A section header moves together with its entries. The order is stored in this browser.",
+      "drag": "Drag to reorder",
+      "reset": "Reset",
+      "done": "Done"
+    }
   },
   "commandPalette": {
     "placeholder": "Search pages, users, actions...",

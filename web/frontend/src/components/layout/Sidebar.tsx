@@ -4,43 +4,15 @@ import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import client from '@/api/client'
 import {
-  LayoutDashboard,
-  Users,
-  Server,
-  Activity,
-  Globe,
-  ShieldAlert,
-  Settings,
   LogOut,
   X,
-  UserCog,
-  ClipboardList,
-  Terminal,
-  BarChart3,
-  Zap,
-  BellRing,
-  Mail,
-  HardDrive,
-  Key,
-  Bot,
-  ShieldCheck,
-  UsersRound,
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   Github,
   MessageCircle,
   Heart,
-  Ticket,
-  Megaphone,
-  Share2,
-  ShieldBan,
-  Package,
-  Wallet,
-  FileText,
-  Boxes,
-  Network,
-  type LucideIcon,
+  ListOrdered,
 } from '@/components/brand/icons'
 import { useAuthStore } from '../../store/authStore'
 import { usePermissionStore } from '../../store/permissionStore'
@@ -57,96 +29,18 @@ import {
 import { cn } from '@/lib/utils'
 import { BrandLogo } from '@/components/brand/BrandLogo'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-
-interface NavItem {
-  type?: 'item'
-  name: string
-  href: string
-  icon: LucideIcon
-  permission: { resource: string; action: string } | null
-}
-
-interface NavGroup {
-  type: 'group'
-  name: string
-  icon: LucideIcon
-  items: NavItem[]
-}
-
-interface NavSection {
-  type: 'section'
-  name: string
-}
-
-type NavigationEntry = NavItem | NavGroup | NavSection
-
-function isNavGroup(entry: NavigationEntry): entry is NavGroup {
-  return entry.type === 'group'
-}
-
-function isNavSection(entry: NavigationEntry): entry is NavSection {
-  return entry.type === 'section'
-}
-
-const navigation: NavigationEntry[] = [
-  // Overview — «смотрю на систему»
-  { type: 'section', name: 'nav.sections.overview' },
-  { name: 'nav.dashboard', href: '/', icon: LayoutDashboard, permission: null },
-  { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
-  // People — «управляю людьми»
-  { type: 'section', name: 'nav.sections.people' },
-  { name: 'nav.users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
-  { name: 'nav.squads', href: '/squads', icon: UsersRound, permission: { resource: 'users', action: 'view' } },
-  // Infrastructure — «управляю железом и конфигурацией»
-  { type: 'section', name: 'nav.sections.infrastructure' },
-  { name: 'nav.nodes', href: '/nodes', icon: Server, permission: { resource: 'nodes', action: 'view' } },
-  { name: 'nav.fleet', href: '/fleet', icon: Activity, permission: { resource: 'fleet', action: 'view' } },
-  { name: 'nav.hosts', href: '/hosts', icon: Globe, permission: { resource: 'hosts', action: 'view' } },
-  { name: 'nav.dns', href: '/dns', icon: Network, permission: { resource: 'dns', action: 'view' } },
-  { name: 'nav.bscheck', href: '/bscheck', icon: ShieldCheck, permission: { resource: 'bscheck', action: 'view' } },
-  { name: 'nav.finance', href: '/finance', icon: Wallet, permission: { resource: 'finance', action: 'view' } },
-  { name: 'nav.resources', href: '/resources', icon: Boxes, permission: { resource: 'resources', action: 'view' } },
-  // Security — «защищаюсь»
-  { type: 'section', name: 'nav.sections.security' },
-  { name: 'nav.violations', href: '/violations', icon: ShieldAlert, permission: { resource: 'violations', action: 'view' } },
-  { name: 'nav.blocking', href: '/blocking', icon: ShieldBan, permission: { resource: 'blocked_ips', action: 'view' } },
-  { name: 'nav.reports', href: '/reports', icon: FileText, permission: { resource: 'reports', action: 'view' } },
-  // Services — «настраиваю реакции и каналы»
-  { type: 'section', name: 'nav.sections.services' },
-  { name: 'nav.automations', href: '/automations', icon: Zap, permission: { resource: 'automation', action: 'view' } },
-  { name: 'nav.notifications', href: '/notifications', icon: BellRing, permission: { resource: 'notifications', action: 'view' } },
-  { name: 'nav.mailServer', href: '/mailserver', icon: Mail, permission: { resource: 'mailserver', action: 'view' } },
-  { name: 'nav.apiKeys', href: '/api-keys', icon: Key, permission: { resource: 'api_keys', action: 'view' } },
-  // Bedolaga
-  { type: 'section', name: 'nav.sections.bedolaga' },
-  {
-    type: 'group',
-    name: 'nav.bedolagaGroup',
-    icon: Bot,
-    items: [
-      { name: 'nav.bedolaga.dashboard', href: '/bedolaga', icon: BarChart3, permission: { resource: 'bedolaga', action: 'view' } },
-      { name: 'nav.bedolaga.customers', href: '/bedolaga/customers', icon: Users, permission: { resource: 'bedolaga_customers', action: 'view' } },
-      { name: 'nav.bedolaga.promo', href: '/bedolaga/promo', icon: Ticket, permission: { resource: 'bedolaga_promo', action: 'view' } },
-      { name: 'nav.bedolaga.marketing', href: '/bedolaga/marketing', icon: Megaphone, permission: { resource: 'bedolaga_marketing', action: 'view' } },
-      { name: 'nav.bedolaga.referrals', href: '/bedolaga/referrals', icon: Share2, permission: { resource: 'bedolaga', action: 'view' } },
-    ],
-  },
-  // Administration
-  { type: 'section', name: 'nav.sections.admin' },
-  {
-    type: 'group',
-    name: 'nav.administration',
-    icon: ShieldCheck,
-    items: [
-      { name: 'nav.admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
-      { name: 'nav.audit', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
-      { name: 'nav.adminPlugins', href: '/admin/plugins', icon: Package, permission: { resource: 'plugins', action: 'view' } },
-      { name: 'nav.logs', href: '/logs', icon: Terminal, permission: { resource: 'logs', action: 'view' } },
-      { name: 'nav.backups', href: '/backups', icon: HardDrive, permission: { resource: 'backups', action: 'view' } },
-    ],
-  },
-  { name: 'nav.settings', href: '/settings', icon: Settings, permission: { resource: 'settings', action: 'view' } },
-]
+import { applySidebarOrder, useSidebarOrder } from '@/lib/sidebarOrder'
+import { SidebarCustomizeDialog } from './SidebarCustomizeDialog'
+import {
+  filterVisible,
+  isNavGroup,
+  isNavSection,
+  navigation,
+  type NavGroup,
+  type NavItem,
+  type NavSection,
+  type NavigationEntry,
+} from './navigation'
 
 interface SidebarProps {
   mobileOpen?: boolean
@@ -163,7 +57,9 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const toggleSidebar = useAppearanceStore((s) => s.toggleSidebar)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [customizeOpen, setCustomizeOpen] = useState(false)
   const { data: activePlugins } = useActivePlugins()
+  const { order, moveTop, moveInGroup, reset: resetOrder, isCustomized } = useSidebarOrder()
 
   // Build the navigation merged with plugin-contributed entries. Plugins
   // are grouped by ``section_i18n`` (or fall back to a generic "Plugins"
@@ -222,29 +118,18 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     })
   }
 
-  // Check if a nav item is visible based on permissions
-  const isItemVisible = (item: NavItem) => {
-    if (!item.permission) return true
-    return hasPermission(item.permission.resource, item.permission.action)
-  }
+  // Пользовательская расстановка ложится на полное меню — до отсева по
+  // правам: так пункт, которого этот админ не видит, всё равно держит своё
+  // место для тех, кто видит.
+  const orderedNavigation = useMemo(
+    () => applySidebarOrder(mergedNavigation, order),
+    [mergedNavigation, order],
+  )
 
-  // Filter navigation entries based on permissions (keep sections if next items are visible)
-  const visibleNavigation = mergedNavigation.filter((entry, idx) => {
-    if (isNavSection(entry)) {
-      // Show section header only if at least one following item (before next section) is visible
-      for (let i = idx + 1; i < mergedNavigation.length; i++) {
-        const next = mergedNavigation[i]
-        if (isNavSection(next)) break
-        if (isNavGroup(next) && next.items.some(isItemVisible)) return true
-        if (!isNavSection(next) && !isNavGroup(next) && isItemVisible(next as NavItem)) return true
-      }
-      return false
-    }
-    if (isNavGroup(entry)) {
-      return entry.items.some(isItemVisible)
-    }
-    return isItemVisible(entry as NavItem)
-  })
+  const visibleNavigation = useMemo(
+    () => filterVisible(orderedNavigation, hasPermission),
+    [orderedNavigation, hasPermission],
+  )
 
   // Check if group has active child
   const isGroupActive = (group: NavGroup) =>
@@ -306,7 +191,8 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             if (isNavGroup(entry)) {
               const groupActive = isGroupActive(entry)
               const isExpanded = expandedGroups.has(entry.name) || groupActive
-              const visibleItems = entry.items.filter(isItemVisible)
+              // Запретные подпункты отсеяны ещё в filterVisible.
+              const visibleItems = entry.items
 
               // When collapsed, show group items as flat icons
               if (collapsed) {
@@ -469,15 +355,33 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         </nav>
       </ScrollArea>
 
-      {/* Collapse toggle — desktop only */}
-      <div className="hidden md:flex justify-center py-2">
+      {/* Порядок пунктов и сворачивание. Сворачивание — только на десктопе:
+          на телефоне меню и так выезжает поверх экрана. */}
+      <div className={cn("flex items-center justify-center gap-1 py-2", collapsed && "flex-col")}>
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setCustomizeOpen(true)}
+              className={cn(
+                "h-8 w-8 text-dark-300 hover:text-white",
+                isCustomized && "text-primary-400",
+              )}
+              aria-label={t('sidebar.customize.button')}
+            >
+              <ListOrdered className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('sidebar.customize.button')}</TooltipContent>
+        </Tooltip>
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
-              className="h-8 w-8 text-dark-300 hover:text-white"
+              className="hidden md:inline-flex h-8 w-8 text-dark-300 hover:text-white"
               aria-label={t('sidebar.toggleCollapse', 'Toggle sidebar')}
             >
               {collapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
@@ -665,6 +569,17 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       >
         {sidebarContent}
       </div>
+
+      <SidebarCustomizeDialog
+        open={customizeOpen}
+        onOpenChange={setCustomizeOpen}
+        entries={orderedNavigation}
+        visible={visibleNavigation}
+        onMoveTop={moveTop}
+        onMoveInGroup={moveInGroup}
+        onReset={resetOrder}
+        isCustomized={isCustomized}
+      />
 
       <ConfirmDialog
         open={logoutConfirmOpen}
