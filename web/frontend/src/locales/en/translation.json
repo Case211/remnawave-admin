@@ -5670,6 +5670,7 @@
       "pip_install_failed": "pip failed to install the package — check backend logs"
     },
     "free": "Free",
+    "free_hint": "no subscription needed",
     "pick_paid": "Choose a paid plan",
     "plan": "Plan"
   },
