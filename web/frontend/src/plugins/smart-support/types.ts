@@ -294,3 +294,63 @@ export interface SessionListResponse {
   items: SessionEntry[]
   total: number
 }
+
+
+// ── общий справочник клиентских приложений ────────────────────────────────
+// Ведут его все панели вместе: любая предлагает правку, остальные голосуют,
+// в справочник она попадает решением владельца сервера лицензий.
+
+export interface ClientIssue {
+  id?: number | null
+  version_min?: string | null
+  version_max?: string | null
+  platform?: string | null
+  os_min?: string | null
+  os_max?: string | null
+  severity: 'low' | 'medium' | 'high'
+  title: string
+  detail?: string | null
+  workaround?: string | null
+}
+
+export interface ClientApp {
+  id: string
+  title?: string | null
+  latest_version?: string | null
+  /** Под одним User-Agent ходят разные сборки — версия не сравнивается. */
+  ambiguous: boolean
+  notes?: string | null
+  issues: ClientIssue[]
+}
+
+export interface ClientReferenceResponse {
+  apps: ClientApp[]
+  catalog_version: number
+}
+
+export interface Submission {
+  id: number
+  kind: 'app' | 'issue'
+  app_id: string
+  payload: Record<string, unknown>
+  comment: string
+  status: 'pending' | 'accepted' | 'rejected'
+  votes_up: number
+  votes_down: number
+  /** Голос этой панели: 1 согласна, -1 нет, 0 не голосовала. */
+  my_vote: number
+  /** Предложение отправлено с этой панели — за своё не голосуют. */
+  mine: boolean
+  created_at: string
+}
+
+export interface SubmissionListResponse {
+  submissions: Submission[]
+}
+
+export interface SubmissionIn {
+  kind: 'app' | 'issue'
+  app_id: string
+  payload: Record<string, unknown>
+  comment?: string
+}

@@ -218,6 +218,30 @@ class CloudClient:
         except entitlements.LicenseServerError as e:
             raise CloudUnavailable(e.code, e.detail) from e
 
+    async def client_submissions(self, status: str = "open") -> dict:
+        """Правки справочника, предложенные панелями (в т.ч. этой)."""
+        from web.backend.core import entitlements
+        try:
+            return await entitlements.client_submissions(status)
+        except entitlements.LicenseServerError as e:
+            raise CloudUnavailable(e.code, e.detail) from e
+
+    async def submit_client_change(self, payload: dict) -> dict:
+        """Предложить правку общего справочника."""
+        from web.backend.core import entitlements
+        try:
+            return await entitlements.submit_client_change(payload)
+        except entitlements.LicenseServerError as e:
+            raise CloudError(e.code, e.detail) from e
+
+    async def vote_client_submission(self, submission_id: int, vote: int) -> dict:
+        """Подтвердить чужую правку, возразить или отозвать свой голос."""
+        from web.backend.core import entitlements
+        try:
+            return await entitlements.vote_client_submission(submission_id, vote)
+        except entitlements.LicenseServerError as e:
+            raise CloudError(e.code, e.detail) from e
+
     async def call(self, method: str, payload: dict | None = None, *,
                    timeout: float = 30.0) -> dict:
         from web.backend.core import entitlements

@@ -6055,6 +6055,51 @@
             "help": "Older clusters are not surfaced in reports even if still in DB."
           }
         }
+      },
+      "clients": {
+        "title": "Client reference",
+        "subtitle": "Current app versions and known bugs, shared by every panel. This is what the report compares the client version against.",
+        "back": "Back to search",
+        "queue": "Proposed changes",
+        "queue_empty": "No open proposals",
+        "decided": "Decided ({{n}})",
+        "reference": "Reference",
+        "reference_empty": "The reference is empty",
+        "propose": "Propose a change",
+        "propose_title": "Reference change",
+        "propose_hint": "Other panels will see the proposal and either confirm it or object. It reaches the reference after the server owner reviews it.",
+        "proposed": "Proposal sent",
+        "propose_failed": "Could not send the proposal",
+        "vote_failed": "Vote was not counted",
+        "send": "Send",
+        "app_id": "App identifier",
+        "app_id_hint": "How the app is detected from the User-Agent: Happ, v2rayNG, V2rayTun.",
+        "latest_version": "Current version",
+        "ambiguous_label": "Builds are numbered differently — don't compare versions",
+        "ambiguous": "version not compared",
+        "no_version": "version unknown",
+        "bug_title": "What breaks",
+        "version_min": "From version",
+        "version_max": "To version",
+        "workaround": "What helps",
+        "comment": "Comment",
+        "version": "version",
+        "issues": "bugs: {{n}}",
+        "fix_version": "Version",
+        "report_bug": "Bug",
+        "mine": "mine",
+        "agree": "Agree",
+        "disagree": "Disagree",
+        "agree_count": "agree: {{n}}",
+        "votes_hint": "How many panels confirmed the change",
+        "kind": {
+          "app": "app version",
+          "issue": "version bug"
+        },
+        "status": {
+          "accepted": "accepted",
+          "rejected": "rejected"
+        }
       }
     }
   },
