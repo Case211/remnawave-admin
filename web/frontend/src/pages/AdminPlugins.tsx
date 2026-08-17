@@ -670,8 +670,12 @@ function PluginCard({
         )}
       </div>
 
-      {entitlement?.quota && <QuotaBar quota={entitlement.quota} />}
-      {entitlement?.paid_until && (
+      {/* У бесплатного плагина ни квоты, ни срока оплаты быть не может.
+          Сервер их и не отдаёт, но у инстанса мог остаться entitlement с
+          платных времён — показывать «оплачено до» и счётчик вызовов у
+          того, что раздаётся даром, значит врать. */}
+      {!isFree && entitlement?.quota && <QuotaBar quota={entitlement.quota} />}
+      {!isFree && entitlement?.paid_until && (
         <div className="text-[11px] text-dark-400">
           {t('adminPlugins.paid_until')}: <span className="text-dark-200">{formatTs(entitlement.paid_until, lang)}</span>
         </div>
