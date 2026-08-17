@@ -12,8 +12,10 @@ The panel builds the command for you, token included:
 2. Copy the resulting line and run it on the node:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh \
-  | bash -s -- --uuid UUID --url URL --token TOKEN
+curl -fsSL --retry 3 --retry-delay 2 \
+  https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh \
+  -o /tmp/rwa-node-agent-install.sh \
+  && bash /tmp/rwa-node-agent-install.sh --uuid UUID --url URL --token TOKEN
 ```
 
 The script creates `/opt/remnawave-node-agent/`, downloads `docker-compose.yml`, writes `.env` and starts the container.
@@ -35,7 +37,7 @@ Generate the token in the panel (**Nodes → node → Agent token**) or in the b
 
 ```bash
 mkdir -p /opt/remnawave-node-agent && cd /opt/remnawave-node-agent
-curl -sLO https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
+curl -fsSLO --retry 3 --retry-delay 2 https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
 nano .env
 docker compose up -d
 ```

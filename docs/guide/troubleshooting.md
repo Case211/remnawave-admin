@@ -47,6 +47,20 @@ docker exec -it <контейнер> python3 scripts/admin_cli.py list-admins
 2. Домен панели прописан в BotFather: `/mybots` → бот → Bot Settings → Domain
 3. Сайт открывается по HTTPS — виджет не работает по HTTP
 
+## Установка агента падает с `429:: command not found`
+
+GitHub ограничивает частоту скачиваний с `raw.githubusercontent.com` и на превышении отвечает `429 Too Many Requests`. Если установщик запускали конвейером (`curl … | bash`), в интерпретатор попадал текст этой ошибки — отсюда странные строки вроде `429:: command not found` и `syntax error near unexpected token`.
+
+Команда из панели скачивает установщик в файл и проверяет результат, поэтому теперь такое не выполнится. Если скачать всё же не удалось, подождите минуту и повторите — лимит снимается сам.
+
+Проверить, в лимите ли вы:
+
+```bash
+curl -sI https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh | head -1
+```
+
+`HTTP/2 200` — всё в порядке, `HTTP/2 429` — лимит ещё держится.
+
 ## Агент ноды не подключается
 
 `server rejected WebSocket connection: HTTP 404` — reverse proxy не пропускает `/api/v2/agent/ws`. Пример правильного конфига: [Веб-панель и reverse proxy](/guide/web-panel).

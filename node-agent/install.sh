@@ -2,7 +2,14 @@
 set -euo pipefail
 
 # Remnawave Node Agent — one-line installer
-# Usage: curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh | bash -s -- --uuid UUID --url URL --token TOKEN
+# Usage:
+#   curl -fsSL --retry 3 --retry-delay 2 \
+#     https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh \
+#     -o /tmp/rwa-node-agent-install.sh \
+#   && bash /tmp/rwa-node-agent-install.sh --uuid UUID --url URL --token TOKEN
+#
+# Downloading to a file first is deliberate: piping straight into bash feeds it
+# whatever GitHub returns, and a 429 rate-limit body becomes a command.
 
 INSTALL_DIR="/opt/remnawave-node-agent"
 COMPOSE_URL="https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml"
@@ -85,13 +92,27 @@ mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
 # Download docker-compose.yml
+#
+# raw.githubusercontent.com limits requests per address and answers 429 when
+# the limit is hit. Without -f (curl) / --content-on-error off (wget) the body
+# of that error is saved as docker-compose.yml, and the failure surfaces much
+# later as an unreadable compose error. Retries cover the usual short bursts.
 log "Downloading docker-compose.yml..."
 if command -v curl &>/dev/null; then
-    curl -sSL "$COMPOSE_URL" -o docker-compose.yml
+    curl -fsSL --retry 3 --retry-delay 2 "$COMPOSE_URL" -o docker-compose.yml \
+        || error "Could not download docker-compose.yml from GitHub. If this is a 429, wait a minute and run the installer again."
 elif command -v wget &>/dev/null; then
-    wget -q "$COMPOSE_URL" -O docker-compose.yml
+    wget -q --tries=3 --waitretry=2 "$COMPOSE_URL" -O docker-compose.yml \
+        || error "Could not download docker-compose.yml from GitHub. If this is a 429, wait a minute and run the installer again."
 else
     error "Neither curl nor wget found. Install one of them."
+fi
+
+# A rate-limit page is small and is not YAML: catch it here rather than let
+# compose choke on it.
+if ! grep -q "services:" docker-compose.yml 2>/dev/null; then
+    rm -f docker-compose.yml
+    error "Downloaded docker-compose.yml is not valid (GitHub likely returned an error page). Try again in a minute."
 fi
 
 # Generate .env

@@ -37,7 +37,10 @@ Xray, а по желанию ещё и разбором трафика чере�
 3. Скопируйте команду и выполните на ноде:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh | bash -s -- --uuid UUID --url URL --token TOKEN
+curl -fsSL --retry 3 --retry-delay 2 \
+  https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh \
+  -o /tmp/rwa-node-agent-install.sh \
+  && bash /tmp/rwa-node-agent-install.sh --uuid UUID --url URL --token TOKEN
 ```
 
 Скрипт автоматически:
@@ -82,7 +85,7 @@ curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-ag
 mkdir -p /opt/remnawave-node-agent && cd /opt/remnawave-node-agent
 
 # Скачайте docker-compose.yml
-curl -sLO https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
+curl -fsSLO --retry 3 --retry-delay 2 https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
 
 # Создайте .env
 nano .env
