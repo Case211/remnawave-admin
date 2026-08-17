@@ -107,3 +107,49 @@ def test_has_mobile_network_scans_all_addresses():
     }
     assert networks.has_mobile_network(meta) is True
     assert networks.has_mobile_network({"1.1.1.1": meta["1.1.1.1"]}) is False
+
+
+# ── классификация ASN не должна терять оператора ──────────────────
+
+@pytest.mark.asyncio
+async def test_asn_database_does_not_override_carrier_name():
+    """Локальная база ASN не должна разжаловать оператора в «домашнюю сеть».
+
+    Она наполняется из RIPE, где вместо названия часто приходит хендл вида
+    ORG-OM1-RIPE — классификатор оператора по нему не узнаёт и ставит
+    дефолтный residential. Именно из-за этого МегаФон и МТС оказывались
+    домашними сетями, а CGNAT-буфер детектора не включался.
+    """
+    from unittest.mock import AsyncMock
+
+    from shared.geoip import GeoIPService
+
+    db = AsyncMock()
+    db.is_connected = True
+    db.get_asn_record = AsyncMock(return_value={"provider_type": "residential",
+                                                "region": "Москва", "city": "Москва"})
+    service = GeoIPService(db_service=db)
+
+    ctype, is_mobile, is_dc, is_vpn, region, city = await service._classify_asn(
+        25159, "PJSC MegaFon", False, False, "RU",
+    )
+    assert (ctype, is_mobile) == ("mobile", True)
+    # регион и город из базы при этом не теряются
+    assert (region, city) == ("Москва", "Москва")
+
+
+@pytest.mark.asyncio
+async def test_asn_database_still_wins_for_ordinary_networks():
+    from unittest.mock import AsyncMock
+
+    from shared.geoip import GeoIPService
+
+    db = AsyncMock()
+    db.is_connected = True
+    db.get_asn_record = AsyncMock(return_value={"provider_type": "hosting"})
+    service = GeoIPService(db_service=db)
+
+    ctype, is_mobile, is_dc, _, _, _ = await service._classify_asn(
+        24940, "Hetzner Online GmbH", False, False, "RU",
+    )
+    assert (ctype, is_mobile, is_dc) == ("hosting", False, True)

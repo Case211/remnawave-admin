@@ -426,6 +426,20 @@ class GeoIPService:
                 if asn_record:
                     provider_type = asn_record.get('provider_type')
                     if provider_type:
+                        # Локальная база ASN наполняется из RIPE, где вместо
+                        # названия оператора часто приходит хендл вида
+                        # ORG-OM1-RIPE. По нему классификатор оператора не
+                        # узнаёт и ставит дефолтный residential — так МегаФон
+                        # и МТС оказывались «домашними сетями», а CGNAT-буфер
+                        # детектора не включался никогда. Имя организации из
+                        # GeoIP приходит нормальным, поэтому оно вправе
+                        # поднять тип до мобильного.
+                        if provider_type not in ('mobile', 'mobile_isp'):
+                            from shared.analyzers.networks import is_mobile_network
+
+                            if is_mobile_network(asn_org, provider_type):
+                                return ('mobile', True, False, False,
+                                        asn_record.get('region'), asn_record.get('city'))
                         is_mobile_carrier = provider_type in ('mobile', 'mobile_isp')
                         is_datacenter = provider_type in ('hosting', 'datacenter')
                         is_vpn = provider_type == 'vpn'
