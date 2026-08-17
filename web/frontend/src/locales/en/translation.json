@@ -5880,7 +5880,8 @@
             "reset_traffic": "Reset traffic",
             "notify_update": "Notify about update"
           }
-        }
+        },
+        "crumb": "Report"
       },
       "audit": {
         "title": "Audit log",
