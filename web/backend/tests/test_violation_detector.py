@@ -516,3 +516,78 @@ async def test_profile_geo_baseline_revived_via_geoip():
     history = [{"ip_address": "77.88.8.8", "connected_at": datetime.utcnow() - timedelta(days=1)}]
     bl = await pa.build_baseline("u", days=30, connection_history=history)
     assert "RU" in bl["typical_countries"], "гео-baseline должен резолвиться через GeoIP по known_ips"
+
+
+# ── CGNAT: пул оператора считается источниками, а не адресами ──────
+
+@pytest.mark.asyncio
+async def test_cgnat_pool_does_not_look_like_sharing():
+    """Жалоба из чата: CGNAT раздал одному клиенту пачку адресов.
+
+    Двенадцать адресов МегаФона и двенадцать Билайна — по логам это был
+    один человек, открывший соединения к одному хосту. По адресам детектор
+    видел «24 разных», по источникам видит два.
+    """
+    geo_map = {}
+    conns = []
+    for i in range(2, 14):
+        ip = f"178.177.22.{i}"
+        geo_map[ip] = meta(ip, country_code="RU", city="Moscow", latitude=55.7, longitude=37.6,
+                           asn=31133, asn_org="PJSC MegaFon", connection_type="residential")
+        conns.append(conn(ip, 60 + i))
+    for i in range(179, 191):
+        ip = f"81.9.21.{i}"
+        geo_map[ip] = meta(ip, country_code="RU", city="Moscow", latitude=55.7, longitude=37.6,
+                           asn=16345, asn_org="PVimpelCom", connection_type="residential")
+        conns.append(conn(ip, 60 + i))
+
+    det = make_detector(geo_map, recent_violations=3)
+    res = await run_check(det, conns, devices=2)
+
+    assert res.breakdown["temporal"].score == 0.0, "два источника при двух устройствах — не шаринг"
+    assert res.recommended_action.value in ("no_action", "monitor")
+
+
+@pytest.mark.asyncio
+async def test_real_sharing_through_hosting_still_caught():
+    """Обратная сторона: у хостера соседние адреса — разные машины.
+
+    Схлопывание там не применяется, иначе прокси-пул на одном /24
+    превратился бы в «одного человека» и шаринг стал бы невидим.
+    """
+    geo_map = {}
+    conns = []
+    for i in range(1, 7):
+        ip = f"5.9.10.{i}"
+        geo_map[ip] = meta(ip, country_code="DE", city="Nuremberg", latitude=49.4, longitude=11.0,
+                           asn=24940, asn_org="Hetzner Online GmbH", connection_type="hosting")
+        conns.append(conn(ip, 60 + i))
+
+    det = make_detector(geo_map, recent_violations=3)
+    res = await run_check(det, conns, devices=1)
+
+    assert res.breakdown["temporal"].score == 100.0, "шесть машин хостера — это шаринг"
+
+
+@pytest.mark.asyncio
+async def test_violation_text_names_sources_and_addresses():
+    """Разбирать инцидент нужно по числам: сколько источников и сколько адресов."""
+    geo_map = {}
+    conns = []
+    for i in range(1, 9):
+        ip = f"178.177.22.{i}"
+        geo_map[ip] = meta(ip, country_code="RU", city="Moscow", latitude=55.7, longitude=37.6,
+                           asn=31133, asn_org="PJSC MegaFon", connection_type="residential")
+        conns.append(conn(ip, 60 + i))
+    # девятый адрес из чужой сети — источников станет два, порог при одном
+    # устройстве это уже превышает
+    geo_map["203.0.113.7"] = meta("203.0.113.7", country_code="RU", city="Moscow",
+                                  latitude=55.7, longitude=37.6, asn=64500,
+                                  asn_org="Some ISP", connection_type="fixed")
+    conns.append(conn("203.0.113.7", 70))
+
+    det = make_detector(geo_map, recent_violations=3)
+    res = await run_check(det, conns, devices=1)
+
+    reasons = " ".join(res.breakdown["temporal"].reasons)
+    assert "источник" in reasons and "адрес" in reasons, reasons
