@@ -29,6 +29,34 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+AGENT_INSTALL_SCRIPT_URL = (
+    "https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh"
+)
+#: Куда installer кладётся на ноде перед запуском.
+AGENT_INSTALL_SCRIPT_PATH = "/tmp/rwa-node-agent-install.sh"
+
+
+def build_agent_install_command(
+    node_uuid: str, base_url: str, token: str, ws_secret: str
+) -> str:
+    """Команда установки агента, которую оператор копирует в консоль ноды.
+
+    Скачиваем скрипт в файл и только потом запускаем, а не льём в bash по
+    конвейеру. raw.githubusercontent.com ограничивает частоту запросов и на
+    превышении отвечает 429 — при `curl | bash` телом этого ответа становится
+    текст ошибки, и bash пытается его выполнить: оператор видит
+    «429:: command not found» и не понимает, при чём тут вообще GitHub.
+
+    С `-f` curl на такой ответ возвращает ошибку и ничего не пишет в файл, а
+    `--retry` переживает короткие всплески лимита.
+    """
+    return (
+        f"curl -fsSL --retry 3 --retry-delay 2 {AGENT_INSTALL_SCRIPT_URL} "
+        f"-o {AGENT_INSTALL_SCRIPT_PATH} && "
+        f"bash {AGENT_INSTALL_SCRIPT_PATH} --uuid {node_uuid} --url {base_url} "
+        f"--token {token} --ws-secret {ws_secret}"
+    )
+
 
 # ВАЖНО: роутер монтируется с префиксом /api/v2/nodes — путь здесь БЕЗ /nodes.
 # Статический роут обязан быть объявлен раньше динамического /{node_uuid}.
@@ -624,15 +652,10 @@ async def get_agent_install_command(
         elif forwarded_host:
             base_url = f"{forwarded_proto}://{forwarded_host}"
 
-        script_url = "https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh"
         # Include WS secret key so agent can verify HMAC-signed commands
         from web.backend.core.config import get_web_settings
         ws_secret = get_web_settings().secret_key
-        install_cmd = (
-            f"curl -sSL {script_url} | "
-            f"bash -s -- --uuid {node_uuid} --url {base_url} --token {token} "
-            f"--ws-secret {ws_secret}"
-        )
+        install_cmd = build_agent_install_command(node_uuid, base_url, token, ws_secret)
 
         return {
             "install_command": install_cmd,
@@ -772,7 +795,6 @@ async def bulk_install_commands(
         base_url = f"{forwarded_proto}://{forwarded_host}"
 
     ws_secret = get_web_settings().secret_key
-    script_url = "https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh"
 
     results = []
     success, failed = 0, 0
@@ -795,11 +817,7 @@ async def bulk_install_commands(
                     continue
                 tokens_generated += 1
 
-            install_cmd = (
-                f"curl -sSL {script_url} | "
-                f"bash -s -- --uuid {node_uuid} --url {base_url} --token {token} "
-                f"--ws-secret {ws_secret}"
-            )
+            install_cmd = build_agent_install_command(node_uuid, base_url, token, ws_secret)
             results.append(BulkNodeInstallItem(
                 node_uuid=node_uuid, name=name, token=token,
                 install_command=install_cmd,

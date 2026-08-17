@@ -12,8 +12,10 @@
 2. Скопировать готовую строку и выполнить её на ноде:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh \
-  | bash -s -- --uuid UUID --url URL --token TOKEN
+curl -fsSL --retry 3 --retry-delay 2 \
+  https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh \
+  -o /tmp/rwa-node-agent-install.sh \
+  && bash /tmp/rwa-node-agent-install.sh --uuid UUID --url URL --token TOKEN
 ```
 
 Скрипт создаст `/opt/remnawave-node-agent/`, положит туда `docker-compose.yml`, соберёт `.env` и поднимет контейнер.
@@ -35,7 +37,7 @@ curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-ag
 
 ```bash
 mkdir -p /opt/remnawave-node-agent && cd /opt/remnawave-node-agent
-curl -sLO https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
+curl -fsSLO --retry 3 --retry-delay 2 https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
 nano .env
 docker compose up -d
 ```
