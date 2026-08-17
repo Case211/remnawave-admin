@@ -976,6 +976,20 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 17,
     },
     {
+        "key": "ndpi_detection_enabled",
+        "value_type": "bool",
+        "category": "violations",
+        "subcategory": "thresholds",
+        "display_name": "Детект торрентов через nDPI",
+        "description": (
+            "Xray опознаёт BitTorrent только по открытому рукопожатию, а шифрованный "
+            "поток, DHT и uTP проходят мимо. nDPI видит и их. Требует демона nDPId на "
+            "ноде: включение уходит агентам командой, .env править не нужно"
+        ),
+        "default_value": "false",
+        "sort_order": 19,
+    },
+    {
         "key": "torrent_retention_days",
         "value_type": "int",
         "category": "violations",

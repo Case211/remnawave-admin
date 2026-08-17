@@ -173,6 +173,36 @@ async def run_agent() -> None:
         collector.torrent_oracle = ndpi_watcher
         logger.info("nDPI torrent detection enabled (socket: %s)", settings.ndpi_socket_path)
 
+    async def control_ndpi(enabled: bool, socket_path=None, window_seconds=None) -> dict:
+        """Включить/выключить чтение вердиктов nDPI по команде из панели.
+
+        Возвращает состояние, по которому панель отличит «включено и
+        работает» от «включено, но демона на ноде нет».
+        """
+        nonlocal ndpi_watcher
+        if not enabled:
+            if ndpi_watcher is not None:
+                await ndpi_watcher.stop()
+                collector.torrent_oracle = None
+                ndpi_watcher = None
+            logger.info("nDPI torrent detection disabled by panel")
+            return {"enabled": False, "connected": False}
+
+        path = socket_path or settings.ndpi_socket_path
+        window = int(window_seconds or settings.ndpi_window_seconds)
+        if ndpi_watcher is not None:
+            await ndpi_watcher.stop()
+        ndpi_watcher = NdpiTorrentWatcher(path, window_seconds=window)
+        await ndpi_watcher.start()
+        collector.torrent_oracle = ndpi_watcher
+        # Даём подключению мгновение: панели полезнее сразу увидеть, что
+        # сокета нет, чем узнать об этом из отсутствия событий.
+        await asyncio.sleep(0.5)
+        state = {"enabled": True, "socket_path": path, "window_seconds": window}
+        state.update(ndpi_watcher.stats())
+        logger.info("nDPI torrent detection enabled by panel: %s", state)
+        return state
+
     # ── Agent v2: WebSocket command channel ──
     ws_task = None
     if settings.command_enabled and (settings.ws_url or settings.collector_url):
@@ -180,7 +210,7 @@ async def run_agent() -> None:
         from .command_runner import CommandRunner
 
         ws_client = AgentWSClient(settings)
-        cmd_runner = CommandRunner(settings, ws_client.send)
+        cmd_runner = CommandRunner(settings, ws_client.send, ndpi_control=control_ndpi)
         ws_client._command_handler = cmd_runner.handle
         logger.info("Agent v2 command channel enabled")
     else:

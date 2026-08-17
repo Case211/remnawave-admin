@@ -193,3 +193,72 @@ def test_xray_tag_still_wins_and_is_marked_as_such():
     assert len(torrent_events) == 1
     assert torrent_events[0].detected_by == "xray_routing"
     assert torrent_events[0].outbound_tag == "TORRENT"
+
+
+# ── включение из панели ───────────────────────────────────────────
+
+def test_command_shape_matches_agent_contract():
+    """Панель шлёт ровно то, что агент разбирает."""
+    from web.backend.core import ndpi_rollout
+    from src.command_runner import ALLOWED_COMMAND_TYPES
+
+    command = ndpi_rollout.build_command(True)
+    assert command["type"] in ALLOWED_COMMAND_TYPES
+    assert command["enabled"] is True
+    # Путь сокета и окно остаются на ноде: у разных нод они могут
+    # отличаться, и панели незачем это знать.
+    assert set(command) == {"type", "enabled"}
+
+
+@pytest.mark.asyncio
+async def test_agent_answers_with_state_not_just_ok(monkeypatch):
+    """Ответ должен отличать «работает» от «включено, но демона нет».
+
+    Иначе тумблер в панели врёт: чтение сокета включается всегда, а
+    nDPId на ноде может быть не установлен.
+    """
+    from src.command_runner import CommandRunner
+
+    sent = []
+
+    async def _send(msg):
+        sent.append(msg)
+        return True
+
+    async def _control(enabled, socket_path=None, window_seconds=None):
+        return {"enabled": enabled, "connected": False, "socket_path": "/tmp/x.sock"}
+
+    class _Settings:
+        ws_secret_key = ""
+        auth_token = ""
+
+    runner = CommandRunner(_Settings(), _send, ndpi_control=_control)
+    monkeypatch.setattr("src.command_runner.verify_signature", lambda *a, **k: True)
+
+    await runner.handle({"type": "set_ndpi", "enabled": True, "command_id": "c1", "_sig": "x"})
+
+    assert len(sent) == 1
+    assert sent[0]["status"] == "completed"
+    assert "connected" in sent[0]["output"]
+
+
+@pytest.mark.asyncio
+async def test_agent_without_ndpi_support_answers_honestly(monkeypatch):
+    from src.command_runner import CommandRunner
+
+    sent = []
+
+    async def _send(msg):
+        sent.append(msg)
+        return True
+
+    class _Settings:
+        ws_secret_key = ""
+        auth_token = ""
+
+    runner = CommandRunner(_Settings(), _send)  # без контроллера
+    monkeypatch.setattr("src.command_runner.verify_signature", lambda *a, **k: True)
+
+    await runner.handle({"type": "set_ndpi", "enabled": True, "command_id": "c2", "_sig": "x"})
+
+    assert sent[0]["status"] == "error"
