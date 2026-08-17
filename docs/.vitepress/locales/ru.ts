@@ -68,6 +68,7 @@ export const ru: LocaleSpecificConfig<DefaultTheme.Config> = {
         {
           text: 'Справочник',
           items: [
+            { text: 'Настройки панели', link: '/reference/settings' },
             { text: 'Переменные окружения', link: '/reference/env' },
             { text: 'Команды бота', link: '/reference/bot-commands' },
             { text: 'Структура проекта', link: '/reference/project-layout' },
