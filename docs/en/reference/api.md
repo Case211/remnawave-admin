@@ -3,8 +3,8 @@
 Remnawave Admin exposes a read/write HTTP API for external integrations at `/api/v3/*`.
 Authentication is by API key. Permissions are controlled by scopes.
 
-- **Endpoint reference:** [API-ENDPOINTS.md](./API-ENDPOINTS.md)
-- **Error format:** [API-ERRORS.md](./API-ERRORS.md)
+- **Endpoint reference:** [Endpoints](/en/reference/api-endpoints)
+- **Error format:** [Errors](/en/reference/api-errors)
 - **Interactive docs:** `/api/v3/docs` (Swagger UI), `/api/v3/openapi.json`
 
 ---

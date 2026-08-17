@@ -3,8 +3,8 @@
 Remnawave Admin can push events to any HTTP(S) endpoint. Each webhook subscription picks a set
 of events; matching events are delivered as signed JSON POSTs.
 
-- **Event catalog:** [WEBHOOKS-EVENTS.md](./WEBHOOKS-EVENTS.md)
-- **Signature verification (v1 and v2):** [WEBHOOKS-SIGNATURES.md](./WEBHOOKS-SIGNATURES.md)
+- **Event catalog:** [Event catalogue](/en/reference/webhook-events)
+- **Signature verification (v1 and v2):** [Signature verification](/en/reference/webhook-signatures)
 
 ---
 
@@ -60,7 +60,7 @@ Body:
 }
 ```
 
-See per-event `data` shapes in [WEBHOOKS-EVENTS.md](./WEBHOOKS-EVENTS.md).
+See per-event `data` shapes in [Event catalogue](/en/reference/webhook-events).
 
 ---
 
@@ -74,7 +74,7 @@ Webhooks sign the request body with your secret using HMAC-SHA256. There are two
   clock by more than 5 minutes to prevent replay attacks.
 
 Full examples for Python, Node, Go and PHP are in
-[WEBHOOKS-SIGNATURES.md](./WEBHOOKS-SIGNATURES.md).
+[Signature verification](/en/reference/webhook-signatures).
 
 ---
 

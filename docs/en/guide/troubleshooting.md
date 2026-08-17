@@ -1,0 +1,90 @@
+# Troubleshooting
+
+## The bot does not answer
+
+```bash
+docker compose ps                 # what is running at all
+docker compose logs -f bot        # what the bot says
+docker compose config             # is compose or .env broken
+```
+
+If the container restarts in a loop, read the first lines of the log — usually a required variable is missing.
+
+## The bot says access denied
+
+Your Telegram ID has to be in `ADMINS`. Find it via [@userinfobot](https://t.me/userinfobot). After editing `.env`, run `docker compose up -d` so the container re-reads it.
+
+## No connection to the Remnawave panel
+
+- Are `API_BASE_URL` and `API_TOKEN` current? The token can be reissued in the panel
+- Does the network exist: `docker network ls | grep remnawave-network`
+- If the panel is elsewhere, the address must be reachable from the container: `docker exec -it <bot> wget -qO- $API_BASE_URL/api/system/health`
+
+## Lost access to the panel
+
+The password is reset by a CLI utility that talks to PostgreSQL directly and does not need a running web panel.
+
+```bash
+# generate a new password
+docker exec -it <container> python3 scripts/admin_cli.py reset-password
+
+# for a specific administrator
+docker exec -it <container> python3 scripts/admin_cli.py reset-password --username myadmin
+
+# with a password of your own
+docker exec -it <container> python3 scripts/admin_cli.py reset-password --password "MyNew$ecure1"
+
+# create another superadmin
+docker exec -it <container> python3 scripts/admin_cli.py create-superadmin --username newadmin
+
+# see who exists
+docker exec -it <container> python3 scripts/admin_cli.py list-admins
+```
+
+## Telegram login does not work
+
+1. `TELEGRAM_BOT_USERNAME` without the `@`
+2. The panel domain is registered in BotFather: `/mybots` → bot → Bot Settings → Domain
+3. The site is served over HTTPS — the widget does not work over HTTP
+
+## The node agent will not connect
+
+`server rejected WebSocket connection: HTTP 404` means the reverse proxy is not passing `/api/v2/agent/ws`. A correct config: [Web panel and reverse proxy](/en/guide/web-panel).
+
+Other cases are covered in [Node Agent](/en/guide/node-agent#if-no-data-arrives).
+
+## No notifications from the panel
+
+Check the [webhook setup](/en/guide/webhook-setup#if-nothing-arrives): usually the secrets differ, or `https://` is used where `http://` is required.
+
+## Database connection error
+
+`DATABASE_URL` must agree with `POSTGRES_USER` and `POSTGRES_PASSWORD` — three separate places that drift apart easily. Also check whether the database container came up: `docker compose logs remnawave-admin-db`.
+
+## The panel complains about a plugin version
+
+The plugin wants a newer panel than you run. Either [upgrade](/en/guide/upgrade) or install an older plugin release.
+
+## Logs
+
+Two levels: files keep everything, the console only warnings and errors.
+
+| File | Level | Contents |
+|------|-------|----------|
+| `adminbot_INFO.log` | INFO+ | API calls, sync, actions |
+| `adminbot_WARNING.log` | WARNING+ | timeouts and errors |
+| `web_INFO.log` | INFO+ | web backend |
+| `web_WARNING.log` | WARNING+ | web backend problems |
+
+Rotation: 50 MB per file, five gzipped archives. They live in `./logs/`.
+
+```bash
+docker compose logs -f bot
+tail -100 ./logs/adminbot_INFO.log
+```
+
+Log level, file size and rotation are configurable from the panel without a restart.
+
+## Where to go next
+
+If none of the above fits — [issues on GitHub](https://github.com/Case211/remnawave-admin/issues) or the [Telegram chat](https://t.me/remnawave_admin). Include the panel version, a slice of the logs and what you already tried: it saves a round trip.

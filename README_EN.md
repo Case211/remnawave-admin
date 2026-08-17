@@ -1,609 +1,107 @@
-# 🤖 Remnawave Admin Web + Bot
-
 <div align="center">
 
-**Telegram bot and web panel for managing Remnawave panel**
+<img src="remnawave-admin.webp" alt="Remnawave Admin" width="100%" />
 
-[![Stars](https://img.shields.io/github/stars/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=f5c518)](https://github.com/Case211/remnawave-admin/stargazers) [![Forks](https://img.shields.io/github/forks/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=6e7bf2)](https://github.com/Case211/remnawave-admin/forks) [![Release](https://img.shields.io/github/v/release/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=3fb950)](https://github.com/Case211/remnawave-admin/releases/latest) [![Last commit](https://img.shields.io/github/last-commit/Case211/remnawave-admin/main?style=flat-square&logo=git&logoColor=white&labelColor=1f2430&color=8957e5)](https://github.com/Case211/remnawave-admin/commits/main)
+# Remnawave Admin
 
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![License](https://img.shields.io/badge/License-AGPL_v3-blue?style=flat-square&logo=gnu&logoColor=white)](LICENSE)
+**A control panel and Telegram bot on top of your Remnawave panel**
 
-[English](README_EN.md) | [Русский](README.md)
+Users, nodes, anti-abuse, mail and monitoring in one place
 
-<a href="https://github.com/Case211/remnawave-admin/stargazers">
-  <img src="docs/star-history.svg" alt="Star history" width="720" />
-</a>
+[![Stars](https://img.shields.io/github/stars/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=f5c518)](https://github.com/Case211/remnawave-admin/stargazers) [![Release](https://img.shields.io/github/v/release/Case211/remnawave-admin?style=flat-square&logo=github&logoColor=white&labelColor=1f2430&color=3fb950)](https://github.com/Case211/remnawave-admin/releases/latest) [![Last commit](https://img.shields.io/github/last-commit/Case211/remnawave-admin/main?style=flat-square&logo=git&logoColor=white&labelColor=1f2430&color=8957e5)](https://github.com/Case211/remnawave-admin/commits/main) [![License](https://img.shields.io/badge/License-AGPL_v3-blue?style=flat-square&logo=gnu&logoColor=white)](LICENSE)
+
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev/) [![Prometheus](https://img.shields.io/badge/Prometheus-ready-E6522C?style=flat-square&logo=prometheus&logoColor=white)](https://case211.github.io/remnawave-admin/en/guide/monitoring)
+
+### [📖 Documentation](https://case211.github.io/remnawave-admin/en/) · [🚀 Install](https://case211.github.io/remnawave-admin/en/guide/installation) · [💬 Chat](https://t.me/remnawave_admin)
+
+English · [Русский](README.md)
 
 </div>
 
 ---
 
-## ✨ Features
+The Remnawave panel owns users and configuration. Remnawave Admin takes care of everything else: it collects connections from your nodes, hunts for subscription sharing, sends notifications, keeps the history and shows you what is going on.
 
-### 🤖 Telegram Bot
-- **👥 Users** — search, create, edit, HWID devices, statistics, bulk operations
-- **🛰 Nodes** — view, enable/disable, restart, traffic monitoring, statistics
-- **🖥 Hosts** — view, create, edit, bulk operations
-- **🧰 Resources** — subscription templates, snippets, API tokens, configs
-- **💰 Billing** — payment history, providers, billing nodes
-- **📊 System** — health checks, statistics, traffic
+It works on top of your panel over the API and keeps its data in its own database. One command to install, everything optional can be switched off.
 
-### 🌐 Web Panel
-- 📊 Dashboard with system overview and violation charts
-- 👥 User, node, and host management
-- 🛡 Violation viewer with IP Lookup (provider, city, connection type)
-- 🗺 Interactive geo map with user details and city breakdown
-- ⚙️ Settings with auto-save (priority: DB > .env > defaults)
-- 🔐 Telegram Login Widget + JWT authentication
-- 🎨 6 dark themes + 1 light theme, responsive design
-- 🌍 Full internationalization (Russian / English)
-- 🔔 Notifications and alerts system with customizable templates
+## Features
 
-### 🛡 Anti-Abuse System
-- 🔍 Multi-factor connection analysis (temporal, geographic, ASN, profile, device)
-- 🌍 "Impossible travel" detection, 60+ Russian metropolitan area recognition
-- ⚡ Automatic actions based on scoring thresholds
-- 📡 Integration with [Node Agent](node-agent/README.md) for data collection
+🛡 **Anti-abuse.** Seven analyzers look for subscription sharing: simultaneous connections, impossible travel, ASN, behaviour, devices, HWID, User-Agent. It counts sources rather than addresses, so mobile CGNAT no longer looks like a crowd of four. [More](https://case211.github.io/remnawave-admin/en/guide/anti-abuse)
 
-### 📧 Built-in Mail Server
-- 📤 Direct MX delivery without external SMTP providers
-- 🔏 DKIM signing (RSA-2048) + automatic SPF/DKIM/DMARC verification
-- 📥 Inbound email receiving (embedded SMTP server)
-- 📊 Outbound queue with retries, rate limiting, and monitoring
-- ✍️ Built-in compose editor + inbox viewer
+🧲 **Torrent detection.** The Xray routing tag plus traffic inspection through nDPI, so encrypted BitTorrent, DHT and uTP are visible too. One toggle; the daemon ships inside the agent. [More](https://case211.github.io/remnawave-admin/en/guide/torrents)
 
-### 🔧 Additional
-- 🏗 ARM64 (aarch64) support — Docker images for `linux/amd64` and `linux/arm64`
-- ⚙️ Dynamic settings without restart (Telegram and web panel)
-- 🔔 Webhook notifications with topic routing
-- 📝 Dynamic logging: runtime level switching, rotation, configurable file sizes
-- 🌍 Russian and English language support
-- 🗄 PostgreSQL with graceful degradation (works without DB too)
-- 🧪 Testing infrastructure: Playwright E2E, CI/CD workflows
+🛰 **Agent on your nodes.** Reads Xray logs, collects host metrics, provides a remote terminal and a script catalogue. Installed with a single line generated by the panel. [More](https://case211.github.io/remnawave-admin/en/guide/node-agent)
 
----
+📧 **Mail server.** Direct MX delivery, DKIM, inbound mail, SPF/DKIM/DMARC checks and DMARC report parsing — no external SMTP provider. [More](https://case211.github.io/remnawave-admin/en/guide/mail)
 
-## 🚀 Quick Start
+📈 **Monitoring.** Prometheus metrics out of the box, 30+ custom gauges and five ready-made Grafana dashboards. [More](https://case211.github.io/remnawave-admin/en/guide/monitoring)
 
-### 📋 What you'll need
+🤖 **Telegram bot.** Manage things from a chat, notifications with action buttons, routing across forum topics. [More](https://case211.github.io/remnawave-admin/en/guide/bot)
 
-| What | Where to get |
-|------|-------------|
-| 🐳 **Docker** + **Docker Compose** | [docker.com](https://www.docker.com/) |
-| 🤖 **Telegram bot token** | Create a bot with [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token |
-| 🔑 **Remnawave API token** | Remnawave Panel → Settings → API → copy the token |
-| 🆔 **Your Telegram ID** | Message [@userinfobot](https://t.me/userinfobot) → it will reply with your numeric ID |
+🔌 **Plugins and API.** A plugin store inside the panel, an API v3 with keys and scopes, outgoing webhooks with signatures. [More](https://case211.github.io/remnawave-admin/en/guide/plugins)
 
----
+📱 **Android app.** Home-screen widget, push notifications, several panel profiles.
 
-### Step 1️⃣ — Clone the repository
+Also: a connection geo map, analytics with minute-level granularity, an automation builder, scheduled backups, an audit log, RBAC with roles and permissions, TOTP and biometric login, seven themes, and full Russian and English translations.
+
+## Installation
 
 ```bash
-git clone https://github.com/case211/remnawave-admin.git
+git clone https://github.com/Case211/remnawave-admin.git
 cd remnawave-admin
-```
-
-### Step 2️⃣ — Create the `.env` file
-
-```bash
 cp .env.example .env
-nano .env          # or vim, or any editor
-```
+nano .env                          # bot token, panel API, your Telegram ID
 
-Fill in the **required** fields (bot won't start without them):
-
-```env
-# 🤖 Bot token (from @BotFather)
-BOT_TOKEN=1234567890:ABCdefGHIjklmNOPqrstUVWxyz
-
-# 🌐 Remnawave API address
-# If bot and panel are on the same Docker network:
-API_BASE_URL=http://remnawave:3000
-# If the panel is on a different server:
-# API_BASE_URL=https://panel.yourdomain.com/api
-
-# 🔑 API token from Remnawave panel
-API_TOKEN=your_token_from_panel
-
-# 👤 Telegram IDs of administrators (comma-separated)
-ADMINS=123456789
-```
-
-Configure the **database** (PostgreSQL starts automatically in Docker):
-
-```env
-# 🗄 PostgreSQL — choose a password
-POSTGRES_USER=remnawave
-POSTGRES_PASSWORD=choose_a_secure_password
-POSTGRES_DB=remnawave_bot
-
-# ⚠️ Password here must match POSTGRES_PASSWORD above!
-DATABASE_URL=postgresql://remnawave:choose_a_secure_password@remnawave-admin-db:5432/remnawave_bot
-```
-
-### Step 3️⃣ — Start the bot
-
-```bash
-# Create Docker network (once)
 docker network create remnawave-network
-
-# Pull images and start
-docker compose up -d
-
-# Check that everything is working
-docker compose logs -f bot
-```
-
-✅ **Done!** Open the bot in Telegram and send `/start`.
-
----
-
-### Step 4️⃣ — Web Panel (optional)
-
-If you want the web interface — add to `.env`:
-
-```env
-# 🌐 Web panel
-# JWT secret key (generate: openssl rand -hex 32)
-WEB_SECRET_KEY=generated_key_minimum_32_characters
-
-# Bot username (without @) — needed for Telegram Login Widget
-TELEGRAM_BOT_USERNAME=your_bot_username
-
-# Web panel domain (for CORS)
-WEB_CORS_ORIGINS=https://admin.yourdomain.com
-```
-
-Start with the `web` profile:
-
-```bash
-docker compose --profile web up -d
-```
-
-Web panel will be available on ports: **frontend :3000**, **backend :8081**.
-
-> 📖 More on domain setup and reverse proxy: [web/README.md](web/README.md)
-
----
-
-### Step 5️⃣ — Webhook Notifications (optional)
-
-To get bot notifications when things change in the panel — add to `.env`:
-
-```env
-# 🔔 Notification chat
-NOTIFICATIONS_CHAT_ID=-1001234567890    # Your group/channel ID
-
-# 🔐 Webhook secret (generate: openssl rand -hex 64)
-WEBHOOK_SECRET=your_secret_key
-```
-
-Then in the **Remnawave panel** set:
-- **WEBHOOK_URL** = `http://bot:8080/webhook` (if on the same Docker network)
-- **WEBHOOK_SECRET_HEADER** = same key as `WEBHOOK_SECRET` in the bot's `.env`
-
-> 📖 Detailed guide with nginx/Caddy examples: [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
-
----
-
-### Step 6️⃣ — Topic Notifications (optional)
-
-If you have a forum-group in Telegram, you can split notifications by topics:
-
-```env
-NOTIFICATIONS_TOPIC_USERS=456       # 👥 User events
-NOTIFICATIONS_TOPIC_NODES=789       # 🛰 Node events
-NOTIFICATIONS_TOPIC_SERVICE=101     # ⚙️ Service events
-NOTIFICATIONS_TOPIC_HWID=102        # 💻 HWID devices
-NOTIFICATIONS_TOPIC_CRM=103         # 💰 Billing
-NOTIFICATIONS_TOPIC_FINANCE=106     # 💳 Finance events
-NOTIFICATIONS_TOPIC_ERRORS=104      # ❌ Errors
-NOTIFICATIONS_TOPIC_VIOLATIONS=105  # 🛡 Violations
-```
-
-> 💡 If a topic is not set — the notification goes to `NOTIFICATIONS_TOPIC_ID` (general fallback).
-
----
-
-### Step 7️⃣ — Built-in Mail Server (optional)
-
-The web panel includes an embedded mail server with DKIM signing, direct MX delivery, and inbound email receiving — no external SMTP providers needed.
-
-#### Enabling
-
-Go to **Settings** in the web panel → **"Mail Server"** section → enable **"Mail Server Enabled"**. Restart the container.
-
-Or via `.env`:
-
-```env
-MAIL_SERVER_ENABLED=true
-MAIL_INBOUND_PORT=2525          # Inbound SMTP port (default 2525)
-MAIL_SERVER_HOSTNAME=0.0.0.0    # SMTP server bind address
-```
-
-> 💡 All settings can be changed from the web UI (Settings page). `.env` values serve as fallback.
-
-#### Adding a domain
-
-1. Go to **Mail Server** → **Domains** tab → **Add Domain**
-2. Enter your domain (e.g. `example.com`)
-3. The system will auto-generate DKIM keys (RSA-2048)
-
-#### DNS configuration
-
-Click **"DNS Records"** on your domain — the system shows 4 records to add at your DNS provider:
-
-| Type | Host | Purpose |
-|------|------|---------|
-| **MX** | `example.com` | Routes incoming mail to your server |
-| **TXT** | `example.com` | SPF — authorizes your IP to send email |
-| **TXT** | `rw._domainkey.example.com` | DKIM — email signature verification |
-| **TXT** | `_dmarc.example.com` | DMARC — policy for unverified emails |
-
-Values can be copied from the interface. After adding, click **"Check DNS"** to verify.
-
-#### Network ports
-
-```
-Port 25   — outbound (for direct MX delivery to recipient servers)
-Port 2525 — inbound (receiving emails, configurable)
-```
-
-Add to `docker-compose.yml`:
-
-```yaml
-ports:
-  - "25:2525"    # inbound email
-```
-
-> ⚠️ Many cloud providers (AWS, GCP, Azure) block port 25 by default. Use a VPS with open port 25 (Hetzner, OVH, DigitalOcean).
-
-#### Behind a reverse proxy (nginx, Caddy, Traefik)
-
-The web panel (HTTP API) goes through reverse proxy as usual — `/api/v2/mailserver/*` endpoints work without extra configuration.
-
-**SMTP is a separate protocol** and **cannot** be proxied through an HTTP reverse proxy. Two options:
-
-**Option 1 — Direct port mapping (recommended):**
-
-```yaml
-# docker-compose.yml — SMTP port bypasses the proxy
-services:
-  remnawave-admin:
-    ports:
-      - "25:2525"    # inbound email directly
-```
-
-**Option 2 — nginx stream proxy (TCP):**
-
-```nginx
-# Separate stream {} block, NOT inside http {}
-stream {
-    server {
-        listen 25;
-        proxy_pass remnawave-admin:2525;
-    }
-}
-```
-
-**Option 3 — Caddy L4 (TCP proxy):**
-
-Caddy requires the [caddy-l4](https://github.com/mholt/caddy-l4) plugin for TCP proxying:
-
-```json
-{
-  "apps": {
-    "layer4": {
-      "servers": {
-        "smtp": {
-          "listen": [":25"],
-          "routes": [{
-            "handle": [{
-              "handler": "proxy",
-              "upstreams": [{"dial": ["remnawave-admin:2525"]}]
-            }]
-          }]
-        }
-      }
-    }
-  }
-}
-```
-
-Or via Caddyfile (with `caddy-l4`):
-
-```caddyfile
-:25 {
-    route {
-        proxy remnawave-admin:2525
-    }
-}
-```
-
-**Connection diagram:**
-
-```
-Internet
-  │
-  ├── :443 (HTTPS) → nginx/Caddy → :8081 (web panel API)
-  │                               → :3000 (web panel frontend)
-  │
-  └── :25  (SMTP)  → directly    → :2525 (built-in SMTP server)
-```
-
-**Important:**
-- MX, SPF, PTR records must point to your server's **public IP**
-- PTR record (reverse DNS) is configured at your hosting provider — improves deliverability
-- If the proxy and app are on the same machine — simply map port 25/2525 in docker-compose, bypassing nginx/Caddy
-
-#### Testing
-
-1. Activate the domain (toggle switch on the domain card)
-2. Go to the **Compose** tab → select domain → enter address → **Send Test**
-3. Check the **Queue** tab — status should become `sent`
-
-> 📬 When an active outbound domain is configured, the notification system automatically uses the built-in mail server (falls back to SMTP relay).
-
----
-
-### Step 8️⃣ — Node Agent (optional)
-
-The Anti-Abuse system requires a **Node Agent** on each node. The agent collects connection data from Xray logs and sends it to the Web Backend.
-
-**Quick install (one command):**
-
-1. Open the web panel → **Nodes** → select a node → **Agent Token** → **Install Agent**
-2. Copy the generated command and run it on the node:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/install.sh | bash -s -- --uuid UUID --url URL --token TOKEN
-```
-
-The script will automatically create the directory, download `docker-compose.yml`, generate `.env`, and start the agent.
-
-**Manual install:**
-
-```bash
-mkdir -p /opt/remnawave-node-agent && cd /opt/remnawave-node-agent
-curl -sLO https://raw.githubusercontent.com/Case211/remnawave-admin/main/node-agent/docker-compose.yml
-nano .env  # Paste the variables from the web panel
 docker compose up -d
 ```
 
-> 📖 Full documentation: [node-agent/README.md](node-agent/README.md) — parsing modes, Command Channel (terminal/scripts), migration, troubleshooting.
+Next: [reverse proxy and domain](https://case211.github.io/remnawave-admin/en/guide/web-panel), then [the agent on your nodes](https://case211.github.io/remnawave-admin/en/guide/node-agent).
 
----
+Full guide: **[case211.github.io/remnawave-admin](https://case211.github.io/remnawave-admin/en/guide/installation)**
 
-## 💻 Local Development
+## Requirements
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env: API_BASE_URL=https://your-panel-domain.com/api
-python -m src.main
-```
+| | Up to 1,000 users | 1,000–5,000 | 5,000–20,000 | 20,000+ |
+|---|---|---|---|---|
+| CPU | 2 vCPU | 4 vCPU | 8 vCPU | 8–16 vCPU |
+| RAM | 4 GB | 8 GB | 16+ GB | 32+ GB |
+| Disk | 40 GB SSD | 80 GB SSD | 240 GB NVMe | 240+ GB NVMe |
 
----
+Plus Docker, a Remnawave panel with API access and a Telegram bot. Images are built for `amd64` and `arm64`.
 
-## ⚙️ Environment Variables Reference
+## Documentation
 
-### Core
+| Section | About |
+|---------|-------|
+| [Installation](https://case211.github.io/remnawave-admin/en/guide/installation) | from nothing to a working panel |
+| [Environment variables](https://case211.github.io/remnawave-admin/en/reference/env) | the full reference |
+| [Web panel and proxy](https://case211.github.io/remnawave-admin/en/guide/web-panel) | Caddy, nginx, WebSocket, split mode |
+| [Anti-abuse](https://case211.github.io/remnawave-admin/en/guide/anti-abuse) | analyzers, thresholds, incident review |
+| [Public API](https://case211.github.io/remnawave-admin/en/reference/api) | keys, scopes, endpoints |
+| [Webhooks](https://case211.github.io/remnawave-admin/en/reference/webhooks) | events, signatures, retries |
+| [Troubleshooting](https://case211.github.io/remnawave-admin/en/guide/troubleshooting) | what to do when it does not work |
 
-| Variable | Req. | Default | Description |
-|----------|------|---------|-------------|
-| `BOT_TOKEN` | ✅ | — | Telegram bot token |
-| `API_BASE_URL` | ✅ | — | Remnawave API URL |
-| `API_TOKEN` | ✅ | — | API authentication token |
-| `ADMINS` | ✅ | — | Comma-separated administrator IDs |
-| `DEFAULT_LOCALE` | — | `ru` | Language (`ru` / `en`) |
-| `LOG_LEVEL` | — | `INFO` | Logging level |
-| `BOT_PROXY_URL` | — | — | Proxy for the Telegram API: `socks5://`, `socks4://` or `http://` (credentials allowed). Needed when the server runs on an IP that cannot reach Telegram. Schemes `socks5h://` and `https://` are not supported |
+## Contributing
 
-### 🗄 Database
+Bugs and ideas go to [issues](https://github.com/Case211/remnawave-admin/issues). Pull requests are welcome; the first one asks you to sign the [CLA](CLA.md). Details in the [guide](https://case211.github.io/remnawave-admin/en/guide/contributing).
 
-| Variable | Req. | Default | Description |
-|----------|------|---------|-------------|
-| `POSTGRES_USER` | ✅ | — | PostgreSQL user |
-| `POSTGRES_PASSWORD` | ✅ | — | PostgreSQL password |
-| `POSTGRES_DB` | ✅ | — | Database name |
-| `DATABASE_URL` | ✅ | — | PostgreSQL connection URL |
-| `SYNC_INTERVAL_SECONDS` | — | `300` | Data sync interval with API (sec) |
+## Licence
 
-### 🔔 Notifications
+GNU AGPL v3.0 with a plugin exception (§7) — see [LICENSE](LICENSE). Versions up to and including 2.15.x remain under MIT. A commercial licence is available on request.
 
-| Variable | Description |
-|----------|-------------|
-| `NOTIFICATIONS_CHAT_ID` | Group/channel ID |
-| `NOTIFICATIONS_TOPIC_ID` | General topic (fallback) |
-| `NOTIFICATIONS_TOPIC_USERS` | User notifications topic |
-| `NOTIFICATIONS_TOPIC_NODES` | Node notifications topic |
-| `NOTIFICATIONS_TOPIC_SERVICE` | Service notifications |
-| `NOTIFICATIONS_TOPIC_HWID` | HWID notifications |
-| `NOTIFICATIONS_TOPIC_CRM` | Billing notifications |
-| `NOTIFICATIONS_TOPIC_FINANCE` | Finance notifications |
-| `NOTIFICATIONS_TOPIC_ERRORS` | Error notifications |
-| `NOTIFICATIONS_TOPIC_VIOLATIONS` | Violation notifications |
+## Support the project
 
-### 🔗 Webhook
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WEBHOOK_SECRET` | — | Webhook verification key (HMAC-SHA256) |
-| `WEBHOOK_PORT` | `8080` | Webhook server port |
-
-### 🌍 GeoIP (MaxMind GeoLite2)
-
-| Variable | Req. | Default | Description |
-|----------|------|---------|-------------|
-| `MAXMIND_LICENSE_KEY` | — | — | MaxMind license key (free). When set — databases download automatically |
-| `MAXMIND_CITY_DB` | — | `/app/geoip/GeoLite2-City.mmdb` | Path to GeoLite2-City database |
-| `MAXMIND_ASN_DB` | — | `/app/geoip/GeoLite2-ASN.mmdb` | Path to GeoLite2-ASN database |
-
-> **Without MaxMind** — uses ip-api.com (free but limited to ~1000 requests/day).
-> **With MaxMind** — local database, instant lookups, no rate limits.
->
-> How to set up:
-> 1. Sign up at [maxmind.com/en/geolite2/signup](https://www.maxmind.com/en/geolite2/signup) (free)
-> 2. Account → Manage License Keys → Generate New License Key
-> 3. Add to `.env`: `MAXMIND_LICENSE_KEY=your_key`
-> 4. Databases will download automatically on startup and update every 24 hours
-
-### 🌐 Web Panel
-
-| Variable | Req.* | Default | Description |
-|----------|-------|---------|-------------|
-| `WEB_SECRET_KEY` | ✅ | — | JWT secret key |
-| `TELEGRAM_BOT_USERNAME` | ✅ | — | Bot username (without @) |
-| `WEB_CORS_ORIGINS` | — | — | Allowed domains (CORS) |
-| `WEB_JWT_EXPIRE_MINUTES` | — | `30` | Access token lifetime (min) |
-| `WEB_JWT_REFRESH_HOURS` | — | `6` | Refresh token lifetime (h) |
-| `WEB_BACKEND_PORT` | — | `8081` | Backend port |
-| `WEB_FRONTEND_PORT` | — | `3000` | Frontend port |
-| `WEB_ALLOWED_IPS` | — | — | IP whitelist (CIDR) |
-
-*\* Required only when running with `--profile web`*
-
-### 📧 Mail Server
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MAIL_SERVER_ENABLED` | `false` | Enable the built-in mail server |
-| `MAIL_INBOUND_PORT` | `2525` | Inbound SMTP server port |
-| `MAIL_SERVER_HOSTNAME` | `0.0.0.0` | SMTP server bind address |
-
-> 💡 These variables are fallbacks. Settings can be changed from the web panel (Settings → Mail Server).
-
----
-
-## 🤖 Bot Commands
-
-| Command | Description |
-|---------|-------------|
-| `/start` | Main menu |
-| `/help` | Help |
-| `/health` | System health status |
-| `/stats` | Panel statistics |
-| `/bandwidth` | Traffic statistics |
-| `/config` | Dynamic settings |
-| `/user <username\|id>` | User information |
-| `/node <uuid>` | Node information |
-| `/host <uuid>` | Host information |
-
----
-
-## 📝 Logging
-
-Two-tier system: **files** (full history) and **console** (WARNING+ only).
-
-| File | Level | Contents |
-|------|-------|----------|
-| `adminbot_INFO.log` | INFO+ | Everything: API calls, sync, actions |
-| `adminbot_WARNING.log` | WARNING+ | Problems: timeouts, errors |
-| `web_INFO.log` | INFO+ | Web backend logs |
-| `web_WARNING.log` | WARNING+ | Web backend problems |
-
-Rotation: 50 MB per file, 5 backups (gzip). Files in `./logs/`.
-
-```bash
-docker compose logs -f bot                    # Live logs
-tail -100 ./logs/adminbot_INFO.log            # Last 100 lines
-```
-
----
-
-## 📂 Project Structure
-
-```
-remnawave-admin/
-├── src/                        # Telegram bot
-│   ├── handlers/               # Handlers (users, nodes, hosts, billing, ...)
-│   ├── keyboards/              # Inline keyboards
-│   ├── services/               # API client, database, violation detector, webhook, ...
-│   └── utils/                  # i18n, logging, formatting
-├── web/                        # Web panel
-│   ├── frontend/               # React + TypeScript + Tailwind
-│   └── backend/                # FastAPI backend
-├── node-agent/                 # Node data collection agent
-├── alembic/                    # DB migrations
-├── locales/                    # Localization (ru, en)
-└── docker-compose.yml          # Docker Compose (profiles: bot, web)
-```
-
----
-
-## 📚 Documentation
-
-| Document | Description |
-|----------|-------------|
-| [docs/README.md](docs/README.md) | Monitoring, Prometheus metrics catalog, VictoriaMetrics integration |
-| [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md) | Webhook setup guide |
-| [web/README.md](web/README.md) | Web panel: setup, reverse proxy, API |
-| [node-agent/README.md](node-agent/README.md) | Node Agent: installation, configuration, troubleshooting |
-| [docs/API.md](docs/API.md), [docs/API-ENDPOINTS.md](docs/API-ENDPOINTS.md) | External API v3 |
-| [docs/WEBHOOKS-EVENTS.md](docs/WEBHOOKS-EVENTS.md), [docs/WEBHOOKS-SIGNATURES.md](docs/WEBHOOKS-SIGNATURES.md) | Webhook event catalog and signatures |
-
----
-
-## 🔧 Troubleshooting
-
-### Bot not responding
-
-```bash
-docker compose ps                    # Container status
-docker compose logs -f bot           # Logs
-docker compose config                # Check configuration
-```
-
-### API connection issues
-
-- Check `API_BASE_URL` and `API_TOKEN`
-- Docker network exists: `docker network ls | grep remnawave-network`
-
-### Access denied
-
-- Telegram ID in `ADMINS`? Check via [@userinfobot](https://t.me/userinfobot)
-
-### Webhook not working
-
-- `WEBHOOK_SECRET` matches `WEBHOOK_SECRET_HEADER` in panel?
-- Webhook URL accessible from panel?
-- Details: [WEBHOOK_SETUP.md](WEBHOOK_SETUP.md)
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a branch: `git checkout -b feature/amazing-feature`
-3. Commit and push
-4. Open a Pull Request
-
----
-
-## 📄 License
-
-GNU Affero General Public License v3.0 with a plugin exception (§7) — see [LICENSE](LICENSE). Earlier versions (≤ 2.15.x) remain under MIT.
-
-A **commercial license** (proprietary use without AGPL obligations) is available on request. Contributions are accepted under the [CLA](CLA.md): signing is requested automatically on your first pull request.
-
----
-
-## 💖 Support
-
-- [GitHub Issues](https://github.com/case211/remnawave-admin/issues)
-- [Telegram chat](https://t.me/remnawave_admin)
-
-Support the author:
-- TON: `UQDDe-jyFTbQsPHqyojdFeO1_m7uPF-q1w0g_MfbSOd3l1sC`
-- USDT TRC20: `TGyHJj2PsYSUwkBbWdc7BFfsAxsE6SGGJP`
-- BTC: `bc1qusrj5rxd3kv6eepzpdn0muy6zsl3c24xunz2xn`
-
----
+TON `UQDDe-jyFTbQsPHqyojdFeO1_m7uPF-q1w0g_MfbSOd3l1sC`
+USDT TRC20 `TGyHJj2PsYSUwkBbWdc7BFfsAxsE6SGGJP`
+BTC `1J6Zz7XcrpFkchwFmuU5WTFYTxziBdSwRz`
 
 <div align="center">
 
-Made with ❤️ for the Remnawave community
+<a href="https://github.com/Case211/remnawave-admin/stargazers">
+  <img src="docs/star-history.svg" alt="Star history" width="640" />
+</a>
+
+Built for the Remnawave community
 
 </div>
