@@ -134,6 +134,10 @@ class NdpiDaemon:
         self._ndpid = await asyncio.create_subprocess_exec(
             NDPID_BIN, "-i", self.interface, "-c", self.collector_socket,
             "-a", DAEMON_ALIAS,
+            # Пакетные события — две трети потока в сокет, и ни одно из них
+            # не несёт вердикта: агент их отбрасывает. На живой ноде это
+            # была даром потраченная сериализация на каждый поток.
+            "-o", "max-packets-per-flow-to-send=0",
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
         )
         await asyncio.sleep(0.5)
