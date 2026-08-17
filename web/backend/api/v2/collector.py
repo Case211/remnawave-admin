@@ -252,6 +252,10 @@ class TorrentEventReport(BaseModel):
     outbound_tag: str = "TORRENT"
     node_uuid: str
     detected_at: datetime
+    # Чем поймали: тег роутинга Xray (только открытое рукопожатие
+    # BitTorrent) или вердикт nDPI (видит и шифрованный поток, DHT, uTP).
+    # Агенты постарше поля не шлют — им остаётся прежний источник.
+    detected_by: str = "xray_routing"
 
 
 class BatchReport(BaseModel):
@@ -636,6 +640,7 @@ async def receive_connections(
                         "inbound_tag": event.inbound_tag,
                         "outbound_tag": event.outbound_tag,
                         "detected_at": event.detected_at,
+                        "detected_by": event.detected_by,
                     })
                 except Exception as e:
                     logger.warning("Error resolving torrent event for %s: %s", event.user_email, e)
@@ -1004,6 +1009,7 @@ async def _handle_violation(
         except Exception as geo_error:
             logger.warning("GeoIP lookup failed for user %s: %s", user_uuid, geo_error)
 
+    notification_sent = False
     if not is_whitelisted:
         try:
             from web.backend.core.violation_notifier import send_violation_notification
@@ -1020,6 +1026,7 @@ async def _handle_violation(
                 active_connections=active_conns,
                 ip_metadata=ip_metadata,
             )
+            notification_sent = True
         except Exception as notify_error:
             logger.warning("Failed to send violation notification for user %s: %s", user_uuid, notify_error)
 
@@ -1082,6 +1089,15 @@ async def _handle_violation(
             logger.debug("Violation deduplicated for user %s (id=%s)", user_uuid, violation_id)
             return
 
+        if notification_sent and violation_id:
+            # Уведомление уходит до сохранения (id ещё нет), поэтому отметка ставится
+            # здесь. Без неё кулдаун повторных уведомлений считает, что юзеру ещё
+            # ничего не отправляли: он берёт MAX(notified_at) по пользователю.
+            try:
+                await db_service.mark_violation_notified(violation_id)
+            except Exception as mark_error:
+                logger.warning("Failed to mark violation %s as notified: %s", violation_id, mark_error)
+
         fire_event("violation.created", {
             "violation_id": violation_id,
             "user_uuid": user_uuid,
@@ -1097,9 +1113,11 @@ async def _handle_violation(
         from shared.violation_detector import ViolationAction
         if violation_score.recommended_action == ViolationAction.HARD_BLOCK:
             if config_service.get("violation_auto_hard_block", True):
+                from shared.api_client import api_client
+                blocked_count = 0
                 try:
-                    from shared.api_client import api_client
                     await api_client.disable_user(await _resolve_user_key(user_uuid))
+                    blocked_count += 1
                     logger.warning("Auto-blocked user %s score=%.1f", user_uuid[:8], violation_score.total)
                     fire_event("user.blocked", {
                         "uuid": user_uuid,
@@ -1111,6 +1129,55 @@ async def _handle_violation(
                     })
                 except Exception as block_error:
                     logger.warning("Failed to auto-block user %s: %s", user_uuid, block_error)
+
+                # Соучастники накрутки триалов блокируются вместе с проверяемым.
+                # Иначе связка остаётся рабочей: после бана одного остальные видят
+                # уже один живой триал, под правило не попадают, и накрутка стоит
+                # абузеру ровно один аккаунт из N. Список приходит от анализатора
+                # и содержит только чужие подписки с ЖИВЫМ триалом на том же HWID —
+                # платные и истёкшие туда не попадают.
+                for accomplice_uuid in (getattr(hwid, "active_trial_accomplices", None) or []):
+                    try:
+                        await api_client.disable_user(await _resolve_user_key(accomplice_uuid))
+                        blocked_count += 1
+                        logger.warning(
+                            "Auto-blocked trial-abuse accomplice %s (violation %s)",
+                            accomplice_uuid[:8], violation_id,
+                        )
+                        fire_event("user.blocked", {
+                            "uuid": accomplice_uuid,
+                            "username": None,
+                            "reason": "violation",
+                            "details": f"trial abuse accomplice of {user_uuid}",
+                            "violation_id": violation_id,
+                            "blocked_by": "auto",
+                        })
+                    except Exception as block_error:
+                        logger.warning(
+                            "Failed to auto-block accomplice %s: %s", accomplice_uuid, block_error,
+                        )
+
+                # Нарушение помечается решённым: меру система уже приняла. Без этого
+                # запись остаётся в «неразрешённых» (метрики фильтруют по
+                # action_taken IS NULL) и админ видит требование действия, которого
+                # делать не нужно.
+                if blocked_count and violation_id:
+                    try:
+                        comment = (
+                            "Автоблокировка детектора"
+                            if blocked_count == 1
+                            else f"Автоблокировка детектора: заблокировано аккаунтов — {blocked_count}"
+                        )
+                        await db_service.update_violation_action(
+                            violation_id=violation_id,
+                            action_taken="hard_block",
+                            admin_telegram_id=None,
+                            admin_comment=comment,
+                        )
+                    except Exception as mark_error:
+                        logger.warning(
+                            "Failed to mark violation %s as auto-resolved: %s", violation_id, mark_error,
+                        )
             else:
                 logger.info(
                     "Auto-block skipped for user %s (violation_auto_hard_block=off, score=%.1f)",

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, History, Search, SearchX, Sliders } from '@/components/brand/icons'
+import { ArrowRight, History, Search, SearchX, Sliders, Smartphone } from '@/components/brand/icons'
 
 import { Input } from '@/components/ui/input'
 
@@ -57,6 +57,15 @@ export default function SearchPage() {
           >
             <History className="w-3.5 h-3.5" aria-hidden />
             <span className="hidden sm:inline">{t('plugins.smart_support.audit.open')}</span>
+          </Link>
+          <Link
+            to="/plugins/smart-support/clients"
+            title={t('plugins.smart_support.clients.title')}
+            aria-label={t('plugins.smart_support.clients.title')}
+            className="inline-flex items-center justify-center gap-1.5 min-h-[36px] text-xs text-dark-300 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-[var(--glass-border)] hover:bg-[var(--glass-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40"
+          >
+            <Smartphone className="w-3.5 h-3.5" aria-hidden />
+            <span className="hidden sm:inline">{t('plugins.smart_support.clients.title')}</span>
           </Link>
           <Link
             to="/plugins/smart-support/settings"

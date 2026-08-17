@@ -213,7 +213,16 @@
     "logout": "Logout",
     "logoutConfirmTitle": "Log out of the panel?",
     "logoutConfirmDescription": "You'll need to sign in again. Any unsaved changes will be lost.",
-    "toggleCollapse": "Toggle sidebar"
+    "toggleCollapse": "Toggle sidebar",
+    "customize": {
+      "button": "Customize menu",
+      "title": "Menu order",
+      "description": "Drag an entry by the handle on the left — the menu updates instantly.",
+      "hint": "A section header moves together with its entries. The order is stored in this browser.",
+      "drag": "Drag to reorder",
+      "reset": "Reset",
+      "done": "Done"
+    }
   },
   "commandPalette": {
     "placeholder": "Search pages, users, actions...",
@@ -1650,11 +1659,14 @@
       "lastActivityTooltip": "Most recent appearance of this HWID on a new account",
       "overThresholdBadge": "≥{{thr}} → ban",
       "overThresholdTooltip": "Account count has reached the hard-block threshold ({{thr}}) — the next violation gets hard_block",
+      "trialAbuseBadge": "{{count}} live trials → ban",
+      "trialAbuseTooltip": "More distinct accounts with a live trial than the threshold ({{thr}}) — this is trial farming, the violation gets hard_block",
       "stats": {
         "groups": "Devices",
         "accounts": "Accounts",
         "withActive": "With active",
-        "overThreshold": "Over ban threshold ({{thr}}+)"
+        "overThreshold": "Over ban threshold ({{thr}}+)",
+        "trialAbuse": "Trial farming (>{{thr}} live)"
       },
       "sort": {
         "accounts": "By accounts",
@@ -3644,7 +3656,11 @@
       },
       "violations_hwid_max_accounts": {
         "label": "👥 Max accounts per HWID",
-        "description": "Number of accounts sharing one HWID that triggers a violation (default 2)"
+        "description": "How many distinct accounts may share one HWID WITHOUT triggering — a violation starts at the next account (value 2 → fires on the third). Subscriptions of the same person count as one account: grouped by telegram_id, or by email when the user signed up without Telegram"
+      },
+      "violations_hwid_max_active_trials": {
+        "label": "🎁 Max active trials per HWID",
+        "description": "How many distinct accounts with a LIVE trial subscription may share one device without triggering. Catches trial farming via fresh accounts while ignoring both the normal «trial expired → paid plan purchased» upgrade and two paying people sharing a device. Trial status is determined by the tag and internal squad settings below. 0 = disabled"
       },
       "violations_mobile_cgnat_buffer": {
         "label": "📱 Mobile CGNAT buffer (IPs)",
@@ -5654,6 +5670,7 @@
       "pip_install_failed": "pip failed to install the package — check backend logs"
     },
     "free": "Free",
+    "free_hint": "no subscription needed",
     "pick_paid": "Choose a paid plan",
     "plan": "Plan"
   },
@@ -5863,7 +5880,8 @@
             "reset_traffic": "Reset traffic",
             "notify_update": "Notify about update"
           }
-        }
+        },
+        "crumb": "Report"
       },
       "audit": {
         "title": "Audit log",
@@ -5956,18 +5974,25 @@
           "ai": "AI analysis"
         },
         "ai": {
-          "enabled": "Enable cloud AI analysis in reports",
-          "cloud_hint": "Analysis runs on the cloud core: no provider keys needed, calls are drawn from the subscription quota.",
-          "subscription": "Subscription",
-          "sub_state": {
-            "active": "active",
-            "grace": "grace period",
-            "expired": "expired",
-            "missing": "none"
+          "enabled": "Enable AI analysis in reports",
+          "own_key_hint": "Analysis runs on your own provider key — no subscription needed. Without a key the report still works, just without the AI section.",
+          "no_keys_warning": "AI is on, but no key is set — there will be no analysis.",
+          "chain_hint": "Providers in order: if the first hits its limit, the next one is called",
+          "key": "API key",
+          "key_set": "key saved — enter a new one to replace",
+          "key_empty": "no key set",
+          "clear": "Clear",
+          "model": "Model",
+          "model_default": "default",
+          "move_up": "Move up the chain",
+          "move_down": "Move down the chain",
+          "state": {
+            "ready": "ready",
+            "no_key": "no key",
+            "cooldown": "paused {{n}}s"
           },
-          "quota": "Call quota",
-          "quota_topup": "+{{n}} topped up",
-          "manage": "Manage subscription and quota →"
+          "outage_lookup": "Check for outages at the client's ISP",
+          "outage_hint": "IODA (Georgia Tech/CAIDA), free and key-less: tells whether the subscriber's own network is down."
         },
         "fields": {
           "node_cpu_high": {
@@ -6030,6 +6055,51 @@
             "label": "Cache TTL, min",
             "help": "Older clusters are not surfaced in reports even if still in DB."
           }
+        }
+      },
+      "clients": {
+        "title": "Client reference",
+        "subtitle": "Current app versions and known bugs, shared by every panel. This is what the report compares the client version against.",
+        "back": "Back to search",
+        "queue": "Proposed changes",
+        "queue_empty": "No open proposals",
+        "decided": "Decided ({{n}})",
+        "reference": "Reference",
+        "reference_empty": "The reference is empty",
+        "propose": "Propose a change",
+        "propose_title": "Reference change",
+        "propose_hint": "Other panels will see the proposal and either confirm it or object. It reaches the reference after the server owner reviews it.",
+        "proposed": "Proposal sent",
+        "propose_failed": "Could not send the proposal",
+        "vote_failed": "Vote was not counted",
+        "send": "Send",
+        "app_id": "App identifier",
+        "app_id_hint": "How the app is detected from the User-Agent: Happ, v2rayNG, V2rayTun.",
+        "latest_version": "Current version",
+        "ambiguous_label": "Builds are numbered differently — don't compare versions",
+        "ambiguous": "version not compared",
+        "no_version": "version unknown",
+        "bug_title": "What breaks",
+        "version_min": "From version",
+        "version_max": "To version",
+        "workaround": "What helps",
+        "comment": "Comment",
+        "version": "version",
+        "issues": "bugs: {{n}}",
+        "fix_version": "Version",
+        "report_bug": "Bug",
+        "mine": "mine",
+        "agree": "Agree",
+        "disagree": "Disagree",
+        "agree_count": "agree: {{n}}",
+        "votes_hint": "How many panels confirmed the change",
+        "kind": {
+          "app": "app version",
+          "issue": "version bug"
+        },
+        "status": {
+          "accepted": "accepted",
+          "rejected": "rejected"
         }
       }
     }

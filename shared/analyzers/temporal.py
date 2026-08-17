@@ -37,6 +37,7 @@ class TemporalAnalyzer:
         connection_history: List[Dict[str, Any]],
         user_device_count: int = 1,
         is_mobile: bool = False,
+        source_of: Optional[Dict[str, str]] = None,
     ) -> TemporalScore:
         """
         Анализирует временные паттерны подключений.
@@ -45,6 +46,10 @@ class TemporalAnalyzer:
             connections: Активные подключения
             connection_history: История подключений за период
             user_device_count: Количество устройств пользователя (для учёта нормальных одновременных подключений)
+            source_of: ``адрес → ключ источника``. Адреса одного пула
+                оператора считаются одним источником: CGNAT раздаёт клиенту
+                разные адреса на каждое соединение, и по адресам один
+                человек выглядит толпой. Пусто — считаем по адресам.
         
         Returns:
             TemporalScore с оценкой и причинами
@@ -53,6 +58,11 @@ class TemporalAnalyzer:
         reasons = []
         rapid_switches = 0
         overlap_minutes = 0.0
+        source_of = source_of or {}
+
+        def sources(ips) -> int:
+            """Сколько независимых источников за набором адресов."""
+            return len({source_of.get(ip, ip) for ip in ips})
 
         # Проверка одновременных подключений
         # Считаем уникальные IP и проверяем, действительно ли подключения одновременные
@@ -158,9 +168,11 @@ class TemporalAnalyzer:
                 
                 # Находим группу с максимальным количеством уникальных IP
                 max_simultaneous_ips = 0
+                max_simultaneous_addresses = 0
                 for group in simultaneous_groups:
-                    unique_ips = len(set(ip for _, ip in group))
-                    max_simultaneous_ips = max(max_simultaneous_ips, unique_ips)
+                    group_ips = {ip for _, ip in group}
+                    max_simultaneous_ips = max(max_simultaneous_ips, sources(group_ips))
+                    max_simultaneous_addresses = max(max_simultaneous_addresses, len(group_ips))
                 
                 # Если есть действительно одновременные подключения с разных IP
                 if max_simultaneous_ips > 1:
@@ -193,6 +205,15 @@ class TemporalAnalyzer:
                     if user_device_count >= 3:
                         effective_threshold += 1
 
+                    # Когда адресов больше, чем источников, сработал пул
+                    # оператора — говорим об этом прямо, иначе по тексту
+                    # нарушения не понять, почему «7 IP» превратились в «3».
+                    collapsed = max_simultaneous_addresses > simultaneous_count
+                    counted = (
+                        f"{simultaneous_count} источников ({max_simultaneous_addresses} адресов)"
+                        if collapsed else f"{simultaneous_count} разных IP"
+                    )
+
                     # Проверяем превышение с учётом буфера
                     if simultaneous_count > effective_threshold:
                         # Превышение буфера — вероятно шаринг
@@ -200,31 +221,31 @@ class TemporalAnalyzer:
                         if excess >= 3 or simultaneous_count > 10:
                             # Сильное превышение
                             score = 100.0
-                            reasons.append(f"Множественные одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
+                            reasons.append(f"Множественные одновременные подключения: {counted} (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
                         elif excess >= 2:
                             # Умеренное превышение
                             score = 80.0
-                            reasons.append(f"Одновременные подключения с {simultaneous_count} разных IP (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
+                            reasons.append(f"Одновременные подключения: {counted} (превышение на {excess}, порог: {effective_threshold}, устройств: {user_device_count})")
                         else:
                             # Превышение на 1 сверх буфера
                             score = 60.0
-                            reasons.append(f"Превышение лимита устройств: {simultaneous_count} IP (порог: {effective_threshold}, устройств: {user_device_count})")
+                            reasons.append(f"Превышение лимита устройств: {counted} (порог: {effective_threshold}, устройств: {user_device_count})")
                     elif simultaneous_count > max_allowed_simultaneous:
                         # IP > устройств, но в пределах буфера — скорее всего переключение сети
                         # Минимальный скор для мониторинга, не классифицируем как нарушение
                         excess_over_limit = simultaneous_count - max_allowed_simultaneous
                         if excess_over_limit >= 2:
                             score = 35.0
-                            reasons.append(f"Подозрительная активность: {simultaneous_count} IP при лимите {max_allowed_simultaneous} устройств")
+                            reasons.append(f"Подозрительная активность: {counted} при лимите {max_allowed_simultaneous} устройств")
                         else:
                             score = 15.0
-                            reasons.append(f"Возможное переключение сети: {simultaneous_count} IP при лимите {max_allowed_simultaneous} устройств")
+                            reasons.append(f"Возможное переключение сети: {counted} при лимите {max_allowed_simultaneous} устройств")
 
                     # Анализ длительности перекрытия сессий
                     # Кратковременное перекрытие (< 3 мин) — почти наверняка переключение сети
                     # Длительное перекрытие (> 15 мин) — подозрительно
                     if simultaneous_groups and score > 0:
-                        best_group = max(simultaneous_groups, key=lambda g: len(set(ip for _, ip in g)))
+                        best_group = max(simultaneous_groups, key=lambda g: sources({ip for _, ip in g}))
                         # Длительность перекрытия = разница между самым ранним и самым поздним подключением в группе
                         earliest_start = min(t for t, _ in best_group)
                         latest_start = max(t for t, _ in best_group)
@@ -254,8 +275,9 @@ class TemporalAnalyzer:
                         # > 15 мин — длительное перекрытие, скор не снижаем
 
                 else:
-                    # Если нет одновременных подключений, используем количество уникальных IP для статистики
-                    simultaneous_count = len(set(ip for _, ip in valid_connections))
+                    # Нет одновременных подключений — для статистики берём
+                    # число источников (адреса одного пула не считаем порознь)
+                    simultaneous_count = sources({ip for _, ip in valid_connections})
             elif len(valid_connections) == 1:
                 # Одно валидное подключение
                 simultaneous_count = 1

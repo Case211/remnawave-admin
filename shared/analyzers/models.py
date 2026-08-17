@@ -68,6 +68,10 @@ class HwidScore:
     matched_details: List[Dict[str, Any]] = None
     per_account_abuse: bool = False  # абуз мультитарифа (один telegram_id, N подписок на HWID)
     max_accounts_per_hwid: int = 1  # макс. разных аккаунтов на одном HWID (включая самого юзера)
+    max_active_trials_per_hwid: int = 0  # макс. РАЗНЫХ аккаунтов с живым триалом на одном HWID
+    # UUID'ы чужих подписок с живым триалом на тех HWID, где порог превышен —
+    # соучастники накрутки, блокировать их надо вместе с проверяемым
+    active_trial_accomplices: List[str] = None
 
 
 class UserAgentClassification(Enum):

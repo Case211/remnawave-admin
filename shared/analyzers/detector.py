@@ -22,6 +22,7 @@ from shared.database import DatabaseService
 from shared.geoip import GeoIPService, IPMetadata, get_geoip_service
 from shared.analyzers.temporal import TemporalAnalyzer
 from shared.analyzers.geo import GeoAnalyzer
+from shared.analyzers import networks
 from shared.analyzers.asn import ASNAnalyzer
 from shared.analyzers.profile import UserProfileAnalyzer
 from shared.analyzers.device import DeviceFingerprintAnalyzer
@@ -181,14 +182,25 @@ class IntelligentViolationDetector:
                 except Exception as geo_err:
                     logger.warning("Failed pre-fetching GeoIP data for %d IPs: %s", len(all_ips_for_geo), geo_err)
 
-            # Determine if user is on a mobile carrier (for CGNAT buffer)
-            _has_mobile = any(
-                ip_metadata_cache.get(str(c.ip_address), None) and
-                getattr(ip_metadata_cache[str(c.ip_address)], 'connection_type', '') in ('mobile', 'mobile_isp')
+            # Мобильный оператор — повод дать буфер на CGNAT. Определяем по
+            # имени организации, а не по connection_type: GeoIP-провайдер
+            # почти всегда зовёт мобильные сети «residential», и буфер,
+            # написанный ровно против этого случая, не включался никогда.
+            active_ip_meta = {
+                str(c.ip_address): ip_metadata_cache.get(str(c.ip_address))
                 for c in active_connections
-            ) if ip_metadata_cache else False
+            } if ip_metadata_cache else {}
+            _has_mobile = networks.has_mobile_network(active_ip_meta)
 
-            temporal_score = self.temporal_analyzer.analyze(active_connections, connection_history, user_device_count, is_mobile=_has_mobile)
+            # Адреса одного операторского пула — это один источник, а не
+            # толпа: CGNAT раздаёт клиенту разные адреса на каждое соединение.
+            # Пороги считаем по источникам, число адресов остаётся в тексте.
+            source_of = networks.source_map(active_ip_meta.keys(), active_ip_meta)
+
+            temporal_score = self.temporal_analyzer.analyze(
+                active_connections, connection_history, user_device_count,
+                is_mobile=_has_mobile, source_of=source_of,
+            )
 
             # Анализируем геолокацию (используем общий кэш)
             geo_score = await self.geo_analyzer.analyze(active_connections, connection_history, ip_metadata_cache)
@@ -434,10 +446,14 @@ class IntelligentViolationDetector:
             hb_dev = config_service.get("violations_hard_block_devices", 80)
             hb_hwid = config_service.get("violations_hard_block_hwid_matches", 10)
 
-            # 1) Аномально много уникальных IP
-            if hb_ips > 0 and len(current_ips) >= hb_ips:
+            # 1) Аномально много источников. Считаем по ним, а не по адресам:
+            # полсотни адресов мобильного пула — это по-прежнему один человек,
+            # и жёстко блокировать его не за что.
+            current_sources = {source_of.get(ip, ip) for ip in current_ips}
+            if hb_ips > 0 and len(current_sources) >= hb_ips:
                 extreme_abuse_reasons.append(
-                    f"Экстремальное количество IP: {len(current_ips)} уникальных адресов (порог: {hb_ips})"
+                    f"Экстремальное количество источников: {len(current_sources)}"
+                    f" ({len(current_ips)} адресов, порог: {hb_ips})"
                 )
 
             # 2) Много одновременных активных подключений
@@ -469,6 +485,27 @@ class IntelligentViolationDetector:
             if hb_hwid_accounts > 0 and hwid_accounts >= hb_hwid_accounts:
                 extreme_abuse_reasons.append(
                     f"Массовый кросс-аккаунт: {hwid_accounts} аккаунтов на одном HWID (порог: {hb_hwid_accounts})"
+                )
+
+            # 6) Несколько РАЗНЫХ аккаунтов с живым триалом на одном устройстве.
+            # Проверка №5 меряет аккаунты любого типа и на «двое платящих делят планшет»
+            # даёт такой же сигнал, как на реальный абуз, поэтому её порог приходится
+            # держать высоким. Живые триалы — сигнал однозначный: апгрейд «пробная
+            # истекла → куплена платная» сюда не попадает (истёкшая не активна), два
+            # платящих человека тоже. Порог берётся из настройки анализатора, чтобы
+            # не заводить третье место с той же семантикой.
+            max_active_trials = config_service.get("violations_hwid_max_active_trials", 1)
+            try:
+                max_active_trials = int(max_active_trials)
+            except (TypeError, ValueError):
+                max_active_trials = 1
+            hwid_active_trials = getattr(hwid_score, 'max_active_trials_per_hwid', 0)
+            if max_active_trials > 0 and hwid_active_trials > max_active_trials:
+                # Текст дословно повторяет причину HwidCrossAccountAnalyzer — причины
+                # дедуплицируются по строке, так что в уведомление уйдёт одна запись.
+                extreme_abuse_reasons.append(
+                    f"Абуз пробных подписок: {hwid_active_trials} аккаунтов "
+                    f"с активным триалом на одном устройстве (порог: {max_active_trials})"
                 )
 
             if extreme_abuse_reasons:

@@ -39,6 +39,10 @@ class TorrentEvent(BaseModel):
     outbound_tag: str      # e.g. "TORRENT"
     node_uuid: str
     detected_at: datetime
+    # Чем поймали: "xray_routing" — тег роутинга Xray (открытое рукопожатие
+    # BitTorrent), "ndpi" — вердикт nDPI (берёт и шифрованный поток, DHT,
+    # uTP). Разбирая инцидент, важно знать, насколько твёрдый признак.
+    detected_by: str = "xray_routing"
 
 
 class SystemMetrics(BaseModel):

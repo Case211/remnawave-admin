@@ -13,6 +13,9 @@ import type {
   AISettingsOut,
   AIStatusResponse,
   ActionExecuteIn,
+  ClientReferenceResponse,
+  SubmissionIn,
+  SubmissionListResponse,
   ActionExecuteOut,
   ActionListResponse,
   ReportResponse,
@@ -105,5 +108,35 @@ export async function fetchRecentSessions(
     `${BASE}/sessions/recent`,
     { params },
   )
+  return data
+}
+
+
+// ── общий справочник клиентских приложений ────────────────────────────────
+
+export async function fetchClientReference(): Promise<ClientReferenceResponse> {
+  const { data } = await client.get<ClientReferenceResponse>(`${BASE}/clients`)
+  return data
+}
+
+export async function fetchSubmissions(
+  status: 'open' | 'all' = 'open',
+): Promise<SubmissionListResponse> {
+  const { data } = await client.get<SubmissionListResponse>(`${BASE}/clients/submissions`, {
+    params: { status },
+  })
+  return data
+}
+
+export async function proposeChange(body: SubmissionIn): Promise<{ id: number }> {
+  const { data } = await client.post<{ id: number }>(`${BASE}/clients/submissions`, body)
+  return data
+}
+
+export async function voteSubmission(
+  id: number,
+  vote: number,
+): Promise<{ votes_up: number; votes_down: number; my_vote: number }> {
+  const { data } = await client.post(`${BASE}/clients/submissions/${id}/vote`, { vote })
   return data
 }

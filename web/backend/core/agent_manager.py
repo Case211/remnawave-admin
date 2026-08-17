@@ -85,6 +85,10 @@ class AgentConnectionManager:
                 self._connections.pop(node_uuid, None)
             return False
 
+    def connected_nodes(self) -> list:
+        """UUID нод с живым каналом команд — кому вообще есть смысл слать."""
+        return list(self._connections.keys())
+
     async def get_websocket(self, node_uuid: str) -> Optional[WebSocket]:
         """Get the WebSocket for a node (for direct streaming like terminal)."""
         return self._connections.get(node_uuid)

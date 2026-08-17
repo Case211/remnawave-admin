@@ -911,7 +911,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "category": "violations",
         "subcategory": "thresholds",
         "display_name": "Макс. разных аккаунтов на один HWID",
-        "description": "Сколько разных аккаунтов (telegram_id) могут делить один HWID без срабатывания. Подписки одного telegram_id (мультитарифный режим) считаются одним аккаунтом. Юзеры без telegram_id считаются как один аккаунт = одна подписка",
+        "description": "Сколько разных аккаунтов могут делить один HWID БЕЗ срабатывания — нарушение фиксируется начиная со следующего аккаунта (значение 2 → сработает на третьем). Подписки одного человека считаются одним аккаунтом: группировка по telegram_id, а при регистрации без Telegram — по email",
         "default_value": "2",
         "sort_order": 12,
     },
@@ -924,6 +924,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Сколько панельных UUID (подписок) одного telegram_id допустимо на одном HWID. Защита от абуза мультитарифа. 0 = без ограничений",
         "default_value": "10",
         "sort_order": 13,
+    },
+    {
+        "key": "violations_hwid_max_active_trials",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "thresholds",
+        "display_name": "Макс. активных триалов на один HWID",
+        "description": "Сколько разных аккаунтов с ДЕЙСТВУЮЩЕЙ пробной подпиской могут делить одно устройство без срабатывания. Ловит накрутку триалов новыми аккаунтами и не задевает ни апгрейд «пробная истекла → куплена платная», ни двух платящих людей на общем устройстве. Триальность определяется настройками тегов и internal squad ниже. 0 = отключено",
+        "default_value": "1",
+        "sort_order": 14,
     },
     {
         "key": "violations_mobile_cgnat_buffer",
@@ -964,6 +974,20 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Сколько дней хранить историю подключений пользователей до автоочистки",
         "default_value": "30",
         "sort_order": 17,
+    },
+    {
+        "key": "ndpi_detection_enabled",
+        "value_type": "bool",
+        "category": "violations",
+        "subcategory": "thresholds",
+        "display_name": "Детект торрентов через nDPI",
+        "description": (
+            "Xray опознаёт BitTorrent только по открытому рукопожатию, а шифрованный "
+            "поток, DHT и uTP проходят мимо. nDPI видит и их. Требует демона nDPId на "
+            "ноде: включение уходит агентам командой, .env править не нужно"
+        ),
+        "default_value": "false",
+        "sort_order": 19,
     },
     {
         "key": "torrent_retention_days",

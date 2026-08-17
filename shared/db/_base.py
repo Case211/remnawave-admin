@@ -111,7 +111,8 @@ CREATE TABLE IF NOT EXISTS torrent_events (
     destination VARCHAR(255) NOT NULL,
     inbound_tag VARCHAR(100) DEFAULT '',
     outbound_tag VARCHAR(100) DEFAULT 'TORRENT',
-    detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    detected_by VARCHAR(32) NOT NULL DEFAULT 'xray_routing'
 );
 CREATE INDEX IF NOT EXISTS idx_te_user_date ON torrent_events(user_uuid, detected_at);
 CREATE INDEX IF NOT EXISTS idx_te_detected ON torrent_events(detected_at);

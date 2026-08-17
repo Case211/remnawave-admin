@@ -11,7 +11,7 @@ import json
 import logging
 import re
 import time
-from typing import Any, Callable, Awaitable, Dict
+from typing import Any, Callable, Awaitable, Dict, Optional
 
 from .config import Settings
 
@@ -40,6 +40,7 @@ ALLOWED_COMMAND_TYPES = {
     "pty_resize",
     "service_status",
     "sync_blocked_ips",
+    "set_ndpi",
     "ping",
 }
 
@@ -90,9 +91,14 @@ class CommandRunner:
         self,
         settings: Settings,
         send_fn: Callable[[dict], Awaitable[bool]],
+        ndpi_control: Optional[Callable[..., Awaitable[dict]]] = None,
     ):
         self._settings = settings
         self._send = send_fn
+        # Включение nDPI приходит командой из панели, чтобы оператору не
+        # пришлось лезть в .env на каждой ноде. Сам агент решать за панель
+        # ничего не должен, поэтому здесь только вызов контроллера.
+        self._ndpi_control = ndpi_control
 
     async def handle(self, msg: dict) -> None:
         """Route an incoming command message."""
@@ -138,6 +144,8 @@ class CommandRunner:
             await self._service_status(msg)
         elif msg_type == "sync_blocked_ips":
             await self._sync_blocked_ips(msg)
+        elif msg_type == "set_ndpi":
+            await self._set_ndpi(msg)
 
     async def _run_shell(self, script: str, timeout: int) -> tuple:
         """Run a shell script (on the HOST via nsenter when host_mode).
@@ -399,6 +407,47 @@ class CommandRunner:
         session = pty_manager.get_session(session_id)
         if session:
             session.resize(cols, rows)
+
+    async def _set_ndpi(self, msg: dict) -> None:
+        """Включить или выключить чтение вердиктов nDPI.
+
+        Отвечаем честно: включить чтение можно всегда, а вот демона на ноде
+        может не быть вовсе. Панель должна видеть разницу между «включено и
+        работает» и «включено, но сокета нет» — иначе тумблер врёт.
+        """
+        command_id = msg.get("command_id")
+        if self._ndpi_control is None:
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "error",
+                "output": "nDPI control is not available in this agent build",
+                "exit_code": 1,
+            })
+            return
+
+        try:
+            state = await self._ndpi_control(
+                enabled=bool(msg.get("enabled")),
+                socket_path=msg.get("socket_path") or None,
+                window_seconds=msg.get("window_seconds") or None,
+            )
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "completed",
+                "output": json.dumps(state, ensure_ascii=False),
+                "exit_code": 0,
+            })
+        except Exception as e:
+            logger.error("set_ndpi failed: %s", e, exc_info=True)
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "error",
+                "output": str(e),
+                "exit_code": 1,
+            })
 
     async def _service_status(self, msg: dict) -> None:
         """Get service status information."""

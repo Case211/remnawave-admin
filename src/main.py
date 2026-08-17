@@ -55,12 +55,25 @@ async def run_migrations() -> bool:
         def _run_migrations_sync():
             """Синхронная функция для запуска в executor."""
             engine = None
+            lock_conn = None
             try:
                 engine = create_engine(
                     db_url,
                     pool_pre_ping=True,
                     pool_recycle=3600,
                 )
+
+                # Панель, коллектор и бот стартуют вместе на одной базе.
+                # Каждый на время апгрейда отцепляет из alembic_version
+                # плагинные ветки и возвращает их обратно — и пока один
+                # планировал путь, другой уже вернул чужую ревизию. Лок
+                # выстраивает их в очередь: дождавшийся видит схему
+                # применённой и просто выходит.
+                from shared.migration_lock import MIGRATION_LOCK_KEY
+
+                lock_conn = engine.connect()
+                lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": MIGRATION_LOCK_KEY})
+                lock_conn.commit()
 
                 # Multi-head aware: панель может содержать ревизии от
                 # установленных плагинов (отдельные ветки в alembic-графе).
@@ -145,6 +158,18 @@ async def run_migrations() -> bool:
                 return True
 
             finally:
+                if lock_conn is not None:
+                    try:
+                        from shared.migration_lock import MIGRATION_LOCK_KEY
+
+                        lock_conn.execute(
+                            text("SELECT pg_advisory_unlock(:k)"), {"k": MIGRATION_LOCK_KEY}
+                        )
+                        lock_conn.commit()
+                    except Exception:
+                        # Соединение мертво — лок снимется вместе с сессией.
+                        pass
+                    lock_conn.close()
                 if engine:
                     engine.dispose(close=True)
 

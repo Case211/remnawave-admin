@@ -13,6 +13,8 @@ from pathlib import Path
 
 from .config import Settings
 from .collectors import (
+    NdpiDaemon,
+    NdpiTorrentWatcher,
     NetworkMetricsCollector,
     SystemMetricsCollector,
     XrayLogCollector,
@@ -158,6 +160,70 @@ async def run_agent() -> None:
     last_send_time = time.monotonic()
     total_sent = 0  # общий счётчик отправленных подключений
 
+    # ── nDPI: второй источник правды про торренты ──
+    # Тег роутинга Xray ловит только открытое рукопожатие BitTorrent;
+    # шифрованный поток, DHT и uTP видит nDPI. Демон ставится на ноду
+    # отдельно, поэтому включается флагом и молча простаивает, если сокета
+    # нет: связь с ним не должна мешать основному делу агента.
+    ndpi_watcher = None
+    ndpi_daemon = None
+    if settings.ndpi_enabled and settings.torrent_detection_enabled:
+        ndpi_watcher = NdpiTorrentWatcher(
+            settings.ndpi_socket_path, window_seconds=settings.ndpi_window_seconds,
+        )
+        await ndpi_watcher.start()
+        collector.torrent_oracle = ndpi_watcher
+        logger.info("nDPI torrent detection enabled (socket: %s)", settings.ndpi_socket_path)
+
+    async def control_ndpi(enabled: bool, socket_path=None, window_seconds=None) -> dict:
+        """Включить/выключить чтение вердиктов nDPI по команде из панели.
+
+        Возвращает состояние, по которому панель отличит «включено и
+        работает» от «включено, но демона на ноде нет».
+        """
+        nonlocal ndpi_watcher, ndpi_daemon
+        if not enabled:
+            if ndpi_watcher is not None:
+                await ndpi_watcher.stop()
+                collector.torrent_oracle = None
+                ndpi_watcher = None
+            if ndpi_daemon is not None:
+                await ndpi_daemon.stop()
+                ndpi_daemon = None
+            logger.info("nDPI torrent detection disabled by panel")
+            return {"enabled": False, "connected": False}
+
+        path = socket_path or settings.ndpi_socket_path
+        window = int(window_seconds or settings.ndpi_window_seconds)
+
+        # Демон едет в образе агента, поэтому «установка» — это запуск.
+        # Если оператор поднял nDPId сам, снаружи, мы это увидим по живому
+        # сокету и второй раз плодить процессы не станем.
+        daemon_state = {}
+        from .collectors.ndpi_daemon import socket_alive
+
+        if settings.ndpi_manage_daemon and not await socket_alive(path):
+            if ndpi_daemon is None:
+                ndpi_daemon = NdpiDaemon(path, interface=settings.ndpi_interface or None)
+            daemon_state = await ndpi_daemon.start()
+            if not daemon_state.get("started"):
+                logger.warning("nDPI: демон не поднялся — %s", daemon_state.get("reason"))
+
+        if ndpi_watcher is not None:
+            await ndpi_watcher.stop()
+        ndpi_watcher = NdpiTorrentWatcher(path, window_seconds=window)
+        await ndpi_watcher.start()
+        collector.torrent_oracle = ndpi_watcher
+        # Даём подключению мгновение: панели полезнее сразу увидеть, что
+        # сокета нет, чем узнать об этом из отсутствия событий.
+        await asyncio.sleep(0.5)
+        state = {"enabled": True, "socket_path": path, "window_seconds": window}
+        state.update(ndpi_watcher.stats())
+        if daemon_state:
+            state["daemon"] = daemon_state
+        logger.info("nDPI torrent detection enabled by panel: %s", state)
+        return state
+
     # ── Agent v2: WebSocket command channel ──
     ws_task = None
     if settings.command_enabled and (settings.ws_url or settings.collector_url):
@@ -165,7 +231,7 @@ async def run_agent() -> None:
         from .command_runner import CommandRunner
 
         ws_client = AgentWSClient(settings)
-        cmd_runner = CommandRunner(settings, ws_client.send)
+        cmd_runner = CommandRunner(settings, ws_client.send, ndpi_control=control_ndpi)
         ws_client._command_handler = cmd_runner.handle
         logger.info("Agent v2 command channel enabled")
     else:
@@ -300,6 +366,11 @@ async def run_agent() -> None:
                 await ws_task
             except asyncio.CancelledError:
                 pass
+
+        if ndpi_watcher is not None:
+            await ndpi_watcher.stop()
+        if ndpi_daemon is not None:
+            await ndpi_daemon.stop()
 
         await sender.close()
         uptime = time.monotonic() - start_time

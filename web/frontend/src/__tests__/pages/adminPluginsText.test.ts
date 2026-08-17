@@ -15,7 +15,7 @@ vi.mock('@/api/client', () => ({
   },
 }))
 
-const { pickText } = await import('@/pages/AdminPlugins')
+const { pickText, saleMode } = await import('@/pages/AdminPlugins')
 
 describe('pickText', () => {
   it('берёт нужную локаль', () => {
@@ -33,5 +33,22 @@ describe('pickText', () => {
 
   it('пустой ввод даёт пустую строку', () => {
     expect(pickText(undefined, 'ru')).toBe('')
+  })
+})
+
+describe('saleMode', () => {
+  it('бесплатный плагин отличается от снятого с продажи', () => {
+    // У обоих purchasable=false и пустые тарифы, но для оператора это
+    // противоположные вещи: одно ставится сразу, другое нельзя вообще.
+    expect(saleMode({ free: true, purchasable: false })).toBe('free')
+    expect(saleMode({ purchasable: false })).toBe('paused')
+  })
+
+  it('обычный платный плагин продаётся', () => {
+    expect(saleMode({ purchasable: true })).toBe('sale')
+  })
+
+  it('сервер старой версии не знает про free — значит продаётся', () => {
+    expect(saleMode({})).toBe('sale')
   })
 })

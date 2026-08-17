@@ -200,29 +200,49 @@ export interface ThresholdSettings {
   correlation_max_age_minutes?: number | null
 }
 
+/** Провайдеры, которых плагин умеет звать. Порядок — очередь фолбэка. */
+export type AIProviderName = 'gemini' | 'groq' | 'openrouter' | 'anthropic'
+
 /**
- * AI moved to the cloud rt-core: the operator only toggles it on/off,
- * provider keys and chains live on the licensing server.
+ * Один провайдер в настройках. Ключ наружу не отдаётся никогда — только
+ * признак «задан»; чтобы сменить, его присылают заново.
  */
+export interface AIProviderSettings {
+  provider: AIProviderName
+  key_set: boolean
+  model?: string | null
+}
+
 export interface AISettingsOut {
   enabled: boolean
+  provider_chain: AIProviderName[]
+  providers: AIProviderSettings[]
+  outage_lookup_enabled: boolean
 }
 
 export interface AISettingsIn {
   enabled?: boolean
+  provider_chain?: AIProviderName[]
+  /** провайдер → ключ; пустая строка стирает */
+  keys?: Record<string, string>
+  /** провайдер → модель; пустая строка возвращает модель по умолчанию */
+  models?: Record<string, string>
+  outage_lookup_enabled?: boolean
 }
 
-/** Quota snapshot from entitlements — for the progress bar. */
-export interface AIQuota {
-  period_limit: number
-  used: number
-  topup_left: number
+/** Состояние провайдера в моменте — чтобы объяснить, почему разбора нет. */
+export interface AIProviderStatus {
+  provider: AIProviderName
+  configured: boolean
+  available: boolean
+  cooldown_seconds_remaining: number
+  last_error?: string | null
 }
 
 export interface AIStatusResponse {
   enabled: boolean
-  subscription_state: 'active' | 'grace' | 'expired' | 'missing'
-  quota?: AIQuota | null
+  configured: boolean
+  providers: AIProviderStatus[]
 }
 
 export interface ActionParamSpec {
@@ -273,4 +293,64 @@ export interface SessionEntry {
 export interface SessionListResponse {
   items: SessionEntry[]
   total: number
+}
+
+
+// ── общий справочник клиентских приложений ────────────────────────────────
+// Ведут его все панели вместе: любая предлагает правку, остальные голосуют,
+// в справочник она попадает решением владельца сервера лицензий.
+
+export interface ClientIssue {
+  id?: number | null
+  version_min?: string | null
+  version_max?: string | null
+  platform?: string | null
+  os_min?: string | null
+  os_max?: string | null
+  severity: 'low' | 'medium' | 'high'
+  title: string
+  detail?: string | null
+  workaround?: string | null
+}
+
+export interface ClientApp {
+  id: string
+  title?: string | null
+  latest_version?: string | null
+  /** Под одним User-Agent ходят разные сборки — версия не сравнивается. */
+  ambiguous: boolean
+  notes?: string | null
+  issues: ClientIssue[]
+}
+
+export interface ClientReferenceResponse {
+  apps: ClientApp[]
+  catalog_version: number
+}
+
+export interface Submission {
+  id: number
+  kind: 'app' | 'issue'
+  app_id: string
+  payload: Record<string, unknown>
+  comment: string
+  status: 'pending' | 'accepted' | 'rejected'
+  votes_up: number
+  votes_down: number
+  /** Голос этой панели: 1 согласна, -1 нет, 0 не голосовала. */
+  my_vote: number
+  /** Предложение отправлено с этой панели — за своё не голосуют. */
+  mine: boolean
+  created_at: string
+}
+
+export interface SubmissionListResponse {
+  submissions: Submission[]
+}
+
+export interface SubmissionIn {
+  kind: 'app' | 'issue'
+  app_id: string
+  payload: Record<string, unknown>
+  comment?: string
 }

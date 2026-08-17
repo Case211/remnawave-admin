@@ -402,6 +402,30 @@ async def fetch_client_apps(force: bool = False) -> dict:
     return data
 
 
+async def client_submissions(status: str = "open") -> dict:
+    """Очередь правок общего справочника: что предложили другие панели.
+
+    Кэша нет намеренно: список меняется от чужих действий, и показывать
+    вчерашние счётчики голосов хуже, чем честно сходить на сервер.
+    """
+    await ensure_registered()
+    return await _request("GET", f"/v1/clients/submissions?status={status}")
+
+
+async def submit_client_change(payload: dict) -> dict:
+    """Предложить правку справочника от имени этой панели."""
+    await ensure_registered()
+    return await _request("POST", "/v1/clients/submissions", json_body=payload)
+
+
+async def vote_client_submission(submission_id: int, vote: int) -> dict:
+    """Согласиться с чужой правкой (1), возразить (-1) или отозвать голос (0)."""
+    await ensure_registered()
+    return await _request(
+        "POST", f"/v1/clients/submissions/{submission_id}/vote", json_body={"vote": vote},
+    )
+
+
 async def start_trial(plugin_id: str = "smart_support") -> None:
     """Активировать пробный период (POST /v1/trial). Требует подключения —
     сервер выдаёт триал один раз на пару (инстанс, плагин)."""

@@ -203,7 +203,18 @@ async def get_all_settings(
 def _apply_dynamic_setting(key: str, value: str) -> None:
     """Apply setting changes that take effect immediately (no restart)."""
     try:
-        if key == "log_level":
+        if key == "ndpi_detection_enabled":
+            # Тумблер живёт в панели, а работает на нодах: рассылаем новое
+            # состояние агентам, чтобы оператору не пришлось править .env
+            # на каждой ноде руками.
+            import asyncio
+
+            from web.backend.core import ndpi_rollout
+
+            enabled = str(value).strip().lower() in ("1", "true", "yes", "on")
+            asyncio.create_task(ndpi_rollout.push_to_all(enabled))
+
+        elif key == "log_level":
             from shared.logger import set_log_level
             set_log_level(value)
 

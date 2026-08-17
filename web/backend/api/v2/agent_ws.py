@@ -125,6 +125,15 @@ async def agent_websocket(
     except Exception as e:
         logger.debug("Failed to push blocked IPs to agent %s: %s", node_uuid, e)
 
+    # Состояние nDPI тоже отправляем при каждом подключении: агент после
+    # перезапуска про него не помнит, а панель — единственный источник
+    # правды об этом тумблере.
+    try:
+        from web.backend.core import ndpi_rollout
+        await ndpi_rollout.push_to_node(node_uuid, token)
+    except Exception as e:
+        logger.debug("Failed to push nDPI setting to agent %s: %s", node_uuid, e)
+
     try:
         while True:
             try:

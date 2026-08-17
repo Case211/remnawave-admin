@@ -421,10 +421,16 @@ async def _handle_torrent_blocker_event(bot: Bot, event: str, event_data: dict) 
     if node_name:
         lines.append(f"Нода: <b>{_esc(node_name)}</b>")
 
+    # Человек один, а полей под него в отчёте два: username и email. Берём
+    # первое непустое — иначе в уведомлении дважды подряд идёт строка
+    # «Пользователь» с разными написаниями одного и того же абонента.
+    who = event_data.get("username") or event_data.get("email") if isinstance(event_data, dict) else None
+    if who:
+        lines.append(f"Пользователь: <code>{_esc(str(who))}</code>")
+
     # Состав отчёта у плагина меняется от версии к версии, поэтому берём то,
     # что есть, и не пытаемся угадать полную схему.
-    for key, label in (("username", "Пользователь"), ("email", "Пользователь"),
-                       ("ip", "IP"), ("destination", "Назначение"),
+    for key, label in (("ip", "IP"), ("destination", "Назначение"),
                        ("action", "Действие"), ("reason", "Причина")):
         value = event_data.get(key) if isinstance(event_data, dict) else None
         if value:

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/breadcrumb'
 import client from '@/api/client'
 
-const ROUTE_LABEL_KEYS: Record<string, string> = {
+export const ROUTE_LABEL_KEYS: Record<string, string> = {
   '': 'nav.dashboard',
   users: 'nav.users',
   nodes: 'nav.nodes',
@@ -22,7 +22,6 @@ const ROUTE_LABEL_KEYS: Record<string, string> = {
   notifications: 'nav.notifications',
   mailserver: 'nav.mailServer',
   analytics: 'nav.analytics',
-  billing: 'nav.billing',
   backups: 'nav.backups',
   'api-keys': 'nav.apiKeys',
   reports: 'nav.reports',
@@ -33,14 +32,38 @@ const ROUTE_LABEL_KEYS: Record<string, string> = {
   audit: 'nav.audit',
   logs: 'nav.logs',
   settings: 'nav.settings',
+  dns: 'nav.dns',
+  bscheck: 'nav.bscheck',
+  finance: 'nav.finance',
+  bedolaga: 'nav.bedolagaGroup',
+  customers: 'nav.bedolaga.customers',
+  promo: 'nav.bedolaga.promo',
+  marketing: 'nav.bedolaga.marketing',
+  referrals: 'nav.bedolaga.referrals',
+  admin: 'nav.administration',
+  // Разделы плагинов: сегмент пути → подпись их собственной страницы.
+  plugins: 'nav.sections.plugins',
+  report: 'plugins.smart_support.report.crumb',
+  'smart-support': 'plugins.smart_support.nav',
+  'block-radar': 'plugins.block_radar.nav',
+  clients: 'plugins.smart_support.clients.title',
 }
+
+/**
+ * Сегменты, у которых нет своей страницы: они лишь группируют вложенные
+ * пути (``/plugins/smart-support``, ``/admin/plugins``). Ссылка на такой
+ * сегмент вела бы в 404, поэтому в крошках он остаётся просто текстом.
+ */
+export const VIRTUAL_SEGMENTS = new Set(['plugins', 'admin'])
 
 /**
  * Resolves dynamic route segments like UUIDs to readable names.
  */
 function useDynamicLabel(segment: string, parentSegment: string): string | null {
   // Only fetch user names for /users/:uuid
-  const isUserUuid = parentSegment === 'users' && segment.length > 8
+  // Отчёт плагина адресуется тем же uuid, что и карточка юзера, — резолвим
+  // его так же, иначе в крошке висит 36 символов вместо имени.
+  const isUserUuid = (parentSegment === 'users' || parentSegment === 'report') && segment.length > 8
   const { data } = useQuery({
     queryKey: ['breadcrumb-user', segment],
     queryFn: async () => {
@@ -68,7 +91,7 @@ function BreadcrumbEntry({ segment, parentSegment, path, isLast }: CrumbProps) {
   const labelKey = ROUTE_LABEL_KEYS[segment]
   const label = dynamicLabel || (labelKey ? t(labelKey) : segment)
 
-  if (isLast) {
+  if (isLast || VIRTUAL_SEGMENTS.has(segment)) {
     return (
       <BreadcrumbItem className="min-w-0">
         <BreadcrumbPage className="truncate max-w-[140px] sm:max-w-[240px] md:max-w-none">{label}</BreadcrumbPage>

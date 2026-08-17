@@ -657,6 +657,7 @@ class ConnectionsMixin:
         inbound_tag: str = "",
         outbound_tag: str = "TORRENT",
         detected_at=None,
+        detected_by: str = "xray_routing",
     ):
         """Save a raw torrent event to the torrent_events table."""
         if not self.is_connected:
@@ -667,12 +668,12 @@ class ConnectionsMixin:
                     """
                     INSERT INTO torrent_events (
                         user_uuid, node_uuid, ip_address, destination,
-                        inbound_tag, outbound_tag, detected_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()))
+                        inbound_tag, outbound_tag, detected_at, detected_by
+                    ) VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW()), $8)
                     RETURNING id
                     """,
                     user_uuid, node_uuid, ip_address, destination,
-                    inbound_tag, outbound_tag, detected_at,
+                    inbound_tag, outbound_tag, detected_at, detected_by,
                 )
         except Exception as e:
             logger.error("save_torrent_event failed: %s", e, exc_info=True)
@@ -700,6 +701,7 @@ class ConnectionsMixin:
             inbound_tags = []
             outbound_tags = []
             detected_ats = []
+            detected_bys = []
 
             for ev in events:
                 user_uuids.append(ev["user_uuid"])
@@ -709,22 +711,23 @@ class ConnectionsMixin:
                 inbound_tags.append(ev.get("inbound_tag", ""))
                 outbound_tags.append(ev.get("outbound_tag", "TORRENT"))
                 detected_ats.append(ev.get("detected_at"))
+                detected_bys.append(ev.get("detected_by") or "xray_routing")
 
             async with self.acquire() as conn:
                 result = await conn.execute(
                     """
                     INSERT INTO torrent_events (
                         user_uuid, node_uuid, ip_address, destination,
-                        inbound_tag, outbound_tag, detected_at
+                        inbound_tag, outbound_tag, detected_at, detected_by
                     )
-                    SELECT u, n, ip, dst, itag, otag, COALESCE(da, NOW())
+                    SELECT u, n, ip, dst, itag, otag, COALESCE(da, NOW()), db
                     FROM UNNEST(
                         $1::text[], $2::text[], $3::text[], $4::text[],
-                        $5::text[], $6::text[], $7::timestamptz[]
-                    ) AS t(u, n, ip, dst, itag, otag, da)
+                        $5::text[], $6::text[], $7::timestamptz[], $8::text[]
+                    ) AS t(u, n, ip, dst, itag, otag, da, db)
                     """,
                     user_uuids, node_uuids, ip_addresses, destinations,
-                    inbound_tags, outbound_tags, detected_ats,
+                    inbound_tags, outbound_tags, detected_ats, detected_bys,
                 )
                 return int(result.split()[-1]) if result else 0
         except Exception as e:

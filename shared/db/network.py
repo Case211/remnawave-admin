@@ -19,6 +19,81 @@ from shared.db_schema import (
 from shared.db_query import select_sql, insert_sql, update_sql, delete_sql
 
 
+def _load_trial_settings() -> Tuple[List[str], List[str]]:
+    """Читает настройки определения триальности: теги + internal squad'ы.
+
+    Возвращает (trial_tags, trial_squads) — обе в нижнем регистре.
+    """
+    from shared.config_service import config_service
+
+    trial_tags_raw = config_service.get("violations_trial_tags", "trial") or ""
+    trial_tags = [t.strip().lower() for t in str(trial_tags_raw).split(",") if t.strip()]
+
+    trial_squads_raw = config_service.get("violations_trial_squad_uuids", "[]")
+    trial_squads: List[str] = []
+    try:
+        parsed = json.loads(trial_squads_raw)
+        if isinstance(parsed, list):
+            trial_squads = [s.strip().lower() for s in parsed if isinstance(s, str) and s.strip()]
+    except (ValueError, TypeError):
+        pass
+
+    return trial_tags, trial_squads
+
+
+def _is_trial_user(
+    tag: Optional[str],
+    raw_data: Any,
+    trial_tags: List[str],
+    trial_squads: List[str],
+) -> bool:
+    """Триальный ли пользователь — по тегу либо по активному internal squad."""
+    user_tag = (tag or "").strip().lower()
+    if user_tag and user_tag in trial_tags:
+        return True
+
+    if not trial_squads or not raw_data:
+        return False
+
+    if isinstance(raw_data, str):
+        try:
+            raw_data = json.loads(raw_data)
+        except (ValueError, TypeError):
+            return False
+
+    if not isinstance(raw_data, dict):
+        return False
+
+    user_squads = raw_data.get("activeInternalSquads") or []
+    if not isinstance(user_squads, list):
+        return False
+
+    for sq in user_squads:
+        if isinstance(sq, str) and sq.strip().lower() in trial_squads:
+            return True
+        # Панель v3 отдаёт сквады объектами {uuid, name}, а не строками
+        if isinstance(sq, dict):
+            sq_uuid = str(sq.get("uuid") or "").strip().lower()
+            if sq_uuid and sq_uuid in trial_squads:
+                return True
+
+    return False
+
+
+def _subscription_is_active(expire_at: Any, status: Optional[str] = None) -> bool:
+    """Подписка живая: срок не истёк и статус не отключён вручную."""
+    if status and status.upper() in ("DISABLED", "LIMITED", "EXPIRED"):
+        return False
+    if not expire_at:
+        return False
+    if hasattr(expire_at, 'tzinfo') and expire_at.tzinfo is None:
+        expire_at = expire_at.replace(tzinfo=timezone.utc)
+    try:
+        return expire_at > datetime.now(timezone.utc)
+    except TypeError:
+        return False
+
+
 class NetworkMixin:
     # ==================== User Devices (HWID) ====================
     # Используем данные из users.raw_data вместо отдельной таблицы
@@ -959,20 +1034,7 @@ class NetworkMixin:
         if not self.is_connected:
             return []
 
-        # Load trial detection settings
-        from shared.config_service import config_service
-        trial_tags_raw = config_service.get("violations_trial_tags", "trial")
-        trial_tags = [t.strip().lower() for t in trial_tags_raw.split(",") if t.strip()]
-
-        trial_squads_raw = config_service.get("violations_trial_squad_uuids", "[]")
-        trial_squads: list = []
-        try:
-            import json as _json
-            parsed = _json.loads(trial_squads_raw)
-            if isinstance(parsed, list):
-                trial_squads = [s.strip().lower() for s in parsed if isinstance(s, str) and s.strip()]
-        except (ValueError, TypeError):
-            pass
+        trial_tags, trial_squads = _load_trial_settings()
 
         try:
             async with self.acquire() as conn:
@@ -1002,8 +1064,6 @@ class NetworkMixin:
                 )
 
                 # Group by hwid
-                from datetime import timezone as _tz
-                now = datetime.now(_tz.utc)
                 groups: Dict[str, Dict[str, Any]] = {}
                 for r in rows:
                     hwid = r["hwid"]
@@ -1017,35 +1077,11 @@ class NetworkMixin:
                         }
                     groups[hwid]["user_count"] += 1
 
-                    # Determine is_active from expire_at
                     expire_at = r.get("expire_at")
-                    is_active = False
-                    if expire_at:
-                        if hasattr(expire_at, 'tzinfo') and expire_at.tzinfo is None:
-                            expire_at = expire_at.replace(tzinfo=_tz.utc)
-                        is_active = expire_at > now
-
-                    # Determine is_trial from tag and internal squads
-                    is_trial = False
-                    user_tag = (r.get("tag") or "").strip().lower()
-                    if user_tag and user_tag in trial_tags:
-                        is_trial = True
-
-                    if not is_trial and trial_squads:
-                        raw_data = r.get("raw_data")
-                        if raw_data:
-                            if isinstance(raw_data, str):
-                                try:
-                                    import json as _json2
-                                    raw_data = _json2.loads(raw_data)
-                                except (ValueError, TypeError):
-                                    raw_data = {}
-                            user_squads = raw_data.get("activeInternalSquads") or []
-                            if isinstance(user_squads, list):
-                                for sq in user_squads:
-                                    if isinstance(sq, str) and sq.strip().lower() in trial_squads:
-                                        is_trial = True
-                                        break
+                    if expire_at and hasattr(expire_at, 'tzinfo') and expire_at.tzinfo is None:
+                        expire_at = expire_at.replace(tzinfo=timezone.utc)
+                    is_active = _subscription_is_active(expire_at)
+                    is_trial = _is_trial_user(r.get("tag"), r.get("raw_data"), trial_tags, trial_squads)
 
                     groups[hwid]["users"].append({
                         "uuid": r["user_uuid"],
@@ -1074,9 +1110,16 @@ class NetworkMixin:
         the requested user) and ``telegram_id`` on every other user, so the
         violation detector can group sibling accounts: Bedolaga multi-tariff
         mode binds several panel UUIDs to one telegram_id.
+
+        Кроме telegram_id отдаётся ``email`` (у регистраций без Telegram он
+        единственное, что связывает подписки одного человека) и признаки
+        ``is_trial`` / ``is_active`` — без них анализатор не отличает абуз
+        параллельных триалов от обычного апгрейда «пробная → платная».
         """
         if not self.is_connected:
             return []
+
+        trial_tags, trial_squads = _load_trial_settings()
 
         try:
             async with self.acquire() as conn:
@@ -1087,7 +1130,16 @@ class NetworkMixin:
                            u.username,
                            u.status,
                            u.telegram_id,
-                           me.telegram_id AS self_telegram_id
+                           u.email,
+                           u.tag,
+                           u.expire_at,
+                           u.raw_data,
+                           me.telegram_id AS self_telegram_id,
+                           me.email       AS self_email,
+                           me.status      AS self_status,
+                           me.tag         AS self_tag,
+                           me.expire_at   AS self_expire_at,
+                           me.raw_data    AS self_raw_data
                     FROM {USER_HWID_DEVICES_TABLE} h1
                     JOIN {USERS_TABLE} me ON me.uuid = h1.user_uuid
                     JOIN {USER_HWID_DEVICES_TABLE} h2 ON h1.hwid = h2.hwid AND h2.user_uuid != h1.user_uuid
@@ -1108,6 +1160,13 @@ class NetworkMixin:
                         groups[hwid] = {
                             "hwid": hwid,
                             "self_telegram_id": r["self_telegram_id"],
+                            "self_email": r["self_email"],
+                            "self_is_trial": _is_trial_user(
+                                r["self_tag"], r["self_raw_data"], trial_tags, trial_squads,
+                            ),
+                            "self_is_active": _subscription_is_active(
+                                r["self_expire_at"], r["self_status"],
+                            ),
                             "other_users": [],
                         }
                     groups[hwid]["other_users"].append({
@@ -1115,6 +1174,9 @@ class NetworkMixin:
                         "username": r["username"],
                         "status": r["status"],
                         "telegram_id": r["telegram_id"],
+                        "email": r["email"],
+                        "is_trial": _is_trial_user(r["tag"], r["raw_data"], trial_tags, trial_squads),
+                        "is_active": _subscription_is_active(r["expire_at"], r["status"]),
                     })
 
                 return list(groups.values())

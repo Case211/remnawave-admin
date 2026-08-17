@@ -81,6 +81,22 @@ import {
  * Superadmin-only — enforced server-side, sidebar hides the entry.
  */
 
+/**
+ * В каком из трёх состояний продаётся плагин.
+ *
+ * Отдельная функция, потому что «бесплатно» и «временно не продаём» в
+ * каталоге выглядят одинаково — у обоих `purchasable: false` и пустые
+ * тарифы, — а для оператора это противоположные вещи: в первом случае
+ * ставить можно прямо сейчас, во втором нельзя вообще. Поле `free`
+ * появилось позже, поэтому его отсутствие означает старый сервер, а не
+ * платность: там «бесплатных» не бывает.
+ */
+export function saleMode(plugin: Pick<CatalogPlugin, 'free' | 'purchasable'>): 'free' | 'paused' | 'sale' {
+  if (plugin.free === true) return 'free'
+  if (plugin.purchasable === false) return 'paused'
+  return 'sale'
+}
+
 export function pickText(text: CatalogText | string | undefined, lang: string): string {
   if (!text) return ''
   // Каталог может отдать простую строку вместо словаря локалей. Без этой
@@ -508,9 +524,10 @@ function PluginCard({
   // Пока план не выбран руками, показываем оплаченный (tier) — иначе первый по sort.
   const tariff =
     plugin.tariffs.find((x) => x.code === (pickedTariff ?? entitlement?.tier)) ?? plugin.tariffs[0]
-  // Плагин снят с продажи: цен в каталоге нет, покупка и триал закрыты на
-  // сервере. Поля нет — сервер лицензирования старой версии, продаётся.
-  const salePaused = plugin.purchasable === false
+  // Бесплатно / временно не продаём / продаётся — см. saleMode.
+  const mode = saleMode(plugin)
+  const isFree = mode === 'free'
+  const salePaused = mode === 'paused'
   const saleNote = pickText(plugin.sale_note ?? {}, lang) || t('adminPlugins.sale_paused')
   // Нулевая цена = пробный план: его не покупают, а активируют через /v1/trial.
   const isTrial = !!tariff && tariff.price.rub === 0 && tariff.price.usdt === 0
@@ -552,7 +569,7 @@ function PluginCard({
                 dev
               </span>
             )}
-            <StateBadge ent={entitlement} />
+            {!isFree && <StateBadge ent={entitlement} />}
             {updateAvailable && (
               <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300">
                 {t('adminPlugins.update_available', { version: plugin.latest_version })}
@@ -561,7 +578,14 @@ function PluginCard({
           </div>
           <p className="mt-1.5 text-sm text-dark-300">{pickText(plugin.summary, lang)}</p>
         </div>
-        {salePaused ? (
+        {isFree ? (
+          <div className="text-right shrink-0">
+            <div className="text-lg font-bold text-emerald-300 leading-tight">
+              {t('adminPlugins.free')}
+            </div>
+            <div className="text-xs text-dark-400">{t('adminPlugins.free_hint')}</div>
+          </div>
+        ) : salePaused ? (
           <div className="text-right shrink-0">
             <span className="inline-block text-[11px] uppercase tracking-wider px-2 py-1 rounded bg-amber-500/15 text-amber-300">
               {saleNote}
@@ -646,15 +670,23 @@ function PluginCard({
         )}
       </div>
 
-      {entitlement?.quota && <QuotaBar quota={entitlement.quota} />}
-      {entitlement?.paid_until && (
+      {/* У бесплатного плагина ни квоты, ни срока оплаты быть не может.
+          Сервер их и не отдаёт, но у инстанса мог остаться entitlement с
+          платных времён — показывать «оплачено до» и счётчик вызовов у
+          того, что раздаётся даром, значит врать. */}
+      {!isFree && entitlement?.quota && <QuotaBar quota={entitlement.quota} />}
+      {!isFree && entitlement?.paid_until && (
         <div className="text-[11px] text-dark-400">
           {t('adminPlugins.paid_until')}: <span className="text-dark-200">{formatTs(entitlement.paid_until, lang)}</span>
         </div>
       )}
 
       <div className="mt-auto flex items-center gap-2 flex-wrap">
-        {salePaused ? (
+        {isFree ? (
+          // Покупать нечего и пробовать незачем — ставится сразу. Кнопки
+          // установки и обновления живут ниже, общие для всех плагинов.
+          null
+        ) : salePaused ? (
           // Покупка и пробный период закрыты на сервере — не показываем кнопки,
           // которые гарантированно вернут ошибку. Установка, обновление и
           // удаление ниже остаются: у оплативших плагин продолжает работать.
@@ -719,7 +751,9 @@ function PluginCard({
             )}
           </>
         )}
-        {usable && (!installedVersion || updateAvailable) && (
+        {/* Бесплатному ставить нечего проверять: entitlement у него не
+            заводится вовсе, и без этого условия кнопка не появилась бы. */}
+        {(isFree || usable) && (!installedVersion || updateAvailable) && (
           <Button
             size="sm"
             variant={installedVersion ? 'outline' : 'default'}

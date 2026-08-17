@@ -29,6 +29,7 @@ export const PLUGIN_ROUTES: Record<string, PluginRoute[]> = {
     { path: '/plugins/smart-support/report/:uuid', Component: lazy(() => import('./smart-support/ReportPage')) },
     { path: '/plugins/smart-support/settings', Component: lazy(() => import('./smart-support/SettingsPage')) },
     { path: '/plugins/smart-support/audit', Component: lazy(() => import('./smart-support/AuditPage')) },
+    { path: '/plugins/smart-support/clients', Component: lazy(() => import('./smart-support/ClientsPage')) },
   ],
   block_radar: [
     { path: '/plugins/block-radar', Component: lazy(() => import('./block-radar/RadarPage')) },
