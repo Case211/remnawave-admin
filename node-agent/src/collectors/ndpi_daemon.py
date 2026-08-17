@@ -30,6 +30,28 @@ NDPISRVD_BIN = "nDPIsrvd"
 #: Сокет между самим nDPId и раздатчиком — внутренняя кухня, наружу не идёт.
 COLLECTOR_SOCKET = "/tmp/ndpid-collector.sock"
 
+#: Имя экземпляра в каждом JSON-сообщении.
+DAEMON_ALIAS = "remnawave-node-agent"
+
+
+async def socket_alive(path: str) -> bool:
+    """Отвечает ли кто-нибудь на этом сокете.
+
+    Файл сокета переживает смерть процесса, поэтому его наличие ничего не
+    доказывает: после падения демона остаётся мёртвый путь, к которому
+    невозможно подключиться. Спрашиваем подключением.
+    """
+    try:
+        _, writer = await asyncio.open_unix_connection(path)
+    except (OSError, asyncio.CancelledError):
+        return False
+    writer.close()
+    try:
+        await writer.wait_closed()
+    except OSError:
+        pass
+    return True
+
 
 def binaries_available() -> bool:
     return bool(shutil.which(NDPID_BIN) and shutil.which(NDPISRVD_BIN))
@@ -87,16 +109,31 @@ class NdpiDaemon:
         if not self.interface:
             return {"started": False, "reason": "не удалось определить сетевой интерфейс"}
 
+        # Осиротевший сокет от прежнего запуска не даст демону встать
+        # («address already in use»), а живой означает, что демон уже поднят.
+        for path in (self.collector_socket, self.distributor_socket):
+            if Path(path).exists() and not await socket_alive(path):
+                try:
+                    Path(path).unlink()
+                except OSError:
+                    logger.warning("nDPI: не удалось убрать мёртвый сокет %s", path)
+
         # Раздатчик поднимается первым: nDPId при старте стучится в его
         # сокет, и обратный порядок дал бы гонку на пустом месте.
+        # Без «-d»: этот флаг уводит процесс в фон, родитель выходит с
+        # кодом 0, и агент теряет управление — остановить такой демон он уже
+        # не может, а по коду возврата решает, что запуск провалился.
         self._srvd = await asyncio.create_subprocess_exec(
             NDPISRVD_BIN, "-c", self.collector_socket, "-s", self.distributor_socket,
-            "-d",  # без демонизации: процессом управляет агент
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
         )
         await asyncio.sleep(0.3)
+        # Alias обязателен: без него nDPId ругается в stderr и берёт
+        # hostname, а он у контейнера случайный и меняется при каждом
+        # пересоздании — в вердиктах это выглядело бы новым источником.
         self._ndpid = await asyncio.create_subprocess_exec(
-            NDPID_BIN, "-i", self.interface, "-c", self.collector_socket, "-d",
+            NDPID_BIN, "-i", self.interface, "-c", self.collector_socket,
+            "-a", DAEMON_ALIAS,
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
         )
         await asyncio.sleep(0.5)
@@ -107,7 +144,11 @@ class NdpiDaemon:
             return {"started": False, "reason": reason}
 
         logger.info("nDPId запущен на интерфейсе %s", self.interface)
-        return {"started": True, "interface": self.interface}
+        return {
+            "started": True,
+            "interface": self.interface,
+            "pids": {"nDPId": self._ndpid.pid, "nDPIsrvd": self._srvd.pid},
+        }
 
     async def _failure_reason(self) -> str:
         """Что именно сказал упавший процесс — иначе отладка вслепую."""

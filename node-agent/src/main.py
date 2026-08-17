@@ -200,7 +200,9 @@ async def run_agent() -> None:
         # Если оператор поднял nDPId сам, снаружи, мы это увидим по живому
         # сокету и второй раз плодить процессы не станем.
         daemon_state = {}
-        if settings.ndpi_manage_daemon and not Path(path).exists():
+        from .collectors.ndpi_daemon import socket_alive
+
+        if settings.ndpi_manage_daemon and not await socket_alive(path):
             if ndpi_daemon is None:
                 ndpi_daemon = NdpiDaemon(path, interface=settings.ndpi_interface or None)
             daemon_state = await ndpi_daemon.start()
