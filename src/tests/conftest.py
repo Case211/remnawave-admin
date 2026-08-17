@@ -19,3 +19,10 @@ sys.modules["aiogram.types"] = unittest.mock.MagicMock()
 # не считается пакетом и `from aiogram.utils.i18n import I18n` падает «not a package».
 sys.modules["aiogram.utils"] = unittest.mock.MagicMock()
 sys.modules["aiogram.utils.i18n"] = unittest.mock.MagicMock()
+# Роутеры бота тянут ещё несколько подмодулей. Каждый приходится объявлять
+# отдельно по той же причине: MagicMock не пакет, и «from aiogram.X import Y»
+# без этого падает на импорте тестируемого модуля.
+for _submodule in ("filters", "enums", "exceptions", "fsm", "fsm.context",
+                   "fsm.state", "fsm.storage", "fsm.storage.memory", "client",
+                   "client.default"):
+    sys.modules[f"aiogram.{_submodule}"] = unittest.mock.MagicMock()
