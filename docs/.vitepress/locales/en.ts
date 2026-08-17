@@ -68,6 +68,7 @@ export const en: LocaleSpecificConfig<DefaultTheme.Config> = {
         {
           text: 'Reference',
           items: [
+            { text: 'Panel settings', link: '/en/reference/settings' },
             { text: 'Environment variables', link: '/en/reference/env' },
             { text: 'Bot commands', link: '/en/reference/bot-commands' },
             { text: 'Project layout', link: '/en/reference/project-layout' },

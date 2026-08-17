@@ -1,6 +1,6 @@
 # Environment variables
 
-Few of them are required — everything else has sensible defaults. Most settings are changed in the panel interface without a restart; `.env` only provides the starting value.
+Few of them are required — everything else has sensible defaults. Most settings are changed in the panel interface without a restart; `.env` only provides the starting value. Everything configurable from the interface is broken down in [Panel settings](/en/reference/settings).
 
 The order of precedence is **database → `.env` → defaults**. Once a setting has been changed in the interface, it stops depending on `.env`.
 

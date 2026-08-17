@@ -3837,6 +3837,246 @@
       "user_blacklist_auto_block": {
         "label": "⚡ Автоблокировка",
         "description": "Автоматически блокировать пользователей из чёрного списка через Panel API. Если выключено — только уведомление."
+      },
+      "web_session_access_minutes": {
+        "label": "Срок access-токена (минут)",
+        "description": "Время жизни access-токена веб-админки. Применяется к новым логинам и refresh. Рекомендация: 30-120 мин"
+      },
+      "web_session_refresh_hours": {
+        "label": "Срок сессии (часов)",
+        "description": "Общее время жизни сессии (refresh-токен). Пока валиден — юзер не выходит. После истечения нужен повторный вход с 2FA. Рекомендация: 12-24ч"
+      },
+      "finance_base_currency": {
+        "label": "Базовая валюта отчётов",
+        "description": "Валюта, в которую конвертируются агрегаты (RUB, USD, EUR...)"
+      },
+      "finance_rates_auto_update": {
+        "label": "Автообновление курсов валют",
+        "description": "Раз в сутки обновлять курсы (ЦБ РФ, fallback open.er-api.com). Курсы с ручной правкой не трогаются"
+      },
+      "finance_reminders_enabled": {
+        "label": "Напоминания о списаниях",
+        "description": "Слать уведомления о предстоящих и просроченных платежах в Telegram/панель"
+      },
+      "finance_reminder_days": {
+        "label": "За сколько дней напоминать",
+        "description": "Список дней до списания через запятую (например: 7,3,1). Просрочка напоминается всегда"
+      },
+      "finance_autosync_enabled": {
+        "label": "Автосинк API хостеров",
+        "description": "Периодически снимать баланс и услуги с подключённых API хостеров"
+      },
+      "finance_autosync_interval_hours": {
+        "label": "Интервал автосинка (часы)",
+        "description": "Как часто опрашивать API хостеров (баланс, услуги, даты списаний)"
+      },
+      "finance_autosync_update_due_dates": {
+        "label": "Подтягивать даты списаний",
+        "description": "Обновлять next_due_at записей по данным хостера (матч по имени услуги в рамках провайдера)"
+      },
+      "finance_bedolaga_deposits_enabled": {
+        "label": "Записывать пополнения Bedolaga",
+        "description": "Ежедневно заносить пополнения баланса из Bedolaga в доходы (P&L-график, доход за месяц). ⚠️ Не совмещать с ручным импортом выручки подписок — двойной учёт"
+      },
+      "dns_creds_cloudflare": {
+        "label": "DNS: Cloudflare (зашифр.)",
+        "description": "Управляется на странице «DNS», не здесь"
+      },
+      "dns_creds_timeweb": {
+        "label": "DNS: Timeweb Cloud (зашифр.)",
+        "description": "Управляется на странице «DNS», не здесь"
+      },
+      "dns_creds_regru": {
+        "label": "DNS: reg.ru (зашифр.)",
+        "description": "Управляется на странице «DNS», не здесь"
+      },
+      "dns_creds_selectel": {
+        "label": "DNS: Selectel (зашифр.)",
+        "description": "Управляется на странице «DNS», не здесь"
+      },
+      "dns_creds_aeza": {
+        "label": "DNS: Aeza (зашифр.)",
+        "description": "Управляется на странице «DNS», не здесь"
+      },
+      "bscheck_token": {
+        "label": "BS-Check: токен bschekbot (зашифр.)",
+        "description": "Токен bsk_live_… (bsbord) для проверки нод через операторов. Правится на странице нод"
+      },
+      "reputation_ipinfo_token": {
+        "label": "Репутация: ipinfo.io токен (зашифр.)",
+        "description": "Управляется на странице BS-Check"
+      },
+      "reputation_ipqs_token": {
+        "label": "Репутация: IPQualityScore токен (зашифр.)",
+        "description": "Управляется на странице BS-Check"
+      },
+      "reputation_abuseipdb_token": {
+        "label": "Репутация: AbuseIPDB токен (зашифр.)",
+        "description": "Управляется на странице BS-Check"
+      },
+      "oauth_google_client_id": {
+        "label": "OAuth: Google client_id",
+        "description": "Управляется в настройках OAuth"
+      },
+      "oauth_google_client_secret": {
+        "label": "OAuth: Google secret (зашифр.)",
+        "description": "Управляется в настройках OAuth"
+      },
+      "oauth_github_client_id": {
+        "label": "OAuth: GitHub client_id",
+        "description": "Управляется в настройках OAuth"
+      },
+      "oauth_github_client_secret": {
+        "label": "OAuth: GitHub secret (зашифр.)",
+        "description": "Управляется в настройках OAuth"
+      },
+      "oauth_oidc_client_id": {
+        "label": "OAuth: OIDC client_id",
+        "description": "Управляется в настройках OAuth"
+      },
+      "oauth_oidc_client_secret": {
+        "label": "OAuth: OIDC secret (зашифр.)",
+        "description": "Управляется в настройках OAuth"
+      },
+      "oauth_oidc_issuer": {
+        "label": "OAuth: OIDC issuer URL",
+        "description": "Управляется в настройках OAuth"
+      },
+      "oauth_oidc_name": {
+        "label": "OAuth: OIDC имя кнопки",
+        "description": "Управляется в настройках OAuth"
+      },
+      "backup_auto_enabled": {
+        "label": "Авто-бэкап по расписанию",
+        "description": "Автоматически создавать бэкап БД по расписанию"
+      },
+      "backup_auto_time": {
+        "label": "Время бэкапа",
+        "description": "Время ежедневного авто-бэкапа (HH:MM по UTC)"
+      },
+      "backup_auto_telegram": {
+        "label": "Отправлять в Telegram",
+        "description": "Отправлять созданный бэкап в Telegram (chat_id из настроек уведомлений)"
+      },
+      "backup_auto_keep_count": {
+        "label": "Хранить бэкапов (шт)",
+        "description": "Сколько последних авто-бэкапов хранить"
+      },
+      "backup_auto_keep_days": {
+        "label": "Хранить бэкапов (дней)",
+        "description": "Максимальный возраст авто-бэкапов в днях"
+      },
+      "backup_auto_interval_hours": {
+        "label": "Интервал бэкапа (часов)",
+        "description": "0 — раз в день в указанное время; N>0 — начиная с этого времени каждые N часов"
+      },
+      "backup_auto_config": {
+        "label": "Бэкапить конфиг",
+        "description": "Дополнительно к БД бэкапить настройки (config-бэкап)"
+      },
+      "backup_deadman_hours": {
+        "label": "Алерт: нет бэкапа N часов",
+        "description": "Прислать алерт, если успешного бэкапа не было дольше N часов (0 = выкл)"
+      },
+      "violations_hwid_max_per_account": {
+        "label": "Макс. подписок одного аккаунта на HWID",
+        "description": "Сколько панельных UUID (подписок) одного telegram_id допустимо на одном HWID. Защита от абуза мультитарифа. 0 = без ограничений"
+      },
+      "violation_check_cooldown_minutes": {
+        "label": "Кулдаун проверок (мин)",
+        "description": "Минимальный интервал между повторными проверками одного пользователя детектором (троттлинг нагрузки). НЕ путать с кулдауном уведомлений"
+      },
+      "violation_retention_days": {
+        "label": "Хранение нарушений (дни)",
+        "description": "Сколько дней хранить записи нарушений до автоочистки"
+      },
+      "connections_retention_days": {
+        "label": "Хранение подключений (дни)",
+        "description": "Сколько дней хранить историю подключений пользователей до автоочистки"
+      },
+      "ndpi_detection_enabled": {
+        "label": "Детект торрентов через nDPI",
+        "description": "Xray опознаёт BitTorrent только по открытому рукопожатию, а шифрованный поток, DHT и uTP проходят мимо. nDPI видит и их. Требует демона nDPId на ноде: включение уходит агентам командой, .env править не нужно"
+      },
+      "torrent_retention_days": {
+        "label": "Хранение торрент-событий (дни)",
+        "description": "Сколько дней хранить зафиксированные торрент-события до автоочистки"
+      },
+      "violations_hwid_scan_interval_minutes": {
+        "label": "Интервал HWID-скана (мин)",
+        "description": "Как часто проверять оффлайн-юзеров с общими HWID на кросс-аккаунт (детектор по батчам ловит только онлайн-юзеров)"
+      },
+      "mailserver_tls_cert_path": {
+        "label": "Путь к TLS-сертификату",
+        "description": "Сертификат для STARTTLS на почтовых портах. Пусто — будет выписан самоподписанный (для приёма почты этого достаточно, но почтовые клиенты на порту 587 будут ругаться)"
+      },
+      "mailserver_tls_key_path": {
+        "label": "Путь к TLS-ключу",
+        "description": "Приватный ключ к сертификату выше"
+      },
+      "mailserver_tls_hostname": {
+        "label": "Имя почтового сервера",
+        "description": "Чем сервер представляется в SMTP и на что выписан сертификат. Должно совпадать с PTR-записью IP. Пусто — mail.<первый домен>"
+      },
+      "mailserver_submission_require_tls": {
+        "label": "Требовать TLS на порту 587",
+        "description": "Не принимать логин и пароль по незашифрованному соединению. Клиенты из внутренних сетей (10.x, 192.168.x, 100.64.x — Netbird и подобные) исключение: там трафик и так в туннеле. Работает только при наличии сертификата"
+      },
+      "mailserver_spam_threshold": {
+        "label": "Порог спама",
+        "description": "Оценка, начиная с которой письмо помечается подозрительным. 5 баллов = домен объявил политику DMARC, а письмо её не прошло"
+      },
+      "mailserver_reject_spam": {
+        "label": "Отклонять подозрительные письма",
+        "description": "Отказывать на приёме письмам, набравшим порог. Выключено — письмо принимается, но помечается в списке"
+      },
+      "mailserver_inbox_retention_days": {
+        "label": "Хранить входящие, дней",
+        "description": "Через сколько дней удалять полученные письма. 0 = хранить вечно"
+      },
+      "mailserver_queue_retention_days": {
+        "label": "Хранить историю отправки, дней",
+        "description": "Через сколько дней удалять отправленные и отклонённые письма из очереди. Ожидающие отправки не трогаются. 0 = хранить вечно"
+      },
+      "mailserver_notify_new_mail": {
+        "label": "Уведомлять о новых письмах",
+        "description": "Присылать уведомление при получении письма (кроме служебных: отказов доставки, отписок и DMARC-отчётов)"
+      },
+      "violation_dedup_window_hours": {
+        "label": "Окно дедупликации записей (часы)",
+        "description": "Пока у пользователя есть неразрешённое нарушение свежее этого окна, повторные детекты не создают новую запись (кроме случаев с более высоким скором). 0 — дедупликация отключена."
+      },
+      "violation_auto_hard_block": {
+        "label": "Автоблокировка при hard_block",
+        "description": "Автоматически отключать пользователя через Panel API, когда детектор рекомендует жёсткую блокировку. Если выключено — только уведомление и запись нарушения."
+      },
+      "attack_detect_enabled": {
+        "label": "Детект атак на ноды",
+        "description": "Следить за сетевыми метриками нод и предупреждать, когда нода под атакой. Работает только с агентом 1.3.0+."
+      },
+      "attack_pps_ratio": {
+        "label": "Порог по пакетам (× от обычного)",
+        "description": "Во сколько раз входящий поток пакетов должен превысить обычный для этой ноды. Ниже 3 будут ложные срабатывания на вечерних пиках."
+      },
+      "attack_bps_ratio": {
+        "label": "Порог по трафику (× от обычного)",
+        "description": "То же самое, но для объёма входящего трафика — ловит атаки крупными пакетами."
+      },
+      "attack_min_pps": {
+        "label": "Минимум пакетов/с для тревоги",
+        "description": "Ниже этого значения всплеск игнорируется: на пустой ночной ноде рост «в десять раз» получается из шума."
+      },
+      "attack_min_bps": {
+        "label": "Минимум байт/с для тревоги",
+        "description": "То же для объёма. По умолчанию 12 500 000 — это 100 Мбит/с."
+      },
+      "attack_min_samples": {
+        "label": "Замеров для базлайна",
+        "description": "Сколько замеров нужно накопить, прежде чем верить «обычному» уровню ноды. Пока меньше — детектор молчит."
+      },
+      "attack_small_packet_bytes": {
+        "label": "Мелкий пакет, байт",
+        "description": "Средний размер пакета ниже этого считается признаком флуда: полезный трафик состоит из пакетов покрупнее."
       }
     },
     "inDb": "В БД",
