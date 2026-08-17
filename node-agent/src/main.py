@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .config import Settings
 from .collectors import (
+    NdpiTorrentWatcher,
     NetworkMetricsCollector,
     SystemMetricsCollector,
     XrayLogCollector,
@@ -158,6 +159,20 @@ async def run_agent() -> None:
     last_send_time = time.monotonic()
     total_sent = 0  # общий счётчик отправленных подключений
 
+    # ── nDPI: второй источник правды про торренты ──
+    # Тег роутинга Xray ловит только открытое рукопожатие BitTorrent;
+    # шифрованный поток, DHT и uTP видит nDPI. Демон ставится на ноду
+    # отдельно, поэтому включается флагом и молча простаивает, если сокета
+    # нет: связь с ним не должна мешать основному делу агента.
+    ndpi_watcher = None
+    if settings.ndpi_enabled and settings.torrent_detection_enabled:
+        ndpi_watcher = NdpiTorrentWatcher(
+            settings.ndpi_socket_path, window_seconds=settings.ndpi_window_seconds,
+        )
+        await ndpi_watcher.start()
+        collector.torrent_oracle = ndpi_watcher
+        logger.info("nDPI torrent detection enabled (socket: %s)", settings.ndpi_socket_path)
+
     # ── Agent v2: WebSocket command channel ──
     ws_task = None
     if settings.command_enabled and (settings.ws_url or settings.collector_url):
@@ -300,6 +315,9 @@ async def run_agent() -> None:
                 await ws_task
             except asyncio.CancelledError:
                 pass
+
+        if ndpi_watcher is not None:
+            await ndpi_watcher.stop()
 
         await sender.close()
         uptime = time.monotonic() - start_time

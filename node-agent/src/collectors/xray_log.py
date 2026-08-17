@@ -69,12 +69,19 @@ def _parse_lines(
     lines: list[str],
     node_uuid: str,
     torrent_tag: str = "TORRENT",
+    torrent_oracle=None,
 ) -> tuple[list[ConnectionReport], list[TorrentEvent], int, int, int]:
     """
     Парсит строки лога Xray и возвращает подключения + торрент-события.
 
     Общая логика парсинга для polling и realtime режимов.
     Подключения группируются по (user_email, ip); торрент-события сохраняются все.
+
+    ``torrent_oracle`` — необязательный второй источник правды (nDPI). Xray
+    ставит тег TORRENT только на открытое рукопожатие BitTorrent, а
+    зашифрованный поток, DHT и uTP проходят мимо. Оракул отвечает на вопрос
+    «по этому адресу только что видели торрент?»; чей это клиент, знает
+    только лог, поэтому связка живёт здесь.
 
     Returns:
         (connections, torrent_events, lines_count, accepted_lines, matched_lines)
@@ -117,8 +124,25 @@ def _parse_lines(
                     outbound_tag=outbound_tag.strip(),
                     node_uuid=node_uuid,
                     detected_at=detected_at,
+                    detected_by="xray_routing",
                 ))
                 continue  # Торрент-подключения не добавляем в обычные connections
+
+            # Xray тега не поставил, но nDPI по этому же адресу назначения
+            # только что видел торрент — значит поток шифрованный либо это
+            # DHT/uTP, до рукопожатия дело не дошло.
+            if torrent_oracle is not None and torrent_oracle.is_torrent(destination):
+                torrent_events.append(TorrentEvent(
+                    user_email=user_identifier,
+                    ip_address=client_ip,
+                    destination=destination,
+                    inbound_tag=inbound_tag.strip(),
+                    outbound_tag="",
+                    node_uuid=node_uuid,
+                    detected_at=detected_at,
+                    detected_by="ndpi",
+                ))
+                continue
 
             # Обычное подключение. Тег инбаунда несём дальше: у ноды с
             # несколькими инбаундами иначе не понять, каким классом
@@ -172,7 +196,21 @@ def _parse_lines(
     return connections, torrent_events, lines_count, accepted_lines, matched_lines
 
 
-class XrayLogCollector(BaseCollector):
+class _TorrentOracleMixin:
+    """Второй источник правды про торренты — общий для обоих режимов чтения.
+
+    Xray ставит тег TORRENT только на открытое рукопожатие BitTorrent.
+    Оракул (nDPI) добирает то, что прошло мимо: шифрованный поток, DHT,
+    uTP. ``None`` — работаем как раньше, на одном теге роутинга.
+    """
+
+    torrent_oracle = None
+
+    def _oracle_if_enabled(self):
+        return self.torrent_oracle if getattr(self, "_torrent_enabled", False) else None
+
+
+class XrayLogCollector(_TorrentOracleMixin, BaseCollector):
     """Читает access.log Xray и возвращает список подключений (accepted)."""
 
     def __init__(self, settings: Settings):
@@ -219,7 +257,8 @@ class XrayLogCollector(BaseCollector):
 
         tag = self._torrent_tag if self._torrent_enabled else "__DISABLED__"
         connections, torrent_events, lines_count, accepted_lines, matched_lines = _parse_lines(
-            content.splitlines(), self._node_uuid, torrent_tag=tag
+            content.splitlines(), self._node_uuid, torrent_tag=tag,
+            torrent_oracle=self._oracle_if_enabled(),
         )
         self._last_torrent_events = torrent_events
 
@@ -245,7 +284,7 @@ def _read_tail(path: Path, size: int) -> str:
         return f.read().decode("utf-8", errors="replace")
 
 
-class XrayLogRealtimeCollector(BaseCollector):
+class XrayLogRealtimeCollector(_TorrentOracleMixin, BaseCollector):
     """
     Real-time парсер access.log Xray.
     
@@ -418,7 +457,8 @@ class XrayLogRealtimeCollector(BaseCollector):
 
         tag = self._torrent_tag if self._torrent_enabled else "__DISABLED__"
         connections, torrent_events, lines_count, accepted_lines, matched_lines = _parse_lines(
-            new_lines, self._node_uuid, torrent_tag=tag
+            new_lines, self._node_uuid, torrent_tag=tag,
+            torrent_oracle=self._oracle_if_enabled(),
         )
         self._last_torrent_events = torrent_events
 

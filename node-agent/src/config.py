@@ -85,3 +85,14 @@ class Settings(BaseSettings):
 
     # Включение/выключение сбора торрент-событий
     torrent_detection_enabled: bool = True  # AGENT_TORRENT_DETECTION_ENABLED
+
+    # ── nDPI ──────────────────────────────────────────────────
+    # Второй источник правды про торренты: демон nDPId раздаёт вердикты
+    # JSON-строками через UNIX-сокет. Тег роутинга Xray ловит только
+    # открытое рукопожатие BitTorrent, nDPI видит и шифрованный поток, и
+    # DHT, и uTP. Выключено по умолчанию: демон ставится на ноду отдельно.
+    ndpi_enabled: bool = False  # AGENT_NDPI_ENABLED
+    ndpi_socket_path: str = "/tmp/ndpid-distributor.sock"  # AGENT_NDPI_SOCKET_PATH
+    # Сколько секунд вердикт по адресу считается свежим. Лог Xray агент
+    # читает пачками, поэтому окно должно перекрывать интервал опроса.
+    ndpi_window_seconds: int = 120  # AGENT_NDPI_WINDOW_SECONDS

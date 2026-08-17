@@ -252,6 +252,10 @@ class TorrentEventReport(BaseModel):
     outbound_tag: str = "TORRENT"
     node_uuid: str
     detected_at: datetime
+    # Чем поймали: тег роутинга Xray (только открытое рукопожатие
+    # BitTorrent) или вердикт nDPI (видит и шифрованный поток, DHT, uTP).
+    # Агенты постарше поля не шлют — им остаётся прежний источник.
+    detected_by: str = "xray_routing"
 
 
 class BatchReport(BaseModel):
@@ -636,6 +640,7 @@ async def receive_connections(
                         "inbound_tag": event.inbound_tag,
                         "outbound_tag": event.outbound_tag,
                         "detected_at": event.detected_at,
+                        "detected_by": event.detected_by,
                     })
                 except Exception as e:
                     logger.warning("Error resolving torrent event for %s: %s", event.user_email, e)
