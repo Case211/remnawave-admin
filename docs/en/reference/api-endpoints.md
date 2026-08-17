@@ -1,7 +1,7 @@
 # API v3 Endpoint Reference
 
 All endpoints are under the base path `/api/v3` and require `X-API-Key` header plus the scope
-shown next to each route. See [API.md](./API.md) for authentication basics.
+shown next to each route. See [Public API](/en/reference/api) for authentication basics.
 
 ---
 

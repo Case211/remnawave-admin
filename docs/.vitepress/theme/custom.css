@@ -1,0 +1,38 @@
+/* Цвета взяты из логотипа панели: синий #4283f6 с уходом в голубой #a5f3fc.
+   Документация и интерфейс должны выглядеть одним продуктом, поэтому акцент
+   здесь тот же, что в панели, а не дефолтный зелёный VitePress. */
+:root {
+  --vp-c-brand-1: #2f6fe4;
+  --vp-c-brand-2: #4283f6;
+  --vp-c-brand-3: #5c96f8;
+  --vp-c-brand-soft: rgba(66, 131, 246, 0.14);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #4283f6 30%, #67d3ee);
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, #4283f6 45%, #a5f3fc 75%);
+  --vp-home-hero-image-filter: blur(52px);
+}
+
+.dark {
+  --vp-c-brand-1: #7aabff;
+  --vp-c-brand-2: #4283f6;
+  --vp-c-brand-3: #3a76e0;
+  --vp-c-brand-soft: rgba(66, 131, 246, 0.2);
+}
+
+/* Таблицы в справочнике переменных широкие: колонка описания должна дышать,
+   а не резаться в узкий столбик рядом с длинными именами переменных. */
+.vp-doc table {
+  display: table;
+  width: 100%;
+}
+
+.vp-doc td:first-child code {
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .VPHome .VPFeature .icon {
+    font-size: 22px;
+  }
+}

@@ -130,7 +130,7 @@ A new anti-abuse violation has been stored.
 
 `source` is `detector` (multi-factor pipeline), `torrent`, or `traffic_rate`.
 Full analyzer breakdown is available via `GET /api/v3/violations/{id}`
-(scope `violations:read`, see [API-ENDPOINTS.md](./API-ENDPOINTS.md)).
+(scope `violations:read`, see [Endpoints](/en/reference/api-endpoints)).
 
 ---
 
