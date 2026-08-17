@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .config import Settings
 from .collectors import (
+    NdpiDaemon,
     NdpiTorrentWatcher,
     NetworkMetricsCollector,
     SystemMetricsCollector,
@@ -165,6 +166,7 @@ async def run_agent() -> None:
     # отдельно, поэтому включается флагом и молча простаивает, если сокета
     # нет: связь с ним не должна мешать основному делу агента.
     ndpi_watcher = None
+    ndpi_daemon = None
     if settings.ndpi_enabled and settings.torrent_detection_enabled:
         ndpi_watcher = NdpiTorrentWatcher(
             settings.ndpi_socket_path, window_seconds=settings.ndpi_window_seconds,
@@ -179,17 +181,32 @@ async def run_agent() -> None:
         Возвращает состояние, по которому панель отличит «включено и
         работает» от «включено, но демона на ноде нет».
         """
-        nonlocal ndpi_watcher
+        nonlocal ndpi_watcher, ndpi_daemon
         if not enabled:
             if ndpi_watcher is not None:
                 await ndpi_watcher.stop()
                 collector.torrent_oracle = None
                 ndpi_watcher = None
+            if ndpi_daemon is not None:
+                await ndpi_daemon.stop()
+                ndpi_daemon = None
             logger.info("nDPI torrent detection disabled by panel")
             return {"enabled": False, "connected": False}
 
         path = socket_path or settings.ndpi_socket_path
         window = int(window_seconds or settings.ndpi_window_seconds)
+
+        # Демон едет в образе агента, поэтому «установка» — это запуск.
+        # Если оператор поднял nDPId сам, снаружи, мы это увидим по живому
+        # сокету и второй раз плодить процессы не станем.
+        daemon_state = {}
+        if settings.ndpi_manage_daemon and not Path(path).exists():
+            if ndpi_daemon is None:
+                ndpi_daemon = NdpiDaemon(path, interface=settings.ndpi_interface or None)
+            daemon_state = await ndpi_daemon.start()
+            if not daemon_state.get("started"):
+                logger.warning("nDPI: демон не поднялся — %s", daemon_state.get("reason"))
+
         if ndpi_watcher is not None:
             await ndpi_watcher.stop()
         ndpi_watcher = NdpiTorrentWatcher(path, window_seconds=window)
@@ -200,6 +217,8 @@ async def run_agent() -> None:
         await asyncio.sleep(0.5)
         state = {"enabled": True, "socket_path": path, "window_seconds": window}
         state.update(ndpi_watcher.stats())
+        if daemon_state:
+            state["daemon"] = daemon_state
         logger.info("nDPI torrent detection enabled by panel: %s", state)
         return state
 
@@ -348,6 +367,8 @@ async def run_agent() -> None:
 
         if ndpi_watcher is not None:
             await ndpi_watcher.stop()
+        if ndpi_daemon is not None:
+            await ndpi_daemon.stop()
 
         await sender.close()
         uptime = time.monotonic() - start_time

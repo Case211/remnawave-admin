@@ -96,3 +96,8 @@ class Settings(BaseSettings):
     # Сколько секунд вердикт по адресу считается свежим. Лог Xray агент
     # читает пачками, поэтому окно должно перекрывать интервал опроса.
     ndpi_window_seconds: int = 120  # AGENT_NDPI_WINDOW_SECONDS
+    # Поднимать nDPId самому (он лежит в образе). Выключите, если демон уже
+    # запущен на ноде снаружи и агенту надо только читать его сокет.
+    ndpi_manage_daemon: bool = True  # AGENT_NDPI_MANAGE_DAEMON
+    # Интерфейс для разбора; пусто — маршрут по умолчанию.
+    ndpi_interface: str = ""  # AGENT_NDPI_INTERFACE

@@ -262,3 +262,48 @@ async def test_agent_without_ndpi_support_answers_honestly(monkeypatch):
     await runner.handle({"type": "set_ndpi", "enabled": True, "command_id": "c2", "_sig": "x"})
 
     assert sent[0]["status"] == "error"
+
+
+# ── демон внутри агента ───────────────────────────────────────────
+
+def test_default_interface_is_the_one_with_default_route(tmp_path, monkeypatch):
+    """Слушать надо интерфейс маршрута по умолчанию, а не «any».
+
+    «any» у nDPId ловит в том числе loopback — разбирать собственный
+    трафик агента незачем.
+    """
+    from src.collectors import ndpi_daemon
+
+    route = tmp_path / "route"
+    route.write_text(
+        "Iface\tDestination\tGateway\tFlags\n"
+        "lo\t0000007F\t00000000\t0001\n"
+        "eth0\t00000000\t0100A8C0\t0003\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ndpi_daemon, "Path", lambda _p: route)
+    assert ndpi_daemon.default_interface() == "eth0"
+
+
+@pytest.mark.asyncio
+async def test_daemon_says_plainly_when_binaries_are_missing(monkeypatch):
+    """Агент старой сборки не должен делать вид, что всё включилось."""
+    from src.collectors.ndpi_daemon import NdpiDaemon
+
+    monkeypatch.setattr("src.collectors.ndpi_daemon.binaries_available", lambda: False)
+    state = await NdpiDaemon("/tmp/none.sock", interface="eth0").start()
+
+    assert state["started"] is False
+    assert "образе" in state["reason"]
+
+
+@pytest.mark.asyncio
+async def test_daemon_needs_an_interface(monkeypatch):
+    from src.collectors.ndpi_daemon import NdpiDaemon
+
+    monkeypatch.setattr("src.collectors.ndpi_daemon.binaries_available", lambda: True)
+    monkeypatch.setattr("src.collectors.ndpi_daemon.default_interface", lambda: None)
+    state = await NdpiDaemon("/tmp/none.sock").start()
+
+    assert state["started"] is False
+    assert "интерфейс" in state["reason"]
