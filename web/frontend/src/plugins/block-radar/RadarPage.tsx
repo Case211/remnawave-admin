@@ -20,6 +20,7 @@ import {
 import type {
   RadarAlert,
   RadarNodeDip,
+  RadarSelfAlert,
   RadarOverview,
   RadarSite,
   RadarStatus,
@@ -130,6 +131,10 @@ export default function RadarPage() {
       )}
 
       {!licenseError && overview.data && <NetworkPulse pulse={overview.data.pulse} />}
+
+      {status.data?.self_alert && !status.data.self_alert.resolved && (
+        <SelfAlertCard alert={status.data.self_alert} />
+      )}
 
       {(status.data?.open_dips?.length ?? 0) > 0 && (
         <section className="space-y-3">
@@ -569,6 +574,43 @@ function ExpiryNotice({ status }: { status: RadarStatus | null }) {
         <p className="text-xs text-dark-300">{t('plugins.block_radar.expiry_hint')}</p>
       </div>
     </div>
+  )
+}
+
+
+function SelfAlertCard({ alert }: { alert: RadarSelfAlert }) {
+  const { t } = useTranslation()
+  const round = (v: number | null) => (v === null ? '—' : Math.round(v))
+
+  return (
+    <section className="glass-card p-4 border-l-4 border-amber-500/70 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
+          {t('plugins.block_radar.self_badge')}
+        </span>
+        <span className="text-xs text-dark-400 ml-auto whitespace-nowrap">
+          {formatTs(alert.since)}
+        </span>
+      </div>
+      <div className="text-sm text-white font-medium">
+        {t('plugins.block_radar.self_title')}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dark-300">
+        <span>
+          {t('plugins.block_radar.self_yours')}:{' '}
+          <span className="text-white font-mono tabular-nums">
+            {alert.online} / {round(alert.baseline)}
+          </span>
+        </span>
+        <span>
+          {t('plugins.block_radar.self_neighbours', { n: alert.panels })}:{' '}
+          <span className="text-white font-mono tabular-nums">
+            {alert.neighbours} / {round(alert.neighbours_baseline)}
+          </span>
+        </span>
+      </div>
+      <p className="text-xs text-dark-300">{t('plugins.block_radar.self_hint')}</p>
+    </section>
   )
 }
 

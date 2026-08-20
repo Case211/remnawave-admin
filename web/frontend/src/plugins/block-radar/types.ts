@@ -37,11 +37,29 @@ export interface RadarNodeDip {
   node_alive: boolean
 }
 
+/**
+ * Провал, который виден только у этой панели: её онлайн просел, а у соседей
+ * по тем же связкам — нет. Отвечает на первый вопрос при аварии: накрыло
+ * всех или меня одного. Приходит только от плагина 0.7.3 и новее.
+ */
+export interface RadarSelfAlert {
+  kind: 'self_only'
+  since: string
+  resolved: string | null
+  online: number
+  baseline: number | null
+  neighbours: number
+  neighbours_baseline: number | null
+  panels: number
+}
+
 export interface RadarStatus {
   last_tick: RadarTick | null
   open_alerts: number
   license_usable: boolean
   open_dips: RadarNodeDip[]
+  /** Плагины до 0.7.3 поля не присылают — блок просто не рисуется. */
+  self_alert?: RadarSelfAlert | null
   license_state: string | null
   license_tier: string | null
   /** Unix-время окончания подписки: нужно, чтобы предупредить до отключения. */
