@@ -95,6 +95,8 @@
 | `/nodes/{uuid}/enable` | POST | `nodes:write` | включить |
 | `/nodes/{uuid}/disable` | POST | `nodes:write` | отключить |
 | `/nodes/{uuid}/restart` | POST | `nodes:write` | перезапустить |
+| `/nodes/{uuid}/agent-token/generate` | POST | `nodes:token` | сгенерировать (перевыпустить) токен агента |
+| `/nodes/{uuid}/agent-token/revoke` | POST | `nodes:token` | отозвать токен агента |
 
 ```json
 {

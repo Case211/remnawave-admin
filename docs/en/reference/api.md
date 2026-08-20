@@ -92,6 +92,7 @@ scope required by the endpoint.
 | `users:delete` | Delete a single user | `DELETE /users/{uuid}` |
 | `nodes:read` | Read node list/detail | `GET /nodes`, `GET /nodes/{uuid}` |
 | `nodes:write` | Enable/disable/restart a node | `POST /nodes/{uuid}/restart` |
+| `nodes:token` | Generate/revoke a node's agent token | `POST /nodes/{uuid}/agent-token/generate` |
 | `hosts:read` | Read hosts | `GET /hosts`, `GET /hosts/{uuid}` |
 | `stats:read` | Global statistics | `GET /stats` |
 | `violations:read` | Read anti-abuse violations | `GET /violations`, `GET /violations/{id}` |
@@ -103,6 +104,7 @@ Guidelines:
 - **Split integrations.** A dedicated key per integration makes rotation painless.
 - **Prefer short TTL** for CI/CD keys (1-7 days) and rotate regularly.
 - `bulk:write` bypasses per-user scope checks. Treat it as a privileged scope.
+- `nodes:token` grants access to a node's agent token — the credential that authenticates the Collector API, the agent WebSocket, and remote-terminal commands, effectively a key to the node host. Treat it as more privileged than `bulk:write`.
 
 ---
 

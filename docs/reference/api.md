@@ -80,6 +80,7 @@ const res = await fetch("https://admin.example.com/api/v3/users", {
 | `users:delete` | удалять пользователя | `DELETE /users/{uuid}` |
 | `nodes:read` | читать ноды | `GET /nodes`, `GET /nodes/{uuid}` |
 | `nodes:write` | включать, отключать, перезапускать ноду | `POST /nodes/{uuid}/restart` |
+| `nodes:token` | генерировать и отзывать токен агента ноды | `POST /nodes/{uuid}/agent-token/generate` |
 | `hosts:read` | читать хосты | `GET /hosts` |
 | `stats:read` | общая статистика | `GET /stats` |
 | `violations:read` | читать нарушения | `GET /violations` |
@@ -91,6 +92,7 @@ const res = await fetch("https://admin.example.com/api/v3/users", {
 - Свой ключ на каждую интеграцию — тогда его отзыв не заденет остальные
 - Ключам CI/CD ставьте короткий срок жизни и перевыпускайте регулярно
 - `bulk:write` обходит проверки по отдельным пользователям — относитесь к нему как к привилегированному
+- `nodes:token` даёт доступ к токену агента — этим токеном аутентифицируется Collector API, WebSocket агента и удалённый терминал, то есть фактически это ключ к хосту ноды. Ещё более привилегированная область, чем `bulk:write`
 
 ## Лимиты запросов
 
