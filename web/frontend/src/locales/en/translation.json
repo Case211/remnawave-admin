@@ -6120,7 +6120,8 @@
             "switch_node": "Switch node",
             "extend_subscription": "Extend subscription",
             "reset_traffic": "Reset traffic",
-            "notify_update": "Notify about update"
+            "notify_update": "Notify about update",
+            "notify_battery_optimization": "Notify about battery optimization"
           }
         },
         "crumb": "Report"

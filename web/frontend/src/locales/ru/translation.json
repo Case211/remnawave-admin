@@ -6120,7 +6120,8 @@
             "switch_node": "Переключить ноду",
             "extend_subscription": "Продлить подписку",
             "reset_traffic": "Сбросить трафик",
-            "notify_update": "Сообщить об обновлении"
+            "notify_update": "Сообщить об обновлении",
+            "notify_battery_optimization": "Сообщить про экономию батареи"
           }
         },
         "crumb": "Отчёт"
