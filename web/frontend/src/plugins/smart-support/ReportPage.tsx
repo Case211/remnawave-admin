@@ -600,6 +600,20 @@ function CorrelationsCard({ report }: { report: ReportResponse }) {
               </div>
               <div className="mt-0.5 text-[11px] text-dark-400">
                 {t('plugins.smart_support.report.correlations_window', { minutes })}
+                {' · '}
+                {/* Утихшее и текущее лечат по-разному: ноду переключают,
+                    пока она отваливается, а не через час после. */}
+                {c.is_active !== false ? (
+                  <span className="text-amber-400">
+                    {t('plugins.smart_support.report.correlations_active')}
+                  </span>
+                ) : (
+                  <span>
+                    {t('plugins.smart_support.report.correlations_stale', {
+                      minutes: c.age_minutes ?? 0,
+                    })}
+                  </span>
+                )}
               </div>
             </li>
           )

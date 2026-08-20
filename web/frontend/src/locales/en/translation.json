@@ -6069,9 +6069,11 @@
         "nodes_active": "active now",
         "nodes_online": "online",
         "nodes_offline": "offline",
-        "correlations_empty": "No correlations yet — the background worker isn't running or no patterns matched.",
+        "correlations_empty": "No mass incidents in the last few hours — neither on the user's nodes nor at their provider.",
         "correlations_affected": "affected: {{n}}",
         "correlations_window": "in the last {{minutes}} min",
+        "correlations_stale": "ended {{minutes}} min ago",
+        "correlations_active": "ongoing",
         "violations_empty": "No violations recorded in the last 14 days.",
         "sections": {
           "user": "Subscription & user",
