@@ -120,6 +120,12 @@ export interface CorrelationCluster {
   affected_users: number
   window_start: string
   window_end: string
+  /** Кластер подтверждался последним прогоном воркера или уже утих.
+   *  Плагин старее 1.4.1 поля не присылает — тогда считаем «идёт сейчас»,
+   *  как вело себя прежнее поведение с мгновенным снимком. */
+  is_active?: boolean
+  /** Сколько минут назад кластер подтверждался в последний раз. */
+  age_minutes?: number | null
 }
 
 export interface ViolationCard {

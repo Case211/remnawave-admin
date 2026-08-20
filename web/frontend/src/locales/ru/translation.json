@@ -6069,9 +6069,11 @@
         "nodes_active": "активен сейчас",
         "nodes_online": "онлайн",
         "nodes_offline": "офлайн",
-        "correlations_empty": "Корреляций пока нет — фоновый сборщик ещё не запущен или нет паттернов.",
+        "correlations_empty": "Массовых проблем за последние часы не было — ни на нодах юзера, ни у его провайдера.",
         "correlations_affected": "затронуто {{n}}",
         "correlations_window": "за последние {{minutes}} мин",
+        "correlations_stale": "утихло {{minutes}} мин назад",
+        "correlations_active": "идёт сейчас",
         "violations_empty": "За 14 дней нарушений не зафиксировано.",
         "sections": {
           "user": "Подписка и юзер",
@@ -6118,7 +6120,8 @@
             "switch_node": "Переключить ноду",
             "extend_subscription": "Продлить подписку",
             "reset_traffic": "Сбросить трафик",
-            "notify_update": "Сообщить об обновлении"
+            "notify_update": "Сообщить об обновлении",
+            "notify_battery_optimization": "Сообщить про экономию батареи"
           }
         },
         "crumb": "Отчёт"
