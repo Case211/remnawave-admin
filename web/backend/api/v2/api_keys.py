@@ -18,6 +18,7 @@ AVAILABLE_SCOPES = [
     "users:delete",
     "nodes:read",
     "nodes:write",
+    "nodes:token",
     "hosts:read",
     "bulk:write",
     "stats:read",
