@@ -36,6 +36,8 @@ export interface NavItem {
   href: string
   icon: LucideIcon
   permission: { resource: string; action: string } | null
+  /** Выделить пункт цветом: он не про рутину, на него хотят обратить внимание. */
+  accent?: boolean
 }
 
 export interface NavGroup {
@@ -76,7 +78,7 @@ export const navigation: NavigationEntry[] = [
   // Плагины стоят здесь, а не в «Администрировании»: закопанные в подменю,
   // они не попадались на глаза владельцам панелей — часть узнавала об их
   // существовании только из чата.
-  { name: 'nav.adminPlugins', href: '/admin/plugins', icon: Package, permission: { resource: 'plugins', action: 'view' } },
+  { name: 'nav.adminPlugins', href: '/admin/plugins', icon: Package, permission: { resource: 'plugins', action: 'view' }, accent: true },
   // People — «управляю людьми»
   { type: 'section', name: 'nav.sections.people' },
   { name: 'nav.users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },

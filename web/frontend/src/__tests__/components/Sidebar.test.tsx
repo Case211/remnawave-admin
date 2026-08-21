@@ -70,6 +70,15 @@ describe('Sidebar', () => {
     expect(menuRoutes(container).slice(0, 4)).toEqual(['/', '/analytics', '/admin/plugins', '/users'])
   })
 
+  it('акцентный пункт выделен цветом, обычные — нет', () => {
+    const { container } = renderSidebar()
+    const cls = (href: string) =>
+      container.querySelector(`a[href="${href}"]`)?.getAttribute('class') ?? ''
+    expect(cls('/admin/plugins')).toMatch(/amber/)
+    expect(cls('/users')).not.toMatch(/amber/)
+    expect(cls('/analytics')).not.toMatch(/amber/)
+  })
+
   it('сохранённый порядок применяется к отрисованному меню', () => {
     localStorage.setItem(
       SIDEBAR_ORDER_KEY,
