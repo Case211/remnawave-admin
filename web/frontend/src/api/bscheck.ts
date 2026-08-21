@@ -27,6 +27,8 @@ export interface BsAccount {
 export interface BsStatus {
   configured: boolean
   account: BsAccount | null
+  /** Токен есть, но сервис отказал: истёк тариф, ключ отозван, обслуживание. */
+  error?: string | null
 }
 
 export interface BsOpResult {

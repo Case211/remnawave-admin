@@ -160,6 +160,14 @@ function lockedKeys(dpi: string, operators: BsOperator[]): Set<string> {
 
 const DPI_MODES = ['on', 'any', 'off'] as const
 
+/** Подсказка под переключателем режима. Своя на каждый из трёх режимов:
+ *  раньше режимов было два, и текст «любых» достался от старого «выключено». */
+function dpiHintKey(dpi: string): string {
+  if (dpi === 'off') return 'bscheck.bsOffWarn'
+  if (dpi === 'any') return 'bscheck.bsAnyWarn'
+  return 'bscheck.lockBsHint'
+}
+
 /** Режим фильтра единиц по белому списку: только с БС / любые / только без БС.
  *  Раньше был двухпозиционный переключатель — режима «только без БС» в API
  *  не существовало до контракта 1.1. */
@@ -185,7 +193,6 @@ function ProbeConfig({ cfg, onChange, operators, showOperators = true }: {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const set = (patch: Partial<Cfg>) => onChange({ ...cfg, ...patch })
-  const locked = cfg.dpi === 'on'
   const offKeys = offKeySet(operators)
   const offCount = offKeys.size
   // смена режима гасит из выбора единицы, которые под него не подходят,
@@ -206,8 +213,8 @@ function ProbeConfig({ cfg, onChange, operators, showOperators = true }: {
         ))}
         <div className="ml-auto"><BsDpiSelect value={cfg.dpi} onChange={setDpiMode} /></div>
       </div>
-      <p className={cn('text-[11px]', locked ? 'text-muted-foreground' : 'text-amber-400')}>
-        {locked ? t('bscheck.lockBsHint') : t(cfg.dpi === 'off' ? 'bscheck.bsOffWarn' : 'bscheck.bsAnyWarn')}
+      <p className={cn('text-[11px]', cfg.dpi === 'off' ? 'text-amber-400' : 'text-muted-foreground')}>
+        {t(dpiHintKey(cfg.dpi))}
       </p>
 
       {cfg.probes.sni && (
@@ -385,7 +392,7 @@ export default function BsCheck() {
 
       {isLoading ? <Skeleton className="h-64 w-full" />
         : !status?.configured ? <TokenSetup />
-          : <Shell account={status.account} />}
+          : <Shell account={status.account} error={status.error ?? null} />}
     </div>
   )
 }
@@ -431,12 +438,27 @@ function TokenSetup({ onDone }: { onDone?: () => void }) {
 
 // ── Каркас: баланс + вкладки ─────────────────────────────────────
 
-function Shell({ account }: { account: { balance_credits?: number; balance_total?: number; tier?: string } | null }) {
+function Shell({ account, error }: {
+  account: { balance_credits?: number; balance_total?: number; tier?: string } | null
+  error?: string | null
+}) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const [tokenOpen, setTokenOpen] = useState(false)
   const { data: operators } = useQuery({ queryKey: ['bscheck-operators'], queryFn: bscheckApi.operators })
   const ops = operators || []
+
+  // Отказ сервиса виден и сам по себе (плашка), и в ответ на «Обновить»:
+  // без тоста нажатие выглядит как будто кнопка не работает.
+  const refresh = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['bscheck-status'] }),
+      qc.invalidateQueries({ queryKey: ['bscheck-summary'] }),
+      qc.invalidateQueries({ queryKey: ['bscheck-operators'] }),
+    ])
+    const fresh = qc.getQueryData<{ error?: string | null }>(['bscheck-status'])
+    if (fresh?.error) toast.error(t('bscheck.upstreamError', { error: fresh.error }))
+  }
 
   return (
     <div className="space-y-3">
@@ -445,18 +467,23 @@ function Shell({ account }: { account: { balance_credits?: number; balance_total
           {t('bscheck.balance')}: <b>◈ {account?.balance_total ?? account?.balance_credits ?? '—'}</b>
           {account?.tier && <span className="text-muted-foreground">· {account.tier}</span>}
         </Badge>
-        <Button variant="outline" size="sm" className="gap-1.5"
-          onClick={() => {
-            qc.invalidateQueries({ queryKey: ['bscheck-status'] })
-            qc.invalidateQueries({ queryKey: ['bscheck-summary'] })
-            qc.invalidateQueries({ queryKey: ['bscheck-operators'] })
-          }}>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={refresh}>
           <RefreshCw className="w-4 h-4" /> {t('common.refresh')}
         </Button>
         <Button variant="outline" size="sm" className="ml-auto gap-1.5" onClick={() => setTokenOpen(true)}>
           <Key className="w-4 h-4" /> {t('bscheck.tokenChange')}
         </Button>
       </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="text-amber-300">{t('bscheck.upstreamErrorTitle')}</p>
+            <p className="text-muted-foreground mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
 
       <Tabs defaultValue="nodes">
         <TabsList>
@@ -1378,7 +1405,6 @@ function ConfigTab({ operators }: { operators: BsOperator[] }) {
     },
   })
 
-  const locked = dpi === 'on'
   const setDpiMode = (v: string) => {
     setEst(null)
     setDpi(v)
@@ -1441,8 +1467,8 @@ function ConfigTab({ operators }: { operators: BsOperator[] }) {
             </Select>
           </div>
         </div>
-        <p className={cn('text-[11px]', locked ? 'text-muted-foreground' : 'text-amber-400')}>
-          {locked ? t('bscheck.lockBsHint') : t(dpi === 'off' ? 'bscheck.bsOffWarn' : 'bscheck.bsAnyWarn')}
+        <p className={cn('text-[11px]', dpi === 'off' ? 'text-amber-400' : 'text-muted-foreground')}>
+          {t(dpiHintKey(dpi))}
         </p>
       </div>
 

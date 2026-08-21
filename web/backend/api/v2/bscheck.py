@@ -179,14 +179,19 @@ def _vless_body(p: VlessIn) -> Dict:
 
 @router.get("/status")
 async def status(admin: AdminUser = Depends(require_permission("bscheck", "view"))):
+    """Токен настроен? Баланс и тариф. Ошибка апстрима отдаётся, а не глотается.
+
+    Раньше отказ bsbord (истёк тариф, отозван ключ, обслуживание) уходил только
+    в лог, а страница молча рисовала прочерк вместо баланса: снаружи выглядело
+    так, будто кнопка «Обновить» ничего не делает.
+    """
     if not bs.is_configured():
-        return {"configured": False, "account": None}
-    account = None
+        return {"configured": False, "account": None, "error": None}
     try:
-        account = await bs.get_account()
+        return {"configured": True, "account": await bs.get_account(), "error": None}
     except bs.BscheckError as e:
         logger.info("bscheck account: %s", e)
-    return {"configured": True, "account": account}
+        return {"configured": True, "account": None, "error": str(e)}
 
 
 @router.put("/token")
