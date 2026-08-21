@@ -66,7 +66,17 @@ beforeEach(() => {
 describe('Sidebar', () => {
   it('по умолчанию меню идёт в исходном порядке', () => {
     const { container } = renderSidebar()
-    expect(menuRoutes(container).slice(0, 4)).toEqual(['/', '/analytics', '/users', '/squads'])
+    // Плагины сразу после аналитики: они в «Обзоре», а не в «Администрировании»
+    expect(menuRoutes(container).slice(0, 4)).toEqual(['/', '/analytics', '/admin/plugins', '/users'])
+  })
+
+  it('акцентный пункт выделен цветом, обычные — нет', () => {
+    const { container } = renderSidebar()
+    const cls = (href: string) =>
+      container.querySelector(`a[href="${href}"]`)?.getAttribute('class') ?? ''
+    expect(cls('/admin/plugins')).toMatch(/amber/)
+    expect(cls('/users')).not.toMatch(/amber/)
+    expect(cls('/analytics')).not.toMatch(/amber/)
   })
 
   it('сохранённый порядок применяется к отрисованному меню', () => {

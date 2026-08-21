@@ -4622,6 +4622,17 @@
     "uuid": "UUID:"
   },
   "bscheck": {
+    "upstreamErrorTitle": "bschekbot unavailable",
+    "upstreamError": "bschekbot: {{error}}",
+    "dpiShort": {"on": "Whitelist only", "any": "Any", "off": "Without whitelist"},
+    "bsOffWarn": "Mode «without whitelist»: units with the whitelist off are used — shows the target on a channel with no operator filter.",
+    "cancelScan": "Stop",
+    "cancelVless": "Stop",
+    "scanCancelled": "Scan stopped: {{done}} of {{total}} addresses checked, billed proportionally",
+    "vlessCancelled": "Test stopped, {{refunded}} credits refunded",
+    "coreAuto": "Auto",
+    "usedCore": "core: {{core}}",
+    "coreRequested": "requested: {{core}}",
     "title": "BS-Check",
     "subtitle": "Test nodes through RU operators — does the IP pass whitelists / DPI (bschekbot)",
     "connectTitle": "Connect bschekbot",
@@ -4646,8 +4657,8 @@
     "operators": "Operators",
     "operatorsHint": "Empty = all available. ⚠ — operator without BS (result misleading)",
     "lockBs": "BS only",
-    "lockBsHint": "Probe only operators with whitelists on (DPI_ON). Those with BS currently off are skipped — their result is misleading.",
-    "bsAnyWarn": "\"No-BS\" mode: probes also go through operators without whitelists — misleading result, wasted credits.",
+    "lockBsHint": "Probe only units with the whitelist on. Those with it currently off are skipped — their result is misleading.",
+    "bsAnyWarn": "Mode «any»: both units with the whitelist and without it are probed. More checks — bigger charge.",
     "bsOff": "BS off",
     "bsOffCount": "Off now: {{count}}",
     "refreshOps": "Status",
@@ -5924,6 +5935,11 @@
       "missing_body": "Subscribe to the plugin on the Plugins page to continue.",
       "expired_title": "License expired",
       "expired_body": "Renew your subscription to get the plugin working again."
+    },
+    "external": {
+      "loading": "Loading the plugin interface…",
+      "no_ui": "This plugin does not provide a page",
+      "failed": "Could not load the plugin interface"
     },
     "block_radar": {
       "nav": "Block Radar",

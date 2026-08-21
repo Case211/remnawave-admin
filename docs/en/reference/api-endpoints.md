@@ -116,6 +116,8 @@ Bulk endpoints use the dedicated bulk rate limit bucket (`API_V3_RATE_BULK_PER_M
 | `/nodes/{uuid}/enable` | POST | `nodes:write` | Enable node |
 | `/nodes/{uuid}/disable` | POST | `nodes:write` | Disable node |
 | `/nodes/{uuid}/restart` | POST | `nodes:write` | Restart node |
+| `/nodes/{uuid}/agent-token/generate` | POST | `nodes:token` | Generate (rotate) the node's agent token |
+| `/nodes/{uuid}/agent-token/revoke` | POST | `nodes:token` | Revoke the node's agent token |
 
 `NodePublic` schema:
 

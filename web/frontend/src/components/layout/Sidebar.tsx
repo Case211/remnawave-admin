@@ -316,6 +316,10 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
 
             const item = entry as NavItem
             const isActive = location.pathname === item.href
+            // Акцентный пункт отличается от рутинных: янтарная подсветка с
+            // тонкой рамкой. Активное состояние важнее — оно перекрывает акцент,
+            // иначе непонятно, на какой странице находишься.
+            const accent = item.accent && !isActive
             return (
               <Tooltip key={item.name} delayDuration={0}>
                 <TooltipTrigger asChild>
@@ -326,7 +330,9 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                       "sidebar-nav-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative overflow-hidden",
                       isActive
                         ? "text-white bg-[var(--glass-bg-hover)] border border-[var(--glass-border-hover)] shadow-[0_0_15px_-4px_rgba(var(--glow-rgb),0.3)]"
-                        : "text-dark-200 hover:text-white hover:bg-[var(--glass-bg)] hover:translate-x-0.5",
+                        : accent
+                          ? "text-amber-200 bg-amber-400/10 border border-amber-400/25 hover:bg-amber-400/15 hover:text-amber-100 hover:translate-x-0.5"
+                          : "text-dark-200 hover:text-white hover:bg-[var(--glass-bg)] hover:translate-x-0.5",
                       collapsed && "justify-center px-0"
                     )}
                   >
@@ -340,7 +346,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                       className={cn(
                         "w-5 h-5 flex-shrink-0 transition-transform duration-200",
                         !collapsed && "mr-3",
-                        isActive ? "text-primary-400" : "group-hover:scale-110"
+                        isActive ? "text-primary-400" : accent ? "text-amber-300 group-hover:scale-110" : "group-hover:scale-110"
                       )}
                     />
                     {!collapsed && <span className="sidebar-nav-text">{t(item.name)}</span>}

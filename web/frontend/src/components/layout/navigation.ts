@@ -36,6 +36,8 @@ export interface NavItem {
   href: string
   icon: LucideIcon
   permission: { resource: string; action: string } | null
+  /** Выделить пункт цветом: он не про рутину, на него хотят обратить внимание. */
+  accent?: boolean
 }
 
 export interface NavGroup {
@@ -73,6 +75,10 @@ export const navigation: NavigationEntry[] = [
   { type: 'section', name: 'nav.sections.overview' },
   { name: 'nav.dashboard', href: '/', icon: LayoutDashboard, permission: null },
   { name: 'nav.analytics', href: '/analytics', icon: BarChart3, permission: { resource: 'analytics', action: 'view' } },
+  // Плагины стоят здесь, а не в «Администрировании»: закопанные в подменю,
+  // они не попадались на глаза владельцам панелей — часть узнавала об их
+  // существовании только из чата.
+  { name: 'nav.adminPlugins', href: '/admin/plugins', icon: Package, permission: { resource: 'plugins', action: 'view' }, accent: true },
   // People — «управляю людьми»
   { type: 'section', name: 'nav.sections.people' },
   { name: 'nav.users', href: '/users', icon: Users, permission: { resource: 'users', action: 'view' } },
@@ -120,7 +126,6 @@ export const navigation: NavigationEntry[] = [
     items: [
       { name: 'nav.admins', href: '/admins', icon: UserCog, permission: { resource: 'admins', action: 'view' } },
       { name: 'nav.audit', href: '/audit', icon: ClipboardList, permission: { resource: 'audit', action: 'view' } },
-      { name: 'nav.adminPlugins', href: '/admin/plugins', icon: Package, permission: { resource: 'plugins', action: 'view' } },
       { name: 'nav.logs', href: '/logs', icon: Terminal, permission: { resource: 'logs', action: 'view' } },
       { name: 'nav.backups', href: '/backups', icon: HardDrive, permission: { resource: 'backups', action: 'view' } },
     ],

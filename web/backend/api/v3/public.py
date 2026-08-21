@@ -2,11 +2,12 @@
 
 Authenticated via X-API-Key header. Scopes control access.
 """
+import json
 import logging
 from typing import Any, List, Optional
 from uuid import UUID as _UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, model_validator
 
@@ -64,6 +65,12 @@ class NodePublic(_PublicBase):
     is_connected: Optional[bool] = None
     is_disabled: Optional[bool] = None
     users_online: Optional[int] = None
+
+
+class NodeTokenResult(_PublicBase):
+    success: bool
+    token: Optional[str] = None
+    message: str = ""
 
 
 class HostPublic(_PublicBase):
@@ -420,6 +427,83 @@ async def restart_node(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/nodes/{uuid}/agent-token/generate", response_model=NodeTokenResult)
+async def generate_node_agent_token(
+    uuid: str,
+    request: Request,
+    api_key: ApiKeyUser = Depends(require_scope("nodes:token")),
+):
+    """Generate (or rotate) the agent token for a node.
+
+    This token authenticates the node agent to the Collector API and agent
+    WebSocket, and signs remote-terminal commands — treat it as a
+    privileged, host-level credential.
+    """
+    from shared.database import db_service
+    from shared.agent_tokens import set_node_agent_token
+    from web.backend.core.audit import write_audit_log
+    from web.backend.api.deps import get_client_ip
+
+    if not db_service.is_connected:
+        raise _service_unavailable()
+
+    async with db_service.acquire() as conn:
+        exists = await conn.fetchval("SELECT 1 FROM nodes WHERE uuid = $1", uuid)
+    if not exists:
+        raise _not_found("Node")
+
+    token = await set_node_agent_token(db_service, uuid)
+    if not token:
+        raise HTTPException(status_code=500, detail="Token generation failed")
+
+    await write_audit_log(
+        admin_id=None,
+        admin_username=f"apikey:{api_key.key_name}",
+        action="node.generate_agent_token",
+        resource="nodes",
+        resource_id=uuid,
+        details=json.dumps({"node_uuid": uuid, "via": "api_v3", "key_id": api_key.key_id}),
+        ip_address=get_client_ip(request),
+    )
+    return NodeTokenResult(success=True, token=token, message="Token generated")
+
+
+@router.post("/nodes/{uuid}/agent-token/revoke", response_model=SuccessResult)
+async def revoke_node_agent_token(
+    uuid: str,
+    request: Request,
+    api_key: ApiKeyUser = Depends(require_scope("nodes:token")),
+):
+    """Revoke the agent token for a node (agent loses access until re-provisioned)."""
+    from shared.database import db_service
+    from shared.agent_tokens import revoke_node_agent_token as _revoke_token
+    from web.backend.core.audit import write_audit_log
+    from web.backend.api.deps import get_client_ip
+
+    if not db_service.is_connected:
+        raise _service_unavailable()
+
+    async with db_service.acquire() as conn:
+        exists = await conn.fetchval("SELECT 1 FROM nodes WHERE uuid = $1", uuid)
+    if not exists:
+        raise _not_found("Node")
+
+    ok = await _revoke_token(db_service, uuid)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Token revoke failed")
+
+    await write_audit_log(
+        admin_id=None,
+        admin_username=f"apikey:{api_key.key_name}",
+        action="node.revoke_agent_token",
+        resource="nodes",
+        resource_id=uuid,
+        details=json.dumps({"node_uuid": uuid, "via": "api_v3", "key_id": api_key.key_id}),
+        ip_address=get_client_ip(request),
+    )
+    return SuccessResult(success=True, message="Token revoked")
+
+
 # ══════════════════════════════════════════════════════════════════
 # Hosts — Read
 # ══════════════════════════════════════════════════════════════════
@@ -735,6 +819,6 @@ async def api_v3_openapi():
         version="3.0.0",
         description="Public API authenticated via X-API-Key header. "
         "Scopes: users:read, users:write, users:delete, nodes:read, nodes:write, "
-        "hosts:read, bulk:write, stats:read, violations:read",
+        "nodes:token, hosts:read, bulk:write, stats:read, violations:read",
         routes=temp.routes,
     )

@@ -59,6 +59,9 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 import { PLUGIN_ROUTES } from './plugins/registry'
 import { useActivePlugins } from './lib/plugins'
 
+// Generic host for plugins that ship outside this repo — see ExternalPluginPage
+const ExternalPluginPage = lazy(() => import('./plugins/ExternalPluginPage'))
+
 /**
  * Inner shell that renders all protected routes, including any contributed
  * by installed plugins. Lives in its own component so we can call
@@ -114,6 +117,10 @@ function ProtectedShell() {
             {pluginRouteEntries.map(({ key, path, Component }) => (
               <Route key={key} path={path} element={<Component />} />
             ))}
+            {/* Plugins that ship outside this repo declare their UI in the
+                backend manifest and are mounted here. Built-in routes above
+                win: this one only catches ids without a registry entry. */}
+            <Route path="/plugins/:pluginId" element={<ExternalPluginPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
