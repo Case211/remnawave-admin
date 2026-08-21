@@ -1,10 +1,18 @@
 import client from './client'
 
+/** Единица проверки: оператор x округ x белый список. Ключ op_key приходит
+ *  готовым ("mts|цфо|on") — собирать его из частей нельзя. Поля id/alive/
+ *  region_label бэкенд дублирует ради записей, снятых до контракта 1.1. */
 export interface BsOperator {
-  id: string
-  name: string
   op_key: string
+  operator: string
+  name: string
+  region?: string | null
+  region_code?: string | null
+  dpi?: 'on' | 'off' | null
   channel_state: string
+  probeable: boolean
+  id: string
   alive: boolean
   region_label?: string | null
 }
@@ -183,6 +191,12 @@ export const bscheckApi = {
   },
   async vlessStatus(id: number | string): Promise<any> {
     const { data } = await client.get(`/bscheck/vless/${id}`); return data
+  },
+  async scanCancel(id: number | string): Promise<{ state: string; done_ips?: number; total_ips?: number }> {
+    const { data } = await client.post(`/bscheck/scans/${id}/cancel`); return data
+  },
+  async vlessCancel(id: number | string): Promise<{ cancelled: boolean; refunded_credits?: number }> {
+    const { data } = await client.post(`/bscheck/vless/${id}/cancel`); return data
   },
   async saveHistory(payload: HistorySave): Promise<BsHistoryRow> {
     const { data } = await client.post('/bscheck/history', payload); return data

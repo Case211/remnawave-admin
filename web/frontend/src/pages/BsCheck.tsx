@@ -69,15 +69,33 @@ function opBrand(id: string): { bg: string; fg: string } {
   return OP_BRAND[(id || '').toLowerCase()] || { bg: 'rgba(148,163,184,0.25)', fg: '#e2e8f0' }
 }
 
-/** op_key ("dfo1:beeline") → человекочитаемые имя/регион/бренд, через список операторов. */
+/** Разбор op_key без справочника операторов.
+ *
+ *  Контракт 1.1: "оператор|округ|бс" ("mts|цфо|on"). До него ключ выглядел как
+ *  "воркер:оператор" ("dfo1:beeline") — такие лежат в журнале проверок и должны
+ *  читаться дальше, поэтому поддерживаются оба вида. */
+function parseOpKey(opKey: string): { operator: string; region: string; dpi: string | null } {
+  if (opKey.includes('|')) {
+    const [operator = '', region = '', dpi = ''] = opKey.split('|')
+    const clean = (v: string) => (v === '*' ? '' : v)
+    return { operator: clean(operator), region: clean(region), dpi: clean(dpi) || null }
+  }
+  if (opKey.includes(':')) {
+    const [worker = '', operator = ''] = opKey.split(':')
+    return { operator: operator || worker, region: operator ? worker : '', dpi: null }
+  }
+  return { operator: opKey, region: '', dpi: null }
+}
+
+/** op_key → человекочитаемые имя/регион/бренд, через список операторов. */
 function resolveOp(opKey: string, operators: BsOperator[]) {
   const found = operators.find((o) => o.op_key === opKey)
-  const modem = (opKey.split(':').pop() || opKey)
-  const worker = opKey.includes(':') ? opKey.split(':')[0] : ''
+  const parsed = parseOpKey(opKey)
   return {
-    id: (found?.id || modem).toLowerCase(),
-    name: found?.name || modem.toUpperCase(),
-    region: found?.region_label || worker,
+    id: (found?.operator || found?.id || parsed.operator || opKey).toLowerCase(),
+    name: found?.name || (parsed.operator || opKey).toUpperCase(),
+    region: found?.region || found?.region_label || parsed.region,
+    dpi: found?.dpi ?? parsed.dpi,
     channel_state: found?.channel_state ?? null,
   }
 }
@@ -117,21 +135,47 @@ function cfgFields(c: Cfg) {
   }
 }
 
-/** Живой набор op_key операторов, у которых БС сейчас выключен (DPI_OFF). */
+/** Живой набор op_key единиц, у которых БС сейчас выключен.
+ *  Контракт 1.1 отдаёт это отдельным полем dpi; channel_state остаётся
+ *  запасным признаком для ответов, снятых раньше. */
 function offKeySet(operators: BsOperator[]): Set<string> {
-  return new Set(operators.filter((o) => o.channel_state === 'DPI_OFF').map((o) => o.op_key))
+  return new Set(operators
+    .filter((o) => o.dpi === 'off' || (!o.dpi && o.channel_state === 'DPI_OFF'))
+    .map((o) => o.op_key))
 }
 
-/** Переключатель «Только через БС» (dpi on↔any) + сброс DPI_OFF из выбора при локе. */
-function BsLockSwitch({ locked, onToggle }: { locked: boolean; onToggle: (v: boolean) => void }) {
+/** Единицы с включённым БС — нужны, чтобы гасить их в режиме «только без БС». */
+function onKeySet(operators: BsOperator[]): Set<string> {
+  return new Set(operators
+    .filter((o) => o.dpi === 'on' || (!o.dpi && o.channel_state === 'DPI_ON'))
+    .map((o) => o.op_key))
+}
+
+/** Единицы, недоступные выбору при текущем режиме фильтра. */
+function lockedKeys(dpi: string, operators: BsOperator[]): Set<string> {
+  if (dpi === 'on') return offKeySet(operators)
+  if (dpi === 'off') return onKeySet(operators)
+  return new Set()
+}
+
+const DPI_MODES = ['on', 'any', 'off'] as const
+
+/** Режим фильтра единиц по белому списку: только с БС / любые / только без БС.
+ *  Раньше был двухпозиционный переключатель — режима «только без БС» в API
+ *  не существовало до контракта 1.1. */
+function BsDpiSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { t } = useTranslation()
   return (
-    <label className="flex items-center gap-2 text-sm cursor-pointer">
-      <Switch checked={locked} onCheckedChange={onToggle} />
-      <span className={cn('flex items-center gap-1', locked ? 'text-primary-300' : 'text-amber-300')}>
-        <ShieldCheck className="w-3.5 h-3.5" />{t('bscheck.lockBs')}
-      </span>
-    </label>
+    <div className="flex items-center gap-1 rounded-md border border-border/60 p-0.5">
+      {DPI_MODES.map((mode) => (
+        <button key={mode} type="button" onClick={() => onChange(mode)}
+          className={cn('px-2 py-1 text-[11px] rounded transition-colors',
+            value === mode ? 'bg-primary/20 text-primary-200' : 'text-muted-foreground hover:text-foreground')}>
+          {mode === 'on' && <ShieldCheck className="w-3 h-3 inline mr-1" />}
+          {t(`bscheck.dpiShort.${mode}`)}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -144,8 +188,10 @@ function ProbeConfig({ cfg, onChange, operators, showOperators = true }: {
   const locked = cfg.dpi === 'on'
   const offKeys = offKeySet(operators)
   const offCount = offKeys.size
-  const setLock = (v: boolean) =>
-    v ? set({ dpi: 'on', ops: cfg.ops.filter((k) => !offKeys.has(k)) }) : set({ dpi: 'any' })
+  // смена режима гасит из выбора единицы, которые под него не подходят,
+  // иначе запрос уедет с набором, где всё уйдёт в skipped_dpi_off
+  const setDpiMode = (v: string) =>
+    set({ dpi: v, ops: cfg.ops.filter((k) => !lockedKeys(v, operators).has(k)) })
   const toggleOp = (op: string) => set({
     ops: cfg.ops.includes(op) ? cfg.ops.filter((x) => x !== op) : [...cfg.ops, op],
   })
@@ -158,10 +204,10 @@ function ProbeConfig({ cfg, onChange, operators, showOperators = true }: {
             {p.toUpperCase()}
           </label>
         ))}
-        <div className="ml-auto"><BsLockSwitch locked={locked} onToggle={setLock} /></div>
+        <div className="ml-auto"><BsDpiSelect value={cfg.dpi} onChange={setDpiMode} /></div>
       </div>
       <p className={cn('text-[11px]', locked ? 'text-muted-foreground' : 'text-amber-400')}>
-        {locked ? t('bscheck.lockBsHint') : t('bscheck.bsAnyWarn')}
+        {locked ? t('bscheck.lockBsHint') : t(cfg.dpi === 'off' ? 'bscheck.bsOffWarn' : 'bscheck.bsAnyWarn')}
       </p>
 
       {cfg.probes.sni && (
@@ -189,7 +235,7 @@ function ProbeConfig({ cfg, onChange, operators, showOperators = true }: {
               const b = opBrand(op.id)
               const sel = cfg.ops.includes(op.op_key)
               const isOff = op.channel_state === 'DPI_OFF'
-              const disabled = locked && isOff
+              const disabled = lockedKeys(cfg.dpi, operators).has(op.op_key)
               return (
                 <button key={op.op_key} type="button" disabled={disabled}
                   onClick={() => !disabled && toggleOp(op.op_key)}
@@ -553,7 +599,6 @@ function JobDialog({ job, operators, nodes, onClose, onSaved }: {
   const [batch, setBatch] = useState<number>(c.batch || 0)
   const { data: repProvs } = useQuery({ queryKey: ['rep-providers'], queryFn: reputationApi.providers, enabled: kind === 'reputation' })
 
-  const offKeys = offKeySet(operators)
   const validScan = /^\d{1,3}(\.\d{1,3}){3}\/24$/.test(cidr.trim())
   const canSave = !!name.trim()
     && (kind !== 'scan' || validScan)
@@ -726,7 +771,7 @@ function JobDialog({ job, operators, nodes, onClose, onSaved }: {
 
           <div className="flex flex-wrap items-center gap-4">
             {kind !== 'reputation' && (
-              <BsLockSwitch locked={dpi === 'on'} onToggle={(v) => { setDpi(v ? 'on' : 'any'); if (v) setOps((p) => p.filter((k) => !offKeys.has(k))) }} />
+              <BsDpiSelect value={dpi} onChange={(v) => { setDpi(v); setOps((p) => p.filter((k) => !lockedKeys(v, operators).has(k))) }} />
             )}
             <label className="flex items-center gap-2 text-sm cursor-pointer"><Switch checked={alert} onCheckedChange={setAlert} />{kind === 'reputation' ? t('bscheck.autoAlertRkn') : t('bscheck.autoAlert')}</label>
             <label className="flex items-center gap-2 text-sm cursor-pointer"><Switch checked={enabled} onCheckedChange={setEnabled} />{t('bscheck.autoEnable')}</label>
@@ -1079,8 +1124,16 @@ function ScanMode({ operators, disabled }: { operators: BsOperator[]; disabled: 
     refetchInterval: (q) => {
       const d: any = q.state.data
       if (!d) return 4000
-      return ['done', 'failed', 'error'].includes(d.state) ? false : 4000
+      return ['done', 'failed', 'error', 'cancelled'].includes(d.state) ? false : 4000
     },
+  })
+  // Остановка гасит непройденную часть целиком и списывает пропорционально
+  // проверенным адресам. Сумму отдаёт уже следующий статус, поэтому поллинг
+  // продолжаем, а не гасим сразу.
+  const cancel = useMutation({
+    mutationFn: () => bscheckApi.scanCancel(scanId as number),
+    onSuccess: (d) => toast.success(t('bscheck.scanCancelled', { done: d.done_ips ?? 0, total: d.total_ips ?? 0 })),
+    onError: onErr,
   })
 
   const octetsOk = (s: string) => s.replace(/\/.*/, '').split('.').every((o) => o !== '' && Number(o) >= 0 && Number(o) <= 255)
@@ -1135,8 +1188,16 @@ function ScanMode({ operators, disabled }: { operators: BsOperator[]; disabled: 
 
       {scanId != null && (
         <div className="space-y-2">
-          <PollStatus state={scanData?.state} kind="scan" />
-          {scanData && ['done'].includes(scanData.state) && <ScanResult data={scanData} operators={operators} />}
+          <div className="flex items-center gap-2">
+            <PollStatus state={scanData?.state} kind="scan" />
+            {scanData && !['done', 'failed', 'error', 'cancelled'].includes(scanData.state) && (
+              <Button size="sm" variant="outline" className="h-7 text-xs"
+                disabled={disabled || cancel.isPending} onClick={() => cancel.mutate()}>
+                {t('bscheck.cancelScan')}
+              </Button>
+            )}
+          </div>
+          {scanData && ['done', 'cancelled'].includes(scanData.state) && <ScanResult data={scanData} operators={operators} />}
         </div>
       )}
     </div>
@@ -1276,7 +1337,7 @@ function ConfigTab({ operators }: { operators: BsOperator[] }) {
   const canCheck = usePermissionStore((s) => s.hasPermission)('bscheck', 'check')
   const [raw, setRaw] = useState('')
   const [dpi, setDpi] = useState('on')
-  const [core, setCore] = useState('stable')
+  const [core, setCore] = useState('')   // '' = Авто
   const [modems, setModems] = useState<string[]>([])
   const [testId, setTestId] = useState<number | null>(null)
   const [est, setEst] = useState<{ cost: number; n: number } | null>(null)
@@ -1317,13 +1378,19 @@ function ConfigTab({ operators }: { operators: BsOperator[] }) {
     },
   })
 
-  const offKeys = offKeySet(operators)
   const locked = dpi === 'on'
-  const setLock = (v: boolean) => {
+  const setDpiMode = (v: string) => {
     setEst(null)
-    if (v) { setDpi('on'); setModems((m) => m.filter((k) => !offKeys.has(k))) }
-    else setDpi('any')
+    setDpi(v)
+    setModems((m) => m.filter((k) => !lockedKeys(v, operators).has(k)))
   }
+  // Ждал очереди — возврат полный; уже шёл — гасится несделанная часть, а
+  // полученные вердикты остаются платными, включая «режется оператором».
+  const cancel = useMutation({
+    mutationFn: () => bscheckApi.vlessCancel(testId as number),
+    onSuccess: (d) => toast.success(t('bscheck.vlessCancelled', { refunded: d.refunded_credits ?? 0 })),
+    onError: onErr,
+  })
   const toggleModem = (op: string) => { setEst(null); setModems((m) => m.includes(op) ? m.filter((x) => x !== op) : [...m, op]) }
   const data: any = poll.data
   const servers: any[] = vlessServers(data)
@@ -1360,21 +1427,22 @@ function ConfigTab({ operators }: { operators: BsOperator[] }) {
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1">
             <Label className="text-xs">{t('bscheck.dpiMode')}</Label>
-            <div className="h-8 flex items-center"><BsLockSwitch locked={locked} onToggle={setLock} /></div>
+            <div className="h-8 flex items-center"><BsDpiSelect value={dpi} onChange={setDpiMode} /></div>
           </div>
           <div className="w-44">
             <Label className="text-xs">{t('bscheck.core')}</Label>
-            <Select value={core} onValueChange={setCore}>
+            <Select value={core || 'auto'} onValueChange={(v) => setCore(v === 'auto' ? '' : v)}>
               <SelectTrigger className="h-8 mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
+                <SelectItem value="auto">{t('bscheck.coreAuto')}</SelectItem>
                 <SelectItem value="stable">{t('bscheck.coreStable')}</SelectItem>
-                <SelectItem value="new">{t('bscheck.coreNew')}</SelectItem>
+                <SelectItem value="prerelease">{t('bscheck.coreNew')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
         <p className={cn('text-[11px]', locked ? 'text-muted-foreground' : 'text-amber-400')}>
-          {locked ? t('bscheck.lockBsHint') : t('bscheck.bsAnyWarn')}
+          {locked ? t('bscheck.lockBsHint') : t(dpi === 'off' ? 'bscheck.bsOffWarn' : 'bscheck.bsAnyWarn')}
         </p>
       </div>
 
@@ -1386,7 +1454,7 @@ function ConfigTab({ operators }: { operators: BsOperator[] }) {
               const b = opBrand(op.id)
               const sel = modems.includes(op.op_key)
               const isOff = op.channel_state === 'DPI_OFF'
-              const off = locked && isOff
+              const off = lockedKeys(dpi, operators).has(op.op_key)
               return (
                 <button key={op.op_key} type="button" disabled={off}
                   onClick={() => !off && toggleModem(op.op_key)}
@@ -1424,7 +1492,24 @@ function ConfigTab({ operators }: { operators: BsOperator[] }) {
 
       {testId != null && (
         <div className="space-y-2">
-          <PollStatus state={data?.result_ready ? 'done' : data?.state} kind="vless" />
+          <div className="flex flex-wrap items-center gap-2">
+            <PollStatus state={data?.result_ready ? 'done' : data?.state} kind="vless" />
+            {/* used_core — ядро, на котором реально прогнали. В режиме Авто
+                расхождение с заказанным нормально, при форсе его быть не должно */}
+            {data?.used_core && (
+              <Badge variant="outline" className="text-[10px]">
+                {t('bscheck.usedCore', { core: data.used_core })}
+                {data.core_requested && data.core_requested !== 'auto' && data.core_requested !== data.used_core
+                  ? ` (${t('bscheck.coreRequested', { core: data.core_requested })})` : ''}
+              </Badge>
+            )}
+            {data && !data.result_ready && !['done', 'cancelled', 'not_found'].includes(data.state) && (
+              <Button size="sm" variant="outline" className="h-7 text-xs"
+                disabled={!canCheck || cancel.isPending} onClick={() => cancel.mutate()}>
+                {t('bscheck.cancelVless')}
+              </Button>
+            )}
+          </div>
           {(servers.length > 0 || data?.result_ready) && <VlessServers data={data} operators={operators} />}
         </div>
       )}

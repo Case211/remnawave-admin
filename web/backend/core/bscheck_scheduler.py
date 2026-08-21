@@ -35,7 +35,12 @@ def _due(last_iso, interval_min: int, now: datetime) -> bool:
 
 
 def _dpi(cfg) -> str:
-    return cfg.get("dpi") if cfg.get("dpi") in ("on", "any") else "on"
+    """Фильтр по белому списку из конфига теста; неизвестное значение → «только с БС».
+
+    Режим off появился в контракте 1.1 — до него в сохранённых тестах его быть
+    не могло, поэтому старые конфиги просто продолжают работать как раньше.
+    """
+    return cfg.get("dpi") if cfg.get("dpi") in ("on", "off", "any") else "on"
 
 
 def _probes(cfg) -> dict:
@@ -135,7 +140,11 @@ async def _run_vless(bs, db, job, cfg) -> None:
     if not raw.strip():
         return
     modems = cfg.get("operators") or cfg.get("selected_modems") or []
-    core = cfg.get("core") if cfg.get("core") in ("stable", "new") else "stable"
+    # "new" — легаси-имя prerelease-ядра: тесты, заведённые до контракта 1.1,
+    # хранят именно его. "" = Авто, сервис подберёт ядро по самому конфигу.
+    core = {"new": "prerelease", "auto": ""}.get(cfg.get("core"), cfg.get("core"))
+    if core not in ("", "stable", "prerelease"):
+        core = ""
     sub = await bs.vless_submit({"raw_input": raw, "selected_modems": modems, "dpi": _dpi(cfg), "core": core})
     tid = sub.get("test_id")
     st = await _poll_async(bs.vless_status, tid) if tid is not None else None

@@ -28,13 +28,30 @@ def _token():
 class TestSummarize:
     def test_counts_passed_and_sorts_ops(self):
         result = {"cost_credits": 12, "by_target": {"1.2.3.4": {"by_operator": {
-            "ufo1:mts": {"ok": True, "channel_state": "DPI_ON", "latency_ms": 140},
-            "dfo1:tele2": {"ok": False, "channel_state": "DPI_ON", "error": "timeout"}}}},
-            "skipped_dpi_off": [{"operator": "beeline"}]}
+            "mts|цфо|on": {"ok": True, "operator": "mts", "region": "ЦФО", "dpi": "on",
+                           "channel_state": "DPI_ON", "icmp": {"ok": True, "rtt_avg_ms": 140}},
+            "tele2|дфо|on": {"ok": True, "operator": "tele2", "region": "ДФО", "dpi": "on",
+                             "channel_state": "DPI_ON", "icmp": {"ok": False},
+                             "tcp": {"ok": False}, "error": "timeout"}}}},
+            "skipped_dpi_off": [{"operator": "beeline", "region": "ЮФО"}]}
         s = bs.summarize(result, "1.2.3.4")
         assert s["passed"] == 1 and s["total"] == 2
-        assert s["cost_credits"] == 12 and s["skipped_dpi_off"] == ["beeline"]
-        assert s["operators"][0]["op"] == "dfo1:tele2"  # отсортировано по op
+        assert s["cost_credits"] == 12 and s["skipped_dpi_off"] == ["beeline (ЮФО)"]
+        assert s["operators"][0]["op"] == "mts|цфо|on"  # отсортировано по op
+        assert s["operators"][0]["region"] == "ЦФО" and s["operators"][0]["dpi"] == "on"
+        assert s["operators"][0]["latency_ms"] == 140
+
+    def test_ok_without_probes_means_reachable(self):
+        """ok у ноги = «проба выполнена». Без вложенных проб доверяем ему."""
+        result = {"by_target": {"t": {"by_operator": {"mts|цфо|on": {"ok": True}}}}}
+        assert bs.summarize(result, "t")["passed"] == 1
+
+    def test_probe_done_but_target_unreachable(self):
+        """Проба отработала штатно, а цель не ответила — это НЕ «прошло»."""
+        result = {"by_target": {"t": {"by_operator": {"mts|цфо|on": {
+            "ok": True, "icmp": {"ok": False, "loss_pct": 100}, "tcp": {"ok": False}}}}}}
+        s = bs.summarize(result, "t")
+        assert s["passed"] == 0 and s["total"] == 1
 
     def test_empty(self):
         s = bs.summarize({}, "x")
@@ -62,13 +79,26 @@ class TestClient:
     @pytest.mark.asyncio
     async def test_operators(self):
         def h(r):
-            return httpx.Response(200, json={"is_multiworker": True, "operators": [
+            return httpx.Response(200, json={"n_units": 1, "n_probeable": 1, "units": [
+                {"op_key": "mts|цфо|on", "operator": "mts", "name": "МТС", "region": "ЦФО",
+                 "region_code": "cfo", "dpi": "on", "channel_state": "DPI_ON", "probeable": True}]})
+
+        with _token(), patch("httpx.AsyncClient", _patched_client(h)):
+            ops = await bs.get_operators()
+        assert ops[0]["op_key"] == "mts|цфо|on" and ops[0]["dpi"] == "on"
+        assert ops[0]["region"] == "ЦФО" and ops[0]["probeable"] is True
+
+    @pytest.mark.asyncio
+    async def test_operators_legacy_field(self):
+        """Ответ старого сервиса клал единицы в operators — читаем и его."""
+        def h(r):
+            return httpx.Response(200, json={"operators": [
                 {"id": "mts", "name": "МТС", "op_key": "ufo1:mts",
                  "channel_state": "DPI_ON", "alive": True}]})
 
         with _token(), patch("httpx.AsyncClient", _patched_client(h)):
             ops = await bs.get_operators()
-        assert ops[0]["op_key"] == "ufo1:mts" and ops[0]["channel_state"] == "DPI_ON"
+        assert ops[0]["op_key"] == "ufo1:mts"
 
     @pytest.mark.asyncio
     async def test_probe_sends_idempotency_and_body(self):
@@ -188,3 +218,65 @@ class TestScanCidr:
         for bad in ("1.2.3.0/16", "1.2.3.0/25", "1.2.3.0", "10.0.0.0/8", "300.1.1.0/24"):
             with pytest.raises(Exception):
                 ScanIn(cidr=bad)
+
+
+# ── Контракт 1.1: отмена, фильтр dpi, выбор ядра ─────────────────
+
+
+class TestCancel:
+    @pytest.mark.asyncio
+    async def test_scan_cancel(self):
+        seen = {}
+
+        def h(r):
+            seen["url"] = str(r.url)
+            seen["idem"] = r.headers.get("Idempotency-Key")
+            return httpx.Response(200, json={"scan_id": 7, "state": "cancelled",
+                                             "done_ips": 90, "total_ips": 256, "n_jobs_stopped": 2})
+
+        with _token(), patch("httpx.AsyncClient", _patched_client(h)):
+            res = await bs.scans_cancel("7")
+        assert res["state"] == "cancelled" and res["done_ips"] == 90
+        assert seen["url"].endswith("/scans/7/cancel")
+        assert seen["idem"] is None   # отмена бесплатна, ключ идемпотентности не нужен
+
+    @pytest.mark.asyncio
+    async def test_vless_cancel(self):
+        def h(r):
+            return httpx.Response(200, json={"test_id": 5, "cancelled": True,
+                                             "stopped_legs": 3, "refunded_credits": 120})
+
+        with _token(), patch("httpx.AsyncClient", _patched_client(h)):
+            res = await bs.vless_cancel("5")
+        assert res["cancelled"] is True and res["refunded_credits"] == 120
+
+
+class TestContractModes:
+    def test_dpi_off_accepted(self):
+        """Режим «только без БС» появился в 1.1 — раньше валидатор его резал."""
+        from web.backend.api.v2.bscheck import ProbeIn, ScanIn, VlessIn
+        assert ProbeIn(target="1.2.3.4", dpi="off").dpi == "off"
+        assert ScanIn(cidr="1.2.3.0/24", dpi="off").dpi == "off"
+        assert VlessIn(raw_input="vless://x", dpi="off").dpi == "off"
+        with pytest.raises(Exception):
+            ProbeIn(target="1.2.3.4", dpi="bogus")
+
+    def test_core_modes_and_legacy_alias(self):
+        from web.backend.api.v2.bscheck import VlessIn
+        assert VlessIn(raw_input="v").core == ""            # деф. — Авто
+        assert VlessIn(raw_input="v", core="prerelease").core == "prerelease"
+        assert VlessIn(raw_input="v", core="new").core == "prerelease"   # легаси-имя
+        assert VlessIn(raw_input="v", core="auto").core == ""
+        with pytest.raises(Exception):
+            VlessIn(raw_input="v", core="bogus")
+
+    def test_unit_item_keeps_old_names(self):
+        """UI и журнал читают старые имена полей — отдаём оба набора."""
+        from web.backend.api.v2.bscheck import _unit_item
+        item = _unit_item({"op_key": "mts|цфо|on", "operator": "mts", "name": "МТС",
+                           "region": "ЦФО", "region_code": "cfo", "dpi": "on",
+                           "channel_state": "DPI_ON", "probeable": True})
+        assert item["operator"] == item["id"] == "mts"
+        assert item["region"] == item["region_label"] == "ЦФО"
+        assert item["probeable"] == item["alive"] is True
+        assert item["dpi"] == "on"

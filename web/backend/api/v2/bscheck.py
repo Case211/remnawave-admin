@@ -24,6 +24,15 @@ def _upstream(e: bs.BscheckError) -> HTTPException:
     return HTTPException(status_code=502, detail=str(e))
 
 
+# Фильтр единиц по белому списку (контракт 1.1): on — только с БС, off — только
+# без БС, any — обе группы. Раньше режима off не было вовсе.
+DPI_MODES = ("on", "off", "any")
+# Ядро xray для VLESS-теста: "" — Авто (сервис определит по конфигу), иначе форс.
+# При форсе перепроверки вторым ядром не будет.
+CORE_MODES = ("", "stable", "prerelease")
+CORE_ALIASES = {"new": "prerelease", "auto": ""}
+
+
 # ── Схемы ────────────────────────────────────────────────────────
 
 
@@ -42,8 +51,8 @@ class ProbeIn(BaseModel):
     @field_validator("dpi")
     @classmethod
     def _dpi(cls, v: str) -> str:
-        if v not in ("on", "any"):
-            raise ValueError("dpi must be on|any")
+        if v not in DPI_MODES:
+            raise ValueError("dpi must be on|off|any")
         return v
 
     @model_validator(mode="after")
@@ -65,8 +74,8 @@ class ScanIn(BaseModel):
     @field_validator("dpi")
     @classmethod
     def _dpi(cls, v: str) -> str:
-        if v not in ("on", "any"):
-            raise ValueError("dpi must be on|any")
+        if v not in DPI_MODES:
+            raise ValueError("dpi must be on|off|any")
         return v
 
     @field_validator("cidr")
@@ -105,20 +114,21 @@ class VlessIn(BaseModel):
     raw_input: str = Field(min_length=1, max_length=1_000_000)
     selected_modems: List[str] = Field(default_factory=list)
     dpi: str = "on"
-    core: str = "stable"
+    core: str = ""     # "" = Авто (ядро определит сервис)
 
     @field_validator("dpi")
     @classmethod
     def _dpi(cls, v: str) -> str:
-        if v not in ("on", "any"):
-            raise ValueError("dpi must be on|any")
+        if v not in DPI_MODES:
+            raise ValueError("dpi must be on|off|any")
         return v
 
     @field_validator("core")
     @classmethod
     def _core(cls, v: str) -> str:
-        if v not in ("stable", "new"):
-            raise ValueError("core must be stable|new")
+        v = CORE_ALIASES.get(v, v)
+        if v not in CORE_MODES:
+            raise ValueError("core must be empty|stable|prerelease")
         return v
 
 
@@ -201,12 +211,42 @@ async def clear_token(admin: AdminUser = Depends(require_permission("bscheck", "
 # ── Операторы / превью / проверка ────────────────────────────────
 
 
+def _unit_item(u: Dict[str, Any]) -> Dict[str, Any]:
+    """Единица проверки в форме, понятной и новому UI, и старым записям.
+
+    Контракт 1.1 переименовал поля (operator/region/probeable вместо
+    id/region_label/alive) и добавил dpi. Отдаём и то, и другое: журнал
+    проверок рисуется теми же компонентами, а в нём лежат ответы старого
+    формата, которые никто не переписывал.
+    """
+    operator = u.get("operator") or u.get("id") or ""
+    region = u.get("region") or u.get("region_label")
+    probeable = u.get("probeable")
+    if probeable is None:
+        probeable = u.get("alive", True)
+    return {
+        "op_key": u.get("op_key") or "",
+        "operator": operator,
+        "name": u.get("name") or str(operator).upper(),
+        "region": region,
+        "region_code": u.get("region_code"),
+        "dpi": u.get("dpi"),
+        "channel_state": u.get("channel_state") or "UNKNOWN",
+        "probeable": bool(probeable),
+        # старые имена — чтобы не переписывать разбор исторических ответов
+        "id": operator,
+        "region_label": region,
+        "alive": bool(probeable),
+    }
+
+
 @router.get("/operators")
 async def operators(admin: AdminUser = Depends(require_permission("bscheck", "view"))):
     try:
-        return {"items": await bs.get_operators()}
+        units = await bs.get_operators()
     except bs.BscheckError as e:
         raise _upstream(e)
+    return {"items": [_unit_item(u) for u in units]}
 
 
 @router.post("/probe/preview")
@@ -312,6 +352,19 @@ async def scans_status(scan_id: str,
         raise _upstream(e)
 
 
+@router.post("/scans/{scan_id}/cancel")
+async def scans_cancel(scan_id: str,
+                       admin: AdminUser = Depends(require_permission("bscheck", "check"))):
+    """Остановить скан: несделанная часть гасится, платим за проверенные адреса."""
+    try:
+        res = await bs.scans_cancel(scan_id)
+    except bs.BscheckError as e:
+        raise _upstream(e)
+    await write_audit_log(admin_id=admin.account_id, admin_username=admin.username,
+                          action="bscheck.scan_cancel", resource="bscheck", resource_id=scan_id)
+    return res
+
+
 @router.post("/vless")
 async def vless_submit(data: VlessIn,
                        admin: AdminUser = Depends(require_permission("bscheck", "check"))):
@@ -331,6 +384,19 @@ async def vless_status(test_id: str,
         return await bs.vless_status(test_id)
     except bs.BscheckError as e:
         raise _upstream(e)
+
+
+@router.post("/vless/{test_id}/cancel")
+async def vless_cancel(test_id: str,
+                       admin: AdminUser = Depends(require_permission("bscheck", "check"))):
+    """Остановить VLESS-тест. Уже полученные вердикты остаются платными."""
+    try:
+        res = await bs.vless_cancel(test_id)
+    except bs.BscheckError as e:
+        raise _upstream(e)
+    await write_audit_log(admin_id=admin.account_id, admin_username=admin.username,
+                          action="bscheck.vless_cancel", resource="bscheck", resource_id=test_id)
+    return res
 
 
 # ── Журнал проверок (ноды + ad-hoc) ──────────────────────────────

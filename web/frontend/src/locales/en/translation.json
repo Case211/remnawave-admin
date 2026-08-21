@@ -4622,6 +4622,15 @@
     "uuid": "UUID:"
   },
   "bscheck": {
+    "dpiShort": {"on": "Whitelist only", "any": "Any", "off": "Without whitelist"},
+    "bsOffWarn": "Mode «without whitelist»: only units with the whitelist off are probed — shows the target on a channel with no operator filter.",
+    "cancelScan": "Stop",
+    "cancelVless": "Stop",
+    "scanCancelled": "Scan stopped: {{done}} of {{total}} addresses checked, billed proportionally",
+    "vlessCancelled": "Test stopped, {{refunded}} credits refunded",
+    "coreAuto": "Auto",
+    "usedCore": "core: {{core}}",
+    "coreRequested": "requested: {{core}}",
     "title": "BS-Check",
     "subtitle": "Test nodes through RU operators — does the IP pass whitelists / DPI (bschekbot)",
     "connectTitle": "Connect bschekbot",
