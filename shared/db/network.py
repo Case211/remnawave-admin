@@ -1409,7 +1409,8 @@ class NetworkMixin:
         async with self.acquire() as conn:
             rows = await conn.fetch(
                 f"""
-                SELECT h.user_uuid, u.username, u.status, h.platform, h.device_model,
+                SELECT h.user_uuid, u.username, u.status, u.expire_at, u.telegram_id,
+                       h.platform, h.device_model,
                        h.created_at as hwid_first_seen, h.updated_at as hwid_last_seen,
                        -- в выдаче и те, кто устройство уже отвязал: блеклист
                        -- ставят на железо, а уход с него — часть схемы обхода

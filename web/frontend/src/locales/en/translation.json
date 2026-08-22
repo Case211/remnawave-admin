@@ -3842,6 +3842,14 @@
         "label": "🔄 Sync interval (hours)",
         "description": "How often to refresh blacklists from external URLs."
       },
+      "hwid_blacklist_guard_enabled": {
+        "label": "🛡️ HWID blacklist guard",
+        "description": "Periodically check whether a subscription came back to life for anyone seen on a blacklisted device, and disable it again. Blacklist blocking happens once, while a subscription can be revived afterwards — linking a telegram_id to an email-created one already did it. Entries set to «alert» are only reported, never disabled"
+      },
+      "hwid_blacklist_guard_interval_minutes": {
+        "label": "🛡️ HWID guard interval (min)",
+        "description": "How often the guard walks the HWID blacklist. A shorter interval means a shorter window for a revived subscription to stay usable"
+      },
       "user_blacklist_auto_block": {
         "label": "⚡ Auto-block",
         "description": "Automatically block blacklisted users via Panel API. When disabled — notification only."
