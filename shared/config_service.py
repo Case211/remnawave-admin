@@ -936,6 +936,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 14,
     },
     {
+        "key": "violations_hwid_max_trial_subs",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "thresholds",
+        "display_name": "Макс. пробных подписок одного аккаунта на HWID",
+        "description": "Сколько раз один человек может взять пробную подписку с одного устройства — считая истёкшие и отключённые. Закрывает обход, где триал берут второй раз новой подпиской и привязывают к ней свой же telegram_id: по остальным проверкам это один аккаунт с одним живым триалом. Не задевает ни апгрейд «пробная → платная» (у купившего подписка уже не триальная), ни двух разных людей с общим планшетом. 0 = отключено",
+        "default_value": "1",
+        "sort_order": 14,
+    },
+    {
         "key": "violations_mobile_cgnat_buffer",
         "value_type": "int",
         "category": "violations",

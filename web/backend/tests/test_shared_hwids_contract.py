@@ -40,6 +40,8 @@ def _row(**overrides):
         "tag": "TRIAL",
         "expire_at": FUTURE,
         "raw_data": None,
+        "removed_at": None,
+        "self_removed_at": None,
         "self_telegram_id": None,
         "self_email": "Shared@Example.com",
         "self_status": "ACTIVE",
@@ -88,6 +90,9 @@ async def test_both_methods_expose_analyzer_fields():
         assert group["self_is_active"] is True
         other = group["other_users"][0]
         assert other["email"] == "shared@example.com"
+        # Отвязанное устройство — след абузера, который удалил его со старого
+        # аккаунта ради нового триала. Пропадёт из выдачи — схема снова невидима.
+        assert "removed_at" in other
         assert other["is_trial"] is True
         assert other["is_active"] is True
 

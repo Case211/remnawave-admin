@@ -1730,9 +1730,15 @@ async def get_user_deeplinks(
 @router.get("/{user_uuid}/hwid-devices", response_model=List[HwidDevice])
 async def get_user_hwid_devices(
     user_uuid: str,
+    removed: bool = False,
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
-    """Get HWID devices for a user. Reads from local DB (synced via webhooks), API as fallback."""
+    """Get HWID devices for a user. Reads from local DB (synced via webhooks), API as fallback.
+
+    ``removed=true`` отдаёт отвязанные устройства — те, что были на аккаунте и
+    исчезли. В панели их уже нет, поэтому источник только локальный: ни фолбэка
+    на API, ни синка (он бы вернул пустоту и ничего не изменил).
+    """
     await _ensure_user_visible(admin, user_uuid)
     def _parse_devices(devices: list) -> List[HwidDevice]:
         items = []
@@ -1746,8 +1752,18 @@ async def get_user_hwid_devices(
                 user_agent=d.get("userAgent") or d.get("user_agent"),
                 created_at=d.get("createdAt") or d.get("created_at"),
                 updated_at=d.get("updatedAt") or d.get("updated_at"),
+                removed_at=d.get("removed_at"),
             ))
         return items
+
+    if removed:
+        try:
+            from shared.database import db_service
+            if db_service.is_connected:
+                return _parse_devices(await db_service.get_user_hwid_devices(user_uuid, removed=True))
+        except Exception as e:
+            logger.debug("DB removed-HWID fetch failed for %s: %s", user_uuid, e)
+        return []
 
     # Read from local DB first (kept up-to-date via sync + webhooks)
     try:

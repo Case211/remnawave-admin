@@ -591,7 +591,10 @@ class NetworkMixin:
                         app_version = COALESCE(EXCLUDED.app_version, {USER_HWID_DEVICES_TABLE}.app_version),
                         user_agent = COALESCE(EXCLUDED.user_agent, {USER_HWID_DEVICES_TABLE}.user_agent),
                         updated_at = COALESCE(EXCLUDED.updated_at, NOW()),
-                        synced_at = NOW()
+                        synced_at = NOW(),
+                        -- вернулось на тот же аккаунт: обычная переустановка,
+                        -- а не новый владелец — снимаем пометку об отвязке
+                        removed_at = NULL
                     """,
                     user_uuid, hwid, platform, os_version, device_model, app_version,
                     user_agent, created_at, updated_at
@@ -615,10 +618,12 @@ class NetworkMixin:
         try:
             async with self.acquire() as conn:
                 result = await conn.execute(
-                    delete_sql(USER_HWID_DEVICES_TABLE, "user_uuid = $1 AND hwid = $2"),
+                    f"""UPDATE {USER_HWID_DEVICES_TABLE}
+                            SET removed_at = NOW()
+                          WHERE user_uuid = $1 AND hwid = $2 AND removed_at IS NULL""",
                     user_uuid, hwid
                 )
-                return "DELETE" in result
+                return "UPDATE" in result
 
         except Exception as e:
             logger.error("Error deleting HWID device for user %s: %s", user_uuid, e, exc_info=True)
@@ -626,13 +631,17 @@ class NetworkMixin:
 
     async def delete_hwid_devices_except_users(self, user_uuids: List[str]) -> int:
         """
-        Удалить HWID-записи всех юзеров, которых НЕТ в списке.
+        Пометить отвязанными HWID-записи всех юзеров, которых НЕТ в списке.
 
         Используется полным синком: юзер, у которого в панели удалили последнее
         устройство, не попадает в выдачу API вообще — per-user синк его не чистит.
 
+        Именно сюда и уезжал абузер триалов: он удаляет все свои устройства,
+        аккаунт пропадает из выдачи панели, и полный синк дочищал за ним следы.
+        Теперь строки остаются с ``removed_at``.
+
         Returns:
-            Количество удалённых записей
+            Количество помеченных записей
         """
         if not self.is_connected or not user_uuids:
             return 0
@@ -640,10 +649,13 @@ class NetworkMixin:
         try:
             async with self.acquire() as conn:
                 result = await conn.execute(
-                    delete_sql(USER_HWID_DEVICES_TABLE, "NOT (user_uuid = ANY($1::uuid[]))"),
+                    f"""UPDATE {USER_HWID_DEVICES_TABLE}
+                            SET removed_at = NOW()
+                          WHERE NOT (user_uuid = ANY($1::uuid[]))
+                            AND removed_at IS NULL""",
                     list(user_uuids),
                 )
-                if result and "DELETE" in result:
+                if result and "UPDATE" in result:
                     try:
                         return int(result.split()[1])
                     except (IndexError, ValueError):
@@ -651,15 +663,18 @@ class NetworkMixin:
                 return 0
 
         except Exception as e:
-            logger.error("Error deleting stale HWID devices: %s", e, exc_info=True)
+            logger.error("Error marking stale HWID devices removed: %s", e, exc_info=True)
             return 0
 
     async def delete_all_user_hwid_devices(self, user_uuid: str) -> int:
         """
-        Удалить все HWID устройства пользователя.
+        Отвязать все HWID устройства пользователя.
+
+        Строки не удаляются: HWID должен помнить всех, кого на нём видели,
+        иначе «сбросить устройства» становится кнопкой обхода детекта.
 
         Returns:
-            Количество удалённых записей
+            Количество помеченных записей
         """
         if not self.is_connected:
             return 0
@@ -667,11 +682,12 @@ class NetworkMixin:
         try:
             async with self.acquire() as conn:
                 result = await conn.execute(
-                    delete_sql(USER_HWID_DEVICES_TABLE, "user_uuid = $1"),
+                    f"""UPDATE {USER_HWID_DEVICES_TABLE}
+                            SET removed_at = NOW()
+                          WHERE user_uuid = $1 AND removed_at IS NULL""",
                     user_uuid
                 )
-                # Parse "DELETE X" to get count
-                if result and "DELETE" in result:
+                if result and "UPDATE" in result:
                     try:
                         return int(result.split()[1])
                     except (IndexError, ValueError):
@@ -679,12 +695,13 @@ class NetworkMixin:
                 return 0
 
         except Exception as e:
-            logger.error("Error deleting all HWID devices for user %s: %s", user_uuid, e, exc_info=True)
+            logger.error("Error removing all HWID devices for user %s: %s", user_uuid, e, exc_info=True)
             return 0
 
-    async def get_user_hwid_devices(self, user_uuid: str) -> List[Dict[str, Any]]:
-        """
-        Получить список HWID устройств пользователя.
+    async def get_user_hwid_devices(self, user_uuid: str,
+                                    removed: bool = False) -> List[Dict[str, Any]]:
+        """Устройства пользователя. ``removed=True`` — те, что отвязали:
+        строки остаются в таблице ради детекта абуза триалов.
 
         Returns:
             Список устройств с полями: hwid, platform, os_version, app_version, created_at, updated_at
@@ -698,8 +715,12 @@ class NetworkMixin:
                     select_sql(
                         USER_HWID_DEVICES_TABLE,
                         """hwid, platform, os_version, device_model, app_version,
-                           user_agent, created_at, updated_at""",
-                        "WHERE user_uuid = $1 ORDER BY created_at DESC",
+                           user_agent, created_at, updated_at, removed_at""",
+                        ("WHERE user_uuid = $1 AND removed_at IS NOT NULL "
+                         "ORDER BY removed_at DESC")
+                        if removed else
+                        ("WHERE user_uuid = $1 AND removed_at IS NULL "
+                         "ORDER BY created_at DESC"),
                     ),
                     user_uuid
                 )
@@ -722,7 +743,8 @@ class NetworkMixin:
         try:
             async with self.acquire() as conn:
                 result = await conn.fetchval(
-                    select_sql(USER_HWID_DEVICES_TABLE, "COUNT(*)", "WHERE user_uuid = $1"),
+                    select_sql(USER_HWID_DEVICES_TABLE, "COUNT(*)",
+                               "WHERE user_uuid = $1 AND removed_at IS NULL"),
                     user_uuid
                 )
                 return result or 0
@@ -887,7 +909,8 @@ class NetworkMixin:
         try:
             async with self.acquire() as conn:
                 rows = await conn.fetch(
-                    select_sql(USER_HWID_DEVICES_TABLE, "user_uuid, COUNT(*) as cnt", "GROUP BY user_uuid")
+                    select_sql(USER_HWID_DEVICES_TABLE, "user_uuid, COUNT(*) as cnt",
+                               "WHERE removed_at IS NULL GROUP BY user_uuid")
                 )
                 return {str(row["user_uuid"]): row["cnt"] for row in rows}
 
@@ -917,10 +940,12 @@ class NetworkMixin:
         try:
             async with self.acquire() as conn:
                 async with conn.transaction():
-                    # Получаем текущие HWID
+                    # Получаем текущие HWID (только привязанные: отвязанные
+                    # лежат тут же и перепомечать их незачем)
                     current_hwids = set()
                     rows = await conn.fetch(
-                        select_sql(USER_HWID_DEVICES_TABLE, "hwid", "WHERE user_uuid = $1"),
+                        select_sql(USER_HWID_DEVICES_TABLE, "hwid",
+                                   "WHERE user_uuid = $1 AND removed_at IS NULL"),
                         user_uuid
                     )
                     current_hwids = {row['hwid'] for row in rows}
@@ -932,14 +957,20 @@ class NetworkMixin:
                         if hwid:
                             new_hwids.add(hwid)
 
-                    # Удаляем устройства, которых больше нет
-                    to_delete = current_hwids - new_hwids
-                    if to_delete:
+                    # Помечаем отвязанными те, которых в панели больше нет.
+                    # Раньше строки удалялись — и синк молча затирал историю,
+                    # на которой стоит детект абуза триалов.
+                    to_remove = current_hwids - new_hwids
+                    if to_remove:
                         await conn.execute(
-                            delete_sql(USER_HWID_DEVICES_TABLE, "user_uuid = $1 AND hwid = ANY($2)"),
-                            user_uuid, list(to_delete)
+                            f"""UPDATE {USER_HWID_DEVICES_TABLE}
+                                    SET removed_at = NOW()
+                                  WHERE user_uuid = $1 AND hwid = ANY($2)
+                                    AND removed_at IS NULL""",
+                            user_uuid, list(to_remove)
                         )
-                        logger.debug("Deleted %d old HWID devices for user %s", len(to_delete), user_uuid)
+                        logger.debug("Marked %d HWID devices removed for user %s",
+                                     len(to_remove), user_uuid)
 
                     # Добавляем/обновляем устройства
                     synced = 0
@@ -975,7 +1006,10 @@ class NetworkMixin:
                                 app_version = COALESCE(EXCLUDED.app_version, {USER_HWID_DEVICES_TABLE}.app_version),
                                 user_agent = COALESCE(EXCLUDED.user_agent, {USER_HWID_DEVICES_TABLE}.user_agent),
                                 updated_at = COALESCE(EXCLUDED.updated_at, NOW()),
-                                synced_at = NOW()
+                                synced_at = NOW(),
+                                -- панель снова отдаёт устройство этому же
+                                -- аккаунту: переустановка, а не новый владелец
+                                removed_at = NULL
                             """,
                             user_uuid, hwid, platform, os_version, device_model,
                             app_version, user_agent, created_at, updated_at
@@ -1001,10 +1035,12 @@ class NetworkMixin:
         try:
             async with self.acquire() as conn:
                 # Общая статистика
+                # Отвязанные не в счёт: это история для детекта, а не парк устройств
                 stats = await conn.fetchrow(
                     select_sql(
                         USER_HWID_DEVICES_TABLE,
                         "COUNT(*) as total_devices, COUNT(DISTINCT user_uuid) as unique_users",
+                        "WHERE removed_at IS NULL",
                     ),
                 )
 
@@ -1013,7 +1049,7 @@ class NetworkMixin:
                     select_sql(
                         USER_HWID_DEVICES_TABLE,
                         "COALESCE(platform, 'unknown') as platform, COUNT(*) as count",
-                        "GROUP BY platform ORDER BY count DESC",
+                        "WHERE removed_at IS NULL GROUP BY platform ORDER BY count DESC",
                     ),
                 )
 
@@ -1050,6 +1086,9 @@ class NetworkMixin:
                     )
                     SELECT h.hwid, h.platform, h.device_model, h.app_version,
                            h.created_at as hwid_first_seen,
+                           -- отвязанные тоже здесь: без них связка «старый
+                           -- аккаунт → новый на том же железе» не видна
+                           h.removed_at,
                            u.uuid::text as user_uuid, u.username, u.status,
                            u.created_at as user_created_at,
                            u.expire_at,
@@ -1089,6 +1128,7 @@ class NetworkMixin:
                         "status": r["status"],
                         "created_at": r["user_created_at"].isoformat() if r["user_created_at"] else None,
                         "hwid_first_seen": r["hwid_first_seen"].isoformat() if r["hwid_first_seen"] else None,
+                        "removed_at": r["removed_at"].isoformat() if r["removed_at"] else None,
                         "expire_date": expire_at.isoformat() if expire_at else None,
                         "is_active": is_active,
                         "is_trial": is_trial,
@@ -1126,6 +1166,11 @@ class NetworkMixin:
                 rows = await conn.fetch(
                     f"""
                     SELECT h2.hwid,
+                           -- Отвязанные устройства остаются в выдаче: схема
+                           -- «удалил → новый аккаунт → тот же HWID → триал»
+                           -- иначе не видна, в снимке аккаунт всегда один.
+                           h2.removed_at AS removed_at,
+                           h1.removed_at AS self_removed_at,
                            u.uuid::text  AS user_uuid,
                            u.username,
                            u.status,
@@ -1177,6 +1222,9 @@ class NetworkMixin:
                         "email": r["email"],
                         "is_trial": _is_trial_user(r["tag"], r["raw_data"], trial_tags, trial_squads),
                         "is_active": _subscription_is_active(r["expire_at"], r["status"]),
+                        # Устройство у этого аккаунта уже отвязано: связь
+                        # историческая, но для детекта абуза она и важна
+                        "removed_at": r["removed_at"],
                     })
 
                 return list(groups.values())
@@ -1362,7 +1410,10 @@ class NetworkMixin:
             rows = await conn.fetch(
                 f"""
                 SELECT h.user_uuid, u.username, u.status, h.platform, h.device_model,
-                       h.created_at as hwid_first_seen, h.updated_at as hwid_last_seen
+                       h.created_at as hwid_first_seen, h.updated_at as hwid_last_seen,
+                       -- в выдаче и те, кто устройство уже отвязал: блеклист
+                       -- ставят на железо, а уход с него — часть схемы обхода
+                       h.removed_at
                 FROM {USER_HWID_DEVICES_TABLE} h
                 LEFT JOIN {USERS_TABLE} u ON u.uuid = h.user_uuid
                 WHERE h.hwid = $1

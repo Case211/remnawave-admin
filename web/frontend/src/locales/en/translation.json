@@ -879,6 +879,10 @@
       "app": "App",
       "userAgent": "User Agent",
       "added": "Added",
+      "removedAt": "Unlinked",
+      "tabActive": "Current",
+      "tabRemoved": "Removed",
+      "removedHint": "Previously present on this account but were removed. The records are kept so that re-linking the same device to another account stays visible.",
       "uaBadge": {
         "linkInUa": "Double tunnel",
         "botLibrary": "Bot/script",
@@ -3661,6 +3665,10 @@
       "violations_hwid_max_active_trials": {
         "label": "🎁 Max active trials per HWID",
         "description": "How many distinct accounts with a LIVE trial subscription may share one device without triggering. Catches trial farming via fresh accounts while ignoring both the normal «trial expired → paid plan purchased» upgrade and two paying people sharing a device. Trial status is determined by the tag and internal squad settings below. 0 = disabled"
+      },
+      "violations_hwid_max_trial_subs": {
+        "label": "♻️ Max trial subscriptions per account per HWID",
+        "description": "How many times one person may take a trial from the same device — counting expired and disabled ones. Closes the workaround where a second trial is taken on a fresh subscription with the same telegram_id linked to it: to every other check that is one account with one live trial. Ignores both the «trial → paid» upgrade and two different people sharing a tablet. 0 = disabled"
       },
       "violations_mobile_cgnat_buffer": {
         "label": "📱 Mobile CGNAT buffer (IPs)",

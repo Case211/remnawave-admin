@@ -508,6 +508,24 @@ class IntelligentViolationDetector:
                     f"с активным триалом на одном устройстве (порог: {max_active_trials})"
                 )
 
+            # 7) Повторный триал с одного устройства. Проверки 5 и 6 считают
+            # аккаунты, а аккаунт схлопывается по telegram_id — привязал свой же
+            # телеграм ко второй подписке, и для них абуза нет. Эта считает сами
+            # пробные подписки на железе и потому таким приёмом не обходится.
+            max_trial_subs = config_service.get("violations_hwid_max_trial_subs", 1)
+            try:
+                max_trial_subs = int(max_trial_subs)
+            except (TypeError, ValueError):
+                max_trial_subs = 1
+            hwid_trial_subs = getattr(hwid_score, 'max_trial_subs_per_hwid', 0)
+            if max_trial_subs > 0 and hwid_trial_subs > max_trial_subs:
+                # Текст дословно повторяет причину HwidCrossAccountAnalyzer —
+                # причины дедуплицируются по строке.
+                extreme_abuse_reasons.append(
+                    f"Повторный триал на одном устройстве: {hwid_trial_subs} пробных "
+                    f"подписок одного аккаунта на одном HWID (порог: {max_trial_subs})"
+                )
+
             if extreme_abuse_reasons:
                 raw_score = 100.0
                 all_reasons_extra = extreme_abuse_reasons  # Will be added below

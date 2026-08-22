@@ -615,7 +615,7 @@ class UsersMixin:
         try:
             async with self.acquire() as conn:
                 rows = await conn.fetch(
-                    select_sql(USER_HWID_DEVICES_TABLE, "user_uuid, COUNT(*) as cnt", "WHERE user_uuid = ANY($1::uuid[]) GROUP BY user_uuid"),
+                    select_sql(USER_HWID_DEVICES_TABLE, "user_uuid, COUNT(*) as cnt", "WHERE user_uuid = ANY($1::uuid[]) AND removed_at IS NULL GROUP BY user_uuid"),
                     user_uuids
                 )
                 return {str(row["user_uuid"]): row["cnt"] for row in rows}

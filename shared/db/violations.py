@@ -1640,6 +1640,11 @@ class ViolationsMixin:
                     f"""
                     SELECT h1.user_uuid::text AS source_uuid,
                            h2.hwid,
+                           -- отвязанные устройства остаются в выдаче: схема
+                           -- «удалил → новый аккаунт → тот же HWID → триал»
+                           -- иначе не видна, в снимке аккаунт всегда один
+                           h2.removed_at AS removed_at,
+                           h1.removed_at AS self_removed_at,
                            u.uuid::text AS user_uuid,
                            u.username, u.status, u.telegram_id,
                            u.email, u.tag, u.expire_at, u.raw_data,
@@ -1688,6 +1693,9 @@ class ViolationsMixin:
                     "email": r["email"],
                     "is_trial": _is_trial_user(r["tag"], r["raw_data"], trial_tags, trial_squads),
                     "is_active": _subscription_is_active(r["expire_at"], r["status"]),
+                    # Устройство у этого аккаунта уже отвязано: связь
+                    # историческая, но для детекта абуза она и важна
+                    "removed_at": r["removed_at"],
                 })
 
             for src, hwid_groups in temp.items():
@@ -1712,7 +1720,8 @@ class ViolationsMixin:
                         "user_uuid::text, hwid, platform, os_version, "
                         "device_model, app_version, user_agent, "
                         "created_at, updated_at",
-                        "WHERE user_uuid = ANY($1::uuid[]) ORDER BY user_uuid, created_at DESC",
+                        "WHERE user_uuid = ANY($1::uuid[]) AND removed_at IS NULL "
+                        "ORDER BY user_uuid, created_at DESC",
                     ),
                     user_uuids,
                 )

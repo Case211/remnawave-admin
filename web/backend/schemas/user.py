@@ -141,6 +141,9 @@ class HwidDevice(BaseModel):
     user_agent: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # Когда устройство отвязали. Строка живёт дальше: HWID должен помнить всех,
+    # кого на нём видели, иначе повторный триал с того же железа не разглядеть.
+    removed_at: Optional[datetime] = None
 
 
 class UserConnection(BaseModel):
