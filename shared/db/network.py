@@ -1237,20 +1237,116 @@ class NetworkMixin:
 
     async def get_blocked_ips(
         self, limit: int = 50, offset: int = 0, include_expired: bool = False,
+        days: int = 30,
     ) -> List[Dict[str, Any]]:
-        """Get blocked IPs with pagination."""
+        """Записи стоп-листа со счётчиками: кого этот адрес задевает.
+
+        Без счётчиков список — просто столбик адресов: не видно, отрезали вы
+        одного абузера или подсеть, за которой сидит десяток живых абонентов.
+        Считаются только адреса из истории подключений за окно, пробные —
+        отдельно, они и есть повод для большинства блокировок.
+        """
         if not self.is_connected:
             return []
+
+        trial_tags, _ = _load_trial_settings()
+        tags = [t for t in (trial_tags or []) if t] or ['__none__']
+
         try:
             where = "" if include_expired else "WHERE expires_at IS NULL OR expires_at > NOW()"
             async with self.acquire() as conn:
                 rows = await conn.fetch(
-                    select_sql(BLOCKED_IPS_TABLE, "*", f"{where} ORDER BY created_at DESC LIMIT $1 OFFSET $2"),
-                    limit, offset,
+                    f"""
+                    SELECT b.*, s.accounts, s.trial_accounts, s.last_seen
+                      FROM (
+                        SELECT * FROM {BLOCKED_IPS_TABLE}
+                        {where}
+                        ORDER BY created_at DESC
+                        LIMIT $1 OFFSET $2
+                      ) b
+                      LEFT JOIN LATERAL (
+                        SELECT COUNT(DISTINCT c.user_uuid) AS accounts,
+                               COUNT(DISTINCT c.user_uuid)
+                                   FILTER (WHERE u.tag = ANY($3::text[])) AS trial_accounts,
+                               MAX(c.connected_at) AS last_seen
+                          FROM {USER_CONNECTIONS_TABLE} c
+                          JOIN {USERS_TABLE} u ON u.uuid = c.user_uuid
+                         WHERE c.connected_at > NOW() - ($4 || ' days')::interval
+                           AND c.ip_address ~ '^[0-9.]+$'
+                           AND c.ip_address::inet <<= b.ip_cidr
+                      ) s ON TRUE
+                    """,
+                    limit, offset, tags, str(days),
                 )
                 return [dict(r) for r in rows]
         except Exception as e:
             logger.error("Error getting blocked IPs: %s", e)
+            return []
+
+    async def get_blocked_ip_by_id(self, block_id: int) -> Optional[Dict[str, Any]]:
+        """Запись стоп-листа по идентификатору."""
+        if not self.is_connected:
+            return None
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(
+                    select_sql(BLOCKED_IPS_TABLE, "*", "WHERE id = $1"), block_id
+                )
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error("Error getting blocked IP %s: %s", block_id, e)
+            return None
+
+    async def get_users_by_blocked_ip(
+        self, ip_cidr: str, days: int = 30, limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Кто заходил с адреса (или из подсети) за окно — для разбора блокировки."""
+        if not self.is_connected:
+            return []
+
+        trial_tags, trial_squads = _load_trial_settings()
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT c.user_uuid::text AS user_uuid,
+                           COUNT(*)            AS conns,
+                           MIN(c.connected_at) AS first_seen,
+                           MAX(c.connected_at) AS last_seen,
+                           MAX(c.ip_address)   AS sample_ip,
+                           u.username, u.status, u.telegram_id, u.email,
+                           u.tag, u.expire_at, u.raw_data
+                      FROM {USER_CONNECTIONS_TABLE} c
+                      JOIN {USERS_TABLE} u ON u.uuid = c.user_uuid
+                     WHERE c.connected_at > NOW() - ($2 || ' days')::interval
+                       AND c.ip_address ~ '^[0-9.]+$'
+                       AND c.ip_address::inet <<= $1::cidr
+                     GROUP BY c.user_uuid, u.username, u.status, u.telegram_id,
+                              u.email, u.tag, u.expire_at, u.raw_data
+                     ORDER BY COUNT(*) DESC
+                     LIMIT $3
+                    """,
+                    ip_cidr, str(days), limit,
+                )
+
+            return [{
+                "user_uuid": r["user_uuid"],
+                "username": r["username"],
+                "status": r["status"],
+                "telegram_id": r["telegram_id"],
+                "email": r["email"],
+                "expire_at": r["expire_at"],
+                "conns": r["conns"],
+                "first_seen": r["first_seen"],
+                "last_seen": r["last_seen"],
+                "sample_ip": r["sample_ip"],
+                "is_trial": _is_trial_user(r["tag"], r["raw_data"], trial_tags, trial_squads),
+                "is_active": _subscription_is_active(r["expire_at"], r["status"]),
+            } for r in rows]
+
+        except Exception as e:
+            logger.error("Error getting users by blocked IP %s: %s", ip_cidr, e)
             return []
 
     async def get_blocked_ips_count(self, include_expired: bool = False) -> int:
@@ -1417,6 +1513,117 @@ class NetworkMixin:
                 delete_sql(HWID_BLACKLIST_TABLE, "hwid = $1"), hwid
             )
             return "DELETE 1" in result
+
+    async def get_shared_ip_accounts(
+        self, min_accounts: int = 2, days: int = 30, limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Адреса, с которых за период заходили несколько разных ПРОБНЫХ подписок.
+
+        Считаются только пробные: за адресом домашнего провайдера живёт целая
+        квартира, а за адресом оператора — целый район, поэтому «сколько всего
+        аккаунтов» само по себе ничего не значит. А вот несколько пробных
+        подписок с одного адреса — это уже вопрос.
+
+        Служебные и операторские диапазоны отсекаются: 127.0.0.1 набирает
+        аккаунтов больше любого живого абузера, а 100.64/10 — общий CGNAT
+        мобильного оператора. Метаданные адреса приезжают вместе с выдачей:
+        без ``is_mobile`` отличить абуз от нормального оператора нельзя.
+        """
+        if not self.is_connected:
+            return []
+
+        trial_tags, trial_squads = _load_trial_settings()
+        tags = [t for t in (trial_tags or []) if t]
+        if not tags:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""
+                    WITH pairs AS (
+                        SELECT c.ip_address,
+                               c.user_uuid,
+                               COUNT(*)              AS conns,
+                               MIN(c.connected_at)   AS first_seen,
+                               MAX(c.connected_at)   AS last_seen
+                          FROM {USER_CONNECTIONS_TABLE} c
+                          JOIN {USERS_TABLE} tu ON tu.uuid = c.user_uuid
+                         WHERE c.connected_at > NOW() - ($2 || ' days')::interval
+                           -- считаем только пробные: на адресе провайдера живёт
+                           -- целый дом, и сам по себе он ни о чём не говорит
+                           AND tu.tag = ANY($4::text[])
+                           -- служебные и операторские адреса из счёта вон:
+                           -- 127.0.0.1 у нас собирает больше аккаунтов, чем любой
+                           -- реальный абузер, а 100.64/10 — это CGNAT оператора
+                           AND c.ip_address ~ '^[0-9.]+$'
+                           AND NOT (c.ip_address::inet <<= '127.0.0.0/8'
+                                 OR c.ip_address::inet <<= '10.0.0.0/8'
+                                 OR c.ip_address::inet <<= '172.16.0.0/12'
+                                 OR c.ip_address::inet <<= '192.168.0.0/16'
+                                 OR c.ip_address::inet <<= '100.64.0.0/10')
+                         GROUP BY c.ip_address, c.user_uuid
+                    ), shared AS (
+                        SELECT ip_address, COUNT(*) AS accounts
+                          FROM pairs
+                         GROUP BY ip_address
+                        HAVING COUNT(*) >= $1
+                         ORDER BY COUNT(*) DESC
+                         LIMIT $3
+                    )
+                    SELECT s.ip_address::text AS ip,
+                           s.accounts,
+                           p.user_uuid::text  AS user_uuid,
+                           p.conns,
+                           p.first_seen,
+                           p.last_seen,
+                           u.username, u.status, u.telegram_id, u.email,
+                           u.tag, u.expire_at, u.created_at AS user_created_at,
+                           u.raw_data,
+                           m.is_mobile, m.is_proxy, m.is_hosting,
+                           m.asn_org, m.country_code
+                      FROM shared s
+                      JOIN pairs p ON p.ip_address = s.ip_address
+                      JOIN {USERS_TABLE} u ON u.uuid = p.user_uuid
+                      LEFT JOIN {IP_METADATA_TABLE} m ON m.ip_address = s.ip_address
+                     ORDER BY s.accounts DESC, s.ip_address, p.conns DESC
+                    """,
+                    min_accounts, str(days), limit, tags,
+                )
+
+            groups: Dict[str, Dict[str, Any]] = {}
+            for row in rows:
+                ip = row["ip"]
+                if ip not in groups:
+                    groups[ip] = {
+                        "ip": ip,
+                        "accounts": row["accounts"],
+                        "is_mobile": bool(row["is_mobile"]),
+                        "is_proxy": bool(row["is_proxy"]),
+                        "is_hosting": bool(row["is_hosting"]),
+                        "asn_org": row["asn_org"],
+                        "country_code": row["country_code"],
+                        "users": [],
+                    }
+                groups[ip]["users"].append({
+                    "uuid": row["user_uuid"],
+                    "username": row["username"],
+                    "status": row["status"],
+                    "telegram_id": row["telegram_id"],
+                    "email": row["email"],
+                    "expire_at": row["expire_at"],
+                    "created_at": row["user_created_at"],
+                    "conns": row["conns"],
+                    "first_seen": row["first_seen"],
+                    "last_seen": row["last_seen"],
+                    "is_trial": _is_trial_user(row["tag"], row["raw_data"], trial_tags, trial_squads),
+                    "is_active": _subscription_is_active(row["expire_at"], row["status"]),
+                })
+            return list(groups.values())
+
+        except Exception as e:
+            logger.error("Error getting shared IP accounts: %s", e, exc_info=True)
+            return []
 
     async def find_users_by_hwid(self, hwid: str) -> List[Dict[str, Any]]:
         """Find all users that have a specific HWID."""

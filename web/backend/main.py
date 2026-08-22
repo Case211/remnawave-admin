@@ -670,6 +670,12 @@ async def lifespan(app: FastAPI):
                     from web.backend.core.hwid_guard import loop as _hwid_guard_loop
                     _bg("hwid_blacklist_guard", _hwid_guard_loop())
 
+                    # Сторож адресов. HWID клиент называет сам и подделывает
+                    # заголовком, адрес выдаёт провайдер — по нему повторные
+                    # пробные видно даже там, где железо каждый раз «новое».
+                    from web.backend.core.ip_guard import loop as _ip_guard_loop
+                    _bg("ip_trial_guard", _ip_guard_loop())
+
                 # ── Services for all modes ──
                 async def _maintenance_loop():
                     while True:

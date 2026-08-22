@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { Fragment, useState, useCallback, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -69,6 +69,28 @@ interface BlockedIP {
   asn_org: string | null
   expires_at: string | null
   created_at: string | null
+  // счётчики считает бэкенд по истории подключений: без них из списка не
+  // понять, отрезан один абузер или подсеть с живыми абонентами
+  accounts?: number | null
+  trial_accounts?: number | null
+  last_seen?: string | null
+}
+
+type IpSort = 'recent' | 'oldest' | 'accounts' | 'expiring'
+
+interface BlockedIPUser {
+  user_uuid: string
+  username: string | null
+  status: string | null
+  telegram_id: number | null
+  email: string | null
+  expire_at: string | null
+  conns: number
+  first_seen: string | null
+  last_seen: string | null
+  sample_ip: string | null
+  is_trial: boolean
+  is_active: boolean
 }
 
 interface BlockedIPListResponse {
@@ -125,14 +147,53 @@ function BlockedIPsTab() {
   const [bulkReason, setBulkReason] = useState('')
   const [bulkDuration, setBulkDuration] = useState('forever')
 
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<IpSort>('recent')
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['blocked-ips', offset],
     queryFn: () => fetchBlockedIPs(PAGE_SIZE, offset),
     placeholderData: (prev) => prev,
   })
 
-  const items = Array.isArray(data?.items) ? data.items : []
+  // Кто заходил с адреса — тянем только для раскрытой строки
+  const { data: ipUsers, isFetching: ipUsersFetching } = useQuery({
+    queryKey: ['blocked-ip-users', expandedId],
+    queryFn: async () => {
+      const { data } = await client.get(`/blocked-ips/${expandedId}/users`)
+      return data as { ip_cidr: string; users: BlockedIPUser[]; total: number }
+    },
+    enabled: expandedId !== null,
+  })
+
+  const rawItems = Array.isArray(data?.items) ? data.items : []
   const total = data?.total ?? 0
+
+  const stats = {
+    total,
+    forever: rawItems.filter((i) => !i.expires_at).length,
+    temporary: rawItems.filter((i) => !!i.expires_at).length,
+    affecting: rawItems.filter((i) => (i.accounts ?? 0) > 0).length,
+  }
+
+  const ipQuery = search.trim().toLowerCase()
+  const items = rawItems
+    .filter((i) => !ipQuery
+      || i.ip_cidr.toLowerCase().includes(ipQuery)
+      || (i.reason || '').toLowerCase().includes(ipQuery)
+      || (i.asn_org || '').toLowerCase().includes(ipQuery))
+    .sort((a, b) => {
+      if (sortBy === 'accounts') return (b.accounts ?? 0) - (a.accounts ?? 0)
+      if (sortBy === 'oldest') return (a.created_at || '').localeCompare(b.created_at || '')
+      if (sortBy === 'expiring') {
+        // бессрочные в конец: у них нет даты, по которой их можно торопить
+        if (!a.expires_at) return 1
+        if (!b.expires_at) return -1
+        return a.expires_at.localeCompare(b.expires_at)
+      }
+      return (b.created_at || '').localeCompare(a.created_at || '')
+    })
 
   const addMutation = useMutation({
     mutationFn: (body: { ip_cidr: string; reason?: string; expires_in_hours?: number | null }) =>
@@ -256,6 +317,50 @@ function BlockedIPsTab() {
         )}
       </div>
 
+      {/* Сводка: сколько записей и сколько из них кого-то реально задевают */}
+      {rawItems.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <HwidStatTile label={t('blockedIPs.stats.total')} value={stats.total} icon={ShieldBan} />
+          <HwidStatTile label={t('blockedIPs.stats.forever')} value={stats.forever} icon={Ban} tone="red" />
+          <HwidStatTile label={t('blockedIPs.stats.temporary')} value={stats.temporary} icon={Calendar} tone="amber" />
+          <HwidStatTile
+            label={t('blockedIPs.stats.affecting')}
+            value={stats.affecting}
+            icon={Users}
+            tone={stats.affecting > 0 ? 'red' : 'muted'}
+            active={sortBy === 'accounts'}
+            onClick={() => setSortBy('accounts')}
+          />
+        </div>
+      )}
+
+      {/* Поиск и сортировка */}
+      {rawItems.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('blockedIPs.searchPlaceholder')}
+              className="pl-9"
+            />
+          </div>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as IpSort)}>
+            <SelectTrigger className="w-full sm:w-[210px]">
+              <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 text-dark-400" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="recent">{t('blockedIPs.sort.recent')}</SelectItem>
+              <SelectItem value="oldest">{t('blockedIPs.sort.oldest')}</SelectItem>
+              <SelectItem value="accounts">{t('blockedIPs.sort.accounts')}</SelectItem>
+              <SelectItem value="expiring">{t('blockedIPs.sort.expiring')}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-x-auto rounded-md border">
         <Table>
@@ -264,6 +369,7 @@ function BlockedIPsTab() {
               <TableHead>{t('blockedIPs.columns.ipCidr')}</TableHead>
               <TableHead className="hidden sm:table-cell">{t('blockedIPs.columns.country')}</TableHead>
               <TableHead className="hidden md:table-cell">{t('blockedIPs.columns.asnProvider')}</TableHead>
+              <TableHead>{t('blockedIPs.columns.affects')}</TableHead>
               <TableHead>{t('blockedIPs.columns.reason')}</TableHead>
               <TableHead className="hidden lg:table-cell">{t('blockedIPs.columns.addedBy')}</TableHead>
               <TableHead className="hidden md:table-cell">{t('blockedIPs.columns.created')}</TableHead>
@@ -278,6 +384,7 @@ function BlockedIPsTab() {
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-8" /></TableCell>
                   <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
@@ -287,18 +394,46 @@ function BlockedIPsTab() {
               ))
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canDelete ? 8 : 7} className="py-12 text-center text-muted-foreground">
+                <TableCell colSpan={canDelete ? 9 : 8} className="py-12 text-center text-muted-foreground">
                   {t('blockedIPs.empty')}
                 </TableCell>
               </TableRow>
             ) : (
               items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-mono text-sm">{item.ip_cidr}</TableCell>
+                <Fragment key={item.id}>
+                <TableRow
+                  className="cursor-pointer"
+                  onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                >
+                  <TableCell className="font-mono text-sm">
+                    <span className="inline-flex items-center gap-1.5">
+                      {expandedId === item.id
+                        ? <ChevronUp className="h-3.5 w-3.5 text-dark-300 shrink-0" />
+                        : <ChevronDown className="h-3.5 w-3.5 text-dark-300 shrink-0" />}
+                      {item.ip_cidr}
+                    </span>
+                  </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     {item.country_code ? <span title={item.country_code}>{item.country_code}</span> : '—'}
                   </TableCell>
                   <TableCell className="hidden md:table-cell max-w-[200px] truncate">{item.asn_org || '—'}</TableCell>
+                  <TableCell>
+                    {(item.accounts ?? 0) > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-[10px] gap-1">
+                          <Users className="h-3 w-3" />
+                          {item.accounts}
+                        </Badge>
+                        {(item.trial_accounts ?? 0) > 0 && (
+                          <Badge className="text-[10px] bg-amber-500/20 text-amber-300 border-amber-500/40">
+                            {t('blockedIPs.trialsBadge', { count: item.trial_accounts ?? 0 })}
+                          </Badge>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="max-w-[150px] truncate">{item.reason || '—'}</TableCell>
                   <TableCell className="hidden lg:table-cell">{item.added_by_username || '—'}</TableCell>
                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{formatDate(item.created_at)}</TableCell>
@@ -307,12 +442,29 @@ function BlockedIPsTab() {
                   </TableCell>
                   {canDelete && (
                     <TableCell>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => setDeleteTarget(item)} aria-label={t('common.delete')}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-red-500 hover:text-red-600"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(item) }}
+                        aria-label={t('common.delete')}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   )}
                 </TableRow>
+                {expandedId === item.id && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={canDelete ? 9 : 8} className="bg-[var(--glass-bg)]/30 py-3">
+                      <BlockedIpUsers
+                        users={ipUsers?.users}
+                        loading={ipUsersFetching && !ipUsers}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )}
+                </Fragment>
               ))
             )}
           </TableBody>
@@ -763,6 +915,55 @@ function HwidBlacklistTab() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Кто заходил с заблокированного адреса — разворот строки стоп-листа. */
+function BlockedIpUsers({ users, loading }: { users?: BlockedIPUser[]; loading: boolean }) {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+  const navigate = useNavigate()
+
+  if (loading) return <Skeleton className="h-10 w-full" />
+  if (!users?.length) {
+    return (
+      <div className="text-xs text-dark-400 space-y-1">
+        <p>{t('blockedIPs.noUsers')}</p>
+        <p className="text-dark-500">{t('blockedIPs.noUsersHint')}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-dark-400 mb-2">{t('blockedIPs.affectedUsers', { count: users.length })}</p>
+      {users.map((u) => (
+        <button
+          key={u.user_uuid}
+          type="button"
+          onClick={() => navigate(`/users/${u.user_uuid}`)}
+          className="w-full flex items-center gap-2 text-xs rounded-md px-2 py-1.5 text-left hover:bg-[var(--glass-bg-hover)] transition-colors group"
+        >
+          <User className="w-3 h-3 text-dark-400 shrink-0" />
+          <span className="text-white truncate">{u.username || u.user_uuid.slice(0, 8)}</span>
+          {u.telegram_id && <span className="text-dark-400 shrink-0">#{u.telegram_id}</span>}
+          {u.is_trial && (
+            <Badge className="text-[9px] py-0 bg-amber-500/20 text-amber-300 border-amber-500/40 shrink-0">
+              {t('blockedIPs.trialLabel')}
+            </Badge>
+          )}
+          <span className="flex-1" />
+          <span className="text-dark-400 shrink-0">{t('blockedIPs.connsShort', { count: u.conns })}</span>
+          {u.last_seen && (
+            <span className="text-dark-400 shrink-0 hidden sm:inline">{formatDate(u.last_seen)}</span>
+          )}
+          <Badge className={cn('text-[9px] py-0 shrink-0', u.is_active ? 'bg-green-500/20 text-green-400' : 'bg-dark-600 text-dark-300')}>
+            {u.status || '—'}
+          </Badge>
+          <ExternalLink className="w-3 h-3 text-dark-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        </button>
+      ))}
     </div>
   )
 }

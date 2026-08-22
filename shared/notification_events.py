@@ -37,6 +37,8 @@ CATALOG: List[Dict[str, Any]] = [
             _e("violation.hwid_blacklist", "Совпадение с HWID-blacklist", "critical"),
             _e("violation.hwid_reused", "HWID переехал на другой аккаунт", "warning"),
             _e("violation.hwid_blacklist_revived", "Подписка ожила на HWID из чёрного списка", "critical"),
+            _e("violation.ip_trial_reuse", "Несколько пробных подписок с одного адреса", "warning"),
+            _e("violation.ip_blocked", "Адрес занесён в стоп-лист", "warning"),
         ],
     },
     {

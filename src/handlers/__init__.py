@@ -15,6 +15,7 @@ from src.handlers.reports import router as reports_router
 from src.handlers.resources import router as resources_router
 from src.handlers.system import router as system_router
 from src.handlers.users import router as users_router
+from src.handlers.ip_actions import router as ip_actions_router
 from src.handlers.violation_actions import router as violation_actions_router
 from src.handlers.finance_actions import router as finance_actions_router
 from src.handlers.plugin_actions import router as plugin_actions_router
@@ -26,6 +27,7 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.include_router(commands_router)
     dp.include_router(navigation_router)
     dp.include_router(violation_actions_router)
+    dp.include_router(ip_actions_router)
     dp.include_router(finance_actions_router)
     dp.include_router(plugin_actions_router)
     dp.include_router(filters_router)
