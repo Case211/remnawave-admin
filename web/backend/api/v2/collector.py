@@ -1332,6 +1332,85 @@ def _verify_webhook_signature(request: Request, body: bytes) -> bool:
         return False
 
 
+def _person_key(telegram_id, email, uuid: str):
+    """Человек за подпиской: telegram_id → email → uuid.
+
+    Та же лесенка, что у HWID-анализатора: несколько подписок одного человека
+    (мультитариф Bedolaga, регистрация без Telegram) считаются одним аккаунтом.
+    """
+    if telegram_id is not None:
+        return ("tg", telegram_id)
+    normalized = (email or "").strip().lower()
+    return ("email", normalized) if normalized else ("uuid", uuid)
+
+
+async def _notify_hwid_reuse(sync_result: dict) -> None:
+    """Устройство привязали к аккаунту, а его уже видели на другом — сказать сразу.
+
+    Периодический скан заметит это в течение получаса, и всё это время свежий
+    триал работает. Вебхук приходит в момент привязки, поэтому окно закрывается
+    здесь. Шумим не на всякое совпадение: пара «пробная → купленная» у одного
+    человека — это конверсия, а не абуз, и по журналу она встречается впятеро
+    чаще реальных нарушений.
+    """
+    user_uuid = sync_result.get("user_uuid")
+    hwid = sync_result.get("hwid")
+    if not user_uuid or not hwid or not db_service.is_connected:
+        return
+    if not config_service.get("violations_enabled", True):
+        return
+
+    try:
+        groups = await db_service.get_shared_hwids_for_user(str(user_uuid))
+    except Exception as e:  # noqa: BLE001
+        logger.debug("HWID reuse check failed for %s: %s", user_uuid, e)
+        return
+
+    group = next((g for g in groups if g.get("hwid") == hwid), None)
+    others = (group or {}).get("other_users") or []
+    if not others:
+        return
+
+    self_key = _person_key(group.get("self_telegram_id"), group.get("self_email"), str(user_uuid))
+    self_trial = bool(group.get("self_is_trial"))
+
+    strangers, repeat_trials = [], []
+    for other in others:
+        key = _person_key(other.get("telegram_id"), other.get("email"), other.get("uuid", ""))
+        label = other.get("username") or (other.get("uuid") or "")[:8]
+        if other.get("removed_at"):
+            label += " (устройство отвязано)"
+        if key != self_key:
+            strangers.append(label)
+        elif self_trial and other.get("is_trial"):
+            repeat_trials.append(label)
+
+    if not strangers and not repeat_trials:
+        return
+
+    from web.backend.core.notification_service import create_notification
+    lines = []
+    if repeat_trials:
+        lines.append("Повторная пробная подписка того же человека: " + ", ".join(repeat_trials[:5]))
+    if strangers:
+        lines.append("Устройство уже видели на других аккаунтах: " + ", ".join(strangers[:5]))
+    try:
+        await create_notification(
+            title="HWID переехал на другой аккаунт",
+            body="HWID %s...\n%s" % (str(hwid)[:16], "\n".join(lines)),
+            type="alert",
+            severity="critical" if repeat_trials else "warning",
+            link="/violations",
+            source="hwid_reuse",
+            source_id=str(hwid),
+            channels=["in_app", "telegram", "push"],
+            topic_type="violations",
+            event="violation.hwid_reused",
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("HWID reuse notification failed: %s", e)
+
+
 @router.post("/webhook")
 async def collector_webhook(request: Request):
     """Webhook proxy: sync to DB, then forward to bot for Telegram notifications."""
@@ -1353,7 +1432,9 @@ async def collector_webhook(request: Request):
     # 1. Sync to DB (collector owns sync)
     try:
         from shared.sync import sync_service
-        await sync_service.handle_webhook_event(event, event_data)
+        sync_result = await sync_service.handle_webhook_event(event, event_data)
+        if event == "user_hwid_devices.added":
+            await _notify_hwid_reuse(sync_result or {})
     except Exception as e:
         logger.warning("Webhook sync failed for %s: %s", event, e)
 

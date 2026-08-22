@@ -1876,7 +1876,27 @@
       "added": "HWID добавлен в blacklist. Затронуто пользователей: {{count}}",
       "removed": "HWID удалён из blacklist",
       "affectedUsers": "Пользователи с этим HWID ({{count}})",
-      "noUsers": "Пользователей с этим HWID не найдено"
+      "noUsers": "Пользователей с этим HWID не найдено",
+      "noUsersHint": "Устройство могли отвязать до внесения в список — тогда следов не осталось. Отвязки, случившиеся после обновления, сохраняются.",
+      "nothingFound": "Ничего не найдено",
+      "searchPlaceholder": "Поиск по HWID или причине",
+      "unlinked": "отвязано",
+      "badgeLive_one": "{{count}} с живой подпиской",
+      "badgeLive_few": "{{count}} с живой подпиской",
+      "badgeLive_many": "{{count}} с живой подпиской",
+      "badgeUnlinked_one": "{{count}} отвязал",
+      "badgeUnlinked_few": "{{count}} отвязали",
+      "badgeUnlinked_many": "{{count}} отвязали",
+      "stats": {
+        "total": "Всего записей",
+        "live": "С живой подпиской"
+      },
+      "sort": {
+        "recent": "Сначала новые",
+        "oldest": "Сначала старые",
+        "users": "Больше аккаунтов",
+        "active": "Живые подписки"
+      }
     },
     "analyzers": {
       "temporal": "Временной (одновременные подключения)",

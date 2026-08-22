@@ -1876,7 +1876,29 @@
       "added": "HWID added to blacklist. Affected users: {{count}}",
       "removed": "HWID removed from blacklist",
       "affectedUsers": "Users with this HWID ({{count}})",
-      "noUsers": "No users found with this HWID"
+      "noUsers": "No users found with this HWID",
+      "noUsersHint": "The device may have been unlinked before the entry was added — then nothing was left to find. Unlinks that happen from now on are kept.",
+      "nothingFound": "Nothing found",
+      "searchPlaceholder": "Search by HWID or reason",
+      "unlinked": "unlinked",
+      "badgeLive_one": "{{count}} with a live subscription",
+      "badgeLive_few": "{{count}} with live subscriptions",
+      "badgeLive_many": "{{count}} with live subscriptions",
+      "badgeLive_other": "{{count}} with live subscriptions",
+      "badgeUnlinked_one": "{{count}} unlinked",
+      "badgeUnlinked_few": "{{count}} unlinked",
+      "badgeUnlinked_many": "{{count}} unlinked",
+      "badgeUnlinked_other": "{{count}} unlinked",
+      "stats": {
+        "total": "Entries total",
+        "live": "With a live subscription"
+      },
+      "sort": {
+        "recent": "Newest first",
+        "oldest": "Oldest first",
+        "users": "Most accounts",
+        "active": "Live subscriptions"
+      }
     },
     "analyzers": {
       "temporal": "Temporal (simultaneous connections)",

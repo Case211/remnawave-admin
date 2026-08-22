@@ -142,7 +142,9 @@ async def _notify(hwid: str, entry: Dict[str, Any], touched: List[str], blocked:
             source_id=hwid,
             channels=["in_app", "telegram", "push"],
             topic_type="violations",
-            event="violation.hwid_blacklist",
+            # своё событие, не общий hwid_blacklist: воскресшая подписка —
+            # отдельный повод, и отключать его хочется отдельно от остальных
+            event="violation.hwid_blacklist_revived",
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("hwid_guard: уведомление не ушло: %s", e)

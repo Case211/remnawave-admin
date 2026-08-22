@@ -1346,20 +1346,34 @@ class NetworkMixin:
     # ── HWID Blacklist ──────────────────────────────────────────
 
     async def get_hwid_blacklist(self) -> List[Dict[str, Any]]:
-        """Get all blacklisted HWIDs."""
+        """Записи чёрного списка HWID со счётчиками по каждой.
+
+        Счётчики считаются здесь, а не на развороте карточки: без них список
+        молчит о главном — сколько аккаунтов на устройстве и не работает ли
+        там прямо сейчас живая подписка, ради которой запись и заводили.
+        """
         async with self.acquire() as conn:
             rows = await conn.fetch(
-                select_sql(HWID_BLACKLIST_TABLE, "*", "ORDER BY created_at DESC")
+                f"""
+                SELECT b.*,
+                       (SELECT COUNT(DISTINCT h.user_uuid)
+                          FROM {USER_HWID_DEVICES_TABLE} h
+                         WHERE h.hwid = b.hwid) AS users_total,
+                       (SELECT COUNT(DISTINCT h.user_uuid)
+                          FROM {USER_HWID_DEVICES_TABLE} h
+                          JOIN {USERS_TABLE} u ON u.uuid = h.user_uuid
+                         WHERE h.hwid = b.hwid
+                           AND u.status = 'ACTIVE'
+                           AND (u.expire_at IS NULL OR u.expire_at > NOW())) AS users_active,
+                       (SELECT COUNT(DISTINCT h.user_uuid)
+                          FROM {USER_HWID_DEVICES_TABLE} h
+                         WHERE h.hwid = b.hwid
+                           AND h.removed_at IS NOT NULL) AS users_removed
+                  FROM {HWID_BLACKLIST_TABLE} b
+                 ORDER BY b.created_at DESC
+                """
             )
             return [dict(r) for r in rows]
-
-    async def get_blacklisted_hwid(self, hwid: str) -> Optional[Dict[str, Any]]:
-        """Check if a specific HWID is blacklisted. Returns the entry or None."""
-        async with self.acquire() as conn:
-            row = await conn.fetchrow(
-                select_sql(HWID_BLACKLIST_TABLE, "*", "WHERE hwid = $1"), hwid
-            )
-            return dict(row) if row else None
 
     async def check_hwids_against_blacklist(self, hwids: List[str]) -> List[Dict[str, Any]]:
         """Check multiple HWIDs against blacklist. Returns matching entries."""
