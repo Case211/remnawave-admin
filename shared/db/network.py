@@ -1418,6 +1418,117 @@ class NetworkMixin:
             )
             return "DELETE 1" in result
 
+    async def get_shared_ip_accounts(
+        self, min_accounts: int = 2, days: int = 30, limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Адреса, с которых за период заходили несколько разных ПРОБНЫХ подписок.
+
+        Считаются только пробные: за адресом домашнего провайдера живёт целая
+        квартира, а за адресом оператора — целый район, поэтому «сколько всего
+        аккаунтов» само по себе ничего не значит. А вот несколько пробных
+        подписок с одного адреса — это уже вопрос.
+
+        Служебные и операторские диапазоны отсекаются: 127.0.0.1 набирает
+        аккаунтов больше любого живого абузера, а 100.64/10 — общий CGNAT
+        мобильного оператора. Метаданные адреса приезжают вместе с выдачей:
+        без ``is_mobile`` отличить абуз от нормального оператора нельзя.
+        """
+        if not self.is_connected:
+            return []
+
+        trial_tags, trial_squads = _load_trial_settings()
+        tags = [t for t in (trial_tags or []) if t]
+        if not tags:
+            return []
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""
+                    WITH pairs AS (
+                        SELECT c.ip_address,
+                               c.user_uuid,
+                               COUNT(*)              AS conns,
+                               MIN(c.connected_at)   AS first_seen,
+                               MAX(c.connected_at)   AS last_seen
+                          FROM {USER_CONNECTIONS_TABLE} c
+                          JOIN {USERS_TABLE} tu ON tu.uuid = c.user_uuid
+                         WHERE c.connected_at > NOW() - ($2 || ' days')::interval
+                           -- считаем только пробные: на адресе провайдера живёт
+                           -- целый дом, и сам по себе он ни о чём не говорит
+                           AND tu.tag = ANY($4::text[])
+                           -- служебные и операторские адреса из счёта вон:
+                           -- 127.0.0.1 у нас собирает больше аккаунтов, чем любой
+                           -- реальный абузер, а 100.64/10 — это CGNAT оператора
+                           AND c.ip_address ~ '^[0-9.]+$'
+                           AND NOT (c.ip_address::inet <<= '127.0.0.0/8'
+                                 OR c.ip_address::inet <<= '10.0.0.0/8'
+                                 OR c.ip_address::inet <<= '172.16.0.0/12'
+                                 OR c.ip_address::inet <<= '192.168.0.0/16'
+                                 OR c.ip_address::inet <<= '100.64.0.0/10')
+                         GROUP BY c.ip_address, c.user_uuid
+                    ), shared AS (
+                        SELECT ip_address, COUNT(*) AS accounts
+                          FROM pairs
+                         GROUP BY ip_address
+                        HAVING COUNT(*) >= $1
+                         ORDER BY COUNT(*) DESC
+                         LIMIT $3
+                    )
+                    SELECT s.ip_address::text AS ip,
+                           s.accounts,
+                           p.user_uuid::text  AS user_uuid,
+                           p.conns,
+                           p.first_seen,
+                           p.last_seen,
+                           u.username, u.status, u.telegram_id, u.email,
+                           u.tag, u.expire_at, u.created_at AS user_created_at,
+                           u.raw_data,
+                           m.is_mobile, m.is_proxy, m.is_hosting,
+                           m.asn_org, m.country_code
+                      FROM shared s
+                      JOIN pairs p ON p.ip_address = s.ip_address
+                      JOIN {USERS_TABLE} u ON u.uuid = p.user_uuid
+                      LEFT JOIN {IP_METADATA_TABLE} m ON m.ip_address = s.ip_address
+                     ORDER BY s.accounts DESC, s.ip_address, p.conns DESC
+                    """,
+                    min_accounts, str(days), limit, tags,
+                )
+
+            groups: Dict[str, Dict[str, Any]] = {}
+            for row in rows:
+                ip = row["ip"]
+                if ip not in groups:
+                    groups[ip] = {
+                        "ip": ip,
+                        "accounts": row["accounts"],
+                        "is_mobile": bool(row["is_mobile"]),
+                        "is_proxy": bool(row["is_proxy"]),
+                        "is_hosting": bool(row["is_hosting"]),
+                        "asn_org": row["asn_org"],
+                        "country_code": row["country_code"],
+                        "users": [],
+                    }
+                groups[ip]["users"].append({
+                    "uuid": row["user_uuid"],
+                    "username": row["username"],
+                    "status": row["status"],
+                    "telegram_id": row["telegram_id"],
+                    "email": row["email"],
+                    "expire_at": row["expire_at"],
+                    "created_at": row["user_created_at"],
+                    "conns": row["conns"],
+                    "first_seen": row["first_seen"],
+                    "last_seen": row["last_seen"],
+                    "is_trial": _is_trial_user(row["tag"], row["raw_data"], trial_tags, trial_squads),
+                    "is_active": _subscription_is_active(row["expire_at"], row["status"]),
+                })
+            return list(groups.values())
+
+        except Exception as e:
+            logger.error("Error getting shared IP accounts: %s", e, exc_info=True)
+            return []
+
     async def find_users_by_hwid(self, hwid: str) -> List[Dict[str, Any]]:
         """Find all users that have a specific HWID."""
         async with self.acquire() as conn:

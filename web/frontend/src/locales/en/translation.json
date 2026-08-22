@@ -3864,6 +3864,30 @@
         "label": "🔄 Sync interval (hours)",
         "description": "How often to refresh blacklists from external URLs."
       },
+      "violations_ip_trial_guard_enabled": {
+        "label": "🌐 IP guard: repeated trials",
+        "description": "Spot addresses used for several trial subscriptions by different accounts. HWID is announced by the client itself and forged with a header, while an address comes from the provider and is harder to change. Service and carrier ranges are excluded"
+      },
+      "violations_ip_trial_accounts": {
+        "label": "🌐 Trial subscriptions per address",
+        "description": "How many distinct trial subscriptions may share one address without an alert. Only trials count: a home provider address covers a whole flat"
+      },
+      "violations_ip_trial_accounts_mobile": {
+        "label": "📱 Same for mobile addresses",
+        "description": "A separate threshold for mobile carrier addresses. CGNAT puts a whole district behind one address, so several people with trials there is ordinary"
+      },
+      "violations_ip_trial_window_days": {
+        "label": "🌐 Address lookup window (days)",
+        "description": "How far back connections are counted. Too wide a window picks up dynamic addresses that changed hands between subscribers"
+      },
+      "violations_ip_trial_repeat_hours": {
+        "label": "🌐 Silence per address (hours)",
+        "description": "How long to stay quiet about an address after reporting it"
+      },
+      "violations_ip_trial_interval_minutes": {
+        "label": "🌐 Address guard interval (min)",
+        "description": "How often addresses are re-checked. Heavier than the HWID guard: it groups connection history over the whole window"
+      },
       "hwid_blacklist_guard_enabled": {
         "label": "🛡️ HWID blacklist guard",
         "description": "Periodically check whether a subscription came back to life for anyone seen on a blacklisted device, and disable it again. Blacklist blocking happens once, while a subscription can be revived afterwards — linking a telegram_id to an email-created one already did it. Entries set to «alert» are only reported, never disabled"
