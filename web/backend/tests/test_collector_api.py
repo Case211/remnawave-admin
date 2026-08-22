@@ -527,6 +527,56 @@ class TestHandleViolationDisabledUser:
         db.save_violation.assert_not_awaited()
 
 
+class TestHwidBlacklistScan:
+    """Периодический скан блеклиста не должен рапортовать по кругу.
+
+    Скан ходит раз в 30 минут по всем собранным HWID. Пока устройство висит на
+    аккаунте, совпадение находится каждый раз — и админ получал «HWID Blacklist:
+    users blocked» про уже отключённого юзера до бесконечности, да ещё голым
+    UUID вместо имени и отдельным сообщением на каждого.
+    """
+
+    @staticmethod
+    def _db(status, username="bob"):
+        db = make_db_mock()
+        db.batch_get_whitelist_status = AsyncMock(return_value={USER_UUID: (False, None)})
+        db.batch_get_user_hwid_devices = AsyncMock(
+            return_value={USER_UUID: [{"hwid": "BADHWID"}]}
+        )
+        db.batch_get_users_info = AsyncMock(
+            return_value={USER_UUID: {"username": username, "status": status}}
+        )
+        db.check_hwids_against_blacklist = AsyncMock(
+            return_value=[{"hwid": "BADHWID", "action": "block", "reason": "Абуз триала"}]
+        )
+        return db
+
+    async def _run(self, db, handler):
+        detector = MagicMock()
+        detector.check_users_batch = AsyncMock(return_value={})
+        with patch.object(collector, "db_service", db), \
+             patch.object(collector, "violation_detector", detector), \
+             patch.object(collector, "config_service", make_pipeline_config()), \
+             patch("web.backend.api.v2.violations._handle_blacklisted_hwid_users", handler):
+            await collector._run_violation_detection({USER_UUID})
+
+    @pytest.mark.asyncio
+    async def test_disabled_user_not_reported_again(self):
+        handler = AsyncMock()
+        await self._run(self._db("DISABLED"), handler)
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_active_user_reported_with_username(self):
+        handler = AsyncMock()
+        await self._run(self._db("ACTIVE"), handler)
+        handler.assert_awaited_once()
+        hwid, action, reason, affected = handler.await_args.args
+        assert hwid == "BADHWID"
+        assert action == "block"
+        assert affected == [{"user_uuid": USER_UUID, "username": "bob"}]
+
+
 class TestPublicIpForAgent:
     """_public_ip_for_agent: за внутренним прокси agent_ip не должен
     становиться приватным 172.x (у всех нод был «IP» docker-nginx)."""

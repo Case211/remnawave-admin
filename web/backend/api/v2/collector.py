@@ -922,13 +922,26 @@ async def _run_violation_detection(affected_user_uuids: set):
                 bl_matches = await db_service.check_hwids_against_blacklist(list(all_hwids))
                 if bl_matches:
                     from web.backend.api.v2.violations import _handle_blacklisted_hwid_users
+                    matched_uids = {
+                        uid for m in bl_matches for uid in hwid_to_users.get(m["hwid"], [])
+                    }
+                    # Статусы и имена одним запросом: без них в уведомление уходит
+                    # голый UUID, а уже отключённые попадают в него снова и снова
+                    bl_users = await db_service.batch_get_users_info(list(matched_uids))
                     for match in bl_matches:
-                        affected_uids = hwid_to_users.get(match["hwid"], [])
-                        for uid in affected_uids:
-                            user_entry = [{"user_uuid": uid, "username": None}]
+                        affected = []
+                        for uid in hwid_to_users.get(match["hwid"], []):
+                            info = bl_users.get(uid) or {}
+                            # Юзер уже отключён — мера принята, повторять нечего.
+                            # Скан ходит каждые 30 минут, и без этой отсечки он
+                            # рапортует об одном и том же до скончания века
+                            if str(info.get("status") or "").upper() == "DISABLED":
+                                continue
+                            affected.append({"user_uuid": uid, "username": info.get("username")})
+                        if affected:
                             await _handle_blacklisted_hwid_users(
                                 match["hwid"], match["action"],
-                                match.get("reason"), user_entry,
+                                match.get("reason"), affected,
                             )
         except Exception as e:
             logger.debug("Batch HWID blacklist check failed: %s", e)
