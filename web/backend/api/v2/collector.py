@@ -1371,33 +1371,51 @@ async def _notify_hwid_reuse(sync_result: dict) -> None:
     if not others:
         return
 
+    # Устройство уже в чёрном списке — про него скажет блеклист-путь, и скажет
+    # больше: кого отключили. Два сообщения об одном событии админу не нужны.
+    try:
+        if await db_service.check_hwids_against_blacklist([str(hwid)]):
+            return
+    except Exception as e:  # noqa: BLE001
+        logger.debug("HWID blacklist pre-check failed for %s: %s", hwid, e)
+
     self_key = _person_key(group.get("self_telegram_id"), group.get("self_email"), str(user_uuid))
     self_trial = bool(group.get("self_is_trial"))
 
     strangers, repeat_trials = [], []
     for other in others:
         key = _person_key(other.get("telegram_id"), other.get("email"), other.get("uuid", ""))
-        label = other.get("username") or (other.get("uuid") or "")[:8]
-        if other.get("removed_at"):
-            label += " (устройство отвязано)"
         if key != self_key:
-            strangers.append(label)
+            strangers.append(other)
         elif self_trial and other.get("is_trial"):
-            repeat_trials.append(label)
+            repeat_trials.append(other)
 
     if not strangers and not repeat_trials:
         return
 
+    # Дотягиваем то, чего нет в связке: как выглядит само устройство и что за
+    # подписка у принимающего аккаунта — без этого карточка получается пустой
+    device = None
+    target: Dict[str, Any] = {"uuid": str(user_uuid), "is_trial": self_trial,
+                              "telegram_id": group.get("self_telegram_id"),
+                              "email": group.get("self_email")}
+    try:
+        devices = await db_service.get_user_hwid_devices(str(user_uuid))
+        device = next((d for d in devices if d.get("hwid") == hwid), None)
+        info = (await db_service.batch_get_users_info([str(user_uuid)])).get(str(user_uuid)) or {}
+        target["username"] = info.get("username")
+        target["status"] = info.get("status")
+        target["expire_at"] = info.get("expireAt") or info.get("expire_at")
+    except Exception as e:  # noqa: BLE001
+        logger.debug("HWID reuse card details failed for %s: %s", user_uuid, e)
+
+    from web.backend.core.hwid_cards import reuse_card
     from web.backend.core.notification_service import create_notification
-    lines = []
-    if repeat_trials:
-        lines.append("Повторная пробная подписка того же человека: " + ", ".join(repeat_trials[:5]))
-    if strangers:
-        lines.append("Устройство уже видели на других аккаунтах: " + ", ".join(strangers[:5]))
     try:
         await create_notification(
-            title="HWID переехал на другой аккаунт",
-            body="HWID %s...\n%s" % (str(hwid)[:16], "\n".join(lines)),
+            title="Повторная пробная с того же устройства" if repeat_trials
+                  else "HWID переехал на другой аккаунт",
+            body=reuse_card(str(hwid), target, repeat_trials, strangers, device),
             type="alert",
             severity="critical" if repeat_trials else "warning",
             link="/violations",

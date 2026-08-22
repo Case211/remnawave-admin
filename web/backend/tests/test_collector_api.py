@@ -589,14 +589,23 @@ class TestHwidReuseNotification:
     OTHER = "22222222-2222-2222-2222-222222222222"
 
     @staticmethod
-    def _db(group):
+    def _db(group, blacklisted=False):
         db = make_db_mock()
         db.get_shared_hwids_for_user = AsyncMock(return_value=[group] if group else [])
+        db.check_hwids_against_blacklist = AsyncMock(
+            return_value=[{"hwid": "HW1", "action": "block"}] if blacklisted else []
+        )
+        db.get_user_hwid_devices = AsyncMock(return_value=[
+            {"hwid": "HW1", "platform": "android", "os_version": "15", "app_version": "Happ/3.25"},
+        ])
+        db.batch_get_users_info = AsyncMock(return_value={
+            USER_UUID: {"username": "new-one", "status": "ACTIVE"},
+        })
         return db
 
-    async def _run(self, group):
+    async def _run(self, group, blacklisted=False):
         notify = AsyncMock()
-        db = self._db(group)
+        db = self._db(group, blacklisted)
         cfg = MagicMock()
         cfg.get = MagicMock(side_effect=lambda key, default=None: default)
         with patch.object(collector, "db_service", db), \
@@ -649,7 +658,20 @@ class TestHwidReuseNotification:
         group["other_users"][0]["telegram_id"] = 999
         group["other_users"][0]["removed_at"] = datetime.utcnow()
         notify = await self._run(group)
-        assert "устройство отвязано" in notify.await_args.kwargs["body"]
+        assert "Устройство отвязано" in notify.await_args.kwargs["body"]
+
+    @pytest.mark.asyncio
+    async def test_blacklisted_hwid_is_left_to_blacklist_path(self):
+        """Про устройство из чёрного списка скажет блеклист — и скажет больше."""
+        assert (await self._run(self._group(), blacklisted=True)).await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_card_carries_device_and_target(self):
+        """Карточка без деталей устройства и принимающего аккаунта бесполезна."""
+        body = (await self._run(self._group())).await_args.kwargs["body"]
+        assert "Android 15" in body
+        assert "new-one" in body
+        assert "<b>" in body, "разметка нужна боту для rich-сообщения"
 
 
 class TestPublicIpForAgent:

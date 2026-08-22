@@ -52,17 +52,6 @@ async def _disable(user_uuid: str) -> bool:
         return False
 
 
-def _describe(user: Dict[str, Any], conns: int) -> str:
-    """Строка про одного юзера для уведомления."""
-    name = user.get("username") or str(user.get("user_uuid", "?"))
-    parts = [name]
-    if user.get("removed_at"):
-        parts.append("устройство отвязано")
-    if conns:
-        parts.append("подключений сейчас: %d" % conns)
-    return "%s (%s)" % (parts[0], ", ".join(parts[1:])) if len(parts) > 1 else parts[0]
-
-
 async def run_once() -> int:
     """Один проход сторожа. Возвращает число погашенных подписок."""
     from shared.config_service import config_service
@@ -103,21 +92,21 @@ async def run_once() -> int:
             continue
 
         block = str(entry.get("action") or "").lower() == "block"
-        touched: List[str] = []
+        touched: List[Dict[str, Any]] = []
         for user in alive:
             uuid = str(user.get("user_uuid"))
-            conns = await _active_connection_count(uuid)
+            card_user = {**user, "active_connections": await _active_connection_count(uuid)}
             if block:
                 if await _disable(uuid):
                     disabled_total += 1
-                    touched.append(_describe(user, conns))
+                    touched.append(card_user)
                     logger.warning(
                         "hwid_guard: подписка %s ожила на HWID %s из чёрного списка — отключена",
                         user.get("username") or uuid, hwid[:16],
                     )
             elif (hwid, uuid) not in _alerted:
                 _alerted.add((hwid, uuid))
-                touched.append(_describe(user, conns))
+                touched.append(card_user)
 
         if touched:
             await _notify(hwid, entry, touched, blocked=block)
@@ -125,16 +114,16 @@ async def run_once() -> int:
     return disabled_total
 
 
-async def _notify(hwid: str, entry: Dict[str, Any], touched: List[str], blocked: bool) -> None:
+async def _notify(hwid: str, entry: Dict[str, Any], touched: List[Dict[str, Any]],
+                  blocked: bool) -> None:
+    from web.backend.core.hwid_cards import revived_card
     from web.backend.core.notification_service import create_notification
-    reason = entry.get("reason") or "причина не указана"
-    title = ("Чёрный список HWID: подписка ожила и снова отключена" if blocked
-             else "Чёрный список HWID: живая подписка на помеченном устройстве")
+    title = ("Подписка ожила и снова отключена" if blocked
+             else "Живая подписка на устройстве из чёрного списка")
     try:
         await create_notification(
             title=title,
-            body=("HWID %s...\n%s\nПричина в списке: %s" % (
-                hwid[:16], "\n".join("• " + t for t in touched), reason)),
+            body=revived_card(hwid, entry, touched, blocked),
             type="alert",
             severity="critical" if blocked else "warning",
             link="/violations",

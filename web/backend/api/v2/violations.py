@@ -839,14 +839,12 @@ async def _handle_blacklisted_hwid_users(
     affected_users: list,
 ):
     """Process users who have a blacklisted HWID — alert or block them."""
+    from web.backend.core.hwid_cards import blacklist_card
     from web.backend.core.notification_service import create_notification
+    from shared.database import db_service
 
-    usernames = ", ".join(
-        u.get("username") or str(u.get("user_uuid", "?"))
-        for u in affected_users[:10]
-    )
-
-    if action == "block":
+    blocked = action == "block"
+    if blocked:
         # Auto-block affected users via Panel API
         for user in affected_users:
             try:
@@ -859,38 +857,40 @@ async def _handle_blacklisted_hwid_users(
             except Exception as e:
                 logger.error("Failed to block user %s: %s", user["user_uuid"], e)
 
-        await create_notification(
-            title="HWID Blacklist: users blocked",
-            body=(
-                f"HWID {hwid[:16]}... blocked {len(affected_users)} user(s): {usernames}\n"
-                f"Reason: {reason or 'No reason specified'}"
-            ),
-            type="alert",
-            severity="critical",
-            link="/violations",
-            source="hwid_blacklist",
-            source_id=hwid,
-            channels=["in_app", "telegram", "push"],
-            topic_type="violations",
-            event="violation.hwid_blacklist",
-        )
-    else:
-        # Alert only
-        await create_notification(
-            title="HWID Blacklist: match found",
-            body=(
-                f"Blacklisted HWID {hwid[:16]}... found on {len(affected_users)} user(s): {usernames}\n"
-                f"Reason: {reason or 'No reason specified'}"
-            ),
-            type="alert",
-            severity="warning",
-            link="/violations",
-            source="hwid_blacklist",
-            source_id=hwid,
-            channels=["in_app", "telegram", "push"],
-            topic_type="violations",
-            event="violation.hwid_blacklist",
-        )
+    # Карточке нужны детали подписок, а вызывающие передают минимум: коллектор
+    # знает имя и статус, ручное добавление — вообще только uuid
+    detailed = affected_users
+    try:
+        uuids = [str(u["user_uuid"]) for u in affected_users if u.get("user_uuid")]
+        info = await db_service.batch_get_users_info(uuids) if uuids else {}
+        if info:
+            detailed = []
+            for user in affected_users:
+                extra = info.get(str(user.get("user_uuid"))) or {}
+                detailed.append({
+                    **user,
+                    "username": user.get("username") or extra.get("username"),
+                    "status": extra.get("status"),
+                    "telegram_id": extra.get("telegramId") or extra.get("telegram_id"),
+                    "expire_at": extra.get("expireAt") or extra.get("expire_at"),
+                })
+    except Exception as e:  # noqa: BLE001
+        logger.debug("HWID blacklist card details failed: %s", e)
+
+    entry = {"reason": reason}
+    await create_notification(
+        title="Чёрный список HWID: аккаунты отключены" if blocked
+              else "Чёрный список HWID: найдено совпадение",
+        body=blacklist_card(hwid, entry, detailed, blocked),
+        type="alert",
+        severity="critical" if blocked else "warning",
+        link="/violations",
+        source="hwid_blacklist",
+        source_id=hwid,
+        channels=["in_app", "telegram", "push"],
+        topic_type="violations",
+        event="violation.hwid_blacklist",
+    )
 
 
 @router.get("/{violation_id}", response_model=ViolationDetail)
