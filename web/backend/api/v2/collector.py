@@ -922,13 +922,26 @@ async def _run_violation_detection(affected_user_uuids: set):
                 bl_matches = await db_service.check_hwids_against_blacklist(list(all_hwids))
                 if bl_matches:
                     from web.backend.api.v2.violations import _handle_blacklisted_hwid_users
+                    matched_uids = {
+                        uid for m in bl_matches for uid in hwid_to_users.get(m["hwid"], [])
+                    }
+                    # Статусы и имена одним запросом: без них в уведомление уходит
+                    # голый UUID, а уже отключённые попадают в него снова и снова
+                    bl_users = await db_service.batch_get_users_info(list(matched_uids))
                     for match in bl_matches:
-                        affected_uids = hwid_to_users.get(match["hwid"], [])
-                        for uid in affected_uids:
-                            user_entry = [{"user_uuid": uid, "username": None}]
+                        affected = []
+                        for uid in hwid_to_users.get(match["hwid"], []):
+                            info = bl_users.get(uid) or {}
+                            # Юзер уже отключён — мера принята, повторять нечего.
+                            # Скан ходит каждые 30 минут, и без этой отсечки он
+                            # рапортует об одном и том же до скончания века
+                            if str(info.get("status") or "").upper() == "DISABLED":
+                                continue
+                            affected.append({"user_uuid": uid, "username": info.get("username")})
+                        if affected:
                             await _handle_blacklisted_hwid_users(
                                 match["hwid"], match["action"],
-                                match.get("reason"), user_entry,
+                                match.get("reason"), affected,
                             )
         except Exception as e:
             logger.debug("Batch HWID blacklist check failed: %s", e)
@@ -1319,6 +1332,103 @@ def _verify_webhook_signature(request: Request, body: bytes) -> bool:
         return False
 
 
+def _person_key(telegram_id, email, uuid: str):
+    """Человек за подпиской: telegram_id → email → uuid.
+
+    Та же лесенка, что у HWID-анализатора: несколько подписок одного человека
+    (мультитариф Bedolaga, регистрация без Telegram) считаются одним аккаунтом.
+    """
+    if telegram_id is not None:
+        return ("tg", telegram_id)
+    normalized = (email or "").strip().lower()
+    return ("email", normalized) if normalized else ("uuid", uuid)
+
+
+async def _notify_hwid_reuse(sync_result: dict) -> None:
+    """Устройство привязали к аккаунту, а его уже видели на другом — сказать сразу.
+
+    Периодический скан заметит это в течение получаса, и всё это время свежий
+    триал работает. Вебхук приходит в момент привязки, поэтому окно закрывается
+    здесь. Шумим не на всякое совпадение: пара «пробная → купленная» у одного
+    человека — это конверсия, а не абуз, и по журналу она встречается впятеро
+    чаще реальных нарушений.
+    """
+    user_uuid = sync_result.get("user_uuid")
+    hwid = sync_result.get("hwid")
+    if not user_uuid or not hwid or not db_service.is_connected:
+        return
+    if not config_service.get("violations_enabled", True):
+        return
+
+    try:
+        groups = await db_service.get_shared_hwids_for_user(str(user_uuid))
+    except Exception as e:  # noqa: BLE001
+        logger.debug("HWID reuse check failed for %s: %s", user_uuid, e)
+        return
+
+    group = next((g for g in groups if g.get("hwid") == hwid), None)
+    others = (group or {}).get("other_users") or []
+    if not others:
+        return
+
+    # Устройство уже в чёрном списке — про него скажет блеклист-путь, и скажет
+    # больше: кого отключили. Два сообщения об одном событии админу не нужны.
+    try:
+        if await db_service.check_hwids_against_blacklist([str(hwid)]):
+            return
+    except Exception as e:  # noqa: BLE001
+        logger.debug("HWID blacklist pre-check failed for %s: %s", hwid, e)
+
+    self_key = _person_key(group.get("self_telegram_id"), group.get("self_email"), str(user_uuid))
+    self_trial = bool(group.get("self_is_trial"))
+
+    strangers, repeat_trials = [], []
+    for other in others:
+        key = _person_key(other.get("telegram_id"), other.get("email"), other.get("uuid", ""))
+        if key != self_key:
+            strangers.append(other)
+        elif self_trial and other.get("is_trial"):
+            repeat_trials.append(other)
+
+    if not strangers and not repeat_trials:
+        return
+
+    # Дотягиваем то, чего нет в связке: как выглядит само устройство и что за
+    # подписка у принимающего аккаунта — без этого карточка получается пустой
+    device = None
+    target: Dict[str, Any] = {"uuid": str(user_uuid), "is_trial": self_trial,
+                              "telegram_id": group.get("self_telegram_id"),
+                              "email": group.get("self_email")}
+    try:
+        devices = await db_service.get_user_hwid_devices(str(user_uuid))
+        device = next((d for d in devices if d.get("hwid") == hwid), None)
+        info = (await db_service.batch_get_users_info([str(user_uuid)])).get(str(user_uuid)) or {}
+        target["username"] = info.get("username")
+        target["status"] = info.get("status")
+        target["expire_at"] = info.get("expireAt") or info.get("expire_at")
+    except Exception as e:  # noqa: BLE001
+        logger.debug("HWID reuse card details failed for %s: %s", user_uuid, e)
+
+    from web.backend.core.hwid_cards import reuse_card
+    from web.backend.core.notification_service import create_notification
+    try:
+        await create_notification(
+            title="Повторная пробная с того же устройства" if repeat_trials
+                  else "HWID переехал на другой аккаунт",
+            body=reuse_card(str(hwid), target, repeat_trials, strangers, device),
+            type="alert",
+            severity="critical" if repeat_trials else "warning",
+            link="/violations",
+            source="hwid_reuse",
+            source_id=str(hwid),
+            channels=["in_app", "telegram", "push"],
+            topic_type="violations",
+            event="violation.hwid_reused",
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("HWID reuse notification failed: %s", e)
+
+
 @router.post("/webhook")
 async def collector_webhook(request: Request):
     """Webhook proxy: sync to DB, then forward to bot for Telegram notifications."""
@@ -1340,7 +1450,9 @@ async def collector_webhook(request: Request):
     # 1. Sync to DB (collector owns sync)
     try:
         from shared.sync import sync_service
-        await sync_service.handle_webhook_event(event, event_data)
+        sync_result = await sync_service.handle_webhook_event(event, event_data)
+        if event == "user_hwid_devices.added":
+            await _notify_hwid_reuse(sync_result or {})
     except Exception as e:
         logger.warning("Webhook sync failed for %s: %s", event, e)
 

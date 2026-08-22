@@ -114,6 +114,9 @@ interface HwidDevice {
   user_agent: string | null
   created_at: string | null
   updated_at: string | null
+  // Проставлено — устройство отвязали, но запись оставили: по ней видно,
+  // что на этом HWID уже сидел другой аккаунт
+  removed_at: string | null
 }
 
 interface Violation {
@@ -648,6 +651,14 @@ function PaginatedDeviceList({
                     <span className="text-dark-300">{t('userDetail.devices.added')}</span>
                     <span className="text-dark-100">
                       {formatDate(device.created_at)}
+                    </span>
+                  </div>
+                )}
+                {device.removed_at && (
+                  <div className="flex justify-between">
+                    <span className="text-dark-300">{t('userDetail.devices.removedAt')}</span>
+                    <span className="text-amber-300">
+                      {formatDate(device.removed_at)}
                     </span>
                   </div>
                 )}
@@ -1584,11 +1595,25 @@ export default function UserDetail() {
     enabled: !!uuid,
   })
 
+  // Устройства, которые с аккаунта уже отвязали. Держим отдельным списком:
+  // подмешивать их к текущим нельзя — админ перестанет понимать, что у юзера
+  // на руках сейчас, а что осталось только следом в истории.
+  const [devicesTab, setDevicesTab] = useState<'active' | 'removed'>('active')
+  const { data: removedDevices } = useQuery<HwidDevice[]>({
+    queryKey: ['user-hwid-devices-removed', uuid],
+    queryFn: async () => {
+      const response = await client.get(`/users/${uuid}/hwid-devices`, { params: { removed: true } })
+      return response.data
+    },
+    enabled: !!uuid,
+  })
+
   // Sync HWID devices from API
   const syncHwidMutation = useMutation({
     mutationFn: async () => { await client.post(`/users/${uuid}/sync-hwid-devices`) },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
+      queryClient.invalidateQueries({ queryKey: ['user-hwid-devices-removed', uuid] })
       toast.success(t('userDetail.toasts.hwidSynced'))
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
@@ -1604,6 +1629,7 @@ export default function UserDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
+      queryClient.invalidateQueries({ queryKey: ['user-hwid-devices-removed', uuid] })
       queryClient.invalidateQueries({ queryKey: ['user', uuid] })
       toast.success(t('userDetail.toasts.deviceDeleted', 'HWID устройство удалено'))
       setDeviceToDelete(null)
@@ -1621,6 +1647,7 @@ export default function UserDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-hwid-devices', uuid] })
+      queryClient.invalidateQueries({ queryKey: ['user-hwid-devices-removed', uuid] })
       queryClient.invalidateQueries({ queryKey: ['user', uuid] })
       toast.success(t('userDetail.toasts.allDevicesDeleted', 'Все HWID устройства удалены'))
       setShowDeleteAllDevices(false)
@@ -2612,7 +2639,36 @@ export default function UserDetail() {
             }
             animationDelay="0.15s"
           >
-            {hwidDevices && hwidDevices.length > 0 ? (
+            {removedDevices && removedDevices.length > 0 && (
+              <div className="flex items-center gap-1 mb-3 p-1 bg-[var(--glass-bg)]/40 rounded-lg w-fit">
+                {(['active', 'removed'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setDevicesTab(tab)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                      devicesTab === tab
+                        ? 'bg-primary-500/20 text-primary-200'
+                        : 'text-dark-300 hover:text-dark-100'
+                    )}
+                  >
+                    {tab === 'active'
+                      ? t('userDetail.devices.tabActive')
+                      : `${t('userDetail.devices.tabRemoved')} (${removedDevices.length})`}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {devicesTab === 'removed' && removedDevices && removedDevices.length > 0 ? (
+              <>
+                <p className="text-xs text-amber-300/80 mb-3">
+                  {t('userDetail.devices.removedHint')}
+                </p>
+                <PaginatedDeviceList devices={removedDevices || []} />
+              </>
+            ) : hwidDevices && hwidDevices.length > 0 ? (
               <PaginatedDeviceList
                 devices={hwidDevices}
                 onDeleteDevice={setDeviceToDelete}

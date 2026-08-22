@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
   ShieldBan, Plus, Trash2, RefreshCw, Upload,
   Fingerprint, AlertTriangle, Ban, User,
-  ShieldOff, ShieldCheck, Calendar,
-  ChevronLeft, ChevronRight,
+  ShieldOff, ShieldCheck, Calendar, ShieldAlert,
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
+  Search, ArrowUpDown, Users, ExternalLink,
 } from '@/components/brand/icons'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -31,6 +32,33 @@ import { cn } from '@/lib/utils'
 import type { WhitelistItem } from '@/types/violations'
 
 // ── Types ─────────────────────────────────────────────────────────
+
+type HwidSort = 'recent' | 'oldest' | 'users' | 'active'
+
+interface HwidBlacklistItem {
+  id: number
+  hwid: string
+  action: string
+  reason: string | null
+  added_by_username: string | null
+  created_at: string
+  // счётчики считает бэкенд: сколько аккаунтов на устройстве, сколько из них
+  // с живой подпиской и у скольких устройство уже отвязано
+  users_total?: number
+  users_active?: number
+  users_removed?: number
+}
+
+interface HwidBlacklistUser {
+  user_uuid: string
+  username: string | null
+  status: string | null
+  platform: string | null
+  device_model: string | null
+  telegram_id?: number | null
+  expire_at?: string | null
+  removed_at?: string | null
+}
 
 interface BlockedIP {
   id: number
@@ -407,6 +435,7 @@ function BlockedIPsTab() {
 function HwidBlacklistTab() {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const canEdit = useHasPermission('violations', 'create')
   const [addOpen, setAddOpen] = useState(false)
@@ -415,20 +444,23 @@ function HwidBlacklistTab() {
   const [newReason, setNewReason] = useState('')
   const [expandedHwid, setExpandedHwid] = useState<string | null>(null)
   const [confirmRemoveHwid, setConfirmRemoveHwid] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [actionFilter, setActionFilter] = useState<'all' | 'block' | 'alert'>('all')
+  const [sortBy, setSortBy] = useState<HwidSort>('recent')
 
   const { data, isLoading } = useQuery({
     queryKey: ['hwid-blacklist'],
     queryFn: async () => {
       const { data } = await client.get('/violations/hwid-blacklist')
-      return data as { items: Array<{ id: number; hwid: string; action: string; reason: string | null; added_by_username: string | null; created_at: string }>; total: number }
+      return data as { items: HwidBlacklistItem[]; total: number }
     },
   })
 
-  const { data: usersData } = useQuery({
+  const { data: usersData, isFetching: usersFetching } = useQuery({
     queryKey: ['hwid-blacklist-users', expandedHwid],
     queryFn: async () => {
       const { data } = await client.get(`/violations/hwid-blacklist/${expandedHwid}/users`)
-      return data as { users: Array<{ user_uuid: string; username: string | null; status: string | null; platform: string | null; device_model: string | null }>; total: number }
+      return data as { users: HwidBlacklistUser[]; total: number }
     },
     enabled: !!expandedHwid,
   })
@@ -456,6 +488,27 @@ function HwidBlacklistTab() {
     onError: () => toast.error(t('common.error')),
   })
 
+  const items = data?.items ?? []
+  const stats = {
+    total: items.length,
+    block: items.filter((i) => i.action === 'block').length,
+    alert: items.filter((i) => i.action === 'alert').length,
+    live: items.filter((i) => (i.users_active ?? 0) > 0).length,
+  }
+
+  const query = search.trim().toLowerCase()
+  const visible = items
+    .filter((i) => actionFilter === 'all' || i.action === actionFilter)
+    .filter((i) => !query
+      || i.hwid.toLowerCase().includes(query)
+      || (i.reason || '').toLowerCase().includes(query))
+    .sort((a, b) => {
+      if (sortBy === 'users') return (b.users_total ?? 0) - (a.users_total ?? 0)
+      if (sortBy === 'active') return (b.users_active ?? 0) - (a.users_active ?? 0)
+      if (sortBy === 'oldest') return a.created_at.localeCompare(b.created_at)
+      return b.created_at.localeCompare(a.created_at)
+    })
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -470,6 +523,69 @@ function HwidBlacklistTab() {
           </Button>
         )}
       </div>
+
+      {/* Сводка: клик по плитке — тот же фильтр, что и в селекте ниже */}
+      {items.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <HwidStatTile
+            label={t('violations.hwidBlacklist.stats.total')}
+            value={stats.total}
+            icon={Fingerprint}
+            active={actionFilter === 'all'}
+            onClick={() => setActionFilter('all')}
+          />
+          <HwidStatTile
+            label={t('violations.hwidBlacklist.actionBlock')}
+            value={stats.block}
+            icon={Ban}
+            tone="red"
+            active={actionFilter === 'block'}
+            onClick={() => setActionFilter('block')}
+          />
+          <HwidStatTile
+            label={t('violations.hwidBlacklist.actionAlert')}
+            value={stats.alert}
+            icon={AlertTriangle}
+            tone="amber"
+            active={actionFilter === 'alert'}
+            onClick={() => setActionFilter('alert')}
+          />
+          <HwidStatTile
+            label={t('violations.hwidBlacklist.stats.live')}
+            value={stats.live}
+            icon={ShieldAlert}
+            tone={stats.live > 0 ? 'red' : 'muted'}
+            onClick={() => setSortBy('active')}
+          />
+        </div>
+      )}
+
+      {/* Поиск и сортировка */}
+      {items.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('violations.hwidBlacklist.searchPlaceholder')}
+              className="pl-9"
+            />
+          </div>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as HwidSort)}>
+            <SelectTrigger className="w-full sm:w-[210px]">
+              <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 text-dark-400" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="recent">{t('violations.hwidBlacklist.sort.recent')}</SelectItem>
+              <SelectItem value="oldest">{t('violations.hwidBlacklist.sort.oldest')}</SelectItem>
+              <SelectItem value="users">{t('violations.hwidBlacklist.sort.users')}</SelectItem>
+              <SelectItem value="active">{t('violations.hwidBlacklist.sort.active')}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Add dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -544,74 +660,182 @@ function HwidBlacklistTab() {
       {/* List */}
       {isLoading ? (
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
-      ) : !data?.items?.length ? (
+      ) : !items.length ? (
         <Card>
           <CardContent className="p-2">
             <EmptyState icon={Fingerprint} title={t('violations.hwidBlacklist.empty')} size="sm" />
           </CardContent>
         </Card>
+      ) : !visible.length ? (
+        <Card>
+          <CardContent className="p-2">
+            <EmptyState icon={Search} title={t('violations.hwidBlacklist.nothingFound')} size="sm" />
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-2">
-          {data.items.map((item) => (
-            <Card key={item.id} className="p-0 overflow-hidden">
-              <div className="flex items-center justify-between p-3 sm:p-4">
-                <button
-                  onClick={() => setExpandedHwid(expandedHwid === item.hwid ? null : item.hwid)}
-                  className="flex-1 text-left flex items-center gap-3 min-w-0"
-                >
-                  <Fingerprint className="w-4 h-4 text-dark-300 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-mono text-white truncate">{item.hwid}</p>
-                    <p className="text-[11px] text-dark-400">
-                      {item.added_by_username && <span>{item.added_by_username} · </span>}
-                      {formatDate(item.created_at)}
-                      {item.reason && <span> · {item.reason}</span>}
-                    </p>
-                  </div>
-                </button>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Badge className={cn(
-                    'text-[10px]',
-                    item.action === 'block' ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-                  )}>
-                    {item.action === 'block' ? t('violations.hwidBlacklist.actionBlock') : t('violations.hwidBlacklist.actionAlert')}
-                  </Badge>
-                  {canEdit && (
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmRemoveHwid(item.hwid)} className="text-dark-400 hover:text-red-400 h-8 w-8 p-0" aria-label={t('common.delete')}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-              {expandedHwid === item.hwid && usersData && (
-                <div className="border-t border-[var(--glass-border)] px-4 py-3 bg-[var(--glass-bg)]/30">
-                  <p className="text-xs text-dark-400 mb-2">{t('violations.hwidBlacklist.affectedUsers', { count: usersData.total })}</p>
-                  {usersData.users.length === 0 ? (
-                    <p className="text-xs text-dark-400">{t('violations.hwidBlacklist.noUsers')}</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {usersData.users.map((u) => (
-                        <div key={u.user_uuid} className="flex items-center gap-2 text-xs">
-                          <User className="w-3 h-3 text-dark-400" />
-                          <span className="text-white">{u.username || u.user_uuid.slice(0, 8)}</span>
-                          {u.platform && <span className="text-dark-400">{u.platform}</span>}
-                          {u.device_model && <span className="text-dark-400">{u.device_model}</span>}
-                          {u.status && (
-                            <Badge className={cn('text-[9px] py-0', u.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400' : 'bg-dark-600 text-dark-300')}>
-                              {u.status}
-                            </Badge>
-                          )}
-                        </div>
-                      ))}
+          {visible.map((item) => {
+            const expanded = expandedHwid === item.hwid
+            const live = (item.users_active ?? 0) > 0
+            return (
+              <Card key={item.id} className={cn('p-0 overflow-hidden transition-colors', live && 'border-red-500/40')}>
+                <div className="flex items-center justify-between p-3 sm:p-4 gap-2">
+                  <button
+                    onClick={() => setExpandedHwid(expanded ? null : item.hwid)}
+                    className="flex-1 text-left flex items-center gap-3 min-w-0"
+                    aria-expanded={expanded}
+                  >
+                    {expanded
+                      ? <ChevronUp className="w-4 h-4 text-dark-300 shrink-0" />
+                      : <ChevronDown className="w-4 h-4 text-dark-300 shrink-0" />}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-mono text-white truncate">{item.hwid}</p>
+                        {live && (
+                          <Badge className="text-[10px] bg-red-500/20 text-red-300 border-red-500/40 gap-1">
+                            <ShieldAlert className="w-3 h-3" />
+                            {t('violations.hwidBlacklist.badgeLive', { count: item.users_active ?? 0 })}
+                          </Badge>
+                        )}
+                        {(item.users_total ?? 0) > 0 && (
+                          <Badge variant="outline" className="text-[10px] gap-1">
+                            <Users className="w-3 h-3" />
+                            {item.users_total}
+                          </Badge>
+                        )}
+                        {(item.users_removed ?? 0) > 0 && (
+                          <Badge variant="outline" className="text-[10px] text-amber-300 border-amber-500/30">
+                            {t('violations.hwidBlacklist.badgeUnlinked', { count: item.users_removed ?? 0 })}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-dark-400 mt-0.5">
+                        {item.added_by_username && <span>{item.added_by_username} · </span>}
+                        {formatDate(item.created_at)}
+                        {item.reason && <span> · {item.reason}</span>}
+                      </p>
                     </div>
-                  )}
+                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge className={cn(
+                      'text-[10px]',
+                      item.action === 'block' ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+                    )}>
+                      {item.action === 'block' ? t('violations.hwidBlacklist.actionBlock') : t('violations.hwidBlacklist.actionAlert')}
+                    </Badge>
+                    {canEdit && (
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmRemoveHwid(item.hwid)} className="text-dark-400 hover:text-red-400 h-8 w-8 p-0" aria-label={t('common.delete')}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              )}
-            </Card>
-          ))}
+
+                {expanded && (
+                  <div className="border-t border-[var(--glass-border)] px-4 py-3 bg-[var(--glass-bg)]/30">
+                    {usersFetching && !usersData ? (
+                      <Skeleton className="h-10 w-full" />
+                    ) : !usersData?.users?.length ? (
+                      <div className="text-xs text-dark-400 space-y-1">
+                        <p>{t('violations.hwidBlacklist.noUsers')}</p>
+                        <p className="text-dark-500">{t('violations.hwidBlacklist.noUsersHint')}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs text-dark-400 mb-2">
+                          {t('violations.hwidBlacklist.affectedUsers', { count: usersData.total })}
+                        </p>
+                        <div className="space-y-1">
+                          {usersData.users.map((u) => (
+                            <HwidUserRow
+                              key={u.user_uuid}
+                              user={u}
+                              onOpen={() => navigate(`/users/${u.user_uuid}`)}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>
+  )
+}
+
+/** Плитка сводки: она же переключатель фильтра. */
+function HwidStatTile({
+  label, value, icon: Icon, tone = 'default', active, onClick,
+}: {
+  label: string
+  value: number
+  icon: typeof Fingerprint
+  tone?: 'default' | 'red' | 'amber' | 'muted'
+  active?: boolean
+  onClick?: () => void
+}) {
+  const toneClass = {
+    red: 'text-red-400',
+    amber: 'text-amber-400',
+    muted: 'text-dark-400',
+    default: 'text-primary-400',
+  }[tone]
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors',
+        active
+          ? 'border-primary-500/50 bg-primary-500/10'
+          : 'border-[var(--glass-border)] bg-[var(--glass-bg)]/40 hover:bg-[var(--glass-bg)]',
+      )}
+    >
+      <Icon className={cn('w-4 h-4 shrink-0', toneClass)} />
+      <div className="min-w-0">
+        <p className="text-base font-semibold text-white leading-none">{value}</p>
+        <p className="text-[11px] text-dark-300 truncate mt-1">{label}</p>
+      </div>
+    </button>
+  )
+}
+
+/** Строка пользователя на устройстве из списка — с переходом в его карточку. */
+function HwidUserRow({ user, onOpen }: { user: HwidBlacklistUser; onOpen: () => void }) {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+  const active = user.status === 'ACTIVE'
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full flex items-center gap-2 text-xs rounded-md px-2 py-1.5 -mx-2 text-left hover:bg-[var(--glass-bg-hover)] transition-colors group"
+    >
+      <User className="w-3 h-3 text-dark-400 shrink-0" />
+      <span className="text-white truncate">{user.username || user.user_uuid.slice(0, 8)}</span>
+      {user.telegram_id && <span className="text-dark-400 shrink-0">#{user.telegram_id}</span>}
+      {user.platform && <span className="text-dark-400 shrink-0">{user.platform}</span>}
+      {user.device_model && <span className="text-dark-400 truncate hidden sm:inline">{user.device_model}</span>}
+      <span className="flex-1" />
+      {user.removed_at && (
+        <Badge variant="outline" className="text-[9px] py-0 text-amber-300 border-amber-500/30 shrink-0">
+          {t('violations.hwidBlacklist.unlinked')}
+        </Badge>
+      )}
+      {user.expire_at && (
+        <span className="text-dark-400 shrink-0 hidden sm:inline">{formatDate(user.expire_at)}</span>
+      )}
+      {user.status && (
+        <Badge className={cn('text-[9px] py-0 shrink-0', active ? 'bg-green-500/20 text-green-400' : 'bg-dark-600 text-dark-300')}>
+          {user.status}
+        </Badge>
+      )}
+      <ExternalLink className="w-3 h-3 text-dark-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+    </button>
   )
 }
 

@@ -879,6 +879,10 @@
       "app": "App",
       "userAgent": "User Agent",
       "added": "Added",
+      "removedAt": "Unlinked",
+      "tabActive": "Current",
+      "tabRemoved": "Removed",
+      "removedHint": "Previously present on this account but were removed. The records are kept so that re-linking the same device to another account stays visible.",
       "uaBadge": {
         "linkInUa": "Double tunnel",
         "botLibrary": "Bot/script",
@@ -1872,7 +1876,29 @@
       "added": "HWID added to blacklist. Affected users: {{count}}",
       "removed": "HWID removed from blacklist",
       "affectedUsers": "Users with this HWID ({{count}})",
-      "noUsers": "No users found with this HWID"
+      "noUsers": "No users found with this HWID",
+      "noUsersHint": "The device may have been unlinked before the entry was added — then nothing was left to find. Unlinks that happen from now on are kept.",
+      "nothingFound": "Nothing found",
+      "searchPlaceholder": "Search by HWID or reason",
+      "unlinked": "unlinked",
+      "badgeLive_one": "{{count}} with a live subscription",
+      "badgeLive_few": "{{count}} with live subscriptions",
+      "badgeLive_many": "{{count}} with live subscriptions",
+      "badgeLive_other": "{{count}} with live subscriptions",
+      "badgeUnlinked_one": "{{count}} unlinked",
+      "badgeUnlinked_few": "{{count}} unlinked",
+      "badgeUnlinked_many": "{{count}} unlinked",
+      "badgeUnlinked_other": "{{count}} unlinked",
+      "stats": {
+        "total": "Entries total",
+        "live": "With a live subscription"
+      },
+      "sort": {
+        "recent": "Newest first",
+        "oldest": "Oldest first",
+        "users": "Most accounts",
+        "active": "Live subscriptions"
+      }
     },
     "analyzers": {
       "temporal": "Temporal (simultaneous connections)",
@@ -3662,6 +3688,10 @@
         "label": "🎁 Max active trials per HWID",
         "description": "How many distinct accounts with a LIVE trial subscription may share one device without triggering. Catches trial farming via fresh accounts while ignoring both the normal «trial expired → paid plan purchased» upgrade and two paying people sharing a device. Trial status is determined by the tag and internal squad settings below. 0 = disabled"
       },
+      "violations_hwid_max_trial_subs": {
+        "label": "♻️ Max trial subscriptions per account per HWID",
+        "description": "How many times one person may take a trial from the same device — counting expired and disabled ones. Closes the workaround where a second trial is taken on a fresh subscription with the same telegram_id linked to it: to every other check that is one account with one live trial. Ignores both the «trial → paid» upgrade and two different people sharing a tablet. 0 = disabled"
+      },
       "violations_mobile_cgnat_buffer": {
         "label": "📱 Mobile CGNAT buffer (IPs)",
         "description": "Extra simultaneous IPs allowed for mobile connections beyond the device limit (CGNAT gives 3-5 IPs from one device)"
@@ -3833,6 +3863,14 @@
       "user_blacklist_sync_hours": {
         "label": "🔄 Sync interval (hours)",
         "description": "How often to refresh blacklists from external URLs."
+      },
+      "hwid_blacklist_guard_enabled": {
+        "label": "🛡️ HWID blacklist guard",
+        "description": "Periodically check whether a subscription came back to life for anyone seen on a blacklisted device, and disable it again. Blacklist blocking happens once, while a subscription can be revived afterwards — linking a telegram_id to an email-created one already did it. Entries set to «alert» are only reported, never disabled"
+      },
+      "hwid_blacklist_guard_interval_minutes": {
+        "label": "🛡️ HWID guard interval (min)",
+        "description": "How often the guard walks the HWID blacklist. A shorter interval means a shorter window for a revived subscription to stay usable"
       },
       "user_blacklist_auto_block": {
         "label": "⚡ Auto-block",

@@ -527,6 +527,153 @@ class TestHandleViolationDisabledUser:
         db.save_violation.assert_not_awaited()
 
 
+class TestHwidBlacklistScan:
+    """Периодический скан блеклиста не должен рапортовать по кругу.
+
+    Скан ходит раз в 30 минут по всем собранным HWID. Пока устройство висит на
+    аккаунте, совпадение находится каждый раз — и админ получал «HWID Blacklist:
+    users blocked» про уже отключённого юзера до бесконечности, да ещё голым
+    UUID вместо имени и отдельным сообщением на каждого.
+    """
+
+    @staticmethod
+    def _db(status, username="bob"):
+        db = make_db_mock()
+        db.batch_get_whitelist_status = AsyncMock(return_value={USER_UUID: (False, None)})
+        db.batch_get_user_hwid_devices = AsyncMock(
+            return_value={USER_UUID: [{"hwid": "BADHWID"}]}
+        )
+        db.batch_get_users_info = AsyncMock(
+            return_value={USER_UUID: {"username": username, "status": status}}
+        )
+        db.check_hwids_against_blacklist = AsyncMock(
+            return_value=[{"hwid": "BADHWID", "action": "block", "reason": "Абуз триала"}]
+        )
+        return db
+
+    async def _run(self, db, handler):
+        detector = MagicMock()
+        detector.check_users_batch = AsyncMock(return_value={})
+        with patch.object(collector, "db_service", db), \
+             patch.object(collector, "violation_detector", detector), \
+             patch.object(collector, "config_service", make_pipeline_config()), \
+             patch("web.backend.api.v2.violations._handle_blacklisted_hwid_users", handler):
+            await collector._run_violation_detection({USER_UUID})
+
+    @pytest.mark.asyncio
+    async def test_disabled_user_not_reported_again(self):
+        handler = AsyncMock()
+        await self._run(self._db("DISABLED"), handler)
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_active_user_reported_with_username(self):
+        handler = AsyncMock()
+        await self._run(self._db("ACTIVE"), handler)
+        handler.assert_awaited_once()
+        hwid, action, reason, affected = handler.await_args.args
+        assert hwid == "BADHWID"
+        assert action == "block"
+        assert affected == [{"user_uuid": USER_UUID, "username": "bob"}]
+
+
+class TestHwidReuseNotification:
+    """Сигнал в момент привязки устройства, уже засветившегося на другом аккаунте.
+
+    Периодический скан заметит это в течение получаса, и всё это время свежий
+    триал работает. Но шуметь на всякое совпадение нельзя: по журналу за
+    полтора месяца пар «пробная → купленная» у одного человека набралось 20,
+    а реальных нарушений — 4.
+    """
+
+    OTHER = "22222222-2222-2222-2222-222222222222"
+
+    @staticmethod
+    def _db(group, blacklisted=False):
+        db = make_db_mock()
+        db.get_shared_hwids_for_user = AsyncMock(return_value=[group] if group else [])
+        db.check_hwids_against_blacklist = AsyncMock(
+            return_value=[{"hwid": "HW1", "action": "block"}] if blacklisted else []
+        )
+        db.get_user_hwid_devices = AsyncMock(return_value=[
+            {"hwid": "HW1", "platform": "android", "os_version": "15", "app_version": "Happ/3.25"},
+        ])
+        db.batch_get_users_info = AsyncMock(return_value={
+            USER_UUID: {"username": "new-one", "status": "ACTIVE"},
+        })
+        return db
+
+    async def _run(self, group, blacklisted=False):
+        notify = AsyncMock()
+        db = self._db(group, blacklisted)
+        cfg = MagicMock()
+        cfg.get = MagicMock(side_effect=lambda key, default=None: default)
+        with patch.object(collector, "db_service", db), \
+             patch.object(collector, "config_service", cfg), \
+             patch("web.backend.core.notification_service.create_notification", notify):
+            await collector._notify_hwid_reuse({"user_uuid": USER_UUID, "hwid": "HW1"})
+        return notify
+
+    def _group(self, **over):
+        group = {
+            "hwid": "HW1", "self_telegram_id": 100, "self_email": None,
+            "self_is_trial": True, "self_is_active": True,
+            "other_users": [{
+                "uuid": self.OTHER, "username": "old", "telegram_id": 100,
+                "email": None, "is_trial": True, "is_active": False, "removed_at": None,
+            }],
+        }
+        group.update(over)
+        return group
+
+    @pytest.mark.asyncio
+    async def test_no_other_accounts_is_silent(self):
+        assert (await self._run(None)).await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_conversion_trial_to_paid_is_silent(self):
+        """Тот же человек, старая подписка уже не пробная — это покупка."""
+        group = self._group()
+        group["other_users"][0]["is_trial"] = False
+        assert (await self._run(group)).await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_repeat_trial_same_person_is_critical(self):
+        notify = await self._run(self._group())
+        notify.assert_awaited_once()
+        assert notify.await_args.kwargs["severity"] == "critical"
+        assert notify.await_args.kwargs["event"] == "violation.hwid_reused"
+
+    @pytest.mark.asyncio
+    async def test_stranger_account_is_warning(self):
+        group = self._group()
+        group["other_users"][0]["telegram_id"] = 999
+        notify = await self._run(group)
+        notify.assert_awaited_once()
+        assert notify.await_args.kwargs["severity"] == "warning"
+
+    @pytest.mark.asyncio
+    async def test_unlinked_device_marked_in_body(self):
+        group = self._group()
+        group["other_users"][0]["telegram_id"] = 999
+        group["other_users"][0]["removed_at"] = datetime.utcnow()
+        notify = await self._run(group)
+        assert "Устройство отвязано" in notify.await_args.kwargs["body"]
+
+    @pytest.mark.asyncio
+    async def test_blacklisted_hwid_is_left_to_blacklist_path(self):
+        """Про устройство из чёрного списка скажет блеклист — и скажет больше."""
+        assert (await self._run(self._group(), blacklisted=True)).await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_card_carries_device_and_target(self):
+        """Карточка без деталей устройства и принимающего аккаунта бесполезна."""
+        body = (await self._run(self._group())).await_args.kwargs["body"]
+        assert "Android 15" in body
+        assert "new-one" in body
+        assert "<b>" in body, "разметка нужна боту для rich-сообщения"
+
+
 class TestPublicIpForAgent:
     """_public_ip_for_agent: за внутренним прокси agent_ip не должен
     становиться приватным 172.x (у всех нод был «IP» docker-nginx)."""

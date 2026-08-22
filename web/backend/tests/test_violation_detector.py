@@ -10,7 +10,7 @@
 
 Это первые unit-тесты детектора в проекте (раньше их не было вообще).
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -300,6 +300,35 @@ async def test_hwid_expired_trial_next_to_active_is_clean():
     assert res.breakdown["hwid"].max_active_trials_per_hwid == 1
     assert res.breakdown["hwid"].score == 0.0
     assert res.recommended_action.value != "hard_block"
+
+
+@pytest.mark.asyncio
+async def test_hwid_second_trial_under_own_telegram_is_abuse():
+    """Обход, пойманный 22.08: человек с истёкшим триалом удаляет устройство,
+    заводит вторую подписку через email, цепляет к ней тот же HWID и привязывает
+    свой же telegram_id. После привязки аккаунт для детектора снова один, живой
+    триал один, подписок две из десяти разрешённых — все прежние пороги молчат.
+    Ловит только счёт пробных подписок одного аккаунта на устройстве."""
+    geo_map = {"1.1.1.1": meta("1.1.1.1", country_code="RU", asn=1, asn_org="ISP",
+                               connection_type="residential")}
+    shared = [{
+        "hwid": "HW1", "self_telegram_id": 100, "self_email": None,
+        "self_is_trial": True, "self_is_active": True,
+        "other_users": [
+            {"uuid": "U1", "telegram_id": 100, "email": None, "username": "old-trial",
+             "status": "DISABLED", "is_trial": True, "is_active": False,
+             "removed_at": datetime.now(timezone.utc)},
+        ],
+    }]
+    det = make_detector(geo_map, recent_violations=0)
+    res = await run_check(det, [conn("1.1.1.1", 60)], shared=shared)
+    hwid = res.breakdown["hwid"]
+    assert hwid.max_active_trials_per_hwid == 1, "живой триал один — старые пороги слепы"
+    assert hwid.max_accounts_per_hwid == 1, "после привязки telegram_id аккаунт один"
+    assert hwid.per_account_abuse is False, "две подписки из десяти разрешённых"
+    assert hwid.max_trial_subs_per_hwid == 2
+    assert hwid.score == 100.0
+    assert res.recommended_action.value == "hard_block"
 
 
 @pytest.mark.asyncio

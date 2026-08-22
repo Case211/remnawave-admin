@@ -36,6 +36,12 @@ class HwidCrossAccountAnalyzer:
         триалом на одном HWID. Отличает абуз параллельных триалов от обычного
         апгрейда «пробная истекла → куплена платная» и от двух платящих людей,
         делящих планшет.
+      • ``violations_hwid_max_trial_subs`` — макс. пробных подписок ОДНОГО
+        аккаунта на одном HWID, включая истёкшие. Три проверки выше смотрят на
+        живые подписки, и все три обходятся одним приёмом: взять триал второй
+        раз новой подпиской и привязать к ней свой же telegram_id — старая к
+        тому времени отключена, живой триал один, аккаунт после привязки тоже
+        один. Здесь считается, сколько раз человек брал пробную с этого железа.
     """
 
     def __init__(self, db_service: DatabaseService):
@@ -57,6 +63,7 @@ class HwidCrossAccountAnalyzer:
         max_accounts = config_service.get("violations_hwid_max_accounts", 2)
         max_per_account = config_service.get("violations_hwid_max_per_account", 10)
         max_active_trials = config_service.get("violations_hwid_max_active_trials", 1)
+        max_trial_subs = config_service.get("violations_hwid_max_trial_subs", 1)
         try:
             max_accounts = int(max_accounts)
         except (TypeError, ValueError):
@@ -69,6 +76,10 @@ class HwidCrossAccountAnalyzer:
             max_active_trials = int(max_active_trials)
         except (TypeError, ValueError):
             max_active_trials = 1
+        try:
+            max_trial_subs = int(max_trial_subs)
+        except (TypeError, ValueError):
+            max_trial_subs = 1
 
         self_tg_id = shared[0].get("self_telegram_id") if shared else None
         self_email = shared[0].get("self_email") if shared else None
@@ -99,6 +110,7 @@ class HwidCrossAccountAnalyzer:
         max_distinct_accounts_per_hwid = 1
         max_uuids_in_account_per_hwid = 1
         max_active_trial_accounts_per_hwid = 0
+        max_trial_subs_per_hwid = 0
         trial_groups_per_hwid: List[Dict[str, Any]] = []
 
         all_other_uuids: set = set()
@@ -119,12 +131,27 @@ class HwidCrossAccountAnalyzer:
             if self_is_trial and self_is_active:
                 active_trial_accounts_local.add(self_account_key)
 
+            # Пробные подписки ОДНОГО аккаунта на этом устройстве — включая
+            # истёкшие и отключённые. Проверки выше меряют живые триалы, и схема
+            # «взял триал, отвязал устройство, завёл вторую подписку, привязал к
+            # ней свой же telegram_id» для них невидима: аккаунт один, живой
+            # триал тоже один. Здесь видно, сколько раз этот человек брал пробную
+            # с одного железа. Считаем по аккаунту, а не по HWID целиком: два
+            # разных человека, каждый со своим триалом на общем планшете, — это
+            # смена владельца, а не абуз.
+            trial_subs_by_account_local: Dict[Any, Set[str]] = {}
+            if self_is_trial:
+                trial_subs_by_account_local.setdefault(self_account_key, set()).add(user_uuid)
+
             for user in group.get("other_users", []):
                 uid = user["uuid"]
                 tg = user.get("telegram_id")
                 key = _account_key(uid, tg, user.get("email"))
                 uuids_by_account_global.setdefault(key, set()).add(uid)
                 uuids_by_account_local.setdefault(key, set()).add(uid)
+
+                if user.get("is_trial"):
+                    trial_subs_by_account_local.setdefault(key, set()).add(uid)
 
                 if user.get("is_trial") and user.get("is_active"):
                     active_trial_accounts_local.add(key)
@@ -160,6 +187,9 @@ class HwidCrossAccountAnalyzer:
                     "active_trials": len(active_trial_accounts_local),
                 }
 
+            for uids in trial_subs_by_account_local.values():
+                max_trial_subs_per_hwid = max(max_trial_subs_per_hwid, len(uids))
+
             trial_groups_per_hwid.append({
                 "accounts": len(active_trial_accounts_local),
                 "members": active_trial_members_local,
@@ -186,8 +216,12 @@ class HwidCrossAccountAnalyzer:
         active_trials_threshold_hit = (
             max_active_trials > 0 and max_active_trial_accounts_per_hwid > max_active_trials
         )
+        trial_subs_threshold_hit = (
+            max_trial_subs > 0 and max_trial_subs_per_hwid > max_trial_subs
+        )
 
-        if not accounts_threshold_hit and not per_account_threshold_hit and not active_trials_threshold_hit:
+        if (not accounts_threshold_hit and not per_account_threshold_hit
+                and not active_trials_threshold_hit and not trial_subs_threshold_hit):
             return HwidScore(
                 score=0.0,
                 reasons=[],
@@ -197,6 +231,7 @@ class HwidCrossAccountAnalyzer:
                 matched_details=matched_details[:20],
                 max_accounts_per_hwid=max_distinct_accounts_per_hwid,
                 max_active_trials_per_hwid=max_active_trial_accounts_per_hwid,
+                max_trial_subs_per_hwid=max_trial_subs_per_hwid,
             )
 
         # Скоринг — чем сильнее превышение порога, тем выше
@@ -259,6 +294,13 @@ class HwidCrossAccountAnalyzer:
                     shown += f" (+{len(accomplice_usernames) - 5})"
                 reasons.append(f"Связанные аккаунты с живым триалом: {shown}")
 
+        if trial_subs_threshold_hit:
+            score = max(score, 100.0)
+            reasons.append(
+                f"Повторный триал на одном устройстве: {max_trial_subs_per_hwid} пробных "
+                f"подписок одного аккаунта на одном HWID (порог: {max_trial_subs})"
+            )
+
         if shared_hwid_count > 1:
             reasons.append(f"{shared_hwid_count} HWID используются совместно")
 
@@ -272,6 +314,7 @@ class HwidCrossAccountAnalyzer:
             per_account_abuse=per_account_threshold_hit,
             max_accounts_per_hwid=max_distinct_accounts_per_hwid,
             max_active_trials_per_hwid=max_active_trial_accounts_per_hwid,
+            max_trial_subs_per_hwid=max_trial_subs_per_hwid,
             active_trial_accomplices=accomplices,
         )
 

@@ -195,10 +195,14 @@ CREATE TABLE IF NOT EXISTS user_hwid_devices (
     user_agent TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    -- проставлено, если устройство отвязали: строка остаётся, чтобы HWID
+    -- помнил всех, кого на нём видели (детект повторных триалов)
+    removed_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_hwid_devices_user_hwid ON user_hwid_devices(user_uuid, hwid);
+CREATE INDEX IF NOT EXISTS idx_hwid_devices_hwid_removed ON user_hwid_devices(hwid, removed_at);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_user_uuid ON user_hwid_devices(user_uuid);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_platform ON user_hwid_devices(platform);
 CREATE INDEX IF NOT EXISTS idx_hwid_devices_hwid ON user_hwid_devices(hwid);
@@ -353,14 +357,17 @@ class DatabaseBase:
             logger.debug("Database schema initialized")
 
     # Whitelist of valid column names for ALTER TABLE migrations
-    _SAFE_HWID_COLUMNS = frozenset({"device_model", "user_agent"})
+    _SAFE_HWID_COLUMNS = frozenset({"device_model", "user_agent", "removed_at"})
     _SAFE_USER_COLUMNS = frozenset({"tag", "description", "traffic_limit_strategy", "external_squad_uuid"})
     _SAFE_HOST_COLUMNS = frozenset({"is_hidden", "tag", "security_layer", "server_description", "view_position"})
 
     async def _run_migrations(self, conn) -> None:
         """Apply incremental migrations for existing tables."""
         # Add device_model and user_agent columns to user_hwid_devices if missing
-        for col, col_type in [("device_model", "VARCHAR(255)"), ("user_agent", "TEXT")]:
+        # removed_at дублирует alembic 0101 намеренно: обращения к колонке идут из
+        # синка, который может стартовать раньше, чем доедут миграции
+        for col, col_type in [("device_model", "VARCHAR(255)"), ("user_agent", "TEXT"),
+                              ("removed_at", "TIMESTAMP WITH TIME ZONE")]:
             if col not in self._SAFE_HWID_COLUMNS:
                 logger.warning("Skipping unknown column: %s", col)
                 continue

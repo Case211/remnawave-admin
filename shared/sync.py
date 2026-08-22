@@ -1010,6 +1010,11 @@ class SyncService:
             logger.warning("HWID webhook: unknown panel user %s (user not synced yet)", user_key)
             return result
 
+        # отдаём наружу: по ним вызывающий решает, не переехало ли устройство
+        # с чужого аккаунта, — резолв уже сделан, второй раз его делать незачем
+        result["user_uuid"] = user_uuid
+        result["hwid"] = hwid
+
         if event == "user_hwid_devices.added":
             # Добавляем устройство в БД
             platform = hwid_data.get("platform")

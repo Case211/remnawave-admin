@@ -662,6 +662,14 @@ async def lifespan(app: FastAPI):
                             await asyncio.sleep(max(5, interval) * 60)
                     _bg("hwid_scan", _hwid_scan_loop())
 
+                    # Сторож чёрного списка HWID. Скан выше идёт от устройств,
+                    # присланных нодами, и блокирует однократно; подписку после
+                    # этого может поднять что угодно — привязка telegram_id к
+                    # email-подписке уже поднимала. Сторож ходит от самого
+                    # списка и гасит воскресшие подписки снова.
+                    from web.backend.core.hwid_guard import loop as _hwid_guard_loop
+                    _bg("hwid_blacklist_guard", _hwid_guard_loop())
+
                 # ── Services for all modes ──
                 async def _maintenance_loop():
                     while True:
