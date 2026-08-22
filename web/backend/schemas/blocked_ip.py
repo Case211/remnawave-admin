@@ -63,8 +63,35 @@ class BlockedIPItem(BaseModel):
     asn_org: Optional[str] = None
     expires_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    # Кого запись задевает по истории подключений: без этого из списка не
+    # понять, отрезан один абузер или подсеть с живыми абонентами
+    accounts: Optional[int] = None
+    trial_accounts: Optional[int] = None
+    last_seen: Optional[datetime] = None
 
 
 class BlockedIPListResponse(BaseModel):
     items: List[BlockedIPItem]
+    total: int
+
+
+class BlockedIPUser(BaseModel):
+    """Аккаунт, заходивший с заблокированного адреса."""
+    user_uuid: str
+    username: Optional[str] = None
+    status: Optional[str] = None
+    telegram_id: Optional[int] = None
+    email: Optional[str] = None
+    expire_at: Optional[datetime] = None
+    conns: int = 0
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    sample_ip: Optional[str] = None
+    is_trial: bool = False
+    is_active: bool = False
+
+
+class BlockedIPUsersResponse(BaseModel):
+    ip_cidr: str
+    users: List[BlockedIPUser]
     total: int

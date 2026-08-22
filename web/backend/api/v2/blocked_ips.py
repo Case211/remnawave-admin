@@ -23,6 +23,7 @@ from web.backend.schemas.blocked_ip import (
     BlockedIPCreate,
     BlockedIPItem,
     BlockedIPListResponse,
+    BlockedIPUsersResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,6 +128,26 @@ async def blocked_ips_count(
     return {"count": count}
 
 
+@router.get("/{block_id}/users", response_model=BlockedIPUsersResponse)
+@limiter.limit(RATE_READ)
+async def blocked_ip_users(
+    request: Request,
+    block_id: int,
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(50, ge=1, le=200),
+    admin: AdminUser = Depends(require_permission("blocked_ips", "view")),
+    db=Depends(get_db),
+):
+    """Кто заходил с этого адреса за окно — чтобы видеть, кого задела запись."""
+    entry = await db.get_blocked_ip_by_id(block_id)
+    if not entry:
+        raise api_error(404, E.BLOCKED_IP_NOT_FOUND)
+
+    ip_cidr = str(entry["ip_cidr"])
+    users = await db.get_users_by_blocked_ip(ip_cidr, days=days, limit=limit)
+    return BlockedIPUsersResponse(ip_cidr=ip_cidr, users=users, total=len(users))
+
+
 @router.post("", response_model=BlockedIPItem, status_code=201)
 @limiter.limit(RATE_MUTATIONS)
 async def add_blocked_ip(
@@ -165,12 +186,49 @@ async def add_blocked_ip(
     )
 
     # Push to agents (fire-and-forget style, don't block response)
+    pushed = 0
     try:
-        await push_blocklist_to_agents()
+        pushed = await push_blocklist_to_agents()
     except Exception as e:
         logger.warning("Failed to push blocklist after add: %s", e)
 
+    await _notify_ip_blocked(db, row, admin.username, pushed)
+
     return BlockedIPItem(**{**row, "ip_cidr": str(row["ip_cidr"])})
+
+
+async def _notify_ip_blocked(db, row: dict, admin_username: str, pushed: int) -> None:
+    """Сказать в чат, что адрес закрыт — и кого это задело.
+
+    Блокировка адреса режет весь трафик с него на ноду, а не только VPN, и по
+    подсети может задеть живых абонентов. Раньше это происходило молча: в
+    журнале аудита строка есть, а в чате — ничего.
+    """
+    from web.backend.core.blocked_ip_cards import blocked_ip_card
+    from web.backend.core.notification_service import create_notification
+
+    ip_cidr = str(row["ip_cidr"])
+    try:
+        users = await db.get_users_by_blocked_ip(ip_cidr, days=30, limit=20)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("blocked ip card: users lookup failed for %s: %s", ip_cidr, e)
+        users = []
+
+    try:
+        await create_notification(
+            title="Адрес заблокирован",
+            body=blocked_ip_card(row, users, pushed_nodes=pushed, admin_username=admin_username),
+            type="alert",
+            severity="warning",
+            link="/blocking?tab=ip",
+            source="blocked_ip",
+            source_id=ip_cidr,
+            channels=["in_app", "telegram"],
+            topic_type="violations",
+            event="violation.ip_blocked",
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("blocked ip notification failed: %s", e)
 
 
 @router.post("/bulk")

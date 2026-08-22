@@ -1594,7 +1594,8 @@
       "addedBy": "Added By",
       "created": "Date",
       "expires": "Expires",
-      "actions": "Actions"
+      "actions": "Actions",
+      "affects": "Affects"
     },
     "durations": {
       "forever": "Forever",
@@ -1624,7 +1625,32 @@
     "deleteDialog": {
       "title": "Remove block",
       "description": "Remove block for {{ip}}?"
-    }
+    },
+    "stats": {
+      "total": "Entries total",
+      "forever": "Permanent",
+      "temporary": "Temporary",
+      "affecting": "Affecting someone"
+    },
+    "sort": {
+      "recent": "Newest first",
+      "oldest": "Oldest first",
+      "accounts": "Most accounts",
+      "expiring": "Expiring soon"
+    },
+    "searchPlaceholder": "Search by address, reason or provider",
+    "affectedUsers": "Connected from this address ({{count}})",
+    "noUsers": "No connections from this address",
+    "noUsersHint": "Nobody connected from this address in the last month — the block currently affects no one.",
+    "trialLabel": "trial",
+    "trialsBadge_one": "{{count}} trial",
+    "trialsBadge_few": "{{count}} trials",
+    "trialsBadge_many": "{{count}} trials",
+    "trialsBadge_other": "{{count}} trials",
+    "connsShort_one": "{{count}} connection",
+    "connsShort_few": "{{count}} connections",
+    "connsShort_many": "{{count}} connections",
+    "connsShort_other": "{{count}} connections"
   },
   "violations": {
     "title": "Violations",
@@ -4686,7 +4712,11 @@
   "bscheck": {
     "upstreamErrorTitle": "bschekbot unavailable",
     "upstreamError": "bschekbot: {{error}}",
-    "dpiShort": {"on": "Whitelist only", "any": "Any", "off": "Without whitelist"},
+    "dpiShort": {
+      "on": "Whitelist only",
+      "any": "Any",
+      "off": "Without whitelist"
+    },
     "bsOffWarn": "Mode «without whitelist»: units with the whitelist off are used — shows the target on a channel with no operator filter.",
     "cancelScan": "Stop",
     "cancelVless": "Stop",

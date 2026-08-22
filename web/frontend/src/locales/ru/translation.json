@@ -1594,7 +1594,8 @@
       "addedBy": "Добавил",
       "created": "Дата",
       "expires": "Истекает",
-      "actions": "Действия"
+      "actions": "Действия",
+      "affects": "Задевает"
     },
     "durations": {
       "forever": "Навсегда",
@@ -1624,7 +1625,30 @@
     "deleteDialog": {
       "title": "Удалить блокировку",
       "description": "Удалить блокировку для {{ip}}?"
-    }
+    },
+    "stats": {
+      "total": "Всего записей",
+      "forever": "Бессрочных",
+      "temporary": "Временных",
+      "affecting": "Кого-то задевают"
+    },
+    "sort": {
+      "recent": "Сначала новые",
+      "oldest": "Сначала старые",
+      "accounts": "Больше аккаунтов",
+      "expiring": "Скоро истекут"
+    },
+    "searchPlaceholder": "Поиск по адресу, причине или провайдеру",
+    "affectedUsers": "С этого адреса заходили ({{count}})",
+    "noUsers": "Подключений с этого адреса не было",
+    "noUsersHint": "За последний месяц с адреса никто не подключался — блокировка сейчас никого не задевает.",
+    "trialLabel": "пробная",
+    "trialsBadge_one": "{{count}} пробная",
+    "trialsBadge_few": "{{count}} пробных",
+    "trialsBadge_many": "{{count}} пробных",
+    "connsShort_one": "{{count}} подключение",
+    "connsShort_few": "{{count}} подключения",
+    "connsShort_many": "{{count}} подключений"
   },
   "violations": {
     "title": "Нарушения",
@@ -4684,7 +4708,11 @@
   "bscheck": {
     "upstreamErrorTitle": "bschekbot недоступен",
     "upstreamError": "bschekbot: {{error}}",
-    "dpiShort": {"on": "Только с БС", "any": "Любые", "off": "Только без БС"},
+    "dpiShort": {
+      "on": "Только с БС",
+      "any": "Любые",
+      "off": "Только без БС"
+    },
     "bsOffWarn": "Режим «только без БС»: берутся единицы с выключенным белым списком — видно цель на канале без операторского фильтра.",
     "cancelScan": "Остановить",
     "cancelVless": "Остановить",

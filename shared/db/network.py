@@ -1237,20 +1237,116 @@ class NetworkMixin:
 
     async def get_blocked_ips(
         self, limit: int = 50, offset: int = 0, include_expired: bool = False,
+        days: int = 30,
     ) -> List[Dict[str, Any]]:
-        """Get blocked IPs with pagination."""
+        """Записи стоп-листа со счётчиками: кого этот адрес задевает.
+
+        Без счётчиков список — просто столбик адресов: не видно, отрезали вы
+        одного абузера или подсеть, за которой сидит десяток живых абонентов.
+        Считаются только адреса из истории подключений за окно, пробные —
+        отдельно, они и есть повод для большинства блокировок.
+        """
         if not self.is_connected:
             return []
+
+        trial_tags, _ = _load_trial_settings()
+        tags = [t for t in (trial_tags or []) if t] or ['__none__']
+
         try:
             where = "" if include_expired else "WHERE expires_at IS NULL OR expires_at > NOW()"
             async with self.acquire() as conn:
                 rows = await conn.fetch(
-                    select_sql(BLOCKED_IPS_TABLE, "*", f"{where} ORDER BY created_at DESC LIMIT $1 OFFSET $2"),
-                    limit, offset,
+                    f"""
+                    SELECT b.*, s.accounts, s.trial_accounts, s.last_seen
+                      FROM (
+                        SELECT * FROM {BLOCKED_IPS_TABLE}
+                        {where}
+                        ORDER BY created_at DESC
+                        LIMIT $1 OFFSET $2
+                      ) b
+                      LEFT JOIN LATERAL (
+                        SELECT COUNT(DISTINCT c.user_uuid) AS accounts,
+                               COUNT(DISTINCT c.user_uuid)
+                                   FILTER (WHERE u.tag = ANY($3::text[])) AS trial_accounts,
+                               MAX(c.connected_at) AS last_seen
+                          FROM {USER_CONNECTIONS_TABLE} c
+                          JOIN {USERS_TABLE} u ON u.uuid = c.user_uuid
+                         WHERE c.connected_at > NOW() - ($4 || ' days')::interval
+                           AND c.ip_address ~ '^[0-9.]+$'
+                           AND c.ip_address::inet <<= b.ip_cidr
+                      ) s ON TRUE
+                    """,
+                    limit, offset, tags, str(days),
                 )
                 return [dict(r) for r in rows]
         except Exception as e:
             logger.error("Error getting blocked IPs: %s", e)
+            return []
+
+    async def get_blocked_ip_by_id(self, block_id: int) -> Optional[Dict[str, Any]]:
+        """Запись стоп-листа по идентификатору."""
+        if not self.is_connected:
+            return None
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(
+                    select_sql(BLOCKED_IPS_TABLE, "*", "WHERE id = $1"), block_id
+                )
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error("Error getting blocked IP %s: %s", block_id, e)
+            return None
+
+    async def get_users_by_blocked_ip(
+        self, ip_cidr: str, days: int = 30, limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Кто заходил с адреса (или из подсети) за окно — для разбора блокировки."""
+        if not self.is_connected:
+            return []
+
+        trial_tags, trial_squads = _load_trial_settings()
+
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT c.user_uuid::text AS user_uuid,
+                           COUNT(*)            AS conns,
+                           MIN(c.connected_at) AS first_seen,
+                           MAX(c.connected_at) AS last_seen,
+                           MAX(c.ip_address)   AS sample_ip,
+                           u.username, u.status, u.telegram_id, u.email,
+                           u.tag, u.expire_at, u.raw_data
+                      FROM {USER_CONNECTIONS_TABLE} c
+                      JOIN {USERS_TABLE} u ON u.uuid = c.user_uuid
+                     WHERE c.connected_at > NOW() - ($2 || ' days')::interval
+                       AND c.ip_address ~ '^[0-9.]+$'
+                       AND c.ip_address::inet <<= $1::cidr
+                     GROUP BY c.user_uuid, u.username, u.status, u.telegram_id,
+                              u.email, u.tag, u.expire_at, u.raw_data
+                     ORDER BY COUNT(*) DESC
+                     LIMIT $3
+                    """,
+                    ip_cidr, str(days), limit,
+                )
+
+            return [{
+                "user_uuid": r["user_uuid"],
+                "username": r["username"],
+                "status": r["status"],
+                "telegram_id": r["telegram_id"],
+                "email": r["email"],
+                "expire_at": r["expire_at"],
+                "conns": r["conns"],
+                "first_seen": r["first_seen"],
+                "last_seen": r["last_seen"],
+                "sample_ip": r["sample_ip"],
+                "is_trial": _is_trial_user(r["tag"], r["raw_data"], trial_tags, trial_squads),
+                "is_active": _subscription_is_active(r["expire_at"], r["status"]),
+            } for r in rows]
+
+        except Exception as e:
+            logger.error("Error getting users by blocked IP %s: %s", ip_cidr, e)
             return []
 
     async def get_blocked_ips_count(self, include_expired: bool = False) -> int:
