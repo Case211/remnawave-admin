@@ -224,3 +224,120 @@ class TestSendViolationNotification:
 
         body = mock_create.call_args.kwargs["body"]
         assert "from_db" in body
+
+
+# ── Рекомендация против свершившегося факта ───────────────────
+
+
+def _body_of(mock_create):
+    """HTML-тело, которое ушло в Telegram."""
+    return mock_create.call_args.kwargs["telegram_body"]
+
+
+class TestRecommendationWording:
+    def setup_method(self):
+        _violation_notification_cache.clear()
+
+    def teardown_method(self):
+        _violation_notification_cache.clear()
+
+    @patch("web.backend.core.notification_service.create_notification", new_callable=AsyncMock)
+    async def test_non_blocking_verdict_reads_as_advice(self, mock_create):
+        """«ДЕЙСТВИЕ: ВРЕМЕННАЯ БЛОКИРОВКА» читалось как уже случившийся бан."""
+        await send_violation_notification(
+            user_uuid="uuid-1",
+            violation_score={"total": 85.0, "breakdown": {}, "recommended_action": "temp_block"},
+        )
+
+        body = _body_of(mock_create)
+        assert "Рекомендация: <b>ЗАБЛОКИРОВАТЬ ВРЕМЕННО</b>" in body
+        assert "Выполнено" not in body
+
+    @patch("web.backend.core.notification_service.create_notification", new_callable=AsyncMock)
+    async def test_auto_block_is_reported_as_a_fact(self, mock_create):
+        """На hard_block с автоблокировкой бан уже произошёл — это не совет."""
+        cfg = MagicMock()
+        cfg.get.side_effect = lambda key, default=None: (
+            True if key == "violation_auto_hard_block" else default
+        )
+        with patch("shared.config_service.config_service", cfg):
+            await send_violation_notification(
+                user_uuid="uuid-2",
+                violation_score={"total": 97.0, "breakdown": {}, "recommended_action": "hard_block"},
+            )
+
+        body = _body_of(mock_create)
+        assert "Выполнено: <b>ПОЛЬЗОВАТЕЛЬ ЗАБЛОКИРОВАН</b>" in body
+        assert "Рекомендация" not in body
+
+    @patch("web.backend.core.notification_service.create_notification", new_callable=AsyncMock)
+    async def test_hard_block_without_autoblock_stays_advice(self, mock_create):
+        cfg = MagicMock()
+        cfg.get.side_effect = lambda key, default=None: (
+            False if key == "violation_auto_hard_block" else default
+        )
+        with patch("shared.config_service.config_service", cfg):
+            await send_violation_notification(
+                user_uuid="uuid-3",
+                violation_score={"total": 97.0, "breakdown": {}, "recommended_action": "hard_block"},
+            )
+
+        body = _body_of(mock_create)
+        assert "Рекомендация: <b>ЗАБЛОКИРОВАТЬ</b>" in body
+        assert "решение за администратором" in body
+
+    def test_labels_cover_every_action(self):
+        """Словарь и enum не должны разъезжаться — иначе в карточке всплывёт ключ."""
+        from shared.analyzers.models import ACTION_LABELS, ViolationAction
+
+        assert {a.value for a in ViolationAction} == set(ACTION_LABELS)
+
+    def test_soft_block_no_longer_promises_a_missing_mechanism(self):
+        """Ограничивать скорость проект не умеет — название не должно это обещать."""
+        from shared.analyzers.models import ACTION_LABELS
+
+        assert "блокировк" not in ACTION_LABELS["soft_block"]
+
+
+# ── Кнопки белого списка в реально работающем уведомителе ─────
+
+
+class TestWhitelistButtons:
+    def test_partial_button_follows_the_analyzer_that_fired(self):
+        from web.backend.core.violation_notifier import _violation_keyboard
+
+        rows = _violation_keyboard("uuid-1", "hwid")["inline_keyboard"]
+        last = rows[-1]
+        assert [b["callback_data"] for b in last] == ["vact:wl:uuid-1", "vact:wlp_hwid:uuid-1"]
+        assert "HWID" in last[1]["text"]
+
+    def test_only_full_whitelist_when_no_analyzer_stands_out(self):
+        from web.backend.core.violation_notifier import _violation_keyboard
+
+        last = _violation_keyboard("uuid-1", None)["inline_keyboard"][-1]
+        assert [b["callback_data"] for b in last] == ["vact:wl:uuid-1"]
+
+    def test_torrent_card_has_no_whitelist_row(self):
+        """Торрент ловится мимо анализаторов — белый список на него не влияет."""
+        from web.backend.core.violation_notifier import _violation_keyboard
+
+        rows = _violation_keyboard("uuid-1", with_whitelist=False)["inline_keyboard"]
+        flat = [b["callback_data"] for row in rows for b in row]
+        assert not any(cd.startswith("vact:wl") for cd in flat)
+
+    @patch("web.backend.core.notification_service.create_notification", new_callable=AsyncMock)
+    async def test_notification_carries_the_whitelist_buttons(self, mock_create):
+        """Регрессия: кнопки жили в функции бота, которую никто не вызывает."""
+        await send_violation_notification(
+            user_uuid="uuid-9",
+            violation_score={
+                "total": 80.0,
+                "breakdown": {"geo": {"score": 10.0}, "hwid": {"score": 70.0}},
+                "recommended_action": "temp_block",
+            },
+        )
+
+        rows = mock_create.call_args.kwargs["reply_markup"]["inline_keyboard"]
+        flat = [b["callback_data"] for row in rows for b in row]
+        assert "vact:wl:uuid-9" in flat
+        assert "vact:wlp_hwid:uuid-9" in flat

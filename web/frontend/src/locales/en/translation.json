@@ -1756,12 +1756,12 @@
       "resolved": "Resolved"
     },
     "recommendedActions": {
-      "no_action": "No action",
-      "monitor": "Monitor",
-      "warn": "Warning",
-      "soft_block": "Soft block",
-      "temp_block": "Temp block",
-      "hard_block": "Hard block"
+      "no_action": "No action needed",
+      "monitor": "Watch",
+      "warn": "Warn",
+      "soft_block": "Review manually",
+      "temp_block": "Block temporarily",
+      "hard_block": "Block"
     },
     "filters": {
       "level": "Level",

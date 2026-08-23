@@ -12,6 +12,7 @@ from aiogram.types import BufferedInputFile, InlineKeyboardMarkup, InlineKeyboar
 from src.config import get_settings
 from src.utils.formatters import format_bytes, format_datetime, format_provider_name
 from src.utils.i18n import tr
+from shared.analyzers.models import VIOLATION_ANALYZERS, dominant_analyzer  # noqa: F401
 from shared.logger import logger
 from shared.notification_config import (
     is_notification_type_enabled,
@@ -988,41 +989,6 @@ async def send_crm_notification(
 
     except Exception as exc:
         logger.exception("Failed to send CRM notification event=%s error=%s", event, exc)
-
-
-# Ключи анализаторов в breakdown совпадают с теми, что понимает
-# excluded_analyzers в violation_whitelist — на этом и держится кнопка
-# частичного исключения.
-VIOLATION_ANALYZERS = ("temporal", "geo", "asn", "profile", "device", "hwid", "user_agent")
-
-
-def _analyzer_score(entry: Any) -> float:
-    """Вклад анализатора. Breakdown приходит и датаклассами, и словарями."""
-    if isinstance(entry, dict):
-        value = entry.get("score", 0)
-    else:
-        value = getattr(entry, "score", 0)
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def dominant_analyzer(breakdown: dict | None) -> str | None:
-    """Анализатор, давший наибольший вклад в скор, — по нему и предлагаем исключение.
-
-    Нужен, чтобы кнопка под уведомлением вела в тот же разрез, что и само
-    нарушение: сработал HWID — предлагаем не проверять по HWID, а не
-    отключать человеку всю защиту разом. Ничего не набрало — None, тогда
-    останется только полный белый список.
-    """
-    if not breakdown:
-        return None
-    scored = [(key, _analyzer_score(breakdown.get(key))) for key in VIOLATION_ANALYZERS if key in breakdown]
-    if not scored:
-        return None
-    key, top = max(scored, key=lambda pair: pair[1])
-    return key if top > 0 else None
 
 
 async def send_violation_notification(
