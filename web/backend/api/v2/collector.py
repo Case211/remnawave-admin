@@ -12,7 +12,7 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
@@ -1124,6 +1124,39 @@ async def _handle_violation(
         })
 
         from shared.violation_detector import ViolationAction
+
+        # Детектор рекомендует разобраться вручную — можно вместо этого сразу
+        # урезать скорость. Мера обратимая и не выкидывает человека из сети,
+        # поэтому в отличие от автоблокировки её не страшно применять на
+        # среднем скоре; выключено по умолчанию, решает администратор.
+        if (
+            violation_score.recommended_action == ViolationAction.SOFT_BLOCK
+            and config_service.get("violation_auto_soft_throttle", False)
+        ):
+            try:
+                from shared.config_service import config_service as _cfg
+                from shared.throttle import apply_throttle
+
+                rate_kbit = int(_cfg.get("throttle_default_kbit", 1024) or 1024)
+                ok, err, moved = await apply_throttle(
+                    user_uuid=user_uuid,
+                    rate_kbit=rate_kbit,
+                    reason=f"Автоматически по скору {violation_score.total:.1f}",
+                    admin_username="auto",
+                )
+                if ok:
+                    logger.warning(
+                        "Auto-throttled user %s to %d kbit (score=%.1f)%s",
+                        user_uuid[:8], rate_kbit, violation_score.total,
+                        " + reserve squad" if moved else "",
+                    )
+                    from web.backend.core.throttle_sync import push_throttles
+                    await push_throttles()
+                else:
+                    logger.warning("Auto-throttle failed for %s: %s", user_uuid[:8], err)
+            except Exception as throttle_error:
+                logger.warning("Auto-throttle error for %s: %s", user_uuid[:8], throttle_error)
+
         if violation_score.recommended_action == ViolationAction.HARD_BLOCK:
             if config_service.get("violation_auto_hard_block", True):
                 from shared.api_client import api_client

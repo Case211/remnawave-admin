@@ -1204,6 +1204,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 61,
     },
     {
+        "key": "violation_auto_soft_throttle",
+        "value_type": "bool",
+        "category": "violations",
+        "subcategory": "throttle",
+        "display_name": "Урезать скорость автоматически",
+        "description": "Резать скорость сразу, когда детектор рекомендует разобраться вручную (скор 65-80). Мера обратимая и не выкидывает человека из сети, но по умолчанию выключена: решение о наказании остаётся за администратором",
+        "default_value": "false",
+        "sort_order": 64,
+    },
+    {
         "key": "throttle_squad_uuid",
         "value_type": "string",
         "category": "violations",
@@ -1212,16 +1222,6 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "UUID внутреннего сквада, куда уводить наказанного вдобавок к урезанию скорости. Прежние сквады запоминаются и возвращаются при снятии. Пусто — сквады не трогать, только резать скорость",
         "default_value": "",
         "sort_order": 63,
-    },
-    {
-        "key": "throttle_uplink_gbit",
-        "value_type": "int",
-        "category": "violations",
-        "subcategory": "throttle",
-        "display_name": "Полоса ноды (Гбит/с)",
-        "description": "Ширина канала ноды. Нужна дисциплине tc как потолок для НЕограниченного трафика: занижение здесь замедлит обычных пользователей",
-        "default_value": "10",
-        "sort_order": 62,
     },
     {
         "key": "traffic_rate_auto_action",

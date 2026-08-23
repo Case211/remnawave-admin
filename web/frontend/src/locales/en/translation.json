@@ -1567,7 +1567,8 @@
     "tabs": {
       "ip": "IP Blocking",
       "hwid": "HWID Blacklist",
-      "whitelist": "Whitelist"
+      "whitelist": "Whitelist",
+      "throttles": "Throttling"
     }
   },
   "blockedIPs": {
@@ -1970,6 +1971,30 @@
       "moreSettings": "Other settings",
       "needSettingsEdit": "No permission to change settings — preview only.",
       "noData": "No violations for this period — nothing to show."
+    },
+    "throttles": {
+      "description": "Throttling sits between a warning and a block. The person stays online: sites and messengers work, video and torrents don't. The limit is attached to the user's address by rules on the node and lifts instantly.",
+      "add": "Throttle",
+      "addTitle": "Throttle a user",
+      "addDesc": "Empty speed — the value from settings. Empty duration — indefinite, until lifted by hand.",
+      "rate": "Speed, kbit/s",
+      "ratePlaceholder": "from settings",
+      "hours": "Lift after, hours",
+      "hoursPlaceholder": "indefinite",
+      "kbit": "kbit/s",
+      "forever": "indefinite",
+      "by": "Set by {{who}} · {{when}}",
+      "empty": "No limits",
+      "emptyDesc": "Nobody is throttled right now.",
+      "lift": "Lift",
+      "liftTitle": "Lift the limit?",
+      "liftDesc": "Speed returns to normal, and the user goes back to their previous squads if they were moved.",
+      "toast": {
+        "added": "User throttled",
+        "addedWithSquad": "User throttled and moved to the reserve squad",
+        "lifted": "Limit lifted",
+        "liftedWithSquad": "Limit lifted, user returned to previous squads"
+      }
     }
   },
   "admins": {

@@ -52,7 +52,6 @@ async def push_throttles(only_node: str | None = None) -> int:
 
     connected = agent_manager.connected_nodes()
     targets = [only_node] if only_node else list(connected)
-    uplink_gbit = int(config_service.get("throttle_uplink_gbit", 10) or 10)
 
     sent = 0
     for node_uuid in targets:
@@ -71,11 +70,7 @@ async def push_throttles(only_node: str | None = None) -> int:
             if not row or not row["agent_token"]:
                 continue
 
-            cmd = {
-                "type": "sync_throttled_ips",
-                "rules": rules,
-                "uplink_gbit": uplink_gbit,
-            }
+            cmd = {"type": "sync_throttled_ips", "rules": rules}
             payload, sig = sign_command_with_ts(cmd, row["agent_token"])
             payload["_sig"] = sig
             if await agent_manager.send_command(node_uuid, payload):

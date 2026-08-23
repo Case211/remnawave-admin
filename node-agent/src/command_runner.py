@@ -276,8 +276,7 @@ class CommandRunner:
     async def _sync_throttled_ips(self, msg: dict) -> None:
         """Ограничить скорость к указанным адресам на этой ноде (tc HTB).
 
-        Payload: {"rules": [{"ip": "1.2.3.4", "rate_kbit": 1024}, ...],
-                  "uplink_gbit": 10}.
+        Payload: {"rules": [{"ip": "1.2.3.4", "rate_kbit": 1024}, ...]}.
 
         Список заменяет прежний целиком, поэтому пустой снимает все
         ограничения. Режется исходящий трафик ноды к адресу — то есть
@@ -292,10 +291,6 @@ class CommandRunner:
 
         command_id = msg.get("command_id")
         raw_rules = msg.get("rules") or []
-        try:
-            uplink_gbit = max(1, int(msg.get("uplink_gbit") or 10))
-        except (TypeError, ValueError):
-            uplink_gbit = 10
 
         # До шелла доходят только разобранный адрес и целое число — оба
         # приходят снаружи, и подставлять их в скрипт как есть нельзя.
@@ -317,7 +312,7 @@ class CommandRunner:
         if skipped:
             logger.warning("sync_throttled_ips: skipped %d invalid entries", skipped)
 
-        script = self._build_throttle_script(rules, uplink_gbit)
+        script = self._build_throttle_script(rules)
         output, exit_code = await self._run_shell(script, timeout=60)
 
         if exit_code == 0:
@@ -335,13 +330,22 @@ class CommandRunner:
             })
 
     @staticmethod
-    def _build_throttle_script(rules: list, uplink_gbit: int) -> str:
+    def _build_throttle_script(rules: list) -> str:
         """Собрать POSIX-скрипт, целиком заменяющий текущую раскладку tc.
 
-        Классификация идёт по адресу назначения на интерфейсе с маршрутом по
-        умолчанию. Весь неразмеченный трафик попадает в класс с полосой во
-        весь аплинк — HTB обязан знать потолок, иначе он же и станет
-        ограничением для обычных пользователей.
+        Корнем стоит prio с priomap из одних нулей: весь неразмеченный
+        трафик уходит в первую полосу, где никакого ограничителя нет. HTB
+        висит только на отдельной полосе, куда фильтры заводят наказанные
+        адреса.
+
+        Так сделано ради безопасности. Если завернуть в HTB весь трафик,
+        дисциплине придётся сообщить ширину канала — и ошибка в этом числе
+        придушит всех пользователей ноды разом. Здесь знать ширину не нужно
+        вовсе: обычный трафик ограничителя просто не касается.
+
+        Режется исходящий трафик ноды к адресу, то есть скачивание у
+        клиента; отдача идёт входящей стороной, её tc без отдельного
+        ifb-интерфейса не шейпит.
         """
         lines = [
             "set -e",
@@ -357,17 +361,23 @@ class CommandRunner:
             return "\n".join(lines)
 
         lines += [
-            'tc qdisc add dev "$IFACE" root handle 1: htb default 999',
-            f'tc class add dev "$IFACE" parent 1: classid 1:1 htb rate {uplink_gbit}gbit ceil {uplink_gbit}gbit',
-            f'tc class add dev "$IFACE" parent 1:1 classid 1:999 htb rate {uplink_gbit}gbit ceil {uplink_gbit}gbit',
+            # priomap из нулей: без явного фильтра пакет всегда идёт в 1:1.
+            'tc qdisc add dev "$IFACE" root handle 1: prio bands 4 '
+            'priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0',
+            # Ограничитель — только на четвёртой полосе, отдельно от всех.
+            'tc qdisc add dev "$IFACE" parent 1:4 handle 40: htb',
         ]
 
         for index, (ip, rate_kbit) in enumerate(rules, start=10):
             lines += [
-                f'tc class add dev "$IFACE" parent 1:1 classid 1:{index} '
+                f'tc class add dev "$IFACE" parent 40: classid 40:{index} '
                 f'htb rate {rate_kbit}kbit ceil {rate_kbit}kbit burst 32k',
+                # Первый фильтр уводит адрес на полосу ограничителя,
+                # второй — в его личный класс с нужной скоростью.
                 f'tc filter add dev "$IFACE" protocol ip parent 1:0 prio 1 u32 '
-                f'match ip dst {ip}/32 flowid 1:{index}',
+                f'match ip dst {ip}/32 flowid 1:4',
+                f'tc filter add dev "$IFACE" protocol ip parent 40: prio 1 u32 '
+                f'match ip dst {ip}/32 flowid 40:{index}',
             ]
 
         lines.append(f'echo "throttled {len(rules)} addresses on $IFACE"')

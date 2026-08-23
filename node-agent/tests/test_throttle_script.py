@@ -18,8 +18,8 @@ import pytest
 from src.command_runner import CommandRunner
 
 
-def build(rules, uplink=10):
-    return CommandRunner._build_throttle_script(rules, uplink)
+def build(rules):
+    return CommandRunner._build_throttle_script(rules)
 
 
 def runner():
@@ -40,16 +40,17 @@ class TestThrottleScript:
 
     def test_rule_per_address(self):
         script = build([("1.2.3.4", 1024), ("5.6.7.8", 512)])
-        assert "match ip dst 1.2.3.4/32 flowid 1:10" in script
-        assert "match ip dst 5.6.7.8/32 flowid 1:11" in script
+        assert "match ip dst 1.2.3.4/32 flowid 40:10" in script
+        assert "match ip dst 5.6.7.8/32 flowid 40:11" in script
         assert "rate 1024kbit ceil 1024kbit" in script
         assert "rate 512kbit ceil 512kbit" in script
 
-    def test_unclassified_traffic_keeps_full_bandwidth(self):
-        """HTB требует потолок, и он не должен придушить обычных пользователей."""
-        script = build([("1.2.3.4", 1024)], uplink=25)
-        assert "htb default 999" in script
-        assert "classid 1:999 htb rate 25gbit ceil 25gbit" in script
+    def test_ordinary_traffic_never_enters_the_shaper(self):
+        """Ошибиться в ширине канала нельзя, если её вообще не нужно знать."""
+        script = build([("1.2.3.4", 1024)])
+        assert "priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0" in script
+        assert "gbit" not in script
+        assert "parent 1:4 handle 40: htb" in script
 
     def test_previous_layout_is_replaced_not_stacked(self):
         script = build([("1.2.3.4", 1024)])
@@ -98,7 +99,8 @@ class TestRuleValidation:
 
         script = r._run_shell.await_args.args[0]
         assert "9.9.9.9/32" in script
-        assert script.count("tc filter add") == 1
+        # На адрес приходится два фильтра: на полосу ограничителя и в его класс
+        assert script.count("tc filter add") == 2
 
     @pytest.mark.asyncio
     async def test_result_is_reported_back(self):
