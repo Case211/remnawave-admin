@@ -58,6 +58,29 @@ The score picks a **recommendation**, not a verdict: watch, warn, review manuall
 
 Hard-block thresholds are configured separately — by number of addresses, simultaneous connections, devices, HWID matches and accounts per device.
 
+## Soft block
+
+Between "warn" and "cut off entirely" there is a middle measure: **throttle the speed**. The person stays online — sites and messengers work, video and torrents don't — notices the internet has gone weird, and comes to sort it out. A full block gets you nothing of the sort: they simply disappear.
+
+The limit is attached to the user's **address**, via `tc` rules on the node. It touches neither the Xray config nor squad membership, so it applies and lifts instantly and affects nobody else. Requires agent 1.7.0 or newer.
+
+**Settings → Violations → Speed throttling:**
+
+| Setting | Meaning | Default |
+|---------|---------|---------|
+| Speed throttling | enables the mechanism | on |
+| Default speed | what the violator is left with, kbit/s | `1024` |
+| Reserve squad for violators | where to move them as well; empty — leave squads alone | empty |
+| Node bandwidth | link width, `tc` needs it as the ceiling for everyone else | `10` Gbit/s |
+
+There are three ways to apply it: the **"🐌 Throttle"** button under a violation notification, manually via the API, and automatically — when the traffic usage monitor has "throttle" as its auto-action.
+
+With a reserve squad configured, the violator is moved there as well, and their previous squads are remembered and restored when the limit is lifted.
+
+::: warning Addresses change
+People change addresses several times a day, so rules are not set once and forgotten — they are rebuilt from live connections, and a new address is covered within a minute. An address with even one non-throttled user behind it is skipped: a single mobile-carrier address serves a whole district, and throttling it wholesale would punish the innocent.
+:::
+
 The notification arrives in Telegram with buttons: block, drop connections, whitelist — either entirely or only for the analyzer that raised the alarm (see [buttons under notifications](/en/guide/bot#buttons-under-notifications)). Automatic actions are marked in the record as taken by the system — there is no administrator behind them and nothing to review.
 
 Repeat notifications about the same user are held back by a cooldown, so a single incident does not turn into a stream of messages.

@@ -178,6 +178,16 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 | **🚫 Auto-block threshold (GB)** | `traffic_rate_auto_block_gb` | `50.0` | Auto-block when traffic in the window exceeds this value. Only takes effect when auto-action = block_user |
 
 
+### throttle
+
+| Setting | Key | Default | What it does |
+|---|---|---|---|
+| **Ограничение скорости** | `throttle_enabled` | `true` | Разрешить «мягкую блокировку» — резать скорость нарушителю вместо полного отключения. Требует агента 1.6.0+ на нодах |
+| **Скорость по умолчанию (кбит/с)** | `throttle_default_kbit` | `1024` | На сколько резать, если скорость не указана явно. 1024 — сайты и мессенджеры работают, видео и торренты нет: человек замечает, что интернет странный, и идёт разбираться, а не молча теряет доступ |
+| **Полоса ноды (Гбит/с)** | `throttle_uplink_gbit` | `10` | Ширина канала ноды. Нужна дисциплине tc как потолок для НЕограниченного трафика: занижение здесь замедлит обычных пользователей |
+| **Резервный сквад для нарушителей** | `throttle_squad_uuid` | empty | UUID внутреннего сквада, куда уводить наказанного вдобавок к урезанию скорости. Прежние сквады запоминаются и возвращаются при снятии. Пусто — сквады не трогать, только резать скорость |
+
+
 ### 🔍 Violation detection pipeline
 
 | Setting | Key | Default | What it does |
