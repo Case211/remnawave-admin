@@ -170,6 +170,7 @@ def _violation_keyboard(
             ],
             [
                 {"text": "🚫 Аннулировать", "callback_data": f"vact:dismiss:{user_uuid}"},
+                {"text": "🐌 Урезать скорость", "callback_data": f"vact:thr:{user_uuid}"},
             ],
             *([whitelist_row] if whitelist_row else []),
         ]

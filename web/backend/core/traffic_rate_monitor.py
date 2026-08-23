@@ -256,6 +256,54 @@ class TrafficRateMonitor:
                 except Exception as e:
                     logger.warning("Failed to auto-block user %s: %s", v["user_uuid"], e)
 
+            # Урезать скорость вместо отключения. Порог тот же: до него —
+            # только уведомление, после — мера. Разница с блокировкой в том,
+            # что человек остаётся на связи и может прийти разбираться.
+            elif auto_action == "throttle" and v["delta_gb"] >= auto_block_gb:
+                await self._throttle_violator(v, auto_block_gb)
+
+    @staticmethod
+    async def _throttle_violator(v: dict, threshold_gb: float) -> None:
+        """Урезать скорость нарушителю по расходу трафика.
+
+        Ограничение ставится бессрочно: расход — штука накопительная, и
+        снимать его по таймеру значит выпускать человека обратно ровно
+        туда же. Снимается вручную или когда администратор разберётся.
+        """
+        from shared.config_service import config_service
+        from shared.throttle import apply_throttle
+
+        try:
+            rate_kbit = int(config_service.get("throttle_default_kbit", 1024) or 1024)
+        except (TypeError, ValueError):
+            rate_kbit = 1024
+
+        try:
+            success, error, moved = await apply_throttle(
+                user_uuid=v["user_uuid"],
+                rate_kbit=rate_kbit,
+                reason=(
+                    f"Расход {v['delta_gb']} ГБ за {int(v['elapsed_minutes'])} мин "
+                    f"(порог {threshold_gb} ГБ)"
+                ),
+                admin_username="auto",
+            )
+            if not success:
+                logger.warning("Failed to throttle user %s: %s", v["user_uuid"], error)
+                return
+
+            logger.info(
+                "Auto-throttled user %s to %d kbit for excessive traffic: %.1f GB%s",
+                v["username"], rate_kbit, v["delta_gb"],
+                " (moved to reserve squad)" if moved else "",
+            )
+
+            # Не ждём фонового цикла — мера должна успеть за расходом.
+            from web.backend.core.throttle_sync import push_throttles
+            await push_throttles()
+        except Exception as e:
+            logger.warning("Failed to auto-throttle user %s: %s", v["user_uuid"], e)
+
         # Cleanup old cooldown entries
         stale = [uid for uid, ts in self._notified.items() if now - ts > cooldown_seconds * 2]
         for uid in stale:

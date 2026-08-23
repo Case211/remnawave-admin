@@ -1,7 +1,7 @@
 """Обработчики inline-кнопок быстрых действий из уведомлений о нарушениях.
 
 Callback data format: vact:<action>:<user_uuid>
-Actions: info, block, kill, dismiss (= annul), reset, wl, wlp_<analyzer>
+Actions: info, block, kill, dismiss (= annul), reset, thr, wl, wlp_<analyzer>
 
 wlp_<analyzer> держит разрез внутри самого действия, а не отдельным полем:
 user_uuid читается как остаток строки, и лишнее двоеточие сломало бы разбор.
@@ -30,7 +30,7 @@ from src.utils.formatters import _esc
 
 # Действия, меняющие состояние. Белый список сюда же: он отключает защиту,
 # то есть последствия у него не меньше, чем у блокировки.
-_MUTATING_ACTIONS = frozenset({"block", "kill", "dismiss", "reset", "wl"})
+_MUTATING_ACTIONS = frozenset({"block", "kill", "dismiss", "reset", "wl", "thr"})
 
 
 def needs_resolve_permission(action: str) -> bool:
@@ -87,6 +87,8 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
             await _annul(callback, user_uuid)
         elif action == "reset":
             await _reset_traffic(callback, user_uuid, panel_user_id)
+        elif action == "thr":
+            await _throttle_user(callback, user_uuid, admin)
         elif action == "wl":
             await _whitelist_full(callback, user_uuid, admin)
         elif action.startswith("wlp_"):
@@ -342,3 +344,50 @@ async def _append_note(callback: CallbackQuery, note: str) -> None:
         await callback.message.edit_text(old_text + note, parse_mode="HTML")
     except Exception:
         pass
+
+
+async def _throttle_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmin) -> None:
+    """Урезать пользователю скорость вместо полного отключения.
+
+    Бот пишет решение в базу, а раскладывает его по нодам синхронизатор
+    веб-бэкенда: WebSocket-каналы к агентам держит он, и дублировать их в
+    боте незачем. Отсюда и задержка до минуты, о которой честно говорим.
+    """
+    from shared.config_service import config_service
+
+    try:
+        rate_kbit = int(config_service.get("throttle_default_kbit", 1024) or 1024)
+    except (TypeError, ValueError):
+        rate_kbit = 1024
+
+    try:
+        from shared.throttle import apply_throttle
+
+        success, error, moved = await apply_throttle(
+            user_uuid=user_uuid,
+            rate_kbit=rate_kbit,
+            reason=_("vact.thr_reason").format(name=callback.from_user.first_name),
+            admin_id=admin.account_id,
+            admin_username=admin.username or str(admin.telegram_id),
+        )
+        if not success:
+            await callback.answer(_("vact.thr_error").format(e=error or "?"), show_alert=True)
+            return
+
+        logger.warning(
+            "User %s THROTTLED to %d kbit by %s via violation button",
+            user_uuid, rate_kbit, callback.from_user.first_name,
+        )
+        moved_note = _("vact.thr_moved") if moved else ""
+        await callback.answer(
+            _("vact.thr_done").format(rate=rate_kbit, moved=moved_note), show_alert=True,
+        )
+        await _append_note(
+            callback,
+            _("vact.thr_suffix").format(
+                rate=rate_kbit, name=callback.from_user.first_name, moved=moved_note,
+            ),
+        )
+    except Exception as e:
+        logger.error("Throttle user %s failed: %s", user_uuid, e)
+        await callback.answer(_("vact.thr_error").format(e=e), show_alert=True)

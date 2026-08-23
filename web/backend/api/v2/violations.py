@@ -1136,7 +1136,9 @@ async def add_throttle(
     if data.expires_in_hours is not None:
         until = datetime.utcnow() + timedelta(hours=data.expires_in_hours)
 
-    success, error = await db.add_user_throttle(
+    from shared.throttle import apply_throttle
+
+    success, error, moved = await apply_throttle(
         user_uuid=data.user_uuid,
         rate_kbit=rate_kbit,
         reason=data.reason,
@@ -1166,11 +1168,17 @@ async def add_throttle(
             "rate_kbit": rate_kbit,
             "reason": data.reason,
             "expires_in_hours": data.expires_in_hours,
+            "moved_to_squad": moved,
         }, ensure_ascii=False),
         request=request,
     )
 
-    return {"success": True, "rate_kbit": rate_kbit, "nodes_updated": pushed}
+    return {
+        "success": True,
+        "rate_kbit": rate_kbit,
+        "nodes_updated": pushed,
+        "moved_to_squad": moved,
+    }
 
 
 @router.delete("/throttle/{user_uuid}")
@@ -1181,7 +1189,9 @@ async def remove_throttle(
     db: DatabaseService = Depends(get_db),
 ):
     """Снять ограничение скорости."""
-    removed = await db.remove_user_throttle(user_uuid)
+    from shared.throttle import lift_throttle
+
+    removed, restored = await lift_throttle(user_uuid)
     if not removed:
         raise api_error(404, E.USER_NOT_FOUND, "Throttle not found")
 
@@ -1197,7 +1207,8 @@ async def remove_throttle(
         action="violation.throttle.remove",
         resource="violations",
         resource_id=user_uuid,
+        details=json.dumps({"squads_restored": restored}, ensure_ascii=False),
         request=request,
     )
 
-    return {"success": True}
+    return {"success": True, "squads_restored": restored}

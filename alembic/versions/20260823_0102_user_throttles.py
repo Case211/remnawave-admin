@@ -16,6 +16,11 @@ soft_block значился как ограничение скорости, ко
 кому, насколько и до каких пор.
 
 ``until IS NULL`` — бессрочно, до ручного снятия.
+
+``prev_squads`` — сквады, в которых пользователь состоял до наказания. Если
+настроен резервный сквад для нарушителей, наказанный переезжает в него, и
+без этой колонки вернуть человека обратно было бы уже некуда: панель хранит
+только текущий состав.
 """
 from typing import Sequence, Union
 
@@ -37,7 +42,8 @@ def upgrade() -> None:
             created_by_admin_id BIGINT,
             created_by_username VARCHAR(255),
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            until TIMESTAMPTZ
+            until TIMESTAMPTZ,
+            prev_squads JSONB
         )
         """
     )

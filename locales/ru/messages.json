@@ -1026,7 +1026,12 @@
       "device": "устройствам",
       "hwid": "HWID",
       "user_agent": "User-Agent"
-    }
+    },
+    "thr_reason": "Урезана скорость из уведомления о нарушении ({name})",
+    "thr_done": "🐌 Скорость урезана до {rate} кбит/с{moved}. Правило доедет до нод в течение минуты",
+    "thr_suffix": "\n\n🐌 <i>Скорость урезана до {rate} кбит/с{moved} ({name})</i>",
+    "thr_error": "❌ Не удалось урезать скорость: {e}",
+    "thr_moved": " + переведён в резервный сквад"
   },
   "pact": {
     "invalid_format": "Неверный формат кнопки",
@@ -1235,7 +1240,8 @@
         "reset": "🔄 Сбросить трафик",
         "annul": "🚫 Аннулировать",
         "whitelist": "🤍 В белый список",
-        "whitelist_partial": "🤍 Не проверять: {analyzer}"
+        "whitelist_partial": "🤍 Не проверять: {analyzer}",
+        "throttle": "🐌 Урезать скорость"
       },
       "platform": {
         "android": "Android",

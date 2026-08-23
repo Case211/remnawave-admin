@@ -1026,7 +1026,12 @@
       "device": "devices",
       "hwid": "HWID",
       "user_agent": "User-Agent"
-    }
+    },
+    "thr_reason": "Throttled from violation notification ({name})",
+    "thr_done": "🐌 Throttled to {rate} kbit/s{moved}. Nodes pick the rule up within a minute",
+    "thr_suffix": "\n\n🐌 <i>Throttled to {rate} kbit/s{moved} ({name})</i>",
+    "thr_error": "❌ Could not throttle: {e}",
+    "thr_moved": " + moved to the reserve squad"
   },
   "pact": {
     "invalid_format": "Invalid button format",
@@ -1235,7 +1240,8 @@
         "reset": "🔄 Reset traffic",
         "annul": "🚫 Annul",
         "whitelist": "🤍 Whitelist",
-        "whitelist_partial": "🤍 Skip: {analyzer}"
+        "whitelist_partial": "🤍 Skip: {analyzer}",
+        "throttle": "🐌 Throttle"
       },
       "platform": {
         "android": "Android",

@@ -1801,6 +1801,7 @@ class ViolationsMixin:
         admin_id: Optional[int] = None,
         admin_username: Optional[str] = None,
         until: Optional[datetime] = None,
+        prev_squads: Optional[List[str]] = None,
     ) -> tuple:
         """Поставить пользователю ограничение скорости.
 
@@ -1824,16 +1825,20 @@ class ViolationsMixin:
                     insert_sql(
                         USER_THROTTLES_TABLE,
                         ["user_uuid", "rate_kbit", "reason", "created_by_admin_id",
-                         "created_by_username", "until"],
+                         "created_by_username", "until", "prev_squads"],
                         suffix="ON CONFLICT (user_uuid) DO UPDATE SET "
                         "rate_kbit = EXCLUDED.rate_kbit, "
                         "reason = EXCLUDED.reason, "
                         "created_by_admin_id = EXCLUDED.created_by_admin_id, "
                         "created_by_username = EXCLUDED.created_by_username, "
                         "created_at = NOW(), "
-                        "until = EXCLUDED.until",
+                        "until = EXCLUDED.until, "
+                        # Прежние сквады не затираем повторной постановкой: снимок
+                        # сделан до первого переезда, а сейчас человек уже в резервном.
+                        "prev_squads = COALESCE(user_throttles.prev_squads, EXCLUDED.prev_squads)",
                     ),
                     user_uuid, int(rate_kbit), reason, admin_id, admin_username, until,
+                    json.dumps(prev_squads) if prev_squads else None,
                 )
                 return (True, None)
         except Exception as e:
@@ -1877,7 +1882,7 @@ class ViolationsMixin:
             rows = await conn.fetch(
                 select_sql(
                     USER_THROTTLES_TABLE,
-                    "user_uuid::text, rate_kbit, reason, until, created_at, created_by_username",
+                    "user_uuid::text, rate_kbit, reason, until, created_at, created_by_username, prev_squads",
                     "WHERE until IS NULL OR until > NOW() ORDER BY created_at DESC",
                 )
             )

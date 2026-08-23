@@ -1204,6 +1204,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 61,
     },
     {
+        "key": "throttle_squad_uuid",
+        "value_type": "string",
+        "category": "violations",
+        "subcategory": "throttle",
+        "display_name": "Резервный сквад для нарушителей",
+        "description": "UUID внутреннего сквада, куда уводить наказанного вдобавок к урезанию скорости. Прежние сквады запоминаются и возвращаются при снятии. Пусто — сквады не трогать, только резать скорость",
+        "default_value": "",
+        "sort_order": 63,
+    },
+    {
         "key": "throttle_uplink_gbit",
         "value_type": "int",
         "category": "violations",
@@ -1219,9 +1229,9 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "category": "violations",
         "subcategory": "traffic_rate",
         "display_name": "Авто-действие при превышении",
-        "description": "Действие при чрезмерном потреблении трафика: только уведомление или автоблокировка",
+        "description": "Действие при чрезмерном потреблении трафика: только уведомление, урезать скорость или отключить совсем. throttle — «мягкая блокировка»: человек остаётся на связи и может прийти разбираться",
         "default_value": "notify",
-        "options": ["notify", "block_user"],
+        "options": ["notify", "throttle", "block_user"],
         "sort_order": 55,
     },
     {
