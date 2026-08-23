@@ -1122,13 +1122,17 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 42,
     },
 
-    # === TRAFFIC RATE MONITOR ===
+    # === TRAFFIC USAGE MONITOR ===
+    # Ключи остаются traffic_rate_* — они лежат в базе у всех установок,
+    # переименование ключа обнулило бы сохранённые значения. Меняется только
+    # то, что видит человек: монитор считает ОБЪЁМ за окно (гигабайты), а
+    # звался «скоростью» и обещал мегабиты.
     {
         "key": "traffic_rate_enabled",
         "value_type": "bool",
         "category": "violations",
         "subcategory": "traffic_rate",
-        "display_name": "Монитор скорости трафика",
+        "display_name": "Монитор расхода трафика",
         "description": "Отслеживание аномально высокого потребления трафика за период",
         "default_value": "false",
         "sort_order": 50,

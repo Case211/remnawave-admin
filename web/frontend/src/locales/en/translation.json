@@ -1933,7 +1933,7 @@
       "profile": "Profile (behavior deviation)",
       "device": "Device (fingerprint)",
       "hwid": "HWID (cross-account)",
-      "traffic_rate": "Traffic rate (excessive consumption)",
+      "traffic_rate": "Traffic usage (excessive consumption)",
       "torrent": "Torrent (P2P traffic)"
     },
     "exclusions": {
@@ -3196,7 +3196,7 @@
       "thresholds": "📐 Detection thresholds",
       "patterns": "🔤 User-Agent patterns",
       "torrent": "🧲 Torrent blocker",
-      "traffic_rate": "📈 Traffic rate",
+      "traffic_rate": "📈 Traffic usage",
       "hard_block": "🚫 Hard block",
       "trial": "🆓 Trial user detection",
       "auth_methods": "🔑 Auth methods",
@@ -3763,7 +3763,7 @@
         "description": "Minimum interval between torrent notifications for the same user"
       },
       "traffic_rate_enabled": {
-        "label": "📈 Traffic rate monitor",
+        "label": "📈 Traffic usage monitor",
         "description": "Tracks abnormally high traffic consumption over a period"
       },
       "traffic_rate_threshold_gb": {

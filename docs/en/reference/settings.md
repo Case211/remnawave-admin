@@ -116,6 +116,7 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 | **Max subscriptions per account on one HWID** | `violations_hwid_max_per_account` | `10` | How many panel UUIDs (subscriptions) of a single telegram_id are allowed on one HWID. Guards against multi-plan abuse. 0 = unlimited |
 | **📱 Mobile CGNAT buffer (IPs)** | `violations_mobile_cgnat_buffer` | `3` | Extra simultaneous IPs allowed for mobile connections beyond the device limit (CGNAT gives 3-5 IPs from one device) |
 | **🎁 Max active trials per HWID** | `violations_hwid_max_active_trials` | `1` | How many distinct accounts with a LIVE trial subscription may share one device without triggering. Catches trial farming via fresh accounts while ignoring both the normal «trial expired → paid plan purchased» upgrade and two paying people sharing a device. Trial status is determined by the tag and internal squad settings below. 0 = disabled |
+| **♻️ Max trial subscriptions per account per HWID** | `violations_hwid_max_trial_subs` | `1` | How many times one person may take a trial from the same device — counting expired and disabled ones. Closes the workaround where a second trial is taken on a fresh subscription with the same telegram_id linked to it: to every other check that is one account with one live trial. Ignores both the «trial → paid» upgrade and two different people sharing a tablet. 0 = disabled |
 | **Check cooldown (min)** | `violation_check_cooldown_minutes` | `15` | Minimum interval between repeated detector checks of the same user (load throttling). Not the same as the notification cooldown |
 | **Violation retention (days)** | `violation_retention_days` | `90` | How many days violation records are kept before automatic cleanup |
 | **Connection retention (days)** | `connections_retention_days` | `30` | How many days the user connection history is kept before automatic cleanup |
@@ -164,11 +165,11 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 | **🔕 Torrent notification cooldown (min)** | `torrent_notification_cooldown_minutes` | `30` | Minimum interval between torrent notifications for the same user |
 
 
-### 📈 Traffic rate
+### 📈 Traffic usage
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| **📈 Traffic rate monitor** | `traffic_rate_enabled` | `false` | Tracks abnormally high traffic consumption over a period |
+| **📈 Traffic usage monitor** | `traffic_rate_enabled` | `false` | Tracks abnormally high traffic consumption over a period |
 | **📊 Threshold (GB per window)** | `traffic_rate_threshold_gb` | `10.0` | Notify when a user consumes more than this amount in the window |
 | **⏱️ Check window (min)** | `traffic_rate_window_minutes` | `60` | Time window for traffic accounting (default 60 = 1 hour) |
 | **🔁 Check interval (min)** | `traffic_rate_check_interval_minutes` | `5` | How often to check traffic consumption |
@@ -219,6 +220,14 @@ Protection of the panel itself plus node attack detection: login methods, brute-
 | **🔗 Blacklist URLs (one per line)** | `user_blacklist_urls` | empty | External blacklist file URLs. Format: Telegram ID at the start of each line. |
 | **🔄 Sync interval (hours)** | `user_blacklist_sync_hours` | `6` | How often to refresh blacklists from external URLs. |
 | **⚡ Auto-block** | `user_blacklist_auto_block` | `false` | Automatically block blacklisted users via Panel API. When disabled — notification only. |
+| **🛡️ HWID blacklist guard** | `hwid_blacklist_guard_enabled` | `true` | Periodically check whether a subscription came back to life for anyone seen on a blacklisted device, and disable it again. Blacklist blocking happens once, while a subscription can be revived afterwards — linking a telegram_id to an email-created one already did it. Entries set to «alert» are only reported, never disabled |
+| **🛡️ HWID guard interval (min)** | `hwid_blacklist_guard_interval_minutes` | `5` | How often the guard walks the HWID blacklist. A shorter interval means a shorter window for a revived subscription to stay usable |
+| **🌐 IP guard: repeated trials** | `violations_ip_trial_guard_enabled` | `true` | Spot addresses used for several trial subscriptions by different accounts. HWID is announced by the client itself and forged with a header, while an address comes from the provider and is harder to change. Service and carrier ranges are excluded |
+| **🌐 Trial subscriptions per address** | `violations_ip_trial_accounts` | `2` | How many distinct trial subscriptions may share one address without an alert. Only trials count: a home provider address covers a whole flat |
+| **📱 Same for mobile addresses** | `violations_ip_trial_accounts_mobile` | `4` | A separate threshold for mobile carrier addresses. CGNAT puts a whole district behind one address, so several people with trials there is ordinary |
+| **🌐 Address lookup window (days)** | `violations_ip_trial_window_days` | `30` | How far back connections are counted. Too wide a window picks up dynamic addresses that changed hands between subscribers |
+| **🌐 Silence per address (hours)** | `violations_ip_trial_repeat_hours` | `24` | How long to stay quiet about an address after reporting it |
+| **🌐 Address guard interval (min)** | `violations_ip_trial_interval_minutes` | `60` | How often addresses are re-checked. Heavier than the HWID guard: it groups connection history over the whole window |
 
 
 ### node_attacks
