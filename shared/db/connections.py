@@ -218,6 +218,15 @@ class ConnectionsMixin:
 
                 ip_cast = "::inet" if self._ip_col_is_inet else ""
 
+                # Сравнивать ip_address НАПРЯМУЮ, без ::text с обеих сторон.
+                # Совместимость INET/VARCHAR держит ip_cast на стороне значения
+                # (см. 75af1947) — приведение колонки к тексту поверх него уже
+                # ничего не чинит, а на INET-инстансах мешает: ip_address
+                # выпадает из Index Cond частичного индекса
+                # (user_uuid, ip_address) WHERE disconnected_at IS NULL
+                # в Filter, и строки юзера читаются все. На VARCHAR приведение
+                # безвредно — там оно no-op и планировщик его снимает сам.
+
                 # 1a. Update existing active connections (match by user_uuid + ip_address)
                 # Two-step approach: partitioned tables require partition key in
                 # unique index, so ON CONFLICT (user_uuid, ip_address) alone won't
@@ -235,7 +244,7 @@ class ConnectionsMixin:
                             AS t(u, u_ip, n, d, t)
                     ) batch
                     WHERE uc.user_uuid = batch.uid
-                      AND uc.ip_address::text = batch.ip::text
+                      AND uc.ip_address = batch.ip
                       AND uc.disconnected_at IS NULL
                     """,
                     user_uuids, ip_addresses, node_uuids, device_infos, connected_ats,
@@ -252,7 +261,7 @@ class ConnectionsMixin:
                     WHERE NOT EXISTS (
                         SELECT 1 FROM {USER_CONNECTIONS_TABLE} uc
                         WHERE uc.user_uuid = u::uuid
-                          AND uc.ip_address::text = u_ip::text
+                          AND uc.ip_address = u_ip{ip_cast}
                           AND uc.disconnected_at IS NULL
                     )
                     """,
@@ -272,7 +281,7 @@ class ConnectionsMixin:
                         FROM UNNEST($1::text[], $2::text[]) AS t(u, i)
                     ) batch
                     WHERE uc.user_uuid = batch.uid
-                      AND uc.ip_address::text != batch.ip::text
+                      AND uc.ip_address != batch.ip
                       AND uc.disconnected_at IS NULL
                       AND uc.connected_at < NOW() - make_interval(mins => $3)
                     """,
