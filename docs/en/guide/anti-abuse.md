@@ -56,7 +56,7 @@ Which subscriptions count as trials is defined by a list of tags and internal sq
 
 The action follows the score: warning, soft block, temporary block, hard block. Hard-block thresholds are configured separately — by number of addresses, simultaneous connections, devices, HWID matches and accounts per device.
 
-The notification arrives in Telegram with buttons: block, drop connections, whitelist. Automatic actions are marked in the record as taken by the system — there is no administrator behind them and nothing to review.
+The notification arrives in Telegram with buttons: block, drop connections, whitelist — either entirely or only for the analyzer that raised the alarm (see [buttons under notifications](/en/guide/bot#buttons-under-notifications)). Automatic actions are marked in the record as taken by the system — there is no administrator behind them and nothing to review.
 
 Repeat notifications about the same user are held back by a cooldown, so a single incident does not turn into a stream of messages.
 

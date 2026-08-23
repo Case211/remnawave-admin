@@ -1009,7 +1009,24 @@
     "already_processed": "\n\n🚫 <i>Уже обработано ранее ({name})</i>",
     "traffic_reset": "🔄 Трафик {username} сброшен",
     "traffic_reset_suffix": "\n\n🔄 <i>Трафик сброшен ({name})</i>",
-    "reset_error": "❌ Ошибка сброса: {e}"
+    "reset_error": "❌ Ошибка сброса: {e}",
+    "wl_reason": "Из уведомления о нарушении ({name})",
+    "wl_done": "🤍 Пользователь в белом списке — нарушения по нему больше не заводятся",
+    "wl_suffix": "\n\n🤍 <i>В белом списке ({name})</i>",
+    "wlp_done": "🤍 Пользователь больше не проверяется по {analyzer}",
+    "wlp_suffix": "\n\n🤍 <i>Не проверяется по {analyzer} ({name})</i>",
+    "wl_already_full": "🤍 Пользователь уже в полном белом списке — он шире этого исключения",
+    "wl_unknown_analyzer": "❌ Неизвестный анализатор: {analyzer}",
+    "wl_error": "❌ Не удалось добавить в белый список: {e}",
+    "analyzer": {
+      "temporal": "времени",
+      "geo": "гео",
+      "asn": "ASN",
+      "profile": "профилю",
+      "device": "устройствам",
+      "hwid": "HWID",
+      "user_agent": "User-Agent"
+    }
   },
   "pact": {
     "invalid_format": "Неверный формат кнопки",
@@ -1216,7 +1233,9 @@
         "block": "🔒 Заблокировать",
         "kill": "⛔ Откл + разорвать",
         "reset": "🔄 Сбросить трафик",
-        "annul": "🚫 Аннулировать"
+        "annul": "🚫 Аннулировать",
+        "whitelist": "🤍 В белый список",
+        "whitelist_partial": "🤍 Не проверять: {analyzer}"
       },
       "platform": {
         "android": "Android",
@@ -1227,7 +1246,16 @@
         "unknown": "Unknown"
       },
       "summary": "👤 <code>{username}</code> · 📊 Скор: <b>{score}/100</b> · 🌐 IP: <b>{count}/{limit}</b>",
-      "user_section": "👤 <b>Пользователь</b>"
+      "user_section": "👤 <b>Пользователь</b>",
+      "analyzer": {
+        "temporal": "времени",
+        "geo": "гео",
+        "asn": "ASN",
+        "profile": "профилю",
+        "device": "устройствам",
+        "hwid": "HWID",
+        "user_agent": "UA"
+      }
     },
     "push": {
       "node_fallback": "Событие ноды",

@@ -990,6 +990,41 @@ async def send_crm_notification(
         logger.exception("Failed to send CRM notification event=%s error=%s", event, exc)
 
 
+# Ключи анализаторов в breakdown совпадают с теми, что понимает
+# excluded_analyzers в violation_whitelist — на этом и держится кнопка
+# частичного исключения.
+VIOLATION_ANALYZERS = ("temporal", "geo", "asn", "profile", "device", "hwid", "user_agent")
+
+
+def _analyzer_score(entry: Any) -> float:
+    """Вклад анализатора. Breakdown приходит и датаклассами, и словарями."""
+    if isinstance(entry, dict):
+        value = entry.get("score", 0)
+    else:
+        value = getattr(entry, "score", 0)
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def dominant_analyzer(breakdown: dict | None) -> str | None:
+    """Анализатор, давший наибольший вклад в скор, — по нему и предлагаем исключение.
+
+    Нужен, чтобы кнопка под уведомлением вела в тот же разрез, что и само
+    нарушение: сработал HWID — предлагаем не проверять по HWID, а не
+    отключать человеку всю защиту разом. Ничего не набрало — None, тогда
+    останется только полный белый список.
+    """
+    if not breakdown:
+        return None
+    scored = [(key, _analyzer_score(breakdown.get(key))) for key in VIOLATION_ANALYZERS if key in breakdown]
+    if not scored:
+        return None
+    key, top = max(scored, key=lambda pair: pair[1])
+    return key if top > 0 else None
+
+
 async def send_violation_notification(
     bot: Bot,
     user_uuid: str,
@@ -1255,7 +1290,7 @@ async def send_violation_notification(
 
         text = "\n".join(lines)
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        rows = [
             [
                 InlineKeyboardButton(text=tr("notify.violation.btn.info"), callback_data=f"vact:info:{user_uuid}"),
                 InlineKeyboardButton(text=tr("notify.violation.btn.block"), callback_data=f"vact:block:{user_uuid}"),
@@ -1267,7 +1302,28 @@ async def send_violation_notification(
             [
                 InlineKeyboardButton(text=tr("notify.violation.btn.annul"), callback_data=f"vact:dismiss:{user_uuid}"),
             ],
-        ])
+        ]
+
+        # Белый список: целиком и «только по этому поводу». Второй кнопки
+        # нет, если ни один анализатор не набрал очков — предлагать разрез
+        # наугад хуже, чем не предлагать вовсе.
+        whitelist_row = [
+            InlineKeyboardButton(
+                text=tr("notify.violation.btn.whitelist"), callback_data=f"vact:wl:{user_uuid}",
+            ),
+        ]
+        analyzer = dominant_analyzer(breakdown)
+        if analyzer:
+            whitelist_row.append(InlineKeyboardButton(
+                text=tr(
+                    "notify.violation.btn.whitelist_partial",
+                    analyzer=tr(f"notify.violation.analyzer.{analyzer}"),
+                ),
+                callback_data=f"vact:wlp_{analyzer}:{user_uuid}",
+            ))
+        rows.append(whitelist_row)
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
 
         message_kwargs = {
             "chat_id": chat_id,

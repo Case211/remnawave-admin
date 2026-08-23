@@ -1,7 +1,10 @@
 """Обработчики inline-кнопок быстрых действий из уведомлений о нарушениях.
 
 Callback data format: vact:<action>:<user_uuid>
-Actions: info, block, kill, dismiss (= annul), reset
+Actions: info, block, kill, dismiss (= annul), reset, wl, wlp_<analyzer>
+
+wlp_<analyzer> держит разрез внутри самого действия, а не отдельным полем:
+user_uuid читается как остаток строки, и лишнее двоеточие сломало бы разбор.
 """
 import logging
 
@@ -17,12 +20,22 @@ from shared.admin_quota import (
 )
 from src.services import data_access
 from src.utils.auth import BotAdmin
+from src.utils.notifications import VIOLATION_ANALYZERS
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 
 from src.utils.formatters import _esc
+
+# Действия, меняющие состояние. Белый список сюда же: он отключает защиту,
+# то есть последствия у него не меньше, чем у блокировки.
+_MUTATING_ACTIONS = frozenset({"block", "kill", "dismiss", "reset", "wl"})
+
+
+def needs_resolve_permission(action: str) -> bool:
+    """Требует ли действие права violations:resolve — как в веб-API."""
+    return action in _MUTATING_ACTIONS or action.startswith("wlp_")
 
 
 @router.callback_query(F.data.startswith("vact:"))
@@ -33,14 +46,16 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
         await callback.answer(_("vact.invalid_format"), show_alert=True)
         return
 
-    _, action, user_uuid = parts
+    # Не «_»: это имя занято gettext, и присваивание делало его локальным —
+    # ответ про неверный формат выше падал с UnboundLocalError.
+    _prefix, action, user_uuid = parts
     admin_name = callback.from_user.first_name or str(callback.from_user.id)
     logger.info("Violation action: %s on user %s by %s", action, user_uuid[:8], admin_name)
 
     # RBAC: мутирующие действия требуют права violations:resolve — как в веб-API
     # (require_permission("violations","resolve")). Приходящий admin подтверждает
     # только доступ к боту, но не право на действие над нарушением.
-    if action in ("block", "kill", "dismiss", "reset"):
+    if needs_resolve_permission(action):
         if not await admin.has_permission("violations", "resolve"):
             logger.warning(
                 "Violation action %s DENIED for %s (no violations:resolve)", action, admin_name
@@ -72,6 +87,10 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
             await _annul(callback, user_uuid)
         elif action == "reset":
             await _reset_traffic(callback, user_uuid, panel_user_id)
+        elif action == "wl":
+            await _whitelist_full(callback, user_uuid, admin)
+        elif action.startswith("wlp_"):
+            await _whitelist_partial(callback, user_uuid, action[len("wlp_"):], admin)
         else:
             await callback.answer(_("vact.unknown_action").format(action=action), show_alert=True)
     except Exception as e:
@@ -242,3 +261,84 @@ async def _reset_traffic(callback: CallbackQuery, user_uuid: str, panel_user_id:
             pass
     except Exception as e:
         await callback.answer(_("vact.reset_error").format(e=e), show_alert=True)
+
+
+async def _whitelist_full(callback: CallbackQuery, user_uuid: str, admin: BotAdmin) -> None:
+    """Полный белый список: пользователя больше не проверяет ни один анализатор."""
+    try:
+        success, error = await db_service.add_to_violation_whitelist(
+            user_uuid=user_uuid,
+            reason=_("vact.wl_reason").format(name=callback.from_user.first_name),
+            admin_id=admin.account_id,
+            admin_username=admin.username or str(admin.telegram_id),
+            excluded_analyzers=None,
+        )
+        if not success:
+            await callback.answer(_("vact.wl_error").format(e=error or "?"), show_alert=True)
+            return
+
+        logger.warning(
+            "User %s WHITELISTED (full) by %s via violation button",
+            user_uuid, callback.from_user.first_name,
+        )
+        await callback.answer(_("vact.wl_done"), show_alert=True)
+        await _append_note(callback, _("vact.wl_suffix").format(name=callback.from_user.first_name))
+    except Exception as e:
+        logger.error("Whitelist user %s failed: %s", user_uuid, e)
+        await callback.answer(_("vact.wl_error").format(e=e), show_alert=True)
+
+
+async def _whitelist_partial(
+    callback: CallbackQuery, user_uuid: str, analyzer: str, admin: BotAdmin,
+) -> None:
+    """Частичный белый список: не проверять этого пользователя одним анализатором.
+
+    Уже имеющиеся исключения сохраняются: запись в whitelist одна на
+    пользователя и перезаписывается целиком, так что новый разрез нужно
+    подмешать к старым, иначе прошлое решение молча потеряется.
+    """
+    if analyzer not in VIOLATION_ANALYZERS:
+        await callback.answer(_("vact.wl_unknown_analyzer").format(analyzer=analyzer), show_alert=True)
+        return
+
+    try:
+        is_whitelisted, excluded = await db_service.is_user_violation_whitelisted(user_uuid)
+        if is_whitelisted and excluded is None:
+            # Полный белый список шире частичного — сужать его молча нельзя.
+            await callback.answer(_("vact.wl_already_full"), show_alert=True)
+            return
+
+        merged = sorted(set(excluded or []) | {analyzer})
+        success, error = await db_service.add_to_violation_whitelist(
+            user_uuid=user_uuid,
+            reason=_("vact.wl_reason").format(name=callback.from_user.first_name),
+            admin_id=admin.account_id,
+            admin_username=admin.username or str(admin.telegram_id),
+            excluded_analyzers=merged,
+        )
+        if not success:
+            await callback.answer(_("vact.wl_error").format(e=error or "?"), show_alert=True)
+            return
+
+        label = _(f"vact.analyzer.{analyzer}")
+        logger.warning(
+            "User %s WHITELISTED (analyzers=%s) by %s via violation button",
+            user_uuid, ",".join(merged), callback.from_user.first_name,
+        )
+        await callback.answer(_("vact.wlp_done").format(analyzer=label), show_alert=True)
+        await _append_note(
+            callback,
+            _("vact.wlp_suffix").format(analyzer=label, name=callback.from_user.first_name),
+        )
+    except Exception as e:
+        logger.error("Partial whitelist %s/%s failed: %s", user_uuid, analyzer, e)
+        await callback.answer(_("vact.wl_error").format(e=e), show_alert=True)
+
+
+async def _append_note(callback: CallbackQuery, note: str) -> None:
+    """Дописать отметку под карточкой нарушения. Не вышло — не беда."""
+    try:
+        old_text = callback.message.text or callback.message.html_text or ""
+        await callback.message.edit_text(old_text + note, parse_mode="HTML")
+    except Exception:
+        pass
