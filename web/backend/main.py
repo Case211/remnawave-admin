@@ -1027,6 +1027,13 @@ def create_app() -> FastAPI:
             return JSONResponse({"detail": "Request body too large", "code": "BODY_TOO_LARGE"}, status_code=413)
         return await call_next(request)
 
+    # Распаковка сжатых тел (батчи агента 1.6.0+). Стоит после проверки
+    # content-length: та смотрит на сжатое тело, эта ограничивает
+    # распакованное тем же потолком — иначе десяток килобайт мог бы
+    # развернуться в гигабайты.
+    from web.backend.core.gzip_request import GzipRequestMiddleware
+    app.add_middleware(GzipRequestMiddleware, max_decompressed_bytes=MAX_BODY_SIZE)
+
     # Security headers middleware
     @app.middleware("http")
     async def add_security_headers(request: Request, call_next):
