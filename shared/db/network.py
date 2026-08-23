@@ -2298,6 +2298,28 @@ class NetworkMixin:
                 )
             return [dict(r) for r in rows]
 
+    async def cleanup_stale_user_node_traffic(self, keep_days: int = 7) -> int:
+        """Убрать из снимка пары «юзер×нода», которые давно не обновлялись.
+
+        Удалённых юзеров и снятые ноды забирает каскад по внешним ключам,
+        а вот пара живого юзера с нодой, через которую он больше не ходит,
+        остаётся навсегда — и на большом флоте снимок пухнет без предела.
+
+        Учёт от этого не страдает: панель отдаёт трафик ЗА СУТКИ, а не
+        накопительный, поэтому вернувшийся юзер без старой строки попадёт
+        в ту же ветку, что и при суточном обнулении счётчика, — дельтой
+        станет весь его сегодняшний трафик. Задвоения не будет.
+        """
+        if not self.is_connected:
+            return 0
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                "DELETE FROM user_node_traffic "
+                "WHERE synced_at IS NOT NULL AND synced_at < NOW() - INTERVAL '1 day' * $1",
+                keep_days,
+            )
+            return int(result.split()[-1]) if result else 0
+
     async def cleanup_old_user_node_traffic_history(self, keep_hours: int = 48) -> int:
         """Delete user-node traffic history older than keep_hours."""
         if not self.is_connected:

@@ -702,10 +702,38 @@ class NodesMixin:
                 panel_ids,
             )
 
+    async def get_user_node_traffic_snapshot_for_node(self, node_uuid: str) -> Dict[str, int]:
+        """Снимок трафика ОДНОЙ ноды: ``{user_uuid: traffic_bytes}``.
+
+        Синку дельт больше и не нужно: он идёт по нодам и для каждой
+        смотрит только её колонку. Таблица же растёт как «юзеры × ноды,
+        через которые они ходили» — на несколько сотен нод это миллионы
+        строк, и поднимать их целиком каждый цикл (см.
+        get_user_node_traffic_snapshot) значит держать в памяти сотни
+        мегабайт ради среза в тысячу записей. Выборка идёт по
+        idx_user_node_traffic_node.
+        """
+        if not self.is_connected:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                select_sql(
+                    USER_NODE_TRAFFIC_TABLE,
+                    "user_uuid::text, traffic_bytes",
+                    "WHERE node_uuid = $1",
+                ),
+                node_uuid,
+            )
+        return {r["user_uuid"]: int(r["traffic_bytes"]) for r in rows}
+
     async def get_user_node_traffic_snapshot(self) -> Dict[str, Dict[str, int]]:
         """Get current snapshot of user_node_traffic.
 
         Returns dict: {user_uuid: {node_uuid: traffic_bytes}}.
+
+        ⚠️ Поднимает таблицу целиком. Для синка дельт есть
+        get_user_node_traffic_snapshot_for_node — на многонодовых
+        установках разница в памяти на два порядка.
         """
         if not self.is_connected:
             return {}
