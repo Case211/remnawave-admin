@@ -71,9 +71,11 @@ The limit is attached to the user's **address**, via `tc` rules on the node. It 
 | Speed throttling | enables the mechanism | on |
 | Default speed | what the violator is left with, kbit/s | `1024` |
 | Reserve squad for violators | where to move them as well; empty — leave squads alone | empty |
-| Node bandwidth | link width, `tc` needs it as the ceiling for everyone else | `10` Gbit/s |
+| Throttle automatically | apply straight away on the "review manually" verdict | off |
 
-There are three ways to apply it: the **"🐌 Throttle"** button under a violation notification, manually via the API, and automatically — when the traffic usage monitor has "throttle" as its auto-action.
+There are four ways to apply it: the **"🐌 Throttle"** button under a violation notification, by hand on the **Blocking → Throttling** tab, automatically by traffic usage ("throttle" as the monitor's auto-action), and automatically by score — with "Throttle automatically" on, the detector applies it itself on the "review manually" verdict.
+
+The node's link width does not need to be configured: ordinary traffic bypasses the shaper entirely, only the violators' addresses go through it.
 
 With a reserve squad configured, the violator is moved there as well, and their previous squads are remembered and restored when the limit is lifted.
 
