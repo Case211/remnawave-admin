@@ -227,3 +227,42 @@ class WhitelistListResponse(BaseModel):
     """Ответ списка whitelist."""
     items: List[WhitelistItem]
     total: int
+
+
+class ThrottleAddRequest(BaseModel):
+    """Запрос на ограничение скорости пользователю («мягкая блокировка»)."""
+    user_uuid: str
+    rate_kbit: Optional[int] = Field(
+        None, ge=64, le=1_000_000,
+        description="Скорость в кбит/с. Не указана — берётся throttle_default_kbit.",
+    )
+    reason: Optional[str] = Field(None, max_length=1000)
+    expires_in_hours: Optional[int] = Field(
+        None, ge=1, le=8760,
+        description="Через сколько часов снять. None = бессрочно, до ручного снятия.",
+    )
+
+    @field_validator('user_uuid')
+    @classmethod
+    def validate_uuid(cls, v: str) -> str:
+        uuid_re = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+        if not uuid_re.match(v.strip()):
+            raise ValueError('Invalid UUID format')
+        return v.strip()
+
+
+class ThrottleItem(BaseModel):
+    """Действующее ограничение скорости."""
+    user_uuid: str
+    username: Optional[str] = None
+    rate_kbit: int
+    reason: Optional[str] = None
+    created_by_username: Optional[str] = None
+    created_at: datetime
+    until: Optional[datetime] = None
+
+
+class ThrottleListResponse(BaseModel):
+    """Ответ списка ограничений."""
+    items: List[ThrottleItem]
+    total: int

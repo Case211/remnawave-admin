@@ -1177,6 +1177,42 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "default_value": "60",
         "sort_order": 54,
     },
+    # === ОГРАНИЧЕНИЕ СКОРОСТИ (мягкая блокировка) ===
+    # Между «предупредить» и «отключить» не было ничего: soft_block значился
+    # ограничением скорости, которого проект не умел. Ограничение живёт на
+    # ноде правилами tc и вешается на адрес пользователя — конфиг Xray и
+    # принадлежность к сквадам не трогаются, поэтому снимается так же
+    # мгновенно, как ставится.
+    {
+        "key": "throttle_enabled",
+        "value_type": "bool",
+        "category": "violations",
+        "subcategory": "throttle",
+        "display_name": "Ограничение скорости",
+        "description": "Разрешить «мягкую блокировку» — резать скорость нарушителю вместо полного отключения. Требует агента 1.6.0+ на нодах",
+        "default_value": "true",
+        "sort_order": 60,
+    },
+    {
+        "key": "throttle_default_kbit",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "throttle",
+        "display_name": "Скорость по умолчанию (кбит/с)",
+        "description": "На сколько резать, если скорость не указана явно. 1024 — сайты и мессенджеры работают, видео и торренты нет: человек замечает, что интернет странный, и идёт разбираться, а не молча теряет доступ",
+        "default_value": "1024",
+        "sort_order": 61,
+    },
+    {
+        "key": "throttle_uplink_gbit",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "throttle",
+        "display_name": "Полоса ноды (Гбит/с)",
+        "description": "Ширина канала ноды. Нужна дисциплине tc как потолок для НЕограниченного трафика: занижение здесь замедлит обычных пользователей",
+        "default_value": "10",
+        "sort_order": 62,
+    },
     {
         "key": "traffic_rate_auto_action",
         "value_type": "string",

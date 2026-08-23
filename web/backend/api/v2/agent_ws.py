@@ -125,6 +125,16 @@ async def agent_websocket(
     except Exception as e:
         logger.debug("Failed to push blocked IPs to agent %s: %s", node_uuid, e)
 
+    # Ограничения скорости — тоже заново: правила tc живут в ядре и не
+    # переживают перезагрузку ноды, а отпечаток отправленного надо забыть,
+    # иначе синхронизатор решит, что у агента всё на месте, и промолчит.
+    try:
+        from web.backend.core.throttle_sync import forget_node, push_throttles
+        forget_node(node_uuid)
+        await push_throttles(only_node=node_uuid)
+    except Exception as e:
+        logger.debug("Failed to push throttles to agent %s: %s", node_uuid, e)
+
     # Состояние nDPI тоже отправляем при каждом подключении: агент после
     # перезапуска про него не помнит, а панель — единственный источник
     # правды об этом тумблере.
