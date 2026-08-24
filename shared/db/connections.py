@@ -729,7 +729,7 @@ class ConnectionsMixin:
                         user_uuid, node_uuid, ip_address, destination,
                         inbound_tag, outbound_tag, detected_at, detected_by
                     )
-                    SELECT u, n, ip, dst, itag, otag, COALESCE(da, NOW()), db
+                    SELECT u::uuid, n::uuid, ip, dst, itag, otag, COALESCE(da, NOW()), db
                     FROM UNNEST(
                         $1::text[], $2::text[], $3::text[], $4::text[],
                         $5::text[], $6::text[], $7::timestamptz[], $8::text[]
