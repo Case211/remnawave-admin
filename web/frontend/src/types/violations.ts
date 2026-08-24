@@ -43,6 +43,8 @@ export interface ViolationDetail {
   notified_at: string | null
   raw_data: Record<string, unknown> | null
   admin_comment?: string | null
+  /** Источник скора, когда анализаторы подключений в нём не участвовали: 'torrent' | 'external'. */
+  score_source?: string | null
   hwid_matched_users?: Array<{
     uuid: string
     username: string

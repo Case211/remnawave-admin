@@ -75,6 +75,10 @@ class ViolationDetail(ViolationBase):
     raw_data: Optional[Dict[str, Any]] = None
     hwid_matched_users: Optional[List[Dict[str, Any]]] = None
     admin_comment: Optional[str] = None
+    # Откуда взялся скор, когда анализаторы подключений в нём не участвовали:
+    # "torrent" — детект торрент-трафика, "external" — прочие источники
+    # (расход трафика и подобное). Пусто — обычный разбор по анализаторам.
+    score_source: Optional[str] = None
 
 
 class ViolationListResponse(BaseModel):

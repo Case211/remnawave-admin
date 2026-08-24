@@ -1808,6 +1808,8 @@
       "countries": "Стран",
       "ipAddresses": "IP-адресов",
       "scoreBreakdown": "Разбор скоринга",
+      "torrent": "Торрент",
+      "scoreOutsideAnalyzers": "Скор выставлен вне анализаторов подключений — по ним разбора нет",
       "temporal": "Временной",
       "geo": "Гео",
       "provider": "Провайдер",

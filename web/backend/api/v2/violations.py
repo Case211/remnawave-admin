@@ -896,6 +896,138 @@ async def _handle_blacklisted_hwid_users(
     )
 
 
+# ── Ограничение скорости («мягкая блокировка») ────────────────
+
+
+@router.get("/throttles", response_model=ThrottleListResponse)
+async def list_throttles(
+    admin: AdminUser = Depends(require_permission("violations", "read")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Действующие ограничения скорости."""
+    rows = await db.get_active_throttles()
+
+    items = []
+    for row in rows:
+        username = None
+        try:
+            user = await db.get_user_by_uuid(str(row["user_uuid"]))
+            username = (user or {}).get("username")
+        except Exception:
+            pass
+        items.append(ThrottleItem(
+            user_uuid=str(row["user_uuid"]),
+            username=username,
+            rate_kbit=int(row["rate_kbit"]),
+            reason=row.get("reason"),
+            created_by_username=row.get("created_by_username"),
+            created_at=row.get("created_at") or datetime.utcnow(),
+            until=row.get("until"),
+        ))
+
+    return ThrottleListResponse(items=items, total=len(items))
+
+
+@router.post("/throttle")
+async def add_throttle(
+    data: ThrottleAddRequest,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Ограничить пользователю скорость вместо полного отключения."""
+    from shared.config_service import config_service
+
+    rate_kbit = data.rate_kbit or int(config_service.get("throttle_default_kbit", 1024) or 1024)
+
+    # Срок не указан — берём общий лимит из настроек. Ноль там значит
+    # «держать до ручного снятия», как было до появления настройки.
+    hours = data.expires_in_hours
+    if hours is None:
+        try:
+            hours = int(config_service.get("throttle_default_hours", 0) or 0)
+        except (TypeError, ValueError):
+            hours = 0
+    until = datetime.utcnow() + timedelta(hours=hours) if hours and hours > 0 else None
+
+    from shared.throttle import apply_throttle
+
+    success, error, moved = await apply_throttle(
+        user_uuid=data.user_uuid,
+        rate_kbit=rate_kbit,
+        reason=data.reason,
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        until=until,
+    )
+    if not success:
+        raise api_error(500, E.INTERNAL_ERROR, error)
+
+    # Не ждём фонового цикла: между решением и его действием не должно быть
+    # минуты, иначе непонятно, сработало вообще или нет.
+    pushed = 0
+    try:
+        from web.backend.core.throttle_sync import push_throttles
+        pushed = await push_throttles()
+    except Exception as e:
+        logger.warning("Throttle applied in DB but push failed: %s", e)
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violation.throttle.add",
+        resource="violations",
+        resource_id=data.user_uuid,
+        details=json.dumps({
+            "rate_kbit": rate_kbit,
+            "reason": data.reason,
+            "expires_in_hours": hours,
+            "moved_to_squad": moved,
+        }, ensure_ascii=False),
+        request=request,
+    )
+
+    return {
+        "success": True,
+        "rate_kbit": rate_kbit,
+        "nodes_updated": pushed,
+        "moved_to_squad": moved,
+    }
+
+
+@router.delete("/throttle/{user_uuid}")
+async def remove_throttle(
+    user_uuid: str,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("violations", "resolve")),
+    db: DatabaseService = Depends(get_db),
+):
+    """Снять ограничение скорости."""
+    from shared.throttle import lift_throttle
+
+    removed, restored = await lift_throttle(user_uuid)
+    if not removed:
+        raise api_error(404, E.USER_NOT_FOUND, "Throttle not found")
+
+    try:
+        from web.backend.core.throttle_sync import push_throttles
+        await push_throttles()
+    except Exception as e:
+        logger.warning("Throttle removed in DB but push failed: %s", e)
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="violation.throttle.remove",
+        resource="violations",
+        resource_id=user_uuid,
+        details=json.dumps({"squads_restored": restored}, ensure_ascii=False),
+        request=request,
+    )
+
+    return {"success": True, "squads_restored": restored}
+
+
 @router.get("/{violation_id}", response_model=ViolationDetail)
 async def get_violation(
     violation_id: int,
@@ -915,6 +1047,22 @@ async def get_violation(
         uuser = str(violation.get("user_uuid", "")).lower()
         if uuser not in visible:
             raise api_error(404, E.VIOLATION_NOT_FOUND)
+
+    # Торрент и расход трафика заводят нарушение мимо анализаторов подключений:
+    # разбор по ним пуст, и шесть нулей под итоговой сотней сбивают с толку.
+    # Отдаём источник, чтобы карточка показала его вместо пустого разбора.
+    score_value = float(violation.get('score', 0) or 0)
+    analyzer_scores = (
+        violation.get('temporal_score'), violation.get('geo_score'),
+        violation.get('asn_score'), violation.get('profile_score'),
+        violation.get('device_score'), violation.get('hwid_score'),
+    )
+    score_source = None
+    if score_value > 0 and not any(float(s or 0) > 0 for s in analyzer_scores):
+        score_source = "torrent" if any(
+            str(r).startswith("Torrent traffic detected")
+            for r in (violation.get('reasons') or [])
+        ) else "external"
 
     return ViolationDetail(
         id=int(violation.get('id', 0)),
@@ -943,6 +1091,7 @@ async def get_violation(
         raw_data=violation.get('raw_breakdown') or violation.get('raw_data'),
         hwid_matched_users=_parse_hwid_matched(violation.get('hwid_matched_users')),
         admin_comment=violation.get('admin_comment'),
+        score_source=score_source,
     )
 
 
@@ -1085,136 +1234,3 @@ async def annul_violation(
 
 # ══════════════════════════════════════════════════════════════════
 # HWID Blacklist
-
-
-
-# ── Ограничение скорости («мягкая блокировка») ────────────────
-
-
-@router.get("/throttles", response_model=ThrottleListResponse)
-async def list_throttles(
-    admin: AdminUser = Depends(require_permission("violations", "read")),
-    db: DatabaseService = Depends(get_db),
-):
-    """Действующие ограничения скорости."""
-    rows = await db.get_active_throttles()
-
-    items = []
-    for row in rows:
-        username = None
-        try:
-            user = await db.get_user_by_uuid(str(row["user_uuid"]))
-            username = (user or {}).get("username")
-        except Exception:
-            pass
-        items.append(ThrottleItem(
-            user_uuid=str(row["user_uuid"]),
-            username=username,
-            rate_kbit=int(row["rate_kbit"]),
-            reason=row.get("reason"),
-            created_by_username=row.get("created_by_username"),
-            created_at=row.get("created_at") or datetime.utcnow(),
-            until=row.get("until"),
-        ))
-
-    return ThrottleListResponse(items=items, total=len(items))
-
-
-@router.post("/throttle")
-async def add_throttle(
-    data: ThrottleAddRequest,
-    request: Request,
-    admin: AdminUser = Depends(require_permission("violations", "resolve")),
-    db: DatabaseService = Depends(get_db),
-):
-    """Ограничить пользователю скорость вместо полного отключения."""
-    from shared.config_service import config_service
-
-    rate_kbit = data.rate_kbit or int(config_service.get("throttle_default_kbit", 1024) or 1024)
-
-    # Срок не указан — берём общий лимит из настроек. Ноль там значит
-    # «держать до ручного снятия», как было до появления настройки.
-    hours = data.expires_in_hours
-    if hours is None:
-        try:
-            hours = int(config_service.get("throttle_default_hours", 0) or 0)
-        except (TypeError, ValueError):
-            hours = 0
-    until = datetime.utcnow() + timedelta(hours=hours) if hours and hours > 0 else None
-
-    from shared.throttle import apply_throttle
-
-    success, error, moved = await apply_throttle(
-        user_uuid=data.user_uuid,
-        rate_kbit=rate_kbit,
-        reason=data.reason,
-        admin_id=admin.account_id,
-        admin_username=admin.username,
-        until=until,
-    )
-    if not success:
-        raise api_error(500, E.INTERNAL_ERROR, error)
-
-    # Не ждём фонового цикла: между решением и его действием не должно быть
-    # минуты, иначе непонятно, сработало вообще или нет.
-    pushed = 0
-    try:
-        from web.backend.core.throttle_sync import push_throttles
-        pushed = await push_throttles()
-    except Exception as e:
-        logger.warning("Throttle applied in DB but push failed: %s", e)
-
-    await write_audit_log(
-        admin_id=admin.account_id,
-        admin_username=admin.username,
-        action="violation.throttle.add",
-        resource="violations",
-        resource_id=data.user_uuid,
-        details=json.dumps({
-            "rate_kbit": rate_kbit,
-            "reason": data.reason,
-            "expires_in_hours": hours,
-            "moved_to_squad": moved,
-        }, ensure_ascii=False),
-        request=request,
-    )
-
-    return {
-        "success": True,
-        "rate_kbit": rate_kbit,
-        "nodes_updated": pushed,
-        "moved_to_squad": moved,
-    }
-
-
-@router.delete("/throttle/{user_uuid}")
-async def remove_throttle(
-    user_uuid: str,
-    request: Request,
-    admin: AdminUser = Depends(require_permission("violations", "resolve")),
-    db: DatabaseService = Depends(get_db),
-):
-    """Снять ограничение скорости."""
-    from shared.throttle import lift_throttle
-
-    removed, restored = await lift_throttle(user_uuid)
-    if not removed:
-        raise api_error(404, E.USER_NOT_FOUND, "Throttle not found")
-
-    try:
-        from web.backend.core.throttle_sync import push_throttles
-        await push_throttles()
-    except Exception as e:
-        logger.warning("Throttle removed in DB but push failed: %s", e)
-
-    await write_audit_log(
-        admin_id=admin.account_id,
-        admin_username=admin.username,
-        action="violation.throttle.remove",
-        resource="violations",
-        resource_id=user_uuid,
-        details=json.dumps({"squads_restored": restored}, ensure_ascii=False),
-        request=request,
-    )
-
-    return {"success": True, "squads_restored": restored}

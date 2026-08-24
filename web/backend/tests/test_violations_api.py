@@ -393,3 +393,92 @@ class TestResolveBlockIdempotent:
 
         assert resp.status_code == 502
         mock_db.update_violation_action.assert_not_awaited()
+
+
+# ══════════════════════════════════════════════════════════════════
+# Ограничение скорости и источник скора
+# ══════════════════════════════════════════════════════════════════
+
+class TestThrottlesRoute:
+    """GET /api/v2/violations/throttles — маршрут не должен уезжать в /{violation_id}."""
+
+    @pytest.mark.asyncio
+    async def test_throttles_list_is_not_swallowed_by_id_route(self, app, client):
+        """Объявленный выше «/{violation_id}: int» съедал /throttles и отдавал 422."""
+        from web.backend.api.deps import get_db
+
+        mock_db = MagicMock()
+        mock_db.is_connected = True
+        mock_db.get_active_throttles = AsyncMock(return_value=[{
+            "user_uuid": "aaa-111",
+            "rate_kbit": 1024,
+            "reason": "torrent",
+            "until": None,
+            "created_at": datetime(2026, 8, 24, 9, 34),
+            "created_by_username": "admin",
+            "prev_squads": None,
+        }])
+        mock_db.get_user_by_uuid = AsyncMock(return_value={"username": "alice"})
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        resp = await client.get("/api/v2/violations/throttles")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["user_uuid"] == "aaa-111"
+        assert body["items"][0]["username"] == "alice"
+
+
+class TestScoreSource:
+    """Источник скора у нарушений, заведённых мимо анализаторов подключений."""
+
+    @staticmethod
+    def _violation(**extra):
+        row = {
+            "id": 306,
+            "user_uuid": "aaa-111",
+            "score": 100.0,
+            "recommended_action": "hard_block",
+            "confidence": 1.0,
+            "detected_at": datetime(2026, 8, 24, 9, 33),
+            "reasons": [],
+        }
+        row.update(extra)
+        return row
+
+    @staticmethod
+    async def _detail(app, client, row):
+        from web.backend.api.deps import get_db
+
+        mock_db = MagicMock()
+        mock_db.is_connected = True
+        mock_db.get_violation_by_id = AsyncMock(return_value=row)
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        with patch("web.backend.core.rbac.get_visible_user_uuids",
+                   new_callable=AsyncMock, return_value=None):
+            resp = await client.get("/api/v2/violations/306")
+        assert resp.status_code == 200
+        return resp.json()
+
+    @pytest.mark.asyncio
+    async def test_torrent_violation_reports_its_source(self, app, client):
+        body = await self._detail(app, client, self._violation(
+            reasons=["Torrent traffic detected (1 events)", "Destination: 1.2.3.4:6881"],
+        ))
+        assert body["score_source"] == "torrent"
+
+    @pytest.mark.asyncio
+    async def test_other_scoreless_source_marked_external(self, app, client):
+        body = await self._detail(app, client, self._violation(
+            reasons=["Аномальный расход: 120 ГБ/ч"],
+        ))
+        assert body["score_source"] == "external"
+
+    @pytest.mark.asyncio
+    async def test_analyzer_violation_keeps_regular_breakdown(self, app, client):
+        body = await self._detail(app, client, self._violation(
+            score=85.0, hwid_score=60.0, reasons=["HWID shared"],
+        ))
+        assert body["score_source"] is None

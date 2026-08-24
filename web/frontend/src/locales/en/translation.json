@@ -1810,6 +1810,8 @@
       "countries": "Countries",
       "ipAddresses": "IP addresses",
       "scoreBreakdown": "Score Breakdown",
+      "torrent": "Torrent",
+      "scoreOutsideAnalyzers": "Score set outside the connection analyzers — there is no breakdown by them",
       "temporal": "Temporal",
       "geo": "Geo",
       "provider": "Provider",
