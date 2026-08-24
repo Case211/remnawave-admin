@@ -9,7 +9,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 
-from web.backend.api.deps import get_current_admin, get_db, AdminUser, require_permission, get_client_ip
+from web.backend.api.deps import get_db, AdminUser, require_permission, get_client_ip
 from web.backend.core.errors import api_error, E
 from web.backend.core.audit import write_audit_log
 from web.backend.core.rate_limit import limiter, RATE_READ, RATE_EXPORT, RATE_MUTATIONS
@@ -22,7 +22,6 @@ from web.backend.schemas.violation import (
     ResolveViolationRequest,
     AnnulViolationRequest,
     AnnulAllViolationsRequest,
-    ViolationSeverity,
     IPLookupRequest,
     IPLookupResponse,
     IPInfo,

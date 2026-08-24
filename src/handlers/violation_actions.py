@@ -22,13 +22,11 @@ from shared.admin_quota import (
 )
 from src.services import data_access
 from src.utils.auth import BotAdmin
+from src.utils.formatters import _esc
 from src.utils.notifications import VIOLATION_ANALYZERS
 
 logger = logging.getLogger(__name__)
 router = Router()
-
-
-from src.utils.formatters import _esc
 
 # Действия, меняющие состояние. Белый список сюда же: он отключает защиту,
 # то есть последствия у него не меньше, чем у блокировки.

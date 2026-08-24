@@ -5,7 +5,6 @@ from datetime import datetime
 
 from web.backend.api.deps import get_current_admin
 from web.backend.api.v2.violations import get_severity
-from .conftest import make_admin
 
 
 class TestGetSeverity:
