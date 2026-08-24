@@ -8,7 +8,6 @@ user_uuid читается как остаток строки, и лишнее �
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -22,6 +21,7 @@ from shared.admin_quota import (
 )
 from src.services import data_access
 from src.utils.auth import BotAdmin
+from src.utils.cards import append_card_note
 from src.utils.formatters import _esc
 from src.utils.notifications import VIOLATION_ANALYZERS
 
@@ -151,14 +151,9 @@ async def _block_user(callback: CallbackQuery, user_uuid: str, panel_user_id: st
         logger.warning("User %s (%s) BLOCKED by %s via violation button", user_uuid, username, callback.from_user.first_name)
         await callback.answer(_("vact.blocked").format(username=username), show_alert=True)
 
-        try:
-            old_text = callback.message.text or callback.message.html_text or ""
-            await callback.message.edit_text(
-                old_text + _("vact.blocked_suffix").format(name=callback.from_user.first_name),
-                parse_mode="HTML",
-            )
-        except Exception:
-            pass
+        await append_card_note(
+            callback, _("vact.blocked_suffix").format(name=callback.from_user.first_name),
+        )
     except Exception as e:
         logger.error("Block user %s failed: %s", user_uuid, e)
         await callback.answer(_("vact.block_error").format(e=e), show_alert=True)
@@ -189,14 +184,9 @@ async def _kill_user(callback: CallbackQuery, user_uuid: str, panel_user_id: str
         logger.warning("User %s (%s) KILLED (disabled + connections dropped) by %s", user_uuid, username, callback.from_user.first_name)
         await callback.answer(_("vact.killed").format(username=username), show_alert=True)
 
-        try:
-            old_text = callback.message.text or callback.message.html_text or ""
-            await callback.message.edit_text(
-                old_text + _("vact.killed_suffix").format(name=callback.from_user.first_name),
-                parse_mode="HTML",
-            )
-        except Exception:
-            pass
+        await append_card_note(
+            callback, _("vact.killed_suffix").format(name=callback.from_user.first_name),
+        )
     except Exception as e:
         logger.error("Kill user %s failed: %s", user_uuid, e)
         await callback.answer(_("vact.error").format(e=e), show_alert=True)
@@ -225,11 +215,7 @@ async def _annul(callback: CallbackQuery, user_uuid: str) -> None:
         await callback.answer(_("vact.nothing_to_annul"))
         suffix = _("vact.already_processed").format(name=_esc(admin_name))
 
-    try:
-        old_text = callback.message.text or callback.message.html_text or ""
-        await callback.message.edit_text(old_text + suffix, parse_mode="HTML")
-    except Exception:
-        pass
+    await append_card_note(callback, suffix)
 
 
 async def _reset_traffic(callback: CallbackQuery, user_uuid: str, panel_user_id: str | int) -> None:
@@ -255,14 +241,9 @@ async def _reset_traffic(callback: CallbackQuery, user_uuid: str, panel_user_id:
         logger.warning("Traffic RESET for user %s (%s) by %s via violation button", user_uuid, username, callback.from_user.first_name)
         await callback.answer(_("vact.traffic_reset").format(username=username), show_alert=True)
 
-        try:
-            old_text = callback.message.text or callback.message.html_text or ""
-            await callback.message.edit_text(
-                old_text + _("vact.traffic_reset_suffix").format(name=callback.from_user.first_name),
-                parse_mode="HTML",
-            )
-        except Exception:
-            pass
+        await append_card_note(
+            callback, _("vact.traffic_reset_suffix").format(name=callback.from_user.first_name),
+        )
     except Exception as e:
         await callback.answer(_("vact.reset_error").format(e=e), show_alert=True)
 
@@ -286,7 +267,7 @@ async def _whitelist_full(callback: CallbackQuery, user_uuid: str, admin: BotAdm
             user_uuid, callback.from_user.first_name,
         )
         await callback.answer(_("vact.wl_done"), show_alert=True)
-        await _append_note(callback, _("vact.wl_suffix").format(name=callback.from_user.first_name))
+        await append_card_note(callback, _("vact.wl_suffix").format(name=callback.from_user.first_name))
     except Exception as e:
         logger.error("Whitelist user %s failed: %s", user_uuid, e)
         await callback.answer(_("vact.wl_error").format(e=e), show_alert=True)
@@ -330,52 +311,13 @@ async def _whitelist_partial(
             user_uuid, ",".join(merged), callback.from_user.first_name,
         )
         await callback.answer(_("vact.wlp_done").format(analyzer=label), show_alert=True)
-        await _append_note(
+        await append_card_note(
             callback,
             _("vact.wlp_suffix").format(analyzer=label, name=callback.from_user.first_name),
         )
     except Exception as e:
         logger.error("Partial whitelist %s/%s failed: %s", user_uuid, analyzer, e)
         await callback.answer(_("vact.wl_error").format(e=e), show_alert=True)
-
-
-async def _append_note(
-    callback: CallbackQuery,
-    note: str,
-    keyboard: Optional[InlineKeyboardMarkup] = None,
-) -> None:
-    """Дописать отметку под карточкой нарушения.
-
-    Карточки уходят rich-сообщением (Bot API 10.1), которого aiogram 3.12 ещё
-    не знает: ни text, ни caption у такого сообщения нет, а html_text собран из
-    них же и отдаёт пустую строку. Правка пустым текстом стирала карточку
-    целиком, оставляя от неё одну отметку, — поэтому когда текста не видно,
-    отметка уходит отдельным ответом, а на самой карточке меняются кнопки.
-    """
-    message = callback.message
-    if message is None:
-        return
-
-    try:
-        old_text = message.html_text
-    except (AttributeError, TypeError):
-        old_text = ""
-
-    if old_text:
-        try:
-            await message.edit_text(old_text + note, parse_mode="HTML", reply_markup=keyboard)
-        except Exception as e:
-            logger.warning("Failed to append action note: %s", e)
-        return
-
-    try:
-        await message.edit_reply_markup(reply_markup=keyboard)
-    except Exception as e:
-        logger.debug("Cannot update violation card keyboard: %s", e)
-    try:
-        await message.reply(note.strip(), parse_mode="HTML")
-    except Exception as e:
-        logger.warning("Failed to send action note: %s", e)
 
 
 def _unthrottle_keyboard(user_uuid: str) -> InlineKeyboardMarkup:
@@ -433,7 +375,7 @@ async def _throttle_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmi
             _("vact.thr_done").format(rate=rate_kbit, period=period_note, moved=moved_note),
             show_alert=True,
         )
-        await _append_note(
+        await append_card_note(
             callback,
             _("vact.thr_suffix").format(
                 rate=rate_kbit, name=callback.from_user.first_name,
@@ -469,7 +411,7 @@ async def _unthrottle_user(callback: CallbackQuery, user_uuid: str) -> None:
         await callback.answer(
             _("vact.unthr_done").format(restored=restored_note), show_alert=True,
         )
-        await _append_note(
+        await append_card_note(
             callback,
             _("vact.unthr_suffix").format(
                 name=callback.from_user.first_name, restored=restored_note,
