@@ -1567,7 +1567,8 @@
     "tabs": {
       "ip": "IP Blocking",
       "hwid": "HWID Blacklist",
-      "whitelist": "Whitelist"
+      "whitelist": "Whitelist",
+      "throttles": "Throttling"
     }
   },
   "blockedIPs": {
@@ -1756,12 +1757,12 @@
       "resolved": "Resolved"
     },
     "recommendedActions": {
-      "no_action": "No action",
-      "monitor": "Monitor",
-      "warn": "Warning",
-      "soft_block": "Soft block",
-      "temp_block": "Temp block",
-      "hard_block": "Hard block"
+      "no_action": "No action needed",
+      "monitor": "Watch",
+      "warn": "Warn",
+      "soft_block": "Review manually",
+      "temp_block": "Block temporarily",
+      "hard_block": "Block"
     },
     "filters": {
       "level": "Level",
@@ -1809,6 +1810,8 @@
       "countries": "Countries",
       "ipAddresses": "IP addresses",
       "scoreBreakdown": "Score Breakdown",
+      "torrent": "Torrent",
+      "scoreOutsideAnalyzers": "Score set outside the connection analyzers — there is no breakdown by them",
       "temporal": "Temporal",
       "geo": "Geo",
       "provider": "Provider",
@@ -1933,7 +1936,7 @@
       "profile": "Profile (behavior deviation)",
       "device": "Device (fingerprint)",
       "hwid": "HWID (cross-account)",
-      "traffic_rate": "Traffic rate (excessive consumption)",
+      "traffic_rate": "Traffic usage (excessive consumption)",
       "torrent": "Torrent (P2P traffic)"
     },
     "exclusions": {
@@ -1970,6 +1973,30 @@
       "moreSettings": "Other settings",
       "needSettingsEdit": "No permission to change settings — preview only.",
       "noData": "No violations for this period — nothing to show."
+    },
+    "throttles": {
+      "description": "Throttling sits between a warning and a block. The person stays online: sites and messengers work, video and torrents don't. The limit is attached to the user's address by rules on the node and lifts instantly.",
+      "add": "Throttle",
+      "addTitle": "Throttle a user",
+      "addDesc": "Empty speed — the value from settings. Empty duration — indefinite, until lifted by hand.",
+      "rate": "Speed, kbit/s",
+      "ratePlaceholder": "from settings",
+      "hours": "Lift after, hours",
+      "hoursPlaceholder": "indefinite",
+      "kbit": "kbit/s",
+      "forever": "indefinite",
+      "by": "Set by {{who}} · {{when}}",
+      "empty": "No limits",
+      "emptyDesc": "Nobody is throttled right now.",
+      "lift": "Lift",
+      "liftTitle": "Lift the limit?",
+      "liftDesc": "Speed returns to normal, and the user goes back to their previous squads if they were moved.",
+      "toast": {
+        "added": "User throttled",
+        "addedWithSquad": "User throttled and moved to the reserve squad",
+        "lifted": "Limit lifted",
+        "liftedWithSquad": "Limit lifted, user returned to previous squads"
+      }
     }
   },
   "admins": {
@@ -3196,7 +3223,7 @@
       "thresholds": "📐 Detection thresholds",
       "patterns": "🔤 User-Agent patterns",
       "torrent": "🧲 Torrent blocker",
-      "traffic_rate": "📈 Traffic rate",
+      "traffic_rate": "📈 Traffic usage",
       "hard_block": "🚫 Hard block",
       "trial": "🆓 Trial user detection",
       "auth_methods": "🔑 Auth methods",
@@ -3763,7 +3790,7 @@
         "description": "Minimum interval between torrent notifications for the same user"
       },
       "traffic_rate_enabled": {
-        "label": "📈 Traffic rate monitor",
+        "label": "📈 Traffic usage monitor",
         "description": "Tracks abnormally high traffic consumption over a period"
       },
       "traffic_rate_threshold_gb": {
@@ -4089,6 +4116,26 @@
       "torrent_retention_days": {
         "label": "Torrent event retention (days)",
         "description": "How many days recorded torrent events are kept before automatic cleanup"
+      },
+      "throttle_enabled": {
+        "label": "Speed throttling",
+        "description": "Allow the soft block — cut a violator's speed instead of cutting them off entirely. Requires agent 1.6.0+ on the nodes"
+      },
+      "throttle_default_kbit": {
+        "label": "Default speed (kbit/s)",
+        "description": "How hard to throttle when no speed is given. At 1024 sites and messengers still work while video and torrents do not: the person notices the internet is odd and comes to sort it out instead of silently losing access"
+      },
+      "throttle_default_hours": {
+        "label": "Default throttle duration (h)",
+        "description": "How many hours before the throttle lifts itself when no expiry is given. 0 keeps it until lifted by hand"
+      },
+      "throttle_squad_uuid": {
+        "label": "Reserve squad for violators",
+        "description": "UUID of the internal squad to move a punished user into on top of the throttle. Previous squads are remembered and restored when the throttle is lifted. Empty — leave squads alone and only cut the speed"
+      },
+      "violation_auto_soft_throttle": {
+        "label": "Throttle speed automatically",
+        "description": "Cut the speed as soon as the detector recommends a manual review (score 65-80). The measure is reversible and keeps the person online, but it is off by default: the call on punishment stays with the administrator"
       },
       "violations_hwid_scan_interval_minutes": {
         "label": "HWID scan interval (min)",

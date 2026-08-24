@@ -40,6 +40,7 @@ ALLOWED_COMMAND_TYPES = {
     "pty_resize",
     "service_status",
     "sync_blocked_ips",
+    "sync_throttled_ips",
     "set_ndpi",
     "ping",
 }
@@ -144,6 +145,8 @@ class CommandRunner:
             await self._service_status(msg)
         elif msg_type == "sync_blocked_ips":
             await self._sync_blocked_ips(msg)
+        elif msg_type == "sync_throttled_ips":
+            await self._sync_throttled_ips(msg)
         elif msg_type == "set_ndpi":
             await self._set_ndpi(msg)
 
@@ -269,6 +272,116 @@ class CommandRunner:
                 "output": output[-10000:],
                 "exit_code": exit_code,
             })
+
+    async def _sync_throttled_ips(self, msg: dict) -> None:
+        """Ограничить скорость к указанным адресам на этой ноде (tc HTB).
+
+        Payload: {"rules": [{"ip": "1.2.3.4", "rate_kbit": 1024}, ...]}.
+
+        Список заменяет прежний целиком, поэтому пустой снимает все
+        ограничения. Режется исходящий трафик ноды к адресу — то есть
+        скачивание у клиента; отдача идёт входящей стороной, её tc без
+        отдельного ifb-интерфейса не шейпит.
+
+        Ограничение вешается на адрес, а не на порт или пользователя: так
+        не нужно ни трогать конфиг Xray, ни переносить человека между
+        сквадами, и мера применяется мгновенно.
+        """
+        import ipaddress
+
+        command_id = msg.get("command_id")
+        raw_rules = msg.get("rules") or []
+
+        # До шелла доходят только разобранный адрес и целое число — оба
+        # приходят снаружи, и подставлять их в скрипт как есть нельзя.
+        rules, skipped = [], 0
+        for item in raw_rules:
+            try:
+                addr = ipaddress.ip_address(str(item.get("ip", "")).strip())
+                rate = int(item.get("rate_kbit"))
+            except (AttributeError, TypeError, ValueError):
+                skipped += 1
+                continue
+            if addr.version != 4 or rate <= 0:
+                # IPv6 в подключениях пока не встречается, а фильтр под него
+                # нужен отдельный — молча резать не тот трафик хуже, чем не резать.
+                skipped += 1
+                continue
+            rules.append((str(addr), rate))
+
+        if skipped:
+            logger.warning("sync_throttled_ips: skipped %d invalid entries", skipped)
+
+        script = self._build_throttle_script(rules)
+        output, exit_code = await self._run_shell(script, timeout=60)
+
+        if exit_code == 0:
+            logger.info("Throttling applied: %d addresses", len(rules))
+        else:
+            logger.error("Throttling failed (exit=%d): %.500s", exit_code, output)
+
+        if command_id:
+            await self._send({
+                "type": "command_result",
+                "command_id": command_id,
+                "status": "completed" if exit_code == 0 else "error",
+                "output": output[-10000:],
+                "exit_code": exit_code,
+            })
+
+    @staticmethod
+    def _build_throttle_script(rules: list) -> str:
+        """Собрать POSIX-скрипт, целиком заменяющий текущую раскладку tc.
+
+        Корнем стоит prio с priomap из одних нулей: весь неразмеченный
+        трафик уходит в первую полосу, где никакого ограничителя нет. HTB
+        висит только на отдельной полосе, куда фильтры заводят наказанные
+        адреса.
+
+        Так сделано ради безопасности. Если завернуть в HTB весь трафик,
+        дисциплине придётся сообщить ширину канала — и ошибка в этом числе
+        придушит всех пользователей ноды разом. Здесь знать ширину не нужно
+        вовсе: обычный трафик ограничителя просто не касается.
+
+        Режется исходящий трафик ноды к адресу, то есть скачивание у
+        клиента; отдача идёт входящей стороной, её tc без отдельного
+        ifb-интерфейса не шейпит.
+        """
+        lines = [
+            "set -e",
+            'IFACE=$(ip route show default 2>/dev/null | awk \'/default/ {print $5; exit}\')',
+            '[ -n "$IFACE" ] || { echo "no default route interface"; exit 1; }',
+            # Прежняя раскладка снимается всегда: список приходит целиком,
+            # и разбирать разницу дороже, чем собрать заново.
+            'tc qdisc del dev "$IFACE" root 2>/dev/null || true',
+        ]
+
+        if not rules:
+            lines.append('echo "throttling cleared on $IFACE"')
+            return "\n".join(lines)
+
+        lines += [
+            # priomap из нулей: без явного фильтра пакет всегда идёт в 1:1.
+            'tc qdisc add dev "$IFACE" root handle 1: prio bands 4 '
+            'priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0',
+            # Ограничитель — только на четвёртой полосе, отдельно от всех.
+            'tc qdisc add dev "$IFACE" parent 1:4 handle 40: htb',
+        ]
+
+        for index, (ip, rate_kbit) in enumerate(rules, start=10):
+            lines += [
+                f'tc class add dev "$IFACE" parent 40: classid 40:{index} '
+                f'htb rate {rate_kbit}kbit ceil {rate_kbit}kbit burst 32k',
+                # Первый фильтр уводит адрес на полосу ограничителя,
+                # второй — в его личный класс с нужной скоростью.
+                f'tc filter add dev "$IFACE" protocol ip parent 1:0 prio 1 u32 '
+                f'match ip dst {ip}/32 flowid 1:4',
+                f'tc filter add dev "$IFACE" protocol ip parent 40: prio 1 u32 '
+                f'match ip dst {ip}/32 flowid 40:{index}',
+            ]
+
+        lines.append(f'echo "throttled {len(rules)} addresses on $IFACE"')
+        return "\n".join(lines)
 
     @staticmethod
     def _build_blocklist_script(v4: list, v6: list) -> str:

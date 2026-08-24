@@ -7,6 +7,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
+from shared.analyzers.models import ACTION_LABELS, dominant_analyzer
+
 logger = logging.getLogger(__name__)
 
 # Default cooldown (can be overridden via config_service)
@@ -119,8 +121,43 @@ def _detect_primary_reason(reasons: List[str], breakdown: dict) -> dict:
     }
 
 
-def _violation_keyboard(user_uuid: str) -> Dict:
-    """Build inline keyboard with quick actions for violation notifications."""
+ANALYZER_BUTTON_LABELS = {
+    "temporal": "времени",
+    "geo": "гео",
+    "asn": "ASN",
+    "profile": "профилю",
+    "device": "устройствам",
+    "hwid": "HWID",
+    "user_agent": "UA",
+}
+
+
+def _violation_keyboard(
+    user_uuid: str, analyzer: Optional[str] = None, with_whitelist: bool = True,
+) -> Dict:
+    """Build inline keyboard with quick actions for violation notifications.
+
+    Белых списка два: полный снимает с человека все проверки, частичный —
+    только тот разрез, из-за которого пришло это уведомление. Второй кнопки
+    нет, когда очков не набрал ни один анализатор: предлагать разрез наугад
+    хуже, чем не предлагать вовсе.
+
+    ``with_whitelist=False`` — для торрент-событий: они живут мимо
+    анализаторов нарушений, и белый список на них не влияет, так что
+    кнопка там обещала бы не то, что делает.
+    """
+    whitelist_row = []
+    if with_whitelist:
+        whitelist_row.append(
+            {"text": "🤍 В белый список", "callback_data": f"vact:wl:{user_uuid}"}
+        )
+        if analyzer:
+            label = ANALYZER_BUTTON_LABELS.get(analyzer, analyzer)
+            whitelist_row.append({
+                "text": f"🤍 Не проверять: {label}",
+                "callback_data": f"vact:wlp_{analyzer}:{user_uuid}",
+            })
+
     return {
         "inline_keyboard": [
             [
@@ -133,7 +170,9 @@ def _violation_keyboard(user_uuid: str) -> Dict:
             ],
             [
                 {"text": "🚫 Аннулировать", "callback_data": f"vact:dismiss:{user_uuid}"},
+                {"text": "🐌 Урезать скорость", "callback_data": f"vact:thr:{user_uuid}"},
             ],
+            *([whitelist_row] if whitelist_row else []),
         ]
     }
 
@@ -378,32 +417,31 @@ async def send_violation_notification(
             if len(unique_reasons) > 8:
                 lines.append(f"   … и ещё {len(unique_reasons) - 8}")
 
-        # Recommended action
+        # Что делать дальше. Формулировки — глаголами и от лица админа:
+        # «ДЕЙСТВИЕ: ВРЕМЕННАЯ БЛОКИРОВКА» читалось как уже случившийся бан,
+        # хотя система сама блокирует только на пороге hard_block, да и то
+        # если включена автоблокировка. Единственный случай, когда это факт,
+        # а не совет, вынесен в отдельную строку ниже.
         action = violation_score.get("recommended_action", "")
-        action_labels = {
-            "no_action": "без действий",
-            "monitor": "мониторинг",
-            "warn": "предупреждение",
-            "soft_block": "мягкая блокировка",
-            "temp_block": "временная блокировка",
-            "hard_block": "жёсткая блокировка",
-        }
         action_key = action.value if hasattr(action, "value") else str(action)
-        action_label = action_labels.get(action_key, action_key)
-        lines.append("")
-        lines.append(f"\U0001f3af Действие: <b>{action_label.upper()}</b>")
+        action_label = ACTION_LABELS.get(action_key, action_key)
+
+        auto_blocked = False
         if action_key == "hard_block":
-            # Явно говорим админу, заблокирует ли система пользователя сама —
-            # иначе блокировка выглядит как «сработала кнопка, которую я не жал»
             try:
                 from shared.config_service import config_service
-                auto_block_on = bool(config_service.get("violation_auto_hard_block", True))
+                auto_blocked = bool(config_service.get("violation_auto_hard_block", True))
             except Exception:
-                auto_block_on = True
-            if auto_block_on:
-                lines.append("⛔ Автоблокировка включена — пользователь будет заблокирован автоматически")
-            else:
-                lines.append("ℹ️ Автоблокировка выключена — требуется ручное решение")
+                auto_blocked = True
+
+        lines.append("")
+        if auto_blocked:
+            lines.append("⛔ Выполнено: <b>ПОЛЬЗОВАТЕЛЬ ЗАБЛОКИРОВАН</b>")
+            lines.append("   автоматически, по порогу жёсткой блокировки")
+        else:
+            lines.append(f"\U0001f3af Рекомендация: <b>{action_label.upper()}</b>")
+            if action_key == "hard_block":
+                lines.append("ℹ️ Автоблокировка выключена — решение за администратором")
         lines.append(f"\U0001f4ca Скор: <b>{total_score:.1f}</b> / 100")
         lines.append(f"\U0001f550 Время (МСК): {moscow_time_str}")
 
@@ -427,7 +465,7 @@ async def send_violation_notification(
             channels=["telegram", "in_app", "push"],
             topic_type="violations",
             telegram_body=body,
-            reply_markup=_violation_keyboard(user_uuid),
+            reply_markup=_violation_keyboard(user_uuid, dominant_analyzer(breakdown)),
             event="violation.detected",
         )
 
@@ -533,7 +571,9 @@ async def send_torrent_notification(
             channels=["telegram", "in_app", "push"],
             topic_type="violations",
             telegram_body=body,
-            reply_markup=_violation_keyboard(user_uuid),
+            # Торрент-событие ловится мимо анализаторов нарушений — белый
+            # список нарушений на него не влияет, кнопки там не место.
+            reply_markup=_violation_keyboard(user_uuid, with_whitelist=False),
             event="violation.torrent",
         )
 

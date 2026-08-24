@@ -16,6 +16,12 @@ from shared.logger import logger
 # ноде; недобор ловится сверкой с общим итогом ноды.
 NODE_USAGE_TOP_USERS = 1000
 
+# Сколько нод опрашивать одновременно. Флот в несколько сотен нод
+# последовательным циклом обходится дольше, чем интервал самого синка,
+# и данные вечно отстают; безоглядно параллелить тоже нельзя — каждый
+# запрос заставляет панель считать суточный агрегат.
+NODE_TRAFFIC_CONCURRENCY = 8
+
 
 def _node_total_bytes(response: Any, day: str, fallback: int) -> int:
     """Итог ноды за день из ответа панели.
@@ -293,6 +299,17 @@ class SyncService:
                 logger.debug("Cleaned up %d old user-node traffic history entries", deleted)
         except Exception as e:
             logger.debug("User-node traffic history cleanup failed: %s", e)
+
+        # Снимок трафика: пары, которые давно не обновлялись. Удалённых
+        # юзеров и снятые ноды забирает каскад, а вот пара живого юзера с
+        # нодой, через которую он больше не ходит, иначе осталась бы
+        # навсегда — и на большом флоте снимок пух бы без предела.
+        try:
+            deleted = await db_service.cleanup_stale_user_node_traffic(keep_days=7)
+            if deleted:
+                logger.debug("Cleaned up %d stale user-node traffic rows", deleted)
+        except Exception as e:
+            logger.debug("User-node traffic cleanup failed: %s", e)
 
         logger.debug("Full sync completed: %s", results)
         return results
@@ -1062,6 +1079,110 @@ class SyncService:
 
     # ==================== Node Traffic Sync ====================
 
+    async def _sync_one_node_traffic(
+        self, node: Dict[str, Any], start_str: str, end_str: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Снять трафик по одной ноде. None — если панель не ответила.
+
+        Возвращает то, что нужно сложить в базу: дельты по юзерам, строки
+        снимка и итог ноды. Снимок читается срезом только этой ноды —
+        таблица целиком на большом флоте в память не помещается.
+        """
+        node_uuid = str(node["uuid"])
+        try:
+            result = await api_client.get_node_users_usage(
+                node_uuid, start=start_str, end=end_str,
+                top_users_limit=NODE_USAGE_TOP_USERS,
+            )
+            response = result.get("response", result) if isinstance(result, dict) else result
+            # 3.2.0 переименовала список в topUsers и режет его
+            # topUsersLimit — отсюда и большой лимит выше. Старый
+            # ключ оставлен для панелей постарше.
+            if isinstance(response, dict):
+                rows = response.get("topUsers") or response.get("users") or []
+            else:
+                rows = response if isinstance(response, list) else []
+
+            # Endpoint returns one entry per user; v2 keys rows by
+            # userUuid, v3 by numeric id — accept both.
+            user_totals: dict[str, int] = {}
+            for row in rows:
+                key = str(row.get("userUuid") or row.get("id") or row.get("userId") or "").strip()
+                if not key or key == "None":
+                    continue
+                user_totals[key] = user_totals.get(key, 0) + int(
+                    row.get("trafficBytes") or row.get("total", 0) or 0
+                )
+
+            # v3 rows carry the numeric panel id — resolve to local uuid
+            # (DB deltas/snapshots are keyed on local uuid). Резолвим всю
+            # страницу разом: поштучно это тысяча запросов на ноду.
+            numeric = [int(k) for k in user_totals if k.isdigit()]
+            if numeric:
+                id_map = await db_service.get_uuid_map_by_panel_ids(numeric)
+                resolved: dict[str, int] = {}
+                for key, val in user_totals.items():
+                    if not key.isdigit():
+                        resolved[key] = val
+                        continue
+                    local_uuid = id_map.get(int(key))
+                    if local_uuid:
+                        resolved[local_uuid] = val
+                    else:
+                        logger.debug(
+                            "Traffic for unknown panel user id %s (not synced yet), skipping", key,
+                        )
+                user_totals = resolved
+
+            logger.debug(
+                "Node %s: %d rows, %d unique users",
+                node.get("name", node_uuid), len(rows), len(user_totals),
+            )
+
+            old_bytes_by_user = await db_service.get_user_node_traffic_snapshot_for_node(node_uuid)
+
+            raw_deltas: dict[str, int] = {}
+            node_deltas: list = []
+            traffic_upserts: list = []
+            node_traffic_sum = 0
+
+            for user_uuid, new_bytes in user_totals.items():
+                node_traffic_sum += new_bytes
+                if new_bytes <= 0:
+                    continue
+                # Compute delta from previous snapshot
+                old_bytes = old_bytes_by_user.get(user_uuid, 0)
+                if new_bytes > old_bytes:
+                    delta = new_bytes - old_bytes
+                elif new_bytes < old_bytes:
+                    delta = new_bytes
+                else:
+                    delta = 0
+
+                if delta > 0:
+                    raw_deltas[user_uuid] = delta
+                    node_deltas.append((user_uuid, node_uuid, delta))
+
+                traffic_upserts.append((user_uuid, node_uuid, new_bytes))
+
+            return {
+                "raw_deltas": raw_deltas,
+                "node_deltas": node_deltas,
+                "traffic_upserts": traffic_upserts,
+                # Итог ноды берём у панели: сумма по юзерам занизит
+                # его, если их на ноде больше запрошенного лимита.
+                "node_total": (
+                    node_uuid,
+                    _node_total_bytes(response, start_str, fallback=node_traffic_sum),
+                ),
+            }
+        except Exception as e:
+            logger.warning(
+                "Failed to sync traffic for node %s: %s",
+                node.get("name", node_uuid), e,
+            )
+            return None
+
     async def sync_node_traffic(self) -> int:
         """Sync per-user traffic for each active node from Remnawave API.
 
@@ -1069,6 +1190,11 @@ class SyncService:
         computes deltas from previous snapshot, accumulates raw traffic in users table,
         and updates the snapshot in user_node_traffic.
         Returns total number of upserted records.
+
+        Флот обходится пачками, а результат каждой пачки сразу уходит в
+        базу: последовательный цикл на несколько сотен нод растягивался
+        дольше, чем интервал самого синка, а копить весь обход в памяти
+        незачем.
         """
         if not db_service.is_connected:
             return 0
@@ -1085,114 +1211,47 @@ class SyncService:
             start_str = now.replace(hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d")
             end_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
-            # Get previous snapshot to compute deltas
-            old_snapshot = await db_service.get_user_node_traffic_snapshot()
-
             total_synced = 0
-            # Accumulate deltas: {user_uuid: total_delta_bytes}
-            raw_deltas: dict[str, int] = {}
-            # Per-user-per-node deltas for daily traffic history
-            node_deltas: list[tuple[str, str, int]] = []
-            # Accumulate per-node totals for traffic snapshots
-            node_totals: dict[str, int] = {}
-            # Batch upsert buffer: (user_uuid, node_uuid, traffic_bytes)
-            traffic_upserts: list[tuple[str, str, int]] = []
 
-            for node in active_nodes:
-                node_uuid = str(node["uuid"])
-                try:
-                    result = await api_client.get_node_users_usage(
-                        node_uuid, start=start_str, end=end_str,
-                        top_users_limit=NODE_USAGE_TOP_USERS,
-                    )
-                    response = result.get("response", result) if isinstance(result, dict) else result
-                    # 3.2.0 переименовала список в topUsers и режет его
-                    # topUsersLimit — отсюда и большой лимит выше. Старый
-                    # ключ оставлен для панелей постарше.
-                    if isinstance(response, dict):
-                        rows = response.get("topUsers") or response.get("users") or []
-                    else:
-                        rows = response if isinstance(response, list) else []
+            for offset in range(0, len(active_nodes), NODE_TRAFFIC_CONCURRENCY):
+                chunk = active_nodes[offset:offset + NODE_TRAFFIC_CONCURRENCY]
+                results = await asyncio.gather(*(
+                    self._sync_one_node_traffic(node, start_str, end_str) for node in chunk
+                ))
 
-                    # Endpoint returns one entry per user; v2 keys rows by
-                    # userUuid, v3 by numeric id — accept both.
-                    user_totals: dict[str, int] = {}
-                    for row in rows:
-                        uuid = str(row.get("userUuid") or row.get("id") or row.get("userId") or "").strip()
-                        if not uuid or uuid == "None":
-                            continue
-                        user_totals[uuid] = user_totals.get(uuid, 0) + int(row.get("trafficBytes") or row.get("total", 0) or 0)
+                # Accumulate deltas: {user_uuid: total_delta_bytes}
+                raw_deltas: dict[str, int] = {}
+                node_deltas: list = []
+                traffic_upserts: list = []
+                node_totals: dict[str, int] = {}
 
-                    # v3 rows carry the numeric panel id — resolve to local
-                    # uuid (DB deltas/snapshots are keyed on local uuid).
-                    resolved_totals: dict[str, int] = {}
-                    for key, val in user_totals.items():
-                        if key.isdigit():
-                            local_uuid = await db_service.get_user_uuid_by_panel_id(int(key))
-                            if local_uuid:
-                                resolved_totals[local_uuid] = val
-                            else:
-                                logger.debug(
-                                    "Traffic for unknown panel user id %s (not synced yet), skipping", key,
-                                )
-                        else:
-                            resolved_totals[key] = val
-                    user_totals = resolved_totals
+                for item in results:
+                    if not item:
+                        continue
+                    for user_uuid, delta in item["raw_deltas"].items():
+                        raw_deltas[user_uuid] = raw_deltas.get(user_uuid, 0) + delta
+                    node_deltas.extend(item["node_deltas"])
+                    traffic_upserts.extend(item["traffic_upserts"])
+                    nid, total = item["node_total"]
+                    node_totals[nid] = total
 
-                    logger.debug(
-                        "Node %s: %d rows, %d unique users",
-                        node.get("name", node_uuid), len(rows), len(user_totals),
-                    )
+                # Batch upsert all traffic records at once (1 query instead of N)
+                if traffic_upserts:
+                    total_synced += await db_service.batch_upsert_user_node_traffic(traffic_upserts)
 
-                    node_traffic_sum = 0
-                    for user_uuid, new_bytes in user_totals.items():
-                        node_traffic_sum += new_bytes
-                        if new_bytes <= 0:
-                            continue
-                        # Compute delta from previous snapshot
-                        old_bytes = old_snapshot.get(user_uuid, {}).get(node_uuid, 0)
-                        if new_bytes > old_bytes:
-                            delta = new_bytes - old_bytes
-                        elif new_bytes < old_bytes:
-                            delta = new_bytes
-                        else:
-                            delta = 0
+                # Accumulate raw traffic deltas into users table
+                if raw_deltas:
+                    await db_service.increment_raw_traffic(raw_deltas)
+                    logger.debug("Accumulated raw traffic deltas for %d users", len(raw_deltas))
 
-                        if delta > 0:
-                            raw_deltas[user_uuid] = raw_deltas.get(user_uuid, 0) + delta
-                            node_deltas.append((user_uuid, node_uuid, delta))
+                # Save per-user-per-node deltas for daily traffic metric
+                if node_deltas:
+                    await db_service.insert_user_node_traffic_deltas(node_deltas)
+                    logger.debug("Saved %d user-node traffic deltas", len(node_deltas))
 
-                        traffic_upserts.append((user_uuid, node_uuid, new_bytes))
-
-                    # Итог ноды берём у панели: сумма по юзерам занизит
-                    # его, если их на ноде больше запрошенного лимита.
-                    node_totals[node_uuid] = _node_total_bytes(
-                        response, start_str, fallback=node_traffic_sum,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Failed to sync traffic for node %s: %s",
-                        node.get("name", node_uuid), e,
-                    )
-
-            # Batch upsert all traffic records at once (1 query instead of N)
-            if traffic_upserts:
-                total_synced = await db_service.batch_upsert_user_node_traffic(traffic_upserts)
-
-            # Accumulate raw traffic deltas into users table
-            if raw_deltas:
-                await db_service.increment_raw_traffic(raw_deltas)
-                logger.debug("Accumulated raw traffic deltas for %d users", len(raw_deltas))
-
-            # Save per-user-per-node deltas for daily traffic metric
-            if node_deltas:
-                await db_service.insert_user_node_traffic_deltas(node_deltas)
-                logger.debug("Saved %d user-node traffic deltas", len(node_deltas))
-
-            # Save per-node traffic snapshots for timeseries chart
-            if node_totals:
-                snapshots = [(nid, total) for nid, total in node_totals.items()]
-                await db_service.insert_node_traffic_snapshots(snapshots)
+                # Save per-node traffic snapshots for timeseries chart
+                if node_totals:
+                    await db_service.insert_node_traffic_snapshots(list(node_totals.items()))
 
             await db_service.update_sync_metadata(
                 key="node_traffic",

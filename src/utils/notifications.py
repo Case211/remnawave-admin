@@ -12,6 +12,7 @@ from aiogram.types import BufferedInputFile, InlineKeyboardMarkup, InlineKeyboar
 from src.config import get_settings
 from src.utils.formatters import format_bytes, format_datetime, format_provider_name
 from src.utils.i18n import tr
+from shared.analyzers.models import VIOLATION_ANALYZERS, dominant_analyzer  # noqa: F401
 from shared.logger import logger
 from shared.notification_config import (
     is_notification_type_enabled,
@@ -1255,7 +1256,7 @@ async def send_violation_notification(
 
         text = "\n".join(lines)
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        rows = [
             [
                 InlineKeyboardButton(text=tr("notify.violation.btn.info"), callback_data=f"vact:info:{user_uuid}"),
                 InlineKeyboardButton(text=tr("notify.violation.btn.block"), callback_data=f"vact:block:{user_uuid}"),
@@ -1267,7 +1268,28 @@ async def send_violation_notification(
             [
                 InlineKeyboardButton(text=tr("notify.violation.btn.annul"), callback_data=f"vact:dismiss:{user_uuid}"),
             ],
-        ])
+        ]
+
+        # Белый список: целиком и «только по этому поводу». Второй кнопки
+        # нет, если ни один анализатор не набрал очков — предлагать разрез
+        # наугад хуже, чем не предлагать вовсе.
+        whitelist_row = [
+            InlineKeyboardButton(
+                text=tr("notify.violation.btn.whitelist"), callback_data=f"vact:wl:{user_uuid}",
+            ),
+        ]
+        analyzer = dominant_analyzer(breakdown)
+        if analyzer:
+            whitelist_row.append(InlineKeyboardButton(
+                text=tr(
+                    "notify.violation.btn.whitelist_partial",
+                    analyzer=tr(f"notify.violation.analyzer.{analyzer}"),
+                ),
+                callback_data=f"vact:wlp_{analyzer}:{user_uuid}",
+            ))
+        rows.append(whitelist_row)
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
 
         message_kwargs = {
             "chat_id": chat_id,

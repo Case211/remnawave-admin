@@ -159,6 +159,10 @@ async def run_agent() -> None:
     accumulated_torrent_events: list[TorrentEvent] = []
     last_send_time = time.monotonic()
     total_sent = 0  # общий счётчик отправленных подключений
+    # Отступ сверх интервала, пока коллектор не принимает. Растёт вдвое с
+    # каждой неудачей: без него неотправленный батч уходил на повтор тем же
+    # витком цикла, и агент бил по лежащему коллектору без пауз.
+    send_backoff = 0.0
 
     # ── nDPI: второй источник правды про торренты ──
     # Тег роутинга Xray ловит только открытое рукопожатие BitTorrent;
@@ -286,21 +290,36 @@ async def run_agent() -> None:
 
                         # Отправка по таймеру
                         current_time = time.monotonic()
-                        if (accumulated_connections or accumulated_torrent_events) and (current_time - last_send_time >= send_interval):
+                        if (accumulated_connections or accumulated_torrent_events) and (current_time - last_send_time >= send_interval + send_backoff):
                             metrics, net_metrics = await collect_metrics()
-                            count = len(accumulated_connections)
-                            ok = await sender.send_batch(
+                            sent_conns, sent_events = await sender.send_in_chunks(
                                 accumulated_connections,
                                 torrent_events=accumulated_torrent_events if accumulated_torrent_events else None,
                                 system_metrics=metrics,
                                 network_metrics=net_metrics,
                             )
-                            if ok:
-                                total_sent += count
-                                accumulated_connections.clear()
-                                accumulated_torrent_events.clear()
-                                last_send_time = current_time
-                                logger.debug("Batch sent: %d connections", count)
+                            # Время попытки отмечаем всегда, удачной она была
+                            # или нет: иначе условие выше остаётся истинным и
+                            # следующий виток повторяет отправку немедленно.
+                            last_send_time = current_time
+                            if sent_conns:
+                                total_sent += sent_conns
+                                del accumulated_connections[:sent_conns]
+                            if sent_events:
+                                del accumulated_torrent_events[:sent_events]
+
+                            if accumulated_connections or accumulated_torrent_events:
+                                send_backoff = min(
+                                    max(send_backoff * 2, send_interval),
+                                    settings.send_backoff_max_seconds,
+                                )
+                                logger.warning(
+                                    "Batch partially sent: %d connections left, next try in %.0fs",
+                                    len(accumulated_connections), send_interval + send_backoff,
+                                )
+                            else:
+                                send_backoff = 0.0
+                                logger.debug("Batch sent: %d connections", sent_conns)
                     else:
                         # polling — отправляем сразу
                         metrics, net_metrics = await collect_metrics()
@@ -317,13 +336,16 @@ async def run_agent() -> None:
                 else:
                     # Метрики без подключений
                     current_time = time.monotonic()
-                    if current_time - last_send_time >= send_interval:
+                    if current_time - last_send_time >= send_interval + send_backoff:
                         metrics, net_metrics = await collect_metrics()
                         ok = await sender.send_batch(
                             [], system_metrics=metrics, network_metrics=net_metrics
                         )
-                        if ok:
-                            last_send_time = current_time
+                        last_send_time = current_time
+                        send_backoff = 0.0 if ok else min(
+                            max(send_backoff * 2, send_interval),
+                            settings.send_backoff_max_seconds,
+                        )
 
                 # Heartbeat — каждые 100 циклов (примерно раз в 50 мин при интервале 30с)
                 if cycle_count % 100 == 0:
@@ -349,12 +371,11 @@ async def run_agent() -> None:
                 "Shutdown: sending remaining %d connections, %d torrent events...",
                 len(accumulated_connections), len(accumulated_torrent_events),
             )
-            ok = await sender.send_batch(
+            sent_conns, _ = await sender.send_in_chunks(
                 accumulated_connections,
                 torrent_events=accumulated_torrent_events if accumulated_torrent_events else None,
             )
-            if ok:
-                total_sent += len(accumulated_connections)
+            total_sent += sent_conns
 
     finally:
         # Stop WS client

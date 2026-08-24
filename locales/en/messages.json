@@ -1009,7 +1009,36 @@
     "already_processed": "\n\n🚫 <i>Already processed earlier ({name})</i>",
     "traffic_reset": "🔄 Traffic {username} reset",
     "traffic_reset_suffix": "\n\n🔄 <i>Traffic reset ({name})</i>",
-    "reset_error": "❌ Reset error: {e}"
+    "reset_error": "❌ Reset error: {e}",
+    "wl_reason": "From violation notification ({name})",
+    "wl_done": "🤍 User whitelisted — violations will no longer be raised",
+    "wl_suffix": "\n\n🤍 <i>Whitelisted ({name})</i>",
+    "wlp_done": "🤍 User is no longer checked by {analyzer}",
+    "wlp_suffix": "\n\n🤍 <i>Not checked by {analyzer} ({name})</i>",
+    "wl_already_full": "🤍 User is already fully whitelisted — that covers more than this exclusion",
+    "wl_unknown_analyzer": "❌ Unknown analyzer: {analyzer}",
+    "wl_error": "❌ Could not whitelist: {e}",
+    "analyzer": {
+      "temporal": "time",
+      "geo": "geo",
+      "asn": "ASN",
+      "profile": "profile",
+      "device": "devices",
+      "hwid": "HWID",
+      "user_agent": "User-Agent"
+    },
+    "thr_reason": "Throttled from violation notification ({name})",
+    "thr_done": "🐌 Throttled to {rate} kbit/s{period}{moved}. Nodes pick the rule up within a minute",
+    "thr_suffix": "\n\n🐌 <i>Throttled to {rate} kbit/s{period}{moved} ({name})</i>",
+    "thr_error": "❌ Could not throttle: {e}",
+    "thr_moved": " + moved to the reserve squad",
+    "thr_period": " for {hours}h",
+    "unthr_button": "↩️ Restore speed",
+    "unthr_done": "↩️ Throttle lifted{restored}. Nodes learn about it within a minute",
+    "unthr_suffix": "\n\n↩️ <i>Throttle lifted{restored} ({name})</i>",
+    "unthr_restored": " + previous squads restored",
+    "unthr_absent": "ℹ️ This user has no active throttle",
+    "unthr_error": "❌ Could not lift the throttle: {e}"
   },
   "pact": {
     "invalid_format": "Invalid button format",
@@ -1216,7 +1245,10 @@
         "block": "🔒 Block",
         "kill": "⛔ Reject + drop",
         "reset": "🔄 Reset traffic",
-        "annul": "🚫 Annul"
+        "annul": "🚫 Annul",
+        "whitelist": "🤍 Whitelist",
+        "whitelist_partial": "🤍 Skip: {analyzer}",
+        "throttle": "🐌 Throttle"
       },
       "platform": {
         "android": "Android",
@@ -1227,7 +1259,16 @@
         "unknown": "Unknown"
       },
       "summary": "👤 <code>{username}</code> · 📊 Score: <b>{score}/100</b> · 🌐 IPs: <b>{count}/{limit}</b>",
-      "user_section": "👤 <b>User</b>"
+      "user_section": "👤 <b>User</b>",
+      "analyzer": {
+        "temporal": "time",
+        "geo": "geo",
+        "asn": "ASN",
+        "profile": "profile",
+        "device": "devices",
+        "hwid": "HWID",
+        "user_agent": "UA"
+      }
     },
     "push": {
       "node_fallback": "Node event",

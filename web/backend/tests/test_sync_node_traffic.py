@@ -14,7 +14,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from shared.sync import NODE_USAGE_TOP_USERS, SyncService, _node_total_bytes
+from shared.sync import (
+    NODE_TRAFFIC_CONCURRENCY,
+    NODE_USAGE_TOP_USERS,
+    SyncService,
+    _node_total_bytes,
+)
 
 
 def _panel_320(day: str, total: int, users: list) -> dict:
@@ -26,12 +31,13 @@ def _panel_320(day: str, total: int, users: list) -> dict:
     }}
 
 
-def _db_mock():
+def _db_mock(nodes=None):
     db = AsyncMock()
     db.is_connected = True
-    db.get_all_nodes.return_value = [{"uuid": "N1", "name": "Estonia", "isConnected": True}]
-    db.get_user_node_traffic_snapshot.return_value = {}
-    db.get_user_uuid_by_panel_id.side_effect = lambda pid: f"uuid-{pid}"
+    db.get_all_nodes.return_value = nodes or [{"uuid": "N1", "name": "Estonia", "isConnected": True}]
+    db.get_user_node_traffic_snapshot_for_node.return_value = {}
+    db.get_uuid_map_by_panel_ids.side_effect = lambda ids: {int(i): f"uuid-{i}" for i in ids}
+    db.batch_upsert_user_node_traffic.return_value = 0
     return db
 
 
@@ -126,3 +132,85 @@ class TestSyncNodeTraffic:
             await svc.sync_node_traffic()
         upserts = db.batch_upsert_user_node_traffic.await_args.args[0]
         assert upserts == [("uuid-561", "N1", 500)]
+
+    @pytest.mark.asyncio
+    async def test_snapshot_is_read_per_node_not_whole_table(self):
+        """Снимок берётся срезом ноды: таблица целиком на большом флоте не влезает."""
+        svc = SyncService()
+        db = _db_mock()
+        api = AsyncMock()
+        api.get_node_users_usage.return_value = _panel_320("2026-08-05", 0, [])
+        with patch("shared.sync.db_service", db), patch("shared.sync.api_client", api):
+            await svc.sync_node_traffic()
+
+        db.get_user_node_traffic_snapshot.assert_not_awaited()
+        db.get_user_node_traffic_snapshot_for_node.assert_awaited_once_with("N1")
+
+    @pytest.mark.asyncio
+    async def test_delta_counts_from_this_node_slice(self):
+        """Дельта — разница с прошлым значением ИМЕННО этой ноды."""
+        svc = SyncService()
+        db = _db_mock()
+        db.get_user_node_traffic_snapshot_for_node.return_value = {"uuid-561": 300}
+        api = AsyncMock()
+        api.get_node_users_usage.return_value = _panel_320(
+            "2026-08-05", 500, [{"userId": 561, "total": 500}],
+        )
+        with patch("shared.sync.db_service", db), patch("shared.sync.api_client", api):
+            await svc.sync_node_traffic()
+
+        assert db.insert_user_node_traffic_deltas.await_args.args[0] == [("uuid-561", "N1", 200)]
+
+    @pytest.mark.asyncio
+    async def test_panel_ids_resolved_in_one_query_per_node(self):
+        """Резолв страницей, а не по юзеру: поштучно это тысяча запросов на ноду."""
+        svc = SyncService()
+        db = _db_mock()
+        api = AsyncMock()
+        api.get_node_users_usage.return_value = _panel_320(
+            "2026-08-05", 900, [{"userId": 561, "total": 500}, {"userId": 247, "total": 400}],
+        )
+        with patch("shared.sync.db_service", db), patch("shared.sync.api_client", api):
+            await svc.sync_node_traffic()
+
+        db.get_user_uuid_by_panel_id.assert_not_awaited()
+        assert db.get_uuid_map_by_panel_ids.await_count == 1
+        assert sorted(db.get_uuid_map_by_panel_ids.await_args.args[0]) == [247, 561]
+
+    @pytest.mark.asyncio
+    async def test_fleet_is_walked_in_chunks(self):
+        """Пачками, и каждая пишется сразу — иначе обход копится в памяти целиком."""
+        svc = SyncService()
+        nodes = [{"uuid": f"N{i}", "name": f"node-{i}", "isConnected": True} for i in range(20)]
+        db = _db_mock(nodes)
+        api = AsyncMock()
+        api.get_node_users_usage.return_value = _panel_320(
+            "2026-08-05", 100, [{"userId": 1, "total": 100}],
+        )
+        with patch("shared.sync.db_service", db), patch("shared.sync.api_client", api):
+            await svc.sync_node_traffic()
+
+        assert api.get_node_users_usage.await_count == 20
+        # 20 нод по NODE_TRAFFIC_CONCURRENCY=8 — три пачки, три записи в базу
+        expected_chunks = -(-len(nodes) // NODE_TRAFFIC_CONCURRENCY)
+        assert db.insert_node_traffic_snapshots.await_count == expected_chunks
+
+    @pytest.mark.asyncio
+    async def test_one_dead_node_does_not_break_the_rest(self):
+        """Панель молчит по одной ноде — остальные всё равно доезжают."""
+        svc = SyncService()
+        nodes = [{"uuid": "N1", "name": "alive", "isConnected": True},
+                 {"uuid": "N2", "name": "dead", "isConnected": True}]
+        db = _db_mock(nodes)
+        api = AsyncMock()
+
+        async def usage(node_uuid, **kwargs):
+            if node_uuid == "N2":
+                raise RuntimeError("panel timeout")
+            return _panel_320("2026-08-05", 700, [{"userId": 1, "total": 700}])
+
+        api.get_node_users_usage.side_effect = usage
+        with patch("shared.sync.db_service", db), patch("shared.sync.api_client", api):
+            await svc.sync_node_traffic()
+
+        assert db.insert_node_traffic_snapshots.await_args.args[0] == [("N1", 700)]

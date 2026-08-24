@@ -609,6 +609,9 @@ async def lifespan(app: FastAPI):
                     from web.backend.core.attack_detector import attack_detector_loop
                     _bg("attack_detector", attack_detector_loop())
 
+                    from web.backend.core.throttle_sync import throttle_sync_loop
+                    _bg("throttle_sync", throttle_sync_loop())
+
                     from web.backend.core.finance.rates import rates_update_loop
                     _bg("finance_rates", rates_update_loop())
 
@@ -1026,6 +1029,13 @@ def create_app() -> FastAPI:
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "Request body too large", "code": "BODY_TOO_LARGE"}, status_code=413)
         return await call_next(request)
+
+    # Распаковка сжатых тел (батчи агента 1.6.0+). Стоит после проверки
+    # content-length: та смотрит на сжатое тело, эта ограничивает
+    # распакованное тем же потолком — иначе десяток килобайт мог бы
+    # развернуться в гигабайты.
+    from web.backend.core.gzip_request import GzipRequestMiddleware
+    app.add_middleware(GzipRequestMiddleware, max_decompressed_bytes=MAX_BODY_SIZE)
 
     # Security headers middleware
     @app.middleware("http")

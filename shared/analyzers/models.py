@@ -13,6 +13,57 @@ class ViolationAction(Enum):
     HARD_BLOCK = "hard_block"
 
 
+# Как называть действие человеку. Глаголами и от лица администратора:
+# детектор ничего не исполняет, он советует — сам он трогает пользователя
+# только на hard_block и только при включённой автоблокировке.
+#
+# SOFT_BLOCK исторически звался «мягкой блокировкой (ограничение скорости)»,
+# хотя ограничивать скорость проект не умеет: название обещало механизм,
+# которого нет, и читалось как уже наложенное ограничение.
+ACTION_LABELS = {
+    "no_action": "ничего не требуется",
+    "monitor": "наблюдать",
+    "warn": "предупредить",
+    "soft_block": "разобраться вручную",
+    "temp_block": "заблокировать временно",
+    "hard_block": "заблокировать",
+}
+
+# Ключи анализаторов в breakdown ViolationScore. Совпадают с тем, что
+# понимает excluded_analyzers в violation_whitelist, — на этом держится
+# кнопка частичного исключения под уведомлением.
+VIOLATION_ANALYZERS = ("temporal", "geo", "asn", "profile", "device", "hwid", "user_agent")
+
+
+def _analyzer_score(entry: Any) -> float:
+    """Вклад анализатора. Breakdown приходит и датаклассами, и словарями."""
+    if isinstance(entry, dict):
+        value = entry.get("score", 0)
+    else:
+        value = getattr(entry, "score", 0)
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def dominant_analyzer(breakdown: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Анализатор, давший наибольший вклад в скор, — по нему и предлагаем исключение.
+
+    Нужен, чтобы кнопка под уведомлением вела в тот же разрез, что и само
+    нарушение: сработал HWID — предлагаем не проверять по HWID, а не
+    отключать человеку всю защиту разом. Ничего не набрало — None, тогда
+    останется только полный белый список.
+    """
+    if not breakdown:
+        return None
+    scored = [(key, _analyzer_score(breakdown.get(key))) for key in VIOLATION_ANALYZERS if key in breakdown]
+    if not scored:
+        return None
+    key, top = max(scored, key=lambda pair: pair[1])
+    return key if top > 0 else None
+
+
 @dataclass
 class TemporalScore:
     score: float

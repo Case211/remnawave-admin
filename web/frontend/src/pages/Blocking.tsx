@@ -7,7 +7,7 @@ import {
   Fingerprint, AlertTriangle, Ban, User,
   ShieldOff, ShieldCheck, Calendar, ShieldAlert,
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Search, ArrowUpDown, Users, ExternalLink,
+  Search, ArrowUpDown, Users, ExternalLink, Gauge,
 } from '@/components/brand/icons'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
@@ -115,6 +115,21 @@ const fetchBlockedIPs = async (limit: number, offset: number): Promise<BlockedIP
 
 const fetchWhitelist = async (limit: number, offset: number): Promise<{ items: WhitelistItem[]; total: number }> => {
   const { data } = await client.get('/violations/whitelist', { params: { limit, offset } })
+  return data
+}
+
+interface ThrottleItem {
+  user_uuid: string
+  username: string | null
+  rate_kbit: number
+  reason: string | null
+  created_by_username: string | null
+  created_at: string
+  until: string | null
+}
+
+const fetchThrottles = async (): Promise<{ items: ThrottleItem[]; total: number }> => {
+  const { data } = await client.get('/violations/throttles')
   return data
 }
 
@@ -1231,6 +1246,205 @@ function WhitelistAddDialog({
   )
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Ограничения скорости («мягкая блокировка»)
+// ══════════════════════════════════════════════════════════════════
+
+function ThrottlesTab() {
+  const { t } = useTranslation()
+  const { formatDate } = useFormatters()
+  const queryClient = useQueryClient()
+  const canResolve = useHasPermission('violations', 'resolve')
+  const [addOpen, setAddOpen] = useState(false)
+  const [uuid, setUuid] = useState('')
+  const [rate, setRate] = useState('')
+  const [hours, setHours] = useState('')
+  const [reason, setReason] = useState('')
+  const [confirmLift, setConfirmLift] = useState<string | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['throttles'],
+    queryFn: fetchThrottles,
+  })
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['throttles'] })
+    queryClient.invalidateQueries({ queryKey: ['violations'] })
+  }
+
+  const addMutation = useMutation({
+    mutationFn: (body: { user_uuid: string; rate_kbit?: number; expires_in_hours?: number; reason?: string }) =>
+      client.post('/violations/throttle', body),
+    onSuccess: (res) => {
+      refresh()
+      toast.success(
+        res?.data?.moved_to_squad
+          ? t('violations.throttles.toast.addedWithSquad')
+          : t('violations.throttles.toast.added'),
+      )
+      setAddOpen(false)
+      setUuid(''); setRate(''); setHours(''); setReason('')
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
+  const liftMutation = useMutation({
+    mutationFn: (userUuid: string) => client.delete(`/violations/throttle/${userUuid}`),
+    onSuccess: (res) => {
+      refresh()
+      toast.success(
+        res?.data?.squads_restored
+          ? t('violations.throttles.toast.liftedWithSquad')
+          : t('violations.throttles.toast.lifted'),
+      )
+      setConfirmLift(null)
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
+  const items = data?.items || []
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{t('violations.throttles.description')}</p>
+
+      {canResolve && (
+        <div className="flex justify-end">
+          <Button onClick={() => setAddOpen(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            {t('violations.throttles.add')}
+          </Button>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}><CardContent className="p-4"><Skeleton className="h-12 w-full" /></CardContent></Card>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <Card>
+          <CardContent className="p-2">
+            <EmptyState
+              icon={Gauge}
+              title={t('violations.throttles.empty')}
+              description={t('violations.throttles.emptyDesc')}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <Card key={item.user_uuid}>
+              <CardContent className="flex flex-wrap items-center gap-3 p-4">
+                <Gauge className="h-5 w-5 shrink-0 text-amber-500" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{item.username || item.user_uuid.slice(0, 8)}</span>
+                    <Badge variant="secondary">{item.rate_kbit} {t('violations.throttles.kbit')}</Badge>
+                    {item.until ? (
+                      <Badge variant="outline" className="gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {formatDate(item.until)}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">{t('violations.throttles.forever')}</Badge>
+                    )}
+                  </div>
+                  {item.reason && (
+                    <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>
+                  )}
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t('violations.throttles.by', {
+                      who: item.created_by_username || '—',
+                      when: formatDate(item.created_at),
+                    })}
+                  </p>
+                </div>
+                {canResolve && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmLift(item.user_uuid)}
+                    disabled={liftMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('violations.throttles.addTitle')}</DialogTitle>
+            <DialogDescription>{t('violations.throttles.addDesc')}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-sm">{t('violations.whitelist.userUuid')}</label>
+              <Input value={uuid} onChange={(e) => setUuid(e.target.value)} placeholder="uuid" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm">{t('violations.throttles.rate')}</label>
+              <Input
+                type="number"
+                value={rate}
+                onChange={(e) => setRate(e.target.value)}
+                placeholder={t('violations.throttles.ratePlaceholder')}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm">{t('violations.throttles.hours')}</label>
+              <Input
+                type="number"
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
+                placeholder={t('violations.throttles.hoursPlaceholder')}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm">{t('violations.whitelist.reason')}</label>
+              <Input value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>{t('common.cancel')}</Button>
+            <Button
+              onClick={() => addMutation.mutate({
+                user_uuid: uuid.trim(),
+                rate_kbit: rate ? Number(rate) : undefined,
+                expires_in_hours: hours ? Number(hours) : undefined,
+                reason: reason.trim() || undefined,
+              })}
+              disabled={!uuid.trim() || addMutation.isPending}
+            >
+              {t('violations.throttles.add')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmLift}
+        onOpenChange={(open) => { if (!open) setConfirmLift(null) }}
+        title={t('violations.throttles.liftTitle')}
+        description={t('violations.throttles.liftDesc')}
+        confirmLabel={t('violations.throttles.lift')}
+        onConfirm={() => { if (confirmLift) liftMutation.mutate(confirmLift) }}
+      />
+    </div>
+  )
+}
+
 function WhitelistTab() {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
@@ -1424,13 +1638,13 @@ function WhitelistTab() {
 // Main Page
 // ══════════════════════════════════════════════════════════════════
 
-type BlockingTab = 'ip' | 'hwid' | 'whitelist'
+type BlockingTab = 'ip' | 'hwid' | 'whitelist' | 'throttles'
 
 export default function Blocking() {
   const { t } = useTranslation()
   const [params, setParams] = useSearchParams()
   const rawTab = (params.get('tab') || 'ip') as BlockingTab
-  const validTabs: BlockingTab[] = ['ip', 'hwid', 'whitelist']
+  const validTabs: BlockingTab[] = ['ip', 'hwid', 'whitelist', 'throttles']
   const tab = validTabs.includes(rawTab) ? rawTab : 'ip'
 
   const handleTabChange = (newTab: string) => {
@@ -1463,6 +1677,10 @@ export default function Blocking() {
             <ShieldCheck className="w-4 h-4" />
             {t('blocking.tabs.whitelist')}
           </TabsTrigger>
+          <TabsTrigger value="throttles" className="gap-1.5">
+            <Gauge className="w-4 h-4" />
+            {t('blocking.tabs.throttles')}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="ip">
@@ -1473,6 +1691,9 @@ export default function Blocking() {
         </TabsContent>
         <TabsContent value="whitelist">
           <WhitelistTab />
+        </TabsContent>
+        <TabsContent value="throttles">
+          <ThrottlesTab />
         </TabsContent>
       </Tabs>
     </div>

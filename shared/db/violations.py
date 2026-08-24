@@ -17,6 +17,7 @@ from shared.db_schema import (
     VIOLATIONS_TABLE,
     VIOLATION_REPORTS_TABLE,
     VIOLATION_WHITELIST_TABLE,
+    USER_THROTTLES_TABLE,
 )
 from shared.db_query import delete_sql, insert_sql, select_sql, update_sql
 
@@ -1789,3 +1790,160 @@ class ViolationsMixin:
             logger.warning("batch_get_srh_records failed: %s", e)
             return {}
 
+
+    # ==================== Ограничение скорости ====================
+
+    async def add_user_throttle(
+        self,
+        user_uuid: str,
+        rate_kbit: int,
+        reason: Optional[str] = None,
+        admin_id: Optional[int] = None,
+        admin_username: Optional[str] = None,
+        until: Optional[datetime] = None,
+        prev_squads: Optional[List[str]] = None,
+    ) -> tuple:
+        """Поставить пользователю ограничение скорости.
+
+        Повторный вызов заменяет прежнее ограничение целиком: у человека
+        оно одно, и «ещё немного помедленнее» — это просто другая скорость,
+        а не второе правило поверх первого.
+
+        ``until=None`` — бессрочно, до ручного снятия.
+
+        Returns:
+            (success: bool, error: Optional[str])
+        """
+        if not self.is_connected:
+            return (False, "Database not connected")
+        if rate_kbit <= 0:
+            return (False, "rate_kbit must be positive")
+
+        try:
+            async with self.acquire() as conn:
+                await conn.execute(
+                    insert_sql(
+                        USER_THROTTLES_TABLE,
+                        ["user_uuid", "rate_kbit", "reason", "created_by_admin_id",
+                         "created_by_username", "until", "prev_squads"],
+                        suffix="ON CONFLICT (user_uuid) DO UPDATE SET "
+                        "rate_kbit = EXCLUDED.rate_kbit, "
+                        "reason = EXCLUDED.reason, "
+                        "created_by_admin_id = EXCLUDED.created_by_admin_id, "
+                        "created_by_username = EXCLUDED.created_by_username, "
+                        "created_at = NOW(), "
+                        "until = EXCLUDED.until, "
+                        # Прежние сквады не затираем повторной постановкой: снимок
+                        # сделан до первого переезда, а сейчас человек уже в резервном.
+                        "prev_squads = COALESCE(user_throttles.prev_squads, EXCLUDED.prev_squads)",
+                    ),
+                    user_uuid, int(rate_kbit), reason, admin_id, admin_username, until,
+                    json.dumps(prev_squads) if prev_squads else None,
+                )
+                return (True, None)
+        except Exception as e:
+            logger.error("Failed to throttle user %s: %s", user_uuid, e, exc_info=True)
+            return (False, str(e))
+
+    async def remove_user_throttle(self, user_uuid: str) -> bool:
+        """Снять ограничение скорости. True — если оно было."""
+        if not self.is_connected:
+            return False
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    delete_sql(USER_THROTTLES_TABLE, "user_uuid = $1"), user_uuid,
+                )
+                return result != "DELETE 0"
+        except Exception as e:
+            logger.error("Failed to unthrottle user %s: %s", user_uuid, e, exc_info=True)
+            return False
+
+    async def get_user_throttle(self, user_uuid: str) -> Optional[Dict[str, Any]]:
+        """Действующее ограничение пользователя. None — если его нет или срок вышел."""
+        if not self.is_connected:
+            return None
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                select_sql(
+                    USER_THROTTLES_TABLE,
+                    "*",
+                    "WHERE user_uuid = $1 AND (until IS NULL OR until > NOW())",
+                ),
+                user_uuid,
+            )
+        return dict(row) if row else None
+
+    async def get_active_throttles(self) -> List[Dict[str, Any]]:
+        """Все действующие ограничения — их синхронизатор и раскладывает по нодам."""
+        if not self.is_connected:
+            return []
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                select_sql(
+                    USER_THROTTLES_TABLE,
+                    "user_uuid::text, rate_kbit, reason, until, created_at, created_by_username, prev_squads",
+                    "WHERE until IS NULL OR until > NOW() ORDER BY created_at DESC",
+                )
+            )
+        return [dict(r) for r in rows]
+
+    async def cleanup_expired_throttles(self) -> int:
+        """Убрать ограничения, срок которых вышел. Возвращает число снятых."""
+        if not self.is_connected:
+            return 0
+        try:
+            async with self.acquire() as conn:
+                result = await conn.execute(
+                    delete_sql(USER_THROTTLES_TABLE, "until IS NOT NULL AND until <= NOW()")
+                )
+                return int(result.split()[-1]) if result else 0
+        except Exception as e:
+            logger.warning("Throttle cleanup failed: %s", e)
+            return 0
+
+    async def get_throttle_rules_by_node(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Действующие ограничения, разложенные по нодам: {node_uuid: [{ip, rate_kbit}]}.
+
+        Берутся живые подключения ограниченных пользователей — адреса они
+        меняют часто, и правила пересобираются по свежим данным.
+
+        Адрес, за которым сидит кто-то НЕ ограниченный, пропускается: за
+        одним адресом мобильного оператора живёт целый район, и резать его
+        целиком значит наказать невиновных. На проде таких адресов около
+        полутора процентов, так что отказ дешевле ошибки.
+        """
+        if not self.is_connected:
+            return {}
+
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                SELECT DISTINCT uc.node_uuid::text AS node_uuid,
+                       uc.ip_address::text AS ip,
+                       t.rate_kbit
+                FROM {USER_CONNECTIONS_TABLE} uc
+                JOIN {USER_THROTTLES_TABLE} t ON t.user_uuid = uc.user_uuid
+                WHERE uc.disconnected_at IS NULL
+                  AND uc.node_uuid IS NOT NULL
+                  AND (t.until IS NULL OR t.until > NOW())
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM {USER_CONNECTIONS_TABLE} other
+                      LEFT JOIN {USER_THROTTLES_TABLE} ot
+                             ON ot.user_uuid = other.user_uuid
+                            AND (ot.until IS NULL OR ot.until > NOW())
+                      WHERE other.ip_address = uc.ip_address
+                        AND other.disconnected_at IS NULL
+                        AND other.user_uuid <> uc.user_uuid
+                        AND ot.user_uuid IS NULL
+                  )
+                """
+            )
+
+        by_node: Dict[str, List[Dict[str, Any]]] = {}
+        for r in rows:
+            by_node.setdefault(r["node_uuid"], []).append(
+                {"ip": r["ip"], "rate_kbit": int(r["rate_kbit"])}
+            )
+        return by_node

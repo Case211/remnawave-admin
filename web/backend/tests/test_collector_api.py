@@ -4,7 +4,9 @@
 приём батча (метрики/подключения/резолв идентификаторов), кулдаун-логику
 batch-пайплайна нарушений, /health и /stats.
 """
-from datetime import datetime, timedelta
+import gzip
+import json
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -705,3 +707,52 @@ class TestPublicIpForAgent:
         with patch.object(collector, "db_service", db):
             await collector._remember_agent_ip("node-1", None)
         db.acquire.assert_not_called()
+
+
+# ── Сжатые тела (агент 1.6.0+) ────────────────────────────────
+
+
+class TestGzipBody:
+    """POST /api/v2/collector/batch с Content-Encoding: gzip."""
+
+    @staticmethod
+    def _gzip_headers():
+        return {**AGENT_HEADERS, "Content-Type": "application/json", "Content-Encoding": "gzip"}
+
+    @pytest.mark.asyncio
+    async def test_gzipped_batch_processed_like_plain(self, anon_client):
+        """Сжатый батч доходит до обработчика в том же виде, что и обычный."""
+        db = make_db_mock()
+        body = gzip.compress(
+            json.dumps(make_batch(connections=[make_connection()])).encode("utf-8")
+        )
+        with patch.object(collector, "db_service", db), \
+             patch.object(collector, "get_node_by_token", AsyncMock(return_value=NODE_UUID)), \
+             patch.object(collector, "_enqueue_violation_users", MagicMock()):
+            resp = await anon_client.post(
+                "/api/v2/collector/batch", content=body, headers=self._gzip_headers(),
+            )
+        assert resp.status_code == 200
+        assert resp.json()["processed"] == 1
+        db.batch_upsert_connections.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_malformed_gzip_rejected(self, anon_client):
+        """Тело, объявленное сжатым, но не сжатое, — явный 400, а не 500."""
+        resp = await anon_client.post(
+            "/api/v2/collector/batch", content=b"not actually gzip",
+            headers=self._gzip_headers(),
+        )
+        assert resp.status_code == 400
+        assert resp.json()["code"] == "BAD_ENCODING"
+
+    @pytest.mark.asyncio
+    async def test_decompression_bomb_rejected(self, anon_client):
+        """Маленькое сжатое тело с гигантской начинкой не должно разворачиваться."""
+        body = gzip.compress(b"\0" * (32 * 1024 * 1024))
+        assert len(body) < 1024 * 1024  # именно бомба: сжатое мало, распакованное огромно
+        resp = await anon_client.post(
+            "/api/v2/collector/batch", content=body, headers=self._gzip_headers(),
+        )
+        assert resp.status_code == 413
+        assert resp.json()["code"] == "BODY_TOO_LARGE"

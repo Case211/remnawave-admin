@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from shared.analyzers.models import ACTION_LABELS
 from shared.database import db_service
 from shared.logger import logger
 
@@ -81,14 +82,9 @@ class ViolationReportService:
         "safe": "🟢"
     }
 
-    ACTION_NAMES = {
-        "no_action": "Нет действий",
-        "monitor": "Мониторинг",
-        "warn": "Предупреждение",
-        "soft_block": "Мягкая блокировка",
-        "temp_block": "Временная блокировка",
-        "hard_block": "Полная блокировка"
-    }
+    # Названия действий общие с уведомлениями (shared/analyzers/models.py):
+    # одно и то же нарушение не должно называться по-разному в двух местах.
+    ACTION_NAMES = ACTION_LABELS
 
     ASN_TYPE_NAMES = {
         "mobile": "Мобильные",
@@ -396,7 +392,7 @@ class ViolationReportService:
             sorted_actions = sorted(report.by_action.items(), key=lambda x: x[1], reverse=True)
             for action, count in sorted_actions:
                 action_name = self.ACTION_NAMES.get(action, action)
-                lines.append(f"  • {action_name}: <b>{count}</b>")
+                lines.append(f"  • {action_name.capitalize()}: <b>{count}</b>")
 
         # Футер
         lines.append("")

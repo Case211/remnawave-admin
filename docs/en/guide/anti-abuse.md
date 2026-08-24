@@ -54,9 +54,36 @@ Which subscriptions count as trials is defined by a list of tags and internal sq
 
 ## What happens on a violation
 
-The action follows the score: warning, soft block, temporary block, hard block. Hard-block thresholds are configured separately — by number of addresses, simultaneous connections, devices, HWID matches and accounts per device.
+The score picks a **recommendation**, not a verdict: watch, warn, review manually, block temporarily, block. The panel itself touches nobody — with one exception: at the hard-block threshold with auto-blocking on (`violation_auto_hard_block`, enabled by default) the user is disabled right away. The notification then says "Done: user blocked" instead of a recommendation, so there is nothing to guess about.
 
-The notification arrives in Telegram with buttons: block, drop connections, whitelist. Automatic actions are marked in the record as taken by the system — there is no administrator behind them and nothing to review.
+Hard-block thresholds are configured separately — by number of addresses, simultaneous connections, devices, HWID matches and accounts per device.
+
+## Soft block
+
+Between "warn" and "cut off entirely" there is a middle measure: **throttle the speed**. The person stays online — sites and messengers work, video and torrents don't — notices the internet has gone weird, and comes to sort it out. A full block gets you nothing of the sort: they simply disappear.
+
+The limit is attached to the user's **address**, via `tc` rules on the node. It touches neither the Xray config nor squad membership, so it applies and lifts instantly and affects nobody else. Requires agent 1.7.0 or newer.
+
+**Settings → Violations → Speed throttling:**
+
+| Setting | Meaning | Default |
+|---------|---------|---------|
+| Speed throttling | enables the mechanism | on |
+| Default speed | what the violator is left with, kbit/s | `1024` |
+| Reserve squad for violators | where to move them as well; empty — leave squads alone | empty |
+| Throttle automatically | apply straight away on the "review manually" verdict | off |
+
+There are four ways to apply it: the **"🐌 Throttle"** button under a violation notification, by hand on the **Blocking → Throttling** tab, automatically by traffic usage ("throttle" as the monitor's auto-action), and automatically by score — with "Throttle automatically" on, the detector applies it itself on the "review manually" verdict.
+
+The node's link width does not need to be configured: ordinary traffic bypasses the shaper entirely, only the violators' addresses go through it.
+
+With a reserve squad configured, the violator is moved there as well, and their previous squads are remembered and restored when the limit is lifted.
+
+::: warning Addresses change
+People change addresses several times a day, so rules are not set once and forgotten — they are rebuilt from live connections, and a new address is covered within a minute. An address with even one non-throttled user behind it is skipped: a single mobile-carrier address serves a whole district, and throttling it wholesale would punish the innocent.
+:::
+
+The notification arrives in Telegram with buttons: block, drop connections, whitelist — either entirely or only for the analyzer that raised the alarm (see [buttons under notifications](/en/guide/bot#buttons-under-notifications)). Automatic actions are marked in the record as taken by the system — there is no administrator behind them and nothing to review.
 
 Repeat notifications about the same user are held back by a cooldown, so a single incident does not turn into a stream of messages.
 

@@ -1026,6 +1026,22 @@ class UsersMixin:
             )
             return str(row["uuid"]) if row else None
 
+    async def get_uuid_map_by_panel_ids(self, panel_ids: List[int]) -> Dict[int, str]:
+        """Панельные числовые id → локальные uuid, одним запросом.
+
+        Синк трафика резолвит целую страницу юзеров на каждую ноду;
+        поштучный get_user_uuid_by_panel_id превращал это в тысячу
+        запросов на ноду, то есть сотни тысяч за проход по флоту.
+        """
+        if not self.is_connected or not panel_ids:
+            return {}
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                select_sql(USERS_TABLE, "id, uuid::text", "WHERE id = ANY($1::bigint[])"),
+                list(panel_ids),
+            )
+        return {int(r["id"]): r["uuid"] for r in rows}
+
     async def get_user_panel_id_by_uuid(self, uuid: str) -> Optional[int]:
         """Resolve local user uuid to the panel numeric id (or None if unknown)."""
         if not self.is_connected:

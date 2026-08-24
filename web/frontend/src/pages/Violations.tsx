@@ -38,6 +38,7 @@ import {
   ArrowUpRight,
   Monitor,
   Laptop,
+  Download,
   Terminal,
   MonitorSmartphone,
   type LucideIcon,
@@ -698,44 +699,60 @@ function ViolationDetailPanel({
           <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-4">
             {t('violations.detail.scoreBreakdown')}
           </h3>
-          <div className="space-y-3">
-            <ScoreBar
-              label={t('violations.detail.temporal')}
-              score={detail.temporal_score}
-              weight={0.20}
-              icon={<Clock className="w-4 h-4" />}
-            />
-            <ScoreBar
-              label={t('violations.detail.geo')}
-              score={detail.geo_score}
-              weight={0.20}
-              icon={<Globe className="w-4 h-4" />}
-            />
-            <ScoreBar
-              label={t('violations.detail.provider')}
-              score={detail.asn_score}
-              weight={0.10}
-              icon={<Server className="w-4 h-4" />}
-            />
-            <ScoreBar
-              label={t('violations.detail.profileScore')}
-              score={detail.profile_score}
-              weight={0.15}
-              icon={<Fingerprint className="w-4 h-4" />}
-            />
-            <ScoreBar
-              label={t('violations.detail.device')}
-              score={detail.device_score}
-              weight={0.10}
-              icon={<Smartphone className="w-4 h-4" />}
-            />
-            <ScoreBar
-              label={t('violations.detail.hwid')}
-              score={detail.hwid_score}
-              weight={0.25}
-              icon={<Users className="w-4 h-4" />}
-            />
-          </div>
+          {/* Торрент и расход трафика заводят нарушение мимо анализаторов
+              подключений: шесть нулей под итоговой сотней только путают,
+              поэтому показываем источник скора. */}
+          {detail.score_source ? (
+            <div className="space-y-3">
+              {detail.score_source === 'torrent' && (
+                <ScoreBar
+                  label={t('violations.detail.torrent')}
+                  score={detail.score}
+                  icon={<Download className="w-4 h-4" />}
+                />
+              )}
+              <p className="text-xs text-dark-300">{t('violations.detail.scoreOutsideAnalyzers')}</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <ScoreBar
+                label={t('violations.detail.temporal')}
+                score={detail.temporal_score}
+                weight={0.20}
+                icon={<Clock className="w-4 h-4" />}
+              />
+              <ScoreBar
+                label={t('violations.detail.geo')}
+                score={detail.geo_score}
+                weight={0.20}
+                icon={<Globe className="w-4 h-4" />}
+              />
+              <ScoreBar
+                label={t('violations.detail.provider')}
+                score={detail.asn_score}
+                weight={0.10}
+                icon={<Server className="w-4 h-4" />}
+              />
+              <ScoreBar
+                label={t('violations.detail.profileScore')}
+                score={detail.profile_score}
+                weight={0.15}
+                icon={<Fingerprint className="w-4 h-4" />}
+              />
+              <ScoreBar
+                label={t('violations.detail.device')}
+                score={detail.device_score}
+                weight={0.10}
+                icon={<Smartphone className="w-4 h-4" />}
+              />
+              <ScoreBar
+                label={t('violations.detail.hwid')}
+                score={detail.hwid_score}
+                weight={0.25}
+                icon={<Users className="w-4 h-4" />}
+              />
+            </div>
+          )}
           <div className="mt-4 pt-3 border-t border-[var(--glass-border)] flex items-center justify-between">
             <span className="text-sm text-dark-200">{t('violations.detail.finalScore')}</span>
             <span className={`text-lg font-bold ${getScoreColor(detail.score)}`}>

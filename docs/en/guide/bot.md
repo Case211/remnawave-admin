@@ -59,6 +59,8 @@ Anything without its own topic goes to `NOTIFICATIONS_TOPIC_ID`.
 
 A violation notification carries actions: block, drop connections, whitelist. The tap is checked against the permissions of whoever tapped it — a button never grants more than the role does.
 
+There are two whitelists, and they are not the same thing. **"Whitelist"** lifts every check off that user at once. **"Skip: HWID"** (or geo, ASN — whichever fired) excludes only the angle this notification came from, while the other analyzers keep working. The second button shows up once it is clear which analyzer contributed most; existing partial exclusions are kept — a new one is added to them rather than replacing them.
+
 [Plugins](/en/guide/plugins) add their own buttons: a plugin describes an action as text, action and object, and knows nothing about Telegram — the panel assembles the button itself.
 
 ## Bot on a restricted server
