@@ -756,3 +756,31 @@ class TestGzipBody:
         )
         assert resp.status_code == 413
         assert resp.json()["code"] == "BODY_TOO_LARGE"
+
+
+class TestOwnInfrastructureFilter:
+    """Отсев торрент-событий, которые указывают на наши же серверы."""
+
+    INFRA = frozenset({"31.56.229.54", "64.188.82.217"})
+
+    def test_service_port_on_own_node_is_dropped(self):
+        """8443 на своей ноде — панель, а не торрент."""
+        from web.backend.api.v2.collector import _is_own_service
+        assert _is_own_service("31.56.229.54:8443", self.INFRA)
+
+    def test_torrent_port_on_own_node_counts(self):
+        """За нодой сидят наши же клиенты: пир на 6881 — настоящий обмен."""
+        from web.backend.api.v2.collector import _is_own_service
+        assert not _is_own_service("64.188.82.217:6881", self.INFRA)
+
+    def test_foreign_address_counts(self):
+        from web.backend.api.v2.collector import _is_own_service
+        assert not _is_own_service("1.1.1.1:443", self.INFRA)
+
+    def test_split_ipv6_destination(self):
+        from web.backend.api.v2.collector import _split_destination
+        assert _split_destination("[2001:db8::1]:6881") == ("2001:db8::1", 6881)
+
+    def test_split_destination_without_port(self):
+        from web.backend.api.v2.collector import _split_destination
+        assert _split_destination("example.org") == ("example.org", None)

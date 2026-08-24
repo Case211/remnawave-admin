@@ -178,6 +178,10 @@ MIN_BATCH_INTERVAL = 1.0  # seconds
 _infra_ips_cache: tuple[float, frozenset[str]] = (0.0, frozenset())
 _INFRA_IPS_TTL = 300  # seconds
 
+# Порты, на которых слушает наша инфраструктура: ssh, веб-панель, selfsteal
+# и API ноды. Всё остальное на тех же адресах — обычный интернет.
+_INFRA_PORTS = frozenset({22, 80, 443, 2222, 8443})
+
 
 async def _get_node_name(node_uuid: str) -> str:
     """Вернуть имя ноды по UUID (с кэшем и TTL). Fallback — первые 8 символов UUID."""
@@ -216,12 +220,30 @@ async def _own_infrastructure_ips() -> frozenset[str]:
     return _infra_ips_cache[1]
 
 
-def _destination_host(destination: str) -> str:
-    """Хост назначения без порта: Xray пишет их одной строкой host:port."""
-    host = (destination or "").strip()
-    if host.startswith("["):  # IPv6 в скобках
-        return host[1:].split("]", 1)[0]
-    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+def _split_destination(destination: str) -> tuple[str, Optional[int]]:
+    """Разобрать «host:port» — Xray пишет назначение одной строкой."""
+    value = (destination or "").strip()
+    if value.startswith("["):  # IPv6 в скобках
+        host, _, rest = value[1:].partition("]")
+        port = rest[1:] if rest.startswith(":") else ""
+    elif value.count(":") == 1:
+        host, _, port = value.partition(":")
+    else:
+        host, port = value, ""
+    try:
+        return host, int(port)
+    except ValueError:
+        return host, None
+
+
+def _is_own_service(destination: str, infra_ips: frozenset) -> bool:
+    """Поток к нашему же серверу на его служебный порт.
+
+    Только на служебный: за нодой сидят наши же клиенты, и пир на
+    торрент-порту за ней — настоящий обмен, а не туннель между серверами.
+    """
+    host, port = _split_destination(destination)
+    return host in infra_ips and port in _INFRA_PORTS
 
 
 router = APIRouter()
@@ -661,14 +683,14 @@ async def receive_connections(
     if report.torrent_events:
         torrent_enabled = config_service.get("torrent_detection_enabled", True)
         if torrent_enabled:
-            # Поток к собственной ноде — это туннель между нашими же серверами.
-            # Торрента внутри него не видно никому, включая nDPI: он видит
-            # шифрованный поток и метит его по косвенным признакам. Такие
-            # события отбрасываем сразу, не доводя ни до базы, ни до наказания.
+            # Поток к своему же серверу на его служебный порт — это туннель
+            # между нашими нодами: торрента внутри не видит никто, включая
+            # nDPI, он метит шифрованный поток по косвенным признакам. Такие
+            # события отбрасываем, не доводя ни до базы, ни до наказания.
             infra_ips = await _own_infrastructure_ips()
             torrent_events = [
                 event for event in report.torrent_events
-                if _destination_host(event.destination) not in infra_ips
+                if not _is_own_service(event.destination, infra_ips)
             ]
             ignored_infra = len(report.torrent_events) - len(torrent_events)
             if ignored_infra:

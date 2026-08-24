@@ -44,6 +44,17 @@ MEANINGFUL_EVENTS = frozenset({"detected", "detection-update", "update", "guesse
 #: оказаться любой из половин.
 TORRENT_MARKERS = ("bittorrent", "torrent")
 
+#: Переносчики имён. В «DNS.BitTorrent» торрент — это лишь имя, которое
+#: клиент спросил у резолвера («ledger.bt.co»), обмена по нему ещё не было.
+#: Считать такое скачиванием — наказывать за любопытство: имя трекера
+#: резолвит и открытая страница, и клиент, которому не дали соединиться.
+NAME_LOOKUP_MASTERS = frozenset({"dns", "doh_dot", "doh", "dot", "mdns", "llmnr", "netbios"})
+
+#: Уверенность, которой верить нельзя: nDPI сам сообщает, что не разобрал
+#: поток, а угадал по номеру порта или по адресу. На нестандартных портах
+#: такая догадка и даёт ложные срабатывания.
+WEAK_CONFIDENCE = ("guessed", "match by port", "match by ip")
+
 
 def iter_messages(buffer: bytes) -> Tuple[Iterator[dict], bytes]:
     """Разобрать буфер на сообщения; вернуть (события, остаток).
@@ -87,12 +98,38 @@ def protocol_of(event: dict) -> str:
     return ""
 
 
+def confidence_of(event: dict) -> str:
+    """Чем nDPI обосновал вердикт: разбором потока или догадкой.
+
+    В сообщении это объект вида ``{"6": "DPI"}`` — ключ числовой код,
+    значение читаемое имя; берём имя.
+    """
+    ndpi = event.get("ndpi")
+    values = ndpi.get("confidence") if isinstance(ndpi, dict) else None
+    if isinstance(values, dict):
+        return str(next(iter(values.values()), "")).lower()
+    if isinstance(values, str):
+        return values.lower()
+    return ""
+
+
 def is_torrent(event: dict) -> bool:
-    """Вердикт про BitTorrent — по протоколу или категории обмена файлами."""
+    """Вердикт про настоящий обмен по BitTorrent.
+
+    Мало увидеть слово в имени протокола: у составного «master.app» под
+    master прячется переносчик, и `DNS.BitTorrent` означает всего лишь
+    спрошенное имя трекера. Догадкам без разбора потока тоже не верим —
+    иначе за торрент сойдёт что угодно на непонятном порту.
+    """
     if event.get("flow_event_name") not in MEANINGFUL_EVENTS:
         return False
     proto = protocol_of(event).lower()
-    return any(marker in proto for marker in TORRENT_MARKERS)
+    if not any(marker in proto for marker in TORRENT_MARKERS):
+        return False
+    if proto.split(".", 1)[0] in NAME_LOOKUP_MASTERS:
+        return False
+    confidence = confidence_of(event)
+    return not any(weak in confidence for weak in WEAK_CONFIDENCE)
 
 
 def destination_of(event: dict) -> Optional[str]:
