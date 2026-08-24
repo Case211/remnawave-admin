@@ -18,6 +18,7 @@ from aiogram.utils.i18n import gettext as _
 
 from shared.database import db_service
 from src.utils.auth import BotAdmin
+from src.utils.cards import append_card_note
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -95,17 +96,8 @@ async def _block_radar(callback: CallbackQuery, action: str, ref: str) -> None:
 async def _seal(callback: CallbackQuery, mark: str) -> None:
     """Дописать итог в сообщение и убрать кнопки: следующий читатель должен
     видеть, что ответ уже дан, и не жать по второму разу."""
-    try:
-        old = callback.message.html_text or callback.message.text or ""
-        name = callback.from_user.first_name or str(callback.from_user.id)
-        await callback.message.edit_text(
-            old + _("pact.mark_suffix").format(mark=mark, name=name),
-            parse_mode="HTML",
-        )
-    except Exception:
-        # Сообщение старше двух суток или без текста — Telegram править не
-        # даст. Отметка уже сохранена, молчим.
-        logger.debug("pact.seal_failed", exc_info=True)
+    name = callback.from_user.first_name or str(callback.from_user.id)
+    await append_card_note(callback, _("pact.mark_suffix").format(mark=mark, name=name))
 
 
 def _is_plugin_too_old(exc: Exception) -> bool:

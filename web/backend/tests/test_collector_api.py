@@ -756,3 +756,74 @@ class TestGzipBody:
         )
         assert resp.status_code == 413
         assert resp.json()["code"] == "BODY_TOO_LARGE"
+
+
+class TestOwnInfrastructureFilter:
+    """Отсев торрент-событий, которые указывают на наши же серверы."""
+
+    INFRA = frozenset({"31.56.229.54", "64.188.82.217"})
+
+    def test_service_port_on_own_node_is_dropped(self):
+        """8443 на своей ноде — панель, а не торрент."""
+        from web.backend.api.v2.collector import _is_own_service
+        assert _is_own_service("31.56.229.54:8443", self.INFRA)
+
+    def test_torrent_port_on_own_node_counts(self):
+        """За нодой сидят наши же клиенты: пир на 6881 — настоящий обмен."""
+        from web.backend.api.v2.collector import _is_own_service
+        assert not _is_own_service("64.188.82.217:6881", self.INFRA)
+
+    def test_foreign_address_counts(self):
+        from web.backend.api.v2.collector import _is_own_service
+        assert not _is_own_service("1.1.1.1:443", self.INFRA)
+
+    def test_split_ipv6_destination(self):
+        from web.backend.api.v2.collector import _split_destination
+        assert _split_destination("[2001:db8::1]:6881") == ("2001:db8::1", 6881)
+
+    def test_split_destination_without_port(self):
+        from web.backend.api.v2.collector import _split_destination
+        assert _split_destination("example.org") == ("example.org", None)
+
+
+class TestSharedDestinations:
+    """Адрес, за которым стоит не один пользователь, обвинять не даёт."""
+
+    @staticmethod
+    def _db(rows, failing=False):
+        from shared.db.connections import ConnectionsMixin
+
+        class _Db(ConnectionsMixin):
+            is_connected = True
+
+            def acquire(self):
+                conn = MagicMock()
+                conn.fetch = AsyncMock(
+                    side_effect=Exception("boom") if failing else None,
+                    return_value=rows,
+                )
+                ctx = MagicMock()
+                ctx.__aenter__ = AsyncMock(return_value=conn)
+                ctx.__aexit__ = AsyncMock(return_value=False)
+                return ctx
+
+        return _Db()
+
+    @pytest.mark.asyncio
+    async def test_returns_addresses_with_several_users(self):
+        db = self._db([{"destination": "57.144.105.33:443"}])
+        shared = await db.shared_torrent_destinations(
+            ["57.144.105.33:443", "198.51.100.9:6881"]
+        )
+        assert shared == {"57.144.105.33:443"}
+
+    @pytest.mark.asyncio
+    async def test_empty_input_does_not_query(self):
+        db = self._db([{"destination": "should not be asked"}])
+        assert await db.shared_torrent_destinations([]) == set()
+
+    @pytest.mark.asyncio
+    async def test_broken_query_accuses_nobody_extra(self):
+        """Упавший запрос не должен ни ломать разбор, ни глушить обвинения."""
+        db = self._db([], failing=True)
+        assert await db.shared_torrent_destinations(["1.2.3.4:6881"]) == set()

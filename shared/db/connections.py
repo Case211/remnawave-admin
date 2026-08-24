@@ -3,15 +3,12 @@ Connections mixin — user connections, partitioning, torrent events.
 """
 import asyncio
 import json
-import re
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional
-
-import asyncpg
 
 from shared.logger import logger
 from shared.db_schema import USER_CONNECTIONS_TABLE, VIOLATIONS_TABLE, USERS_TABLE, NODES_TABLE
-from shared.db_query import select_sql, insert_sql, update_sql, delete_sql
+from shared.db_query import select_sql, insert_sql, update_sql
 
 
 class ConnectionsMixin:
@@ -742,6 +739,35 @@ class ConnectionsMixin:
         except Exception as e:
             logger.error("batch_save_torrent_events failed: %s", e)
             return 0
+
+    async def shared_torrent_destinations(
+        self, destinations: list, hours: int = 24,
+    ) -> set:
+        """Адреса из списка, за которыми в окне стоял не один пользователь.
+
+        Вердикт nDPI живёт на адресе назначения: за адресом мессенджера или
+        CDN сидит пол-ноды, и один поток сделал бы нарушителями всех, кто
+        туда ходил. Обвинять по такому адресу нельзя — привязка недоказуема.
+        """
+        if not self.is_connected or not destinations:
+            return set()
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT destination
+                    FROM torrent_events
+                    WHERE destination = ANY($1::text[])
+                      AND detected_at > NOW() - make_interval(hours => $2)
+                    GROUP BY destination
+                    HAVING count(DISTINCT user_uuid) > 1
+                    """,
+                    list({str(d) for d in destinations if d}), hours,
+                )
+            return {r["destination"] for r in rows}
+        except Exception as e:
+            logger.warning("shared_torrent_destinations failed: %s", e)
+            return set()
 
     async def get_recent_torrent_violation(self, user_uuid: str, minutes: int = 10):
         """Check if a torrent-type violation exists for this user within the last N minutes."""

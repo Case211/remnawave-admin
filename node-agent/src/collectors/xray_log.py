@@ -88,6 +88,13 @@ def _parse_lines(
     """
     connections_map: dict[tuple[str, str], tuple[datetime, str]] = {}
     torrent_events: list[TorrentEvent] = []
+    # Кандидаты от nDPI вместе с тем, чем они были бы как обычное
+    # подключение: не подтвердится обвинение — вернём их туда.
+    ndpi_candidates: list = []
+    # Кто вообще ходил на каждый адрес в этом куске лога — по всем строкам,
+    # а не только по кандидатам: сосед мог прийти на тот же адрес и с тегом
+    # роутинга, и вовсе без вердикта.
+    users_per_destination: dict[str, set[str]] = {}
 
     lines_count = 0
     accepted_lines = 0
@@ -108,6 +115,7 @@ def _parse_lines(
             matched_lines += 1
             ts_str, client_ip, client_port, destination, inbound_tag, outbound_tag, user_id = match.groups()
             user_identifier = f"user_{user_id}"
+            users_per_destination.setdefault(destination, set()).add(user_identifier)
 
             try:
                 detected_at = _parse_timestamp(ts_str)
@@ -130,17 +138,23 @@ def _parse_lines(
 
             # Xray тега не поставил, но nDPI по этому же адресу назначения
             # только что видел торрент — значит поток шифрованный либо это
-            # DHT/uTP, до рукопожатия дело не дошло.
+            # DHT/uTP, до рукопожатия дело не дошло. Решение откладываем:
+            # вердикт висит на адресе, а кто за ним стоял — выяснится, когда
+            # разберём весь кусок лога.
             if torrent_oracle is not None and torrent_oracle.is_torrent(destination):
-                torrent_events.append(TorrentEvent(
-                    user_email=user_identifier,
-                    ip_address=client_ip,
-                    destination=destination,
-                    inbound_tag=inbound_tag.strip(),
-                    outbound_tag="",
-                    node_uuid=node_uuid,
-                    detected_at=detected_at,
-                    detected_by="ndpi",
+                ndpi_candidates.append((
+                    TorrentEvent(
+                        user_email=user_identifier,
+                        ip_address=client_ip,
+                        destination=destination,
+                        inbound_tag=inbound_tag.strip(),
+                        outbound_tag="",
+                        node_uuid=node_uuid,
+                        detected_at=detected_at,
+                        detected_by="ndpi",
+                    ),
+                    (user_identifier, client_ip),
+                    (detected_at, user_identifier, inbound_tag.strip()),
                 ))
                 continue
 
@@ -177,6 +191,20 @@ def _parse_lines(
             existing_time, _, prev_tag = connections_map[key]
             if connected_at > existing_time:
                 connections_map[key] = (connected_at, user_identifier, prev_tag)
+
+    # Вердикт nDPI висит на адресе назначения, а не на человеке. За одним
+    # адресом мессенджера или CDN в то же окно сидит пол-ноды: один вердикт
+    # сделал бы нарушителями всех разом — на проде так прилетело четверым
+    # за адрес Meta. Пока не видно, что к адресу ходил ровно один
+    # пользователь, обвинять некого; остальные кандидаты возвращаются в
+    # обычные подключения, чтобы не пропасть из учёта.
+    for candidate, key, value in ndpi_candidates:
+        if len(users_per_destination.get(candidate.destination, ())) == 1:
+            torrent_events.append(candidate)
+            continue
+        previous = connections_map.get(key)
+        if previous is None or value[0] > previous[0]:
+            connections_map[key] = value
 
     # Преобразуем в список ConnectionReport
     connections = [
