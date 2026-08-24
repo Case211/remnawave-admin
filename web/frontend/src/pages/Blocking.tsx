@@ -1638,13 +1638,13 @@ function WhitelistTab() {
 // Main Page
 // ══════════════════════════════════════════════════════════════════
 
-type BlockingTab = 'ip' | 'hwid' | 'whitelist'
+type BlockingTab = 'ip' | 'hwid' | 'whitelist' | 'throttles'
 
 export default function Blocking() {
   const { t } = useTranslation()
   const [params, setParams] = useSearchParams()
   const rawTab = (params.get('tab') || 'ip') as BlockingTab
-  const validTabs: BlockingTab[] = ['ip', 'hwid', 'whitelist']
+  const validTabs: BlockingTab[] = ['ip', 'hwid', 'whitelist', 'throttles']
   const tab = validTabs.includes(rawTab) ? rawTab : 'ip'
 
   const handleTabChange = (newTab: string) => {

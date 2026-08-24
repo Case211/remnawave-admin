@@ -173,6 +173,11 @@ _NODE_NAME_TTL_MINUTES = 30
 _node_last_batch: dict[str, float] = {}
 MIN_BATCH_INTERVAL = 1.0  # seconds
 
+# Адреса собственной инфраструктуры: {ip}. Ноды заводят редко, пяти минут
+# кэша хватает, а разбирать событие дороже, чем держать это множество.
+_infra_ips_cache: tuple[float, frozenset[str]] = (0.0, frozenset())
+_INFRA_IPS_TTL = 300  # seconds
+
 
 async def _get_node_name(node_uuid: str) -> str:
     """Вернуть имя ноды по UUID (с кэшем и TTL). Fallback — первые 8 символов UUID."""
@@ -187,6 +192,37 @@ async def _get_node_name(node_uuid: str) -> str:
         return name
     except Exception:
         return cached[0] if cached else node_uuid[:8]
+
+async def _own_infrastructure_ips() -> frozenset[str]:
+    """Адреса наших же нод — панельный адрес и адрес, с которого стучится агент."""
+    global _infra_ips_cache
+    cached_at, ips = _infra_ips_cache
+    now = time.time()
+    if ips and now - cached_at < _INFRA_IPS_TTL:
+        return ips
+    try:
+        async with db_service.acquire() as conn:
+            rows = await conn.fetch(select_sql(NODES_TABLE, "address, agent_ip"))
+    except Exception as e:
+        logger.warning("Cannot read node addresses: %s", e)
+        return ips
+    fresh = {
+        str(value).strip()
+        for row in rows
+        for value in (row["address"], row["agent_ip"])
+        if value and str(value).strip()
+    }
+    _infra_ips_cache = (now, frozenset(fresh))
+    return _infra_ips_cache[1]
+
+
+def _destination_host(destination: str) -> str:
+    """Хост назначения без порта: Xray пишет их одной строкой host:port."""
+    host = (destination or "").strip()
+    if host.startswith("["):  # IPv6 в скобках
+        return host[1:].split("]", 1)[0]
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
 
 router = APIRouter()
 
@@ -625,9 +661,25 @@ async def receive_connections(
     if report.torrent_events:
         torrent_enabled = config_service.get("torrent_detection_enabled", True)
         if torrent_enabled:
+            # Поток к собственной ноде — это туннель между нашими же серверами.
+            # Торрента внутри него не видно никому, включая nDPI: он видит
+            # шифрованный поток и метит его по косвенным признакам. Такие
+            # события отбрасываем сразу, не доводя ни до базы, ни до наказания.
+            infra_ips = await _own_infrastructure_ips()
+            torrent_events = [
+                event for event in report.torrent_events
+                if _destination_host(event.destination) not in infra_ips
+            ]
+            ignored_infra = len(report.torrent_events) - len(torrent_events)
+            if ignored_infra:
+                logger.info(
+                    "Torrent events: %d to own infrastructure ignored (node=%s)",
+                    ignored_infra, node_name,
+                )
+
             # Resolve user UUIDs and build batch
             batch_events = []
-            for event in report.torrent_events:
+            for event in torrent_events:
                 try:
                     user_uuid_t = await _cached_find_user(event.user_email)
                     if not user_uuid_t:
@@ -653,7 +705,7 @@ async def receive_connections(
                     "Torrent events: node=%s count=%d", node_name, torrent_processed
                 )
                 _schedule_background_task(
-                    _process_torrent_violations(report.torrent_events, user_uuid_cache)
+                    _process_torrent_violations(torrent_events, user_uuid_cache)
                 )
 
     return JSONResponse(

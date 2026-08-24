@@ -1,15 +1,17 @@
 """Обработчики inline-кнопок быстрых действий из уведомлений о нарушениях.
 
 Callback data format: vact:<action>:<user_uuid>
-Actions: info, block, kill, dismiss (= annul), reset, thr, wl, wlp_<analyzer>
+Actions: info, block, kill, dismiss (= annul), reset, thr, unthr, wl, wlp_<analyzer>
 
 wlp_<analyzer> держит разрез внутри самого действия, а не отдельным полем:
 user_uuid читается как остаток строки, и лишнее двоеточие сломало бы разбор.
 """
 import logging
+from datetime import datetime, timedelta
+from typing import Optional
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.i18n import gettext as _
 
 from shared.internal_api import internal_api_client
@@ -30,7 +32,7 @@ from src.utils.formatters import _esc
 
 # Действия, меняющие состояние. Белый список сюда же: он отключает защиту,
 # то есть последствия у него не меньше, чем у блокировки.
-_MUTATING_ACTIONS = frozenset({"block", "kill", "dismiss", "reset", "wl", "thr"})
+_MUTATING_ACTIONS = frozenset({"block", "kill", "dismiss", "reset", "wl", "thr", "unthr"})
 
 
 def needs_resolve_permission(action: str) -> bool:
@@ -89,6 +91,8 @@ async def handle_violation_action(callback: CallbackQuery, admin: BotAdmin) -> N
             await _reset_traffic(callback, user_uuid, panel_user_id)
         elif action == "thr":
             await _throttle_user(callback, user_uuid, admin)
+        elif action == "unthr":
+            await _unthrottle_user(callback, user_uuid)
         elif action == "wl":
             await _whitelist_full(callback, user_uuid, admin)
         elif action.startswith("wlp_"):
@@ -337,13 +341,52 @@ async def _whitelist_partial(
         await callback.answer(_("vact.wl_error").format(e=e), show_alert=True)
 
 
-async def _append_note(callback: CallbackQuery, note: str) -> None:
-    """Дописать отметку под карточкой нарушения. Не вышло — не беда."""
+async def _append_note(
+    callback: CallbackQuery,
+    note: str,
+    keyboard: Optional[InlineKeyboardMarkup] = None,
+) -> None:
+    """Дописать отметку под карточкой нарушения.
+
+    Карточки уходят rich-сообщением (Bot API 10.1), которого aiogram 3.12 ещё
+    не знает: ни text, ни caption у такого сообщения нет, а html_text собран из
+    них же и отдаёт пустую строку. Правка пустым текстом стирала карточку
+    целиком, оставляя от неё одну отметку, — поэтому когда текста не видно,
+    отметка уходит отдельным ответом, а на самой карточке меняются кнопки.
+    """
+    message = callback.message
+    if message is None:
+        return
+
     try:
-        old_text = callback.message.text or callback.message.html_text or ""
-        await callback.message.edit_text(old_text + note, parse_mode="HTML")
-    except Exception:
-        pass
+        old_text = message.html_text
+    except (AttributeError, TypeError):
+        old_text = ""
+
+    if old_text:
+        try:
+            await message.edit_text(old_text + note, parse_mode="HTML", reply_markup=keyboard)
+        except Exception as e:
+            logger.warning("Failed to append action note: %s", e)
+        return
+
+    try:
+        await message.edit_reply_markup(reply_markup=keyboard)
+    except Exception as e:
+        logger.debug("Cannot update violation card keyboard: %s", e)
+    try:
+        await message.reply(note.strip(), parse_mode="HTML")
+    except Exception as e:
+        logger.warning("Failed to send action note: %s", e)
+
+
+def _unthrottle_keyboard(user_uuid: str) -> InlineKeyboardMarkup:
+    """Единственная кнопка под наказанием — вернуть скорость обратно."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text=_("vact.unthr_button"), callback_data=f"vact:unthr:{user_uuid}",
+        )
+    ]])
 
 
 async def _throttle_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmin) -> None:
@@ -360,6 +403,14 @@ async def _throttle_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmi
     except (TypeError, ValueError):
         rate_kbit = 1024
 
+    # Срок наказания берём из настроек: ноль там значит «до ручного снятия».
+    try:
+        hours = int(config_service.get("throttle_default_hours", 0) or 0)
+    except (TypeError, ValueError):
+        hours = 0
+    until = datetime.utcnow() + timedelta(hours=hours) if hours > 0 else None
+    period_note = _("vact.thr_period").format(hours=hours) if hours > 0 else ""
+
     try:
         from shared.throttle import apply_throttle
 
@@ -369,6 +420,7 @@ async def _throttle_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmi
             reason=_("vact.thr_reason").format(name=callback.from_user.first_name),
             admin_id=admin.account_id,
             admin_username=admin.username or str(admin.telegram_id),
+            until=until,
         )
         if not success:
             await callback.answer(_("vact.thr_error").format(e=error or "?"), show_alert=True)
@@ -380,14 +432,51 @@ async def _throttle_user(callback: CallbackQuery, user_uuid: str, admin: BotAdmi
         )
         moved_note = _("vact.thr_moved") if moved else ""
         await callback.answer(
-            _("vact.thr_done").format(rate=rate_kbit, moved=moved_note), show_alert=True,
+            _("vact.thr_done").format(rate=rate_kbit, period=period_note, moved=moved_note),
+            show_alert=True,
         )
         await _append_note(
             callback,
             _("vact.thr_suffix").format(
-                rate=rate_kbit, name=callback.from_user.first_name, moved=moved_note,
+                rate=rate_kbit, name=callback.from_user.first_name,
+                period=period_note, moved=moved_note,
             ),
+            keyboard=_unthrottle_keyboard(user_uuid),
         )
     except Exception as e:
         logger.error("Throttle user %s failed: %s", user_uuid, e)
         await callback.answer(_("vact.thr_error").format(e=e), show_alert=True)
+
+
+async def _unthrottle_user(callback: CallbackQuery, user_uuid: str) -> None:
+    """Вернуть скорость: снять решение из базы и увести человека обратно.
+
+    Правила с нод снимает тот же синхронизатор веб-бэкенда, что и ставит:
+    пустой список для ноды — это и есть снятие, отсюда та же задержка до
+    минуты, о которой честно говорим и при наказании.
+    """
+    try:
+        from shared.throttle import lift_throttle
+
+        removed, restored = await lift_throttle(user_uuid)
+        if not removed:
+            await callback.answer(_("vact.unthr_absent"), show_alert=True)
+            return
+
+        logger.warning(
+            "User %s UNTHROTTLED by %s via violation button",
+            user_uuid, callback.from_user.first_name,
+        )
+        restored_note = _("vact.unthr_restored") if restored else ""
+        await callback.answer(
+            _("vact.unthr_done").format(restored=restored_note), show_alert=True,
+        )
+        await _append_note(
+            callback,
+            _("vact.unthr_suffix").format(
+                name=callback.from_user.first_name, restored=restored_note,
+            ),
+        )
+    except Exception as e:
+        logger.error("Unthrottle user %s failed: %s", user_uuid, e)
+        await callback.answer(_("vact.unthr_error").format(e=e), show_alert=True)

@@ -1028,10 +1028,17 @@
       "user_agent": "User-Agent"
     },
     "thr_reason": "Throttled from violation notification ({name})",
-    "thr_done": "🐌 Throttled to {rate} kbit/s{moved}. Nodes pick the rule up within a minute",
-    "thr_suffix": "\n\n🐌 <i>Throttled to {rate} kbit/s{moved} ({name})</i>",
+    "thr_done": "🐌 Throttled to {rate} kbit/s{period}{moved}. Nodes pick the rule up within a minute",
+    "thr_suffix": "\n\n🐌 <i>Throttled to {rate} kbit/s{period}{moved} ({name})</i>",
     "thr_error": "❌ Could not throttle: {e}",
-    "thr_moved": " + moved to the reserve squad"
+    "thr_moved": " + moved to the reserve squad",
+    "thr_period": " for {hours}h",
+    "unthr_button": "↩️ Restore speed",
+    "unthr_done": "↩️ Throttle lifted{restored}. Nodes learn about it within a minute",
+    "unthr_suffix": "\n\n↩️ <i>Throttle lifted{restored} ({name})</i>",
+    "unthr_restored": " + previous squads restored",
+    "unthr_absent": "ℹ️ This user has no active throttle",
+    "unthr_error": "❌ Could not lift the throttle: {e}"
   },
   "pact": {
     "invalid_format": "Invalid button format",

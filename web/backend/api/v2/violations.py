@@ -1132,9 +1132,15 @@ async def add_throttle(
 
     rate_kbit = data.rate_kbit or int(config_service.get("throttle_default_kbit", 1024) or 1024)
 
-    until = None
-    if data.expires_in_hours is not None:
-        until = datetime.utcnow() + timedelta(hours=data.expires_in_hours)
+    # Срок не указан — берём общий лимит из настроек. Ноль там значит
+    # «держать до ручного снятия», как было до появления настройки.
+    hours = data.expires_in_hours
+    if hours is None:
+        try:
+            hours = int(config_service.get("throttle_default_hours", 0) or 0)
+        except (TypeError, ValueError):
+            hours = 0
+    until = datetime.utcnow() + timedelta(hours=hours) if hours and hours > 0 else None
 
     from shared.throttle import apply_throttle
 
@@ -1167,7 +1173,7 @@ async def add_throttle(
         details=json.dumps({
             "rate_kbit": rate_kbit,
             "reason": data.reason,
-            "expires_in_hours": data.expires_in_hours,
+            "expires_in_hours": hours,
             "moved_to_squad": moved,
         }, ensure_ascii=False),
         request=request,

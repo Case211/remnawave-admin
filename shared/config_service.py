@@ -1204,6 +1204,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 61,
     },
     {
+        "key": "throttle_default_hours",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "throttle",
+        "display_name": "Срок ограничения по умолчанию (ч)",
+        "description": "Через сколько часов ограничение снимается само, если срок не указан явно. 0 — держать бессрочно, до ручного снятия. Срок дисциплинирует не хуже бессрочного наказания, а забытых наказанных после него не остаётся",
+        "default_value": "0",
+        "sort_order": 62,
+    },
+    {
         "key": "violation_auto_soft_throttle",
         "value_type": "bool",
         "category": "violations",
