@@ -983,7 +983,7 @@ async def add_throttle(
             "expires_in_hours": hours,
             "moved_to_squad": moved,
         }, ensure_ascii=False),
-        request=request,
+        ip_address=get_client_ip(request),
     )
 
     return {
@@ -1021,7 +1021,7 @@ async def remove_throttle(
         resource="violations",
         resource_id=user_uuid,
         details=json.dumps({"squads_restored": restored}, ensure_ascii=False),
-        request=request,
+        ip_address=get_client_ip(request),
     )
 
     return {"success": True, "squads_restored": restored}

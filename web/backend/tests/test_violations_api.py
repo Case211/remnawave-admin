@@ -428,6 +428,42 @@ class TestThrottlesRoute:
         assert body["items"][0]["user_uuid"] == "aaa-111"
         assert body["items"][0]["username"] == "alice"
 
+    @pytest.mark.asyncio
+    async def test_add_throttle_survives_audit(self, app, client):
+        """Аудит зовут настоящий: с request= вместо ip_address тут был TypeError."""
+        from web.backend.api.deps import get_db
+
+        mock_db = MagicMock()
+        mock_db.is_connected = True
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        with patch("shared.throttle.apply_throttle",
+                   AsyncMock(return_value=(True, None, False))),              patch("web.backend.core.throttle_sync.push_throttles",
+                   AsyncMock(return_value=1)):
+            resp = await client.post(
+                "/api/v2/violations/throttle",
+                json={"user_uuid": "50726d47-2f6c-440b-b573-925c79ea84a1", "rate_kbit": 1024},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["rate_kbit"] == 1024
+
+    @pytest.mark.asyncio
+    async def test_remove_throttle_survives_audit(self, app, client):
+        """Наказание снималось, но ответ падал 500 — пользователь видел ошибку."""
+        from web.backend.api.deps import get_db
+
+        mock_db = MagicMock()
+        mock_db.is_connected = True
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        with patch("shared.throttle.lift_throttle", AsyncMock(return_value=(True, True))),              patch("web.backend.core.throttle_sync.push_throttles",
+                   AsyncMock(return_value=1)):
+            resp = await client.delete("/api/v2/violations/throttle/aaa-111")
+
+        assert resp.status_code == 200
+        assert resp.json()["squads_restored"] is True
+
 
 class TestScoreSource:
     """Источник скора у нарушений, заведённых мимо анализаторов подключений."""
