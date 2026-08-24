@@ -44,12 +44,6 @@ MEANINGFUL_EVENTS = frozenset({"detected", "detection-update", "update", "guesse
 #: оказаться любой из половин.
 TORRENT_MARKERS = ("bittorrent", "torrent")
 
-#: Переносчики имён. В «DNS.BitTorrent» торрент — это лишь имя, которое
-#: клиент спросил у резолвера («ledger.bt.co»), обмена по нему ещё не было.
-#: Считать такое скачиванием — наказывать за любопытство: имя трекера
-#: резолвит и открытая страница, и клиент, которому не дали соединиться.
-NAME_LOOKUP_MASTERS = frozenset({"dns", "doh_dot", "doh", "dot", "mdns", "llmnr", "netbios"})
-
 #: Уверенность, которой верить нельзя: nDPI сам сообщает, что не разобрал
 #: поток, а угадал по номеру порта или по адресу. На нестандартных портах
 #: такая догадка и даёт ложные срабатывания.
@@ -116,17 +110,20 @@ def confidence_of(event: dict) -> str:
 def is_torrent(event: dict) -> bool:
     """Вердикт про настоящий обмен по BitTorrent.
 
-    Мало увидеть слово в имени протокола: у составного «master.app» под
-    master прячется переносчик, и `DNS.BitTorrent` означает всего лишь
-    спрошенное имя трекера. Догадкам без разбора потока тоже не верим —
-    иначе за торрент сойдёт что угодно на непонятном порту.
+    Мало увидеть слово в имени протокола. У составного «master.app» сам
+    поток — это master, а app лишь то, к чему он относится: `DNS.BitTorrent`
+    означает спрошенное имя трекера, `TLS.BitTorrent` — соединение с ним по
+    HTTPS. Ни там, ни там обмена ещё не было, а прилетало за это нарушение
+    со скором сотня. Поэтому торрентом считаем только то, где BitTorrent и
+    есть сам протокол потока.
+
+    Догадкам без разбора потока тоже не верим — иначе за торрент сойдёт что
+    угодно на непонятном порту.
     """
     if event.get("flow_event_name") not in MEANINGFUL_EVENTS:
         return False
-    proto = protocol_of(event).lower()
-    if not any(marker in proto for marker in TORRENT_MARKERS):
-        return False
-    if proto.split(".", 1)[0] in NAME_LOOKUP_MASTERS:
+    master = protocol_of(event).lower().split(".", 1)[0]
+    if not any(marker in master for marker in TORRENT_MARKERS):
         return False
     confidence = confidence_of(event)
     return not any(weak in confidence for weak in WEAK_CONFIDENCE)

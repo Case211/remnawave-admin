@@ -784,3 +784,46 @@ class TestOwnInfrastructureFilter:
     def test_split_destination_without_port(self):
         from web.backend.api.v2.collector import _split_destination
         assert _split_destination("example.org") == ("example.org", None)
+
+
+class TestSharedDestinations:
+    """Адрес, за которым стоит не один пользователь, обвинять не даёт."""
+
+    @staticmethod
+    def _db(rows, failing=False):
+        from shared.db.connections import ConnectionsMixin
+
+        class _Db(ConnectionsMixin):
+            is_connected = True
+
+            def acquire(self):
+                conn = MagicMock()
+                conn.fetch = AsyncMock(
+                    side_effect=Exception("boom") if failing else None,
+                    return_value=rows,
+                )
+                ctx = MagicMock()
+                ctx.__aenter__ = AsyncMock(return_value=conn)
+                ctx.__aexit__ = AsyncMock(return_value=False)
+                return ctx
+
+        return _Db()
+
+    @pytest.mark.asyncio
+    async def test_returns_addresses_with_several_users(self):
+        db = self._db([{"destination": "57.144.105.33:443"}])
+        shared = await db.shared_torrent_destinations(
+            ["57.144.105.33:443", "198.51.100.9:6881"]
+        )
+        assert shared == {"57.144.105.33:443"}
+
+    @pytest.mark.asyncio
+    async def test_empty_input_does_not_query(self):
+        db = self._db([{"destination": "should not be asked"}])
+        assert await db.shared_torrent_destinations([]) == set()
+
+    @pytest.mark.asyncio
+    async def test_broken_query_accuses_nobody_extra(self):
+        """Упавший запрос не должен ни ломать разбор, ни глушить обвинения."""
+        db = self._db([], failing=True)
+        assert await db.shared_torrent_destinations(["1.2.3.4:6881"]) == set()

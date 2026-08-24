@@ -46,6 +46,14 @@ class TestIsTorrent:
         """Тот же резолв, только через DoH: адрес и порт выглядят как HTTPS."""
         assert not is_torrent(verdict("DoH_DoT.BitTorrent", dst="1.1.1.1", port=443))
 
+    def test_torrent_over_tls_does_not_count(self):
+        """TLS.BitTorrent — соединение с трекером по HTTPS, обмена ещё нет.
+
+        На проде такие вердикты прилетали на адреса Meta и делали
+        нарушителями всех, кто в это окно туда ходил.
+        """
+        assert not is_torrent(verdict("TLS.BitTorrent", dst="57.144.105.33", port=443))
+
     def test_guess_does_not_count(self):
         assert not is_torrent(verdict("BitTorrent", confidence="Match by port"))
         assert not is_torrent(verdict("BitTorrent", confidence="Match by IP"))

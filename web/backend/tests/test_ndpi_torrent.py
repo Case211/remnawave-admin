@@ -92,9 +92,16 @@ def test_nested_protocol_object_also_understood():
     assert is_torrent(event) is True
 
 
-def test_composite_protocol_name_counts():
-    # У составных протоколов имя выглядит как «master.app».
-    assert is_torrent({"flow_event_name": "update", "ndpi.proto": "TLS.BitTorrent"}) is True
+def test_torrent_must_be_the_protocol_of_the_flow():
+    """У составного «master.app» сам поток — это master, а app лишь то, к
+    чему он относится. `TLS.BitTorrent` — соединение с трекером по HTTPS,
+    `DNS.BitTorrent` — спрошенное имя: обмена не было ни там, ни там. Пока
+    такие вердикты считались, на проде за один поток к адресу Meta
+    нарушителями становились все, кто в то же окно туда ходил.
+    """
+    assert is_torrent({"flow_event_name": "update", "ndpi.proto": "TLS.BitTorrent"}) is False
+    assert is_torrent({"flow_event_name": "update", "ndpi.proto": "DNS.BitTorrent"}) is False
+    assert is_torrent({"flow_event_name": "update", "ndpi.proto": "BitTorrent.Gnutella"}) is True
 
 
 def test_other_protocols_are_not_torrent():

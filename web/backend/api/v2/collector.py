@@ -745,6 +745,23 @@ async def _process_torrent_violations(
 ):
     """Background: create violations and send notifications for torrent events."""
     try:
+        # Вердикт nDPI висит на адресе назначения, а не на человеке. Если по
+        # тому же адресу события есть и у других — за ним стоит не один
+        # пользователь (мессенджер, CDN, публичный резолвер), и обвинять
+        # некого. Проверка тут, а не в агенте: на нодах он обновляется не в
+        # один день, а защита нужна всем сразу.
+        shared = await db_service.shared_torrent_destinations(
+            [event.destination for event in events]
+        )
+        if shared:
+            events = [event for event in events if event.destination not in shared]
+            logger.info(
+                "Torrent violations: %d destination(s) shared by several users, skipped",
+                len(shared),
+            )
+            if not events:
+                return
+
         # Group events by user
         events_by_user: dict[str, list[TorrentEventReport]] = {}
         for event in events:
