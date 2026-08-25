@@ -1112,6 +1112,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 41,
     },
     {
+        "key": "torrent_min_events",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "torrent",
+        "display_name": "Порог событий для нарушения",
+        "description": "Сколько торрент-событий должно набраться у пользователя за полчаса, чтобы завести нарушение. Настоящий обмен даёт сотни событий за минуты — одиночные срабатывания это шум nDPI. 1 — заводить нарушение по первому же событию",
+        "default_value": "5",
+        "sort_order": 43,
+    },
+    {
         "key": "torrent_notification_cooldown_minutes",
         "value_type": "int",
         "category": "violations",

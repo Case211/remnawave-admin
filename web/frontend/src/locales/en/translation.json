@@ -3789,6 +3789,10 @@
         "label": "🔕 Torrent notification cooldown (min)",
         "description": "Minimum interval between torrent notifications for the same user"
       },
+      "torrent_min_events": {
+        "label": "Event threshold for a violation",
+        "description": "How many torrent events must pile up for one user within half an hour before a violation is raised. Real exchange produces hundreds of events in minutes — single hits are nDPI noise. 1 raises a violation on the very first event"
+      },
       "traffic_rate_enabled": {
         "label": "📈 Traffic usage monitor",
         "description": "Tracks abnormally high traffic consumption over a period"

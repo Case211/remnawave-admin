@@ -827,3 +827,43 @@ class TestSharedDestinations:
         """Упавший запрос не должен ни ломать разбор, ни глушить обвинения."""
         db = self._db([], failing=True)
         assert await db.shared_torrent_destinations(["1.2.3.4:6881"]) == set()
+
+
+class TestRecentTorrentEvents:
+    """Порог, отделяющий обмен от одиночного шума."""
+
+    @staticmethod
+    def _db(value, failing=False):
+        from shared.db.connections import ConnectionsMixin
+
+        class _Db(ConnectionsMixin):
+            is_connected = True
+
+            def acquire(self):
+                conn = MagicMock()
+                conn.fetchval = AsyncMock(
+                    side_effect=Exception("boom") if failing else None,
+                    return_value=value,
+                )
+                ctx = MagicMock()
+                ctx.__aenter__ = AsyncMock(return_value=conn)
+                ctx.__aexit__ = AsyncMock(return_value=False)
+                return ctx
+
+        return _Db()
+
+    @pytest.mark.asyncio
+    async def test_counts_events(self):
+        db = self._db(137)
+        assert await db.count_recent_torrent_events("aaa-111", minutes=30) == 137
+
+    @pytest.mark.asyncio
+    async def test_empty_window_is_zero(self):
+        db = self._db(None)
+        assert await db.count_recent_torrent_events("aaa-111") == 0
+
+    @pytest.mark.asyncio
+    async def test_broken_query_accuses_nobody(self):
+        """Сломанный запрос не должен заводить нарушение вслепую."""
+        db = self._db(0, failing=True)
+        assert await db.count_recent_torrent_events("aaa-111") == 0

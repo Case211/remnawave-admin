@@ -49,6 +49,14 @@ TORRENT_MARKERS = ("bittorrent", "torrent")
 #: такая догадка и даёт ложные срабатывания.
 WEAK_CONFIDENCE = ("guessed", "match by port", "match by ip")
 
+#: Порты, на которых торрент-пиров не бывает. Ниже 1024 нужен root на той
+#: стороне, а 80/443/8443/5222 — это веб и мессенджеры. На проде весь
+#: остаточный шум nDPI пришёл именно сюда: 63 события, размазанных по двум
+#: десяткам человек, — против трёх тысяч событий у четверых на случайных
+#: высоких портах, где рой и живёт.
+IMPLAUSIBLE_PEER_PORTS = frozenset({80, 443, 8443, 5222})
+MIN_PEER_PORT = 1024
+
 
 def iter_messages(buffer: bytes) -> Tuple[Iterator[dict], bytes]:
     """Разобрать буфер на сообщения; вернуть (события, остаток).
@@ -125,8 +133,23 @@ def is_torrent(event: dict) -> bool:
     master = protocol_of(event).lower().split(".", 1)[0]
     if not any(marker in master for marker in TORRENT_MARKERS):
         return False
+    if not peer_port_plausible(event):
+        return False
     confidence = confidence_of(event)
     return not any(weak in confidence for weak in WEAK_CONFIDENCE)
+
+
+def peer_port_plausible(event: dict) -> bool:
+    """Похож ли порт назначения на порт торрент-пира.
+
+    Неизвестный порт не повод отбрасывать вердикт: лучше лишнее событие,
+    чем пропущенный обмен.
+    """
+    try:
+        port = int(event.get("dst_port"))
+    except (TypeError, ValueError):
+        return True
+    return port >= MIN_PEER_PORT and port not in IMPLAUSIBLE_PEER_PORTS
 
 
 def destination_of(event: dict) -> Optional[str]:
