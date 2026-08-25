@@ -740,6 +740,27 @@ class ConnectionsMixin:
             logger.error("batch_save_torrent_events failed: %s", e)
             return 0
 
+    async def count_recent_torrent_events(self, user_uuid: str, minutes: int = 30) -> int:
+        """Сколько торрент-событий набралось у пользователя за окно.
+
+        По этому числу отделяют обмен от шума: у настоящего роя счёт идёт на
+        сотни за минуты, у ложного срабатывания событие ровно одно.
+        """
+        if not self.is_connected:
+            return 0
+        try:
+            async with self.acquire() as conn:
+                value = await conn.fetchval(
+                    "SELECT count(*) FROM torrent_events "
+                    "WHERE user_uuid = $1::uuid "
+                    "AND detected_at > NOW() - make_interval(mins => $2)",
+                    user_uuid, minutes,
+                )
+            return int(value or 0)
+        except Exception as e:
+            logger.warning("count_recent_torrent_events failed: %s", e)
+            return 0
+
     async def shared_torrent_destinations(
         self, destinations: list, hours: int = 24,
     ) -> set:

@@ -69,6 +69,26 @@ class TestIsTorrent:
     def test_torrent_as_master_counts(self):
         assert is_torrent(verdict("BitTorrent.Gnutella"))
 
+    def test_web_ports_are_not_peers(self):
+        """443/80/5222 — это веб и мессенджеры, пиров там не бывает."""
+        assert not is_torrent(verdict("BitTorrent", port=443))
+        assert not is_torrent(verdict("BitTorrent", port=80))
+        assert not is_torrent(verdict("BitTorrent", port=5222))
+
+    def test_privileged_ports_are_not_peers(self):
+        """Ниже 1024 нужен root на той стороне — торрент-клиенты так не делают."""
+        assert not is_torrent(verdict("BitTorrent", port=554))
+        assert not is_torrent(verdict("BitTorrent", port=477))
+
+    def test_high_ports_count(self):
+        assert is_torrent(verdict("BitTorrent", port=51413))
+        assert is_torrent(verdict("BitTorrent", port=27607))
+
+    def test_unknown_port_is_not_a_reason_to_drop(self):
+        event = verdict("BitTorrent")
+        event.pop("dst_port")
+        assert is_torrent(event)
+
     def test_other_protocols_ignored(self):
         assert not is_torrent(verdict("TLS"))
         assert not is_torrent(verdict("DNS", port=53))

@@ -182,6 +182,10 @@ _INFRA_IPS_TTL = 300  # seconds
 # и API ноды. Всё остальное на тех же адресах — обычный интернет.
 _INFRA_PORTS = frozenset({22, 80, 443, 2222, 8443})
 
+# За какое окно считаем накопленные торрент-события пользователя. Полчаса
+# ловят и короткую раздачу, и неспешную закачку, но не тянут вчерашний шум.
+_TORRENT_EVENT_WINDOW_MINUTES = 30
+
 
 async def _get_node_name(node_uuid: str) -> str:
     """Вернуть имя ноды по UUID (с кэшем и TTL). Fallback — первые 8 символов UUID."""
@@ -770,6 +774,10 @@ async def _process_torrent_violations(
                 events_by_user.setdefault(user_uuid, []).append(event)
 
         auto_action = config_service.get("torrent_auto_action", "notify")
+        try:
+            min_events = int(config_service.get("torrent_min_events", 5) or 1)
+        except (TypeError, ValueError):
+            min_events = 5
 
         for user_uuid, user_events in events_by_user.items():
             try:
@@ -778,6 +786,21 @@ async def _process_torrent_violations(
                 if whitelisted and (excluded is None or "torrent" in excluded):
                     logger.debug("User %s is whitelisted for torrent, skipping", user_uuid)
                     continue
+
+                # Одиночное срабатывание — это шум: настоящий обмен даёт сотни
+                # событий за минуты. Считаем накопленное по базе, а не по
+                # батчу: рой приезжает кусками, и в отдельном куске событий
+                # может быть немного.
+                if min_events > 1:
+                    recent = await db_service.count_recent_torrent_events(
+                        user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                    )
+                    if recent < min_events:
+                        logger.info(
+                            "Torrent: %d event(s) for %s in %d min — below threshold %d",
+                            recent, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_events,
+                        )
+                        continue
 
                 # Dedup: skip if torrent violation exists within last 10 min
                 existing = await db_service.get_recent_torrent_violation(user_uuid, minutes=10)
