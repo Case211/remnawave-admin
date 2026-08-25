@@ -145,7 +145,8 @@
       "showAll": "Show all columns",
       "filterBy": "Filter by {{column}}",
       "filterAny": "Any value"
-    }
+    },
+    "prev": "Back"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -1957,7 +1958,8 @@
       "connection": "Connection",
       "hwid": "HWID device",
       "daysShort": "d",
-      "empty": "No events for this period"
+      "empty": "No events for this period",
+      "counter": "Page {{page}} of {{pages}} · {{total}} total"
     },
     "tuning": {
       "title": "Detector threshold tuning",

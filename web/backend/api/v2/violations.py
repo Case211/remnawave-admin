@@ -644,10 +644,16 @@ async def get_score_distribution(
 async def get_user_timeline(
     user_uuid: str = Path(..., pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
     days: int = Query(30, ge=1, le=365),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=500),
     admin: AdminUser = Depends(require_permission("violations", "view")),
     db: DatabaseService = Depends(get_db),
 ):
-    """Единая лента событий юзера: нарушения + сессии подключений + HWID-устройства."""
+    """Единая лента событий юзера: нарушения + сессии подключений + HWID-устройства.
+
+    Лента режется страницами: у активного пользователя за месяц набираются
+    сотни событий, и отдавать их одним куском — значит подвесить диалог.
+    """
     from web.backend.core.rbac import get_visible_user_uuids
     visible = await get_visible_user_uuids(admin)
     if visible is not None and user_uuid.lower() not in visible:
@@ -702,7 +708,16 @@ async def get_user_timeline(
 
     # сортировка по времени (свежие сверху); пустые ts — в конец
     events.sort(key=lambda e: e.get('ts') or '', reverse=True)
-    return {'items': events, 'total': len(events)}
+
+    total = len(events)
+    start = (page - 1) * per_page
+    return {
+        'items': events[start:start + per_page],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': max(1, (total + per_page - 1) // per_page),
+    }
 
 
 @router.get("/export/csv")
