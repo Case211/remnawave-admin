@@ -18,6 +18,7 @@ import {
   Filter,
   Globe,
   Clock,
+  History,
   User,
   TrendingUp,
   ChevronDown,
@@ -389,6 +390,23 @@ const ViolationCard = memo(function ViolationCard({
               </button>
               <SeverityBadge severity={violation.severity} />
               <ActionBadge action={violation.action_taken} />
+              {violation.recap && violation.recap.total > 1 && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-amber-500/40 text-amber-300"
+                  title={t('violations.recap.hint', {
+                    total: violation.recap.total,
+                    days: violation.recap.days,
+                    annulled: violation.recap.annulled,
+                  })}
+                >
+                  <History className="w-3 h-3" />
+                  ×{violation.recap.total}
+                  {violation.recap.annulled > 0 && (
+                    <span className="text-dark-300">/{violation.recap.annulled}</span>
+                  )}
+                </Badge>
+              )}
               {violation.notified && (
                 <span className="text-xs text-dark-200" title={t('violations.notified')}>
                   <MessageCircle className="w-3.5 h-3.5 inline" />
@@ -794,6 +812,41 @@ function ViolationDetailPanel({
           </Card>
         )
       })()}
+
+      {/* История нарушений: разговор с человеком идёт по датам, а не по памяти */}
+      {Array.isArray(detail.history) && detail.history.length > 1 && (
+        <Card className="animate-fade-in-up">
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium text-dark-200 uppercase tracking-wider mb-3">
+              {t('violations.history.title', { days: detail.recap?.days ?? 30 })}
+              {detail.recap && (
+                <span className="ml-2 normal-case text-dark-300">
+                  {t('violations.history.summary', {
+                    total: detail.recap.total,
+                    annulled: detail.recap.annulled,
+                  })}
+                </span>
+              )}
+            </h3>
+            <ul className="space-y-2">
+              {detail.history.map((h) => (
+                <li key={h.id} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="tabular-nums text-dark-200">{formatDate(h.detected_at)}</span>
+                  <Badge variant="secondary">{Math.round(h.score)}</Badge>
+                  {h.action_taken === 'annulled' && (
+                    <Badge variant="outline" className="border-dark-400 text-dark-300">
+                      {t('violations.history.annulled')}
+                    </Badge>
+                  )}
+                  {h.reason && (
+                    <span className="text-dark-300 truncate max-w-full">{h.reason}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Geo & Network info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1112,6 +1112,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 41,
     },
     {
+        "key": "violation_recap_days",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "general",
+        "display_name": "Окно истории нарушений (дней)",
+        "description": "За какой период считать нарушения пользователя для бейджа рецидива и истории в карточке. Аннулированные показываются отдельным числом — видно и сколько раз человек попадался, и сколько из этого оказалось ошибкой детектора",
+        "default_value": "30",
+        "sort_order": 25,
+    },
+    {
         "key": "torrent_min_events",
         "value_type": "int",
         "category": "violations",

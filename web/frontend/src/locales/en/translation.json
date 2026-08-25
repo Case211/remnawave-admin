@@ -1997,6 +1997,14 @@
         "lifted": "Limit lifted",
         "liftedWithSquad": "Limit lifted, user returned to previous squads"
       }
+    },
+    "recap": {
+      "hint": "Violations in {{days}} days: {{total}} (annulled: {{annulled}})"
+    },
+    "history": {
+      "title": "History over {{days}} days",
+      "summary": "{{total}} total, {{annulled}} annulled",
+      "annulled": "annulled"
     }
   },
   "admins": {
@@ -3792,6 +3800,10 @@
       "torrent_min_events": {
         "label": "Event threshold for a violation",
         "description": "How many torrent events must pile up for one user within half an hour before a violation is raised. Real exchange produces hundreds of events in minutes — single hits are nDPI noise. 1 raises a violation on the very first event"
+      },
+      "violation_recap_days": {
+        "label": "Violation history window (days)",
+        "description": "The period used to count a user's violations for the repeat-offender badge and the history block. Annulled ones are shown separately — you see both how often the person was flagged and how much of that turned out to be a detector error"
       },
       "traffic_rate_enabled": {
         "label": "📈 Traffic usage monitor",

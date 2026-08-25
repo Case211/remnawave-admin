@@ -177,6 +177,46 @@ def _violation_keyboard(
     }
 
 
+async def _recap_lines(user_uuid: str) -> list:
+    """Строки о рецидиве для карточки: сколько раз попадался и когда.
+
+    Разговор «за что заблокировали» проще вести по датам, чем по памяти,
+    поэтому в уведомление уходит и счёт, и последние отметки времени.
+    Аннулированные показываем отдельно: это признанные ошибки детектора, и
+    прятать их от администратора нечестно.
+    """
+    from shared.config_service import config_service
+    from shared.database import db_service
+
+    try:
+        days = int(config_service.get("violation_recap_days", 30) or 30)
+    except (TypeError, ValueError):
+        days = 30
+    try:
+        recap = (await db_service.violations_recap([user_uuid], days=days)).get(user_uuid)
+        history = await db_service.user_violation_history(user_uuid, days=days, limit=5)
+    except Exception as e:
+        logger.warning("Recap for notification failed: %s", e)
+        return []
+
+    if not recap or recap.get("total", 0) <= 1:
+        return []
+
+    annulled = recap.get("annulled") or 0
+    tail = f", аннулировано {annulled}" if annulled else ""
+    lines = ["", f"\U0001f501 Нарушений за {days} дн.: <b>{recap['total']}</b>{tail}"]
+
+    marks = []
+    for item in history:
+        when = (item["detected_at"] + timedelta(hours=3)).strftime("%d.%m %H:%M")
+        if item.get("action_taken") == "annulled":
+            when += " (аннул.)"
+        marks.append(when)
+    if marks:
+        lines.append("   " + " · ".join(marks))
+    return lines
+
+
 async def send_violation_notification(
     user_uuid: str,
     violation_score: dict,
@@ -444,6 +484,7 @@ async def send_violation_notification(
                 lines.append("ℹ️ Автоблокировка выключена — решение за администратором")
         lines.append(f"\U0001f4ca Скор: <b>{total_score:.1f}</b> / 100")
         lines.append(f"\U0001f550 Время (МСК): {moscow_time_str}")
+        lines.extend(await _recap_lines(user_uuid))
 
         body = "\n".join(lines)
 
@@ -541,7 +582,7 @@ async def send_torrent_notification(
         lines.append(f"\U0001f4ca \u0421\u043e\u0431\u044b\u0442\u0438\u0439: <b>{event_count}</b>")
 
         if destinations:
-            lines.append(f"\U0001f310 \u041d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f:")
+            lines.append("\U0001f310 \u041d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f:")
             for dest in destinations[:10]:
                 lines.append(f"   <code>{_esc(dest)}</code>")
             if len(destinations) > 10:
@@ -551,8 +592,9 @@ async def send_torrent_notification(
             lines.append(f"\U0001f4cd IP: {', '.join(f'<code>{ip}</code>' for ip in ips[:5])}")
 
         lines.append("")
-        lines.append(f"\U0001f6d1 \u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435: <b>\u0416\u0451\u0441\u0442\u043a\u0430\u044f \u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430</b>")
+        lines.append("\U0001f6d1 \u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435: <b>\u0416\u0451\u0441\u0442\u043a\u0430\u044f \u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430</b>")
         lines.append(f"\U0001f550 \u0412\u0440\u0435\u043c\u044f (\u041c\u0421\u041a): <code>{moscow_time_str}</code>")
+        lines.extend(await _recap_lines(user_uuid))
 
         body = "\n".join(lines)
 

@@ -4,8 +4,8 @@ Violations mixin — detection, whitelist, reports, batch methods.
 import asyncio
 import json
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from shared.db._base import _db_row_to_api_format
 
@@ -660,6 +660,76 @@ class ViolationsMixin:
         except Exception as e:
             logger.error("Error getting violations by ASN type: %s", e, exc_info=True)
             return {}
+
+    async def violations_recap(
+        self, user_uuids: list, days: int = 30,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Сколько нарушений у каждого из пользователей за окно.
+
+        Считается пачкой на всю страницу списка: по запросу на строку вышло бы
+        двадцать походов в базу ради одного бейджа.
+
+        Аннулированные держим отдельным числом, а не выбрасываем: администратор
+        должен видеть и то, что человек попадался четырежды, и то, что дважды
+        из этого оказалось ошибкой детектора.
+        """
+        if not self.is_connected or not user_uuids:
+            return {}
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT user_uuid::text AS user_uuid,
+                           count(*) FILTER (WHERE action_taken IS DISTINCT FROM 'annulled') AS total,
+                           count(*) FILTER (WHERE action_taken = 'annulled') AS annulled,
+                           max(detected_at) FILTER (WHERE action_taken IS DISTINCT FROM 'annulled') AS last_at
+                    FROM {VIOLATIONS_TABLE}
+                    WHERE user_uuid = ANY($1::uuid[])
+                      AND detected_at > NOW() - make_interval(days => $2)
+                    GROUP BY user_uuid
+                    """,
+                    list({str(u) for u in user_uuids if u}), int(days),
+                )
+            return {
+                r["user_uuid"]: {
+                    "total": int(r["total"] or 0),
+                    "annulled": int(r["annulled"] or 0),
+                    "last_at": r["last_at"],
+                }
+                for r in rows
+            }
+        except Exception as e:
+            logger.warning("violations_recap failed: %s", e)
+            return {}
+
+    async def user_violation_history(
+        self, user_uuid: str, days: int = 30, limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """История нарушений пользователя за окно — для разговора по фактам.
+
+        Аннулированные тоже здесь, но помечены: спор «за что заблокировали»
+        разбирается по списку с датами, а не по памяти.
+        """
+        if not self.is_connected:
+            return []
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT id, detected_at, score, recommended_action, action_taken,
+                           COALESCE(reasons[1], '') AS reason
+                    FROM {VIOLATIONS_TABLE}
+                    WHERE user_uuid = $1::uuid
+                      AND detected_at > NOW() - make_interval(days => $2)
+                    ORDER BY detected_at DESC
+                    LIMIT $3
+                    """,
+                    user_uuid, int(days), int(limit),
+                )
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.warning("user_violation_history failed: %s", e)
+            return []
 
     async def get_recent_violations_count(
         self,

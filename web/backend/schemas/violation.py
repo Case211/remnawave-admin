@@ -37,6 +37,28 @@ class ViolationBase(BaseModel):
     detected_at: datetime
 
 
+class ViolationRecap(BaseModel):
+    """Рецидив: сколько раз человек попадался за окно.
+
+    Аннулированные отдельным числом — администратор должен видеть и общее
+    количество срабатываний, и сколько из них признано ошибкой детектора.
+    """
+    total: int = 0
+    annulled: int = 0
+    days: int = 30
+    last_at: Optional[datetime] = None
+
+
+class ViolationHistoryItem(BaseModel):
+    """Строка истории нарушений — чтобы разговор шёл по датам, а не по памяти."""
+    id: int
+    detected_at: datetime
+    score: float = 0.0
+    recommended_action: str = "no_action"
+    action_taken: Optional[str] = None
+    reason: Optional[str] = None
+
+
 class ViolationListItem(ViolationBase):
     """Элемент списка нарушений."""
     severity: ViolationSeverity = ViolationSeverity.LOW
@@ -44,6 +66,7 @@ class ViolationListItem(ViolationBase):
     notified: bool = False
     reasons: List[str] = []
     admin_comment: Optional[str] = None
+    recap: Optional[ViolationRecap] = None
 
     @staticmethod
     def get_severity(score: float) -> ViolationSeverity:
@@ -79,6 +102,8 @@ class ViolationDetail(ViolationBase):
     # "torrent" — детект торрент-трафика, "external" — прочие источники
     # (расход трафика и подобное). Пусто — обычный разбор по анализаторам.
     score_source: Optional[str] = None
+    recap: Optional[ViolationRecap] = None
+    history: List[ViolationHistoryItem] = []
 
 
 class ViolationListResponse(BaseModel):

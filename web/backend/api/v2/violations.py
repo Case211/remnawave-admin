@@ -17,6 +17,8 @@ from web.backend.schemas.violation import (
     ViolationListItem,
     ViolationListResponse,
     ViolationDetail,
+    ViolationHistoryItem,
+    ViolationRecap,
     ViolationStats,
     ViolationUserSummary,
     ResolveViolationRequest,
@@ -61,6 +63,16 @@ def _parse_hwid_matched(raw) -> list | None:
         except (json.JSONDecodeError, TypeError):
             return None
     return None
+
+
+def _recap_days() -> int:
+    """Окно рецидива из настроек: одно и то же число для бейджа и истории."""
+    from shared.config_service import config_service
+
+    try:
+        return int(config_service.get("violation_recap_days", 30) or 30)
+    except (TypeError, ValueError):
+        return 30
 
 
 def _row_to_list_item(v: dict) -> ViolationListItem:
@@ -180,11 +192,28 @@ async def list_violations(
             order=order,
         )
 
+        # Рецидив считаем одним запросом на всю страницу: по запросу на строку
+        # вышло бы двадцать походов в базу ради одного бейджа.
+        recap_days = _recap_days()
+        # Бейдж рецидива — украшение: если сводка не собралась, список всё
+        # равно должен открыться.
+        recap: dict = {}
+        try:
+            recap = await db.violations_recap(
+                [v.get("user_uuid") for v in violations], days=recap_days,
+            )
+        except Exception as e:
+            logger.warning("Violations recap failed: %s", e)
+
         # Преобразуем в модели
         items = []
         for v in violations:
             try:
-                items.append(_row_to_list_item(v))
+                item = _row_to_list_item(v)
+                found = recap.get(str(v.get("user_uuid")))
+                if found:
+                    item.recap = ViolationRecap(days=recap_days, **found)
+                items.append(item)
             except Exception as item_err:
                 logger.warning("Skipping violation row id=%s: %s", v.get('id'), item_err)
 
@@ -1063,6 +1092,15 @@ async def get_violation(
             for r in (violation.get('reasons') or [])
         ) else "external"
 
+    recap_days = _recap_days()
+    user_uuid_str = str(violation.get('user_uuid', ''))
+    found, history = None, []
+    try:
+        found = (await db.violations_recap([user_uuid_str], days=recap_days)).get(user_uuid_str)
+        history = await db.user_violation_history(user_uuid_str, days=recap_days, limit=10)
+    except Exception as e:
+        logger.warning("Violation recap/history failed: %s", e)
+
     return ViolationDetail(
         id=int(violation.get('id', 0)),
         user_uuid=str(violation.get('user_uuid', '')),
@@ -1091,6 +1129,18 @@ async def get_violation(
         hwid_matched_users=_parse_hwid_matched(violation.get('hwid_matched_users')),
         admin_comment=violation.get('admin_comment'),
         score_source=score_source,
+        recap=ViolationRecap(days=recap_days, **found) if found else None,
+        history=[
+            ViolationHistoryItem(
+                id=int(h["id"]),
+                detected_at=h["detected_at"],
+                score=float(h.get("score") or 0),
+                recommended_action=h.get("recommended_action") or "no_action",
+                action_taken=h.get("action_taken"),
+                reason=h.get("reason") or None,
+            )
+            for h in history
+        ],
     )
 
 

@@ -1,3 +1,19 @@
+export interface ViolationRecap {
+  total: number
+  annulled: number
+  days: number
+  last_at?: string | null
+}
+
+export interface ViolationHistoryItem {
+  id: number
+  detected_at: string
+  score: number
+  recommended_action: string
+  action_taken?: string | null
+  reason?: string | null
+}
+
 export interface Violation {
   id: number
   user_uuid: string
@@ -15,6 +31,7 @@ export interface Violation {
   countries?: string[]
   status?: string
   admin_comment?: string | null
+  recap?: ViolationRecap | null
 }
 
 export interface ViolationDetail {
@@ -34,6 +51,8 @@ export interface ViolationDetail {
   device_score: number
   hwid_score: number
   reasons: string[]
+  recap?: ViolationRecap | null
+  history?: ViolationHistoryItem[]
   countries: string[]
   asn_types: string[]
   ips: string[]
