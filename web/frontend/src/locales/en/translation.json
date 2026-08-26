@@ -6543,6 +6543,10 @@
     },
     "exportCsv": "Export CSV",
     "resetZoom": "Reset zoom",
-    "dragHint": "Drag across the chart to select a range"
+    "dragHint": "Drag across the chart to select a range",
+    "otherSeries": "Other ({{count}})",
+    "legendHint": "Click to hide, Alt-click to isolate",
+    "showAll": "Show all",
+    "seriesTrimmed": "Showing {{shown}} of {{total}}, the rest are folded"
   }
 }
