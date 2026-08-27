@@ -517,3 +517,75 @@ class TestScoreSource:
             score=85.0, hwid_score=60.0, reasons=["HWID shared"],
         ))
         assert body["score_source"] is None
+
+
+class TestRecapBadge:
+    """Бейдж рецидива: сколько раз человек попадался за окно."""
+
+    @pytest.mark.asyncio
+    async def test_list_carries_recap(self, app, client):
+        from web.backend.api.deps import get_db
+
+        mock_db = MagicMock()
+        mock_db.is_connected = True
+        mock_db.count_violations_for_period = AsyncMock(return_value=1)
+        mock_db.get_violations_for_period = AsyncMock(return_value=[MOCK_VIOLATIONS[0]])
+        mock_db.violations_recap = AsyncMock(return_value={
+            "aaa-111": {"total": 4, "annulled": 2, "last_at": datetime(2026, 8, 25, 10, 0)},
+        })
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        resp = await client.get("/api/v2/violations")
+
+        assert resp.status_code == 200
+        recap = resp.json()["items"][0]["recap"]
+        assert (recap["total"], recap["annulled"], recap["days"]) == (4, 2, 30)
+
+    @pytest.mark.asyncio
+    async def test_list_survives_broken_recap(self, app, client):
+        """Бейдж — украшение: сломанная сводка не должна ронять список."""
+        from web.backend.api.deps import get_db
+
+        mock_db = MagicMock()
+        mock_db.is_connected = True
+        mock_db.count_violations_for_period = AsyncMock(return_value=1)
+        mock_db.get_violations_for_period = AsyncMock(return_value=[MOCK_VIOLATIONS[0]])
+        mock_db.violations_recap = AsyncMock(side_effect=Exception("boom"))
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        resp = await client.get("/api/v2/violations")
+
+        assert resp.status_code == 200
+        assert resp.json()["items"][0]["recap"] is None
+
+    @pytest.mark.asyncio
+    async def test_detail_carries_history(self, app, client):
+        from web.backend.api.deps import get_db
+
+        mock_db = MagicMock()
+        mock_db.is_connected = True
+        mock_db.get_violation_by_id = AsyncMock(return_value={
+            "id": 306, "user_uuid": "aaa-111", "score": 100.0,
+            "recommended_action": "hard_block", "confidence": 1.0,
+            "detected_at": datetime(2026, 8, 25, 9, 33),
+            "reasons": ["Torrent traffic detected (1 events)"],
+        })
+        mock_db.violations_recap = AsyncMock(return_value={
+            "aaa-111": {"total": 3, "annulled": 1, "last_at": None},
+        })
+        mock_db.user_violation_history = AsyncMock(return_value=[{
+            "id": 305, "detected_at": datetime(2026, 8, 24, 15, 42), "score": 100.0,
+            "recommended_action": "hard_block", "action_taken": "annulled",
+            "reason": "Torrent traffic detected (1 events)",
+        }])
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        with patch("web.backend.core.rbac.get_visible_user_uuids",
+                   new_callable=AsyncMock, return_value=None):
+            resp = await client.get("/api/v2/violations/306")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["recap"]["total"] == 3
+        assert [h["id"] for h in body["history"]] == [305]
+        assert body["history"][0]["action_taken"] == "annulled"

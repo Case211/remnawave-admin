@@ -3,6 +3,10 @@
  * нарушения + сессии подключений + HWID-устройства, в хронологии.
  */
 import { useState } from 'react'
+
+// Полсотни событий на страницу: больше не помещается в диалог без прокрутки
+// длиной в километр, меньше — заставляет щёлкать ради каждой сессии.
+const PER_PAGE = 50
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import client from '@/api/client'
@@ -91,13 +95,22 @@ export function UserTimelineDialog({ userUuid, username, onClose }: {
 }) {
   const { t } = useTranslation()
   const [days, setDays] = useState(30)
+  const [page, setPage] = useState(1)
+
+  // Смена периода начинает чтение заново: третья страница месяца не имеет
+  // отношения к третьей странице суток.
+  const pickDays = (d: number) => { setDays(d); setPage(1) }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['user-timeline', userUuid, days],
-    queryFn: async () => (await client.get(`/violations/user/${userUuid}/timeline`, { params: { days } })).data as { items: TimelineEvent[] },
+    queryKey: ['user-timeline', userUuid, days, page],
+    queryFn: async () => (await client.get(`/violations/user/${userUuid}/timeline`, {
+      params: { days, page, per_page: PER_PAGE },
+    })).data as { items: TimelineEvent[]; total: number; pages: number },
     enabled: !!userUuid,
   })
   const items = data?.items || []
+  const pages = data?.pages || 1
+  const total = data?.total || 0
 
   return (
     <Dialog open={userUuid !== null} onOpenChange={(o) => !o && onClose()}>
@@ -109,8 +122,8 @@ export function UserTimelineDialog({ userUuid, username, onClose }: {
             {username && <span className="text-sm text-muted-foreground">{username}</span>}
           </div>
           <div className="flex items-center gap-1 mt-1">
-            {[7, 30, 90].map((d) => (
-              <button key={d} type="button" onClick={() => setDays(d)}
+            {[1, 7, 30, 90].map((d) => (
+              <button key={d} type="button" onClick={() => pickDays(d)}
                 className={cn('px-2 py-0.5 rounded-md text-xs transition-colors',
                   days === d ? 'bg-primary-500/20 text-primary-300' : 'text-muted-foreground hover:text-white')}>
                 {d}{t('violations.timeline.daysShort')}
@@ -129,6 +142,25 @@ export function UserTimelineDialog({ userUuid, username, onClose }: {
             </div>
           )}
         </div>
+        {pages > 1 && (
+          <div className="shrink-0 flex items-center justify-between gap-2 pt-2 border-t border-[var(--glass-border)]">
+            <span className="text-xs text-muted-foreground">
+              {t('violations.timeline.counter', { page, pages, total })}
+            </span>
+            <div className="flex items-center gap-1">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className={cn('px-2 py-1 rounded-md text-xs transition-colors',
+                  page <= 1 ? 'text-muted-foreground/40' : 'text-muted-foreground hover:text-white')}>
+                {t('common.prev')}
+              </button>
+              <button type="button" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                className={cn('px-2 py-1 rounded-md text-xs transition-colors',
+                  page >= pages ? 'text-muted-foreground/40' : 'text-muted-foreground hover:text-white')}>
+                {t('common.next')}
+              </button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

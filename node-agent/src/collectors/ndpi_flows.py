@@ -55,7 +55,14 @@ WEAK_CONFIDENCE = ("guessed", "match by port", "match by ip")
 #: десяткам человек, — против трёх тысяч событий у четверых на случайных
 #: высоких портах, где рой и живёт.
 IMPLAUSIBLE_PEER_PORTS = frozenset({80, 443, 8443, 5222})
-MIN_PEER_PORT = 1024
+
+#: Где живут настоящие пиры: классический диапазон торрент-клиентов и
+#: эфемерные порты, которые они берут наугад. Промежуток 1024-10000 — это
+#: почти сплошь серверные сервисы, и ловилось там не то: реальный случай —
+#: антивирус Касперского на 1443, которому эвристика зашифрованного
+#: BitTorrent приписала обмен. Порог 1024 такое пропускал.
+CLASSIC_PEER_PORTS = range(6881, 7000)
+MIN_PEER_PORT = 10000
 
 
 def iter_messages(buffer: bytes) -> Tuple[Iterator[dict], bytes]:
@@ -149,7 +156,9 @@ def peer_port_plausible(event: dict) -> bool:
         port = int(event.get("dst_port"))
     except (TypeError, ValueError):
         return True
-    return port >= MIN_PEER_PORT and port not in IMPLAUSIBLE_PEER_PORTS
+    if port in IMPLAUSIBLE_PEER_PORTS:
+        return False
+    return port in CLASSIC_PEER_PORTS or port >= MIN_PEER_PORT
 
 
 def destination_of(event: dict) -> Optional[str]:

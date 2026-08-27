@@ -1112,6 +1112,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 41,
     },
     {
+        "key": "violation_recap_days",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "general",
+        "display_name": "Окно истории нарушений (дней)",
+        "description": "За какой период считать нарушения пользователя для бейджа рецидива и истории в карточке. Аннулированные показываются отдельным числом — видно и сколько раз человек попадался, и сколько из этого оказалось ошибкой детектора",
+        "default_value": "30",
+        "sort_order": 25,
+    },
+    {
         "key": "torrent_min_events",
         "value_type": "int",
         "category": "violations",
@@ -1120,6 +1130,26 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Сколько торрент-событий должно набраться у пользователя за полчаса, чтобы завести нарушение. Настоящий обмен даёт сотни событий за минуты — одиночные срабатывания это шум nDPI. 1 — заводить нарушение по первому же событию",
         "default_value": "5",
         "sort_order": 43,
+    },
+    {
+        "key": "torrent_asn_whitelist",
+        "value_type": "string",
+        "category": "violations",
+        "subcategory": "torrent",
+        "display_name": "Кого не считать торрентом (по владельцу адреса)",
+        "description": "Через запятую: части названий организаций, чьи адреса не считаем нарушением. Игровые лаунчеры раздают обновления настоящим BitTorrent (War Thunder и прочие), и вердикт по ним верный — отличается только адресат. Пусто — берётся список по умолчанию",
+        "default_value": "kaspersky,gaijin,blizzard,valve,wargaming,microsoft,epic games,riot games,steam",
+        "sort_order": 45,
+    },
+    {
+        "key": "torrent_min_peers",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "torrent",
+        "display_name": "Порог разных адресов (рой)",
+        "description": "Со сколькими РАЗНЫМИ адресами должен идти обмен за полчаса. Торрент — это рой из десятков пиров; события по одному и тому же адресу набивает обычное долгое соединение, и на этом ловились антивирус и игровые лаунчеры. 1 — не проверять рой",
+        "default_value": "3",
+        "sort_order": 44,
     },
     {
         "key": "torrent_notification_cooldown_minutes",
@@ -1943,10 +1973,22 @@ class DynamicConfigService:
                         except json.JSONDecodeError:
                             pass
 
+                    # Незнакомый тип не должен ронять загрузку ВСЕЙ конфигурации:
+                    # одна кривая строка в таблице оставляла панель и бота без
+                    # настроек целиком. Читаем как строку и пишем в лог.
+                    try:
+                        row_value_type = ConfigValueType(row['value_type'])
+                    except ValueError:
+                        logger.warning(
+                            "config %s: неизвестный value_type %r — читаю как string",
+                            row['key'], row['value_type'],
+                        )
+                        row_value_type = ConfigValueType.STRING
+
                     item = ConfigItem(
                         key=row['key'],
                         value=row['value'],
-                        value_type=ConfigValueType(row['value_type']),
+                        value_type=row_value_type,
                         category=ConfigCategory(row['category']) if row['category'] in [c.value for c in ConfigCategory] else ConfigCategory.GENERAL,
                         subcategory=row['subcategory'],
                         display_name=row['display_name'],
