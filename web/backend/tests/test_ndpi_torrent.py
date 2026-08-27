@@ -314,3 +314,120 @@ async def test_daemon_needs_an_interface(monkeypatch):
 
     assert state["started"] is False
     assert "интерфейс" in state["reason"]
+
+
+# ── порт назначения: где живут настоящие пиры ─────────────────────
+
+@pytest.mark.parametrize("port,expected", [
+    (51413, True),    # эфемерный — типичный порт клиента
+    (6881, True),     # классика BitTorrent
+    (6999, True),     # верхняя граница классического диапазона
+    (10000, True),    # порог высоких портов
+    (1443, False),    # сервер Kaspersky: эвристика ловила его как BitTorrent
+    (3306, False),    # обычный серверный порт из середины диапазона
+    (443, False),     # исключён явно
+    (80, False),
+])
+def test_only_peer_like_ports_count(port, expected):
+    """Диапазон 1024-10000 — это серверные сервисы, а не рой.
+
+    Прежний порог 1024 пропускал вердикты по ним, и на этом ловился
+    антивирус: 8 событий, один адрес, «жёсткая блокировка».
+    """
+    event = dict(TORRENT_FLOW, dst_port=port)
+    assert is_torrent(event) is expected
+
+
+def test_unknown_port_still_counts():
+    """Порт без значения — не повод выбрасывать разобранный вердикт."""
+    event = dict(TORRENT_FLOW)
+    event.pop("dst_port")
+    assert is_torrent(event) is True
+
+
+# ── демон: BPF и лимиты таблиц ────────────────────────────────────
+
+def test_daemon_filters_traffic_it_would_discard_anyway():
+    """То, что детектор выбросит по порту, незачем и разбирать."""
+    from src.collectors import ndpi_daemon
+
+    for port in (80, 443, 8443, 5222):
+        assert f"port {port}" in ndpi_daemon.BPF_FILTER
+    assert ndpi_daemon.BPF_FILTER.startswith("not (")
+
+
+def test_daemon_caps_threads_and_tables():
+    """Дефолты nDPId — 10 тредов и TCP-поток, живущий два часа.
+
+    На двухъядерной ноде треды делят одну работу и съедают CPU, а таблицы
+    растут весь uptime — именно это и выглядело как утечка.
+    """
+    from src.collectors import ndpi_daemon
+
+    assert ndpi_daemon.MAX_READER_THREADS < 10
+    assert ndpi_daemon.TCP_IDLE_US < 7_440_000_000
+    assert ndpi_daemon.FLOW_SCAN_US <= 10_000_000
+
+
+@pytest.mark.asyncio
+async def test_daemon_passes_limits_to_ndpid(monkeypatch):
+    """Ручки должны доехать до процесса, а не остаться константами."""
+    from src.collectors import ndpi_daemon
+
+    captured: list[list[str]] = []
+
+    class _Proc:
+        returncode = None
+        pid = 4242
+
+    async def fake_exec(*args, **kwargs):
+        captured.append([str(a) for a in args])
+        return _Proc()
+
+    monkeypatch.setattr(ndpi_daemon, "binaries_available", lambda: True)
+    monkeypatch.setattr(ndpi_daemon.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(ndpi_daemon.asyncio, "sleep", lambda *_a, **_k: _noop())
+
+    daemon = ndpi_daemon.NdpiDaemon("/tmp/dist.sock", interface="eth0")
+    state = await daemon.start()
+
+    assert state["started"] is True
+    ndpid_argv = captured[-1]
+    assert "-B" in ndpid_argv
+    joined = " ".join(ndpid_argv)
+    assert "max-reader-threads=" in joined
+    assert "tcp-max-idle-time=" in joined
+    assert "max-flows-per-thread=" in joined
+
+
+async def _noop():
+    return None
+
+
+# ── легальный P2P: игровые лаунчеры и антивирусы ──────────────────
+
+def test_game_launchers_and_antivirus_are_not_violations():
+    """nDPI не ошибается — Gaijin раздаёт обновления настоящим BitTorrent.
+
+    Отличить такую раздачу от пиратской по трафику нельзя, различие только
+    в том, кому принадлежит адрес.
+    """
+    from web.backend.core.torrent_p2p_whitelist import is_whitelisted_org
+
+    assert is_whitelisted_org("Gaijin Network Ltd") is True
+    assert is_whitelisted_org("Kaspersky Lab Switzerland GmbH") is True
+    assert is_whitelisted_org("AS12668 LLC KomTehCentr") is False
+    assert is_whitelisted_org(None) is False
+
+
+@pytest.mark.asyncio
+async def test_whitelist_keeps_addresses_when_geoip_is_down(monkeypatch):
+    """Без геобазы фильтровать нечем — молча хоронить нарушение нельзя."""
+    from web.backend.core import torrent_p2p_whitelist
+
+    def boom():
+        raise RuntimeError("geoip недоступен")
+
+    monkeypatch.setattr("shared.geoip.get_geoip_service", boom, raising=False)
+    kept = await torrent_p2p_whitelist.filter_destinations(["203.0.113.9:51413"])
+    assert kept == ["203.0.113.9:51413"]

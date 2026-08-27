@@ -761,6 +761,29 @@ class ConnectionsMixin:
             logger.warning("count_recent_torrent_events failed: %s", e)
             return 0
 
+    async def count_recent_torrent_peers(self, user_uuid: str, minutes: int = 30) -> int:
+        """Со сколькими РАЗНЫМИ адресами шёл обмен за окно.
+
+        Числа событий мало: их набивает и одно долгое соединение. Торрент
+        отличается роем — клиент разговаривает с десятками пиров сразу.
+        Пойманный случай: антивирус, восемь событий и ровно один адрес, —
+        по счётчику событий это нарушение, по числу пиров очевидно нет.
+        """
+        if not self.is_connected:
+            return 0
+        try:
+            async with self.acquire() as conn:
+                value = await conn.fetchval(
+                    "SELECT count(DISTINCT destination) FROM torrent_events "
+                    "WHERE user_uuid = $1::uuid "
+                    "AND detected_at > NOW() - make_interval(mins => $2)",
+                    user_uuid, minutes,
+                )
+            return int(value or 0)
+        except Exception as e:
+            logger.warning("count_recent_torrent_peers failed: %s", e)
+            return 0
+
     async def shared_torrent_destinations(
         self, destinations: list, hours: int = 24,
     ) -> set:

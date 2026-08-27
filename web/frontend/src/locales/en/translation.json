@@ -3803,6 +3803,14 @@
         "label": "Event threshold for a violation",
         "description": "How many torrent events must pile up for one user within half an hour before a violation is raised. Real exchange produces hundreds of events in minutes — single hits are nDPI noise. 1 raises a violation on the very first event"
       },
+      "torrent_asn_whitelist": {
+        "label": "Not torrent, by address owner",
+        "description": "Comma-separated fragments of organisation names whose addresses are never treated as a violation. Game launchers ship updates over real BitTorrent (War Thunder among them), so the verdict on them is correct — only the counterpart differs. Leave empty to use the built-in list"
+      },
+      "torrent_min_peers": {
+        "label": "Distinct peers threshold (swarm)",
+        "description": "How many DIFFERENT addresses the exchange must span within half an hour. Torrent means a swarm of dozens of peers; events against one and the same address are what a long ordinary connection produces — antivirus traffic and game launchers were caught exactly this way. 1 disables the swarm check"
+      },
       "violation_recap_days": {
         "label": "Violation history window (days)",
         "description": "The period used to count a user's violations for the repeat-offender badge and the history block. Annulled ones are shown separately — you see both how often the person was flagged and how much of that turned out to be a detector error"

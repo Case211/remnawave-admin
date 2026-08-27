@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from shared.database import db_service
 from shared.db_schema import NODES_TABLE
+from web.backend.core import torrent_p2p_whitelist
 from shared.db_query import select_sql
 from shared.connection_monitor import ConnectionMonitor
 from shared.violation_detector import IntelligentViolationDetector
@@ -778,6 +779,10 @@ async def _process_torrent_violations(
             min_events = int(config_service.get("torrent_min_events", 5) or 1)
         except (TypeError, ValueError):
             min_events = 5
+        try:
+            min_peers = int(config_service.get("torrent_min_peers", 3) or 1)
+        except (TypeError, ValueError):
+            min_peers = 3
 
         for user_uuid, user_events in events_by_user.items():
             try:
@@ -802,6 +807,21 @@ async def _process_torrent_violations(
                         )
                         continue
 
+                # Событий может набить и одно долгое соединение — рой это не
+                # доказывает. У обмена десятки пиров сразу; у ложного
+                # срабатывания адрес один и тот же (ловился антивирус,
+                # которому эвристика приписала шифрованный BitTorrent).
+                if min_peers > 1:
+                    peers = await db_service.count_recent_torrent_peers(
+                        user_uuid, minutes=_TORRENT_EVENT_WINDOW_MINUTES,
+                    )
+                    if peers < min_peers:
+                        logger.info(
+                            "Torrent: %d peer(s) for %s in %d min — below threshold %d",
+                            peers, user_uuid[:8], _TORRENT_EVENT_WINDOW_MINUTES, min_peers,
+                        )
+                        continue
+
                 # Dedup: skip if torrent violation exists within last 10 min
                 existing = await db_service.get_recent_torrent_violation(user_uuid, minutes=10)
                 if existing:
@@ -813,6 +833,17 @@ async def _process_torrent_violations(
                 telegram_id = user_info.get("telegramId") if user_info else None
 
                 destinations = list(set(e.destination for e in user_events))
+                # Игровые лаунчеры раздают обновления настоящим BitTorrent, и
+                # вердикт по ним верный — отличается только адресат. Отсев
+                # идёт здесь, на последнем шаге: резолвить ASN на каждое
+                # событие батча было бы дорого и незачем.
+                destinations = await torrent_p2p_whitelist.filter_destinations(destinations)
+                if not destinations:
+                    logger.info(
+                        "Torrent: у %s остались только адреса легального P2P — не нарушение",
+                        user_uuid[:8],
+                    )
+                    continue
                 ips = list(set(e.ip_address for e in user_events))
 
                 # Save as violation (score=100)
