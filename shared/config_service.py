@@ -1133,7 +1133,7 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
     },
     {
         "key": "torrent_asn_whitelist",
-        "value_type": "str",
+        "value_type": "string",
         "category": "violations",
         "subcategory": "torrent",
         "display_name": "Кого не считать торрентом (по владельцу адреса)",
