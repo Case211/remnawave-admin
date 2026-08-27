@@ -1973,10 +1973,22 @@ class DynamicConfigService:
                         except json.JSONDecodeError:
                             pass
 
+                    # Незнакомый тип не должен ронять загрузку ВСЕЙ конфигурации:
+                    # одна кривая строка в таблице оставляла панель и бота без
+                    # настроек целиком. Читаем как строку и пишем в лог.
+                    try:
+                        row_value_type = ConfigValueType(row['value_type'])
+                    except ValueError:
+                        logger.warning(
+                            "config %s: неизвестный value_type %r — читаю как string",
+                            row['key'], row['value_type'],
+                        )
+                        row_value_type = ConfigValueType.STRING
+
                     item = ConfigItem(
                         key=row['key'],
                         value=row['value'],
-                        value_type=ConfigValueType(row['value_type']),
+                        value_type=row_value_type,
                         category=ConfigCategory(row['category']) if row['category'] in [c.value for c in ConfigCategory] else ConfigCategory.GENERAL,
                         subcategory=row['subcategory'],
                         display_name=row['display_name'],
