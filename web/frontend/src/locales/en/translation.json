@@ -3206,7 +3206,8 @@
     "tabs": {
       "general": "General",
       "auth": "Auth methods",
-      "faq": "FAQ"
+      "faq": "FAQ",
+      "diagnostics": "Diagnostics"
     },
     "searchPlaceholder": "Search settings...",
     "filterInCategory": "Filter in this category...",
@@ -4257,6 +4258,20 @@
       "hint": "Settings are applied instantly after changes.",
       "applyNote": "Settings are applied instantly after changes. To reset, hover over a setting and click X.",
       "inDb": "{{count}} in DB"
+    },
+    "diagnostics": {
+      "title": "Memory snapshot",
+      "description": "What caches hold and how many background tasks are alive. The snapshot only reads counters and changes nothing.",
+      "take": "Take snapshot",
+      "send": "Send to Telegram",
+      "sent": "Snapshot sent",
+      "chatPlaceholder": "chat_id",
+      "chatHint": "A numeric chat_id is required: Telegram does not deliver to private chats by @username, and the recipient must message the bot at least once. Leave empty to use the saved chat.",
+      "rss": "Process memory",
+      "tasks": "Asyncio tasks",
+      "cache": "Cache",
+      "items": "Entries",
+      "size": "Size"
     }
   },
   "notifications": {

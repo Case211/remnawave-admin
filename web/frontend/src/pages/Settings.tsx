@@ -28,6 +28,7 @@ import client from '../api/client'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
 import { useHasPermission } from '@/components/PermissionGate'
+import MemoryDiagnosticsBlock from '@/components/settings/MemoryDiagnosticsBlock'
 import { useFormatters } from '@/lib/useFormatters'
 
 import { Button } from '@/components/ui/button'
@@ -1505,6 +1506,7 @@ export default function Settings() {
           <TabsTrigger value="general">{t('settings.tabs.general')}</TabsTrigger>
           <TabsTrigger value="auth">{t('settings.tabs.auth')}</TabsTrigger>
           <TabsTrigger value="faq">{t('settings.tabs.faq')}</TabsTrigger>
+          <TabsTrigger value="diagnostics">{t('settings.tabs.diagnostics')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="auth" className="space-y-6 mt-4">
@@ -1518,6 +1520,10 @@ export default function Settings() {
 
         <TabsContent value="faq" className="mt-4">
           <FaqSection />
+        </TabsContent>
+
+        <TabsContent value="diagnostics" className="space-y-6 mt-4">
+          <MemoryDiagnosticsBlock />
         </TabsContent>
 
         <TabsContent value="general" className="space-y-6 mt-4">
