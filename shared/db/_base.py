@@ -99,7 +99,11 @@ CREATE TABLE IF NOT EXISTS node_metrics_snapshots (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_nms_node_created ON node_metrics_snapshots(node_uuid, created_at);
+-- Индекса (node_uuid, created_at) здесь нет намеренно: все запросы к таблице
+-- начинаются с диапазона времени, а node_uuid идёт вторым условием или уходит
+-- в GROUP BY, поэтому планировщик всегда берёт idx_nms_created_at. На живой
+-- установке тот индекс весил 81 МБ при нуле сканов, а снимки метрик пишутся
+-- непрерывно со всех нод — каждая вставка дописывала его впустую (снят в 0104).
 
 -- Торрент-события
 CREATE TABLE IF NOT EXISTS torrent_events (
