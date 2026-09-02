@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import client from '../../api/client'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface CacheEntry {
@@ -43,9 +42,8 @@ function human(bytes: number | null): string {
 export function MemoryDiagnosticsBlock() {
   const { t } = useTranslation()
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
-  const [chatId, setChatId] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sending, setSending] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   const take = async () => {
     setLoading(true)
@@ -59,18 +57,23 @@ export function MemoryDiagnosticsBlock() {
     }
   }
 
-  const send = async () => {
-    setSending(true)
+  const download = async (fmt: 'json' | 'txt') => {
+    setDownloading(true)
     try {
-      const { data } = await client.post('/api/v2/diagnostics/memory/send', {
-        chat_id: chatId.trim() || undefined,
+      const res = await client.get(`/api/v2/diagnostics/memory/download?fmt=${fmt}`, {
+        responseType: 'blob',
       })
-      setSnapshot(data.snapshot)
-      toast.success(t('settings.diagnostics.sent'))
+      const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+      const url = URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `memory-${stamp}.${fmt}`
+      link.click()
+      URL.revokeObjectURL(url)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || err.message)
     } finally {
-      setSending(false)
+      setDownloading(false)
     }
   }
 
@@ -85,17 +88,14 @@ export function MemoryDiagnosticsBlock() {
           <Button onClick={take} disabled={loading}>
             {loading ? t('common.loading') : t('settings.diagnostics.take')}
           </Button>
-          <Input
-            value={chatId}
-            onChange={(e) => setChatId(e.target.value)}
-            placeholder={t('settings.diagnostics.chatPlaceholder')}
-            className="max-w-[220px]"
-          />
-          <Button variant="secondary" onClick={send} disabled={sending}>
-            {sending ? t('common.loading') : t('settings.diagnostics.send')}
+          <Button variant="secondary" onClick={() => download('json')} disabled={downloading}>
+            {t('settings.diagnostics.downloadJson')}
+          </Button>
+          <Button variant="secondary" onClick={() => download('txt')} disabled={downloading}>
+            {t('settings.diagnostics.downloadTxt')}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">{t('settings.diagnostics.chatHint')}</p>
+        <p className="text-xs text-muted-foreground">{t('settings.diagnostics.downloadHint')}</p>
 
         {snapshot && (
           <div className="space-y-3 text-sm">

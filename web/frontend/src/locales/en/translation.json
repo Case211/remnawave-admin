@@ -4263,15 +4263,14 @@
       "title": "Memory snapshot",
       "description": "What caches hold and how many background tasks are alive. The snapshot only reads counters and changes nothing.",
       "take": "Take snapshot",
-      "send": "Send to Telegram",
-      "sent": "Snapshot sent",
-      "chatPlaceholder": "chat_id",
-      "chatHint": "A numeric chat_id is required: Telegram does not deliver to private chats by @username, and the recipient must message the bot at least once. Leave empty to use the saved chat.",
       "rss": "Process memory",
       "tasks": "Asyncio tasks",
       "cache": "Cache",
       "items": "Entries",
-      "size": "Size"
+      "size": "Size",
+      "downloadJson": "Download JSON",
+      "downloadTxt": "Download TXT",
+      "downloadHint": "JSON for analysis, TXT to read and forward as is. The file holds counters only: cache sizes, task count and process memory."
     }
   },
   "notifications": {

@@ -4,7 +4,8 @@
 онлайна росла до потолка за час-три после рестарта. Причину тогда пришлось
 искать по коду вслепую: с работающей установки снять было нечего. Здесь ровно
 то, чего не хватало — размеры всех словарей-кэшей, число фоновых задач и RSS
-процесса, одним запросом и одной кнопкой в Telegram.
+процесса. Снимок скачивается файлом: его отдаёт владелец установки, а разбирать
+его можно у себя.
 
 Снимок ничего не чинит и ничего не меняет: только читает счётчики.
 """
@@ -16,23 +17,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse, PlainTextResponse
 
-from web.backend.core.errors import api_error, E
 from web.backend.api.deps import AdminUser, require_permission
 from shared.logger import logger
 
 router = APIRouter()
-
-# Куда слать снимок, если адресат не передан явно. Telegram не умеет доставлять
-# в личку по @username — нужен числовой chat_id, и получатель должен хотя бы раз
-# написать боту сам.
-_CHAT_SETTING_KEY = "diagnostics_telegram_chat_id"
-
-
-class MemorySnapshotSend(BaseModel):
-    """Куда отправить снимок. Пусто — берём чат из настроек уведомлений."""
-    chat_id: Optional[str] = None
 
 
 def _rss_bytes() -> Optional[int]:
@@ -172,7 +162,7 @@ def _human(size: Optional[int]) -> str:
 
 
 def _as_text(snap: Dict[str, Any]) -> str:
-    """Снимок в вид, пригодный для сообщения в Telegram."""
+    """Снимок в человекочитаемый вид — им наполняется .txt при выгрузке."""
     lines = [
         f"Память процесса: {_human(snap['rss_bytes'])}",
         f"Задач asyncio: {snap['asyncio_tasks']}",
@@ -196,33 +186,22 @@ async def memory_snapshot(
     return _snapshot()
 
 
-@router.post("/memory/send")
-async def send_memory_snapshot(
-    body: MemorySnapshotSend,
-    admin: AdminUser = Depends(require_permission("settings", "edit")),
+@router.get("/memory/download")
+async def download_memory_snapshot(
+    fmt: str = "json",
+    admin: AdminUser = Depends(require_permission("settings", "view")),
 ):
-    """Отправить снимок в Telegram — тем же каналом, что и обычные уведомления."""
-    from web.backend.core.notification_service import send_telegram
-
-    chat_id = (body.chat_id or "").strip()
-    if not chat_id:
-        # Сохранённый адресат: чтобы кнопка работала без ввода каждый раз
-        try:
-            from shared.config_service import config_service
-            chat_id = str(config_service.get(_CHAT_SETTING_KEY, "") or "")
-        except Exception:
-            chat_id = ""
-    if not chat_id:
-        raise api_error(400, E.INVALID_INPUT, "Telegram chat is not configured")
-
+    """Тот же снимок файлом: json для разбора, txt — чтобы просто прочитать."""
     snap = _snapshot()
-    ok = await send_telegram(
-        chat_id,
-        "Снимок памяти админки",
-        _as_text(snap),
-    )
-    if not ok:
-        raise api_error(502, "TELEGRAM_SEND_FAILED", "Telegram send failed")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    logger.info("Memory snapshot downloaded by admin %s", admin.username)
 
-    logger.info("Memory snapshot sent to Telegram by admin %s", admin.username)
-    return {"sent": True, "chat_id": chat_id, "snapshot": snap}
+    if fmt == "txt":
+        return PlainTextResponse(
+            _as_text(snap),
+            headers={"Content-Disposition": f'attachment; filename="memory-{stamp}.txt"'},
+        )
+    return JSONResponse(
+        snap,
+        headers={"Content-Disposition": f'attachment; filename="memory-{stamp}.json"'},
+    )
