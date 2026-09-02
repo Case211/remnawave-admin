@@ -48,7 +48,7 @@ export function MemoryDiagnosticsBlock() {
   const take = async () => {
     setLoading(true)
     try {
-      const { data } = await client.get<Snapshot>('/api/v2/diagnostics/memory')
+      const { data } = await client.get<Snapshot>('/diagnostics/memory')
       setSnapshot(data)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || err.message)
@@ -60,7 +60,7 @@ export function MemoryDiagnosticsBlock() {
   const download = async (fmt: 'json' | 'txt') => {
     setDownloading(true)
     try {
-      const res = await client.get(`/api/v2/diagnostics/memory/download?fmt=${fmt}`, {
+      const res = await client.get(`/diagnostics/memory/download?fmt=${fmt}`, {
         responseType: 'blob',
       })
       const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
