@@ -228,23 +228,30 @@ class ConnectionsMixin:
                 # Two-step approach: partitioned tables require partition key in
                 # unique index, so ON CONFLICT (user_uuid, ip_address) alone won't
                 # work. Instead: UPDATE existing rows first, then INSERT truly new.
+                #
+                # connected_at здесь НЕ трогается: это ключ партиционирования.
+                # Сдвиг времени на существующей строке заставлял Postgres
+                # физически переносить её в другую партицию (DELETE + INSERT
+                # вместо HOT), а параллельный батч с другой ноды падал на
+                # «tuple to be locked was already moved to another partition»
+                # и терялся целиком. Время начала соединения фиксируется при
+                # вставке — сдвигать его у активной строки и незачем.
                 update_result = await conn.execute(
                     f"""
                     UPDATE {USER_CONNECTIONS_TABLE} uc
-                    SET connected_at = GREATEST(uc.connected_at, batch.ca),
-                        node_uuid = COALESCE(batch.n, uc.node_uuid),
+                    SET node_uuid = COALESCE(batch.n, uc.node_uuid),
                         device_info = COALESCE(batch.d, uc.device_info)
                     FROM (
                         SELECT u::uuid AS uid, u_ip{ip_cast} AS ip,
-                               n::uuid AS n, d::jsonb AS d, COALESCE(t, NOW()) AS ca
-                        FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[])
-                            AS t(u, u_ip, n, d, t)
+                               n::uuid AS n, d::jsonb AS d
+                        FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[])
+                            AS t(u, u_ip, n, d)
                     ) batch
                     WHERE uc.user_uuid = batch.uid
                       AND uc.ip_address = batch.ip
                       AND uc.disconnected_at IS NULL
                     """,
-                    user_uuids, ip_addresses, node_uuids, device_infos, connected_ats,
+                    user_uuids, ip_addresses, node_uuids, device_infos,
                 )
                 updated = int(update_result.split()[-1]) if update_result else 0
 

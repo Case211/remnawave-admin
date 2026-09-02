@@ -177,10 +177,25 @@ CREATE TABLE IF NOT EXISTS user_connections (
     device_info JSONB
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_connections_user ON user_connections(user_uuid, connected_at DESC);
-CREATE INDEX IF NOT EXISTS idx_user_connections_ip ON user_connections(ip_address);
-CREATE INDEX IF NOT EXISTS idx_user_connections_node ON user_connections(node_uuid);
-CREATE INDEX IF NOT EXISTS idx_user_connections_user_active ON user_connections(user_uuid, disconnected_at, connected_at DESC);
+-- Индексы user_connections нужны, только пока таблица не партиционирована.
+-- После alembic 0069 ту же роль играют idx_uc_part_*, а второй набор с теми же
+-- колонками бьёт дважды: disconnected_at попадает в индекс, поэтому апдейт
+-- отключения перестаёт быть HOT и пишется во все индексы разом. Схема
+-- выполняется при каждом старте, а IF NOT EXISTS здесь не спасает — имена у
+-- наборов разные, и дубли создавались заново после каждого перезапуска.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_partitioned_table pt
+        JOIN pg_class c ON c.oid = pt.partrelid
+        WHERE c.relname = 'user_connections'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_user_connections_user ON user_connections(user_uuid, connected_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_user_connections_ip ON user_connections(ip_address);
+        CREATE INDEX IF NOT EXISTS idx_user_connections_node ON user_connections(node_uuid);
+        CREATE INDEX IF NOT EXISTS idx_user_connections_user_active ON user_connections(user_uuid, disconnected_at, connected_at DESC);
+    END IF;
+END $$;
 
 -- HWID устройства пользователей
 CREATE TABLE IF NOT EXISTS user_hwid_devices (
@@ -214,8 +229,19 @@ CREATE INDEX IF NOT EXISTS idx_violations_reasons_gin ON violations USING GIN(re
 -- Индексы для violation_whitelist (таблица создаётся через Alembic)
 CREATE INDEX IF NOT EXISTS idx_violation_whitelist_user ON violation_whitelist(user_uuid);
 
--- Partial-индексы для cleanup-запросов (ускоряют DELETE старых записей)
-CREATE INDEX IF NOT EXISTS idx_uc_cleanup ON user_connections(connected_at) INCLUDE (id) WHERE disconnected_at IS NOT NULL;
+-- Partial-индексы для cleanup-запросов (ускоряют DELETE старых записей).
+-- На партиционированной таблице старьё уходит вместе с партицией, поэтому
+-- idx_uc_cleanup там не нужен: сканов у него нет, а запись он утяжеляет.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_partitioned_table pt
+        JOIN pg_class c ON c.oid = pt.partrelid
+        WHERE c.relname = 'user_connections'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_uc_cleanup ON user_connections(connected_at) INCLUDE (id) WHERE disconnected_at IS NOT NULL;
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_violations_cleanup ON violations(detected_at) INCLUDE (id) WHERE action_taken IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_nms_created_at ON node_metrics_snapshots(created_at);
 

@@ -185,16 +185,23 @@ async def create_script(
 
     admin_id = admin.account_id
 
-    async with db_service.acquire() as conn:
-        row = await conn.fetchrow(
-            insert_sql(NODE_SCRIPTS_TABLE,
-                ["name", "display_name", "description", "category", "script_content", "timeout_seconds", "requires_root", "is_builtin", "created_by"],
-                values="$1, $2, $3, $4, $5, $6, $7, false, $8",
-                returning="*"),
-            body.name, body.display_name, body.description, body.category,
-            body.script_content, body.timeout_seconds, body.requires_root,
-            admin_id,
-        )
+    try:
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow(
+                insert_sql(NODE_SCRIPTS_TABLE,
+                    ["name", "display_name", "description", "category", "script_content", "timeout_seconds", "requires_root", "is_builtin", "created_by"],
+                    values="$1, $2, $3, $4, $5, $6, $7, false, $8",
+                    returning="*"),
+                body.name, body.display_name, body.description, body.category,
+                body.script_content, body.timeout_seconds, body.requires_root,
+                admin_id,
+            )
+    except Exception as e:
+        # Занятое имя — это конфликт, а не отказ сервера: без этой ветки
+        # asyncpg-исключение доходило до обработчика и превращалось в 500
+        if "node_scripts_name_key" in str(e):
+            raise api_error(409, E.ALREADY_EXISTS, "Script with this name already exists")
+        raise
 
     r = dict(row)
     for dt_field in ('created_at', 'updated_at', 'imported_at'):
