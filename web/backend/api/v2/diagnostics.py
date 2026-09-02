@@ -23,6 +23,7 @@ import os
 import random
 import sys
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -39,6 +40,25 @@ router = APIRouter()
 # Внутренний адрес коллектора в раздельном режиме: имя контейнера из compose и
 # его WEB_PORT. Переопределяется, если контейнер назван иначе.
 _COLLECTOR_URL = os.environ.get("COLLECTOR_INTERNAL_URL", "http://remnawave-web-collector:8081")
+
+
+def _plain(value: Any) -> Any:
+    """Привести ответ базы к тому, что умеет JSON.
+
+    asyncpg отдаёт bigint-агрегаты и extract(epoch) как Decimal, а метки
+    времени — как datetime; JSONResponse ни того, ни другого не сериализует.
+    На живой установке серия собиралась целиком и падала уже на отдаче
+    файла — локально без базы это не всплывало.
+    """
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    return value
 
 
 # ── процесс ──────────────────────────────────────────────────────────────────
@@ -218,7 +238,7 @@ async def _database() -> Dict[str, Any]:
             )
     except Exception as e:
         out["error"] = f"{type(e).__name__}: {e}"
-    return out
+    return _plain(out)
 
 
 # ── кэши и очереди ───────────────────────────────────────────────────────────
@@ -660,7 +680,7 @@ async def memory_snapshot(
     admin: AdminUser = Depends(require_permission("settings", "view")),
 ):
     """Снимок: хост, база, свой процесс и коллектор в раздельном режиме."""
-    return await _full_snapshot()
+    return _plain(await _full_snapshot())
 
 
 @router.get("/memory/download")
@@ -678,7 +698,7 @@ async def download_memory_snapshot(
             headers={"Content-Disposition": f'attachment; filename="diagnostics-{stamp}.txt"'},
         )
     return JSONResponse(
-        full,
+        _plain(full),
         headers={"Content-Disposition": f'attachment; filename="diagnostics-{stamp}.json"'},
     )
 
@@ -732,7 +752,7 @@ async def download_series(
             headers={"Content-Disposition": f'attachment; filename="diagnostics-series-{stamp}.txt"'},
         )
     return JSONResponse(
-        result,
+        _plain(result),
         headers={"Content-Disposition": f'attachment; filename="diagnostics-series-{stamp}.json"'},
     )
 
@@ -752,4 +772,4 @@ async def collector_memory_snapshot(request: Request):
     secret = os.environ.get("INTERNAL_API_SECRET", "")
     if not secret or request.headers.get("X-Internal-Api-Secret", "") != secret:
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-    return _process_snapshot()
+    return _plain(_process_snapshot())
