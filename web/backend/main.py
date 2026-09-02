@@ -1139,6 +1139,8 @@ def create_app() -> FastAPI:
     # Collector router — available in collector and full modes
     if app_mode in ("collector", "full"):
         app.include_router(collector_api.router, prefix="/api/v2/collector", tags=["collector"])
+        # Снимок процесса коллектора для диагностики из режима api
+        app.include_router(diagnostics_api.internal_router, prefix="/api/v2/collector", tags=["collector"])
 
     # UI routers — available in api and full modes
     if app_mode in ("api", "full"):

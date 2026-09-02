@@ -4260,8 +4260,8 @@
       "inDb": "{{count}} in DB"
     },
     "diagnostics": {
-      "title": "Memory snapshot",
-      "description": "What caches hold and how many background tasks are alive. The snapshot only reads counters and changes nothing.",
+      "title": "Diagnostics snapshot",
+      "description": "Host, database, online, processes and their caches. The snapshot only reads counters. For an investigation take two or three snapshots apart and compare what grows.",
       "take": "Take snapshot",
       "rss": "Process memory",
       "tasks": "Asyncio tasks",
@@ -4270,7 +4270,22 @@
       "size": "Size",
       "downloadJson": "Download JSON",
       "downloadTxt": "Download TXT",
-      "downloadHint": "JSON for analysis, TXT to read and forward as is. The file holds counters only: cache sizes, task count and process memory."
+      "downloadHint": "JSON to compare two snapshots, TXT to read and forward as is.",
+      "host": "Host",
+      "hostMem": "Memory available",
+      "online": "Online",
+      "perHour": "per hour",
+      "db": "Database",
+      "users": "users",
+      "nodes": "nodes",
+      "dbConns": "DB connections",
+      "active": "active",
+      "waitingLock": "waiting for lock",
+      "longest": "longest",
+      "peak": "peak",
+      "queue": "Violation queue",
+      "lastDrain": "last drain",
+      "tasksDropped": "tasks dropped"
     }
   },
   "notifications": {
