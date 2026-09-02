@@ -595,6 +595,13 @@ class NetworkMixin:
                         -- вернулось на тот же аккаунт: обычная переустановка,
                         -- а не новый владелец — снимаем пометку об отвязке
                         removed_at = NULL
+                    WHERE {USER_HWID_DEVICES_TABLE}.removed_at IS NOT NULL
+                       OR {USER_HWID_DEVICES_TABLE}.platform IS DISTINCT FROM COALESCE(EXCLUDED.platform, {USER_HWID_DEVICES_TABLE}.platform)
+                       OR {USER_HWID_DEVICES_TABLE}.os_version IS DISTINCT FROM COALESCE(EXCLUDED.os_version, {USER_HWID_DEVICES_TABLE}.os_version)
+                       OR {USER_HWID_DEVICES_TABLE}.device_model IS DISTINCT FROM COALESCE(EXCLUDED.device_model, {USER_HWID_DEVICES_TABLE}.device_model)
+                       OR {USER_HWID_DEVICES_TABLE}.app_version IS DISTINCT FROM COALESCE(EXCLUDED.app_version, {USER_HWID_DEVICES_TABLE}.app_version)
+                       OR {USER_HWID_DEVICES_TABLE}.user_agent IS DISTINCT FROM COALESCE(EXCLUDED.user_agent, {USER_HWID_DEVICES_TABLE}.user_agent)
+                       OR {USER_HWID_DEVICES_TABLE}.updated_at IS DISTINCT FROM COALESCE(EXCLUDED.updated_at, {USER_HWID_DEVICES_TABLE}.updated_at)
                     """,
                     user_uuid, hwid, platform, os_version, device_model, app_version,
                     user_agent, created_at, updated_at
@@ -1010,6 +1017,13 @@ class NetworkMixin:
                                 -- панель снова отдаёт устройство этому же
                                 -- аккаунту: переустановка, а не новый владелец
                                 removed_at = NULL
+                            WHERE {USER_HWID_DEVICES_TABLE}.removed_at IS NOT NULL
+                               OR {USER_HWID_DEVICES_TABLE}.platform IS DISTINCT FROM COALESCE(EXCLUDED.platform, {USER_HWID_DEVICES_TABLE}.platform)
+                               OR {USER_HWID_DEVICES_TABLE}.os_version IS DISTINCT FROM COALESCE(EXCLUDED.os_version, {USER_HWID_DEVICES_TABLE}.os_version)
+                               OR {USER_HWID_DEVICES_TABLE}.device_model IS DISTINCT FROM COALESCE(EXCLUDED.device_model, {USER_HWID_DEVICES_TABLE}.device_model)
+                               OR {USER_HWID_DEVICES_TABLE}.app_version IS DISTINCT FROM COALESCE(EXCLUDED.app_version, {USER_HWID_DEVICES_TABLE}.app_version)
+                               OR {USER_HWID_DEVICES_TABLE}.user_agent IS DISTINCT FROM COALESCE(EXCLUDED.user_agent, {USER_HWID_DEVICES_TABLE}.user_agent)
+                               OR {USER_HWID_DEVICES_TABLE}.updated_at IS DISTINCT FROM COALESCE(EXCLUDED.updated_at, {USER_HWID_DEVICES_TABLE}.updated_at)
                             """,
                             user_uuid, hwid, platform, os_version, device_model,
                             app_version, user_agent, created_at, updated_at
