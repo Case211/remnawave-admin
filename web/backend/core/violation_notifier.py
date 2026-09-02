@@ -356,6 +356,11 @@ async def send_violation_notification(
         else:
             lines.append(f"   \U0001f4e7 Username: <code>{_esc(username)}</code>")
 
+        # Полный UUID отдельной строкой: там, где имени нет, в шапку уходил
+        # обрезанный до восьми символов идентификатор — по нему ни найти
+        # пользователя, ни скопировать. В <code> Telegram копирует по тапу.
+        lines.append(f"   \U0001f194 UUID: <code>{_esc(user_uuid)}</code>")
+
         if telegram_id is not None:
             lines.append(f"   \U0001f4f1 TG ID: <code>{telegram_id}</code>")
 
@@ -574,6 +579,8 @@ async def send_torrent_notification(
             lines.append(f"\U0001f4e7 Email: <code>{_esc(email)}</code>")
         else:
             lines.append(f"\U0001f4e7 Username: <code>{_esc(username)}</code>")
+
+        lines.append(f"\U0001f194 UUID: <code>{_esc(user_uuid)}</code>")
 
         if telegram_id is not None:
             lines.append(f"\U0001f4f1 TG ID: <code>{telegram_id}</code>")
