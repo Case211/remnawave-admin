@@ -213,6 +213,14 @@ class NodesMixin:
                         users_online = EXCLUDED.users_online,
                         updated_at = NOW(),
                         raw_data = EXCLUDED.raw_data
+                    WHERE nodes.is_connected IS DISTINCT FROM EXCLUDED.is_connected
+                       OR nodes.users_online IS DISTINCT FROM EXCLUDED.users_online
+                       OR nodes.traffic_used_bytes IS DISTINCT FROM EXCLUDED.traffic_used_bytes
+                       OR nodes.traffic_limit_bytes IS DISTINCT FROM EXCLUDED.traffic_limit_bytes
+                       OR nodes.is_disabled IS DISTINCT FROM EXCLUDED.is_disabled
+                       OR nodes.name IS DISTINCT FROM EXCLUDED.name
+                       OR nodes.address IS DISTINCT FROM EXCLUDED.address
+                       OR nodes.port IS DISTINCT FROM EXCLUDED.port
                     """,
                 ),
                 uuid,
