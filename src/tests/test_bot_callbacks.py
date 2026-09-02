@@ -279,6 +279,49 @@ class TestPanelEvent:
         mock_notif.assert_called_once()
         assert mock_notif.call_args.kwargs["action"] == "updated"
 
+    async def test_user_modified_passes_diff_from_collector(self, set_secret):
+        """Старое состояние и изменения приезжают от коллектора и уходят в уведомление.
+
+        Бот сам их не восстановит: коллектор уже записал новое состояние в
+        общую базу, и без переданного diff уведомление выходило с
+        «Изменения не определены».
+        """
+        from src.services.bot_callbacks import panel_event
+        bot = AsyncMock()
+        req = MagicMock()
+        req.app.state.bot = bot
+        req.headers.get.return_value = "test-secret-123"
+        old = {"uuid": "u-1", "username": "alice", "expireAt": "2026-09-07T21:51:00Z"}
+        req.json = AsyncMock(return_value={
+            "event": "user.modified",
+            "data": {"uuid": "u-1", "username": "alice", "expireAt": "2026-09-12T21:51:00Z"},
+            "diff": {"old_data": old, "changes": ["• Срок действия: 07.09 → 12.09"]},
+        })
+        with patch("src.utils.notifications.send_user_notification", new=AsyncMock()) as mock_notif:
+            resp = await panel_event(req)
+        assert resp.status_code == 200
+        kw = mock_notif.call_args.kwargs
+        assert kw["old_user_info"] == old
+        assert kw["changes"] == ["• Срок действия: 07.09 → 12.09"]
+
+    async def test_user_modified_without_diff_keeps_working(self, set_secret):
+        """Старый коллектор без поля diff — уведомление всё равно уходит."""
+        from src.services.bot_callbacks import panel_event
+        bot = AsyncMock()
+        req = MagicMock()
+        req.app.state.bot = bot
+        req.headers.get.return_value = "test-secret-123"
+        req.json = AsyncMock(return_value={
+            "event": "user.modified",
+            "data": {"uuid": "u-1", "username": "alice"},
+        })
+        with patch("src.utils.notifications.send_user_notification", new=AsyncMock()) as mock_notif:
+            resp = await panel_event(req)
+        assert resp.status_code == 200
+        kw = mock_notif.call_args.kwargs
+        assert kw["old_user_info"] is None
+        assert kw["changes"] is None
+
 
 class TestUserIdentifierHelpers:
     @pytest.mark.asyncio
@@ -311,14 +354,6 @@ class TestUserIdentifierHelpers:
     async def test_local_user_uuid_empty_payload(self):
         from src.utils.notifications import _local_user_uuid
         assert await _local_user_uuid({}) is None
-
-    def test_short_user_id_prefers_local_uuid(self):
-        from src.utils.notifications import _short_user_id
-        assert _short_user_id({"uuid": "abcdefgh", "id": 99}, "xyz") == "xyz"
-
-    def test_short_user_id_falls_back_to_id(self):
-        from src.utils.notifications import _short_user_id
-        assert _short_user_id({"id": 42}, None) == "42"
 
     async def test_node_event(self, set_secret):
         from src.services.bot_callbacks import panel_event

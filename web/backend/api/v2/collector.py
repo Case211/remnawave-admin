@@ -1627,6 +1627,7 @@ async def collector_webhook(request: Request):
     logger.info("Webhook received: %s", event)
 
     # 1. Sync to DB (collector owns sync)
+    sync_result = None
     try:
         from shared.sync import sync_service
         sync_result = await sync_service.handle_webhook_event(event, event_data)
@@ -1634,6 +1635,22 @@ async def collector_webhook(request: Request):
             await _notify_hwid_reuse(sync_result or {})
     except Exception as e:
         logger.warning("Webhook sync failed for %s: %s", event, e)
+
+    # Diff едет боту вместе с событием. Бот сам старое состояние уже не
+    # достанет: коллектор только что записал новое в общую базу, и повторное
+    # сравнение «база против панели» даёт пусто — уведомление выходило с
+    # «Изменения не определены», хотя поле реально поменялось.
+    forward_body = body
+    if isinstance(sync_result, dict) and (sync_result.get("old_data") or sync_result.get("changes")):
+        try:
+            enriched = dict(data)
+            enriched["diff"] = {
+                "old_data": sync_result.get("old_data"),
+                "changes": sync_result.get("changes") or [],
+            }
+            forward_body = json.dumps(enriched, default=str).encode("utf-8")
+        except Exception as e:
+            logger.debug("Webhook diff attach failed for %s: %s", event, e)
 
     # 2. Forward to bot for Telegram notifications (fire-and-forget)
     # Uses INTERNAL_API_SECRET instead of X-Remnawave-Signature
@@ -1644,7 +1661,7 @@ async def collector_webhook(request: Request):
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.post(
                     bot_callback_url,
-                    content=body,
+                    content=forward_body,
                     headers={
                         "content-type": "application/json",
                         "X-Internal-Api-Secret": internal_secret,

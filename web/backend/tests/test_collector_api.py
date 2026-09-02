@@ -867,3 +867,79 @@ class TestRecentTorrentEvents:
         """Сломанный запрос не должен заводить нарушение вслепую."""
         db = self._db(0, failing=True)
         assert await db.count_recent_torrent_events("aaa-111") == 0
+
+
+class TestWebhookForwardCarriesDiff:
+    """Коллектор пересылает боту не сырое тело, а тело с вложенным diff.
+
+    Коллектор пишет новое состояние в общую базу до пересылки, поэтому бот
+    старое состояние уже не достанет — без diff уведомление выходило с
+    «Изменения не определены».
+    """
+
+    def _request(self, payload: dict) -> MagicMock:
+        req = MagicMock()
+        body = json.dumps(payload).encode("utf-8")
+        req.body = AsyncMock(return_value=body)
+        req.headers = {}
+        req.client.host = "127.0.0.1"
+        return req
+
+    @pytest.mark.asyncio
+    async def test_diff_attached_when_sync_has_changes(self, monkeypatch):
+        monkeypatch.delenv("WEBHOOK_SECRET", raising=False)
+        monkeypatch.setenv("INTERNAL_API_SECRET", "s3cr3t")
+        payload = {"event": "user.modified", "data": {"uuid": "u-1", "expireAt": "2026-09-12T21:51:00Z"}}
+        sync_result = {
+            "old_data": {"uuid": "u-1", "expireAt": "2026-09-07T21:51:00Z"},
+            "changes": ["• Срок действия: 07.09 → 12.09"],
+        }
+        sent = {}
+
+        class _Resp:
+            status_code = 200
+
+        class _Client:
+            def __init__(self, *a, **kw): pass
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def post(self, url, content=None, headers=None):
+                sent["url"] = url
+                sent["body"] = json.loads(content)
+                return _Resp()
+
+        with patch("shared.sync.sync_service") as sync_svc,              patch.object(collector.httpx, "AsyncClient", _Client):
+            sync_svc.handle_webhook_event = AsyncMock(return_value=sync_result)
+            resp = await collector.collector_webhook(self._request(payload))
+
+        assert resp.status_code == 200
+        assert sent["body"]["event"] == "user.modified"
+        assert sent["body"]["diff"]["old_data"] == sync_result["old_data"]
+        assert sent["body"]["diff"]["changes"] == sync_result["changes"]
+
+    @pytest.mark.asyncio
+    async def test_body_untouched_when_no_diff(self, monkeypatch):
+        monkeypatch.delenv("WEBHOOK_SECRET", raising=False)
+        monkeypatch.setenv("INTERNAL_API_SECRET", "s3cr3t")
+        payload = {"event": "user.created", "data": {"uuid": "u-2"}}
+        sent = {}
+
+        class _Resp:
+            status_code = 200
+
+        class _Client:
+            def __init__(self, *a, **kw): pass
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def post(self, url, content=None, headers=None):
+                sent["body"] = json.loads(content)
+                return _Resp()
+
+        with patch("shared.sync.sync_service") as sync_svc,              patch.object(collector.httpx, "AsyncClient", _Client):
+            sync_svc.handle_webhook_event = AsyncMock(
+                return_value={"old_data": None, "changes": [], "is_new": True}
+            )
+            await collector.collector_webhook(self._request(payload))
+
+        assert "diff" not in sent["body"]
+        assert sent["body"] == payload
