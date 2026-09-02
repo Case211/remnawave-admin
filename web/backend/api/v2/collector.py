@@ -546,7 +546,8 @@ async def receive_connections(
     if (now - _last_metrics_cleanup).total_seconds() > CLEANUP_INTERVAL_HOURS * 3600:
         _last_metrics_cleanup = now
         try:
-            deleted = await db_service.cleanup_old_metrics_snapshots(METRICS_RETENTION_DAYS)
+            m_days = int(config_service.get("metrics_retention_days", METRICS_RETENTION_DAYS) or METRICS_RETENTION_DAYS)
+            deleted = await db_service.cleanup_old_metrics_snapshots(m_days)
             if deleted > 0:
                 logger.info("Cleaned up %d old metrics snapshots", deleted)
         except Exception as e:

@@ -696,11 +696,24 @@ async def lifespan(app: FastAPI):
                             v_days = int(config_service.get("violation_retention_days", 90) or 90)
                             c_days = int(config_service.get("connections_retention_days", 30) or 30)
                             t_days = int(config_service.get("torrent_retention_days", 90) or 90)
+                            m_days = int(config_service.get("metrics_retention_days", 30) or 30)
                             v = await db_service.cleanup_old_violations(v_days)
                             c = await db_service.cleanup_old_connections(c_days)
                             t = await db_service.cleanup_old_torrent_events(t_days)
-                            if (v or 0) + (c or 0) + (t or 0) > 0:
-                                logger.info("Retention cleanup: %s violations, %s connections, %s torrent events", v, c, t)
+                            # Снапшоты метрик чистились только внутри обработчика
+                            # отчёта от ноды: пока ноды шлют данные — работает,
+                            # а на простое таблица росла без ограничения.
+                            m = await db_service.cleanup_old_metrics_snapshots(m_days)
+                            # Партиции подключений создаются заранее: если ни одна
+                            # нода не отчиталась, писать новый месяц было некуда и
+                            # строки уезжали в DEFAULT-партицию, которую уже не
+                            # отцепить одним движением.
+                            await db_service.ensure_connection_partitions(months_ahead=3)
+                            if (v or 0) + (c or 0) + (t or 0) + (m or 0) > 0:
+                                logger.info(
+                                    "Retention cleanup: %s violations, %s connections, %s torrent events, %s metrics",
+                                    v, c, t, m,
+                                )
                         except Exception as exc:
                             logger.warning("Retention cleanup failed: %s", exc)
                 _bg("table_maintenance", _maintenance_loop())
