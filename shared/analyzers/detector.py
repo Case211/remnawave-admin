@@ -95,6 +95,9 @@ class IntelligentViolationDetector:
         # Per-user SRH кэш: {user_uuid: (fetched_at, records)}
         self._srh_cache: Dict[str, tuple] = {}
         self._srh_cache_ttl_seconds = 300  # 5 минут
+        # Достройка профилей идёт в фоне; держим ссылку, чтобы за одним разом
+        # работала ровно одна задача, а не стопка недоделанных
+        self._baseline_bg_task: Optional[asyncio.Task] = None
     
     async def check_user(
         self,
@@ -1017,16 +1020,30 @@ class IntelligentViolationDetector:
                 results[uid] = None
 
         # Fire-and-forget: build baselines for users without one (non-blocking)
-        if needs_baseline_build:
-            async def _build_baselines_bg():
-                for uid in needs_baseline_build[:50]:
+        #
+        # Замыкание удерживает всё, что видит, поэтому в фон уходят только
+        # истории тех пятидесяти, кого реально достраиваем. Раньше задача
+        # захватывала histories_30d целиком — подключения за 30 дней по всему
+        # батчу, — и держала их до конца работы. Ссылка на задачу тоже
+        # сохраняется: без неё каждый цикл заводил новую поверх незавершённых,
+        # и на установке с десятками тысяч онлайна память росла до потолка за
+        # пару часов после рестарта.
+        if needs_baseline_build and (self._baseline_bg_task is None or self._baseline_bg_task.done()):
+            build_ids = list(needs_baseline_build[:50])
+            build_histories = {uid: histories_30d.get(uid) for uid in build_ids}
+
+            async def _build_baselines_bg(ids: List[str], histories: Dict[str, Any]):
+                for uid in ids:
                     try:
                         await self.profile_analyzer.build_baseline(
-                            uid, days=30, connection_history=histories_30d.get(uid)
+                            uid, days=30, connection_history=histories.get(uid)
                         )
                     except Exception:
                         pass
-            asyncio.create_task(_build_baselines_bg())
+
+            self._baseline_bg_task = asyncio.create_task(
+                _build_baselines_bg(build_ids, build_histories)
+            )
 
         return results
 
