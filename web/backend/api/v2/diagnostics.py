@@ -20,9 +20,12 @@ CPU и записи, размеры кэшей, глубина очереди.
 import asyncio
 import gc
 import os
+import random
 import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel
 
 import httpx
 from fastapi import APIRouter, Depends, Request
@@ -493,6 +496,163 @@ def _as_text(full: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# ── серия снимков ────────────────────────────────────────────────────────────
+#
+# Один снимок инцидент не показывает: утечка и всплеск видны только в динамике.
+# Серия снимает несколько минут со случайным шагом 1–15 с — случайным, чтобы
+# не попадать в такт периодическим задачам и не пропускать их пики. Состояние
+# живёт в памяти процесса: серия одна на процесс, рестарт её сбрасывает.
+
+_SERIES_MIN_INTERVAL = 1
+_SERIES_MAX_INTERVAL = 15
+_SERIES_DEFAULT_MINUTES = 3
+_SERIES_MAX_MINUTES = 15
+
+_series: Dict[str, Any] = {
+    "running": False,
+    "started_at": None,
+    "finished_at": None,
+    "duration_seconds": 0,
+    "snapshots": [],
+    "error": None,
+    "task": None,
+}
+
+
+class SeriesStart(BaseModel):
+    minutes: int = _SERIES_DEFAULT_MINUTES
+
+
+async def _run_series(duration_seconds: int) -> None:
+    """Снимать до истечения времени; каждый снимок — полный, с базой и коллектором."""
+    started = datetime.now(timezone.utc)
+    _series.update({
+        "running": True, "started_at": started.isoformat(), "finished_at": None,
+        "duration_seconds": duration_seconds, "snapshots": [], "error": None,
+    })
+    try:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + duration_seconds
+        while True:
+            _series["snapshots"].append(await _full_snapshot())
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(remaining, random.uniform(_SERIES_MIN_INTERVAL, _SERIES_MAX_INTERVAL)))
+    except asyncio.CancelledError:
+        _series["error"] = "остановлено"
+        raise
+    except Exception as e:  # один сбойный снимок не должен уронить серию целиком
+        _series["error"] = f"{type(e).__name__}: {e}"
+        logger.warning("Diagnostics series failed: %s", e)
+    finally:
+        _series["running"] = False
+        _series["finished_at"] = datetime.now(timezone.utc).isoformat()
+        _series["task"] = None
+
+
+def _series_public() -> Dict[str, Any]:
+    """Состояние серии без объекта задачи и без тяжёлых снимков — для опроса с фронта."""
+    snaps = _series["snapshots"]
+    elapsed = 0.0
+    if _series["started_at"]:
+        start = datetime.fromisoformat(_series["started_at"])
+        end = datetime.fromisoformat(_series["finished_at"]) if _series["finished_at"] else datetime.now(timezone.utc)
+        elapsed = (end - start).total_seconds()
+    return {
+        "running": _series["running"],
+        "started_at": _series["started_at"],
+        "finished_at": _series["finished_at"],
+        "duration_seconds": _series["duration_seconds"],
+        "elapsed_seconds": round(elapsed),
+        "snapshots_taken": len(snaps),
+        "error": _series["error"],
+        "has_result": bool(snaps) and not _series["running"],
+    }
+
+
+def _series_result() -> Dict[str, Any]:
+    """Готовый результат серии: все снимки плюс сводка «что выросло»."""
+    snaps = _series["snapshots"]
+    summary: Dict[str, Any] = {}
+    if len(snaps) >= 2:
+        first, last = snaps[0], snaps[-1]
+        growth: Dict[str, Any] = {}
+        for p_last in last["processes"]:
+            mode = p_last.get("app_mode")
+            p_first = next((p for p in first["processes"] if p.get("app_mode") == mode), None)
+            if not p_first:
+                continue
+            caches_first = {c["name"]: c for c in p_first.get("caches", [])}
+            cache_growth = []
+            for c in p_last.get("caches", []):
+                before = caches_first.get(c["name"])
+                if before is None:
+                    continue
+                d_items = c["items"] - before["items"]
+                d_bytes = c["bytes"] - before["bytes"]
+                if d_items or d_bytes:
+                    cache_growth.append({"name": c["name"], "items_delta": d_items, "bytes_delta": d_bytes})
+            cache_growth.sort(key=lambda g: g["bytes_delta"], reverse=True)
+            cpu_f, cpu_l = p_first.get("cpu_seconds") or {}, p_last.get("cpu_seconds") or {}
+            growth[mode] = {
+                "rss_delta_bytes": (p_last.get("rss_bytes") or 0) - (p_first.get("rss_bytes") or 0),
+                "cpu_user_delta": round((cpu_l.get("user") or 0) - (cpu_f.get("user") or 0), 2),
+                "cpu_system_delta": round((cpu_l.get("system") or 0) - (cpu_f.get("system") or 0), 2),
+                "asyncio_tasks_delta": (p_last.get("asyncio_tasks") or 0) - (p_first.get("asyncio_tasks") or 0),
+                "caches_grown": cache_growth[:10],
+            }
+        db_f, db_l = first.get("database") or {}, last.get("database") or {}
+        wal_f, wal_l = db_f.get("wal") or {}, db_l.get("wal") or {}
+        summary = {
+            "span_seconds": round((datetime.fromisoformat(last["taken_at"])
+                                   - datetime.fromisoformat(first["taken_at"])).total_seconds()),
+            "processes": growth,
+            "database": {
+                "wal_bytes_delta": ((wal_l.get("wal_bytes") or 0) - (wal_f.get("wal_bytes") or 0))
+                if wal_f and wal_l else None,
+                "active_connections_min": min(((s.get("database") or {}).get("active_connections") or 0) for s in snaps),
+                "active_connections_max": max(((s.get("database") or {}).get("active_connections") or 0) for s in snaps),
+                "longest_query_seconds_max": max(
+                    (((s.get("database") or {}).get("activity") or {}).get("longest_active_seconds") or 0) for s in snaps
+                ),
+            },
+            "host": {
+                "load_avg_max": max(((s.get("host") or {}).get("load_avg") or [0])[0] for s in snaps),
+                "mem_available_min_bytes": min(((s.get("host") or {}).get("mem_available_bytes") or 0) for s in snaps),
+            },
+        }
+    return {**_series_public(), "summary": summary, "snapshots": snaps}
+
+
+def _series_as_text(result: Dict[str, Any]) -> str:
+    lines = [
+        f"Серия снимков: {result.get('started_at')} → {result.get('finished_at')}",
+        f"Снимков: {result.get('snapshots_taken')}, длительность {result.get('elapsed_seconds')} с",
+    ]
+    if result.get("error"):
+        lines.append(f"⚠ {result['error']}")
+    sm = result.get("summary") or {}
+    if sm:
+        lines += ["", "=== Что изменилось за серию"]
+        for mode, g in (sm.get("processes") or {}).items():
+            lines.append(f"[{mode}] RSS {_human(g['rss_delta_bytes'])}, CPU user +{g['cpu_user_delta']} с / "
+                         f"system +{g['cpu_system_delta']} с, задач asyncio {g['asyncio_tasks_delta']:+d}")
+            for c in g.get("caches_grown", [])[:5]:
+                lines.append(f"     {c['name']}: {c['items_delta']:+d} шт, {_human(c['bytes_delta'])}")
+        db = sm.get("database") or {}
+        lines.append(f"База: WAL {_human(db.get('wal_bytes_delta'))}, онлайн {db.get('active_connections_min')}–"
+                     f"{db.get('active_connections_max')}, самый долгий запрос {db.get('longest_query_seconds_max')} с")
+        h = sm.get("host") or {}
+        lines.append(f"Хост: load max {h.get('load_avg_max')}, памяти доступно min {_human(h.get('mem_available_min_bytes'))}")
+    snaps = result.get("snapshots") or []
+    if snaps:
+        lines += ["", "=== Первый снимок", _as_text(snaps[0])]
+        if len(snaps) > 1:
+            lines += ["=== Последний снимок", _as_text(snaps[-1])]
+    return "\n".join(lines)
+
+
 # ── роуты ────────────────────────────────────────────────────────────────────
 
 @router.get("/memory")
@@ -520,6 +680,60 @@ async def download_memory_snapshot(
     return JSONResponse(
         full,
         headers={"Content-Disposition": f'attachment; filename="diagnostics-{stamp}.json"'},
+    )
+
+
+@router.post("/series/start")
+async def start_series(
+    body: SeriesStart,
+    admin: AdminUser = Depends(require_permission("settings", "view")),
+):
+    """Запустить серию снимков. Пока идёт — повторный запуск отклоняется."""
+    if _series["running"]:
+        return JSONResponse(status_code=409, content={"detail": "series already running", **_series_public()})
+    minutes = max(1, min(int(body.minutes or _SERIES_DEFAULT_MINUTES), _SERIES_MAX_MINUTES))
+    _series["task"] = asyncio.create_task(_run_series(minutes * 60))
+    logger.info("Diagnostics series started by admin %s for %d min", admin.username, minutes)
+    return _series_public()
+
+
+@router.get("/series/status")
+async def series_status(
+    admin: AdminUser = Depends(require_permission("settings", "view")),
+):
+    return _series_public()
+
+
+@router.post("/series/stop")
+async def stop_series(
+    admin: AdminUser = Depends(require_permission("settings", "view")),
+):
+    """Остановить досрочно — уже снятое сохраняется и доступно к скачиванию."""
+    task = _series.get("task")
+    if task and not task.done():
+        task.cancel()
+    return _series_public()
+
+
+@router.get("/series/download")
+async def download_series(
+    fmt: str = "json",
+    admin: AdminUser = Depends(require_permission("settings", "view")),
+):
+    """Результат серии файлом: json со всеми снимками и сводкой, txt — сводка и крайние снимки."""
+    if not _series["snapshots"]:
+        return JSONResponse(status_code=404, content={"detail": "no series result"})
+    result = _series_result()
+    stamp = (_series["started_at"] or datetime.now(timezone.utc).isoformat())[:19].replace(":", "").replace("-", "")
+    logger.info("Diagnostics series downloaded by admin %s", admin.username)
+    if fmt == "txt":
+        return PlainTextResponse(
+            _series_as_text(result),
+            headers={"Content-Disposition": f'attachment; filename="diagnostics-series-{stamp}.txt"'},
+        )
+    return JSONResponse(
+        result,
+        headers={"Content-Disposition": f'attachment; filename="diagnostics-series-{stamp}.json"'},
     )
 
 

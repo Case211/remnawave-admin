@@ -4261,16 +4261,16 @@
     },
     "diagnostics": {
       "title": "Diagnostics snapshot",
-      "description": "Host, database, online, processes and their caches. The snapshot only reads counters. For an investigation take two or three snapshots apart and compare what grows.",
-      "take": "Take snapshot",
+      "description": "A few minutes of snapshots at random intervals: host, database, online, both processes and their caches. Read-only. The file holds a “what grew” summary and every snapshot.",
+      "take": "Collect data (3 min)",
       "rss": "Process memory",
       "tasks": "Asyncio tasks",
       "cache": "Cache",
       "items": "Entries",
       "size": "Size",
-      "downloadJson": "Download JSON",
-      "downloadTxt": "Download TXT",
-      "downloadHint": "JSON to compare two snapshots, TXT to read and forward as is.",
+      "downloadJson": "Collect & download JSON",
+      "downloadTxt": "Collect & download TXT",
+      "downloadHint": "Download buttons collect a series first when no result is ready. JSON has every snapshot and the summary, TXT has the summary and the first/last snapshots.",
       "host": "Host",
       "hostMem": "Memory available",
       "online": "Online",
@@ -4285,7 +4285,11 @@
       "peak": "peak",
       "queue": "Violation queue",
       "lastDrain": "last drain",
-      "tasksDropped": "tasks dropped"
+      "tasksDropped": "tasks dropped",
+      "collecting": "Collecting data, please wait…",
+      "stop": "Stop",
+      "progress": "Snapshots: {{taken}} · {{elapsed}} s of {{total}}",
+      "lastSeries": "Last run: {{taken}} snapshots over {{elapsed}} s — files ready to download"
     }
   },
   "notifications": {

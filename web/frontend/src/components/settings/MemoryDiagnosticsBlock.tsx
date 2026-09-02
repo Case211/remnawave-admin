@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import client from '../../api/client'
@@ -53,6 +53,17 @@ interface Snapshot {
   processes: ProcessSnapshot[]
 }
 
+interface SeriesStatus {
+  running: boolean
+  started_at: string | null
+  finished_at: string | null
+  duration_seconds: number
+  elapsed_seconds: number
+  snapshots_taken: number
+  error: string | null
+  has_result: boolean
+}
+
 function human(bytes: number | null): string {
   if (bytes === null || bytes === undefined) return '—'
   let value = bytes
@@ -75,40 +86,105 @@ function human(bytes: number | null): string {
 export function MemoryDiagnosticsBlock() {
   const { t } = useTranslation()
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [downloading, setDownloading] = useState(false)
+  const [series, setSeries] = useState<SeriesStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  // Что скачать по окончании сбора, если сбор запустили кнопкой скачивания
+  const pendingDownload = useRef<'json' | 'txt' | null>(null)
+  const SERIES_MINUTES = 3
 
-  const take = async () => {
-    setLoading(true)
+  const fetchStatus = async (): Promise<SeriesStatus | null> => {
     try {
-      const { data } = await client.get<Snapshot>('/diagnostics/memory')
-      setSnapshot(data)
+      const { data } = await client.get<SeriesStatus>('/diagnostics/series/status')
+      setSeries(data)
+      return data
+    } catch {
+      return null
+    }
+  }
+
+  // При открытии вкладки подхватываем уже идущую серию — сбор живёт на сервере
+  useEffect(() => {
+    fetchStatus()
+  }, [])
+
+  // Пока сбор идёт — опрашиваем каждые 3 с; по окончании показываем итог
+  useEffect(() => {
+    if (!series?.running) return
+    const timer = setInterval(async () => {
+      const st = await fetchStatus()
+      if (st && !st.running) {
+        clearInterval(timer)
+        await showResult()
+        if (pendingDownload.current) {
+          const fmt = pendingDownload.current
+          pendingDownload.current = null
+          await download(fmt)
+        }
+      }
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [series?.running])
+
+  const showResult = async () => {
+    try {
+      const { data } = await client.get('/diagnostics/series/download?fmt=json')
+      const snaps: Snapshot[] = data.snapshots || []
+      if (snaps.length) setSnapshot(snaps[snaps.length - 1])
+    } catch {
+      // итог не критичен: файл всё равно можно скачать
+    }
+  }
+
+  const startSeries = async (thenDownload: 'json' | 'txt' | null) => {
+    setBusy(true)
+    try {
+      const { data } = await client.post<SeriesStatus>('/diagnostics/series/start', { minutes: SERIES_MINUTES })
+      pendingDownload.current = thenDownload
+      setSeries(data)
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        // серия уже идёт — просто подхватываем её
+        pendingDownload.current = thenDownload
+        setSeries(err.response.data)
+      } else {
+        toast.error(err.response?.data?.detail || err.message)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const stopSeries = async () => {
+    try {
+      const { data } = await client.post<SeriesStatus>('/diagnostics/series/stop')
+      setSeries(data)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || err.message)
-    } finally {
-      setLoading(false)
     }
   }
 
   const download = async (fmt: 'json' | 'txt') => {
-    setDownloading(true)
+    setBusy(true)
     try {
-      const res = await client.get(`/diagnostics/memory/download?fmt=${fmt}`, {
-        responseType: 'blob',
-      })
+      const res = await client.get(`/diagnostics/series/download?fmt=${fmt}`, { responseType: 'blob' })
       const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
       const url = URL.createObjectURL(new Blob([res.data]))
       const link = document.createElement('a')
       link.href = url
-      link.download = `diagnostics-${stamp}.${fmt}`
+      link.download = `diagnostics-series-${stamp}.${fmt}`
       link.click()
       URL.revokeObjectURL(url)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || err.message)
     } finally {
-      setDownloading(false)
+      setBusy(false)
     }
   }
+
+  const running = !!series?.running
+  const progress = series && series.duration_seconds
+    ? Math.min(100, Math.round((series.elapsed_seconds / series.duration_seconds) * 100))
+    : 0
 
   return (
     <Card>
@@ -117,17 +193,50 @@ export function MemoryDiagnosticsBlock() {
         <CardDescription>{t('settings.diagnostics.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={take} disabled={loading}>
-            {loading ? t('common.loading') : t('settings.diagnostics.take')}
-          </Button>
-          <Button variant="secondary" onClick={() => download('json')} disabled={downloading}>
-            {t('settings.diagnostics.downloadJson')}
-          </Button>
-          <Button variant="secondary" onClick={() => download('txt')} disabled={downloading}>
-            {t('settings.diagnostics.downloadTxt')}
-          </Button>
-        </div>
+        {running ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-2 text-sm">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                {t('settings.diagnostics.collecting')}
+              </span>
+              <Button variant="ghost" size="sm" onClick={stopSeries}>
+                {t('settings.diagnostics.stop')}
+              </Button>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+              <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t('settings.diagnostics.progress', {
+                taken: series?.snapshots_taken ?? 0,
+                elapsed: series?.elapsed_seconds ?? 0,
+                total: series?.duration_seconds ?? 0,
+              })}
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => startSeries(null)} disabled={busy}>
+              {t('settings.diagnostics.take')}
+            </Button>
+            <Button variant="secondary" onClick={() => (series?.has_result ? download('json') : startSeries('json'))} disabled={busy}>
+              {t('settings.diagnostics.downloadJson')}
+            </Button>
+            <Button variant="secondary" onClick={() => (series?.has_result ? download('txt') : startSeries('txt'))} disabled={busy}>
+              {t('settings.diagnostics.downloadTxt')}
+            </Button>
+          </div>
+        )}
+        {!running && series?.has_result && (
+          <p className="text-xs text-muted-foreground">
+            {t('settings.diagnostics.lastSeries', {
+              taken: series.snapshots_taken,
+              elapsed: series.elapsed_seconds,
+            })}
+            {series.error ? ` · ${series.error}` : ''}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground">{t('settings.diagnostics.downloadHint')}</p>
 
         {snapshot && (
