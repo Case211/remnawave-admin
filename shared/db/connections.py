@@ -10,6 +10,9 @@ from shared.logger import logger
 from shared.db_schema import USER_CONNECTIONS_TABLE, VIOLATIONS_TABLE, USERS_TABLE, NODES_TABLE
 from shared.db_query import select_sql, insert_sql, update_sql
 
+# Запас на странице под HOT-апдейты активных соединений (миграция 0105)
+CONNECTIONS_FILLFACTOR = 90
+
 
 class ConnectionsMixin:
     # ==================== User Connections (for future device tracking) ====================
@@ -646,10 +649,14 @@ class ConnectionsMixin:
                         "SELECT 1 FROM pg_class WHERE relname = $1", part_name
                     )
                     if not exists:
+                        # fillfactor: активные соединения переписываются каждый
+                        # цикл синка, без запаса на странице ни один такой апдейт
+                        # не HOT и дописывает все индексы (миграция 0105)
                         await conn.execute(f"""
                             CREATE TABLE {part_name}
                             PARTITION OF {USER_CONNECTIONS_TABLE}
                             FOR VALUES FROM ('{from_date}') TO ('{to_date}')
+                            WITH (fillfactor = {CONNECTIONS_FILLFACTOR})
                         """)
                         created += 1
                         logger.info("Created partition %s (%s to %s)", part_name, from_date, to_date)

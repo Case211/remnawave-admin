@@ -174,10 +174,10 @@ async def _database() -> Dict[str, Any]:
 
             # Кто пишет: топ таблиц по апдейтам/вставкам за аптайм базы
             rows = await conn.fetch(
-                """SELECT relname, n_live_tup, n_dead_tup, n_tup_ins, n_tup_upd, n_tup_hot_upd,
+                """SELECT s.relname, n_live_tup, n_dead_tup, n_tup_ins, n_tup_upd, n_tup_hot_upd,
                           n_tup_del, pg_total_relation_size(relid) AS total_bytes,
-                          last_autovacuum
-                     FROM pg_stat_user_tables
+                          last_autovacuum, c.reloptions
+                     FROM pg_stat_user_tables s JOIN pg_class c ON c.oid = s.relid
                     ORDER BY n_tup_upd + n_tup_ins DESC LIMIT 12"""
             )
             out["top_tables"] = [
@@ -186,7 +186,21 @@ async def _database() -> Dict[str, Any]:
                     "ins": r["n_tup_ins"], "upd": r["n_tup_upd"], "hot_upd": r["n_tup_hot_upd"],
                     "del": r["n_tup_del"], "bytes": r["total_bytes"],
                     "last_autovacuum": r["last_autovacuum"].isoformat() if r["last_autovacuum"] else None,
+                    "options": list(r["reloptions"] or []),
                 }
+                for r in rows
+            ]
+
+            # Индексы: размер и сколько раз их брал планировщик — лишние
+            # снимаются по цифрам, а не по догадкам
+            rows = await conn.fetch(
+                """SELECT relname, indexrelname, idx_scan,
+                          pg_relation_size(indexrelid) AS bytes
+                     FROM pg_stat_user_indexes
+                    ORDER BY pg_relation_size(indexrelid) DESC LIMIT 15"""
+            )
+            out["top_indexes"] = [
+                {"table": r["relname"], "index": r["indexrelname"], "scans": r["idx_scan"], "bytes": r["bytes"]}
                 for r in rows
             ]
 
@@ -496,8 +510,13 @@ def _as_text(full: Dict[str, Any]) -> str:
         lines.append("Таблицы по записи (live/dead, ins/upd/hot/del):")
         for t in d.get("top_tables", [])[:8]:
             hot = f"{100 * t['hot_upd'] / t['upd']:.0f}%" if t["upd"] else "—"
+            opts = f" [{', '.join(t['options'])}]" if t.get("options") else ""
             lines.append(f"   {t['table']}: {_human(t['bytes'])}, {t['live']}/{t['dead']}, "
-                         f"{t['ins']}/{t['upd']}/{hot}/{t['del']}")
+                         f"{t['ins']}/{t['upd']}/{hot}/{t['del']}{opts}")
+        if d.get("top_indexes"):
+            lines.append("Индексы по размеру (сканов за аптайм):")
+            for i in d["top_indexes"][:10]:
+                lines.append(f"   {i['index']} на {i['table']}: {_human(i['bytes'])}, {i['scans']}")
     lines.append("")
 
     if full.get("collector_error"):
