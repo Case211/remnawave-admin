@@ -1721,14 +1721,21 @@ class NetworkMixin:
                 return False
 
     async def bulk_add_to_user_blacklist(self, entries: list[tuple[int, str, str]]) -> int:
-        """Bulk upsert entries: [(telegram_id, reason, source), ...]. Returns count."""
+        """Bulk upsert entries: [(telegram_id, reason, source), ...]. Returns count.
+
+        Обновление только при реальном изменении: синк внешних списков идёт
+        каждые несколько часов и без условия переписывал каждую строку целиком,
+        давая сотни тысяч пустых апдейтов на таблице в тысячу записей.
+        """
         if not entries:
             return 0
         async with self.acquire() as conn:
-            result = await conn.executemany(
+            await conn.executemany(
                 f"""INSERT INTO {USER_BLACKLIST_TABLE} (telegram_id, reason, source)
                    VALUES ($1, $2, $3)
-                   ON CONFLICT (telegram_id) DO UPDATE SET reason = $2, source = $3""",
+                   ON CONFLICT (telegram_id) DO UPDATE SET reason = $2, source = $3
+                   WHERE {USER_BLACKLIST_TABLE}.reason IS DISTINCT FROM EXCLUDED.reason
+                      OR {USER_BLACKLIST_TABLE}.source IS DISTINCT FROM EXCLUDED.source""",
                 entries,
             )
             return len(entries)
