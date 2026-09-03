@@ -38,7 +38,7 @@ class UserAgentAnalyzer:
         r"^ShadowRocket/", r"^FoXray/", r"^Loon/", r"^Wings\s?X/",
         # Android
         r"^v2rayNG/", r"^v2raytun/", r"^NekoBox/", r"^Exclave/", r"^Matsuri/", r"^SagerNet/",
-        r"^Hiddify/", r"^HiddifyNext/",
+        r"^Hiddify/", r"^HiddifyNext/", r"^Nimbo/", r"^INCY/",
         # Clash/Mihomo family (cross-platform)
         r"^FlClash(?:\s?X)?/", r"^ClashX(?:\s?Pro)?/",
         r"^Clash[-\s]?(?:Verge)?(?:[-\s]?Rev)?/", r"^ClashMeta(?:ForAndroid)?/",
