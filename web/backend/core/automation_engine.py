@@ -913,6 +913,7 @@ class AutomationEngine:
                 channels=["telegram", "in_app"],
                 topic_type=topic_type,
                 telegram_body=message,
+                link="/automations",
             )
             return {"action": "notify", "channel": "telegram", "sent": True}
 

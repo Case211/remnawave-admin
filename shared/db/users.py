@@ -907,6 +907,19 @@ class UsersMixin:
                             external_squad_uuid = EXCLUDED.external_squad_uuid,
                             tag = EXCLUDED.tag,
                             created_by_admin_id = COALESCE(EXCLUDED.created_by_admin_id, {USERS_TABLE}.created_by_admin_id)
+                        WHERE {USERS_TABLE}.status IS DISTINCT FROM EXCLUDED.status
+                           OR {USERS_TABLE}.expire_at IS DISTINCT FROM EXCLUDED.expire_at
+                           OR {USERS_TABLE}.used_traffic_bytes IS DISTINCT FROM EXCLUDED.used_traffic_bytes
+                           OR {USERS_TABLE}.traffic_limit_bytes IS DISTINCT FROM EXCLUDED.traffic_limit_bytes
+                           OR {USERS_TABLE}.username IS DISTINCT FROM EXCLUDED.username
+                           OR {USERS_TABLE}.email IS DISTINCT FROM EXCLUDED.email
+                           OR {USERS_TABLE}.telegram_id IS DISTINCT FROM EXCLUDED.telegram_id
+                           OR {USERS_TABLE}.short_uuid IS DISTINCT FROM EXCLUDED.short_uuid
+                           OR {USERS_TABLE}.subscription_uuid IS DISTINCT FROM EXCLUDED.subscription_uuid
+                           OR {USERS_TABLE}.hwid_device_limit IS DISTINCT FROM EXCLUDED.hwid_device_limit
+                           OR {USERS_TABLE}.description IS DISTINCT FROM EXCLUDED.description
+                           OR {USERS_TABLE}.external_squad_uuid IS DISTINCT FROM EXCLUDED.external_squad_uuid
+                           OR {USERS_TABLE}.tag IS DISTINCT FROM EXCLUDED.tag
                         """,
                         [r["uuid"] for r in rows], [str(r["id"]) if r["id"] is not None else None for r in rows],
                         [r["short_uuid"] for r in rows], [r["username"] for r in rows],
@@ -961,6 +974,19 @@ class UsersMixin:
                             external_squad_uuid = EXCLUDED.external_squad_uuid,
                             tag = EXCLUDED.tag,
                             created_by_admin_id = COALESCE(EXCLUDED.created_by_admin_id, {USERS_TABLE}.created_by_admin_id)
+                        WHERE {USERS_TABLE}.status IS DISTINCT FROM EXCLUDED.status
+                           OR {USERS_TABLE}.expire_at IS DISTINCT FROM EXCLUDED.expire_at
+                           OR {USERS_TABLE}.used_traffic_bytes IS DISTINCT FROM EXCLUDED.used_traffic_bytes
+                           OR {USERS_TABLE}.traffic_limit_bytes IS DISTINCT FROM EXCLUDED.traffic_limit_bytes
+                           OR {USERS_TABLE}.username IS DISTINCT FROM EXCLUDED.username
+                           OR {USERS_TABLE}.email IS DISTINCT FROM EXCLUDED.email
+                           OR {USERS_TABLE}.telegram_id IS DISTINCT FROM EXCLUDED.telegram_id
+                           OR {USERS_TABLE}.short_uuid IS DISTINCT FROM EXCLUDED.short_uuid
+                           OR {USERS_TABLE}.subscription_uuid IS DISTINCT FROM EXCLUDED.subscription_uuid
+                           OR {USERS_TABLE}.hwid_device_limit IS DISTINCT FROM EXCLUDED.hwid_device_limit
+                           OR {USERS_TABLE}.description IS DISTINCT FROM EXCLUDED.description
+                           OR {USERS_TABLE}.external_squad_uuid IS DISTINCT FROM EXCLUDED.external_squad_uuid
+                           OR {USERS_TABLE}.tag IS DISTINCT FROM EXCLUDED.tag
                         """,
                         [int(r["id"]) for r in rows],
                         [r["short_uuid"] for r in rows], [r["username"] for r in rows],

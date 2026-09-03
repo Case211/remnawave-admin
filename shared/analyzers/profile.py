@@ -42,7 +42,22 @@ class UserProfileAnalyzer:
         self.geoip = geoip_service
         self._baseline_cache: Dict[str, tuple] = {}  # {user_uuid: (baseline_dict, timestamp)}
         self._baseline_lock = asyncio.Lock()  # single lock for baseline builds (prevents stampede)
-    
+
+    def _cache_baseline(self, user_uuid: str, baseline: Dict[str, Any]) -> None:
+        """Положить профиль в память, вытеснив пятую часть самых старых при переполнении.
+
+        Единая точка записи: раньше вытеснение стояло только на ветке
+        build_baseline, а профили, поднятые из БД, оседали в словаре без
+        всякого потолка. На установке с десятками тысяч онлайна кэш рос на
+        каждого проверенного пользователя и не отдавал память обратно.
+        """
+        if len(self._baseline_cache) >= self._BASELINE_CACHE_MAX_SIZE:
+            sorted_keys = sorted(self._baseline_cache, key=lambda k: self._baseline_cache[k][1])
+            for k in sorted_keys[:len(sorted_keys) // 5]:
+                self._baseline_cache.pop(k, None)
+        self._baseline_cache[user_uuid] = (baseline, time.time())
+
+
     async def build_baseline(self, user_uuid: str, days: int = 30, connection_history: Optional[List] = None) -> Dict[str, Any]:
         """
         Строит baseline профиль пользователя на основе истории.
@@ -178,11 +193,7 @@ class UserProfileAnalyzer:
             }
 
             # Cache the baseline (in-memory + DB)
-            if len(self._baseline_cache) >= self._BASELINE_CACHE_MAX_SIZE:
-                sorted_keys = sorted(self._baseline_cache, key=lambda k: self._baseline_cache[k][1])
-                for k in sorted_keys[:len(sorted_keys) // 5]:
-                    self._baseline_cache.pop(k, None)
-            self._baseline_cache[user_uuid] = (result, time.time())
+            self._cache_baseline(user_uuid, result)
 
             # Persist to DB (fire-and-forget, non-blocking)
             try:
@@ -242,7 +253,7 @@ class UserProfileAnalyzer:
                 db_baseline = await self.db.get_user_baseline(user_uuid, max_age_seconds=self._BASELINE_CACHE_TTL)
                 if db_baseline and db_baseline.get('data_points', 0) > 0:
                     baseline = db_baseline
-                    self._baseline_cache[user_uuid] = (baseline, time.time())
+                    self._cache_baseline(user_uuid, baseline)
 
             if baseline is None and connection_history_30d:
                 baseline = await self.build_baseline(user_uuid, days=30, connection_history=connection_history_30d)

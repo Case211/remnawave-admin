@@ -156,3 +156,33 @@ class TestFullSyncStaleCleanup:
             total = await svc.sync_all_hwid_devices()
         assert total == 0
         db.delete_hwid_devices_except_users.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_user_devices_split_across_pages_synced_as_one_set(self):
+        """Устройства одного юзера на двух страницах уходят в синк одним набором.
+
+        Раньше синк шёл по каждой странице отдельно: порция со страницы 1
+        помечала отвязанными устройства со страницы 2, и наоборот. На живой
+        установке так «отвязалось» 105 устройств за один проход.
+        """
+        svc = SyncService()
+        db = _db_mock()
+        db.sync_user_hwid_devices = AsyncMock(return_value=1)
+        db.delete_hwid_devices_except_users = AsyncMock(return_value=0)
+        api = AsyncMock()
+        # page_size в коде = 500: первая страница полная, вторая — хвост
+        page1 = [{"userUuid": "A", "hwid": f"A{i}"} for i in range(499)] + [{"userUuid": "B", "hwid": "B1"}]
+        page2 = [{"userUuid": "B", "hwid": "B2"}, {"userUuid": "B", "hwid": "B3"}]
+        api.get_all_hwid_devices = AsyncMock(side_effect=[
+            {"response": {"devices": page1, "total": 502}},
+            {"response": {"devices": page2, "total": 502}},
+        ])
+        with patch("shared.sync.db_service", db), patch("shared.sync.api_client", api):
+            await svc.sync_all_hwid_devices()
+
+        # по каждому юзеру ровно один вызов — с полным набором его устройств
+        calls = {c.args[0]: c.args[1] for c in db.sync_user_hwid_devices.await_args_list}
+        assert set(calls) == {"A", "B"}
+        assert db.sync_user_hwid_devices.await_count == 2
+        assert {d["hwid"] for d in calls["B"]} == {"B1", "B2", "B3"}
+        assert len(calls["A"]) == 499

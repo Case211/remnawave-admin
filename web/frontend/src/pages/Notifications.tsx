@@ -8,6 +8,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -202,6 +203,7 @@ function AlertTemplatesTab({ canCreate }: { canCreate: boolean }) {
 function NotificationsTab() {
   const { t } = useTranslation()
   const { formatDate } = useFormatters()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [filterRead, setFilterRead] = useState<string>('all')
@@ -313,8 +315,10 @@ function NotificationsTab() {
               {items.map((n) => (
                 <div
                   key={n.id}
+                  onClick={() => { if (n.link) navigate(n.link) }}
                   className={cn(
                     'flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-l-2 hover:bg-[var(--glass-bg-hover)]/30 transition-colors',
+                    n.link && 'cursor-pointer',
                     n.is_read ? 'border-l-transparent opacity-60' : `border-l-2 ${n.severity === 'critical' ? 'border-l-red-500' : n.severity === 'warning' ? 'border-l-yellow-500' : 'border-l-cyan-500'}`,
                   )}
                 >
@@ -333,7 +337,7 @@ function NotificationsTab() {
                     <p className="text-[10px] text-dark-400 mt-1">{n.created_at ? formatDate(n.created_at) : '\u2014'}</p>
                   </div>
                   <button
-                    onClick={() => deleteOne.mutate(n.id)}
+                    onClick={(e) => { e.stopPropagation(); deleteOne.mutate(n.id) }}
                     className="text-dark-400 hover:text-red-400 transition-colors p-1"
                     aria-label={t('common.delete')}
                   >

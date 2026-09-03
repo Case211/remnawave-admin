@@ -65,10 +65,10 @@ services:
         -c log_min_messages=warning
         -c log_min_duration_statement=1000
         -c "log_line_prefix=%t [%p] "
-        -c shared_buffers=256MB
-        -c work_mem=8MB
+        -c shared_buffers=${ADMIN_DB_SHARED_BUFFERS:-256MB}
+        -c work_mem=${ADMIN_DB_WORK_MEM:-8MB}
         -c maintenance_work_mem=128MB
-        -c effective_cache_size=1GB
+        -c effective_cache_size=${ADMIN_DB_EFFECTIVE_CACHE_SIZE:-1GB}
         -c wal_buffers=16MB
         -c checkpoint_completion_target=0.9
         -c autovacuum_vacuum_scale_factor=0.05

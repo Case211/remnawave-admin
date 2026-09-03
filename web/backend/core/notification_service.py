@@ -1,7 +1,9 @@
 """Notification delivery service — sends via in-app, Telegram, Webhook, Email."""
 import asyncio
+import html
 import json
 import logging
+import re
 import smtplib
 import ssl
 from datetime import datetime
@@ -27,6 +29,26 @@ from shared.notification_config import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Тег телеграм-разметки: буква сразу после «<», чтобы «score < 50» не считалось тегом
+_TAG_RE = re.compile(r"</?[a-zA-Z][^<>]*>")
+
+
+def _plain_text(markup: str) -> str:
+    """Телеграм-HTML → текст: карточке, пушу и WebSocket разметка не нужна."""
+    return html.unescape(_TAG_RE.sub("", markup))
+
+
+def _split_body(body: Optional[str], telegram_body: Optional[str]) -> tuple:
+    """Развести текст для карточки и разметку для Telegram.
+
+    Источники часто отдают один HTML-текст на всё; раньше он целиком ложился
+    в базу, и в колокольчике торчали «<b>Нода:</b>». Если разметка пришла без
+    отдельного telegram_body, она уходит в Telegram, а в карточку — текст.
+    """
+    if telegram_body is None and body and _TAG_RE.search(body):
+        return _plain_text(body), body
+    return body, telegram_body
 
 # Предупреждаем об отсутствии глобального Telegram-чата один раз за процесс (иначе спам в debug).
 _warned_no_global_chat = False
@@ -416,6 +438,7 @@ async def create_notification(
     Returns the notification ID.
     """
     channels = channels or ["in_app"]
+    body, telegram_body = _split_body(body, telegram_body)
     notification_id = None
 
     try:

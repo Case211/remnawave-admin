@@ -1408,6 +1408,8 @@ class SyncService:
         start = 0
         page_size = 500
         users_seen: set = set()
+        # Накопитель по всем страницам: {панельный ключ юзера: [устройства]}
+        devices_by_key: Dict[Any, List[Dict]] = {}
 
         try:
             while True:
@@ -1432,33 +1434,37 @@ class SyncService:
                 if not devices:
                     break
 
-                # Группируем устройства по панельному ключу (uuid в v2, числовой id в v3)
-                devices_by_key: Dict[Any, List[Dict]] = {}
+                # Только копим: синк по пользователю идёт ниже, когда собраны
+                # все страницы. Устройства одного пользователя панель отдаёт
+                # не подряд, и на границе страниц они расходятся по двум
+                # порциям. Синк с порцией N помечал отвязанными устройства из
+                # порции N+1, а тот — из N. На живой установке (841 устройство,
+                # страницы по 500) один проход разом «отвязал» 105 устройств у
+                # 63 пользователей, и карточка показывала одно устройство до
+                # ручного обновления.
                 for device in devices:
                     user_key = device.get("userUuid") or device.get("userId")
                     if user_key:
-                        if user_key not in devices_by_key:
-                            devices_by_key[user_key] = []
-                        devices_by_key[user_key].append(device)
-
-                # Синхронизируем устройства по пользователям
-                for user_key, user_devices in devices_by_key.items():
-                    # В БД ключ — локальный uuid; v3 присылает числовой id.
-                    user_uuid = await self._resolve_local_user_uuid(user_key)
-                    if not user_uuid:
-                        logger.debug("Skipping HWID sync: no local user for panel key %s", user_key)
-                        continue
-                    users_seen.add(user_uuid)
-                    try:
-                        synced = await db_service.sync_user_hwid_devices(user_uuid, user_devices)
-                        total_synced += synced
-                    except Exception as e:
-                        logger.warning("Failed to sync HWID devices for user %s: %s", user_uuid, e)
+                        devices_by_key.setdefault(user_key, []).append(device)
 
                 # Проверяем, достигли ли конца
                 start += page_size
                 if start >= total or len(devices) < page_size:
                     break
+
+            # Синхронизируем устройства по пользователям — теперь полными наборами
+            for user_key, user_devices in devices_by_key.items():
+                # В БД ключ — локальный uuid; v3 присылает числовой id.
+                user_uuid = await self._resolve_local_user_uuid(user_key)
+                if not user_uuid:
+                    logger.debug("Skipping HWID sync: no local user for panel key %s", user_key)
+                    continue
+                users_seen.add(user_uuid)
+                try:
+                    synced = await db_service.sync_user_hwid_devices(user_uuid, user_devices)
+                    total_synced += synced
+                except Exception as e:
+                    logger.warning("Failed to sync HWID devices for user %s: %s", user_uuid, e)
 
             # Юзеры, у которых в панели удалили последнее устройство, в выдаче
             # API отсутствуют — per-user синк их не чистит. Добираем здесь.

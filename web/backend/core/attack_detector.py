@@ -53,6 +53,25 @@ REASON_LABELS: dict[str, str] = {
 
 _PAINFUL = ("syn_flood", "listen_drops", "nic_drops", "conntrack_full")
 
+# Мелкие пакеты без признаков боли — атака только при потоке на порядок выше
+# минимального порога: на небольшом релее 5 тыс. пакетов/с по 90 байт — это
+# вечерний пик из ACK и keepalive, а не флуд
+_SMALL_PACKETS_ALONE_FACTOR = 10
+
+# Сколько тиков подряд нужен вердикт, чтобы завести событие: одиночный
+# минутный всплеск — не атака, а «атака закончилась, длилась 1 мин» — шум
+_CONFIRM_TICKS = 2
+_streak: dict[str, int] = {}
+
+
+def _confirmed(node_uuid: str, verdict: Optional["Verdict"]) -> bool:
+    """Держать ли вердикт: он должен продержаться _CONFIRM_TICKS тиков подряд."""
+    if verdict is None:
+        _streak.pop(node_uuid, None)
+        return False
+    _streak[node_uuid] = _streak.get(node_uuid, 0) + 1
+    return _streak[node_uuid] >= _CONFIRM_TICKS
+
 
 @dataclass(frozen=True)
 class Thresholds:
@@ -141,6 +160,8 @@ def assess(sample: NetSample, baseline: Baseline, cfg: Thresholds) -> Optional[V
 
     # Всплеск без единого признака — это просто нагрузка, а не атака
     if not reasons:
+        return None
+    if reasons == ["small_packets"] and sample.rx_pps < cfg.min_pps * _SMALL_PACKETS_ALONE_FACTOR:
         return None
 
     severity = "critical" if any(r in _PAINFUL for r in reasons) else "warning"
@@ -337,7 +358,7 @@ async def _notify_started(
         source="attack_detector",
         source_id=sample.node_uuid,
         group_key=f"{key}:{sample.node_uuid}",
-        link="/fleet",
+        link=f"/fleet?node={sample.node_uuid}",
     )
 
 
@@ -361,7 +382,7 @@ async def _notify_finished(event: dict[str, Any]) -> None:
         source="attack_detector",
         source_id=str(event["node_uuid"]),
         group_key=f"node_attack_end:{event['node_uuid']}",
-        link="/fleet",
+        link=f"/fleet?node={event['node_uuid']}",
     )
 
 
@@ -391,7 +412,7 @@ async def run_once() -> int:
         for sample in samples:
             baseline = baselines.get(sample.node_uuid, empty)
             verdict = assess(sample, baseline, cfg)
-            if verdict is None:
+            if not _confirmed(sample.node_uuid, verdict):
                 continue
 
             hits += 1

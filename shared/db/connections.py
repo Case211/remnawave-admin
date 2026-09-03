@@ -10,6 +10,9 @@ from shared.logger import logger
 from shared.db_schema import USER_CONNECTIONS_TABLE, VIOLATIONS_TABLE, USERS_TABLE, NODES_TABLE
 from shared.db_query import select_sql, insert_sql, update_sql
 
+# Запас на странице под HOT-апдейты активных соединений (миграция 0105)
+CONNECTIONS_FILLFACTOR = 90
+
 
 class ConnectionsMixin:
     # ==================== User Connections (for future device tracking) ====================
@@ -228,23 +231,36 @@ class ConnectionsMixin:
                 # Two-step approach: partitioned tables require partition key in
                 # unique index, so ON CONFLICT (user_uuid, ip_address) alone won't
                 # work. Instead: UPDATE existing rows first, then INSERT truly new.
+                #
+                # connected_at здесь НЕ трогается: это ключ партиционирования.
+                # Сдвиг времени на существующей строке заставлял Postgres
+                # физически переносить её в другую партицию (DELETE + INSERT
+                # вместо HOT), а параллельный батч с другой ноды падал на
+                # «tuple to be locked was already moved to another partition»
+                # и терялся целиком. Время начала соединения фиксируется при
+                # вставке — сдвигать его у активной строки и незачем.
+                #
+                # Строка переписывается только когда реально сменились нода или
+                # device_info: без этого каждый цикл синка давал апдейт на каждое
+                # активное соединение — 94 % всей записи в таблицу.
                 update_result = await conn.execute(
                     f"""
                     UPDATE {USER_CONNECTIONS_TABLE} uc
-                    SET connected_at = GREATEST(uc.connected_at, batch.ca),
-                        node_uuid = COALESCE(batch.n, uc.node_uuid),
+                    SET node_uuid = COALESCE(batch.n, uc.node_uuid),
                         device_info = COALESCE(batch.d, uc.device_info)
                     FROM (
                         SELECT u::uuid AS uid, u_ip{ip_cast} AS ip,
-                               n::uuid AS n, d::jsonb AS d, COALESCE(t, NOW()) AS ca
-                        FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[])
-                            AS t(u, u_ip, n, d, t)
+                               n::uuid AS n, d::jsonb AS d
+                        FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[])
+                            AS t(u, u_ip, n, d)
                     ) batch
                     WHERE uc.user_uuid = batch.uid
                       AND uc.ip_address = batch.ip
                       AND uc.disconnected_at IS NULL
+                      AND (uc.node_uuid IS DISTINCT FROM COALESCE(batch.n, uc.node_uuid)
+                           OR uc.device_info IS DISTINCT FROM COALESCE(batch.d, uc.device_info))
                     """,
-                    user_uuids, ip_addresses, node_uuids, device_infos, connected_ats,
+                    user_uuids, ip_addresses, node_uuids, device_infos,
                 )
                 updated = int(update_result.split()[-1]) if update_result else 0
 
@@ -639,10 +655,14 @@ class ConnectionsMixin:
                         "SELECT 1 FROM pg_class WHERE relname = $1", part_name
                     )
                     if not exists:
+                        # fillfactor: активные соединения переписываются каждый
+                        # цикл синка, без запаса на странице ни один такой апдейт
+                        # не HOT и дописывает все индексы (миграция 0105)
                         await conn.execute(f"""
                             CREATE TABLE {part_name}
                             PARTITION OF {USER_CONNECTIONS_TABLE}
                             FOR VALUES FROM ('{from_date}') TO ('{to_date}')
+                            WITH (fillfactor = {CONNECTIONS_FILLFACTOR})
                         """)
                         created += 1
                         logger.info("Created partition %s (%s to %s)", part_name, from_date, to_date)

@@ -164,12 +164,6 @@ async def _local_user_uuid(info: dict) -> Optional[str]:
     return await resolve_local_user_uuid(info)
 
 
-def _short_user_id(info: dict, local_uuid: Optional[str]) -> str:
-    """Короткий идентификатор юзера для карточки уведомления."""
-    display = local_uuid or info.get("uuid") or info.get("id") or ""
-    return str(display)[:8]
-
-
 async def send_user_notification(
     bot: Bot,
     action: str,  # "created", "updated", "deleted", "expired", "expires_in_*", etc.
@@ -218,8 +212,13 @@ async def send_user_notification(
         lines.append(title_value)
         lines.append("")
 
-        # Идентификация
-        lines.append(f"👤 <code>{_esc(info.get('username', 'n/a'))}</code>  <code>{_short_user_id(info, local_uuid)}</code>")
+        # Идентификация: имя и полный UUID отдельной строкой. Раньше рядом с
+        # именем стоял обрезок в восемь символов — по нему пользователя ни
+        # найти, ни скопировать. В <code> Telegram копирует значение по тапу.
+        lines.append(f"👤 <code>{_esc(info.get('username', 'n/a'))}</code>")
+        full_id = local_uuid or info.get("uuid") or info.get("id")
+        if full_id:
+            lines.append(f"🆔 <code>{_esc(str(full_id))}</code>")
         lines.append("")
 
         # Для updated: показываем только изменившиеся поля (diff)
@@ -390,7 +389,7 @@ async def send_user_notification(
             push_title = tr("notify.push.user.fallback", action=action)
         _push_dispatch(
             title=push_title,
-            body=info.get("username") or _short_user_id(info, local_uuid),
+            body=info.get("username") or str(local_uuid or info.get("uuid") or info.get("id") or ""),
             notification_type="info",
             source="panel.webhook",
             source_id=local_uuid,
@@ -708,7 +707,8 @@ async def send_hwid_notification(
             description = user_data.get("description", "")
             hwid_device_limit = user_data.get("hwidDeviceLimit", 0)
 
-            lines.append(f"{tr('notify.hwid.label.user', username=_esc(username))}  <code>{_short_user_id(user_data, user_local_uuid)}</code>")
+            lines.append(tr('notify.hwid.label.user', username=_esc(username)))
+            lines.append(f"   🆔 <code>{_esc(str(user_local_uuid or user_uuid))}</code>")
             if telegram_id is not None:
                 lines.append(f"   {tr('notify.hwid.label.tg_id', telegram_id=telegram_id)}")
 

@@ -1,4 +1,5 @@
-import { useState, useMemo, lazy, Suspense } from 'react'
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
 import { useTabParam } from '@/lib/useTabParam'
@@ -413,6 +414,25 @@ export default function Fleet() {
     queryFn: fetchFleet,
     refetchInterval: 60_000,
   })
+
+  // Диплинк из уведомления: /fleet?node=<uuid> раскрывает карточку ноды и
+  // подводит к ней; параметр после этого снимается, чтобы не залипать
+  const [searchParams, setSearchParams] = useSearchParams()
+  const focusUuid = searchParams.get('node')
+  useEffect(() => {
+    if (!focusUuid || !fleet?.nodes.some((n) => n.uuid === focusUuid)) return
+    setExpandedUuid(focusUuid)
+    setSearchQuery('')
+    setStatusFilter('all')
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-node-uuid="${focusUuid}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('node')
+      return next
+    }, { replace: true })
+  }, [focusUuid, fleet, setSearchParams])
 
   // История метрик за 24ч — один запрос на всю таблицу (сервер кэширует 5 мин);
   // раскладываем в per-uuid серии для спарклайнов CPU/RAM/диска.
@@ -866,34 +886,36 @@ export default function Fleet() {
                 >
                   {sortedNodes.map((node) => (
                     <SortableSection key={node.uuid} id={node.uuid} handlePosition="top-left">
-                      {viewMode === 'compact' ? (
-                        <CompactNodeCard
-                          node={node}
-                          canEdit={canEditNodes}
-                          canTerminal={canTerminal}
-                          onRestart={(uuid) => restartNode.mutate(uuid)}
-                          onEnable={(uuid) => enableNode.mutate(uuid)}
-                          onDisable={(uuid) => disableNode.mutate(uuid)}
-                          onTerminal={(n) => setTerminalNode({ uuid: n.uuid, name: n.name })}
-                          isPending={mutationPending}
-                        />
-                      ) : (
-                        <NodeCard
-                          node={node}
-                          isExpanded={expandedUuid === node.uuid}
-                          onToggle={() => setExpandedUuid(expandedUuid === node.uuid ? null : node.uuid)}
-                          onTerminalConnect={canTerminal ? () => setTerminalNode({ uuid: node.uuid, name: node.name }) : undefined}
-                        >
-                          <NodeDetailPanel
+                      <div data-node-uuid={node.uuid}>
+                        {viewMode === 'compact' ? (
+                          <CompactNodeCard
                             node={node}
                             canEdit={canEditNodes}
-                            onRestart={() => restartNode.mutate(node.uuid)}
-                            onEnable={() => enableNode.mutate(node.uuid)}
-                            onDisable={() => disableNode.mutate(node.uuid)}
+                            canTerminal={canTerminal}
+                            onRestart={(uuid) => restartNode.mutate(uuid)}
+                            onEnable={(uuid) => enableNode.mutate(uuid)}
+                            onDisable={(uuid) => disableNode.mutate(uuid)}
+                            onTerminal={(n) => setTerminalNode({ uuid: n.uuid, name: n.name })}
                             isPending={mutationPending}
                           />
-                        </NodeCard>
-                      )}
+                        ) : (
+                          <NodeCard
+                            node={node}
+                            isExpanded={expandedUuid === node.uuid}
+                            onToggle={() => setExpandedUuid(expandedUuid === node.uuid ? null : node.uuid)}
+                            onTerminalConnect={canTerminal ? () => setTerminalNode({ uuid: node.uuid, name: node.name }) : undefined}
+                          >
+                            <NodeDetailPanel
+                              node={node}
+                              canEdit={canEditNodes}
+                              onRestart={() => restartNode.mutate(node.uuid)}
+                              onEnable={() => enableNode.mutate(node.uuid)}
+                              onDisable={() => disableNode.mutate(node.uuid)}
+                              isPending={mutationPending}
+                            />
+                          </NodeCard>
+                        )}
+                      </div>
                     </SortableSection>
                   ))}
                 </div>

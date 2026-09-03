@@ -17,6 +17,15 @@ logger = logging.getLogger(__name__)
 
 BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", "/app/backups"))
 
+# Дамп и загрузки ходят через процесс кусками, а не целиком: на базе в 750 МБ
+# бэкап поднимал RSS backend до гигабайта, на больших базах — до десятков.
+_CHUNK_BYTES = 1 << 20
+TELEGRAM_MAX_PART = 49 * 1024 * 1024  # лимит Telegram — 50 МБ на документ
+
+
+class BackupTooLarge(Exception):
+    """Загрузка превысила лимит размера."""
+
 
 def ensure_backup_dir() -> Path:
     """Ensure the backup directory exists."""
@@ -29,29 +38,33 @@ def ensure_backup_dir() -> Path:
 async def create_database_backup(database_url: str) -> dict:
     """Create a PostgreSQL dump using pg_dump.
 
+    Сжимает и пишет файл сам pg_dump — раньше весь plain-дамп проходил через
+    память процесса (communicate + gzip). Пока дамп пишется, файл лежит под
+    скрытым именем, чтобы не мелькать в списке бэкапов недописанным.
+
     Returns dict with filename, size_bytes, backup_type.
     """
     ensure_backup_dir()
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"db_backup_{ts}.sql.gz"
     filepath = BACKUP_DIR / filename
+    partial = BACKUP_DIR / f".{filename}.part"
 
     try:
         proc = await asyncio.create_subprocess_exec(
             "pg_dump", database_url,
             "--no-owner", "--no-privileges", "--clean", "--if-exists",
-            stdout=asyncio.subprocess.PIPE,
+            "--compress=6", f"--file={partial}",
+            stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await proc.communicate()
+        _, stderr = await proc.communicate()
 
         if proc.returncode != 0:
+            partial.unlink(missing_ok=True)
             raise RuntimeError(f"pg_dump failed: {stderr.decode()}")
 
-        # Compress with Python gzip (no need for external gzip binary)
-        with gzip_module.open(filepath, "wb") as f:
-            f.write(stdout)
-
+        partial.replace(filepath)
         size_bytes = filepath.stat().st_size
 
         from web.backend.core.webhook_security import fire_event
@@ -71,21 +84,18 @@ async def create_database_backup(database_url: str) -> dict:
 
 
 async def restore_database_backup(database_url: str, filename: str) -> None:
-    """Restore a PostgreSQL dump from a backup file."""
+    """Restore a PostgreSQL dump from a backup file.
+
+    Дамп льётся в psql кусками прямо из файла: распакованный он больше базы,
+    и держать его в памяти целиком — значит ловить OOM ровно в момент
+    восстановления.
+    """
     filepath = _safe_backup_path(filename)
     if filepath is None:
         raise ValueError(f"Invalid backup filename: {filename}")
     if not filepath.exists():
         raise FileNotFoundError(f"Backup file not found: {filename}")
 
-    # Read SQL data (decompress if gzipped)
-    if filename.endswith(".gz"):
-        with gzip_module.open(filepath, "rb") as f:
-            sql_data = f.read()
-    else:
-        sql_data = filepath.read_bytes()
-
-    # Feed SQL to psql via stdin.
     # ON_ERROR_STOP=1 makes psql abort (and return non-zero) on the first error
     # instead of silently skipping failed statements and reporting success.
     # --single-transaction wraps the whole restore in one transaction, so a
@@ -95,10 +105,24 @@ async def restore_database_backup(database_url: str, filename: str) -> None:
         "psql", database_url,
         "-v", "ON_ERROR_STOP=1", "--single-transaction",
         stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.PIPE,
     )
-    _, stderr = await psql.communicate(input=sql_data)
+    # stderr читаем параллельно с подачей: иначе psql, забив буфер stderr,
+    # встанет ждать нас, а мы — его.
+    stderr_task = asyncio.create_task(psql.stderr.read())
+    opener = gzip_module.open if filename.endswith(".gz") else open
+    try:
+        with opener(filepath, "rb") as src:
+            while chunk := src.read(_CHUNK_BYTES):
+                psql.stdin.write(chunk)
+                await psql.stdin.drain()
+    except (BrokenPipeError, ConnectionResetError):
+        pass  # psql уже упал — причина в stderr ниже
+    finally:
+        psql.stdin.close()
+    await psql.wait()
+    stderr = await stderr_task
 
     if psql.returncode != 0:
         raise RuntimeError(f"psql restore failed: {stderr.decode()}")
@@ -412,10 +436,9 @@ async def send_backup_to_telegram(
         raise ValueError("No Telegram bot token configured")
 
     file_size = filepath.stat().st_size
-    max_chunk = 49 * 1024 * 1024  # 49 MB (Telegram limit 50 MB)
     parts_sent = 0
 
-    if file_size <= max_chunk:
+    if file_size <= TELEGRAM_MAX_PART:
         async with httpx.AsyncClient(timeout=120) as client:
             data = {"chat_id": chat_id}
             if topic_id:
@@ -430,10 +453,9 @@ async def send_backup_to_telegram(
                 raise RuntimeError(f"Telegram send failed: {resp.text[:200]}")
             parts_sent = 1
     else:
-        total_parts = math.ceil(file_size / max_chunk)
-        raw = filepath.read_bytes()
+        total_parts = math.ceil(file_size / TELEGRAM_MAX_PART)
         for i in range(total_parts):
-            chunk = raw[i * max_chunk : (i + 1) * max_chunk]
+            chunk = _read_part(filepath, i * TELEGRAM_MAX_PART, TELEGRAM_MAX_PART)
             part_name = f"{filename}.part{i + 1}of{total_parts}"
             async with httpx.AsyncClient(timeout=120) as client:
                 data = {
@@ -455,8 +477,19 @@ async def send_backup_to_telegram(
     return {"filename": filename, "parts_sent": parts_sent, "size_bytes": file_size}
 
 
-def save_uploaded_file(filename: str, content: bytes) -> dict:
-    """Save an uploaded backup file. Returns file info."""
+def _read_part(path: Path, offset: int, size: int) -> bytes:
+    with open(path, "rb") as f:
+        f.seek(offset)
+        return f.read(size)
+
+
+async def save_uploaded_file(filename: str, source, max_bytes: int) -> dict:
+    """Save an uploaded backup file. Returns file info.
+
+    ``source`` — файловый объект загрузки (Starlette уже сложил тело во
+    временный файл); копируем на диск кусками в отдельном потоке, лимит
+    проверяем по ходу.
+    """
     import re
     ensure_backup_dir()
 
@@ -468,10 +501,24 @@ def save_uploaded_file(filename: str, content: bytes) -> dict:
     if filepath.exists():
         raise FileExistsError(f"File already exists: {safe_name}")
 
-    filepath.write_bytes(content)
+    def _copy() -> int:
+        written = 0
+        with open(filepath, "wb") as dst:
+            while chunk := source.read(_CHUNK_BYTES):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise BackupTooLarge(max_bytes)
+                dst.write(chunk)
+        return written
+
+    try:
+        size_bytes = await asyncio.to_thread(_copy)
+    except BaseException:
+        filepath.unlink(missing_ok=True)
+        raise
     return {
         "filename": safe_name,
-        "size_bytes": len(content),
+        "size_bytes": size_bytes,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 

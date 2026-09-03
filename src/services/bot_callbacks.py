@@ -162,7 +162,18 @@ async def panel_event(request: Request):
             else:
                 user_data = event_data
 
-            await send_user_notification(bot=bot, action=action, user_info=user_data, event_type=event)
+            # Старое состояние и список изменений приезжают от коллектора: он
+            # снял их до записи в базу. Здесь пересчитать уже нечего — в базе
+            # лежит новое состояние.
+            diff = body.get("diff") or {}
+            await send_user_notification(
+                bot=bot,
+                action=action,
+                user_info=user_data,
+                old_user_info=diff.get("old_data") or None,
+                changes=diff.get("changes") or None,
+                event_type=event,
+            )
 
         elif event.startswith("node."):
             from src.utils.notifications import send_node_notification

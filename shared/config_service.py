@@ -986,6 +986,20 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 17,
     },
     {
+        "key": "metrics_retention_days",
+        "value_type": "int",
+        "category": "violations",
+        "subcategory": "thresholds",
+        "display_name": "Хранение метрик нод (дни)",
+        "description": (
+            "Сколько дней хранить снимки метрик нод до автоочистки. Раньше срок был "
+            "зашит в коде, а сама очистка шла только при отчёте от ноды: на простое "
+            "таблица росла без ограничения"
+        ),
+        "default_value": "30",
+        "sort_order": 18,
+    },
+    {
         "key": "ndpi_detection_enabled",
         "value_type": "bool",
         "category": "violations",

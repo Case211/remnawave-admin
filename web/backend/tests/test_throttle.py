@@ -67,6 +67,28 @@ class TestPushThrottles:
         assert mgr.send_command.await_args.args[1]["rules"] == []
 
     @pytest.mark.asyncio
+    async def test_empty_resync_on_connect_is_not_an_event(self, caplog):
+        """После рестарта панели каждая нода получает пустой список — это не новость."""
+        mgr = self._agent_manager([NODE])
+
+        with patch.object(throttle_sync, "db_service", self._db({})), \
+             patch("web.backend.core.agent_manager.agent_manager", mgr), \
+             caplog.at_level("DEBUG", logger=throttle_sync.__name__):
+            await throttle_sync.push_throttles(only_node=NODE)
+            quiet = [r for r in caplog.records if "Throttles pushed" in r.getMessage()]
+            caplog.clear()
+            throttle_sync._pushed.clear()
+
+        with patch.object(throttle_sync, "db_service", self._db({NODE: [{"ip": "1.2.3.4", "rate_kbit": 1024}]})), \
+             patch("web.backend.core.agent_manager.agent_manager", mgr), \
+             caplog.at_level("DEBUG", logger=throttle_sync.__name__):
+            await throttle_sync.push_throttles(only_node=NODE)
+            loud = [r for r in caplog.records if "Throttles pushed" in r.getMessage()]
+
+        assert [r.levelname for r in quiet] == ["DEBUG"]
+        assert [r.levelname for r in loud] == ["INFO"]
+
+    @pytest.mark.asyncio
     async def test_unchanged_list_is_not_resent(self):
         """Применение снимает и ставит корневую дисциплину — дёргать зря нельзя."""
         db = self._db({NODE: [{"ip": "1.2.3.4", "rate_kbit": 1024}]})

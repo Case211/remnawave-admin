@@ -79,7 +79,7 @@ const res = await fetch("https://admin.example.com/api/v3/users", {
 | `users:write` | создавать, менять, включать, сбрасывать трафик | `POST /users`, `POST /users/{uuid}/enable` |
 | `users:delete` | удалять пользователя | `DELETE /users/{uuid}` |
 | `nodes:read` | читать ноды | `GET /nodes`, `GET /nodes/{uuid}` |
-| `nodes:write` | включать, отключать, перезапускать ноду | `POST /nodes/{uuid}/restart` |
+| `nodes:write` | включать, отключать, перезапускать ноду, синхронизировать список нод с панелью | `POST /nodes/{uuid}/restart` |
 | `nodes:token` | генерировать и отзывать токен агента ноды | `POST /nodes/{uuid}/agent-token/generate` |
 | `hosts:read` | читать хосты | `GET /hosts` |
 | `stats:read` | общая статистика | `GET /stats` |

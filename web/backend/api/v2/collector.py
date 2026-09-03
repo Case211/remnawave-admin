@@ -546,7 +546,8 @@ async def receive_connections(
     if (now - _last_metrics_cleanup).total_seconds() > CLEANUP_INTERVAL_HOURS * 3600:
         _last_metrics_cleanup = now
         try:
-            deleted = await db_service.cleanup_old_metrics_snapshots(METRICS_RETENTION_DAYS)
+            m_days = int(config_service.get("metrics_retention_days", METRICS_RETENTION_DAYS) or METRICS_RETENTION_DAYS)
+            deleted = await db_service.cleanup_old_metrics_snapshots(m_days)
             if deleted > 0:
                 logger.info("Cleaned up %d old metrics snapshots", deleted)
         except Exception as e:
@@ -638,13 +639,13 @@ async def receive_connections(
                 "user_uuid": user_uuid,
                 "ip_address": conn.ip_address,
                 "node_uuid": conn.node_uuid,
+                # Только то, что читается: транспорт для карточки юзера и
+                # block-radar. Время есть в колонках, а байты агент не считает
+                # (в access.log их нет) — эти дубли лишь заставляли переписывать
+                # строку каждый цикл.
                 "device_info": {
                     "user_email": conn.user_email,
                     "inbound_tag": conn.inbound_tag or None,
-                    "bytes_sent": conn.bytes_sent,
-                    "bytes_received": conn.bytes_received,
-                    "connected_at": conn.connected_at.isoformat() if conn.connected_at else None,
-                    "disconnected_at": conn.disconnected_at.isoformat() if conn.disconnected_at else None,
                 },
                 "connected_at": conn.connected_at,
             })
@@ -1626,6 +1627,7 @@ async def collector_webhook(request: Request):
     logger.info("Webhook received: %s", event)
 
     # 1. Sync to DB (collector owns sync)
+    sync_result = None
     try:
         from shared.sync import sync_service
         sync_result = await sync_service.handle_webhook_event(event, event_data)
@@ -1633,6 +1635,22 @@ async def collector_webhook(request: Request):
             await _notify_hwid_reuse(sync_result or {})
     except Exception as e:
         logger.warning("Webhook sync failed for %s: %s", event, e)
+
+    # Diff едет боту вместе с событием. Бот сам старое состояние уже не
+    # достанет: коллектор только что записал новое в общую базу, и повторное
+    # сравнение «база против панели» даёт пусто — уведомление выходило с
+    # «Изменения не определены», хотя поле реально поменялось.
+    forward_body = body
+    if isinstance(sync_result, dict) and (sync_result.get("old_data") or sync_result.get("changes")):
+        try:
+            enriched = dict(data)
+            enriched["diff"] = {
+                "old_data": sync_result.get("old_data"),
+                "changes": sync_result.get("changes") or [],
+            }
+            forward_body = json.dumps(enriched, default=str).encode("utf-8")
+        except Exception as e:
+            logger.debug("Webhook diff attach failed for %s: %s", event, e)
 
     # 2. Forward to bot for Telegram notifications (fire-and-forget)
     # Uses INTERNAL_API_SECRET instead of X-Remnawave-Signature
@@ -1643,7 +1661,7 @@ async def collector_webhook(request: Request):
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.post(
                     bot_callback_url,
-                    content=body,
+                    content=forward_body,
                     headers={
                         "content-type": "application/json",
                         "X-Internal-Api-Secret": internal_secret,

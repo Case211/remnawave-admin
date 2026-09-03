@@ -213,6 +213,14 @@ class NodesMixin:
                         users_online = EXCLUDED.users_online,
                         updated_at = NOW(),
                         raw_data = EXCLUDED.raw_data
+                    WHERE nodes.is_connected IS DISTINCT FROM EXCLUDED.is_connected
+                       OR nodes.users_online IS DISTINCT FROM EXCLUDED.users_online
+                       OR nodes.traffic_used_bytes IS DISTINCT FROM EXCLUDED.traffic_used_bytes
+                       OR nodes.traffic_limit_bytes IS DISTINCT FROM EXCLUDED.traffic_limit_bytes
+                       OR nodes.is_disabled IS DISTINCT FROM EXCLUDED.is_disabled
+                       OR nodes.name IS DISTINCT FROM EXCLUDED.name
+                       OR nodes.address IS DISTINCT FROM EXCLUDED.address
+                       OR nodes.port IS DISTINCT FROM EXCLUDED.port
                     """,
                 ),
                 uuid,
@@ -540,7 +548,13 @@ class NodesMixin:
     async def batch_upsert_user_node_traffic(
         self, records: List[tuple]
     ) -> int:
-        """Batch upsert traffic records via UNNEST. Each record: (user_uuid, node_uuid, traffic_bytes)."""
+        """Batch upsert traffic records via UNNEST. Each record: (user_uuid, node_uuid, traffic_bytes).
+
+        Строка переписывается, только если байты изменились. synced_at при этом
+        всё же продлевается раз в сутки: по нему cleanup_stale_user_node_traffic
+        отличает живую пару «юзер×нода» от той, которую панель больше не отдаёт,
+        и без продления пара с ровным трафиком через неделю ушла бы как мёртвая.
+        """
         if not self.is_connected or not records:
             return 0
         user_uuids = [r[0] for r in records]
@@ -555,6 +569,8 @@ class NodesMixin:
                     FROM UNNEST($1::text[], $2::text[], $3::bigint[]) AS r(u, n, t)
                     ON CONFLICT (user_uuid, node_uuid)
                     DO UPDATE SET traffic_bytes = EXCLUDED.traffic_bytes, synced_at = NOW()
+                    WHERE {USER_NODE_TRAFFIC_TABLE}.traffic_bytes IS DISTINCT FROM EXCLUDED.traffic_bytes
+                       OR {USER_NODE_TRAFFIC_TABLE}.synced_at < NOW() - INTERVAL '1 day'
                     """,
                     user_uuids, node_uuids, traffic_bytes,
                 )

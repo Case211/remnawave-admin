@@ -32,6 +32,7 @@ from web.backend.core.rate_limit import limiter
 from web.backend.core.update_checker import get_latest_version
 from web.backend.api.v2 import auth, users, nodes, analytics, violations, hosts, websocket
 from web.backend.api.v2 import settings as settings_api
+from web.backend.api.v2 import diagnostics as diagnostics_api
 from web.backend.api.v2 import admins as admins_api, roles as roles_api
 from web.backend.api.v2 import access_policies as access_policies_api
 from web.backend.api.v2 import audit as audit_api
@@ -695,11 +696,24 @@ async def lifespan(app: FastAPI):
                             v_days = int(config_service.get("violation_retention_days", 90) or 90)
                             c_days = int(config_service.get("connections_retention_days", 30) or 30)
                             t_days = int(config_service.get("torrent_retention_days", 90) or 90)
+                            m_days = int(config_service.get("metrics_retention_days", 30) or 30)
                             v = await db_service.cleanup_old_violations(v_days)
                             c = await db_service.cleanup_old_connections(c_days)
                             t = await db_service.cleanup_old_torrent_events(t_days)
-                            if (v or 0) + (c or 0) + (t or 0) > 0:
-                                logger.info("Retention cleanup: %s violations, %s connections, %s torrent events", v, c, t)
+                            # Снапшоты метрик чистились только внутри обработчика
+                            # отчёта от ноды: пока ноды шлют данные — работает,
+                            # а на простое таблица росла без ограничения.
+                            m = await db_service.cleanup_old_metrics_snapshots(m_days)
+                            # Партиции подключений создаются заранее: если ни одна
+                            # нода не отчиталась, писать новый месяц было некуда и
+                            # строки уезжали в DEFAULT-партицию, которую уже не
+                            # отцепить одним движением.
+                            await db_service.ensure_connection_partitions(months_ahead=3)
+                            if (v or 0) + (c or 0) + (t or 0) + (m or 0) > 0:
+                                logger.info(
+                                    "Retention cleanup: %s violations, %s connections, %s torrent events, %s metrics",
+                                    v, c, t, m,
+                                )
                         except Exception as exc:
                             logger.warning("Retention cleanup failed: %s", exc)
                 _bg("table_maintenance", _maintenance_loop())
@@ -1125,6 +1139,8 @@ def create_app() -> FastAPI:
     # Collector router — available in collector and full modes
     if app_mode in ("collector", "full"):
         app.include_router(collector_api.router, prefix="/api/v2/collector", tags=["collector"])
+        # Снимок процесса коллектора для диагностики из режима api
+        app.include_router(diagnostics_api.internal_router, prefix="/api/v2/collector", tags=["collector"])
 
     # UI routers — available in api and full modes
     if app_mode in ("api", "full"):
@@ -1135,6 +1151,7 @@ def create_app() -> FastAPI:
         app.include_router(violations.router, prefix="/api/v2/violations", tags=["violations"])
         app.include_router(hosts.router, prefix="/api/v2/hosts", tags=["hosts"])
         app.include_router(settings_api.router, prefix="/api/v2/settings", tags=["settings"])
+        app.include_router(diagnostics_api.router, prefix="/api/v2/diagnostics", tags=["diagnostics"])
         app.include_router(admins_api.router, prefix="/api/v2/admins", tags=["admins"])
         app.include_router(roles_api.router, prefix="/api/v2/roles", tags=["roles"])
         app.include_router(access_policies_api.router, prefix="/api/v2/access-policies", tags=["access-policies"])

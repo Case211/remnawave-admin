@@ -11,7 +11,9 @@ from web.backend.core.attack_detector import (
     NetSample,
     Thresholds,
     Verdict,
+    _confirmed,
     _open_or_touch,
+    _streak,
     assess,
 )
 
@@ -137,6 +139,31 @@ def test_small_packets_alone_are_only_a_warning():
     assert verdict is not None
     assert verdict.severity == "warning"
     assert verdict.reasons == ["small_packets"]
+
+
+def test_relay_evening_peak_of_small_packets_is_not_an_attack():
+    """Живой случай: релей на 5 тыс. пакетов/с по 90 байт при базлайне в тысячу.
+
+    Мелкие пакеты без единого признака боли считаются атакой только при потоке
+    на порядок выше минимального порога — иначе панель каждые полчаса пишет
+    «нода под атакой» на обычный вечер, и её перестают читать.
+    """
+    relay = Baseline(rx_bps=600_000, rx_pps=1_000, samples=200)
+    peak = sample(rx_pps=5_368, rx_bps=500_000)  # 93 байта на пакет
+
+    assert assess(peak, relay, CFG) is None
+
+
+def test_verdict_needs_two_ticks_in_a_row():
+    """Одиночный минутный всплеск событие не заводит; повтор подряд — заводит."""
+    node = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    verdict = Verdict(severity="warning", reasons=["small_packets"], ratio_pps=8.0, ratio_bps=1.0)
+    _streak.clear()
+
+    assert _confirmed(node, verdict) is False
+    assert _confirmed(node, verdict) is True
+    assert _confirmed(node, None) is False   # тишина сбрасывает серию
+    assert _confirmed(node, verdict) is False
 
 
 def test_ratio_is_reported_for_the_alert_text():
