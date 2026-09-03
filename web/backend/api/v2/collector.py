@@ -639,13 +639,13 @@ async def receive_connections(
                 "user_uuid": user_uuid,
                 "ip_address": conn.ip_address,
                 "node_uuid": conn.node_uuid,
+                # Только то, что читается: транспорт для карточки юзера и
+                # block-radar. Время есть в колонках, а байты агент не считает
+                # (в access.log их нет) — эти дубли лишь заставляли переписывать
+                # строку каждый цикл.
                 "device_info": {
                     "user_email": conn.user_email,
                     "inbound_tag": conn.inbound_tag or None,
-                    "bytes_sent": conn.bytes_sent,
-                    "bytes_received": conn.bytes_received,
-                    "connected_at": conn.connected_at.isoformat() if conn.connected_at else None,
-                    "disconnected_at": conn.disconnected_at.isoformat() if conn.disconnected_at else None,
                 },
                 "connected_at": conn.connected_at,
             })

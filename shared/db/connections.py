@@ -239,6 +239,10 @@ class ConnectionsMixin:
                 # «tuple to be locked was already moved to another partition»
                 # и терялся целиком. Время начала соединения фиксируется при
                 # вставке — сдвигать его у активной строки и незачем.
+                #
+                # Строка переписывается только когда реально сменились нода или
+                # device_info: без этого каждый цикл синка давал апдейт на каждое
+                # активное соединение — 94 % всей записи в таблицу.
                 update_result = await conn.execute(
                     f"""
                     UPDATE {USER_CONNECTIONS_TABLE} uc
@@ -253,6 +257,8 @@ class ConnectionsMixin:
                     WHERE uc.user_uuid = batch.uid
                       AND uc.ip_address = batch.ip
                       AND uc.disconnected_at IS NULL
+                      AND (uc.node_uuid IS DISTINCT FROM COALESCE(batch.n, uc.node_uuid)
+                           OR uc.device_info IS DISTINCT FROM COALESCE(batch.d, uc.device_info))
                     """,
                     user_uuids, ip_addresses, node_uuids, device_infos,
                 )

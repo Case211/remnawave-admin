@@ -187,6 +187,23 @@ class TestReceiveBatch:
         enqueue.assert_called_once_with({USER_UUID})
 
     @pytest.mark.asyncio
+    async def test_device_info_carries_only_what_is_read(self, anon_client):
+        """Время и байты в device_info — дубли колонок и нули от агента; из-за них
+        строка переписывалась каждый цикл. Остаются только читаемые поля."""
+        db = make_db_mock()
+        with patch.object(collector, "db_service", db), \
+             patch.object(collector, "get_node_by_token", AsyncMock(return_value=NODE_UUID)), \
+             patch.object(collector, "_enqueue_violation_users", MagicMock()):
+            resp = await anon_client.post(
+                "/api/v2/collector/batch",
+                json=make_batch(connections=[{**make_connection(), "inbound_tag": "vless-reality"}]),
+                headers=AGENT_HEADERS,
+            )
+        assert resp.status_code == 200
+        batch = db.batch_upsert_connections.await_args.args[0]
+        assert batch[0]["device_info"] == {"user_email": "alice@example.com", "inbound_tag": "vless-reality"}
+
+    @pytest.mark.asyncio
     async def test_unresolved_user_counts_as_error(self, anon_client):
         db = make_db_mock()
         db.get_email_to_uuid_map = AsyncMock(return_value={})
