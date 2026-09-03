@@ -964,8 +964,14 @@ class IntelligentViolationDetector:
         user_uuids: List[str],
         window_minutes: int = 60,
         excluded_analyzers_map: Optional[Dict[str, Optional[List[str]]]] = None,
+        live_connections: Optional[Dict[str, List[ActiveConnection]]] = None,
     ) -> Dict[str, Optional['ViolationScore']]:
-        """Batch violation check: prefetch all data, then analyze per-user in memory."""
+        """Batch violation check: prefetch all data, then analyze per-user in memory.
+
+        ``live_connections`` — живые соединения из карты активности коллектора,
+        по последней активности. Без них берутся строки базы, а там старт не
+        обновляется, и сидящие часами в одно окно одновременности не попадают.
+        """
         if not self.db.is_connected or not user_uuids:
             return {}
 
@@ -973,9 +979,13 @@ class IntelligentViolationDetector:
         if not config_service.get("violations_enabled", True):
             return {}
 
+        async def _given(value):
+            return value
+
         device_counts, active_conns_map, histories_30d, baselines, shared_hwids_map = await asyncio.gather(
             self.db.batch_get_user_devices_counts(user_uuids),
-            self.db.batch_get_active_connections(user_uuids, max_age_minutes=5),
+            _given({}) if live_connections is not None
+            else self.db.batch_get_active_connections(user_uuids, max_age_minutes=5),
             self.db.batch_get_connection_histories(user_uuids, days=30, limit_per_user=200),
             self.db.batch_get_user_baselines(user_uuids, max_age_seconds=self.profile_analyzer._BASELINE_CACHE_TTL),
             self.db.batch_get_shared_hwids(user_uuids),
@@ -987,7 +997,7 @@ class IntelligentViolationDetector:
             srh_map = await self.db.batch_get_srh_records(user_uuids, limit_per_user=100)
 
         # Convert raw active_conns rows to ActiveConnection dataclasses
-        active_connections_map: Dict[str, List[ActiveConnection]] = {}
+        active_connections_map: Dict[str, List[ActiveConnection]] = dict(live_connections or {})
         for uid, rows in active_conns_map.items():
             active_connections_map[uid] = [
                 ActiveConnection(

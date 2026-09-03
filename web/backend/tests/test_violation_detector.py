@@ -51,11 +51,15 @@ def make_detector(geo_map, recent_violations=3):
     return IntelligentViolationDetector(db, monitor, geoip_service=FakeGeoip(geo_map))
 
 
-def conn(ip, sec_ago=480, ua=None):
-    """ActiveConnection. sec_ago=480 (8 мин) — для temporal даёт максимум overlap-скора."""
+def conn(ip, sec_ago=480, ua=None, seen_sec_ago=None):
+    """ActiveConnection. sec_ago=480 (8 мин) — для temporal даёт максимум overlap-скора.
+
+    seen_sec_ago — последняя активность по логу (карта коллектора); с ней
+    одновременность считается по активности, а не по стартам."""
     c = ActiveConnection(
         connection_id=1, user_uuid="u", ip_address=ip, node_uuid="n",
         connected_at=datetime.utcnow() - timedelta(seconds=sec_ago), device_info=None,
+        last_seen_at=None if seen_sec_ago is None else datetime.utcnow() - timedelta(seconds=seen_sec_ago),
     )
     if ua is not None:
         c.user_agent = ua  # коллектор такого не пишет — для проверки device-анализатора
@@ -523,8 +527,11 @@ async def test_mobile_carrier_not_false_positive():
     assert res.total < 50.0, "M3: мобильный оператор не должен ловить ложное нарушение"
 
 
-def _crowd(n, mobile_every=None):
-    """n адресов из n разных сетей и провайдеров; каждый mobile_every-й — мобильный."""
+def _crowd(n, mobile_every=None, started=None, seen=None):
+    """n адресов из n разных сетей и провайдеров; каждый mobile_every-й — мобильный.
+
+    started — старты в секундах назад (по умолчанию все минуту назад),
+    seen — последняя активность в секундах назад (None — без карты активности)."""
     geo_map, conns = {}, []
     for i in range(1, n + 1):
         ip = f"{80 + i}.{10 + i}.{20 + i}.{30 + i}"
@@ -532,8 +539,34 @@ def _crowd(n, mobile_every=None):
         geo_map[ip] = meta(ip, country_code="RU", city="Moscow", latitude=55.7, longitude=37.6,
                            asn=1000 + i, asn_org="PJSC MegaFon" if mobile else f"ISP-{i}",
                            connection_type="mobile" if mobile else "residential", is_mobile=mobile)
-        conns.append(conn(ip, 60 + i))
+        conns.append(conn(ip, started[i - 1] if started else 60 + i, seen_sec_ago=seen))
     return geo_map, conns
+
+
+@pytest.mark.asyncio
+async def test_crowd_that_joined_over_an_hour_is_caught_by_activity():
+    """Старты вразнобой за час, все живы сейчас — по стартам это не группировалось никогда."""
+    geo_map, conns = _crowd(8, mobile_every=4, started=[600 * i for i in range(1, 9)], seen=15)
+    res = await run_check(make_detector(geo_map, recent_violations=3), conns, devices=1)
+    assert res.breakdown["temporal"].simultaneous_connections_count == 8
+    assert res.total >= 50.0
+
+
+@pytest.mark.asyncio
+async def test_batch_check_uses_live_connections_instead_of_db_rows():
+    geo_map, conns = _crowd(8, mobile_every=4, started=[600 * i for i in range(1, 9)], seen=15)
+    det = make_detector(geo_map, recent_violations=3)
+    det.db.batch_get_user_devices_counts = AsyncMock(return_value={"u": 1})
+    det.db.batch_get_active_connections = AsyncMock(return_value={"u": []})
+    det.db.batch_get_connection_histories = AsyncMock(return_value={})
+    det.db.batch_get_user_baselines = AsyncMock(return_value={})
+    det.db.batch_get_shared_hwids = AsyncMock(return_value={})
+    det.db.batch_get_srh_records = AsyncMock(return_value={})
+
+    results = await det.check_users_batch(["u"], live_connections={"u": conns})
+
+    det.db.batch_get_active_connections.assert_not_awaited()
+    assert results["u"].total >= 50.0
 
 
 @pytest.mark.asyncio

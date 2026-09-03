@@ -11,7 +11,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 import httpx
@@ -23,7 +23,7 @@ from shared.database import db_service
 from shared.db_schema import NODES_TABLE
 from web.backend.core import torrent_p2p_whitelist
 from shared.db_query import select_sql
-from shared.connection_monitor import ConnectionMonitor
+from shared.connection_monitor import ActiveConnection, ConnectionMonitor
 from shared.violation_detector import IntelligentViolationDetector
 from shared.agent_tokens import get_node_by_token
 from shared.config_service import config_service
@@ -63,6 +63,68 @@ CONNECTIONS_RETENTION_DAYS = 30
 
 # Semaphore: limit concurrent background violation detection batches
 _violation_semaphore = asyncio.Semaphore(3)
+
+# ── Карта активности ──────────────────────────────────────
+# Кто с какого адреса подавал признаки жизни: {user_uuid: {ip: [первый раз,
+# последний раз, нода]}}. Детектор считает одновременность по ней, а не по
+# стартам строк в базе: connected_at там не обновляется, и люди, сидящие
+# часами, по стартам в одно окно не попадали. В базу карта не пишется —
+# это была бы та самая ежецикловая перезапись, от которой мы ушли.
+_activity: dict[str, dict[str, list]] = {}
+_ACTIVITY_WINDOW_MINUTES = 5    # без новых записей в логе дольше — соединение не живое
+_ACTIVITY_TTL_MINUTES = 30      # дольше — адрес выбрасывается из карты
+_ACTIVITY_SWEEP_SECONDS = 300
+_last_activity_sweep: datetime = datetime.min
+
+
+def _as_naive_utc(value) -> Optional[datetime]:
+    if not isinstance(value, datetime):
+        return None
+    return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
+
+
+def _note_activity(batch: list) -> None:
+    """Отметить адреса батча живыми; первое появление остаётся стартом."""
+    for c in batch:
+        seen = _as_naive_utc(c.get("connected_at")) or datetime.utcnow()
+        ips = _activity.setdefault(str(c["user_uuid"]), {})
+        rec = ips.get(c["ip_address"])
+        if rec is None:
+            ips[c["ip_address"]] = [seen, seen, c.get("node_uuid")]
+        else:
+            rec[1] = max(rec[1], seen)
+            rec[2] = c.get("node_uuid") or rec[2]
+
+
+def _live_connections(user_uuids) -> Dict[str, list]:
+    """Живые соединения пользователей: активность в пределах окна."""
+    horizon = datetime.utcnow() - timedelta(minutes=_ACTIVITY_WINDOW_MINUTES)
+    return {
+        uid: [
+            ActiveConnection(
+                connection_id=0, user_uuid=uid, ip_address=ip, node_uuid=node,
+                connected_at=first, last_seen_at=last,
+            )
+            for ip, (first, last, node) in _activity.get(uid, {}).items()
+            if last >= horizon
+        ]
+        for uid in user_uuids
+    }
+
+
+def _sweep_activity(now: datetime) -> None:
+    """Выбросить адреса, о которых давно не слышно, чтобы карта не росла без потолка."""
+    global _last_activity_sweep
+    if (now - _last_activity_sweep).total_seconds() < _ACTIVITY_SWEEP_SECONDS:
+        return
+    _last_activity_sweep = now
+    horizon = now - timedelta(minutes=_ACTIVITY_TTL_MINUTES)
+    for uid in list(_activity):
+        ips = _activity[uid]
+        for ip in [ip for ip, rec in ips.items() if rec[1] < horizon]:
+            del ips[ip]
+        if not ips:
+            del _activity[uid]
 
 # ── Violation detection queue ──────────────────────────────
 # Instead of spawning a task per batch, accumulate user UUIDs in a set
@@ -651,12 +713,16 @@ async def receive_connections(
             })
 
         if batch_connections:
+            _note_activity(batch_connections)
             for attempt in range(3):
                 try:
                     result = await db_service.batch_upsert_connections(
                         batch_connections, stale_threshold_minutes=2
                     )
-                    processed = result["upserted"]
+                    # Принятые соединения, а не записанные строки: база
+                    # переписывает строку только при изменениях, а детектору
+                    # нужен каждый батч, где пользователь был замечен
+                    processed = len(batch_connections)
                     logger.info("Batch upserted      node=%-20s  upserted=%-4d  stale=%-3d  errors=%d", node_name, result["upserted"], result["closed_stale"], errors)
                     break
                 except Exception as e:
@@ -966,6 +1032,7 @@ async def _run_violation_detection(affected_user_uuids: set):
         if expired_keys:
             logger.debug("Cooldown cleanup: removed %d expired entries, %d remaining",
                          len(expired_keys), len(_violation_check_cooldown))
+        _sweep_activity(now_cleanup)
 
         # Adaptive cooldown based on total tracked users
         total_tracked = len(_violation_check_cooldown) + len(affected_user_uuids)
@@ -1014,6 +1081,7 @@ async def _run_violation_detection(affected_user_uuids: set):
             remaining,
             window_minutes=60,
             excluded_analyzers_map=excluded_map,
+            live_connections=_live_connections(remaining),
         )
 
         # Post-processing: handle violations and update cooldowns
