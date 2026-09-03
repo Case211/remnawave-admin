@@ -91,7 +91,7 @@ scope required by the endpoint.
 | `users:write` | Create/update/enable/disable/reset-traffic | `POST /users`, `POST /users/{uuid}/enable`, `POST /users/{uuid}/reset-traffic` |
 | `users:delete` | Delete a single user | `DELETE /users/{uuid}` |
 | `nodes:read` | Read node list/detail | `GET /nodes`, `GET /nodes/{uuid}` |
-| `nodes:write` | Enable/disable/restart a node | `POST /nodes/{uuid}/restart` |
+| `nodes:write` | Enable/disable/restart a node, sync the node list from the panel | `POST /nodes/{uuid}/restart` |
 | `nodes:token` | Generate/revoke a node's agent token | `POST /nodes/{uuid}/agent-token/generate` |
 | `hosts:read` | Read hosts | `GET /hosts`, `GET /hosts/{uuid}` |
 | `stats:read` | Global statistics | `GET /stats` |

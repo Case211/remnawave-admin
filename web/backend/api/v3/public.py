@@ -73,6 +73,11 @@ class NodeTokenResult(_PublicBase):
     message: str = ""
 
 
+class SyncResult(BaseModel):
+    success: bool
+    synced: int
+
+
 class HostPublic(_PublicBase):
     uuid: str
     remark: Optional[str] = None
@@ -425,6 +430,26 @@ async def restart_node(
         return SuccessResult(success=True, message="Node restarted")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/nodes/sync", response_model=SyncResult)
+async def sync_nodes(
+    api_key: ApiKeyUser = Depends(require_scope("nodes:write")),
+):
+    """Sync all nodes from the Remnawave panel into the local DB.
+
+    Fetches every node from the panel, upserts them locally, and removes
+    local nodes no longer present on the panel. Same sync the admin UI's
+    Settings -> Sync page triggers manually.
+    """
+    from shared.sync import sync_service
+
+    try:
+        synced = await sync_service.sync_nodes()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return SyncResult(success=True, synced=synced)
 
 
 @router.post("/nodes/{uuid}/agent-token/generate", response_model=NodeTokenResult)
