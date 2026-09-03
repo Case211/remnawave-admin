@@ -19,6 +19,8 @@ CPU и записи, размеры кэшей, глубина очереди.
 """
 import asyncio
 import gc
+import hashlib
+import hmac
 import os
 import random
 import sys
@@ -33,6 +35,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from web.backend.api.deps import AdminUser, require_permission
+from web.backend.core.config import get_web_settings
 from shared.logger import logger
 
 router = APIRouter()
@@ -392,16 +395,30 @@ def _process_snapshot() -> Dict[str, Any]:
 
 # ── сборка ───────────────────────────────────────────────────────────────────
 
+def _internal_secret() -> str:
+    """Ключ, которым api забирает снимок у коллектора.
+
+    INTERNAL_API_SECRET, если задан. Без него — производный от WEB_SECRET_KEY:
+    тот обязателен для backend, а коллектор крутится на том же образе с тем же
+    .env, так что ключ совпадает у обоих и настраивать ничего не нужно. Раньше
+    без INTERNAL_API_SECRET серия оставалась без коллектора, а на раздельных
+    установках он как раз обычно не задан. Совсем без проверки нельзя: порт
+    коллектора смотрит наружу, а снимок обходит все кэши детектора.
+    """
+    explicit = os.environ.get("INTERNAL_API_SECRET", "")
+    if explicit:
+        return explicit
+    key = get_web_settings().secret_key.encode("utf-8")
+    return hmac.new(key, b"remnawave-admin:collector-diagnostics", hashlib.sha256).hexdigest()
+
+
 async def _fetch_collector_snapshot() -> Dict[str, Any]:
     """В режиме api тяжёлое живёт в коллекторе — забираем его снимок по внутреннему URL."""
-    secret = os.environ.get("INTERNAL_API_SECRET", "")
-    if not secret:
-        return {"error": "INTERNAL_API_SECRET не задан — до коллектора не достучаться"}
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.get(
                 f"{_COLLECTOR_URL}/api/v2/collector/diagnostics/memory",
-                headers={"X-Internal-Api-Secret": secret},
+                headers={"X-Internal-Api-Secret": _internal_secret()},
             )
         if resp.status_code != 200:
             return {"error": f"коллектор ответил {resp.status_code}"}
@@ -769,7 +786,7 @@ async def collector_memory_snapshot(request: Request):
     Роуты коллектора не проходят через middleware авторизации, поэтому
     внутренний секрет проверяется вручную, как и при пересылке в бот.
     """
-    secret = os.environ.get("INTERNAL_API_SECRET", "")
-    if not secret or request.headers.get("X-Internal-Api-Secret", "") != secret:
+    received = request.headers.get("X-Internal-Api-Secret", "")
+    if not hmac.compare_digest(received.encode("utf-8"), _internal_secret().encode("utf-8")):
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
     return _plain(_process_snapshot())
