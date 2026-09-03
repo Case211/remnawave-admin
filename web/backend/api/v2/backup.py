@@ -678,18 +678,16 @@ async def upload_backup(
     admin: AdminUser = Depends(require_superadmin()),
 ):
     """Upload a backup file (.sql.gz or .json)."""
-    from web.backend.core.backup_service import save_uploaded_file
+    from web.backend.core.backup_service import BackupTooLarge, save_uploaded_file
 
     if not file.filename:
         raise api_error(400, "INVALID_FILENAME")
 
-    content = await file.read()
     max_size = 500 * 1024 * 1024  # 500 MB
-    if len(content) > max_size:
-        raise api_error(400, "FILE_TOO_LARGE", f"Max size: {max_size // 1024 // 1024} MB")
-
     try:
-        result = save_uploaded_file(file.filename, content)
+        result = await save_uploaded_file(file.filename, file.file, max_size)
+    except BackupTooLarge:
+        raise api_error(400, "FILE_TOO_LARGE", f"Max size: {max_size // 1024 // 1024} MB")
     except ValueError as e:
         raise api_error(400, "INVALID_FILE_TYPE", str(e))
     except FileExistsError as e:

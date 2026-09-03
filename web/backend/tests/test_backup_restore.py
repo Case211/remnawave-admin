@@ -3,6 +3,9 @@
 These guard against silent partial restores: psql must run with ON_ERROR_STOP=1
 and --single-transaction so a failed statement aborts and rolls back instead of
 reporting success on a half-restored database.
+
+Дамп подаётся в psql потоком, а не одним буфером — проверяем, что в stdin
+ушёл ровно распакованный SQL и что stdin закрыт, иначе psql не завершится.
 """
 import gzip
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,7 +18,11 @@ from web.backend.core import backup_service
 def _make_proc(returncode: int, stderr: bytes = b""):
     proc = MagicMock()
     proc.returncode = returncode
-    proc.communicate = AsyncMock(return_value=(b"", stderr))
+    proc.stdin.written = []
+    proc.stdin.write = proc.stdin.written.append
+    proc.stdin.drain = AsyncMock()
+    proc.stderr.read = AsyncMock(return_value=stderr)
+    proc.wait = AsyncMock(return_value=returncode)
     return proc
 
 
@@ -35,8 +42,28 @@ async def test_restore_passes_safety_flags(tmp_path, monkeypatch):
     assert args[0] == "psql"
     assert "ON_ERROR_STOP=1" in args
     assert "--single-transaction" in args
-    # Decompressed SQL must be fed to psql via stdin.
-    proc.communicate.assert_awaited_once_with(input=b"SELECT 1;")
+    # Decompressed SQL must be fed to psql via stdin, then stdin closed.
+    assert b"".join(proc.stdin.written) == b"SELECT 1;"
+    proc.stdin.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_restore_streams_in_chunks(tmp_path, monkeypatch):
+    monkeypatch.setattr(backup_service, "BACKUP_DIR", tmp_path)
+    monkeypatch.setattr(backup_service, "_CHUNK_BYTES", 4)
+    backup_file = tmp_path / "db_backup_s.sql.gz"
+    with gzip.open(backup_file, "wb") as fh:
+        fh.write(b"SELECT 1; SELECT 2;")
+
+    proc = _make_proc(0)
+    with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as m:
+        m.return_value = proc
+        await backup_service.restore_database_backup("postgresql://x", "db_backup_s.sql.gz")
+
+    assert len(proc.stdin.written) > 1
+    assert max(len(c) for c in proc.stdin.written) <= 4
+    assert b"".join(proc.stdin.written) == b"SELECT 1; SELECT 2;"
+    assert proc.stdin.drain.await_count == len(proc.stdin.written)
 
 
 @pytest.mark.asyncio
