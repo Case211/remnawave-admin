@@ -58,6 +58,7 @@ class TemporalAnalyzer:
         reasons = []
         rapid_switches = 0
         overlap_minutes = 0.0
+        strong_sharing = False
         source_of = source_of or {}
 
         def sources(ips) -> int:
@@ -414,7 +415,8 @@ class TemporalAnalyzer:
             reasons=reasons,
             simultaneous_connections_count=simultaneous_count,
             rapid_switches_count=rapid_switches,
-            overlap_duration_minutes=overlap_minutes
+            overlap_duration_minutes=overlap_minutes,
+            strong_sharing=strong_sharing,
         )
 
 

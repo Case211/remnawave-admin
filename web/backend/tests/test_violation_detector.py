@@ -506,11 +506,14 @@ async def test_temporal_strong_sharing_reaches_100():
 
 @pytest.mark.asyncio
 async def test_mobile_carrier_not_false_positive():
-    """M3: те же 6 IP, но мобильный оператор (connection_type=mobile) — CGNAT-буфер
-    поднимает порог, floor_suppressed гасит temporal-floor -> нарушения НЕТ."""
+    """M3: те же 6 IP, но один мобильный оператор (connection_type=mobile) — CGNAT-буфер
+    поднимает порог, floor_suppressed гасит temporal-floor -> нарушения НЕТ.
+
+    Оператор один: шесть адресов из шести разных сетей за минуту — это уже не
+    CGNAT одного телефона, а толпа, и её детектор обязан ловить (см. ниже)."""
     geo_map = {
         f"{i}.{i}.{i}.{i}": meta(f"{i}.{i}.{i}.{i}", country_code="RU", city="Moscow",
-                                 latitude=55.7, longitude=37.6, asn=100 + i, asn_org=f"MegaFon-{i}",
+                                 latitude=55.7, longitude=37.6, asn=31133, asn_org="PJSC MegaFon",
                                  connection_type="mobile", is_mobile=True)
         for i in range(1, 7)
     }
@@ -518,6 +521,44 @@ async def test_mobile_carrier_not_false_positive():
     conns = [conn(f"{i}.{i}.{i}.{i}", 60 + i) for i in range(1, 7)]
     res = await run_check(det, conns, devices=1)
     assert res.total < 50.0, "M3: мобильный оператор не должен ловить ложное нарушение"
+
+
+def _crowd(n, mobile_every=None):
+    """n адресов из n разных сетей и провайдеров; каждый mobile_every-й — мобильный."""
+    geo_map, conns = {}, []
+    for i in range(1, n + 1):
+        ip = f"{80 + i}.{10 + i}.{20 + i}.{30 + i}"
+        mobile = bool(mobile_every) and i % mobile_every == 0
+        geo_map[ip] = meta(ip, country_code="RU", city="Moscow", latitude=55.7, longitude=37.6,
+                           asn=1000 + i, asn_org="PJSC MegaFon" if mobile else f"ISP-{i}",
+                           connection_type="mobile" if mobile else "residential", is_mobile=mobile)
+        conns.append(conn(ip, 60 + i))
+    return geo_map, conns
+
+
+@pytest.mark.asyncio
+async def test_mass_sharing_survives_one_mobile_address():
+    """Живой случай: один мобильный адрес среди восьми сетей обнулял нарушение целиком."""
+    geo_map, conns = _crowd(8, mobile_every=8)
+    res = await run_check(make_detector(geo_map, recent_violations=3), conns, devices=1)
+    assert res.breakdown["temporal"].strong_sharing
+    assert res.total >= 50.0
+
+
+@pytest.mark.asyncio
+async def test_crowd_of_operators_half_mobile_is_a_violation():
+    """Скрин из чата: шестнадцать адресов из шестнадцати сетей, половина мобильных."""
+    geo_map, conns = _crowd(16, mobile_every=2)
+    res = await run_check(make_detector(geo_map, recent_violations=3), conns, devices=1)
+    assert res.total >= 50.0
+
+
+@pytest.mark.asyncio
+async def test_two_operators_stay_a_network_switch():
+    """Домашний провайдер плюс мобильный — переключение сети, а не шаринг."""
+    geo_map, conns = _crowd(2, mobile_every=2)
+    res = await run_check(make_detector(geo_map, recent_violations=3), conns, devices=1)
+    assert res.total < 50.0
 
 
 def test_mobile_carriers_list_covers_major_operators():
