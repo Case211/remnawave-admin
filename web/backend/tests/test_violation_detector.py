@@ -51,11 +51,15 @@ def make_detector(geo_map, recent_violations=3):
     return IntelligentViolationDetector(db, monitor, geoip_service=FakeGeoip(geo_map))
 
 
-def conn(ip, sec_ago=480, ua=None):
-    """ActiveConnection. sec_ago=480 (8 мин) — для temporal даёт максимум overlap-скора."""
+def conn(ip, sec_ago=480, ua=None, seen_sec_ago=None):
+    """ActiveConnection. sec_ago=480 (8 мин) — для temporal даёт максимум overlap-скора.
+
+    seen_sec_ago — последняя активность по логу (карта коллектора); с ней
+    одновременность считается по активности, а не по стартам."""
     c = ActiveConnection(
         connection_id=1, user_uuid="u", ip_address=ip, node_uuid="n",
         connected_at=datetime.utcnow() - timedelta(seconds=sec_ago), device_info=None,
+        last_seen_at=None if seen_sec_ago is None else datetime.utcnow() - timedelta(seconds=seen_sec_ago),
     )
     if ua is not None:
         c.user_agent = ua  # коллектор такого не пишет — для проверки device-анализатора
@@ -506,11 +510,14 @@ async def test_temporal_strong_sharing_reaches_100():
 
 @pytest.mark.asyncio
 async def test_mobile_carrier_not_false_positive():
-    """M3: те же 6 IP, но мобильный оператор (connection_type=mobile) — CGNAT-буфер
-    поднимает порог, floor_suppressed гасит temporal-floor -> нарушения НЕТ."""
+    """M3: те же 6 IP, но один мобильный оператор (connection_type=mobile) — CGNAT-буфер
+    поднимает порог, floor_suppressed гасит temporal-floor -> нарушения НЕТ.
+
+    Оператор один: шесть адресов из шести разных сетей за минуту — это уже не
+    CGNAT одного телефона, а толпа, и её детектор обязан ловить (см. ниже)."""
     geo_map = {
         f"{i}.{i}.{i}.{i}": meta(f"{i}.{i}.{i}.{i}", country_code="RU", city="Moscow",
-                                 latitude=55.7, longitude=37.6, asn=100 + i, asn_org=f"MegaFon-{i}",
+                                 latitude=55.7, longitude=37.6, asn=31133, asn_org="PJSC MegaFon",
                                  connection_type="mobile", is_mobile=True)
         for i in range(1, 7)
     }
@@ -518,6 +525,73 @@ async def test_mobile_carrier_not_false_positive():
     conns = [conn(f"{i}.{i}.{i}.{i}", 60 + i) for i in range(1, 7)]
     res = await run_check(det, conns, devices=1)
     assert res.total < 50.0, "M3: мобильный оператор не должен ловить ложное нарушение"
+
+
+def _crowd(n, mobile_every=None, started=None, seen=None):
+    """n адресов из n разных сетей и провайдеров; каждый mobile_every-й — мобильный.
+
+    started — старты в секундах назад (по умолчанию все минуту назад),
+    seen — последняя активность в секундах назад (None — без карты активности)."""
+    geo_map, conns = {}, []
+    for i in range(1, n + 1):
+        ip = f"{80 + i}.{10 + i}.{20 + i}.{30 + i}"
+        mobile = bool(mobile_every) and i % mobile_every == 0
+        geo_map[ip] = meta(ip, country_code="RU", city="Moscow", latitude=55.7, longitude=37.6,
+                           asn=1000 + i, asn_org="PJSC MegaFon" if mobile else f"ISP-{i}",
+                           connection_type="mobile" if mobile else "residential", is_mobile=mobile)
+        conns.append(conn(ip, started[i - 1] if started else 60 + i, seen_sec_ago=seen))
+    return geo_map, conns
+
+
+@pytest.mark.asyncio
+async def test_crowd_that_joined_over_an_hour_is_caught_by_activity():
+    """Старты вразнобой за час, все живы сейчас — по стартам это не группировалось никогда."""
+    geo_map, conns = _crowd(8, mobile_every=4, started=[600 * i for i in range(1, 9)], seen=15)
+    res = await run_check(make_detector(geo_map, recent_violations=3), conns, devices=1)
+    assert res.breakdown["temporal"].simultaneous_connections_count == 8
+    assert res.total >= 50.0
+
+
+@pytest.mark.asyncio
+async def test_batch_check_uses_live_connections_instead_of_db_rows():
+    geo_map, conns = _crowd(8, mobile_every=4, started=[600 * i for i in range(1, 9)], seen=15)
+    det = make_detector(geo_map, recent_violations=3)
+    det.db.batch_get_user_devices_counts = AsyncMock(return_value={"u": 1})
+    det.db.batch_get_active_connections = AsyncMock(return_value={"u": []})
+    det.db.batch_get_connection_histories = AsyncMock(return_value={})
+    det.db.batch_get_user_baselines = AsyncMock(return_value={})
+    det.db.batch_get_shared_hwids = AsyncMock(return_value={})
+    det.db.batch_get_srh_records = AsyncMock(return_value={})
+
+    results = await det.check_users_batch(["u"], live_connections={"u": conns})
+
+    det.db.batch_get_active_connections.assert_not_awaited()
+    assert results["u"].total >= 50.0
+
+
+@pytest.mark.asyncio
+async def test_mass_sharing_survives_one_mobile_address():
+    """Живой случай: один мобильный адрес среди восьми сетей обнулял нарушение целиком."""
+    geo_map, conns = _crowd(8, mobile_every=8)
+    res = await run_check(make_detector(geo_map, recent_violations=3), conns, devices=1)
+    assert res.breakdown["temporal"].strong_sharing
+    assert res.total >= 50.0
+
+
+@pytest.mark.asyncio
+async def test_crowd_of_operators_half_mobile_is_a_violation():
+    """Скрин из чата: шестнадцать адресов из шестнадцати сетей, половина мобильных."""
+    geo_map, conns = _crowd(16, mobile_every=2)
+    res = await run_check(make_detector(geo_map, recent_violations=3), conns, devices=1)
+    assert res.total >= 50.0
+
+
+@pytest.mark.asyncio
+async def test_two_operators_stay_a_network_switch():
+    """Домашний провайдер плюс мобильный — переключение сети, а не шаринг."""
+    geo_map, conns = _crowd(2, mobile_every=2)
+    res = await run_check(make_detector(geo_map, recent_violations=3), conns, devices=1)
+    assert res.total < 50.0
 
 
 def test_mobile_carriers_list_covers_major_operators():

@@ -321,6 +321,8 @@ def _collect_caches() -> List[Dict[str, Any]]:
                               {t for t in c._background_tasks if not t.done()}, "живые фоновые задачи"))
         entries.append(_entry("collector.node_name_cache", c._node_name_cache))
         entries.append(_entry("collector.node_last_batch", c._node_last_batch))
+        entries.append(_entry("collector.activity", c._activity,
+                              "живые адреса по последней активности"))
 
         det = getattr(c, "violation_detector", None)
         if det is not None:

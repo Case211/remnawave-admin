@@ -74,6 +74,7 @@ def reset_collector_state():
     collector._pending_violation_users.clear()
     collector._violation_check_cooldown.clear()
     collector._node_name_cache.clear()
+    collector._activity.clear()
     # Гасим часовой таймер чистки нарушений, чтобы не дёргал db в тестах
     collector._last_violation_cleanup = datetime.utcnow()
     yield

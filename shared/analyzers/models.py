@@ -71,6 +71,10 @@ class TemporalScore:
     simultaneous_connections_count: int = 0
     rapid_switches_count: int = 0
     overlap_duration_minutes: float = 0.0
+    # Явный массовый шаринг: источников сильно больше порога, в который уже
+    # заложены буферы на смену сети и CGNAT. Детектор не гасит такой сигнал
+    # мобильными объяснениями.
+    strong_sharing: bool = False
 
 
 @dataclass

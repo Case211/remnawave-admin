@@ -32,6 +32,10 @@ class ActiveConnection:
     node_uuid: Optional[str]
     connected_at: datetime
     device_info: Optional[Dict[str, Any]] = None
+    # Последняя активность по логу агента; есть только у соединений из карты
+    # активности коллектора. По ней считается одновременность, по
+    # connected_at — давность.
+    last_seen_at: Optional[datetime] = None
 
 
 class ConnectionMonitor:

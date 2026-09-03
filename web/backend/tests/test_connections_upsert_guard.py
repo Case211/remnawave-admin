@@ -50,3 +50,25 @@ async def test_refresh_update_is_guarded_by_real_change():
     guard = update_sql.split("disconnected_at IS NULL", 1)[1]
     assert "uc.node_uuid IS DISTINCT FROM COALESCE(batch.n, uc.node_uuid)" in guard
     assert "uc.device_info IS DISTINCT FROM COALESCE(batch.d, uc.device_info)" in guard
+
+
+@pytest.mark.asyncio
+async def test_stale_close_spares_addresses_present_in_the_batch():
+    """Регрессия: «адрес не равен адресу из батча» против каждой пары батча
+    закрывало у пользователя с двумя адресами оба. Закрываются только адреса,
+    которых в батче этой ноды нет."""
+    conn = _conn()
+    node = "22222222-2222-2222-2222-222222222222"
+    await _Service(conn).batch_upsert_connections([
+        {"user_uuid": "11111111-1111-1111-1111-111111111111", "ip_address": ip,
+         "node_uuid": node, "device_info": {"inbound_tag": "vless"}, "connected_at": None}
+        for ip in ("1.2.3.4", "5.6.7.8")
+    ])
+
+    close_call = conn.execute.await_args_list[2]
+    close_sql = close_call.args[0]
+    assert "NOT EXISTS" in close_sql
+    assert "b.uid = uc.user_uuid AND b.ip = uc.ip_address" in close_sql
+    assert "ip_address != batch.ip" not in close_sql
+    assert "uc.node_uuid::text = ANY($4::text[])" in close_sql
+    assert close_call.args[4] == [node]

@@ -206,6 +206,8 @@ class ConnectionsMixin:
                     ca = None
             connected_ats.append(ca or datetime.utcnow())
 
+        batch_nodes = sorted({n.lower() for n in node_uuids if n}) or None
+
         async with self.acquire() as conn:
             async with conn.transaction():
                 # Detect ip_address column type (INET vs VARCHAR) — cache once
@@ -285,20 +287,30 @@ class ConnectionsMixin:
 
                 # 2. Close stale connections — IPs not in this batch, older than threshold
                 # Cast ip_address to text for comparison (works with both INET and VARCHAR)
+                # Закрываются адреса пользователя, которых в батче этой ноды
+                # нет. Раньше условие «адрес не равен адресу из батча»
+                # проверялось против каждой пары батча — у пользователя с
+                # двумя адресами в одном батче закрывались оба, и строки
+                # флапали каждые две минуты. Нода в условии — чтобы батч одной
+                # ноды не закрывал адрес, живой на другой.
                 close_result = await conn.execute(
                     f"""
-                    UPDATE {USER_CONNECTIONS_TABLE} uc
-                    SET disconnected_at = NOW()
-                    FROM (
+                    WITH batch AS (
                         SELECT DISTINCT u::uuid AS uid, i{ip_cast} AS ip
                         FROM UNNEST($1::text[], $2::text[]) AS t(u, i)
-                    ) batch
-                    WHERE uc.user_uuid = batch.uid
-                      AND uc.ip_address != batch.ip
+                    )
+                    UPDATE {USER_CONNECTIONS_TABLE} uc
+                    SET disconnected_at = NOW()
+                    WHERE uc.user_uuid IN (SELECT uid FROM batch)
                       AND uc.disconnected_at IS NULL
                       AND uc.connected_at < NOW() - make_interval(mins => $3)
+                      AND ($4::text[] IS NULL OR uc.node_uuid::text = ANY($4::text[]))
+                      AND NOT EXISTS (
+                          SELECT 1 FROM batch b
+                          WHERE b.uid = uc.user_uuid AND b.ip = uc.ip_address
+                      )
                     """,
-                    user_uuids, ip_addresses, stale_threshold_minutes,
+                    user_uuids, ip_addresses, stale_threshold_minutes, batch_nodes,
                 )
                 closed = int(close_result.split()[-1]) if close_result else 0
 

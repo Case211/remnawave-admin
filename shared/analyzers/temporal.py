@@ -19,6 +19,58 @@ from shared.analyzers.models import (
 from shared.connection_monitor import ConnectionMonitor, ActiveConnection, ConnectionStats
 from shared.logger import logger
 
+def _as_naive_utc(value) -> Optional[datetime]:
+    """Время из строки или datetime — в naive UTC; иначе None."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    return value.astimezone(tz.utc).replace(tzinfo=None) if value.tzinfo else value
+
+
+def _group_by_start(valid_connections, window_seconds: int, switch_threshold: int) -> list:
+    """Группы одновременных подключений по стартам (соединения без last_seen_at).
+
+    Подключения считаются одновременными, только если созданы в пределах окна
+    друг от друга и между ними нет разрыва, похожего на последовательное
+    переключение сети.
+    """
+    groups = []
+    current_group = [valid_connections[0]]
+
+    for conn_time, ip in valid_connections[1:]:
+        prev_conn_time = current_group[-1][0]
+        time_diff_seconds = (conn_time - prev_conn_time).total_seconds()
+
+        # Разрыв больше порога переключения — это переподключение, не одновременность
+        if time_diff_seconds > switch_threshold:
+            if len(current_group) > 1:
+                groups.append(current_group)
+            current_group = [(conn_time, ip)]
+            continue
+
+        earliest_in_group = current_group[0][0]
+        time_diff_from_earliest_seconds = (conn_time - earliest_in_group).total_seconds()
+
+        # В группу — если в пределах окна и от самого раннего, и от предыдущего;
+        # разница 0.0 с — разные события в одной секунде из-за округления
+        if (time_diff_from_earliest_seconds <= window_seconds and
+                time_diff_seconds <= window_seconds and
+                time_diff_seconds >= 0.1):
+            current_group.append((conn_time, ip))
+        else:
+            if len(current_group) > 1:
+                groups.append(current_group)
+            current_group = [(conn_time, ip)]
+
+    if len(current_group) > 1:
+        groups.append(current_group)
+    return groups
+
+
 class TemporalAnalyzer:
     """
     Анализ временных паттернов смены IP.
@@ -58,6 +110,7 @@ class TemporalAnalyzer:
         reasons = []
         rapid_switches = 0
         overlap_minutes = 0.0
+        strong_sharing = False
         source_of = source_of or {}
 
         def sources(ips) -> int:
@@ -72,6 +125,7 @@ class TemporalAnalyzer:
         if len(connections) > 1:
             from shared.config_service import config_service
             simultaneous_window_seconds = 120  # Окно для определения одновременности (2 минуты)
+            active_window_seconds = 300        # Окно активности по логу агента (5 минут)
             max_connection_age_seconds = 600   # Подключения старше этого считаются устаревшими (10 минут)
             sequential_switch_threshold = 300  # Разрыв между подключениями, указывающий на переключение (5 минут)
             max_connection_age_hours = 24  # Максимальный возраст подключения для учёта
@@ -87,21 +141,27 @@ class TemporalAnalyzer:
             # Собираем все валидные времена подключений
             valid_connections = []
             now = datetime.utcnow()
-            
-            for conn in connections:
-                conn_time = conn.connected_at
-                if isinstance(conn_time, str):
-                    try:
-                        conn_time = datetime.fromisoformat(conn_time.replace('Z', '+00:00'))
-                    except ValueError:
-                        continue
 
-                if not isinstance(conn_time, datetime):
+            # Соединения из карты активности коллектора несут last_seen_at:
+            # одновременность считаем по последней активности, а не по стартам.
+            # Агент видит в логе только новые соединения, поэтому у живой
+            # сессии старт может быть часовой давности, а активность — сейчас;
+            # по стартам такие сессии в одно окно не попадали никогда.
+            by_activity = bool(connections) and all(
+                getattr(c, "last_seen_at", None) is not None for c in connections
+            )
+
+            for conn in connections:
+                conn_time = _as_naive_utc(conn.connected_at)
+                if conn_time is None:
                     continue
 
-                # Нормализуем timezone в UTC перед сравнением
-                if conn_time.tzinfo:
-                    conn_time = conn_time.astimezone(tz.utc).replace(tzinfo=None)
+                if by_activity:
+                    last_seen = _as_naive_utc(conn.last_seen_at)
+                    if last_seen is None or (now - last_seen).total_seconds() > active_window_seconds:
+                        continue
+                    valid_connections.append((conn_time, str(conn.ip_address)))
+                    continue
 
                 # Пропускаем слишком старые подключения (старше 24 часов)
                 age_hours = (now - conn_time).total_seconds() / 3600
@@ -116,56 +176,20 @@ class TemporalAnalyzer:
                     continue
 
                 valid_connections.append((conn_time, str(conn.ip_address)))
-            
+
             # Если есть валидные подключения, проверяем одновременность
             if len(valid_connections) > 1:
                 # Сортируем по времени подключения
                 valid_connections.sort(key=lambda x: x[0])
-                
-                # Группируем подключения по временным окнам
-                # Подключения считаются одновременными только если они созданы в пределах окна (2 минуты) друг от друга
-                # И между ними нет большого разрыва (что указывало бы на последовательное переключение)
-                simultaneous_groups = []
-                current_group = [valid_connections[0]]
-                
-                for conn_time, ip in valid_connections[1:]:
-                    # Проверяем разрыв между текущим и предыдущим подключением
-                    prev_conn_time = current_group[-1][0]
-                    time_diff_seconds = (conn_time - prev_conn_time).total_seconds()
-                    
-                    # Если разрыв больше порога переключения (5 минут), это последовательное переподключение
-                    # Не считаем это одновременным подключением
-                    if time_diff_seconds > sequential_switch_threshold:
-                        # Начинаем новую группу (это переподключение, а не одновременное подключение)
-                        if len(current_group) > 1:
-                            simultaneous_groups.append(current_group)
-                        current_group = [(conn_time, ip)]
-                        continue
-                    
-                    # Проверяем, попадает ли подключение в текущую группу
-                    # (в пределах окна от самого раннего подключения в группе)
-                    earliest_in_group = current_group[0][0]
-                    time_diff_from_earliest_seconds = (conn_time - earliest_in_group).total_seconds()
-                    
-                    # Подключение считается одновременным только если:
-                    # 1. Оно в пределах окна от самого раннего подключения в группе
-                    # 2. Разрыв между подключениями не слишком большой (не более окна одновременности)
-                    # 3. Разрыв не превышает порог переподключения (уже проверено выше)
-                    # 4. Разрыв больше 0.1 сек (если 0.0 сек, это разные события в одной секунде из-за округления)
-                    if (time_diff_from_earliest_seconds <= simultaneous_window_seconds and 
-                        time_diff_seconds <= simultaneous_window_seconds and
-                        time_diff_seconds >= 0.1):  # Игнорируем разницу 0.0 сек (округление времени)
-                        current_group.append((conn_time, ip))
-                    else:
-                        # Начинаем новую группу (есть разрыв, указывающий на последовательное переключение)
-                        if len(current_group) > 1:
-                            simultaneous_groups.append(current_group)
-                        current_group = [(conn_time, ip)]
-                
-                # Добавляем последнюю группу
-                if len(current_group) > 1:
-                    simultaneous_groups.append(current_group)
-                
+
+                if by_activity:
+                    # Всё, что активно в окне, в сети сейчас вместе — одна группа
+                    simultaneous_groups = [list(valid_connections)]
+                else:
+                    simultaneous_groups = _group_by_start(
+                        valid_connections, simultaneous_window_seconds, sequential_switch_threshold,
+                    )
+
                 # Находим группу с максимальным количеством уникальных IP
                 max_simultaneous_ips = 0
                 max_simultaneous_addresses = 0
@@ -414,7 +438,8 @@ class TemporalAnalyzer:
             reasons=reasons,
             simultaneous_connections_count=simultaneous_count,
             rapid_switches_count=rapid_switches,
-            overlap_duration_minutes=overlap_minutes
+            overlap_duration_minutes=overlap_minutes,
+            strong_sharing=strong_sharing,
         )
 
 
