@@ -80,10 +80,11 @@ async def push_throttles(only_node: str | None = None) -> int:
             logger.warning("Failed to push throttles to %s: %s", node_uuid, e)
 
     if sent:
-        logger.info(
-            "Throttles pushed to %d node(s), %d address(es) total",
-            sent, sum(len(v) for v in by_node.values()),
-        )
+        total = sum(len(v) for v in by_node.values())
+        # Пустой список при подключении агента — рутина, а не событие:
+        # после рестарта панели так отчитывается каждая нода
+        log = logger.debug if only_node and not total else logger.info
+        log("Throttles pushed to %d node(s), %d address(es) total", sent, total)
     return sent
 
 
