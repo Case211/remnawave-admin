@@ -15,7 +15,7 @@ The order of precedence is **database → `.env` → defaults**. Once a setting 
 | `DEFAULT_LOCALE` | — | `ru` | interface language: `ru` or `en` |
 | `LOG_LEVEL` | — | `INFO` | logging level |
 | `BOT_API_ROOT` | — | `https://api.telegram.org` | custom Bot API server |
-| `BOT_PROXY_URL` | — | — | proxy to Telegram: `socks5://`, `socks4://`, `http://`, credentials allowed. `socks5h://` and `https://` are not supported |
+| `BOT_PROXY_URL` | — | — | proxy to Telegram: `socks5://`, `socks4://`, `http://`, credentials allowed. `socks5h://` and `https://` are not supported. Notifications and backups sent by the web panel use it too |
 | `PANEL_API_KEY` | — | — | extra key if the panel requires one |
 
 ## Database
