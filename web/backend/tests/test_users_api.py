@@ -253,3 +253,73 @@ class TestParseDt:
     def test_invalid_string(self):
         from web.backend.api.v2.users import _parse_dt
         assert _parse_dt("not-a-date") is None
+
+
+class TestResolveUserByTelegramId:
+    """POST /api/v2/users/resolve — цифры это и внутренний id панели, и Telegram ID."""
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_telegram_id_when_panel_id_misses(self, client):
+        """Панель не знает такого id — ищем тот же номер как Telegram ID."""
+        found = {"uuid": "344ddd21-fead-483a-ae23-8c49e6b83ddb",
+                 "username": "GeologVPN_192647_6487", "shortUuid": "6U7X4Pn47FSb7JbumQJk"}
+
+        with patch("shared.api_client.api_client.get_user_by_id",
+                   new_callable=AsyncMock, side_effect=Exception("404")), \
+                patch("web.backend.api.v2.users._lookup_user_by_telegram_id",
+                      new_callable=AsyncMock, return_value={"response": found}), \
+                patch("web.backend.api.v2.users._resolve_visible_user_uuid",
+                      new_callable=AsyncMock, return_value=None):
+            resp = await client.post("/api/v2/users/resolve", json={"query": "127192647"})
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["username"] == "GeologVPN_192647_6487"
+
+    @pytest.mark.asyncio
+    async def test_panel_id_still_wins(self, client):
+        """Совпадение по внутреннему id панели по-прежнему возвращается первым."""
+        panel_user = {"uuid": "11111111-1111-1111-1111-111111111111", "username": "by-panel-id"}
+        tg_lookup = AsyncMock(return_value={"response": {"username": "by-telegram-id"}})
+
+        with patch("shared.api_client.api_client.get_user_by_id",
+                   new_callable=AsyncMock, return_value={"response": panel_user}), \
+                patch("web.backend.api.v2.users._lookup_user_by_telegram_id", new=tg_lookup), \
+                patch("web.backend.api.v2.users._resolve_visible_user_uuid",
+                      new_callable=AsyncMock, return_value=None):
+            resp = await client.post("/api/v2/users/resolve", json={"query": "42"})
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["username"] == "by-panel-id"
+        tg_lookup.assert_not_awaited()
+
+
+class TestLookupUserByTelegramId:
+    """_lookup_user_by_telegram_id — обёртка над локальной таблицей."""
+
+    @pytest.mark.asyncio
+    async def test_returns_response_envelope(self):
+        from web.backend.api.v2.users import _lookup_user_by_telegram_id
+
+        user = {"uuid": "abc", "username": "tg-user"}
+        with patch("shared.database.db_service") as db:
+            db.is_connected = True
+            db.get_user_by_telegram_id = AsyncMock(return_value=user)
+            assert await _lookup_user_by_telegram_id("127192647") == {"response": user}
+            db.get_user_by_telegram_id.assert_awaited_once_with(127192647)
+
+    @pytest.mark.asyncio
+    async def test_empty_when_not_found(self):
+        from web.backend.api.v2.users import _lookup_user_by_telegram_id
+
+        with patch("shared.database.db_service") as db:
+            db.is_connected = True
+            db.get_user_by_telegram_id = AsyncMock(return_value=None)
+            assert await _lookup_user_by_telegram_id("1") == {}
+
+    @pytest.mark.asyncio
+    async def test_empty_without_db(self):
+        from web.backend.api.v2.users import _lookup_user_by_telegram_id
+
+        with patch("shared.database.db_service") as db:
+            db.is_connected = False
+            assert await _lookup_user_by_telegram_id("1") == {}

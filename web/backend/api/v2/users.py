@@ -79,6 +79,19 @@ async def _lookup_user_by_email(email: str) -> dict:
     return {"response": users[0]} if users else {}
 
 
+async def _lookup_user_by_telegram_id(query: str) -> dict:
+    """Lookup a user by Telegram ID in the synced local table.
+
+    В Panel API поиска по telegram_id нет — берём из локальной таблицы,
+    которая синхронизируется вместе с остальными полями пользователя.
+    """
+    from shared.database import db_service
+    if not db_service.is_connected:
+        return {}
+    user = await db_service.get_user_by_telegram_id(int(query))
+    return {"response": user} if user else {}
+
+
 def _extract_panel_error(exc: Exception) -> Optional[str]:
     """
     Достаёт человекочитаемое описание ошибки из ответа Panel API.
@@ -741,6 +754,10 @@ async def resolve_user(
     lookups = []
     if query.isdigit():
         lookups.append(("id", lambda: api_client.get_user_by_id(int(query))))
+        # Telegram ID выглядит так же, как внутренний id панели, поэтому
+        # пробуем и его: у панели такого поиска нет, но синхронизированная
+        # локальная таблица знает telegram_id каждого пользователя.
+        lookups.append(("telegram_id", lambda: _lookup_user_by_telegram_id(query)))
     elif "@" in query:
         lookups.append(("email", lambda: _lookup_user_by_email(query)))
     else:
@@ -773,12 +790,14 @@ async def resolve_user(
                     """
                     SELECT uuid, username, short_uuid FROM users
                     WHERE uuid = $1
-                       OR LOWER(raw_data->>'description') LIKE $2
+                       OR telegram_id::text = $3
+                       OR LOWER(COALESCE(description, raw_data->>'description', '')) LIKE $2
                        OR LOWER(raw_data->>'note') LIKE $2
                     LIMIT 1
                     """,
                     query.lower(),
                     f"%{query.lower()}%",
+                    query,
                 )
                 if row:
                     await _ensure_user_visible(admin, str(row["uuid"]))
