@@ -10,6 +10,8 @@ Both are toggled in the panel settings.
 
 The bot button appears once a public https address of the panel is set — the "General → Public panel URL" setting (`web_panel_public_url`) or the `APP_PUBLIC_URL` variable.
 
+Signed `initData` is only read from the URL fragment and only inside a Telegram client, so a link with `#tgWebAppData=...` sent in a chat cannot poison an admin's tab; the parameter is stripped from the address immediately after it is read. In fullscreen mode the Telegram client draws its buttons on top of the page, so the header and sidebar inset by their height (`--tg-content-safe-area-inset-*` from the vendored `telegram-web-app.js`).
+
 **Login and password** — accounts from the database (the Administrators section) or the fallback pair `WEB_ADMIN_LOGIN` / `WEB_ADMIN_PASSWORD` from `.env`. TOTP two-factor and biometric login (WebAuthn) can be added on top.
 
 The first administrator is created by the registration form on first open. If the panel is already running and nobody can get in, use the CLI:

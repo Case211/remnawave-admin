@@ -8,7 +8,7 @@ import {
   TotpSetupResponse,
 } from '../api/auth'
 import { registerAuthGetter } from './authBridge'
-import { clearTelegramInitData } from '../lib/telegramWebApp'
+import { clearTelegramInitData, parseTelegramUser } from '../lib/telegramWebApp'
 
 // Safe localStorage wrapper to prevent quota errors
 const safeLocalStorage: StateStorage = {
@@ -181,10 +181,15 @@ export const useAuthStore = create<AuthState>()(
             return
           }
 
+          // Личность из initData — чтобы в шапке было видно, под кем вошли.
+          // Подпись проверил сервер; здесь это только подпись под аватаром.
+          const tgUser = parseTelegramUser(initData)
           set({
             user: {
-              username: 'telegram',
-              firstName: 'telegram',
+              telegramId: tgUser?.id,
+              username: tgUser?.username || tgUser?.first_name || 'telegram',
+              firstName: tgUser?.first_name || tgUser?.username || 'telegram',
+              lastName: tgUser?.last_name,
               authMethod: 'telegram',
             },
             accessToken: response.access_token || null,

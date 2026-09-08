@@ -779,6 +779,41 @@
     padding-top: env(safe-area-inset-top, 0px);
   }
 
+  /* ── Telegram Mini App ──────────────────────────────────────
+     Внутри Telegram кнопки клиента («Закрыть», «свернуть», «···») лежат
+     ПОВЕРХ страницы, внутри вьюпорта, и env(safe-area-inset-*) про них
+     не знает. Их размеры отдаёт сам Telegram в переменных --tg-*, которые
+     выставляет вендоренный SDK (см. lib/telegramViewport). Пока SDK не
+     загрузился, переменные пусты и запасные нули дают прежнюю раскладку.
+
+     --tg-safe-area-inset-top — вырез/статус-бар устройства,
+     --tg-content-safe-area-inset-top — собственная шапка Telegram. */
+  .tg-miniapp .layout-root {
+    /* 100vh в мини-аппе врёт: реальную высоту знает только клиент */
+    height: var(--tg-viewport-stable-height, 100vh);
+  }
+
+  .tg-miniapp .layout-header {
+    padding-top: calc(
+      var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)
+    );
+    padding-left: calc(1rem + var(--tg-safe-area-inset-left, 0px));
+    padding-right: calc(1rem + var(--tg-safe-area-inset-right, 0px));
+    height: auto;
+    min-height: 4rem;
+  }
+
+  .tg-miniapp .layout-sidebar {
+    padding-top: calc(
+      var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)
+    );
+    padding-bottom: var(--tg-safe-area-inset-bottom, 0px);
+  }
+
+  .tg-miniapp .layout-main-bg {
+    padding-bottom: var(--tg-safe-area-inset-bottom, 0px);
+  }
+
   /* Hide scrollbar but keep scroll functionality */
   .no-scrollbar {
     -ms-overflow-style: none;

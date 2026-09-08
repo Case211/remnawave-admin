@@ -23,6 +23,7 @@ vi.mock('@/store/authBridge', () => ({
 
 vi.mock('@/lib/telegramWebApp', () => ({
   clearTelegramInitData: vi.fn(),
+  parseTelegramUser: vi.fn(() => ({ id: 777, username: 'admin777', first_name: 'Admin' })),
 }))
 
 // Helper: create a JWT-like token with given exp

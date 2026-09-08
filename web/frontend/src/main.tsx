@@ -5,14 +5,27 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { OfflineIndicator } from '@/components/OfflineIndicator'
 import App from './App'
-import { captureTelegramInitData } from './lib/telegramWebApp'
+import { useAuthStore } from './store/authStore'
+import { captureTelegramInitData, stripTelegramInitDataFromUrl } from './lib/telegramWebApp'
+import { initTelegramViewport } from './lib/telegramViewport'
 import './i18n'
 import './index.css'
 
 // Telegram кладёт подписанные initData в хеш URL при открытии мини-аппа.
 // Снимаем их до того, как роутер перепишет адрес, иначе авто-вход
-// потеряет данные ещё до первого рендера.
-captureTelegramInitData()
+// потеряет данные ещё до первого рендера. Для уже вошедшего админа
+// не снимаем вовсе: чужие initData в его вкладке не нужны, а без этой
+// проверки открытая им ссылка молча сменила бы аккаунт при следующем
+// истечении сессии.
+if (useAuthStore.getState().isAuthenticated) {
+  stripTelegramInitDataFromUrl()
+} else {
+  captureTelegramInitData()
+}
+
+// Внутри Telegram кнопки клиента лежат поверх страницы — подтягиваем его
+// SDK, чтобы знать их размеры и не рисовать шапку под ними.
+initTelegramViewport()
 
 // A tab holding a pre-deploy build references chunk hashes that no longer
 // exist on the server — lazy imports fail with "Failed to fetch dynamically
