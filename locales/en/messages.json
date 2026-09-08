@@ -6,6 +6,7 @@
     "menu_stats": "📊 Statistics:\n\n  👥 Users: {users}\n     └─ Online: {online}\n\n  🛰 Nodes: {nodes}\n     ├─ Enabled: {nodes_enabled}\n     └─ Online: {nodes_online}\n\n  🖥 Hosts: {hosts}\n     └─ Enabled: {hosts_enabled}",
     "user_usage": "🔍 Use Users → Find user and type username/email/Telegram ID/description.",
     "panel_open_hint": "🖥 The panel opens inside Telegram — you will be signed in automatically.",
+    "panel_private_only": "ℹ️ The panel can only be opened in a private chat with the bot.",
     "panel_url_not_set": "⚠️ Public panel URL is not set. Set it in the panel settings (General → Public panel URL) or via APP_PUBLIC_URL — it must start with https://"
   },
   "panel": {

@@ -6,6 +6,7 @@
     "menu_stats": "📊 Статистика:\n\n  👥 Пользователей: {users}\n     └─ Онлайн: {online}\n\n  🛰 Нод: {nodes}\n     ├─ Включено: {nodes_enabled}\n     └─ Онлайн: {nodes_online}\n\n  🖥 Хостов: {hosts}\n     └─ Включено: {hosts_enabled}",
     "user_usage": "🔍 Меню «Пользователи → Найти пользователя». Введите username/email/Telegram ID/описание.",
     "panel_open_hint": "🖥 Панель откроется внутри Telegram — вход выполнится автоматически.",
+    "panel_private_only": "ℹ️ Панель открывается только в личном чате с ботом.",
     "panel_url_not_set": "⚠️ Публичный URL панели не задан. Укажите его в настройках панели (Общие → Публичный URL панели) или в переменной APP_PUBLIC_URL — адрес должен начинаться с https://"
   },
   "panel": {

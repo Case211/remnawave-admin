@@ -147,6 +147,12 @@ async def cmd_panel(message: Message) -> None:
     if await _not_admin(message):
         return
 
+    # Telegram принимает WebApp-кнопки только в приватных чатах, поэтому
+    # причины отказа разные — и сообщение должно называть настоящую.
+    if message.chat.type != "private":
+        await _send_clean_message(message, _("bot.panel_private_only"))
+        return
+
     button = panel_web_app_button()
     if button is None:
         await _send_clean_message(message, _("bot.panel_url_not_set"))

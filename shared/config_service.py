@@ -1512,7 +1512,10 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Входить автоматически, когда панель открыта внутри Telegram "
                        "(мини-приложение). Требует включённой авторизации через Telegram",
         "default_value": "true",
-        "sort_order": 1,
+        # 1-3 заняты соседями по подкатегории, 4-8 — brute_force. Метаданные
+        # существующих ключей не мигрируют (_create_config идёт с ON CONFLICT
+        # DO NOTHING), поэтому сдвинуть соседей нельзя — берём свободный номер.
+        "sort_order": 9,
     },
     {
         "key": "auth_password_enabled",

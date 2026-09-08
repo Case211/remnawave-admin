@@ -21,8 +21,9 @@ def _private_chat():
 
 
 @pytest.fixture(autouse=True)
-def _no_env_url(monkeypatch):
+def _clean_env(monkeypatch):
     monkeypatch.delenv("APP_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("WEB_SECRET_PATH", raising=False)
 
 
 class TestPanelWebAppUrl:
@@ -50,7 +51,13 @@ class TestPanelWebAppUrl:
             cs.get.side_effect = fake_get
             assert panel_web_app_url() == "https://from-setting.example.com"
 
-    def test_secret_path_appended(self, monkeypatch):
+    def test_secret_path_from_env(self, monkeypatch):
+        """WEB_SECRET_PATH — та же переменная, из которой префикс берёт фронт."""
+        monkeypatch.setenv("APP_PUBLIC_URL", "https://panel.example.com")
+        monkeypatch.setenv("WEB_SECRET_PATH", "/s3cret/")
+        assert panel_web_app_url() == "https://panel.example.com/s3cret"
+
+    def test_secret_path_from_config_when_env_empty(self, monkeypatch):
         monkeypatch.setenv("APP_PUBLIC_URL", "https://panel.example.com")
 
         def fake_get(key, default=None):
@@ -62,6 +69,10 @@ class TestPanelWebAppUrl:
             cs._initialized = True
             cs.get.side_effect = fake_get
             assert panel_web_app_url() == "https://panel.example.com/s3cret"
+
+    def test_no_secret_path(self, monkeypatch):
+        monkeypatch.setenv("APP_PUBLIC_URL", "https://panel.example.com")
+        assert panel_web_app_url() == "https://panel.example.com"
 
 
 class TestPanelWebAppButton:
@@ -115,3 +126,4 @@ class TestPanelWebAppButton:
             rows = markup.call_args.kwargs["inline_keyboard"]
             assert rows
             web_app.assert_called_once_with(url="https://panel.example.com")
+
