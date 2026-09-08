@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/authStore'
 vi.mock('@/api/auth', () => ({
   authApi: {
     telegramLogin: vi.fn(),
+    telegramWebAppLogin: vi.fn(),
     passwordLogin: vi.fn(),
     register: vi.fn(),
     refreshToken: vi.fn(),
@@ -18,6 +19,10 @@ vi.mock('@/api/auth', () => ({
 // Mock authBridge (imported by authStore at module level)
 vi.mock('@/store/authBridge', () => ({
   registerAuthGetter: vi.fn(),
+}))
+
+vi.mock('@/lib/telegramWebApp', () => ({
+  clearTelegramInitData: vi.fn(),
 }))
 
 // Helper: create a JWT-like token with given exp
@@ -103,6 +108,82 @@ describe('authStore', () => {
       expect(state.isAuthenticated).toBe(false)
       expect(state.error).toBe('Invalid hash')
       expect(state.isLoading).toBe(false)
+    })
+  })
+
+  describe('loginWithTelegramWebApp', () => {
+    it('авторизует по initData из мини-аппа', async () => {
+      const { authApi } = await import('@/api/auth')
+      vi.mocked(authApi.telegramWebAppLogin).mockResolvedValue({
+        access_token: 'acc-mini',
+        refresh_token: 'ref-mini',
+        token_type: 'bearer',
+        expires_in: 3600,
+        requires_2fa: false,
+        totp_enabled: false,
+      })
+
+      await useAuthStore.getState().loginWithTelegramWebApp('user=%7B%22id%22%3A1%7D&hash=x')
+
+      const state = useAuthStore.getState()
+      expect(authApi.telegramWebAppLogin).toHaveBeenCalledWith('user=%7B%22id%22%3A1%7D&hash=x')
+      expect(state.isAuthenticated).toBe(true)
+      expect(state.accessToken).toBe('acc-mini')
+      expect(state.refreshToken).toBeNull()
+      expect(state.user?.authMethod).toBe('telegram')
+    })
+
+    it('уходит в ветку 2FA, не авторизуя сессию', async () => {
+      const { authApi } = await import('@/api/auth')
+      vi.mocked(authApi.telegramWebAppLogin).mockResolvedValue({
+        requires_2fa: true,
+        totp_enabled: true,
+        temp_token: 'tmp-1',
+      })
+
+      await useAuthStore.getState().loginWithTelegramWebApp('init')
+
+      const state = useAuthStore.getState()
+      expect(state.requires2fa).toBe(true)
+      expect(state.tempToken).toBe('tmp-1')
+      expect(state.isAuthenticated).toBe(false)
+    })
+
+    it('сохраняет ошибку и пробрасывает её наружу', async () => {
+      const { authApi } = await import('@/api/auth')
+      vi.mocked(authApi.telegramWebAppLogin).mockRejectedValue(new Error('Not an admin'))
+
+      await expect(
+        useAuthStore.getState().loginWithTelegramWebApp('init')
+      ).rejects.toThrow('Not an admin')
+
+      const state = useAuthStore.getState()
+      expect(state.isAuthenticated).toBe(false)
+      expect(state.error).toBe('Not an admin')
+      expect(state.isLoading).toBe(false)
+    })
+
+    it('logout забывает initData, чтобы не залогиниться обратно', async () => {
+      const { authApi } = await import('@/api/auth')
+      const { clearTelegramInitData } = await import('@/lib/telegramWebApp')
+      vi.mocked(authApi.logout).mockResolvedValue(undefined)
+      useAuthStore.setState({ isAuthenticated: true })
+
+      useAuthStore.getState().logout()
+
+      expect(clearTelegramInitData).toHaveBeenCalled()
+    })
+
+    it('разлогин по истёкшей сессии сохраняет initData для повторного входа', async () => {
+      const { authApi } = await import('@/api/auth')
+      const { clearTelegramInitData } = await import('@/lib/telegramWebApp')
+      vi.mocked(authApi.logout).mockResolvedValue(undefined)
+      useAuthStore.setState({ isAuthenticated: true })
+
+      useAuthStore.getState().logout({ keepMiniAppSession: true })
+
+      expect(clearTelegramInitData).not.toHaveBeenCalled()
+      expect(useAuthStore.getState().isAuthenticated).toBe(false)
     })
   })
 

@@ -2,7 +2,7 @@
 from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardMarkup, Message
 from aiogram.utils.i18n import gettext as _
 
 from src.handlers.common import _not_admin, _send_clean_message
@@ -10,7 +10,7 @@ from src.handlers.state import LAST_BOT_MESSAGES, LAST_BOT_MESSAGES_LOCK, PENDIN
 from src.keyboards.billing_menu import billing_menu_keyboard
 from src.keyboards.billing_nodes_menu import billing_nodes_menu_keyboard
 from src.keyboards.hosts_menu import hosts_menu_keyboard
-from src.keyboards.main_menu import bulk_menu_keyboard, main_menu_keyboard, nodes_menu_keyboard, resources_menu_keyboard, system_menu_keyboard
+from src.keyboards.main_menu import bulk_menu_keyboard, main_menu_keyboard, nodes_menu_keyboard, panel_web_app_button, resources_menu_keyboard, system_menu_keyboard
 from src.keyboards.providers_menu import providers_menu_keyboard
 from src.keyboards.stats_menu import stats_menu_keyboard
 from src.utils.auth import BotAdmin
@@ -139,6 +139,24 @@ async def handle_pending(message: Message, state: FSMContext, admin: BotAdmin) -
         await handle_block_ip_add(message, ctx)
     else:
         await _send_clean_message(message, _("errors.generic"))
+
+
+@router.message(Command("panel"))
+async def cmd_panel(message: Message) -> None:
+    """Открыть веб-панель как Telegram Mini App (вход выполняется автоматически)."""
+    if await _not_admin(message):
+        return
+
+    button = panel_web_app_button()
+    if button is None:
+        await _send_clean_message(message, _("bot.panel_url_not_set"))
+        return
+
+    await _send_clean_message(
+        message,
+        _("bot.panel_open_hint"),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[button]]),
+    )
 
 
 @router.message(Command("help"))

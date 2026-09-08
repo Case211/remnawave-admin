@@ -5,8 +5,14 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { OfflineIndicator } from '@/components/OfflineIndicator'
 import App from './App'
+import { captureTelegramInitData } from './lib/telegramWebApp'
 import './i18n'
 import './index.css'
+
+// Telegram кладёт подписанные initData в хеш URL при открытии мини-аппа.
+// Снимаем их до того, как роутер перепишет адрес, иначе авто-вход
+// потеряет данные ещё до первого рендера.
+captureTelegramInitData()
 
 // A tab holding a pre-deploy build references chunk hashes that no longer
 // exist on the server — lazy imports fail with "Failed to fetch dynamically

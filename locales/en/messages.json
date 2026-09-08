@@ -1,10 +1,12 @@
 {
   "bot": {
     "welcome": "👋 Welcome to the {brand} admin bot. Control users, nodes, and billing from one place.",
-    "help": "ℹ️ Quick commands:\n\nCore:\n/start — welcome\n/help — this help\n/health — system check\n/stats — summary\n/bandwidth — traffic\n\nUsers:\nUsers → Find user (menu) — search by username/email/Telegram ID/description\n/user_create <username> <expire_iso> [telegram_id] — create user\n\nInfra:\n/nodes — list nodes\n/node <uuid> — node details\n/nodes_usage — realtime usage\n/nodes_range <start_iso> <end_iso> — traffic by range\n/hosts — list hosts\n/host <uuid> — host details\n\nOther:\n/sub <short_uuid> — subscription\n/tokens — API tokens\n/templates — templates\n/snippets — snippets\n/configs — configs\n/billing — billing\n/providers — providers",
+    "help": "ℹ️ Quick commands:\n\nCore:\n/start — welcome\n/help — this help\n/panel — open the web panel\n/health — system check\n/stats — summary\n/bandwidth — traffic\n\nUsers:\nUsers → Find user (menu) — search by username/email/Telegram ID/description\n/user_create <username> <expire_iso> [telegram_id] — create user\n\nInfra:\n/nodes — list nodes\n/node <uuid> — node details\n/nodes_usage — realtime usage\n/nodes_range <start_iso> <end_iso> — traffic by range\n/hosts — list hosts\n/host <uuid> — host details\n\nOther:\n/sub <short_uuid> — subscription\n/tokens — API tokens\n/templates — templates\n/snippets — snippets\n/configs — configs\n/billing — billing\n/providers — providers",
     "menu": "🤖 Remnawave Admin Bot",
     "menu_stats": "📊 Statistics:\n\n  👥 Users: {users}\n     └─ Online: {online}\n\n  🛰 Nodes: {nodes}\n     ├─ Enabled: {nodes_enabled}\n     └─ Online: {nodes_online}\n\n  🖥 Hosts: {hosts}\n     └─ Enabled: {hosts_enabled}",
-    "user_usage": "🔍 Use Users → Find user and type username/email/Telegram ID/description."
+    "user_usage": "🔍 Use Users → Find user and type username/email/Telegram ID/description.",
+    "panel_open_hint": "🖥 The panel opens inside Telegram — you will be signed in automatically.",
+    "panel_url_not_set": "⚠️ Public panel URL is not set. Set it in the panel settings (General → Public panel URL) or via APP_PUBLIC_URL — it must start with https://"
   },
   "panel": {
     "status": "Panel status",
@@ -56,7 +58,8 @@
     "filter_active": "Current: {filter}",
     "filter_clear": "❌ Clear filter",
     "yes": "✅ Yes",
-    "no": "❌ No"
+    "no": "❌ No",
+    "open_panel": "🖥 Open panel"
   },
   "filter": {
     "title_users": "🔍 User Filters",

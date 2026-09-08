@@ -269,6 +269,8 @@
     "loginButton": "Log in",
     "forgotPassword": "Forgot password?",
     "loggingIn": "Logging in...",
+    "miniAppLoggingIn": "Signing in via Telegram...",
+    "miniAppFailed": "Telegram auto-login failed",
     "telegram": "Log in with Telegram",
     "password": "Log in with password",
     "passkey": "Sign in with passkey",
@@ -3628,9 +3630,17 @@
         "label": "🏷️ Panel name",
         "description": "Project name displayed in the sidebar (next to the logo)"
       },
+      "web_panel_public_url": {
+        "label": "🔗 Public panel URL",
+        "description": "https address of the web panel. Used by the bot's \"Open panel\" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL"
+      },
       "auth_telegram_enabled": {
         "label": "✈️ Telegram Authentication",
         "description": "Allow login via Telegram Login Widget"
+      },
+      "auth_telegram_webapp_enabled": {
+        "label": "✈️ Telegram Mini App auto-login",
+        "description": "Sign in automatically when the panel is opened inside Telegram (Mini App). Requires Telegram authentication to be enabled"
       },
       "auth_password_enabled": {
         "label": "🔒 Password Authentication",

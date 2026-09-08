@@ -138,6 +138,17 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 6,
     },
     {
+        "key": "web_panel_public_url",
+        "value_type": "string",
+        "category": "general",
+        "display_name": "Публичный URL панели",
+        "description": "https-адрес веб-панели. Используется кнопкой «Открыть панель» "
+                       "в боте (Telegram Mini App). Пусто — берётся из APP_PUBLIC_URL",
+        "default_value": "",
+        "env_var_name": "APP_PUBLIC_URL",
+        "sort_order": 7,
+    },
+    {
         "key": "web_session_access_minutes",
         "value_type": "int",
         "category": "general",
@@ -1489,6 +1500,17 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "subcategory": "auth_methods",
         "display_name": "Авторизация через Telegram",
         "description": "Разрешить вход через Telegram Login Widget",
+        "default_value": "true",
+        "sort_order": 1,
+    },
+    {
+        "key": "auth_telegram_webapp_enabled",
+        "value_type": "bool",
+        "category": "security",
+        "subcategory": "auth_methods",
+        "display_name": "Автовход в Telegram Mini App",
+        "description": "Входить автоматически, когда панель открыта внутри Telegram "
+                       "(мини-приложение). Требует включённой авторизации через Telegram",
         "default_value": "true",
         "sort_order": 1,
     },
