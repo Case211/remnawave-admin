@@ -23,6 +23,7 @@ The basics: language, logs, access to the Remnawave panel, third-party service k
 | **🗂️ Log backup count** | `log_backup_count` | `5` | Number of compressed backup files kept after rotation |
 | **🌍 MaxMind GeoIP source** | `maxmind_source` | `auto` | auto — GitHub (ltsdev/maxmind) then MaxMind; github — GitHub only (no key); maxmind — official only (key required) (`MAXMIND_SOURCE`) |
 | **🏷️ Panel name** | `panel_name` | empty | Project name displayed in the sidebar (next to the logo) |
+| **🔗 Public panel URL** | `web_panel_public_url` | empty | https address of the web panel. Used by the bot's "Open panel" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL (`APP_PUBLIC_URL`) |
 | **Access token lifetime (minutes)** | `web_session_access_minutes` | `30` | Lifetime of the web panel access token. Applies to new logins and refreshes. Recommended: 30-120 min (`WEB_JWT_EXPIRE_MINUTES`) |
 | **Session lifetime (hours)** | `web_session_refresh_hours` | `6` | Total session lifetime (refresh token). While it is valid the user stays signed in; after that a new login with 2FA is required. Recommended: 12-24h (`WEB_JWT_REFRESH_HOURS`) |
 | **DNS: Cloudflare (encrypted)** | `dns_creds_cloudflare` | empty | Managed on the DNS page, not here (read-only) |
@@ -84,7 +85,7 @@ Where and what to write in Telegram. Topics spread events across forum threads, 
 | **🛡️ Topic: Violations** | `notifications_topic_violations` | empty | Topic ID for violation notifications (`NOTIFICATIONS_TOPIC_VIOLATIONS`) |
 | **❗ Topic: Errors** | `notifications_topic_errors` | empty | Topic ID for error notifications (`NOTIFICATIONS_TOPIC_ERRORS`) |
 | **💰 Topic: Finance** | `notifications_topic_finance` | empty | Topic ID for financial notifications and reminders (`NOTIFICATIONS_TOPIC_FINANCE`) |
-| **💾 Topic: Backups** | `notifications_topic_backups` | empty | Topic ID for backup files; empty — the service topic (`NOTIFICATIONS_TOPIC_BACKUPS`) |
+| **💾 Topic: Backups** | `notifications_topic_backups` | empty | Topic ID for backup files; empty — they go to the service topic (`NOTIFICATIONS_TOPIC_BACKUPS`) |
 
 
 ## 🛡️ Violation Detection
@@ -122,6 +123,7 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 | **Violation retention (days)** | `violation_retention_days` | `90` | How many days violation records are kept before automatic cleanup |
 | **Connection retention (days)** | `connections_retention_days` | `30` | How many days the user connection history is kept before automatic cleanup |
 | **HWID scan interval (min)** | `violations_hwid_scan_interval_minutes` | `30` | How often offline users sharing a HWID are checked for cross-account abuse (the batch detector only sees users who are online) |
+| **Хранение метрик нод (дни)** | `metrics_retention_days` | `30` | Сколько дней хранить снимки метрик нод до автоочистки. Раньше срок был зашит в коде, а сама очистка шла только при отчёте от ноды: на простое таблица росла без ограничения |
 | **Torrent event retention (days)** | `torrent_retention_days` | `90` | How many days recorded torrent events are kept before automatic cleanup |
 | **📅 Max SRH record age (days)** | `violation_ua_max_age_days` | `0` | Ignore subscription requests older than N days. 0 = analyse all records |
 | **Torrent detection via nDPI** | `ndpi_detection_enabled` | `false` | Xray only recognises BitTorrent by the plaintext handshake, so encrypted streams, DHT and uTP slip past. nDPI sees those too. Requires the nDPId daemon on the node: the setting is pushed to agents as a command, no .env editing needed |
@@ -164,6 +166,16 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 | **🧲 Torrent detection** | `torrent_detection_enabled` | `true` | Enable/disable torrent traffic detection via Xray routing |
 | **⚡ Auto-action on torrent** | `torrent_auto_action` | `notify` | Action on torrent traffic: notify (alert only), block_user (block) |
 | **🔕 Torrent notification cooldown (min)** | `torrent_notification_cooldown_minutes` | `30` | Minimum interval between torrent notifications for the same user |
+| **Event threshold for a violation** | `torrent_min_events` | `5` | How many torrent events must pile up for one user within half an hour before a violation is raised. Real exchange produces hundreds of events in minutes — single hits are nDPI noise. 1 raises a violation on the very first event |
+| **Distinct peers threshold (swarm)** | `torrent_min_peers` | `3` | How many DIFFERENT addresses the exchange must span within half an hour. Torrent means a swarm of dozens of peers; events against one and the same address are what a long ordinary connection produces — antivirus traffic and game launchers were caught exactly this way. 1 disables the swarm check |
+| **Not torrent, by address owner** | `torrent_asn_whitelist` | `kaspersky,gaijin,blizzard,valve,wargaming,microsoft,epic games,riot games,steam` | Comma-separated fragments of organisation names whose addresses are never treated as a violation. Game launchers ship updates over real BitTorrent (War Thunder among them), so the verdict on them is correct — only the counterpart differs. Leave empty to use the built-in list |
+
+
+### general
+
+| Setting | Key | Default | What it does |
+|---|---|---|---|
+| **Violation history window (days)** | `violation_recap_days` | `30` | The period used to count a user's violations for the repeat-offender badge and the history block. Annulled ones are shown separately — you see both how often the person was flagged and how much of that turned out to be a detector error |
 
 
 ### 📈 Traffic usage
@@ -183,10 +195,11 @@ The largest section: analyzers, thresholds, automatic actions and retention. Wha
 
 | Setting | Key | Default | What it does |
 |---|---|---|---|
-| **Ограничение скорости** | `throttle_enabled` | `true` | Разрешить «мягкую блокировку» — резать скорость нарушителю вместо полного отключения. Требует агента 1.6.0+ на нодах |
-| **Скорость по умолчанию (кбит/с)** | `throttle_default_kbit` | `1024` | На сколько резать, если скорость не указана явно. 1024 — сайты и мессенджеры работают, видео и торренты нет: человек замечает, что интернет странный, и идёт разбираться, а не молча теряет доступ |
-| **Резервный сквад для нарушителей** | `throttle_squad_uuid` | empty | UUID внутреннего сквада, куда уводить наказанного вдобавок к урезанию скорости. Прежние сквады запоминаются и возвращаются при снятии. Пусто — сквады не трогать, только резать скорость |
-| **Урезать скорость автоматически** | `violation_auto_soft_throttle` | `false` | Резать скорость сразу, когда детектор рекомендует разобраться вручную (скор 65-80). Мера обратимая и не выкидывает человека из сети, но по умолчанию выключена: решение о наказании остаётся за администратором |
+| **Speed throttling** | `throttle_enabled` | `true` | Allow the soft block — cut a violator's speed instead of cutting them off entirely. Requires agent 1.6.0+ on the nodes |
+| **Default speed (kbit/s)** | `throttle_default_kbit` | `1024` | How hard to throttle when no speed is given. At 1024 sites and messengers still work while video and torrents do not: the person notices the internet is odd and comes to sort it out instead of silently losing access |
+| **Default throttle duration (h)** | `throttle_default_hours` | `0` | How many hours before the throttle lifts itself when no expiry is given. 0 keeps it until lifted by hand |
+| **Reserve squad for violators** | `throttle_squad_uuid` | empty | UUID of the internal squad to move a punished user into on top of the throttle. Previous squads are remembered and restored when the throttle is lifted. Empty — leave squads alone and only cut the speed |
+| **Throttle speed automatically** | `violation_auto_soft_throttle` | `false` | Cut the speed as soon as the detector recommends a manual review (score 65-80). The measure is reversible and keeps the person online, but it is off by default: the call on punishment stays with the administrator |
 
 
 ### 🔍 Violation detection pipeline
@@ -208,9 +221,9 @@ Protection of the panel itself plus node attack detection: login methods, brute-
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | **✈️ Telegram Authentication** | `auth_telegram_enabled` | `true` | Allow login via Telegram Login Widget |
-| **✈️ Telegram Mini App auto-login** | `auth_telegram_webapp_enabled` | `true` | Sign in automatically when the panel is opened inside Telegram. Requires Telegram authentication to be enabled |
 | **🔒 Password Authentication** | `auth_password_enabled` | `true` | Allow login with username and password |
 | **🔐 Mandatory 2FA (TOTP)** | `auth_totp_required` | `false` | Require TOTP setup for all accounts |
+| **✈️ Telegram Mini App auto-login** | `auth_telegram_webapp_enabled` | `true` | Sign in automatically when the panel is opened inside Telegram (Mini App). Requires Telegram authentication to be enabled |
 
 
 ### 🛡️ Brute-force protection
@@ -278,6 +291,8 @@ The built-in mail server: TLS, inbound mail, spam scoring, retention. Setup is d
 | **Keep inbound mail, days** | `mailserver_inbox_retention_days` | `0` | After how many days received messages are deleted. 0 = keep forever |
 | **Keep sending history, days** | `mailserver_queue_retention_days` | `90` | After how many days sent and rejected messages leave the queue. Messages still waiting to be sent are untouched. 0 = keep forever |
 | **Notify about new mail** | `mailserver_notify_new_mail` | `false` | Send a notification when a message arrives, excluding service mail: bounces, unsubscribes and DMARC reports |
+| **📮 Outbound delivery** | `mailserver_delivery_mode` | `direct` | direct — straight to the recipient MX (needs outbound port 25); brevo — via the Brevo HTTP API, no outbound SMTP ports needed (`MAIL_DELIVERY_MODE`) |
+| **🔑 Brevo: API key** | `mailserver_brevo_api_key` | empty | v3 key from Brevo → SMTP & API → API Keys. The sender domain must be authenticated in Brevo (`BREVO_API_KEY`) |
 
 
 ## 💾 Backups
