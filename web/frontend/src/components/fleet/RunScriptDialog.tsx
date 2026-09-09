@@ -118,6 +118,7 @@ function ExecResult({ execId, nodeName, error }: { execId?: number; nodeName: st
 export default function RunScriptDialog({ open, onOpenChange, script }: RunScriptDialogProps) {
   const { t } = useTranslation()
   const [selectedNodes, setSelectedNodes] = useState<string[]>([])
+  const [nodeSearch, setNodeSearch] = useState('')
   const [execResults, setExecResults] = useState<ExecResultRow[] | null>(null)
   const [envVars, setEnvVars] = useState<Record<string, string>>({})
 
@@ -146,7 +147,13 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
   }, [scriptDetail?.script_content])
 
   const connectedNodes = agents?.nodes?.filter((n) => n.agent_v2_connected) || []
-  const allSelected = connectedNodes.length > 0 && selectedNodes.length === connectedNodes.length
+  // Поиск по имени и адресу: когда нод десятки, глазами искать неудобно
+  const needle = nodeSearch.trim().toLowerCase()
+  const visibleNodes = needle
+    ? connectedNodes.filter((n) => `${n.name} ${n.address}`.toLowerCase().includes(needle))
+    : connectedNodes
+  // «Выбрать все» работает с тем, что сейчас показано: с поиском — только с найденными
+  const allSelected = visibleNodes.length > 0 && visibleNodes.every((n) => selectedNodes.includes(n.uuid))
 
   const toggleNode = (uuid: string) => {
     setSelectedNodes((prev) =>
@@ -156,7 +163,10 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
   }
 
   const toggleAll = () => {
-    setSelectedNodes(allSelected ? [] : connectedNodes.map((n) => n.uuid))
+    const visible = visibleNodes.map((n) => n.uuid)
+    setSelectedNodes((prev) =>
+      allSelected ? prev.filter((u) => !visible.includes(u)) : Array.from(new Set([...prev, ...visible])),
+    )
     setExecResults(null)
   }
 
@@ -194,6 +204,7 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
 
   const handleClose = () => {
     setSelectedNodes([])
+    setNodeSearch('')
     setExecResults(null)
     setEnvVars({})
     onOpenChange(false)
@@ -202,6 +213,7 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
   useEffect(() => {
     if (open) {
       setSelectedNodes([])
+      setNodeSearch('')
       setExecResults(null)
       setEnvVars({})
     }
@@ -239,11 +251,23 @@ export default function RunScriptDialog({ open, onOpenChange, script }: RunScrip
                 </button>
               )}
             </div>
+            {connectedNodes.length > 5 && (
+              <Input
+                value={nodeSearch}
+                onChange={(e) => setNodeSearch(e.target.value)}
+                placeholder={t('fleet.searchPlaceholder')}
+                aria-label={t('fleet.searchPlaceholder')}
+                className="h-8 text-xs mb-1.5"
+              />
+            )}
             {connectedNodes.length === 0 ? (
               <p className="text-xs text-dark-400 py-2">{t('fleet.terminal.agentNotConnected')}</p>
             ) : (
               <div className="max-h-[180px] overflow-auto rounded-md border border-[var(--glass-border)] divide-y divide-[var(--glass-border)]">
-                {connectedNodes.map((node) => (
+                {visibleNodes.length === 0 && (
+                  <p className="text-xs text-dark-400 px-3 py-2">{t('fleet.nothingFound')}</p>
+                )}
+                {visibleNodes.map((node) => (
                   <label
                     key={node.uuid}
                     className="flex items-center gap-2.5 px-3 py-2 hover:bg-[var(--glass-bg)] cursor-pointer"
