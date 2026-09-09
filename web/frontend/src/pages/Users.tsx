@@ -47,6 +47,7 @@ import {
 import client from '../api/client'
 import { userPresetsApi, UserPreset, UserPresetData } from '../api/userPresets'
 import { EmptyState } from '@/components/EmptyState'
+import { OverflowBadges } from '@/components/OverflowBadges'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -1019,6 +1020,10 @@ export default function Users() {
   const [adminId, setAdminId] = useUrlParam('admin_id', '')
   const [externalSquad, setExternalSquad] = useUrlParam('external_squad', '')
   const [internalSquad, setInternalSquad] = useUrlParam('internal_squad', '')
+  // Внутренних сквадов у юзера несколько, фильтр тоже множественный: в URL и
+  // пресетах живёт строка через запятую, в коде — массив.
+  const internalSquads = useMemo(() => internalSquad.split(',').filter(Boolean), [internalSquad])
+  const setInternalSquads = useCallback((v: string[]) => setInternalSquad(v.join(',')), [setInternalSquad])
   const [userTag, setUserTag] = useUrlParam('tag', '')
   // Lock restricted admins to their own account
   // Unrestricted non-superadmins default to "any admin" (like superadmin)
@@ -1439,6 +1444,7 @@ export default function Users() {
     () => new Map(internalSquadsList.map((s) => [String(s.uuid).toLowerCase(), s.name])),
     [internalSquadsList],
   )
+  const moreSquads = useCallback((n: number) => t('users.table.moreSquads', { count: n }), [t])
 
   // Колонки витрины: одна точка истины для заголовков и ячеек — раньше
   // разметка ячеек дублировалась в виртуальном и обычном режимах и уже
@@ -1610,14 +1616,25 @@ export default function Users() {
       key: 'active_internal_squads',
       labelKey: 'users.table.internalSquads',
       optional: true,
-      filter: singleFilter(
-        internalSquad,
-        setInternalSquad,
-        internalSquadsList.map((sq: Squad) => ({ value: String(sq.uuid), label: sq.name || String(sq.uuid) })),
-      ),
+      filter: {
+        type: 'select',
+        options: internalSquadsList.map((sq: Squad) => ({ value: String(sq.uuid), label: sq.name || String(sq.uuid) })),
+        value: internalSquads,
+        onChange: (v) => {
+          setInternalSquads(Array.isArray(v) ? v : [])
+          setPage(1)
+        },
+      },
       className: 'text-dark-200 text-sm',
+      // Бейдж на сквад; что не влезло в строку — сворачивается в «ещё N»
       render: (user) => (user.active_internal_squads?.length
-        ? user.active_internal_squads.map((id) => internalSquadNames.get(id.toLowerCase()) || id).join(', ')
+        ? (
+          <OverflowBadges
+            items={user.active_internal_squads.map((id) => internalSquadNames.get(id.toLowerCase()) || id)}
+            more={moreSquads}
+            className="max-w-[300px]"
+          />
+        )
         : '—'),
     },
     {
@@ -1644,7 +1661,7 @@ export default function Users() {
     trafficUsage, setTrafficUsage, onlineFilter, setOnlineFilter,
     expireFilter, setExpireFilter, canChooseAdmin, adminId, setAdminId, admins,
     userTag, setUserTag, userTagsList, externalSquad, setExternalSquad, externalSquadsList,
-    internalSquad, setInternalSquad, internalSquadsList, internalSquadNames,
+    internalSquads, setInternalSquads, internalSquadsList, internalSquadNames, moreSquads, setPage,
   ])
 
   const columns = useTableColumns('users', columnDefs)
@@ -1929,19 +1946,34 @@ export default function Users() {
 
                   <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.internalSquad')}</Label>
-                    <Select value={internalSquad || '_all'} onValueChange={(v) => { setInternalSquad(v === '_all' ? '' : v); setPage(1) }}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder={t('users.filters.anyInternalSquad')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_all">{t('users.filters.anyInternalSquad')}</SelectItem>
-                        {internalSquadsList.map((sq: Squad) => (
-                          <SelectItem key={sq.uuid} value={sq.uuid}>
+                    {/* Мультивыбор: чипы-переключатели, пусто = все сквады */}
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {internalSquadsList.length === 0 && (
+                        <span className="text-xs text-dark-400">{t('users.filters.anyInternalSquad')}</span>
+                      )}
+                      {internalSquadsList.map((sq: Squad) => {
+                        const on = internalSquads.includes(sq.uuid)
+                        return (
+                          <button
+                            key={sq.uuid}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => {
+                              setInternalSquads(on ? internalSquads.filter((s) => s !== sq.uuid) : [...internalSquads, sq.uuid])
+                              setPage(1)
+                            }}
+                            className={cn(
+                              'px-2.5 py-1 rounded-md border text-xs transition-colors',
+                              on
+                                ? 'border-primary-500/40 bg-primary-500/15 text-primary-200'
+                                : 'border-[var(--glass-border)] text-dark-200 hover:text-white',
+                            )}
+                          >
                             {sq.squadName || sq.name || sq.squadTag || sq.tag || sq.uuid}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <div>
@@ -2038,12 +2070,13 @@ export default function Users() {
                     onRemove={() => { setExternalSquad(''); setPage(1) }}
                   />
                 )}
-                {internalSquad && (
+                {internalSquads.map((id) => (
                   <FilterChip
-                    label={`${t('users.filters.internalSquad')}: ${internalSquadNames.get(internalSquad.toLowerCase()) || internalSquad}`}
-                    onRemove={() => { setInternalSquad(''); setPage(1) }}
+                    key={id}
+                    label={`${t('users.filters.internalSquad')}: ${internalSquadNames.get(id.toLowerCase()) || id}`}
+                    onRemove={() => { setInternalSquads(internalSquads.filter((s) => s !== id)); setPage(1) }}
                   />
-                )}
+                ))}
                 {userTag && (
                   <FilterChip
                     label={`${t('users.filters.tag')}: ${userTag}`}

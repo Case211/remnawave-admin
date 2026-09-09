@@ -448,7 +448,7 @@ class UsersMixin:
         admin_id: Optional[int] = None,
         external_squad_uuid: Optional[str] = None,
         tag: Optional[str] = None,
-        internal_squad_uuid: Optional[str] = None,
+        internal_squad_uuids: Optional[List[str]] = None,
     ) -> tuple:
         """
         Get paginated users with server-side filtering and sorting.
@@ -551,17 +551,18 @@ class UsersMixin:
             args.append(str(external_squad_uuid))
             conditions.append(f"external_squad_uuid::text = ${param_idx}")
 
-        if internal_squad_uuid:
+        if internal_squad_uuids:
             # Внутренние сквады лежат только в raw_data панели (JSON):
             # activeInternalSquads — список объектов {uuid, name} или строк-uuid.
-            # json_typeof защищает от не-массива и NULL (тогда '[]').
+            # json_typeof защищает от не-массива и NULL (тогда '[]'). Юзер
+            # проходит, если состоит хотя бы в одном из выбранных сквадов.
             param_idx += 1
-            args.append(str(internal_squad_uuid).lower())
+            args.append([str(s).lower() for s in internal_squad_uuids])
             conditions.append(
                 "EXISTS (SELECT 1 FROM json_array_elements("
                 "CASE WHEN json_typeof(raw_data->'activeInternalSquads') = 'array' "
                 "THEN raw_data->'activeInternalSquads' ELSE '[]'::json END) sq "
-                f"WHERE lower(COALESCE(sq->>'uuid', sq #>> '{{}}')) = ${param_idx})"
+                f"WHERE lower(COALESCE(sq->>'uuid', sq #>> '{{}}')) = ANY(${param_idx}::text[]))"
             )
 
         # Filter: tag (exact match, single tag per user)

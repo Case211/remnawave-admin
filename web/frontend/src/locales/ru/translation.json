@@ -635,6 +635,7 @@
       "email": "Email",
       "externalSquad": "Внешний сквад",
       "internalSquads": "Внутренние сквады",
+      "moreSquads": "ещё {{count}}",
       "shortUuid": "Short UUID",
       "description": "Описание"
     },

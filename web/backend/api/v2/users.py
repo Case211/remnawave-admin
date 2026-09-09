@@ -383,7 +383,7 @@ def _filter_users_in_memory(
     expire_filter=None, online_filter=None, traffic_usage=None,
     sort_by="created_at", sort_order="desc", page=1, per_page=20,
     visible_uuids: Optional[Set[str]] = None,
-    external_squad_uuid=None, tag=None, internal_squad_uuid=None,
+    external_squad_uuid=None, tag=None, internal_squad_uuids=None,
 ) -> tuple:
     """In-memory filtering/sorting/pagination fallback for API path."""
     now = datetime.now(timezone.utc)
@@ -471,11 +471,12 @@ def _filter_users_in_memory(
         esq = str(external_squad_uuid).lower()
         users = [u for u in users if str(_get(u, 'external_squad_uuid', 'externalSquadUuid')).lower() == esq]
 
-    if internal_squad_uuid:
-        isq = str(internal_squad_uuid).lower()
+    if internal_squad_uuids:
+        wanted = {str(s).lower() for s in internal_squad_uuids}
         users = [
             u for u in users
-            if isq in _internal_squad_uuids(_get(u, 'active_internal_squads', 'activeInternalSquads', default=None))
+            if wanted & set(_internal_squad_uuids(
+                _get(u, 'active_internal_squads', 'activeInternalSquads', default=None)))
         ]
 
     if tag:
@@ -517,7 +518,7 @@ async def list_users(
     admin_id: Optional[int] = Query(None, description="Filter by creator admin ID (superadmin only)"),
     external_squad_uuid: Optional[str] = Query(None, description="Filter by external squad UUID"),
     tag: Optional[str] = Query(None, description="Filter by user tag"),
-    internal_squad_uuid: Optional[str] = Query(None, description="Filter by internal squad UUID (user is a member)"),
+    internal_squad_uuid: Optional[str] = Query(None, description="Filter by internal squad UUIDs, comma-separated (member of any)"),
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """List users with pagination and filtering."""
@@ -532,6 +533,10 @@ async def list_users(
 
         # Restrict admin_id filter to superadmin and unrestricted admins
         resolved_admin_id = admin_id if (admin.role == "superadmin" or getattr(admin, "unrestricted_user_access", False)) else None
+        # Внутренних сквадов у юзера несколько, фильтр тоже множественный: uuid через запятую
+        internal_squad_uuids = [
+            s.strip().lower() for s in (internal_squad_uuid or "").split(",") if s.strip()
+        ] or None
 
         # Primary path: SQL pagination in database
         try:
@@ -549,7 +554,7 @@ async def list_users(
                     admin_id=resolved_admin_id,
                     external_squad_uuid=external_squad_uuid,
                     tag=tag,
-                    internal_squad_uuid=internal_squad_uuid,
+                    internal_squad_uuids=internal_squad_uuids,
                 )
                 db_available = True
         except Exception as e:
@@ -570,7 +575,7 @@ async def list_users(
                 visible_uuids=visible_uuids,
                 external_squad_uuid=external_squad_uuid,
                 tag=tag,
-                internal_squad_uuid=internal_squad_uuid,
+                internal_squad_uuids=internal_squad_uuids,
             )
 
         # Normalize to snake_case
