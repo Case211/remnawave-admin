@@ -292,6 +292,22 @@ def _internal_squad_uuids(value) -> list:
     return result
 
 
+def _internal_squad_sort_key(user: dict) -> str:
+    """Ключ сортировки по внутренним сквадам: имена (или uuid) через запятую без
+    регистра — то же, что string_agg в SQL-пути; без сквадов — пустая строка."""
+    value = user.get('active_internal_squads')
+    if value is None:
+        value = user.get('activeInternalSquads')
+    if not isinstance(value, list):
+        return ''
+    names = []
+    for item in value:
+        name = (item.get('name') or item.get('uuid')) if isinstance(item, dict) else item
+        if name:
+            names.append(str(name).lower())
+    return ','.join(sorted(names))
+
+
 def _ensure_snake_case(user: dict) -> dict:
     """Ensure user dict has snake_case keys for pydantic schemas."""
     result = dict(user)
@@ -490,6 +506,8 @@ def _filter_users_in_memory(
             val = u.get('traffic_limit_bytes')
             return val if val else float('inf')
         users.sort(key=_tlk, reverse=reverse)
+    elif sort_by == 'active_internal_squads':
+        users.sort(key=_internal_squad_sort_key, reverse=reverse)
     elif sort_by in ('online_at', 'expire_at'):
         def _dsk(u):
             val = _parse_dt(u.get(sort_by))

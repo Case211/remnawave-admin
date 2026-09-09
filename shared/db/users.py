@@ -416,7 +416,12 @@ class UsersMixin:
         "updated_at": "updated_at",
         "used_traffic_bytes": "COALESCE(used_traffic_bytes, 0)",
         "raw_used_traffic_bytes": "COALESCE(raw_used_traffic_bytes, 0)",
-        "lifetime_used_traffic_bytes": "COALESCE((raw_data->>'lifetimeUsedTrafficBytes')::bigint, 0)",
+        # Панель v3 держит трафик внутри userTraffic, 2.x — на верхнем уровне.
+        # Только верхний уровень давал всем 0, и сортировка «не работала».
+        "lifetime_used_traffic_bytes": (
+            "COALESCE((raw_data->'userTraffic'->>'lifetimeUsedTrafficBytes')::bigint, "
+            "(raw_data->>'lifetimeUsedTrafficBytes')::bigint, 0)"
+        ),
         "traffic_limit_bytes": "COALESCE(traffic_limit_bytes, 0)",
         "hwid_device_limit": "COALESCE(hwid_device_limit, 0)",
         "online_at": "immutable_tstz(raw_data->'userTraffic'->>'onlineAt')",
@@ -427,6 +432,13 @@ class UsersMixin:
         "short_uuid": "short_uuid",
         "description": "description",
         "external_squad_uuid": "external_squad_uuid::text",
+        # Имена внутренних сквадов через запятую; без сквадов — NULL, уходит в конец
+        "active_internal_squads": (
+            "(SELECT string_agg(lower(COALESCE(sq->>'name', sq #>> '{}')), ',' "
+            "ORDER BY lower(COALESCE(sq->>'name', sq #>> '{}'))) "
+            "FROM jsonb_array_elements(CASE WHEN jsonb_typeof(raw_data->'activeInternalSquads') = 'array' "
+            "THEN raw_data->'activeInternalSquads' ELSE '[]'::jsonb END) sq)"
+        ),
         "created_by_admin_username": (
             "(" + select_sql(ADMIN_TABLE, 'username', 'WHERE id = users.created_by_admin_id') + ")"
         ),
