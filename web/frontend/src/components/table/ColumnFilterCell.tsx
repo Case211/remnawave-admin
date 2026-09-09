@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { X } from '@/components/brand/icons'
+import { ChevronDown, X } from '@/components/brand/icons'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -10,7 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { ColumnFilterProps } from './ColumnFilter'
+import { cn } from '@/lib/utils'
+import { SelectFilter, type ColumnFilterProps } from './ColumnFilter'
 
 /** Значение, которое «показать всё»: пустая строка в Select запрещена Radix. */
 const ANY = '_any'
@@ -21,10 +23,10 @@ const ANY = '_any'
  * значение всегда на виду, поэтому не нужно открывать меню, чтобы понять,
  * что список уже отфильтрован.
  *
- * Поддерживает те же режимы, что нужны серверным таблицам: `text` (ввод с
- * задержкой, чтобы не дёргать API на каждую букву) и `single` (выбор из
- * списка). Для `select`/`range` остаётся попап — их место в клиентских
- * таблицах, где значений может быть много.
+ * Поддерживает режимы серверных таблиц: `text` (ввод с задержкой, чтобы не
+ * дёргать API на каждую букву), `single` (выбор из списка) и `select`
+ * (несколько значений: та же строка-триггер, под ней попап с чекбоксами).
+ * `range` в шапке не рисуем — его место в попапе клиентских таблиц.
  */
 export function ColumnFilterCell({ filter, label }: { filter: ColumnFilterProps; label: string }) {
   const { t } = useTranslation()
@@ -58,7 +60,43 @@ export function ColumnFilterCell({ filter, label }: { filter: ColumnFilterProps;
     )
   }
 
+  if (filter.type === 'select') {
+    return <MultiFilterCell filter={filter} label={label} />
+  }
+
   return null
+}
+
+/** Несколько значений: выбранные подписи в строке-триггере, попап с чекбоксами. */
+function MultiFilterCell({ filter, label }: { filter: ColumnFilterProps; label: string }) {
+  const { t } = useTranslation()
+  const value = Array.isArray(filter.value) ? filter.value : []
+  const options = filter.options || []
+  const chosen = value.map((v) => options.find((o) => o.value === v)?.label || v)
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={t('common.columns.filterBy', { column: label })}
+          title={chosen.join(', ') || undefined}
+          className={cn(
+            'flex h-7 w-full items-center justify-between gap-1 rounded-none border-b border-[var(--glass-border)] bg-transparent px-1 text-xs focus:outline-none',
+            chosen.length ? 'text-dark-100' : 'text-dark-400',
+          )}
+        >
+          <span className="truncate">
+            {chosen.length ? chosen.join(', ') : t('common.columns.filterBy', { column: label })}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-56 p-2">
+        <SelectFilter options={options} value={value} onChange={filter.onChange} />
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 function TextFilterCell({ filter, label }: { filter: ColumnFilterProps; label: string }) {

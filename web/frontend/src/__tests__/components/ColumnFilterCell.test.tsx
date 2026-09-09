@@ -66,12 +66,35 @@ describe('ColumnFilterCell', () => {
     })
   })
 
-  it('для попап-режимов в шапке ничего не рисует', () => {
+  describe('select', () => {
+    const multiFilter = (value: string[], onChange = vi.fn()): ColumnFilterProps => ({
+      type: 'select', options: OPTIONS, value, onChange,
+    })
+
+    it('без выбора показывает подсказку с названием столбца', () => {
+      render(<ColumnFilterCell filter={multiFilter([])} label="Сквад" />)
+      expect(screen.getByText(/фильтр по/i)).toBeInTheDocument()
+    })
+
+    it('показывает выбранные значения через запятую', () => {
+      render(<ColumnFilterCell filter={multiFilter(['active', 'disabled'])} label="Сквад" />)
+      expect(screen.getByText('Активен, Отключён')).toBeInTheDocument()
+    })
+
+    it('добавляет значение к уже выбранным, а не заменяет', async () => {
+      const onChange = vi.fn()
+      const user = userEvent.setup()
+      render(<ColumnFilterCell filter={multiFilter(['active'], onChange)} label="Сквад" />)
+
+      await user.click(screen.getByRole('button', { name: /фильтр по/i }))
+      await user.click(await screen.findByText('Отключён'))
+      expect(onChange).toHaveBeenCalledWith(['active', 'disabled'])
+    })
+  })
+
+  it('для диапазона в шапке ничего не рисует', () => {
     const { container } = render(
-      <ColumnFilterCell
-        filter={{ type: 'select', options: OPTIONS, value: [], onChange: vi.fn() }}
-        label="Статус"
-      />,
+      <ColumnFilterCell filter={{ type: 'range', value: undefined, onChange: vi.fn() }} label="Трафик" />,
     )
     expect(container).toBeEmptyDOMElement()
   })

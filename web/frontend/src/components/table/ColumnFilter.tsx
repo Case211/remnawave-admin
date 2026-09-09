@@ -75,7 +75,8 @@ export function ColumnFilter({ type, options = [], value, onChange, rangeUnit, p
   )
 }
 
-function SelectFilter({
+/** Список с чекбоксами; экспортирован, чтобы шапка таблицы (ColumnFilterCell) рисовала тот же мультивыбор. */
+export function SelectFilter({
   options,
   value,
   onChange,
