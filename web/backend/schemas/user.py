@@ -30,6 +30,8 @@ class UserListItem(UserBase):
     hwid_device_limit: Optional[int] = 0
     hwid_device_count: Optional[int] = 0
     external_squad_uuid: Optional[str] = None
+    # UUID внутренних сквадов из raw_data панели — для колонки и фильтра в списке.
+    active_internal_squads: Optional[List[str]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     online_at: Optional[datetime] = None

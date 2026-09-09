@@ -592,6 +592,8 @@
       "anyAdmin": "All admins",
       "externalSquad": "External squad",
       "anyExternalSquad": "All squads",
+      "internalSquad": "Internal squad",
+      "anyInternalSquad": "All internal squads",
       "tag": "Tag",
       "anyTag": "All tags",
       "perPage": "Per page",
@@ -630,6 +632,7 @@
       "telegram": "Telegram",
       "email": "Email",
       "externalSquad": "External squad",
+      "internalSquads": "Internal squads",
       "shortUuid": "Short UUID",
       "description": "Description"
     },
@@ -3568,6 +3571,10 @@
         "label": "💰 Topic: Finance",
         "description": "Topic ID for financial notifications and reminders"
       },
+      "notifications_topic_backups": {
+        "label": "💾 Topic: Backups",
+        "description": "Topic ID for backup files; empty — they go to the service topic"
+      },
       "sync_interval_seconds": {
         "label": "🔄 Sync interval",
         "description": "Data sync interval with API (seconds, requires restart)"
@@ -3871,6 +3878,14 @@
       "mailserver_submission_enabled": {
         "label": "📤 SMTP Submission enabled",
         "description": "Enable SMTP Submission (port 587) for sending mail via login/password"
+      },
+      "mailserver_delivery_mode": {
+        "label": "📮 Outbound delivery",
+        "description": "direct — straight to the recipient MX (needs outbound port 25); brevo — via the Brevo HTTP API, no outbound SMTP ports needed"
+      },
+      "mailserver_brevo_api_key": {
+        "label": "🔑 Brevo: API key",
+        "description": "v3 key from Brevo → SMTP & API → API Keys. The sender domain must be authenticated in Brevo"
       },
       "mailserver_submission_port": {
         "label": "🔌 SMTP Submission port",
@@ -4988,7 +5003,7 @@
   },
   "dns": {
     "title": "DNS",
-    "subtitle": "Manage DNS zone records (Cloudflare, Timeweb, reg.ru) from the admin",
+    "subtitle": "Manage DNS zone records from the admin: Cloudflare, Timeweb, reg.ru, Selectel, Aeza, Amazon Route 53, Porkbun",
     "connectTitle": "Connect {{provider}}",
     "connect": "Connect",
     "disconnect": "Disconnect",

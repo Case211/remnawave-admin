@@ -58,6 +58,22 @@ AWS, GCP and Azure block outbound port 25. For mail, use a provider that does no
 
 Only the HTTP API (`/api/v2/mailserver/*`) goes through the reverse proxy. SMTP cannot be tunnelled through an HTTP proxy — it is a different layer: either publish the port past the proxy, or configure `stream {}` in nginx or caddy-l4.
 
+## Sending through Brevo
+
+If your host blocks outbound 25 and 587, mail can go out through the Brevo (ex-Sendinblue) HTTP API:
+traffic is HTTPS, DKIM signing and delivery to the recipient MX happen on Brevo's side.
+
+1. In Brevo: **Senders & IP → Domains** — add and authenticate the sender domain (their DKIM/DMARC records),
+   **SMTP & API → API Keys** — create a v3 key.
+2. In the admin: **Settings → Mail server**: "Outbound delivery" = `brevo`, "Brevo: API key" = the key
+   (or `MAIL_DELIVERY_MODE=brevo` and `BREVO_API_KEY=…` in `.env`). The domain in **Mail server** stays —
+   it provides the sender address and name.
+3. Queue, rate limits, attachments and threading headers work as before; the built-in DKIM and the recipient
+   MX are not used in this mode. Outbound port 25 is not needed; inbound mail (2525) and SMTP submission (587)
+   do not depend on the mode.
+
+API errors (wrong key, unauthenticated domain) show up in the queue as the delivery failure reason.
+
 ## Encryption
 
 STARTTLS is offered on both mail ports:

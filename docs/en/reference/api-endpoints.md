@@ -58,9 +58,14 @@ Body:
   "telegram_id": 123456789,
   "email": "alice@example.com",
   "tag": "vip",
-  "status": "active"
+  "status": "active",
+  "external_squad_uuid": "3f2c...",
+  "active_internal_squads": ["a1b2...", "c3d4..."]
 }
 ```
+
+`external_squad_uuid` and `active_internal_squads` are optional; take squad UUIDs from
+`GET /squads/external` and `GET /squads/internal` (below).
 
 Returns `201` with `{"success": true, "uuid": "..."}`.
 
@@ -147,6 +152,29 @@ Bulk endpoints use the dedicated bulk rate limit bucket (`API_V3_RATE_BULK_PER_M
 is_disabled, alpn, fingerprint).
 
 ---
+
+## Squads
+
+Required scope: `users:read`. Lists come live from the Remnawave panel — use them to pick UUIDs
+for `external_squad_uuid` and `active_internal_squads` when creating a user.
+
+| Endpoint | Method | Returns |
+|----------|--------|---------|
+| `/squads/internal` | GET | internal squads: `uuid`, `name`, `members_count`, `inbounds` (`uuid`, `tag`) |
+| `/squads/external` | GET | external squads: `uuid`, `name`, `members_count` |
+
+```json
+[
+  {
+    "uuid": "3f2c...",
+    "name": "Standard",
+    "members_count": 128,
+    "inbounds": [{"uuid": "a1b2...", "tag": "VLESS-Reality"}]
+  }
+]
+```
+
+Panel unavailable — `503`.
 
 ## Violations
 

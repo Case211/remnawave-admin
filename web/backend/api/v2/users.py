@@ -266,6 +266,19 @@ def _detail_from_panel(user: dict, user_uuid: str) -> UserDetail:
     return UserDetail(**payload)
 
 
+def _internal_squad_uuids(value) -> list:
+    """UUID внутренних сквадов из raw_data панели — там список объектов
+    ``{uuid, name}`` или строк-uuid; наружу отдаём только uuid в нижнем регистре."""
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        uid = item.get('uuid') if isinstance(item, dict) else item
+        if uid:
+            result.append(str(uid).lower())
+    return result
+
+
 def _ensure_snake_case(user: dict) -> dict:
     """Ensure user dict has snake_case keys for pydantic schemas."""
     result = dict(user)
@@ -357,7 +370,7 @@ def _filter_users_in_memory(
     expire_filter=None, online_filter=None, traffic_usage=None,
     sort_by="created_at", sort_order="desc", page=1, per_page=20,
     visible_uuids: Optional[Set[str]] = None,
-    external_squad_uuid=None, tag=None,
+    external_squad_uuid=None, tag=None, internal_squad_uuid=None,
 ) -> tuple:
     """In-memory filtering/sorting/pagination fallback for API path."""
     now = datetime.now(timezone.utc)
@@ -445,6 +458,13 @@ def _filter_users_in_memory(
         esq = str(external_squad_uuid).lower()
         users = [u for u in users if str(_get(u, 'external_squad_uuid', 'externalSquadUuid')).lower() == esq]
 
+    if internal_squad_uuid:
+        isq = str(internal_squad_uuid).lower()
+        users = [
+            u for u in users
+            if isq in _internal_squad_uuids(_get(u, 'active_internal_squads', 'activeInternalSquads', default=None))
+        ]
+
     if tag:
         users = [u for u in users if _get(u, 'tag') == tag]
 
@@ -484,6 +504,7 @@ async def list_users(
     admin_id: Optional[int] = Query(None, description="Filter by creator admin ID (superadmin only)"),
     external_squad_uuid: Optional[str] = Query(None, description="Filter by external squad UUID"),
     tag: Optional[str] = Query(None, description="Filter by user tag"),
+    internal_squad_uuid: Optional[str] = Query(None, description="Filter by internal squad UUID (user is a member)"),
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """List users with pagination and filtering."""
@@ -515,6 +536,7 @@ async def list_users(
                     admin_id=resolved_admin_id,
                     external_squad_uuid=external_squad_uuid,
                     tag=tag,
+                    internal_squad_uuid=internal_squad_uuid,
                 )
                 db_available = True
         except Exception as e:
@@ -535,10 +557,13 @@ async def list_users(
                 visible_uuids=visible_uuids,
                 external_squad_uuid=external_squad_uuid,
                 tag=tag,
+                internal_squad_uuid=internal_squad_uuid,
             )
 
         # Normalize to snake_case
         users = [_ensure_snake_case(u) for u in users]
+        for u in users:
+            u['active_internal_squads'] = _internal_squad_uuids(u.get('active_internal_squads'))
 
         # Enrich ONLY current page with hwid_device_count and raw_traffic
         user_uuids = [u.get('uuid') for u in users if u.get('uuid')]

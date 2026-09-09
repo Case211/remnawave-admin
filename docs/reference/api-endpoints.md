@@ -48,9 +48,14 @@
   "telegram_id": 123456789,
   "email": "alice@example.com",
   "tag": "vip",
-  "status": "active"
+  "status": "active",
+  "external_squad_uuid": "3f2c...",
+  "active_internal_squads": ["a1b2...", "c3d4..."]
 }
 ```
+
+`external_squad_uuid` и `active_internal_squads` необязательны; UUID сквадов — из `GET /squads/external`
+и `GET /squads/internal` (см. ниже).
 
 Ответ — `201` и `{"success": true, "uuid": "..."}`.
 
@@ -119,6 +124,29 @@
 | `/hosts/{uuid}` | GET | `hosts:read` |
 
 Поля повторяют объекты хостов панели Remnawave: uuid, remark, address, port, sni, host, is_disabled, alpn, fingerprint.
+
+## Сквады
+
+Область: `users:read`. Списки берутся живьём из панели Remnawave — чтобы взять UUID
+для `external_squad_uuid` и `active_internal_squads` при создании пользователя.
+
+| Эндпоинт | Метод | Что отдаёт |
+|----------|-------|------------|
+| `/squads/internal` | GET | внутренние сквады: `uuid`, `name`, `members_count`, `inbounds` (`uuid`, `tag`) |
+| `/squads/external` | GET | внешние сквады: `uuid`, `name`, `members_count` |
+
+```json
+[
+  {
+    "uuid": "3f2c...",
+    "name": "Standard",
+    "members_count": 128,
+    "inbounds": [{"uuid": "a1b2...", "tag": "VLESS-Reality"}]
+  }
+]
+```
+
+Панель недоступна — `503`.
 
 ## Нарушения
 

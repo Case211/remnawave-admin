@@ -51,6 +51,7 @@ NOTIFICATIONS_TOPIC_CRM=103         # биллинг
 NOTIFICATIONS_TOPIC_FINANCE=106     # финансы
 NOTIFICATIONS_TOPIC_ERRORS=104      # ошибки
 NOTIFICATIONS_TOPIC_VIOLATIONS=105  # нарушения
+NOTIFICATIONS_TOPIC_BACKUPS=107     # файлы бэкапов
 ```
 
 Для чего топик не указан, уходит в общий `NOTIFICATIONS_TOPIC_ID`.

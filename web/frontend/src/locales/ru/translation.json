@@ -592,6 +592,8 @@
       "anyAdmin": "Все администраторы",
       "externalSquad": "Внешний сквад",
       "anyExternalSquad": "Все сквады",
+      "internalSquad": "Внутренний сквад",
+      "anyInternalSquad": "Все внутренние сквады",
       "tag": "Тег",
       "anyTag": "Все теги",
       "perPage": "На страницу",
@@ -630,6 +632,7 @@
       "telegram": "Telegram",
       "email": "Email",
       "externalSquad": "Внешний сквад",
+      "internalSquads": "Внутренние сквады",
       "shortUuid": "Short UUID",
       "description": "Описание"
     },
@@ -3564,6 +3567,10 @@
         "label": "💰 Топик: Финансы",
         "description": "ID топика для финансовых уведомлений и напоминаний"
       },
+      "notifications_topic_backups": {
+        "label": "💾 Топик: Бэкапы",
+        "description": "ID топика для файлов резервных копий; пусто — уходят в сервисный топик"
+      },
       "sync_interval_seconds": {
         "label": "🔄 Интервал синхронизации",
         "description": "Интервал синхронизации данных с API (секунды, требует перезапуск)"
@@ -3867,6 +3874,14 @@
       "mailserver_submission_enabled": {
         "label": "📤 SMTP Submission включён",
         "description": "Включить SMTP Submission сервер (порт 587) для отправки писем через логин/пароль"
+      },
+      "mailserver_delivery_mode": {
+        "label": "📮 Доставка исходящих",
+        "description": "direct — напрямую на MX получателя (нужен исходящий порт 25); brevo — через HTTP API Brevo, исходящие SMTP-порты не нужны"
+      },
+      "mailserver_brevo_api_key": {
+        "label": "🔑 Brevo: API-ключ",
+        "description": "Ключ v3 из Brevo → SMTP & API → API Keys. Домен отправителя должен быть подтверждён в Brevo"
       },
       "mailserver_submission_port": {
         "label": "🔌 Порт SMTP Submission",
@@ -4984,7 +4999,7 @@
   },
   "dns": {
     "title": "DNS",
-    "subtitle": "Управление DNS-записями зон (Cloudflare, Timeweb, reg.ru) из админки",
+    "subtitle": "Управление DNS-записями зон из админки: Cloudflare, Timeweb, reg.ru, Selectel, Aeza, Amazon Route 53, Porkbun",
     "connectTitle": "Подключение {{provider}}",
     "connect": "Подключить",
     "disconnect": "Отключить",

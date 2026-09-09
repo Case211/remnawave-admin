@@ -85,6 +85,7 @@ Details: [Panel webhook](/en/guide/webhook-setup).
 | `NOTIFICATIONS_TOPIC_FINANCE` | finance |
 | `NOTIFICATIONS_TOPIC_ERRORS` | errors |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | violations |
+| `NOTIFICATIONS_TOPIC_BACKUPS` | backup files (unset — the service topic) |
 
 ## GeoIP (MaxMind GeoLite2)
 

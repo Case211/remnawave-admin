@@ -360,6 +360,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "env_var_name": "NOTIFICATIONS_TOPIC_FINANCE",
         "sort_order": 17,
     },
+    {
+        "key": "notifications_topic_backups",
+        "value_type": "int",
+        "category": "notifications",
+        "subcategory": "topics",
+        "display_name": "Топик: Бэкапы",
+        "description": "ID топика для файлов резервных копий (пусто — сервисный топик)",
+        "env_var_name": "NOTIFICATIONS_TOPIC_BACKUPS",
+        "sort_order": 18,
+    },
 
     # === FINANCE ===
     {
@@ -1386,6 +1396,28 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "default_value": "587",
         "env_var_name": "MAIL_SUBMISSION_PORT",
         "sort_order": 8,
+    },
+    {
+        "key": "mailserver_delivery_mode",
+        "value_type": "string",
+        "category": "mailserver",
+        "display_name": "Доставка исходящих",
+        "description": "direct — напрямую на MX получателя (нужен исходящий порт 25); brevo — через HTTP API Brevo: исходящие SMTP-порты не нужны, DKIM и репутация на стороне Brevo",
+        "default_value": "direct",
+        "options": ["direct", "brevo"],
+        "env_var_name": "MAIL_DELIVERY_MODE",
+        "sort_order": 20,
+    },
+    {
+        "key": "mailserver_brevo_api_key",
+        "value_type": "string",
+        "category": "mailserver",
+        "display_name": "Brevo: API-ключ",
+        "description": "Ключ v3 из Brevo → SMTP & API → API Keys. Домен отправителя должен быть подтверждён в Brevo (Senders & IP → Domains)",
+        "default_value": "",
+        "is_secret": True,
+        "env_var_name": "BREVO_API_KEY",
+        "sort_order": 21,
     },
     {
         "key": "mailserver_tls_cert_path",

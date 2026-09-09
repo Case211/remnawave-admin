@@ -84,6 +84,7 @@ Where and what to write in Telegram. Topics spread events across forum threads, 
 | **🛡️ Topic: Violations** | `notifications_topic_violations` | empty | Topic ID for violation notifications (`NOTIFICATIONS_TOPIC_VIOLATIONS`) |
 | **❗ Topic: Errors** | `notifications_topic_errors` | empty | Topic ID for error notifications (`NOTIFICATIONS_TOPIC_ERRORS`) |
 | **💰 Topic: Finance** | `notifications_topic_finance` | empty | Topic ID for financial notifications and reminders (`NOTIFICATIONS_TOPIC_FINANCE`) |
+| **💾 Topic: Backups** | `notifications_topic_backups` | empty | Topic ID for backup files; empty — the service topic (`NOTIFICATIONS_TOPIC_BACKUPS`) |
 
 
 ## 🛡️ Violation Detection

@@ -13,6 +13,7 @@ NOTIFICATION_TYPES = (
     "errors",
     "violations",
     "finance",
+    "backups",
 )
 
 
@@ -75,4 +76,19 @@ def resolve_notification_topic(
         topic = _topic_or_none(type_fallback)
     if topic is None:
         topic = _topic_or_none(general_fallback)
+    return topic
+
+
+def resolve_topic_override(notification_type: str, type_fallback: Any = None) -> Any:
+    """Свой топик типа без общего фолбэка: из БД, иначе из env, иначе None.
+
+    Нужен там, где у события есть «естественный» топик другого типа (бэкапы
+    исторически уходят в сервисный): свой топик должен перебивать его, только
+    если задан, а не проваливаться в общий раньше, чем сработает старая цепочка.
+    """
+    topic = None
+    if notification_type in NOTIFICATION_TYPES:
+        topic = _topic_or_none(config_service.get(f"notifications_topic_{notification_type}"))
+    if topic is None:
+        topic = _topic_or_none(type_fallback)
     return topic

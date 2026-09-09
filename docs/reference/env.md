@@ -85,6 +85,7 @@
 | `NOTIFICATIONS_TOPIC_FINANCE` | финансы |
 | `NOTIFICATIONS_TOPIC_ERRORS` | ошибки |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | нарушения |
+| `NOTIFICATIONS_TOPIC_BACKUPS` | файлы бэкапов (не задан — сервисный топик) |
 
 ## GeoIP (MaxMind GeoLite2)
 

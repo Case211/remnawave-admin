@@ -448,6 +448,7 @@ class UsersMixin:
         admin_id: Optional[int] = None,
         external_squad_uuid: Optional[str] = None,
         tag: Optional[str] = None,
+        internal_squad_uuid: Optional[str] = None,
     ) -> tuple:
         """
         Get paginated users with server-side filtering and sorting.
@@ -549,6 +550,19 @@ class UsersMixin:
             param_idx += 1
             args.append(str(external_squad_uuid))
             conditions.append(f"external_squad_uuid::text = ${param_idx}")
+
+        if internal_squad_uuid:
+            # Внутренние сквады лежат только в raw_data панели (JSON):
+            # activeInternalSquads — список объектов {uuid, name} или строк-uuid.
+            # json_typeof защищает от не-массива и NULL (тогда '[]').
+            param_idx += 1
+            args.append(str(internal_squad_uuid).lower())
+            conditions.append(
+                "EXISTS (SELECT 1 FROM json_array_elements("
+                "CASE WHEN json_typeof(raw_data->'activeInternalSquads') = 'array' "
+                "THEN raw_data->'activeInternalSquads' ELSE '[]'::json END) sq "
+                f"WHERE lower(COALESCE(sq->>'uuid', sq #>> '{{}}')) = ${param_idx})"
+            )
 
         # Filter: tag (exact match, single tag per user)
         if tag:

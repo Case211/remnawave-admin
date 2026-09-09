@@ -84,6 +84,7 @@
 | **🛡️ Топик: Нарушения** | `notifications_topic_violations` | пусто | ID топика для уведомлений о нарушениях (`NOTIFICATIONS_TOPIC_VIOLATIONS`) |
 | **❗ Топик: Ошибки** | `notifications_topic_errors` | пусто | ID топика для уведомлений об ошибках (`NOTIFICATIONS_TOPIC_ERRORS`) |
 | **💰 Топик: Финансы** | `notifications_topic_finance` | пусто | ID топика для финансовых уведомлений и напоминаний (`NOTIFICATIONS_TOPIC_FINANCE`) |
+| **💾 Топик: Бэкапы** | `notifications_topic_backups` | пусто | ID топика для файлов резервных копий; пусто — сервисный топик (`NOTIFICATIONS_TOPIC_BACKUPS`) |
 
 
 ## 🛡️ Обнаружение нарушений

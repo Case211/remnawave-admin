@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     notifications_topic_errors: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ERRORS")
     notifications_topic_violations: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_VIOLATIONS")
     notifications_topic_finance: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_FINANCE")
+    notifications_topic_backups: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_BACKUPS")
     webhook_port: int = Field(default=8080, alias="WEBHOOK_PORT")
     webhook_secret: str | None = Field(default=None, alias="WEBHOOK_SECRET")
     
@@ -136,6 +137,7 @@ class Settings(BaseSettings):
         "notifications_topic_errors",
         "notifications_topic_violations",
         "notifications_topic_finance",
+        "notifications_topic_backups",
         mode="before",
     )
     @classmethod

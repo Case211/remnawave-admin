@@ -644,19 +644,24 @@ def resolve_backup_tg_destination() -> tuple:
     from shared.notification_config import (
         resolve_notification_topic,
         resolve_notifications_chat_id,
+        resolve_topic_override,
     )
     from web.backend.core.config import get_web_settings
 
     settings = get_web_settings()
-    # Та же цепочка, что у обычных уведомлений: свой топик из БД → общий
-    # из БД → env. Раньше общий топик, заданный через UI, здесь терялся —
-    # бэкап уходил в корень чата, хотя уведомления шли в топик.
     chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
-    topic_raw = resolve_notification_topic(
-        "service",
-        type_fallback=settings.get_topic_for("service"),
-        general_fallback=settings.notifications_topic_id,
-    )
+    # Свой топик бэкапов (UI или NOTIFICATIONS_TOPIC_BACKUPS) главнее всего:
+    # файлы дампов удобно держать отдельно от сервисного шума. Не задан —
+    # прежняя цепочка сервисного топика: свой из БД → общий из БД → env.
+    # Раньше общий топик, заданный через UI, здесь терялся — бэкап уходил
+    # в корень чата, хотя уведомления шли в топик.
+    topic_raw = resolve_topic_override("backups", settings.notifications_topic_backups)
+    if topic_raw is None:
+        topic_raw = resolve_notification_topic(
+            "service",
+            type_fallback=settings.get_topic_for("service"),
+            general_fallback=settings.notifications_topic_id,
+        )
     topic_id = None
     if topic_raw:
         try:

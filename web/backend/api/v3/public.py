@@ -4,7 +4,7 @@ Authenticated via X-API-Key header. Scopes control access.
 """
 import json
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID as _UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -56,6 +56,36 @@ class UserCreate(BaseModel):
     email: Optional[str] = None
     tag: Optional[str] = None
     status: Optional[str] = None
+    # Сквады панели: внешний — один, внутренних — список. UUID берутся из
+    # GET /squads/external и GET /squads/internal.
+    external_squad_uuid: Optional[str] = None
+    active_internal_squads: Optional[List[str]] = None
+
+
+class SquadPublic(_PublicBase):
+    uuid: str
+    name: str
+    members_count: Optional[int] = None
+    # Только у внутренних сквадов: инбаунды, которые они открывают.
+    inbounds: Optional[List[Dict[str, Any]]] = None
+
+
+def _squad_public(sq: Dict[str, Any]) -> Dict[str, Any]:
+    """Панель отдаёт сквад в camelCase с вложенным ``info`` — сводим к плоскому
+    объекту публичного API, оставляя от инбаундов только uuid и tag."""
+    info = sq.get("info") if isinstance(sq.get("info"), dict) else {}
+    inbounds = None
+    if isinstance(sq.get("inbounds"), list):
+        inbounds = [
+            {"uuid": str(i.get("uuid") or ""), "tag": i.get("tag")}
+            for i in sq["inbounds"] if isinstance(i, dict)
+        ]
+    return {
+        "uuid": str(sq.get("uuid") or ""),
+        "name": sq.get("name") or sq.get("squadName") or sq.get("tag") or "",
+        "members_count": info.get("membersCount"),
+        "inbounds": inbounds,
+    }
 
 
 class NodePublic(_PublicBase):
@@ -279,6 +309,8 @@ async def create_user(
             email=body.email,
             tag=body.tag,
             status=body.status,
+            external_squad_uuid=body.external_squad_uuid,
+            active_internal_squads=body.active_internal_squads,
         )
         return SuccessResult(success=True, message=f"User {body.username} created")
     except Exception as e:
@@ -576,6 +608,49 @@ async def get_host(
 # ══════════════════════════════════════════════════════════════════
 # Stats
 # ══════════════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════════════
+# Squads — Read
+# ══════════════════════════════════════════════════════════════════
+
+async def _list_squads(kind: str) -> List[Dict[str, Any]]:
+    """Сквады живьём из панели (как в /api/v2/squads): БД хранит их копию
+    только для синка, а внешний интеграции нужен актуальный список."""
+    api = _get_api_client()
+    if kind == "internal":
+        result = await api.get_internal_squads()
+        key = "internalSquads"
+    else:
+        result = await api.get_external_squads()
+        key = "externalSquads"
+    payload = result.get("response", result) if isinstance(result, dict) else result
+    squads = payload.get(key, []) if isinstance(payload, dict) else payload
+    return [_squad_public(s) for s in (squads or []) if isinstance(s, dict) and s.get("uuid")]
+
+
+@router.get("/squads/internal", response_model=List[SquadPublic])
+async def list_internal_squads(
+    api_key: ApiKeyUser = Depends(require_scope("users:read")),
+):
+    """Internal squads of the panel (uuid, name, members, inbounds)."""
+    try:
+        return await _list_squads("internal")
+    except Exception as e:
+        logger.error("v3 list_internal_squads failed: %s", e)
+        raise _service_unavailable()
+
+
+@router.get("/squads/external", response_model=List[SquadPublic])
+async def list_external_squads(
+    api_key: ApiKeyUser = Depends(require_scope("users:read")),
+):
+    """External squads of the panel (uuid, name, members)."""
+    try:
+        return await _list_squads("external")
+    except Exception as e:
+        logger.error("v3 list_external_squads failed: %s", e)
+        raise _service_unavailable()
+
 
 @router.get("/stats", response_model=StatsPublic)
 async def get_stats(

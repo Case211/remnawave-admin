@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useDeferredAction } from '@/lib/useDeferredAction'
 import { toastMutationError } from '@/lib/mutationToast'
+import { cmpVersions } from '@/lib/version'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -902,7 +903,7 @@ function NodeUsersIpsDialog({ node, open, onClose }: { node: Node; open: boolean
 function AgentVersionRow({ node }: { node: Node }) {
   const { t } = useTranslation()
   const latest = useAgentLatestVersion()
-  const outdated = !!latest && node.agent_version !== latest
+  const outdated = agentOutdated(node.agent_version, latest)
   return (
     <div className="p-3 bg-[var(--glass-bg)] rounded-lg space-y-1">
       <div className="flex items-center justify-between">
@@ -931,6 +932,16 @@ function useAgentLatestVersion(): string {
   return data?.latest_agent_version || ''
 }
 
+// Агент «устарел», только если эталон панели новее того, что стоит на ноде.
+// Раньше строки сравнивались на неравенство, и агент 1.8.1 при эталоне 1.5.0
+// (панель отстала от агента) получал «доступна версия v1.5.0». Неизвестная
+// версия (старый агент её не репортит) по-прежнему считается устаревшей.
+function agentOutdated(current: string | null | undefined, latest: string): boolean {
+  if (!latest) return false
+  if (!current) return true
+  return cmpVersions(latest, current) > 0
+}
+
 // Compact agent-state badge shown next to status badge on each node card.
 function AgentBadge({ node }: { node: Node }) {
   const { t } = useTranslation()
@@ -939,7 +950,7 @@ function AgentBadge({ node }: { node: Node }) {
 
   if (node.agent_v2_connected) {
     // подключён, но версия отстаёт от эталона (или агент её ещё не репортит)
-    const outdated = !!latest && node.agent_version !== latest
+    const outdated = agentOutdated(node.agent_version, latest)
     const versionInfo = node.agent_version
       ? t('nodes.agent.version', { version: node.agent_version })
       : t('nodes.agent.versionUnknown')
