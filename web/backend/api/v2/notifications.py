@@ -24,6 +24,7 @@ from web.backend.schemas.notification import (
     ChannelConfigItem,
     ChannelConfigUpdate,
     NotificationCreate,
+    NotificationDeleteResult,
     NotificationItem,
     NotificationMarkRead,
     NotificationUnreadCount,
@@ -223,6 +224,32 @@ async def mark_notifications_read(
                 )
 
     return SuccessResponse(message="Marked as read")
+
+
+@router.delete("/notifications/read", response_model=NotificationDeleteResult)
+async def delete_read_notifications(
+    admin: AdminUser = Depends(require_permission("notifications", "delete")),
+):
+    """Удалить все прочитанные уведомления текущего админа, без ограничения по возрасту.
+
+    Объявлен раньше DELETE /notifications/{notification_id}: иначе «read»
+    попадёт в int-параметр маршрута и вернётся 422.
+    """
+    from shared.database import db_service
+
+    aid = _get_admin_id(admin)
+    async with db_service.acquire() as conn:
+        if aid is not None:
+            result = await conn.execute(
+                "DELETE FROM notifications WHERE (admin_id = $1 OR admin_id IS NULL) AND is_read = true",
+                aid,
+            )
+        else:
+            result = await conn.execute(
+                "DELETE FROM notifications WHERE admin_id IS NULL AND is_read = true",
+            )
+    # result вида "DELETE 1700"
+    return NotificationDeleteResult(deleted=int(result.split()[-1]) if result else 0)
 
 
 @router.delete("/notifications/{notification_id}", response_model=SuccessResponse)

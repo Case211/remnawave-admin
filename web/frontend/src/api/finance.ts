@@ -221,11 +221,22 @@ export const financeApi = {
     await client.delete(`/finance/payments/${id}`)
   },
 
+  /** Правка операции на месте; comment: null очищает комментарий. */
+  updatePayment: async (id: number, data: {
+    item_name?: string; kind?: string; paid_at?: string
+    amount?: number; currency?: string; comment?: string | null
+  }): Promise<FinancePayment> =>
+    (await client.patch(`/finance/payments/${id}`, data)).data,
+
   listCategories: async (): Promise<{ items: FinanceCategory[] }> =>
     (await client.get('/finance/categories')).data,
 
   createCategory: async (data: { name: string; kind: string; color?: string; icon?: string }): Promise<FinanceCategory> =>
     (await client.post('/finance/categories', data)).data,
+
+  updateCategory: async (id: number, data: { name?: string; color?: string; icon?: string; sort_order?: number }): Promise<void> => {
+    await client.patch(`/finance/categories/${id}`, data)
+  },
 
   deleteCategory: async (id: number): Promise<void> => {
     await client.delete(`/finance/categories/${id}`)
@@ -256,6 +267,9 @@ export const financeApi = {
 
   refreshRates: async (): Promise<{ updated: number; items: FinanceRate[] }> =>
     (await client.post('/finance/rates/refresh')).data,
+  /** Снять ручной флаг с курса и сразу подтянуть его из внешнего источника. */
+  resetRateToAuto: async (currency: string): Promise<{ updated: number; items: FinanceRate[] }> =>
+    (await client.post(`/finance/rates/${currency}/auto`)).data,
 
   importFromPanel: async (currency = 'USD'): Promise<{ providers: number; items: number; payments: number; retagged: number; skipped: number; errors: string[] }> =>
     (await client.post('/finance/import-panel', null, { params: { currency } })).data,
