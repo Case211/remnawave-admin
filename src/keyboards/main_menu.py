@@ -1,8 +1,26 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.i18n import gettext as _
 
 from src.keyboards.navigation import NavTarget, nav_row
 from src.utils.auth import BotAdmin
+from src.utils.chat_context import is_private_chat
+from src.utils.panel_link import panel_web_app_url
+
+
+def panel_web_app_button() -> InlineKeyboardButton | None:
+    """Кнопка «Открыть панель» (Telegram Mini App) либо None.
+
+    Панель авторизует администратора автоматически по подписанным
+    initData — отдельный вход внутри мини-аппа не нужен. Кнопка
+    появляется только если задан публичный https-адрес панели.
+    """
+    if not is_private_chat():
+        # В группах Telegram отклоняет всё сообщение с WebApp-кнопкой
+        return None
+    url = panel_web_app_url()
+    if not url:
+        return None
+    return InlineKeyboardButton(text=_("actions.open_panel"), web_app=WebAppInfo(url=url))
 
 
 def main_menu_keyboard(admin: BotAdmin | None = None) -> InlineKeyboardMarkup:
@@ -31,6 +49,10 @@ def main_menu_keyboard(admin: BotAdmin | None = None) -> InlineKeyboardMarkup:
         row3.append(InlineKeyboardButton(text=_("actions.menu_system"), callback_data="menu:section:system"))
     if row3:
         kb.append(row3)
+
+    panel_button = panel_web_app_button()
+    if panel_button:
+        kb.append([panel_button])
 
     kb.append([InlineKeyboardButton(text=_("actions.refresh"), callback_data="menu:refresh")])
 

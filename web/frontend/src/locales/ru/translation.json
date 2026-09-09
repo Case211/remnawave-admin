@@ -269,6 +269,8 @@
     "loginButton": "Войти",
     "forgotPassword": "Забыли пароль?",
     "loggingIn": "Вход...",
+    "miniAppLoggingIn": "Вход через Telegram...",
+    "miniAppFailed": "Автовход через Telegram не удался",
     "telegram": "Войти через Telegram",
     "password": "Войти с паролем",
     "passkey": "Войти по passkey",
@@ -3656,9 +3658,17 @@
         "label": "🏷️ Название панели",
         "description": "Отображаемое название проекта в боковом меню (рядом с логотипом)"
       },
+      "web_panel_public_url": {
+        "label": "🔗 Публичный URL панели",
+        "description": "https-адрес веб-панели. Используется кнопкой «Открыть панель» в боте (Telegram Mini App). Пусто — берётся из APP_PUBLIC_URL"
+      },
       "auth_telegram_enabled": {
         "label": "✈️ Авторизация через Telegram",
         "description": "Разрешить вход через Telegram Login Widget"
+      },
+      "auth_telegram_webapp_enabled": {
+        "label": "✈️ Автовход в Telegram Mini App",
+        "description": "Входить автоматически, когда панель открыта внутри Telegram (мини-приложение). Требует включённой авторизации через Telegram"
       },
       "auth_password_enabled": {
         "label": "🔒 Авторизация по паролю",

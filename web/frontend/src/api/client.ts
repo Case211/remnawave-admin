@@ -119,7 +119,9 @@ function doRefresh(refreshToken?: string | null): Promise<{ access_token: string
 function forceLogout() {
   const auth = getAuthState()
   if (auth) {
-    auth.logout()
+    // Мини-апп переживает истёкшую сессию: на /login он войдёт заново
+    // по тем же подписанным initData.
+    auth.logout({ keepMiniAppSession: true })
   }
   // Only redirect if not already on the login page
   const secretPath = window.__ENV?.SECRET_PATH || ''

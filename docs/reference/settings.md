@@ -208,6 +208,7 @@
 | Настройка | Ключ | По умолчанию | Что делает |
 |---|---|---|---|
 | **✈️ Авторизация через Telegram** | `auth_telegram_enabled` | `true` | Разрешить вход через Telegram Login Widget |
+| **✈️ Автовход в Telegram Mini App** | `auth_telegram_webapp_enabled` | `true` | Входить автоматически, когда панель открыта внутри Telegram. Требует включённой авторизации через Telegram |
 | **🔒 Авторизация по паролю** | `auth_password_enabled` | `true` | Разрешить вход по логину и паролю |
 | **🔐 Обязательная 2FA (TOTP)** | `auth_totp_required` | `false` | Требовать настройку TOTP для всех аккаунтов |
 

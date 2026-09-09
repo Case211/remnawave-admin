@@ -121,6 +121,7 @@ export interface SetupStatus {
 
 export interface AuthMethods {
   telegram: boolean
+  telegram_webapp: boolean
   password: boolean
   totp_required: boolean
 }
@@ -173,7 +174,7 @@ export const authApi = {
       const response = await client.get<AuthMethods>('/auth/methods')
       return response.data
     } catch {
-      return { telegram: true, password: true, totp_required: false }
+      return { telegram: true, telegram_webapp: true, password: true, totp_required: false }
     }
   },
 
@@ -208,6 +209,20 @@ export const authApi = {
   telegramLogin: async (data: TelegramUser): Promise<LoginResponse> => {
     try {
       const response = await client.post<LoginResponse>('/auth/telegram', data)
+      return response.data
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    }
+  },
+
+  /**
+   * Login with Telegram Mini App initData (auto-login inside Telegram)
+   */
+  telegramWebAppLogin: async (initData: string): Promise<LoginResponse> => {
+    try {
+      const response = await client.post<LoginResponse>('/auth/telegram/webapp', {
+        init_data: initData,
+      })
       return response.data
     } catch (error) {
       throw new Error(getErrorMessage(error))

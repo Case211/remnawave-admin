@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 from aiogram.utils.i18n import gettext as _
 
 from src.config import get_settings
+from src.utils.chat_context import set_current_chat_type
 from src.utils.i18n import get_i18n
 from shared.logger import log_button_click, log_command, log_user_input, logger
 from shared.rbac import has_permission, get_scope, get_visible_user_uuids, get_admin_account_by_telegram_id
@@ -114,8 +115,18 @@ class AdminMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         user_id = None
-        if isinstance(event, (Message, CallbackQuery)):
+        chat_type = None
+        if isinstance(event, Message):
             user_id = event.from_user.id if event.from_user else None
+            chat_type = event.chat.type if event.chat else None
+        elif isinstance(event, CallbackQuery):
+            user_id = event.from_user.id if event.from_user else None
+            if event.message is not None and getattr(event.message, "chat", None):
+                chat_type = event.message.chat.type
+
+        # Клавиатуры строятся без доступа к событию, а WebApp-кнопки
+        # допустимы только в приватных чатах — см. utils/chat_context.
+        set_current_chat_type(chat_type)
 
         if user_id is None:
             return await handler(event, data)

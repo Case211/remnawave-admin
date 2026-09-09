@@ -8,6 +8,7 @@ import {
   TotpSetupResponse,
 } from '../api/auth'
 import { registerAuthGetter } from './authBridge'
+import { clearTelegramInitData, parseTelegramUser } from '../lib/telegramWebApp'
 
 // Safe localStorage wrapper to prevent quota errors
 const safeLocalStorage: StateStorage = {
@@ -70,6 +71,7 @@ interface AuthState {
 
   // Actions
   login: (telegramUser: TelegramUser) => Promise<void>
+  loginWithTelegramWebApp: (initData: string) => Promise<void>
   loginWithPassword: (credentials: LoginCredentials) => Promise<void>
   loginWithPasskey: (username?: string) => Promise<void>
   register: (credentials: RegisterCredentials) => Promise<void>
@@ -77,7 +79,7 @@ interface AuthState {
   totpConfirmSetup: (code: string) => Promise<void>
   totpVerify: (code: string) => Promise<void>
   cancel2fa: () => void
-  logout: () => void
+  logout: (options?: { keepMiniAppSession?: boolean }) => void
   setTokens: (accessToken: string, refreshToken?: string | null) => void
   completeTokenLogin: (accessToken: string, authMethod: string) => void
   clearError: () => void
@@ -149,6 +151,47 @@ export const useAuthStore = create<AuthState>()(
               authMethod: 'telegram',
             },
             // refresh уходит в HttpOnly cookie, access — только в память
+            accessToken: response.access_token || null,
+            refreshToken: null,
+            isAuthenticated: true,
+            isLoading: false,
+          })
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Login failed',
+          })
+          throw error
+        }
+      },
+
+      loginWithTelegramWebApp: async (initData: string) => {
+        set({ isLoading: true, error: null })
+
+        try {
+          const response = await authApi.telegramWebAppLogin(initData)
+
+          if (response.requires_2fa) {
+            set({
+              requires2fa: true,
+              totpEnabled: response.totp_enabled,
+              tempToken: response.temp_token || null,
+              isLoading: false,
+            })
+            return
+          }
+
+          // Личность из initData — чтобы в шапке было видно, под кем вошли.
+          // Подпись проверил сервер; здесь это только подпись под аватаром.
+          const tgUser = parseTelegramUser(initData)
+          set({
+            user: {
+              telegramId: tgUser?.id,
+              username: tgUser?.username || tgUser?.first_name || 'telegram',
+              firstName: tgUser?.first_name || tgUser?.username || 'telegram',
+              lastName: tgUser?.last_name,
+              authMethod: 'telegram',
+            },
             accessToken: response.access_token || null,
             refreshToken: null,
             isAuthenticated: true,
@@ -328,8 +371,16 @@ export const useAuthStore = create<AuthState>()(
         })
       },
 
-      logout: () => {
+      logout: (options?: { keepMiniAppSession?: boolean }) => {
         const { isAuthenticated } = get()
+
+        // Внутри мини-аппа initData лежит в sessionStorage и запустил бы
+        // авто-вход сразу после выхода — забываем его до перезапуска.
+        // Исключение: разлогин по истёкшей сессии (client.ts) — там мини-апп
+        // должен молча войти заново, а не показывать экран логина.
+        if (!options?.keepMiniAppSession) {
+          clearTelegramInitData()
+        }
 
         // Clear state immediately for responsive UX
         set({

@@ -6,6 +6,12 @@ Both are toggled in the panel settings.
 
 **Telegram Login Widget** — only IDs listed in `ADMINS` can get in. Requires the [domain registered in BotFather](/en/guide/web-panel#domain-in-botfather) and HTTPS.
 
+**Telegram Mini App** — when the panel is opened inside Telegram (the bot's "Open panel" button, the `/panel` command, or the BotFather Menu Button), sign-in happens automatically from the signed `initData` — no login form is shown. The same `ADMINS` list, per-account login-method policy and 2FA rules apply as for the widget. Turn it off with `auth_telegram_webapp_enabled`; if auto-login fails, the panel quietly falls back to the regular login screen.
+
+The bot button appears once a public https address of the panel is set — the "General → Public panel URL" setting (`web_panel_public_url`) or the `APP_PUBLIC_URL` variable.
+
+Signed `initData` is only read from the URL fragment and only inside a Telegram client, so a link with `#tgWebAppData=...` sent in a chat cannot poison an admin's tab; the parameter is stripped from the address immediately after it is read. In fullscreen mode the Telegram client draws its buttons on top of the page, so the header and sidebar inset by their height (`--tg-content-safe-area-inset-*` from the vendored `telegram-web-app.js`).
+
 **Login and password** — accounts from the database (the Administrators section) or the fallback pair `WEB_ADMIN_LOGIN` / `WEB_ADMIN_PASSWORD` from `.env`. TOTP two-factor and biometric login (WebAuthn) can be added on top.
 
 The first administrator is created by the registration form on first open. If the panel is already running and nobody can get in, use the CLI:

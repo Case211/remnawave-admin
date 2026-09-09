@@ -208,6 +208,7 @@ Protection of the panel itself plus node attack detection: login methods, brute-
 | Setting | Key | Default | What it does |
 |---|---|---|---|
 | **✈️ Telegram Authentication** | `auth_telegram_enabled` | `true` | Allow login via Telegram Login Widget |
+| **✈️ Telegram Mini App auto-login** | `auth_telegram_webapp_enabled` | `true` | Sign in automatically when the panel is opened inside Telegram. Requires Telegram authentication to be enabled |
 | **🔒 Password Authentication** | `auth_password_enabled` | `true` | Allow login with username and password |
 | **🔐 Mandatory 2FA (TOTP)** | `auth_totp_required` | `false` | Require TOTP setup for all accounts |
 

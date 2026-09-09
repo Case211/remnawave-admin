@@ -138,6 +138,17 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 6,
     },
     {
+        "key": "web_panel_public_url",
+        "value_type": "string",
+        "category": "general",
+        "display_name": "Публичный URL панели",
+        "description": "https-адрес веб-панели. Используется кнопкой «Открыть панель» "
+                       "в боте (Telegram Mini App). Пусто — берётся из APP_PUBLIC_URL",
+        "default_value": "",
+        "env_var_name": "APP_PUBLIC_URL",
+        "sort_order": 7,
+    },
+    {
         "key": "web_session_access_minutes",
         "value_type": "int",
         "category": "general",
@@ -1523,6 +1534,20 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Разрешить вход через Telegram Login Widget",
         "default_value": "true",
         "sort_order": 1,
+    },
+    {
+        "key": "auth_telegram_webapp_enabled",
+        "value_type": "bool",
+        "category": "security",
+        "subcategory": "auth_methods",
+        "display_name": "Автовход в Telegram Mini App",
+        "description": "Входить автоматически, когда панель открыта внутри Telegram "
+                       "(мини-приложение). Требует включённой авторизации через Telegram",
+        "default_value": "true",
+        # 1-3 заняты соседями по подкатегории, 4-8 — brute_force. Метаданные
+        # существующих ключей не мигрируют (_create_config идёт с ON CONFLICT
+        # DO NOTHING), поэтому сдвинуть соседей нельзя — берём свободный номер.
+        "sort_order": 9,
     },
     {
         "key": "auth_password_enabled",
