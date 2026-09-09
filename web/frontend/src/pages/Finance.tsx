@@ -23,6 +23,7 @@ import {
   MoreVertical,
   RotateCcw,
   Pencil,
+  Tag,
 } from '@/components/brand/icons'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -31,7 +32,7 @@ import {
   Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
 import { InteractiveChart } from '@/components/charts/InteractiveChart'
-import { financeApi, FinanceItem, ItemPayload, FinanceProvider, FinanceAccount, FinanceService, AccountTestResult } from '../api/finance'
+import { financeApi, FinanceItem, FinancePayment, ItemPayload, FinanceProvider, FinanceAccount, FinanceService, AccountTestResult } from '../api/finance'
 import client from '../api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -527,6 +528,7 @@ function ItemsTab({ canCreate, canEdit, canDelete, prefillProvider, onPrefillCon
   const [editing, setEditing] = useState<FinanceItem | null>(null)
   const [form, setForm] = useState<ItemPayload>(EMPTY_FORM)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [catsOpen, setCatsOpen] = useState(false)
 
   // «Добавить сервер» из карточки хостера: открыть диалог с выбранным провайдером
   useEffect(() => {
@@ -609,12 +611,21 @@ function ItemsTab({ canCreate, canEdit, canDelete, prefillProvider, onPrefillCon
             </Button>
           ))}
         </div>
-        {canCreate && (
-          <Button size="sm" onClick={openCreate} className="gap-1.5">
-            <Plus className="w-4 h-4" /> {t('finance.addItem')}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {(canCreate || canEdit || canDelete) && (
+            <Button size="sm" variant="outline" onClick={() => setCatsOpen(true)} className="gap-1.5" title={t('finance.cat.title')}>
+              <Tag className="w-4 h-4" /> <span className="hidden sm:inline">{t('finance.cat.manage')}</span>
+            </Button>
+          )}
+          {canCreate && (
+            <Button size="sm" onClick={openCreate} className="gap-1.5">
+              <Plus className="w-4 h-4" /> {t('finance.addItem')}
+            </Button>
+          )}
+        </div>
       </div>
+
+      <CategoriesDialog open={catsOpen} onOpenChange={setCatsOpen} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} />
 
       {isLoading ? (
         <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
@@ -792,6 +803,159 @@ function ItemsTab({ canCreate, canEdit, canDelete, prefillProvider, onPrefillCon
   )
 }
 
+// ── Categories dialog ────────────────────────────────────────────
+
+// Добавить / переименовать / удалить категории расходов и доходов.
+// Системные категории можно переименовать, но не удалить (защита на бэке).
+function CategoriesDialog({ open, onOpenChange, canCreate, canEdit, canDelete }: {
+  open: boolean; onOpenChange: (open: boolean) => void
+  canCreate: boolean; canEdit: boolean; canDelete: boolean
+}) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const { data } = useQuery({ queryKey: ['finance-cats'], queryFn: financeApi.listCategories, staleTime: 300_000, enabled: open })
+  const [newName, setNewName] = useState<Record<string, string>>({ expense: '', income: '' })
+  const [newIcon, setNewIcon] = useState<Record<string, string>>({ expense: '', income: '' })
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+
+  // категории видны в записях, сводке и структуре расходов
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['finance-cats'] })
+    qc.invalidateQueries({ queryKey: ['finance-items'] })
+    qc.invalidateQueries({ queryKey: ['finance-summary'] })
+  }
+  const onError = (e: any) =>
+    toast.error(e?.response?.status === 409 ? t('finance.cat.exists') : (e?.response?.data?.detail || t('common.error')))
+
+  const createMut = useMutation({
+    mutationFn: (kind: string) => financeApi.createCategory({
+      kind, name: newName[kind].trim(), icon: newIcon[kind].trim() || undefined,
+    }),
+    onSuccess: (_c, kind) => {
+      toast.success(t('common.saved'))
+      setNewName((prev) => ({ ...prev, [kind]: '' }))
+      setNewIcon((prev) => ({ ...prev, [kind]: '' }))
+      invalidate()
+    },
+    onError,
+  })
+  const renameMut = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => financeApi.updateCategory(id, { name }),
+    onSuccess: () => { toast.success(t('common.saved')); setEditId(null); invalidate() },
+    onError,
+  })
+  const delMut = useMutation({
+    mutationFn: (id: number) => financeApi.deleteCategory(id),
+    onSuccess: () => { toast.success(t('common.deleted')); setDeleteId(null); invalidate() },
+    onError,
+  })
+
+  const startRename = (id: number, name: string) => { setEditId(id); setEditName(name) }
+  const submitRename = (id: number) => {
+    const name = editName.trim()
+    if (name) renameMut.mutate({ id, name })
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{t('finance.cat.title')}</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">{t('finance.cat.hint')}</p>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+            {(['expense', 'income'] as const).map((kind) => {
+              const list = (data?.items || []).filter((c) => c.kind === kind)
+              return (
+                <div key={kind} className="space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{t(`finance.kind.${kind}`)}</div>
+                  {!list.length && <div className="text-xs text-muted-foreground">{t('finance.cat.empty')}</div>}
+                  {list.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2 rounded-md border border-white/5 px-2 py-1.5">
+                      <span className="text-base w-6 text-center shrink-0">{c.icon || (kind === 'income' ? '💰' : '📦')}</span>
+                      {editId === c.id ? (
+                        <Input
+                          autoFocus value={editName} className="h-8 text-sm"
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') submitRename(c.id)
+                            if (e.key === 'Escape') setEditId(null)
+                          }}
+                        />
+                      ) : (
+                        <span className="text-sm text-white truncate">{c.name}</span>
+                      )}
+                      {c.is_system && <Badge variant="outline" className="text-[10px] shrink-0">{t('finance.cat.system')}</Badge>}
+                      <div className="ml-auto flex items-center gap-1 shrink-0">
+                        {editId === c.id ? (
+                          <>
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-green-400 hover:text-green-300"
+                              disabled={!editName.trim() || renameMut.isPending} onClick={() => submitRename(c.id)} title={t('common.save')}>
+                              <Check className="w-4 h-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditId(null)}>
+                              {t('common.cancel')}
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            {canEdit && (
+                              <Button size="sm" variant="ghost" className="h-7 px-2" title={t('finance.cat.rename')} onClick={() => startRename(c.id, c.name)}>
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-red-400 hover:text-red-300 disabled:opacity-40"
+                                disabled={c.is_system} title={c.is_system ? t('finance.cat.systemHint') : t('common.delete')}
+                                onClick={() => setDeleteId(c.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {canCreate && (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={newIcon[kind]} placeholder={t('finance.cat.iconPh')} className="h-8 w-20 text-center text-sm" maxLength={4}
+                        onChange={(e) => setNewIcon({ ...newIcon, [kind]: e.target.value })}
+                      />
+                      <Input
+                        value={newName[kind]} placeholder={t('finance.cat.namePh')} className="h-8 text-sm"
+                        onChange={(e) => setNewName({ ...newName, [kind]: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && newName[kind].trim()) createMut.mutate(kind) }}
+                      />
+                      <Button size="sm" variant="outline" className="h-8 gap-1 shrink-0"
+                        disabled={!newName[kind].trim() || createMut.isPending} onClick={() => createMut.mutate(kind)}>
+                        <Plus className="w-4 h-4" />{t('common.add')}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.close')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        open={deleteId != null}
+        onOpenChange={(o) => !o && setDeleteId(null)}
+        title={t('finance.cat.deleteTitle')}
+        description={t('finance.cat.deleteDesc')}
+        variant="destructive"
+        confirmLabel={t('common.delete')}
+        onConfirm={() => deleteId != null && delMut.mutate(deleteId)}
+      />
+    </>
+  )
+}
+
 // ── Payments tab ─────────────────────────────────────────────────
 
 // Пресеты периода операций: ключ → (since, until) в ISO-датах
@@ -819,13 +983,15 @@ function paymentsRange(preset: string, from: string, to: string): { since?: stri
 
 const EMPTY_PAYMENT = { kind: 'expense', item_name: '', amount: '', currency: 'RUB', paid_at: '', comment: '' }
 
-function PaymentsTab({ canCreate, canDelete }: { canCreate: boolean; canDelete: boolean }) {
+function PaymentsTab({ canCreate, canEdit, canDelete }: { canCreate: boolean; canEdit: boolean; canDelete: boolean }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const [preset, setPreset] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [addOpen, setAddOpen] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState<FinancePayment | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
   const [pf, setPf] = useState({ ...EMPTY_PAYMENT })
 
   const range = useMemo(() => paymentsRange(preset, from, to), [preset, from, to])
@@ -836,26 +1002,44 @@ function PaymentsTab({ canCreate, canDelete }: { canCreate: boolean; canDelete: 
   })
   const delMut = useMutation({
     mutationFn: (id: number) => financeApi.deletePayment(id),
-    onSuccess: () => { toast.success(t('common.deleted')); qc.invalidateQueries({ queryKey: ['finance-payments'] }); qc.invalidateQueries({ queryKey: ['finance-summary'] }) },
-  })
-  const addMut = useMutation({
-    mutationFn: () => financeApi.createPayment({
-      kind: pf.kind as 'expense' | 'income',
-      item_name: pf.item_name.trim() || undefined,
-      amount: parseFloat(pf.amount),
-      currency: pf.currency.trim().toUpperCase() || 'RUB',
-      paid_at: pf.paid_at,
-      comment: pf.comment.trim() || undefined,
-    }),
     onSuccess: () => {
-      toast.success(t('finance.paymentAdded'))
-      setAddOpen(false); setPf({ ...EMPTY_PAYMENT })
+      toast.success(t('common.deleted')); setDeleteId(null)
+      qc.invalidateQueries({ queryKey: ['finance-payments'] }); qc.invalidateQueries({ queryKey: ['finance-summary'] })
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+  // Один диалог на добавление и правку: editing — какую операцию правим
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const base = {
+        kind: pf.kind as 'expense' | 'income',
+        amount: parseFloat(pf.amount),
+        currency: pf.currency.trim().toUpperCase() || 'RUB',
+        paid_at: pf.paid_at,
+        item_name: pf.item_name.trim() || undefined,
+      }
+      if (editing) {
+        // пустой комментарий при правке очищает его, пустое название оставляет прежнее
+        await financeApi.updatePayment(editing.id, { ...base, comment: pf.comment.trim() || null })
+        return
+      }
+      await financeApi.createPayment({ ...base, comment: pf.comment.trim() || undefined })
+    },
+    onSuccess: () => {
+      toast.success(editing ? t('finance.paymentUpdated') : t('finance.paymentAdded'))
+      setDialogOpen(false); setEditing(null); setPf({ ...EMPTY_PAYMENT })
       qc.invalidateQueries({ queryKey: ['finance-payments'] })
       qc.invalidateQueries({ queryKey: ['finance-summary'] })
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail || t('common.error')),
   })
   const pfValid = pf.paid_at && parseFloat(pf.amount) > 0
+  const openAdd = () => { setEditing(null); setPf({ ...EMPTY_PAYMENT }); setDialogOpen(true) }
+  const openEdit = (p: FinancePayment) => {
+    setEditing(p)
+    setPf({ kind: p.kind, item_name: p.item_name, amount: String(p.amount), currency: p.currency, paid_at: p.paid_at, comment: p.comment || '' })
+    setDialogOpen(true)
+  }
 
   if (isError) return <QueryError onRetry={refetch} />
 
@@ -881,7 +1065,7 @@ function PaymentsTab({ canCreate, canDelete }: { canCreate: boolean; canDelete: 
           </>
         )}
         {canCreate && (
-          <Button size="sm" className="ml-auto gap-1.5" onClick={() => setAddOpen(true)}>
+          <Button size="sm" className="ml-auto gap-1.5" onClick={openAdd}>
             <Plus className="w-4 h-4" />{t('finance.addPayment')}
           </Button>
         )}
@@ -907,8 +1091,13 @@ function PaymentsTab({ canCreate, canDelete }: { canCreate: boolean; canDelete: 
               </div>
               {p.currency !== 'RUB' && <div className="text-[11px] text-muted-foreground">≈ {fmtMoney(p.amount_rub, 'RUB')}</div>}
             </div>
+            {canEdit && (
+              <Button size="sm" variant="ghost" className="h-8 px-2" title={t('common.edit')} onClick={() => openEdit(p)}>
+                <Pencil className="w-4 h-4" />
+              </Button>
+            )}
             {canDelete && (
-              <Button size="sm" variant="ghost" className="h-8 px-2 text-red-400 hover:text-red-300" onClick={() => delMut.mutate(p.id)}>
+              <Button size="sm" variant="ghost" className="h-8 px-2 text-red-400 hover:text-red-300" title={t('common.delete')} onClick={() => setDeleteId(p.id)}>
                 <Trash2 className="w-4 h-4" />
               </Button>
             )}
@@ -918,10 +1107,10 @@ function PaymentsTab({ canCreate, canDelete }: { canCreate: boolean; canDelete: 
       </div>
       )}
 
-      {/* Диалог: ручная операция произвольной датой (в т.ч. старая) */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      {/* Диалог: ручная операция произвольной датой (в т.ч. старая) или правка существующей */}
+      <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditing(null) }}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{t('finance.addPayment')}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? t('finance.editPayment') : t('finance.addPayment')}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -961,13 +1150,23 @@ function PaymentsTab({ canCreate, canDelete }: { canCreate: boolean; canDelete: 
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>{t('common.cancel')}</Button>
-            <Button disabled={!pfValid || addMut.isPending} onClick={() => addMut.mutate()}>
-              {addMut.isPending ? t('common.saving') : t('common.save')}
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+            <Button disabled={!pfValid || saveMut.isPending} onClick={() => saveMut.mutate()}>
+              {saveMut.isPending ? t('common.saving') : t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteId != null}
+        onOpenChange={(o) => !o && setDeleteId(null)}
+        title={t('finance.deletePaymentTitle')}
+        description={t('finance.deletePaymentDesc')}
+        variant="destructive"
+        confirmLabel={t('common.delete')}
+        onConfirm={() => deleteId != null && delMut.mutate(deleteId)}
+      />
     </div>
   )
 }
@@ -983,11 +1182,24 @@ function RatesTab({ canEdit }: { canEdit: boolean }) {
     onSuccess: (r) => { toast.success(t('finance.ratesUpdated', { count: r.updated })); qc.invalidateQueries({ queryKey: ['finance-rates'] }) },
     onError: () => toast.error(t('common.error')),
   })
+  const [edits, setEdits] = useState<Record<string, string>>({})
+  const clearEdit = (cur: string) => setEdits((prev) => { const next = { ...prev }; delete next[cur]; return next })
   const setMut = useMutation({
     mutationFn: ({ cur, rate }: { cur: string; rate: number }) => financeApi.setRate(cur, rate),
-    onSuccess: () => { toast.success(t('common.saved')); qc.invalidateQueries({ queryKey: ['finance-rates'] }) },
+    onSuccess: (_r, { cur }) => { toast.success(t('common.saved')); clearEdit(cur); qc.invalidateQueries({ queryKey: ['finance-rates'] }) },
+    onError: () => toast.error(t('common.error')),
   })
-  const [edits, setEdits] = useState<Record<string, string>>({})
+  // Возврат на авто: снимаем ручной флаг и сразу тянем курс из источника
+  const autoMut = useMutation({
+    mutationFn: (cur: string) => financeApi.resetRateToAuto(cur),
+    onSuccess: (r, cur) => {
+      if (r.updated > 0) toast.success(t('finance.rateAutoRestored', { currency: cur }))
+      else toast.warning(t('finance.rateAutoNotFetched', { currency: cur }))
+      clearEdit(cur)
+      qc.invalidateQueries({ queryKey: ['finance-rates'] })
+    },
+    onError: () => toast.error(t('common.error')),
+  })
 
   if (isLoading) return <Skeleton className="h-40 w-full" />
 
@@ -1010,18 +1222,31 @@ function RatesTab({ canEdit }: { canEdit: boolean }) {
               {canEdit ? (
                 <Input
                   className="h-8 w-28 ml-auto text-sm"
-                  defaultValue={r.rate_rub}
-                  value={edits[r.currency] ?? undefined}
+                  value={edits[r.currency] ?? String(r.rate_rub)}
                   onChange={(e) => setEdits({ ...edits, [r.currency]: e.target.value })}
                   onBlur={(e) => {
                     const v = Number(e.target.value)
                     if (v > 0 && v !== r.rate_rub) setMut.mutate({ cur: r.currency, rate: v })
+                    else clearEdit(r.currency)
                   }}
                 />
               ) : (
                 <span className="ml-auto font-mono text-white">{r.rate_rub}</span>
               )}
               {r.is_manual && <Badge variant="outline" className="text-[10px]">{t('finance.manual')}</Badge>}
+              {r.is_manual && canEdit && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1 px-2 text-xs"
+                  title={t('finance.resetToAutoHint')}
+                  onClick={() => autoMut.mutate(r.currency)}
+                  disabled={autoMut.isPending}
+                >
+                  <RotateCcw className={cn('w-3.5 h-3.5', autoMut.isPending && autoMut.variables === r.currency && 'animate-spin')} />
+                  {t('finance.resetToAuto')}
+                </Button>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -1920,7 +2145,7 @@ export default function Finance() {
           <ItemsTab canCreate={canCreate} canEdit={canEdit} canDelete={canDelete}
             prefillProvider={prefillProvider} onPrefillConsumed={() => setPrefillProvider(null)} />
         </TabsContent>
-        <TabsContent value="payments"><PaymentsTab canCreate={canCreate} canDelete={canDelete} /></TabsContent>
+        <TabsContent value="payments"><PaymentsTab canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} /></TabsContent>
         <TabsContent value="hosters">
           <HostersTab canCreate={canCreate} canEdit={canEdit} canDelete={canDelete}
             onAddItem={(id) => { setPrefillProvider(id); setTab('items') }} />

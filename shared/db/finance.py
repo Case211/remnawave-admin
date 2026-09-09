@@ -37,6 +37,17 @@ def _d(v: Any) -> Optional[str]:
     return str(v)
 
 
+def _payment_row(r: Any) -> Dict[str, Any]:
+    """Строка finance_payments -> dict для API: числа float, даты ISO, сумма в RUB."""
+    d = dict(r)
+    d["amount"] = _num(d.get("amount"))
+    d["rate_rub"] = _num(d["rate_rub"]) if d.get("rate_rub") is not None else None
+    d["amount_rub"] = round(d["amount"] * (d["rate_rub"] or 1.0), 2)
+    d["paid_at"] = _d(d.get("paid_at"))
+    d["created_at"] = _d(d.get("created_at"))
+    return d
+
+
 def _advance_due(next_due: date, cycle: str, cycle_days: Optional[int], today: date) -> Optional[date]:
     """Сдвинуть дату следующего платежа на один или несколько циклов вперёд.
 
@@ -337,16 +348,50 @@ class FinanceMixin:
                     ORDER BY paid_at DESC, id DESC LIMIT ${len(params) - 1} OFFSET ${len(params)}""",
                 *params,
             )
-        out = []
-        for r in rows:
-            d = dict(r)
-            d["amount"] = _num(d.get("amount"))
-            d["rate_rub"] = _num(d["rate_rub"]) if d.get("rate_rub") is not None else None
-            d["amount_rub"] = round(d["amount"] * (d["rate_rub"] or 1.0), 2)
-            d["paid_at"] = _d(d.get("paid_at"))
-            d["created_at"] = _d(d.get("created_at"))
-            out.append(d)
-        return out
+        return [_payment_row(r) for r in rows]
+
+    async def get_finance_payment(self, payment_id: int) -> Optional[Dict[str, Any]]:
+        if not self.is_connected:
+            return None
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                f"SELECT * FROM {FINANCE_PAYMENTS_TABLE} WHERE id = $1", payment_id,
+            )
+        return _payment_row(row) if row else None
+
+    async def update_finance_payment(self, payment_id: int, **fields) -> Optional[Dict[str, Any]]:
+        """Править операцию на месте (сумма, дата, валюта, тип, название, комментарий).
+
+        Курс к RUB зафиксирован на момент оплаты и при правке суммы/даты не
+        трогается; при смене валюты перефиксируется по текущей таблице курсов.
+        None — операции нет.
+        """
+        if not self.is_connected:
+            return None
+        allowed = {
+            k: v for k, v in fields.items()
+            if k in ("item_name", "kind", "paid_at", "amount", "currency", "comment")
+        }
+        if not allowed:
+            return await self.get_finance_payment(payment_id)
+        if isinstance(allowed.get("paid_at"), str):
+            allowed["paid_at"] = date.fromisoformat(allowed["paid_at"])
+        if "amount" in allowed:
+            allowed["amount"] = round(float(allowed["amount"]), 2)
+        if "currency" in allowed:
+            allowed["currency"] = str(allowed["currency"]).upper()
+        sets = [f"{k} = ${i + 2}" for i, k in enumerate(allowed)]
+        if "currency" in allowed:
+            cur_idx = list(allowed).index("currency") + 2
+            sets.append(
+                f"rate_rub = (SELECT rate_rub FROM {FINANCE_RATES_TABLE} WHERE currency = ${cur_idx})"
+            )
+        async with self.acquire() as conn:
+            row = await conn.fetchrow(
+                f"UPDATE {FINANCE_PAYMENTS_TABLE} SET {', '.join(sets)} WHERE id = $1 RETURNING *",
+                payment_id, *allowed.values(),
+            )
+        return _payment_row(row) if row else None
 
     async def delete_finance_payment(self, payment_id: int) -> bool:
         if not self.is_connected:
@@ -687,6 +732,17 @@ class FinanceMixin:
                     SET rate_rub = EXCLUDED.rate_rub, is_manual = EXCLUDED.is_manual, updated_at = NOW()""",
                 currency.upper(), rate_rub, is_manual,
             )
+
+    async def set_finance_rate_manual(self, currency: str, is_manual: bool) -> bool:
+        """Переключить ручной флаг курса. False — такой валюты в таблице нет."""
+        if not self.is_connected:
+            return False
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                f"UPDATE {FINANCE_RATES_TABLE} SET is_manual = $2 WHERE currency = $1",
+                currency.upper(), is_manual,
+            )
+        return "UPDATE 1" in result
 
     async def finance_currencies_in_use(self) -> List[str]:
         """Валюты активных записей — какие курсы обновлять автоматически."""

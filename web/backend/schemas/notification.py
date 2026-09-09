@@ -42,6 +42,10 @@ class NotificationUnreadCount(BaseModel):
     count: int
 
 
+class NotificationDeleteResult(BaseModel):
+    deleted: int
+
+
 # ── Notification Channels ────────────────────────────────────────
 
 class ChannelConfig(BaseModel):

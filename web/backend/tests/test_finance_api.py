@@ -229,6 +229,149 @@ class TestRatesUpdate:
         assert out == {"USDT": 92.35, "TON": 548.1}
 
 
+class TestRatesAutoReset:
+    """POST /rates/{currency}/auto — возврат ручного курса на автообновление."""
+
+    @pytest.mark.asyncio
+    async def test_resets_flag_and_refetches(self, client):
+        db = AsyncMock()
+        db.set_finance_rate_manual = AsyncMock(return_value=True)
+        db.get_finance_rates = AsyncMock(return_value=[
+            {"currency": "EUR", "rate_rub": 100.1, "is_manual": False},
+        ])
+        update = AsyncMock(return_value=1)
+        with patch("web.backend.api.v2.finance.db_service", db),              patch("web.backend.core.finance.rates.update_rates", update):
+            resp = await client.post("/api/v2/finance/rates/eur/auto")
+        assert resp.status_code == 200
+        db.set_finance_rate_manual.assert_awaited_once_with("EUR", False)  # код нормализуется
+        update.assert_awaited_once_with(["EUR"])  # тянем только эту валюту
+        data = resp.json()
+        assert data["updated"] == 1
+        assert data["items"][0]["is_manual"] is False
+
+    @pytest.mark.asyncio
+    async def test_source_unavailable_still_clears_flag(self, client):
+        """Источник курсов недоступен: флаг снят, updated=0 — суточный цикл догонит."""
+        db = AsyncMock()
+        db.set_finance_rate_manual = AsyncMock(return_value=True)
+        db.get_finance_rates = AsyncMock(return_value=[])
+        with patch("web.backend.api.v2.finance.db_service", db),              patch("web.backend.core.finance.rates.update_rates", AsyncMock(return_value=0)):
+            resp = await client.post("/api/v2/finance/rates/EUR/auto")
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 0
+
+    @pytest.mark.asyncio
+    async def test_unknown_currency_404(self, client):
+        db = AsyncMock()
+        db.set_finance_rate_manual = AsyncMock(return_value=False)
+        update = AsyncMock(return_value=0)
+        with patch("web.backend.api.v2.finance.db_service", db),              patch("web.backend.core.finance.rates.update_rates", update):
+            resp = await client.post("/api/v2/finance/rates/XXX/auto")
+        assert resp.status_code == 404
+        update.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_denied_without_permission(self, viewer_client):
+        resp = await viewer_client.post("/api/v2/finance/rates/EUR/auto")
+        assert resp.status_code == 403
+
+
+class TestPaymentsEdit:
+    """PATCH /payments/{id} — правка операции на месте."""
+
+    @pytest.mark.asyncio
+    async def test_update_forwards_fields(self, client):
+        db = AsyncMock()
+        db.update_finance_payment = AsyncMock(return_value={
+            "id": 7, "item_name": "Hetzner", "kind": "expense", "paid_at": "2026-08-01",
+            "amount": 12.5, "currency": "EUR", "rate_rub": 100.0, "amount_rub": 1250.0,
+            "comment": None, "source": "manual",
+        })
+        with patch("web.backend.api.v2.finance.db_service", db):
+            resp = await client.patch("/api/v2/finance/payments/7", json={
+                "amount": 12.5, "paid_at": "2026-08-01", "comment": None,
+            })
+        assert resp.status_code == 200
+        assert resp.json()["amount_rub"] == 1250.0
+        # comment=null доходит до БД (очистка), незаданные поля — нет
+        db.update_finance_payment.assert_awaited_once_with(7, amount=12.5, paid_at="2026-08-01", comment=None)
+
+    @pytest.mark.asyncio
+    async def test_update_not_found(self, client):
+        db = AsyncMock()
+        db.update_finance_payment = AsyncMock(return_value=None)
+        with patch("web.backend.api.v2.finance.db_service", db):
+            resp = await client.patch("/api/v2/finance/payments/404", json={"amount": 1})
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_validates(self, client):
+        db = AsyncMock()
+        with patch("web.backend.api.v2.finance.db_service", db):
+            bad_kind = await client.patch("/api/v2/finance/payments/1", json={"kind": "refund"})
+            bad_date = await client.patch("/api/v2/finance/payments/1", json={"paid_at": "01.08.2026"})
+            bad_amount = await client.patch("/api/v2/finance/payments/1", json={"amount": 0})
+        assert (bad_kind.status_code, bad_date.status_code, bad_amount.status_code) == (422, 422, 422)
+        db.update_finance_payment.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_denied_without_permission(self, viewer_client):
+        resp = await viewer_client.patch("/api/v2/finance/payments/1", json={"amount": 1})
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_db_update_refixes_rate_on_currency_change(self, mock_db_acquire):
+        """Смена валюты перефиксирует rate_rub из таблицы курсов; прочие правки курс не трогают."""
+        from shared.db.finance import FinanceMixin
+
+        mock_conn, cm = mock_db_acquire
+        mock_conn.fetchrow = AsyncMock(return_value={
+            "id": 1, "item_id": None, "item_name": "X", "kind": "expense", "paid_at": date(2026, 8, 1),
+            "amount": 10, "currency": "USD", "rate_rub": 90, "comment": None, "source": "manual",
+            "created_at": None,
+        })
+
+        class _DB(FinanceMixin):
+            is_connected = True
+
+            def acquire(self):
+                return cm
+
+        row = await _DB().update_finance_payment(1, currency="usd", amount=10)
+        sql = mock_conn.fetchrow.await_args.args[0]
+        assert "rate_rub = (SELECT rate_rub FROM" in sql
+        assert mock_conn.fetchrow.await_args.args[2] == "USD"  # валюта нормализована
+        assert row["amount_rub"] == 900.0
+        assert row["paid_at"] == "2026-08-01"
+
+        mock_conn.fetchrow.reset_mock()
+        await _DB().update_finance_payment(1, amount=11, paid_at="2026-08-02")
+        sql = mock_conn.fetchrow.await_args.args[0]
+        assert "rate_rub" not in sql
+        assert mock_conn.fetchrow.await_args.args[3] == date(2026, 8, 2)  # ISO-строка -> date
+
+
+class TestCategoriesApi:
+    @pytest.mark.asyncio
+    async def test_rename_conflict_409(self, client):
+        import asyncpg
+
+        db = AsyncMock()
+        db.update_finance_category = AsyncMock(side_effect=asyncpg.UniqueViolationError("dup"))
+        with patch("web.backend.api.v2.finance.db_service", db):
+            resp = await client.patch("/api/v2/finance/categories/3", json={"name": "Ноды"})
+        assert resp.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_rename_ok(self, client):
+        db = AsyncMock()
+        db.update_finance_category = AsyncMock(return_value=True)
+        with patch("web.backend.api.v2.finance.db_service", db):
+            resp = await client.patch("/api/v2/finance/categories/3", json={"name": "Домены"})
+        assert resp.status_code == 200
+        db.update_finance_category.assert_awaited_once_with(3, name="Домены")
+
+
 # ── Напоминания ──────────────────────────────────────────────────
 
 

@@ -126,6 +126,12 @@ export const notificationsApi = {
     await client.delete('/notifications', { params: { days } })
   },
 
+  /** Удалить все прочитанные уведомления любого возраста; возвращает число удалённых. */
+  deleteRead: async (): Promise<{ deleted: number }> => {
+    const { data } = await client.delete('/notifications/read')
+    return data
+  },
+
   create: async (payload: {
     title: string
     body?: string

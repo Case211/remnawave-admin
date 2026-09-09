@@ -6,8 +6,10 @@
 """
 import json
 import logging
+from datetime import date
 from typing import Dict, List, Optional
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
@@ -163,6 +165,30 @@ class PaymentCreate(BaseModel):
         return v
 
 
+class PaymentUpdate(BaseModel):
+    """Правка операции: все поля опциональны, comment=null очищает комментарий."""
+    item_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    kind: Optional[str] = None
+    paid_at: Optional[str] = None
+    amount: Optional[float] = Field(default=None, gt=0)
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=8)
+    comment: Optional[str] = None
+
+    @field_validator("kind")
+    @classmethod
+    def _kind(cls, v):
+        if v is not None and v not in ITEM_KINDS:
+            raise ValueError("kind must be expense|income")
+        return v
+
+    @field_validator("paid_at")
+    @classmethod
+    def _paid_at(cls, v):
+        if v is not None:
+            date.fromisoformat(v)  # ValueError -> 422
+        return v
+
+
 class RateUpdate(BaseModel):
     rate_rub: float = Field(gt=0)
     is_manual: bool = True
@@ -303,9 +329,12 @@ async def update_category(
     data: CategoryUpdate,
     admin: AdminUser = Depends(require_permission("finance", "edit")),
 ):
-    ok = await db_service.update_finance_category(
-        category_id, **data.model_dump(exclude_unset=True, exclude_none=True),
-    )
+    try:
+        ok = await db_service.update_finance_category(
+            category_id, **data.model_dump(exclude_unset=True, exclude_none=True),
+        )
+    except asyncpg.UniqueViolationError:
+        raise HTTPException(status_code=409, detail="Category already exists")
     if not ok:
         raise HTTPException(status_code=404, detail="Category not found")
     return {"status": "ok"}
@@ -508,6 +537,22 @@ async def create_payment(
     return {"id": row["id"], "status": "ok"}
 
 
+@router.patch("/payments/{payment_id}")
+async def update_payment(
+    payment_id: int,
+    data: PaymentUpdate,
+    admin: AdminUser = Depends(require_permission("finance", "edit")),
+):
+    """Правка операции на месте — вместо «удалить и завести заново»."""
+    fields = data.model_dump(exclude_unset=True)
+    # null допустим только для comment (очистка); для остальных null = не менять
+    fields = {k: v for k, v in fields.items() if v is not None or k == "comment"}
+    updated = await db_service.update_finance_payment(payment_id, **fields)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return updated
+
+
 @router.delete("/payments/{payment_id}")
 async def delete_payment(
     payment_id: int,
@@ -535,6 +580,24 @@ async def set_rate(
 ):
     await db_service.upsert_finance_rate(currency, data.rate_rub, is_manual=data.is_manual)
     return {"status": "ok"}
+
+
+@router.post("/rates/{currency}/auto")
+async def reset_rate_to_auto(
+    currency: str,
+    admin: AdminUser = Depends(require_permission("finance", "edit")),
+):
+    """Снять ручной флаг и сразу подтянуть курс из внешнего источника.
+
+    Если источник недоступен, флаг всё равно снят (updated=0 в ответе) —
+    суточный цикл автообновления подхватит валюту при следующем проходе.
+    """
+    from web.backend.core.finance.rates import update_rates
+    code = currency.upper()
+    if not await db_service.set_finance_rate_manual(code, False):
+        raise HTTPException(status_code=404, detail="Rate not found")
+    updated = await update_rates([code])
+    return {"updated": updated, "items": await db_service.get_finance_rates()}
 
 
 @router.post("/rates/refresh")

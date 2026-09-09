@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 import {
   Bell, Settings2, Shield, Mail, MessageSquare, Webhook,
   Check, Trash2, Plus, Power, PowerOff, Pencil, Send, AlertTriangle,
-  CheckCircle2, ChevronDown, ChevronRight, MonitorSmartphone,
+  CheckCircle2, ChevronDown, ChevronRight, MonitorSmartphone, MailOpen,
 } from '@/components/brand/icons'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -209,6 +209,7 @@ function NotificationsTab() {
   const [filterRead, setFilterRead] = useState<string>('all')
   const [filterSeverity, setFilterSeverity] = useState<string>('all')
   const [confirmDeleteOld, setConfirmDeleteOld] = useState(false)
+  const [confirmDeleteRead, setConfirmDeleteRead] = useState(false)
 
   const params: Record<string, unknown> = { page, per_page: 20 }
   if (filterRead === 'unread') params.is_read = false
@@ -231,11 +232,30 @@ function NotificationsTab() {
     onError: () => toast.error(t('common.error')),
   })
 
+  // После массового удаления сбрасываем список, счётчик в шапке и выпадашку
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    queryClient.invalidateQueries({ queryKey: ['notifications-unread'] })
+    queryClient.invalidateQueries({ queryKey: ['notifications-recent'] })
+  }
+
   const deleteOld = useMutation({
     mutationFn: () => notificationsApi.deleteOld(30),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      invalidateAll()
+      setPage(1)
       toast.success(t('notifications.oldDeleted'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  // «Очистить прочитанные»: все прочитанные любого возраста, непрочитанные остаются
+  const deleteRead = useMutation({
+    mutationFn: () => notificationsApi.deleteRead(),
+    onSuccess: (r) => {
+      invalidateAll()
+      setPage(1)
+      toast.success(t('notifications.readDeleted', { count: r.deleted }))
     },
     onError: () => toast.error(t('common.error')),
   })
@@ -286,6 +306,10 @@ function NotificationsTab() {
               <Button variant="outline" size="sm" onClick={() => markAllRead.mutate()} className="flex-1 sm:flex-none">
                 <Check className="w-4 h-4 mr-1" />
                 <span className="truncate">{t('notifications.markAllRead')}</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setConfirmDeleteRead(true)} className="text-red-400 flex-1 sm:flex-none">
+                <MailOpen className="w-4 h-4 mr-1" />
+                <span className="truncate">{t('notifications.deleteRead')}</span>
               </Button>
               <Button variant="outline" size="sm" onClick={() => setConfirmDeleteOld(true)} className="text-red-400 flex-1 sm:flex-none">
                 <Trash2 className="w-4 h-4 mr-1" />
@@ -368,11 +392,20 @@ function NotificationsTab() {
       <ConfirmDialog
         open={confirmDeleteOld}
         onOpenChange={setConfirmDeleteOld}
-        title={t('notifications.deleteOldConfirmTitle', { defaultValue: 'Удалить старые уведомления?' })}
-        description={t('notifications.deleteOldConfirmDesc', { defaultValue: 'Все прочитанные уведомления старше 30 дней будут удалены. Действие необратимо.' })}
+        title={t('notifications.deleteOldConfirmTitle')}
+        description={t('notifications.deleteOldConfirmDesc')}
         confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={() => deleteOld.mutate()}
+      />
+      <ConfirmDialog
+        open={confirmDeleteRead}
+        onOpenChange={setConfirmDeleteRead}
+        title={t('notifications.deleteReadConfirmTitle')}
+        description={t('notifications.deleteReadConfirmDesc')}
+        confirmLabel={t('common.delete')}
+        variant="destructive"
+        onConfirm={() => deleteRead.mutate()}
       />
     </div>
   )
