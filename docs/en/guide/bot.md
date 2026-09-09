@@ -51,6 +51,7 @@ NOTIFICATIONS_TOPIC_CRM=103         # billing
 NOTIFICATIONS_TOPIC_FINANCE=106     # finance
 NOTIFICATIONS_TOPIC_ERRORS=104      # errors
 NOTIFICATIONS_TOPIC_VIOLATIONS=105  # violations
+NOTIFICATIONS_TOPIC_BACKUPS=107     # backup files
 ```
 
 Anything without its own topic goes to `NOTIFICATIONS_TOPIC_ID`.

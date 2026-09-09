@@ -47,6 +47,7 @@ import {
 import client from '../api/client'
 import { userPresetsApi, UserPreset, UserPresetData } from '../api/userPresets'
 import { EmptyState } from '@/components/EmptyState'
+import { OverflowBadges } from '@/components/OverflowBadges'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -86,6 +87,7 @@ interface UserListItem {
   hwid_device_limit: number
   hwid_device_count: number
   external_squad_uuid: string | null
+  active_internal_squads?: string[] | null
   telegram_id: number | null
   created_at: string | null
   updated_at: string | null
@@ -1017,6 +1019,11 @@ export default function Users() {
   const [sortOrder, setSortOrder] = useUrlParam('sort_order', 'desc')
   const [adminId, setAdminId] = useUrlParam('admin_id', '')
   const [externalSquad, setExternalSquad] = useUrlParam('external_squad', '')
+  const [internalSquad, setInternalSquad] = useUrlParam('internal_squad', '')
+  // Внутренних сквадов у юзера несколько, фильтр тоже множественный: в URL и
+  // пресетах живёт строка через запятую, в коде — массив.
+  const internalSquads = useMemo(() => internalSquad.split(',').filter(Boolean), [internalSquad])
+  const setInternalSquads = useCallback((v: string[]) => setInternalSquad(v.join(',')), [setInternalSquad])
   const [userTag, setUserTag] = useUrlParam('tag', '')
   // Lock restricted admins to their own account
   // Unrestricted non-superadmins default to "any admin" (like superadmin)
@@ -1026,12 +1033,12 @@ export default function Users() {
     }
   }, [isLockedToOwnAccount, isSuperadmin, unrestrictedUserAccess, accountId, adminId])
   const hasAnyFilterInUrl =
-    !!status || !!trafficType || !!expireFilter || !!onlineFilter || !!trafficUsage || (canChooseAdmin && !!adminId) || !!externalSquad || !!userTag
+    !!status || !!trafficType || !!expireFilter || !!onlineFilter || !!trafficUsage || (canChooseAdmin && !!adminId) || !!externalSquad || !!internalSquad || !!userTag
   const [showFilters, setShowFilters] = useState(hasAnyFilterInUrl)
 
   const activeFilterCount = useMemo(
-    () => [status, trafficType, expireFilter, onlineFilter, trafficUsage, externalSquad, userTag].filter(Boolean).length,
-    [status, trafficType, expireFilter, onlineFilter, trafficUsage, externalSquad, userTag],
+    () => [status, trafficType, expireFilter, onlineFilter, trafficUsage, externalSquad, internalSquad, userTag].filter(Boolean).length,
+    [status, trafficType, expireFilter, onlineFilter, trafficUsage, externalSquad, internalSquad, userTag],
   )
 
   // Export handlers
@@ -1070,8 +1077,9 @@ export default function Users() {
     ...(trafficUsage && { trafficUsage }),
     ...(adminId && { adminId }),
     ...(externalSquad && { externalSquad }),
+    ...(internalSquad && { internalSquad }),
     ...(userTag && { userTag }),
-  }), [status, trafficType, expireFilter, onlineFilter, trafficUsage, adminId, externalSquad, userTag])
+  }), [status, trafficType, expireFilter, onlineFilter, trafficUsage, adminId, externalSquad, internalSquad, userTag])
   const hasActiveFilters = activeFilterCount > 0
   const handleLoadFilter = useCallback((filters: Record<string, unknown>) => {
     setStatus((filters.status as string) || '')
@@ -1081,6 +1089,7 @@ export default function Users() {
     setTrafficUsage((filters.trafficUsage as string) || '')
     setAdminId((filters.adminId as string) || '')
     setExternalSquad((filters.externalSquad as string) || '')
+    setInternalSquad((filters.internalSquad as string) || '')
     setUserTag((filters.userTag as string) || '')
     setShowFilters(true)
     setPage(1)
@@ -1111,7 +1120,7 @@ export default function Users() {
 
   // Fetch users
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
-    queryKey: ['users', page, perPage, debouncedSearch, status, trafficType, expireFilter, onlineFilter, trafficUsage, sortBy, sortOrder, adminId, externalSquad, userTag],
+    queryKey: ['users', page, perPage, debouncedSearch, status, trafficType, expireFilter, onlineFilter, trafficUsage, sortBy, sortOrder, adminId, externalSquad, internalSquad, userTag],
     queryFn: () => {
       const p: Record<string, unknown> = {
         page,
@@ -1123,6 +1132,7 @@ export default function Users() {
         online_filter: onlineFilter || undefined,
         traffic_usage: trafficUsage || undefined,
         external_squad_uuid: externalSquad || undefined,
+        internal_squad_uuid: internalSquad || undefined,
         tag: userTag || undefined,
         sort_by: sortBy,
         sort_order: sortOrder,
@@ -1155,6 +1165,17 @@ export default function Users() {
     staleTime: 60_000,
   })
   const externalSquadsList: Squad[] = Array.isArray(externalSquadsData) ? externalSquadsData : []
+
+  // Внутренние сквады — для фильтра и колонки: в выдаче юзеров только их uuid
+  const { data: internalSquadsData } = useQuery<Squad[]>({
+    queryKey: ['internal-squads'],
+    queryFn: async () => {
+      const { data } = await client.get('/users/meta/internal-squads')
+      return Array.isArray(data) ? data : []
+    },
+    staleTime: 60_000,
+  })
+  const internalSquadsList: Squad[] = Array.isArray(internalSquadsData) ? internalSquadsData : []
 
   // Fetch distinct user tags for filter dropdown
   const { data: userTagsData } = useQuery<string[]>({
@@ -1241,6 +1262,7 @@ export default function Users() {
     setOnlineFilter('')
     setTrafficUsage('')
     setExternalSquad('')
+    setInternalSquad('')
     setUserTag('')
     setPage(1)
   }, [])
@@ -1418,6 +1440,11 @@ export default function Users() {
     () => new Map(externalSquadsList.map((s) => [String(s.uuid).toLowerCase(), s.name])),
     [externalSquadsList],
   )
+  const internalSquadNames = useMemo(
+    () => new Map(internalSquadsList.map((s) => [String(s.uuid).toLowerCase(), s.name])),
+    [internalSquadsList],
+  )
+  const moreSquads = useCallback((n: number) => t('users.table.moreSquads', { count: n }), [t])
 
   // Колонки витрины: одна точка истины для заголовков и ячеек — раньше
   // разметка ячеек дублировалась в виртуальном и обычном режимах и уже
@@ -1586,6 +1613,31 @@ export default function Users() {
         : '—'),
     },
     {
+      key: 'active_internal_squads',
+      labelKey: 'users.table.internalSquads',
+      optional: true,
+      filter: {
+        type: 'select',
+        options: internalSquadsList.map((sq: Squad) => ({ value: String(sq.uuid), label: sq.name || String(sq.uuid) })),
+        value: internalSquads,
+        onChange: (v) => {
+          setInternalSquads(Array.isArray(v) ? v : [])
+          setPage(1)
+        },
+      },
+      className: 'text-dark-200 text-sm',
+      // Бейдж на сквад; что не влезло в строку — сворачивается в «ещё N»
+      render: (user) => (user.active_internal_squads?.length
+        ? (
+          <OverflowBadges
+            items={user.active_internal_squads.map((id) => internalSquadNames.get(id.toLowerCase()) || id)}
+            more={moreSquads}
+            className="max-w-[300px]"
+          />
+        )
+        : '—'),
+    },
+    {
       key: 'short_uuid',
       labelKey: 'users.table.shortUuid',
       optional: true,
@@ -1609,6 +1661,7 @@ export default function Users() {
     trafficUsage, setTrafficUsage, onlineFilter, setOnlineFilter,
     expireFilter, setExpireFilter, canChooseAdmin, adminId, setAdminId, admins,
     userTag, setUserTag, userTagsList, externalSquad, setExternalSquad, externalSquadsList,
+    internalSquads, setInternalSquads, internalSquadsList, internalSquadNames, moreSquads, setPage,
   ])
 
   const columns = useTableColumns('users', columnDefs)
@@ -1892,6 +1945,38 @@ export default function Users() {
                   </div>
 
                   <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.internalSquad')}</Label>
+                    {/* Мультивыбор: чипы-переключатели, пусто = все сквады */}
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {internalSquadsList.length === 0 && (
+                        <span className="text-xs text-dark-400">{t('users.filters.anyInternalSquad')}</span>
+                      )}
+                      {internalSquadsList.map((sq: Squad) => {
+                        const on = internalSquads.includes(sq.uuid)
+                        return (
+                          <button
+                            key={sq.uuid}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => {
+                              setInternalSquads(on ? internalSquads.filter((s) => s !== sq.uuid) : [...internalSquads, sq.uuid])
+                              setPage(1)
+                            }}
+                            className={cn(
+                              'px-2.5 py-1 rounded-md border text-xs transition-colors',
+                              on
+                                ? 'border-primary-500/40 bg-primary-500/15 text-primary-200'
+                                : 'border-[var(--glass-border)] text-dark-200 hover:text-white',
+                            )}
+                          >
+                            {sq.squadName || sq.name || sq.squadTag || sq.tag || sq.uuid}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
                     <Label className="text-[11px] uppercase tracking-wider text-dark-300">{t('users.filters.tag')}</Label>
                     <Select value={userTag || '_all'} onValueChange={(v) => { setUserTag(v === '_all' ? '' : v); setPage(1) }}>
                       <SelectTrigger className="mt-1">
@@ -1985,6 +2070,13 @@ export default function Users() {
                     onRemove={() => { setExternalSquad(''); setPage(1) }}
                   />
                 )}
+                {internalSquads.map((id) => (
+                  <FilterChip
+                    key={id}
+                    label={`${t('users.filters.internalSquad')}: ${internalSquadNames.get(id.toLowerCase()) || id}`}
+                    onRemove={() => { setInternalSquads(internalSquads.filter((s) => s !== id)); setPage(1) }}
+                  />
+                ))}
                 {userTag && (
                   <FilterChip
                     label={`${t('users.filters.tag')}: ${userTag}`}
@@ -2350,6 +2442,21 @@ export default function Users() {
           )}
         </p>
         <div className="flex items-center gap-2 order-1 sm:order-2">
+          {/* На десктопе панель фильтров скрыта, а с ней и выбор размера
+              страницы — поэтому он живёт рядом с пагинацией. */}
+          <div className="hidden md:flex items-center gap-2 mr-2">
+            <span className="text-xs text-muted-foreground">{t('users.filters.perPage')}</span>
+            <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1) }}>
+              <SelectTrigger className="h-9 w-[84px]" aria-label={t('users.filters.perPage')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 20, 50, 100].map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="secondary" size="icon" className="h-11 w-11 md:h-9 md:w-9" onClick={() => setPage(page - 1)} disabled={page <= 1} aria-label={t('common.previousPage')}>
             <ChevronLeft className="w-5 h-5" />
           </Button>

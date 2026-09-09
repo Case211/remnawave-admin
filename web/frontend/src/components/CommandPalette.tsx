@@ -39,6 +39,45 @@ interface CommandPaletteProps {
   onOpenChange: (open: boolean) => void
 }
 
+interface UserResult {
+  uuid: string
+  short_uuid: string | null
+  username: string | null
+  email: string | null
+  telegram_id: number | null
+  description: string | null
+  status: string
+}
+
+/**
+ * Строка, по которой cmdk фильтрует результат уже на клиенте.
+ *
+ * Сервер ищет по username, email, UUID, short UUID, Telegram ID и описанию
+ * (см. get_users_paginated). Если сюда не положить те же поля, найденный
+ * сервером пользователь молча исчезнет из выдачи: поиск по Telegram ID
+ * возвращал совпадение, а список показывал «ничего не найдено».
+ */
+function userSearchValue(user: UserResult): string {
+  return [
+    'user',
+    user.uuid,
+    user.short_uuid,
+    user.username,
+    user.email,
+    user.telegram_id,
+    user.description,
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+/** Подсказка, по какому полю пользователь опознаётся, кроме имени. */
+function userMatchHint(user: UserResult): string | null {
+  if (user.telegram_id) return `TG ${user.telegram_id}`
+  if (user.email && user.username) return user.email
+  return null
+}
+
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -74,7 +113,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       const { data } = await client.get('/users', {
         params: { search: debouncedSearch, page: 1, per_page: 5 },
       })
-      return data.items as { uuid: string; username: string | null; email: string | null; status: string }[]
+      return data.items as UserResult[]
     },
     enabled: open && debouncedSearch.length >= 2,
     staleTime: 10_000,
@@ -96,12 +135,19 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             {userResults.map((user) => (
               <CommandItem
                 key={user.uuid}
-                value={`user-${user.username || user.email || user.uuid}`}
+                value={userSearchValue(user)}
                 onSelect={() => runCommand(() => navigate(`/users/${user.uuid}`))}
               >
                 <Users className="mr-2 h-4 w-4" />
-                <span>{user.username || user.email || user.uuid.slice(0, 8)}</span>
-                <span className="ml-auto text-xs text-dark-300">{user.status}</span>
+                <span className="truncate">
+                  {user.username || user.email || user.uuid.slice(0, 8)}
+                </span>
+                {userMatchHint(user) && (
+                  <span className="ml-2 text-xs text-dark-300 truncate">
+                    {userMatchHint(user)}
+                  </span>
+                )}
+                <span className="ml-auto pl-2 text-xs text-dark-300">{user.status}</span>
               </CommandItem>
             ))}
           </CommandGroup>

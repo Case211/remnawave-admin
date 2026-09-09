@@ -110,3 +110,17 @@ async def test_disabled_bot_notification_type_does_not_fall_back():
         await send_error_notification(bot, "errors.test", {"message": "failed"})
 
     send_card.assert_not_awaited()
+
+
+def test_topic_override_has_no_general_fallback():
+    """Свой топик типа: БД → env → None; общий notifications_topic_id не подставляется."""
+    from shared.notification_config import resolve_topic_override
+
+    values = {"notifications_topic_id": 9}
+    with patch("shared.notification_config.config_service.get", side_effect=lambda key, default=None: values.get(key, default)):
+        assert resolve_topic_override("backups", None) is None
+        assert resolve_topic_override("backups", 5) == 5
+
+    values["notifications_topic_backups"] = 3
+    with patch("shared.notification_config.config_service.get", side_effect=lambda key, default=None: values.get(key, default)):
+        assert resolve_topic_override("backups", 5) == 3

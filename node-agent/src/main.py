@@ -149,7 +149,12 @@ async def run_agent() -> None:
     if log_path.exists():
         logger.info("Log file: %s (%d bytes)", settings.xray_log_path, log_path.stat().st_size)
     else:
-        logger.warning("Log file not found: %s", settings.xray_log_path)
+        # Сервер без Xray (бот, панель, база): агент живёт в режиме «только
+        # метрики и канал команд», это штатно, а не ошибка.
+        logger.warning(
+            "Log file not found: %s — running without Xray (system and network metrics only)",
+            settings.xray_log_path,
+        )
 
     cycle_count = 0
     check_interval = settings.realtime_check_interval_seconds or settings.interval_seconds

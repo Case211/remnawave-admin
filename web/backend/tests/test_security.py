@@ -212,3 +212,143 @@ def test_password_reset_token_expired():
     token = jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
     result = decode_token(token, token_type="password_reset")
     assert result is None
+
+
+class TestTelegramWebAppAuth:
+    """Telegram Mini App initData verification (verify_telegram_webapp_init_data)."""
+
+    BOT_TOKEN = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+
+    @staticmethod
+    def _sign(pairs: dict, bot_token: str = BOT_TOKEN) -> str:
+        """Build a signed initData query string the way Telegram does."""
+        import hashlib
+        import hmac as _hmac
+        from urllib.parse import urlencode
+
+        data_check_string = "\n".join(f"{k}={pairs[k]}" for k in sorted(pairs))
+        secret_key = _hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+        signature = _hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        return urlencode({**pairs, "hash": signature})
+
+    @classmethod
+    def _valid_init_data(cls, **overrides) -> str:
+        import json as _json
+
+        user = {"id": 12345, "first_name": "Test", "username": "tester"}
+        pairs = {
+            "query_id": "AAHdF6IQAAAAAN0XohDhrOrc",
+            "user": _json.dumps(user, separators=(",", ":")),
+            "auth_date": str(int(time.time())),
+        }
+        pairs.update(overrides)
+        return cls._sign(pairs)
+
+    def _verify(self, init_data: str, **kwargs):
+        from web.backend.core.security import verify_telegram_webapp_init_data
+
+        with patch("web.backend.core.security.get_web_settings") as mock:
+            mock.return_value.telegram_bot_token = self.BOT_TOKEN
+            return verify_telegram_webapp_init_data(init_data, **kwargs)
+
+    def test_valid_init_data(self):
+        is_valid, error, user = self._verify(self._valid_init_data())
+        assert is_valid, error
+        assert error == ""
+        assert user["id"] == 12345
+        assert user["username"] == "tester"
+
+    def test_empty_init_data(self):
+        is_valid, error, user = self._verify("")
+        assert not is_valid
+        assert user == {}
+
+    def test_missing_hash(self):
+        from urllib.parse import urlencode
+
+        raw = urlencode({"user": '{"id":1}', "auth_date": str(int(time.time()))})
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+        assert "hash" in error.lower()
+
+    def test_tampered_payload_rejected(self):
+        """Any field added or changed after signing must invalidate the hash."""
+        raw = self._valid_init_data()
+        is_valid, error, _ = self._verify(raw + "&chat_instance=999")
+        assert not is_valid
+        assert "signature" in error.lower()
+
+    def test_swapped_user_id_rejected(self):
+        """Substituting another user id without re-signing must fail."""
+        raw = self._valid_init_data().replace("12345", "999999")
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+        assert "signature" in error.lower()
+
+    def test_wrong_bot_token_rejected(self):
+        raw = self._valid_init_data()
+        from web.backend.core.security import verify_telegram_webapp_init_data
+
+        with patch("web.backend.core.security.get_web_settings") as mock:
+            mock.return_value.telegram_bot_token = "999999:someone-elses-token"
+            is_valid, error, _ = verify_telegram_webapp_init_data(raw)
+        assert not is_valid
+        assert "signature" in error.lower()
+
+    def test_missing_auth_date(self):
+        import json as _json
+
+        raw = self._sign({"user": _json.dumps({"id": 1}, separators=(",", ":"))})
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+        assert "auth_date" in error.lower()
+
+    def test_expired_init_data(self):
+        raw = self._valid_init_data(auth_date=str(int(time.time()) - 100000))
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+        assert "expired" in error.lower()
+
+    def test_future_auth_date(self):
+        raw = self._valid_init_data(auth_date=str(int(time.time()) + 3600))
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+        assert "future" in error.lower()
+
+    def test_custom_max_age(self):
+        raw = self._valid_init_data(auth_date=str(int(time.time()) - 120))
+        assert self._verify(raw)[0] is True
+        is_valid, error, _ = self._verify(raw, max_age_seconds=60)
+        assert not is_valid
+        assert "expired" in error.lower()
+
+    def test_missing_user_field(self):
+        raw = self._sign({"auth_date": str(int(time.time())), "query_id": "abc"})
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+        assert "user" in error.lower()
+
+    def test_malformed_user_json(self):
+        raw = self._sign({"auth_date": str(int(time.time())), "user": "{not-json"})
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+        assert "user" in error.lower()
+
+    def test_user_without_id(self):
+        raw = self._sign({"auth_date": str(int(time.time())), "user": '{"first_name":"NoId"}'})
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+        assert "user" in error.lower()
+
+    def test_duplicate_keys_rejected(self):
+        """Parameter smuggling: the same key twice must not pass."""
+        raw = self._valid_init_data() + "&auth_date=" + str(int(time.time()))
+        is_valid, error, _ = self._verify(raw)
+        assert not is_valid
+
+    def test_signature_field_is_part_of_check_string(self):
+        """Telegram's third-party `signature` field is signed too — only `hash` is excluded."""
+        raw = self._valid_init_data(signature="ed25519-signature-value")
+        is_valid, error, user = self._verify(raw)
+        assert is_valid, error
+        assert user["id"] == 12345

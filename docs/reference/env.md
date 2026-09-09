@@ -15,7 +15,7 @@
 | `DEFAULT_LOCALE` | — | `ru` | язык интерфейса: `ru` или `en` |
 | `LOG_LEVEL` | — | `INFO` | уровень логирования |
 | `BOT_API_ROOT` | — | `https://api.telegram.org` | свой сервер Bot API |
-| `BOT_PROXY_URL` | — | — | прокси до Telegram: `socks5://`, `socks4://`, `http://`, можно с логином и паролем. Схемы `socks5h://` и `https://` не поддерживаются |
+| `BOT_PROXY_URL` | — | — | прокси до Telegram: `socks5://`, `socks4://`, `http://`, можно с логином и паролем. Схемы `socks5h://` и `https://` не поддерживаются. Через него же идут уведомления и бэкапы из веб-панели |
 | `PANEL_API_KEY` | — | — | дополнительный ключ, если панель закрыта им |
 
 ## База данных
@@ -54,6 +54,7 @@
 | `REDIS_URL` | — | — | общий кэш и лимиты для нескольких экземпляров |
 | `INTERNAL_API_SECRET` | — | — | ключ внутренних вызовов между ботом и бэкендом |
 | `INTERNAL_API_BACKEND_URL` | — | `http://web-backend:8081` | адрес бэкенда для этих вызовов |
+| `MAP_TILES_API_KEY` | нет | — | ключ CARTO Basemaps для карты в аналитике; без него тайлы с водяным знаком «API key required», ключ бесплатный: carto.com/basemaps/apikey |
 
 ## Внешний API
 
@@ -85,6 +86,7 @@
 | `NOTIFICATIONS_TOPIC_FINANCE` | финансы |
 | `NOTIFICATIONS_TOPIC_ERRORS` | ошибки |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | нарушения |
+| `NOTIFICATIONS_TOPIC_BACKUPS` | файлы бэкапов (не задан — сервисный топик) |
 
 ## GeoIP (MaxMind GeoLite2)
 

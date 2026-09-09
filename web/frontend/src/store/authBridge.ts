@@ -12,7 +12,7 @@ interface AuthState {
   refreshToken: string | null
   isAuthenticated: boolean
   setTokens: (accessToken: string, refreshToken?: string | null) => void
-  logout: () => void
+  logout: (options?: { keepMiniAppSession?: boolean }) => void
 }
 
 type AuthGetter = () => AuthState | null

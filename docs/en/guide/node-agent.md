@@ -108,6 +108,23 @@ A Remnawave log line looks like this:
 
 `email: 154` is a user identifier, not an address: the collector resolves it by `short_uuid`, email or ID. IPv4 and IPv6 are both supported. If your log format differs, the parser lives in `node-agent/src/collectors/xray_log.py`.
 
+## Your own servers without Xray
+
+The agent also works on a server that is not a Remnawave node: the bot, the panel itself, a database.
+It collects CPU, memory, disk and network, keeps the command channel (terminal, scripts), and simply
+runs in "metrics only" mode when there is no Xray log.
+
+1. **Fleet → Add server**, enter a name and an address.
+2. Copy the install command from the response and run it on the server: it is the same command as for
+   nodes, only the UUID is issued by the admin panel rather than by Remnawave.
+3. The server shows up in Fleet with a "Server" badge after the first agent report. Alert rules for
+   CPU, RAM, disk and "not responding" apply to it as well.
+
+Such servers do not appear in the **Nodes** section or in the node counters on the dashboard, and the
+panel sync leaves them alone. Connectivity follows the metrics: an agent silent for more than five
+minutes means the server is offline. Remove it with the button in its Fleet card; stop the agent
+container on the server yourself afterwards.
+
 ## Upgrading
 
 ```bash

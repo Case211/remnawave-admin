@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 import { cn } from '@/lib/utils'
 import {
   listScripts,
@@ -53,6 +54,8 @@ function isValidCron(expr: string): boolean {
 interface FleetNodeOption {
   uuid: string
   name: string
+  /** Адрес показывается подсказкой и участвует в поиске. */
+  address?: string
 }
 
 interface ScheduleFormDialogProps {
@@ -217,18 +220,16 @@ export default function ScheduleFormDialog({
             <Label className="text-xs font-medium text-dark-100">
               {t('fleet.scheduled.node')}
             </Label>
-            <Select value={nodeUuid} onValueChange={setNodeUuid} disabled={isEditing}>
-              <SelectTrigger>
-                <SelectValue placeholder={t('fleet.scheduled.nodePlaceholder')} />
-              </SelectTrigger>
-              <SelectContent>
-                {nodes.map((n) => (
-                  <SelectItem key={n.uuid} value={n.uuid}>
-                    {n.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Список с поиском: нод бывают десятки, обычный Select не годится */}
+            <Combobox
+              value={nodeUuid}
+              onChange={setNodeUuid}
+              disabled={isEditing}
+              options={nodes.map((n) => ({ value: n.uuid, label: n.name, hint: n.address }))}
+              placeholder={t('fleet.scheduled.nodePlaceholder')}
+              searchPlaceholder={t('fleet.searchPlaceholder')}
+              emptyText={t('fleet.nothingFound')}
+            />
           </div>
 
           {/* Cron presets */}

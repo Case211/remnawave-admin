@@ -208,12 +208,13 @@ class TestResolveBackupTgDestination:
     """Баг: web-backend читал notifications_chat_id только из env — значение,
     заданное через UI (БД bot_config), игнорировалось, бэкап падал NO_CHAT_ID."""
 
-    def _settings(self, chat_id=None, topic=None, general_topic=None):
+    def _settings(self, chat_id=None, topic=None, general_topic=None, backups_topic=None):
         s = MagicMock()
         s.notifications_chat_id = chat_id
         # Задаём явно: у MagicMock любой атрибут «существует», а int() от
         # него молча даёт 1 — незаданный общий топик выглядел бы как топик №1.
         s.notifications_topic_id = general_topic
+        s.notifications_topic_backups = backups_topic
         s.get_topic_for.return_value = topic
         return s
 
@@ -233,6 +234,31 @@ class TestResolveBackupTgDestination:
             chat_id, topic_id = backup_service.resolve_backup_tg_destination()
         assert chat_id == "-100123"
         assert topic_id == 42
+
+    def test_dedicated_backups_topic_wins(self):
+        """Свой топик бэкапов из UI главнее сервисного."""
+        from web.backend.core import backup_service
+
+        cfg = self._cfg({"notifications_chat_id": -100123,
+                         "notifications_topic_service": 42,
+                         "notifications_topic_backups": 77})
+        with patch("shared.notification_config.config_service", cfg), \
+             patch("web.backend.core.config.get_web_settings",
+                   return_value=self._settings(chat_id="-100999", topic="7")):
+            _, topic_id = backup_service.resolve_backup_tg_destination()
+        assert topic_id == 77
+
+    def test_backups_topic_from_env_beats_service_from_db(self):
+        """NOTIFICATIONS_TOPIC_BACKUPS в env тоже свой топик, а не общий фолбэк."""
+        from web.backend.core import backup_service
+
+        cfg = self._cfg({"notifications_chat_id": -100123,
+                         "notifications_topic_service": 42})
+        with patch("shared.notification_config.config_service", cfg), \
+             patch("web.backend.core.config.get_web_settings",
+                   return_value=self._settings(chat_id="-100999", topic="7", backups_topic="88")):
+            _, topic_id = backup_service.resolve_backup_tg_destination()
+        assert topic_id == 88
 
     def test_general_db_topic_used_when_service_topic_unset(self):
         """Общий топик из UI раньше терялся — бэкап уходил в корень чата."""

@@ -138,6 +138,17 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 6,
     },
     {
+        "key": "web_panel_public_url",
+        "value_type": "string",
+        "category": "general",
+        "display_name": "Публичный URL панели",
+        "description": "https-адрес веб-панели. Используется кнопкой «Открыть панель» "
+                       "в боте (Telegram Mini App). Пусто — берётся из APP_PUBLIC_URL",
+        "default_value": "",
+        "env_var_name": "APP_PUBLIC_URL",
+        "sort_order": 7,
+    },
+    {
         "key": "web_session_access_minutes",
         "value_type": "int",
         "category": "general",
@@ -360,6 +371,16 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "env_var_name": "NOTIFICATIONS_TOPIC_FINANCE",
         "sort_order": 17,
     },
+    {
+        "key": "notifications_topic_backups",
+        "value_type": "int",
+        "category": "notifications",
+        "subcategory": "topics",
+        "display_name": "Топик: Бэкапы",
+        "description": "ID топика для файлов резервных копий (пусто — сервисный топик)",
+        "env_var_name": "NOTIFICATIONS_TOPIC_BACKUPS",
+        "sort_order": 18,
+    },
 
     # === FINANCE ===
     {
@@ -433,6 +454,18 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Ежедневно заносить пополнения баланса из Bedolaga в доходы (P&L-график, доход за месяц). ⚠️ Не совмещать с ручным импортом выручки подписок — двойной учёт",
         "default_value": "true",
         "sort_order": 8,
+    },
+
+    # === MAP (CARTO) ===
+    # Карта в аналитике рисуется тайлами CARTO; с августа 2026 без ключа они с
+    # водяным знаком «API key required». Ключ бесплатный, живёт в URL тайла.
+    {
+        "key": "map_tiles_api_key",
+        "value_type": "string", "category": "general",
+        "display_name": "Ключ карт CARTO",
+        "description": "Ключ CARTO Basemaps для карты в аналитике. Без ключа тайлы с водяным знаком "
+                       "«API key required». Бесплатный ключ (5 млн тайлов в месяц): carto.com/basemaps/apikey",
+        "default_value": "", "env_var_name": "MAP_TILES_API_KEY", "is_secret": True, "sort_order": 40,
     },
 
     # === INTEGRATIONS (DNS) ===
@@ -1388,6 +1421,28 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 8,
     },
     {
+        "key": "mailserver_delivery_mode",
+        "value_type": "string",
+        "category": "mailserver",
+        "display_name": "Доставка исходящих",
+        "description": "direct — напрямую на MX получателя (нужен исходящий порт 25); brevo — через HTTP API Brevo: исходящие SMTP-порты не нужны, DKIM и репутация на стороне Brevo",
+        "default_value": "direct",
+        "options": ["direct", "brevo"],
+        "env_var_name": "MAIL_DELIVERY_MODE",
+        "sort_order": 20,
+    },
+    {
+        "key": "mailserver_brevo_api_key",
+        "value_type": "string",
+        "category": "mailserver",
+        "display_name": "Brevo: API-ключ",
+        "description": "Ключ v3 из Brevo → SMTP & API → API Keys. Домен отправителя должен быть подтверждён в Brevo (Senders & IP → Domains)",
+        "default_value": "",
+        "is_secret": True,
+        "env_var_name": "BREVO_API_KEY",
+        "sort_order": 21,
+    },
+    {
         "key": "mailserver_tls_cert_path",
         "value_type": "string",
         "category": "mailserver",
@@ -1491,6 +1546,20 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "description": "Разрешить вход через Telegram Login Widget",
         "default_value": "true",
         "sort_order": 1,
+    },
+    {
+        "key": "auth_telegram_webapp_enabled",
+        "value_type": "bool",
+        "category": "security",
+        "subcategory": "auth_methods",
+        "display_name": "Автовход в Telegram Mini App",
+        "description": "Входить автоматически, когда панель открыта внутри Telegram "
+                       "(мини-приложение). Требует включённой авторизации через Telegram",
+        "default_value": "true",
+        # 1-3 заняты соседями по подкатегории, 4-8 — brute_force. Метаданные
+        # существующих ключей не мигрируют (_create_config идёт с ON CONFLICT
+        # DO NOTHING), поэтому сдвинуть соседей нельзя — берём свободный номер.
+        "sort_order": 9,
     },
     {
         "key": "auth_password_enabled",

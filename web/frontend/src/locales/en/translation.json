@@ -269,6 +269,8 @@
     "loginButton": "Log in",
     "forgotPassword": "Forgot password?",
     "loggingIn": "Logging in...",
+    "miniAppLoggingIn": "Signing in via Telegram...",
+    "miniAppFailed": "Telegram auto-login failed",
     "telegram": "Log in with Telegram",
     "password": "Log in with password",
     "passkey": "Sign in with passkey",
@@ -592,6 +594,8 @@
       "anyAdmin": "All admins",
       "externalSquad": "External squad",
       "anyExternalSquad": "All squads",
+      "internalSquad": "Internal squad",
+      "anyInternalSquad": "All internal squads",
       "tag": "Tag",
       "anyTag": "All tags",
       "perPage": "Per page",
@@ -630,6 +634,8 @@
       "telegram": "Telegram",
       "email": "Email",
       "externalSquad": "External squad",
+      "internalSquads": "Internal squads",
+      "moreSquads": "{{count}} more",
       "shortUuid": "Short UUID",
       "description": "Description"
     },
@@ -1204,6 +1210,31 @@
   "fleet": {
     "title": "Fleet",
     "subtitle": "Server fleet monitoring",
+    "server": {
+      "badge": "Server",
+      "add": "Add server",
+      "title": "Add your own server",
+      "description": "Any server with Docker: the bot, the panel, a database. The agent collects CPU, memory, disk and network; Xray is not required.",
+      "name": "Name",
+      "namePlaceholder": "e.g. panel-01",
+      "address": "Address",
+      "addressHint": "IP or domain for reference in the list only: the agent finds the panel on its own.",
+      "note": "Note",
+      "notePlaceholder": "What runs there, who is responsible",
+      "create": "Create and get the command",
+      "creating": "Creating…",
+      "created": "Server “{{name}}” added. Run this command on it:",
+      "createdToast": "Server “{{name}}” added",
+      "createFailed": "Failed to add the server",
+      "installHint": "The agent runs without Xray: metrics and the command channel only. The server shows up in the list after the first agent report; silent for over five minutes means offline.",
+      "copy": "Copy command",
+      "copied": "Copied",
+      "copyFailed": "Copy failed",
+      "delete": "Remove server",
+      "deleteConfirmTitle": "Remove the server from monitoring?",
+      "deleteConfirmDescription": "“{{name}}” disappears from Fleet and its agent token stops working. Stop the agent container on the server yourself.",
+      "deleted": "Server removed"
+    },
     "avgCpu": "Avg CPU",
     "avgRam": "Avg RAM",
     "throughput": "Throughput",
@@ -2438,6 +2469,7 @@
       "tooltip": "Geographic distribution of user connections by city",
       "noData": "No geolocation data",
       "noDataHint": "Data will appear after first connections",
+      "noMapKey": "Without a CARTO key the map shows an “API key required” watermark. Get a free key at carto.com/basemaps/apikey and paste it in Settings → General → “CARTO maps key”.",
       "connections": "{{count}} connections",
       "users": "Users",
       "more": "more",
@@ -3568,6 +3600,10 @@
         "label": "💰 Topic: Finance",
         "description": "Topic ID for financial notifications and reminders"
       },
+      "notifications_topic_backups": {
+        "label": "💾 Topic: Backups",
+        "description": "Topic ID for backup files; empty — they go to the service topic"
+      },
       "sync_interval_seconds": {
         "label": "🔄 Sync interval",
         "description": "Data sync interval with API (seconds, requires restart)"
@@ -3628,9 +3664,21 @@
         "label": "🏷️ Panel name",
         "description": "Project name displayed in the sidebar (next to the logo)"
       },
+      "map_tiles_api_key": {
+        "label": "🗺️ CARTO maps key",
+        "description": "CARTO Basemaps key for the analytics map. Without it tiles carry an “API key required” watermark. Free key (5M tiles/month): carto.com/basemaps/apikey"
+      },
+      "web_panel_public_url": {
+        "label": "🔗 Public panel URL",
+        "description": "https address of the web panel. Used by the bot's \"Open panel\" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL"
+      },
       "auth_telegram_enabled": {
         "label": "✈️ Telegram Authentication",
         "description": "Allow login via Telegram Login Widget"
+      },
+      "auth_telegram_webapp_enabled": {
+        "label": "✈️ Telegram Mini App auto-login",
+        "description": "Sign in automatically when the panel is opened inside Telegram (Mini App). Requires Telegram authentication to be enabled"
       },
       "auth_password_enabled": {
         "label": "🔒 Password Authentication",
@@ -3871,6 +3919,14 @@
       "mailserver_submission_enabled": {
         "label": "📤 SMTP Submission enabled",
         "description": "Enable SMTP Submission (port 587) for sending mail via login/password"
+      },
+      "mailserver_delivery_mode": {
+        "label": "📮 Outbound delivery",
+        "description": "direct — straight to the recipient MX (needs outbound port 25); brevo — via the Brevo HTTP API, no outbound SMTP ports needed"
+      },
+      "mailserver_brevo_api_key": {
+        "label": "🔑 Brevo: API key",
+        "description": "v3 key from Brevo → SMTP & API → API Keys. The sender domain must be authenticated in Brevo"
       },
       "mailserver_submission_port": {
         "label": "🔌 SMTP Submission port",
@@ -4988,7 +5044,7 @@
   },
   "dns": {
     "title": "DNS",
-    "subtitle": "Manage DNS zone records (Cloudflare, Timeweb, reg.ru) from the admin",
+    "subtitle": "Manage DNS zone records from the admin: Cloudflare, Timeweb, reg.ru, Selectel, Aeza, Amazon Route 53, Porkbun",
     "connectTitle": "Connect {{provider}}",
     "connect": "Connect",
     "disconnect": "Disconnect",

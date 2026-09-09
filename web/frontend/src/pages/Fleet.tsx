@@ -61,6 +61,7 @@ import { FleetTable } from '@/components/fleet/FleetTable'
 import { ViewToggle } from '@/components/ViewToggle'
 import { useViewMode } from '@/lib/useViewMode'
 import TerminalDialog from '@/components/fleet/TerminalDialog'
+import AddServerDialog from '@/components/fleet/AddServerDialog'
 import type { Script } from '@/components/fleet/ScriptCatalog'
 import type { ScheduledTask as FleetScheduledTask } from '@/api/fleet'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -148,6 +149,7 @@ function NodeDetailPanel({
   onRestart,
   onEnable,
   onDisable,
+  onDelete,
   isPending,
 }: {
   node: FleetNode
@@ -155,6 +157,8 @@ function NodeDetailPanel({
   onRestart: () => void
   onEnable: () => void
   onDisable: () => void
+  /** Только для своих серверов: убрать из мониторинга. */
+  onDelete?: () => void
   isPending: boolean
 }) {
   const { t } = useTranslation()
@@ -181,30 +185,43 @@ function NodeDetailPanel({
             <div className="flex items-center gap-2 min-w-0">
               <Globe className="w-3.5 h-3.5 text-dark-300 shrink-0" />
               <span className="text-dark-200 shrink-0">{t('fleet.detail.address')}</span>
-              <span className="text-white ml-auto font-mono text-xs truncate max-w-[50%]">{node.address}:{node.port}</span>
-            </div>
-            <div className="flex items-center gap-2 min-w-0">
-              <Zap className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
-              <span className="text-dark-200 shrink-0">{t('fleet.detail.xray')}</span>
-              <span className="text-white ml-auto font-mono text-xs">{node.xray_version || '-'}</span>
-            </div>
-            <div className="flex items-center gap-2 min-w-0">
-              <Activity className="w-3.5 h-3.5 text-dark-300 shrink-0" />
-              <span className="text-dark-200 truncate">{t('fleet.detail.xrayRunning')}</span>
-              <span className="ml-auto flex items-center gap-1.5 shrink-0">
-                {node.is_xray_running ? (
-                  <>
-                    <ShieldCheck className="w-4 h-4 text-green-400" />
-                    <span className="text-green-400 text-xs">{t('common.yes')}</span>
-                  </>
-                ) : (
-                  <>
-                    <ShieldAlert className="w-4 h-4 text-red-400" />
-                    <span className="text-red-400 text-xs">{t('common.no')}</span>
-                  </>
-                )}
+              <span className="text-white ml-auto font-mono text-xs truncate max-w-[50%]">
+                {node.is_external ? (node.address || '—') : `${node.address}:${node.port}`}
               </span>
             </div>
+            {node.is_external ? (
+              node.description && (
+                <div className="flex items-start gap-2 min-w-0">
+                  <Server className="w-3.5 h-3.5 text-dark-300 shrink-0 mt-0.5" />
+                  <span className="text-dark-100 text-xs break-words">{node.description}</span>
+                </div>
+              )
+            ) : (
+              <>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Zap className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                  <span className="text-dark-200 shrink-0">{t('fleet.detail.xray')}</span>
+                  <span className="text-white ml-auto font-mono text-xs">{node.xray_version || '-'}</span>
+                </div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Activity className="w-3.5 h-3.5 text-dark-300 shrink-0" />
+                  <span className="text-dark-200 truncate">{t('fleet.detail.xrayRunning')}</span>
+                  <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                    {node.is_xray_running ? (
+                      <>
+                        <ShieldCheck className="w-4 h-4 text-green-400" />
+                        <span className="text-green-400 text-xs">{t('common.yes')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldAlert className="w-4 h-4 text-red-400" />
+                        <span className="text-red-400 text-xs">{t('common.no')}</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="flex items-center gap-2 min-w-0">
               <Clock className="w-3.5 h-3.5 text-dark-300 shrink-0" />
               <span className="text-dark-200 truncate">{t('fleet.detail.lastSeen')}</span>
@@ -318,8 +335,25 @@ function NodeDetailPanel({
             </div>
           </div>
 
-          {/* Quick actions */}
-          {canEdit && (
+          {/* Quick actions: у своего сервера панели нет — только убрать из мониторинга */}
+          {canEdit && node.is_external && (
+            <>
+              <Separator />
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 gap-1.5 text-red-400 hover:text-red-300"
+                  disabled={isPending || !onDelete}
+                  onClick={onDelete}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {t('fleet.server.delete')}
+                </Button>
+              </div>
+            </>
+          )}
+          {canEdit && !node.is_external && (
             <>
               <Separator />
               <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -390,6 +424,8 @@ export default function Fleet() {
   const queryClient = useQueryClient()
   const hasPermission = usePermissionStore((s) => s.hasPermission)
   const canEditNodes = hasPermission('fleet', 'edit')
+  // Свои серверы заводятся через /nodes/external — там право nodes:edit
+  const canAddServer = hasPermission('nodes', 'edit')
   const canTerminal = hasPermission('fleet', 'terminal')
   const canScripts = hasPermission('fleet', 'scripts')
 
@@ -403,6 +439,8 @@ export default function Fleet() {
 
   // Terminal state
   const [terminalNode, setTerminalNode] = useState<{ uuid: string; name: string } | null>(null)
+  const [addServerOpen, setAddServerOpen] = useState(false)
+  const [deleteServer, setDeleteServer] = useState<FleetNode | null>(null)
 
   // Script state
   const [runScript, setRunScript] = useState<Script | null>(null)
@@ -493,7 +531,19 @@ export default function Fleet() {
     },
   })
 
-  const mutationPending = restartNode.isPending || enableNode.isPending || disableNode.isPending
+  const deleteExternal = useMutation({
+    mutationFn: (uuid: string) => client.delete(`/nodes/external/${uuid}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fleet'] })
+      toast.success(t('fleet.server.deleted'))
+      setDeleteServer(null)
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(t('fleet.toast.error'), { description: err.response?.data?.detail || err.message })
+    },
+  })
+
+  const mutationPending = restartNode.isPending || enableNode.isPending || disableNode.isPending || deleteExternal.isPending
 
   // ── Sorting ───────────────────────────────────────────────────
 
@@ -642,6 +692,12 @@ export default function Fleet() {
             <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
             <span className="hidden sm:inline">{t('fleet.actions.refresh')}</span>
           </Button>
+          {canAddServer && (
+            <Button onClick={() => setAddServerOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">{t('fleet.server.add')}</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -911,6 +967,7 @@ export default function Fleet() {
                               onRestart={() => restartNode.mutate(node.uuid)}
                               onEnable={() => enableNode.mutate(node.uuid)}
                               onDisable={() => disableNode.mutate(node.uuid)}
+                              onDelete={node.is_external ? () => setDeleteServer(node) : undefined}
                               isPending={mutationPending}
                             />
                           </NodeCard>
@@ -952,6 +1009,19 @@ export default function Fleet() {
           <BulkNodeOpsTab />
         </TabsContent>
       </Tabs>
+
+      {/* Свой сервер в мониторинг */}
+      <AddServerDialog open={addServerOpen} onOpenChange={setAddServerOpen} />
+
+      <ConfirmDialog
+        open={!!deleteServer}
+        onOpenChange={(open) => { if (!open) setDeleteServer(null) }}
+        title={t('fleet.server.deleteConfirmTitle')}
+        description={t('fleet.server.deleteConfirmDescription', { name: deleteServer?.name || '' })}
+        confirmLabel={t('common.delete')}
+        variant="destructive"
+        onConfirm={() => deleteServer && deleteExternal.mutate(deleteServer.uuid)}
+      />
 
       {/* Terminal Dialog */}
       {terminalNode && (
@@ -1024,7 +1094,7 @@ function ScheduledTasksTab({ nodes }: { nodes: FleetNode[] }) {
 
   const tasks = Array.isArray(data?.items) ? data!.items : []
   const nodeOptions = useMemo(
-    () => nodes.map((n) => ({ uuid: n.uuid, name: n.name })),
+    () => nodes.map((n) => ({ uuid: n.uuid, name: n.name, address: n.address })),
     [nodes],
   )
 

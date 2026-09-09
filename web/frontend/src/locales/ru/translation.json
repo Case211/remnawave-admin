@@ -269,6 +269,8 @@
     "loginButton": "Войти",
     "forgotPassword": "Забыли пароль?",
     "loggingIn": "Вход...",
+    "miniAppLoggingIn": "Вход через Telegram...",
+    "miniAppFailed": "Автовход через Telegram не удался",
     "telegram": "Войти через Telegram",
     "password": "Войти с паролем",
     "passkey": "Войти по passkey",
@@ -592,6 +594,8 @@
       "anyAdmin": "Все администраторы",
       "externalSquad": "Внешний сквад",
       "anyExternalSquad": "Все сквады",
+      "internalSquad": "Внутренний сквад",
+      "anyInternalSquad": "Все внутренние сквады",
       "tag": "Тег",
       "anyTag": "Все теги",
       "perPage": "На страницу",
@@ -630,6 +634,8 @@
       "telegram": "Telegram",
       "email": "Email",
       "externalSquad": "Внешний сквад",
+      "internalSquads": "Внутренние сквады",
+      "moreSquads": "ещё {{count}}",
       "shortUuid": "Short UUID",
       "description": "Описание"
     },
@@ -1204,6 +1210,31 @@
   "fleet": {
     "title": "Fleet",
     "subtitle": "Мониторинг серверного парка",
+    "server": {
+      "badge": "Сервер",
+      "add": "Добавить сервер",
+      "title": "Свой сервер в мониторинг",
+      "description": "Любой сервер с Docker: бот, панель, база. Агент соберёт CPU, память, диск и сеть, Xray на нём не нужен.",
+      "name": "Название",
+      "namePlaceholder": "Например, panel-01",
+      "address": "Адрес",
+      "addressHint": "IP или домен только для справки в списке: панель агент находит сам.",
+      "note": "Заметка",
+      "notePlaceholder": "Что на нём крутится, кто отвечает",
+      "create": "Создать и получить команду",
+      "creating": "Создаём…",
+      "created": "Сервер «{{name}}» добавлен. Выполните команду на нём:",
+      "createdToast": "Сервер «{{name}}» добавлен",
+      "createFailed": "Не удалось добавить сервер",
+      "installHint": "Агент запустится без Xray: только метрики и канал команд. Сервер появится в списке после первого отчёта агента; молчит дольше пяти минут — считается офлайн.",
+      "copy": "Скопировать команду",
+      "copied": "Скопировано",
+      "copyFailed": "Не удалось скопировать",
+      "delete": "Удалить сервер",
+      "deleteConfirmTitle": "Удалить сервер из мониторинга?",
+      "deleteConfirmDescription": "«{{name}}» исчезнет из Fleet, токен агента перестанет работать. Контейнер агента на сервере остановите сами.",
+      "deleted": "Сервер удалён"
+    },
     "avgCpu": "Сред. CPU",
     "avgRam": "Сред. RAM",
     "throughput": "Throughput",
@@ -2434,6 +2465,7 @@
       "tooltip": "Географическое распределение подключений пользователей по городам",
       "noData": "Нет данных о геолокации",
       "noDataHint": "Данные появятся после первых подключений",
+      "noMapKey": "Карта без ключа CARTO показывает водяной знак «API key required». Бесплатный ключ выдают на carto.com/basemaps/apikey, вписать в Настройки → Общие → «Ключ карт CARTO».",
       "connections": "{{count}} подключений",
       "users": "Пользователи",
       "more": "ещё",
@@ -3564,6 +3596,10 @@
         "label": "💰 Топик: Финансы",
         "description": "ID топика для финансовых уведомлений и напоминаний"
       },
+      "notifications_topic_backups": {
+        "label": "💾 Топик: Бэкапы",
+        "description": "ID топика для файлов резервных копий; пусто — уходят в сервисный топик"
+      },
       "sync_interval_seconds": {
         "label": "🔄 Интервал синхронизации",
         "description": "Интервал синхронизации данных с API (секунды, требует перезапуск)"
@@ -3624,9 +3660,21 @@
         "label": "🏷️ Название панели",
         "description": "Отображаемое название проекта в боковом меню (рядом с логотипом)"
       },
+      "map_tiles_api_key": {
+        "label": "🗺️ Ключ карт CARTO",
+        "description": "Ключ CARTO Basemaps для карты в аналитике. Без ключа тайлы с водяным знаком «API key required». Бесплатный ключ (5 млн тайлов в месяц): carto.com/basemaps/apikey"
+      },
+      "web_panel_public_url": {
+        "label": "🔗 Публичный URL панели",
+        "description": "https-адрес веб-панели. Используется кнопкой «Открыть панель» в боте (Telegram Mini App). Пусто — берётся из APP_PUBLIC_URL"
+      },
       "auth_telegram_enabled": {
         "label": "✈️ Авторизация через Telegram",
         "description": "Разрешить вход через Telegram Login Widget"
+      },
+      "auth_telegram_webapp_enabled": {
+        "label": "✈️ Автовход в Telegram Mini App",
+        "description": "Входить автоматически, когда панель открыта внутри Telegram (мини-приложение). Требует включённой авторизации через Telegram"
       },
       "auth_password_enabled": {
         "label": "🔒 Авторизация по паролю",
@@ -3867,6 +3915,14 @@
       "mailserver_submission_enabled": {
         "label": "📤 SMTP Submission включён",
         "description": "Включить SMTP Submission сервер (порт 587) для отправки писем через логин/пароль"
+      },
+      "mailserver_delivery_mode": {
+        "label": "📮 Доставка исходящих",
+        "description": "direct — напрямую на MX получателя (нужен исходящий порт 25); brevo — через HTTP API Brevo, исходящие SMTP-порты не нужны"
+      },
+      "mailserver_brevo_api_key": {
+        "label": "🔑 Brevo: API-ключ",
+        "description": "Ключ v3 из Brevo → SMTP & API → API Keys. Домен отправителя должен быть подтверждён в Brevo"
       },
       "mailserver_submission_port": {
         "label": "🔌 Порт SMTP Submission",
@@ -4984,7 +5040,7 @@
   },
   "dns": {
     "title": "DNS",
-    "subtitle": "Управление DNS-записями зон (Cloudflare, Timeweb, reg.ru) из админки",
+    "subtitle": "Управление DNS-записями зон из админки: Cloudflare, Timeweb, reg.ru, Selectel, Aeza, Amazon Route 53, Porkbun",
     "connectTitle": "Подключение {{provider}}",
     "connect": "Подключить",
     "disconnect": "Отключить",

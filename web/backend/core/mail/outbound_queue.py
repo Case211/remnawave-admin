@@ -37,6 +37,16 @@ def _append_noreply_notice_html(body_html: str) -> str:
     return body_html + _NOREPLY_NOTICE_HTML
 
 
+def _delivery_mode() -> str:
+    """direct — напрямую на MX получателя (порт 25); brevo — через HTTP API Brevo."""
+    try:
+        from shared.config_service import config_service
+        mode = str(config_service.get("mailserver_delivery_mode", "direct") or "direct")
+    except Exception:  # noqa: BLE001 — без конфига работаем как раньше
+        return "direct"
+    return "brevo" if mode.strip().lower() == "brevo" else "direct"
+
+
 class OutboundMailQueue:
     """Background queue processor for outgoing emails.
 
@@ -204,25 +214,31 @@ class OutboundMailQueue:
             # Build the email message
             attachments = await self._load_attachments(queue_id)
             msg = self._build_message(row, attachments)
-            raw_bytes = msg.as_bytes()
 
-            # DKIM sign if domain config available
-            if row.get("dkim_private_key") and row.get("dkim_selector") and row.get("domain"):
-                from web.backend.core.mail.dkim_manager import sign_message
-                raw_bytes = sign_message(
-                    raw_bytes, row["domain"], row["dkim_selector"], row["dkim_private_key"],
+            if _delivery_mode() == "brevo":
+                # Хостер режет 25/587 — письмо уходит по HTTPS в Brevo; DKIM
+                # и доставка до MX получателя на их стороне.
+                smtp_response = await self._deliver_brevo(row, attachments, msg)
+            else:
+                raw_bytes = msg.as_bytes()
+
+                # DKIM sign if domain config available
+                if row.get("dkim_private_key") and row.get("dkim_selector") and row.get("domain"):
+                    from web.backend.core.mail.dkim_manager import sign_message
+                    raw_bytes = sign_message(
+                        raw_bytes, row["domain"], row["dkim_selector"], row["dkim_private_key"],
+                    )
+
+                # Resolve MX and deliver
+                rcpt_domain = to_email.split("@")[-1]
+                mx_hosts = await self._resolve_mx(rcpt_domain)
+                if not mx_hosts:
+                    raise RuntimeError(f"No MX records found for {rcpt_domain}")
+
+                smtp_response = await self._deliver_smtp(
+                    mx_hosts, from_email, to_email, raw_bytes,
+                    sender_domain=row.get("domain"),
                 )
-
-            # Resolve MX and deliver
-            rcpt_domain = to_email.split("@")[-1]
-            mx_hosts = await self._resolve_mx(rcpt_domain)
-            if not mx_hosts:
-                raise RuntimeError(f"No MX records found for {rcpt_domain}")
-
-            smtp_response = await self._deliver_smtp(
-                mx_hosts, from_email, to_email, raw_bytes,
-                sender_domain=row.get("domain"),
-            )
 
             # Success
             async with db_service.acquire() as conn:
@@ -348,6 +364,31 @@ class OutboundMailQueue:
                 logger.warning("Failed to attach %s: %s", att.get("filename"), e)
 
         return msg
+
+    async def _deliver_brevo(self, row: Dict[str, Any], attachments: List[Dict[str, Any]],
+                             msg: EmailMessage) -> str:
+        """Отправка через HTTP API Brevo. Текст и HTML берём из уже собранного
+        письма — с пометками noreply и заголовками ветки, как при прямой доставке."""
+        from shared.config_service import config_service
+        from web.backend.core.mail import brevo_api
+
+        api_key = str(config_service.get("mailserver_brevo_api_key", "") or "").strip()
+        if not api_key:
+            raise RuntimeError("Brevo: API-ключ не задан (Настройки → Почтовый сервер)")
+        text_part = msg.get_body(preferencelist=("plain",))
+        html_part = msg.get_body(preferencelist=("html",))
+        headers = {
+            name: str(msg[name])
+            for name in ("In-Reply-To", "References", "Reply-To") if msg[name]
+        }
+        payload = brevo_api.build_payload(
+            from_email=row["from_email"], from_name=row.get("from_name"),
+            to_email=row["to_email"], subject=row["subject"],
+            body_text=text_part.get_content() if text_part is not None else "",
+            body_html=html_part.get_content() if html_part is not None else None,
+            headers=headers, attachments=attachments,
+        )
+        return await brevo_api.send_email(api_key, payload)
 
     async def _resolve_mx(self, domain: str) -> List[str]:
         """Resolve MX records for a domain, sorted by priority."""

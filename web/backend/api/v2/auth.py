@@ -25,6 +25,7 @@ from web.backend.core.notification_service import (
 from web.backend.core.rate_limit import limiter
 from web.backend.core.security import (
     verify_telegram_auth,
+    verify_telegram_webapp_init_data,
     verify_admin_password_async,
     create_access_token,
     create_refresh_token,
@@ -49,6 +50,7 @@ from web.backend.core.totp import (
 )
 from web.backend.schemas.auth import (
     TelegramAuthData,
+    TelegramWebAppAuthData,
     LoginRequest,
     RegisterRequest,
     SetupStatusResponse,
@@ -73,8 +75,11 @@ router = APIRouter()
 @router.get("/methods")
 async def get_auth_methods():
     """Public endpoint — returns enabled auth methods for login page."""
+    telegram_enabled = config_service.get("auth_telegram_enabled", True)
     return {
-        "telegram": config_service.get("auth_telegram_enabled", True),
+        "telegram": telegram_enabled,
+        "telegram_webapp": telegram_enabled and config_service.get(
+            "auth_telegram_webapp_enabled", True),
         "password": config_service.get("auth_password_enabled", True),
         "totp_required": config_service.get("auth_totp_required", False),
     }
@@ -198,7 +203,6 @@ async def telegram_login(request: Request, response: Response, data: TelegramAut
 
     Verifies the data signature and creates JWT tokens (or temp 2FA token).
     """
-    settings = get_web_settings()
     client_ip = get_client_ip(request)
 
     # Check if Telegram auth is enabled
@@ -222,52 +226,97 @@ async def telegram_login(request: Request, response: Response, data: TelegramAut
     is_valid, error_message = verify_telegram_auth(auth_dict)
     if not is_valid:
         logger.warning("Auth verification failed for user id=%d: %s", data.id, error_message)
-        locked = login_guard.record_failure(client_ip)
-        log_auth_failure(client_ip, f"tg:{data.id}", "telegram", error_message)
-        if config_service.get("auth_notify_on_failure", True):
-            await notify_login_failed(
-                ip=client_ip,
-                username=f"tg:{data.id}",
-                auth_method="telegram",
-                reason=error_message,
-            )
-        if locked:
-            if config_service.get("auth_notify_on_block", True):
-                await notify_ip_blocked(
-                    client_ip,
-                    config_service.get("auth_lockout_minutes", 15) * 60,
-                    config_service.get("auth_max_attempts", 5),
-                )
+        await _record_telegram_failure(client_ip, f"tg:{data.id}", error_message)
         raise api_error(401, E.INVALID_TOKEN, f"Invalid Telegram auth data: {error_message}")
 
+    return await _finish_telegram_login(
+        request, response, data.id, data.username or data.first_name, client_ip)
+
+
+@router.post("/telegram/webapp", response_model=LoginResponse)
+@limiter.limit("10/minute")
+async def telegram_webapp_login(request: Request, response: Response, data: TelegramWebAppAuthData):
+    """
+    Authenticate via Telegram Mini App (Web App) initData.
+
+    Тот же способ входа, что и Login Widget — отличается только источником
+    подписанных данных, поэтому auth_method в токене остаётся "telegram"
+    (политики allowed_auth_methods, уведомления и список сессий не меняются).
+    """
+    client_ip = get_client_ip(request)
+
+    if not config_service.get("auth_telegram_enabled", True):
+        raise api_error(403, E.FORBIDDEN, "Telegram authentication is disabled")
+    if not config_service.get("auth_telegram_webapp_enabled", True):
+        raise api_error(403, E.FORBIDDEN, "Telegram Mini App authentication is disabled")
+
+    if login_guard.is_locked(client_ip):
+        remaining = login_guard.remaining_seconds(client_ip)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed attempts. Try again in {remaining}s",
+        )
+
+    # initData целиком не логируем — это подписанный секрет на время сессии
+    is_valid, error_message, tg_user = verify_telegram_webapp_init_data(data.init_data)
+    if not is_valid:
+        logger.warning("Mini App auth verification failed from %s: %s", client_ip, error_message)
+        await _record_telegram_failure(client_ip, "tg:webapp", error_message)
+        raise api_error(401, E.INVALID_TOKEN, f"Invalid Telegram init data: {error_message}")
+
+    tg_id = int(tg_user["id"])
+    display_name = tg_user.get("username") or tg_user.get("first_name") or str(tg_id)
+    logger.info("Mini App login attempt from Telegram user (id=%d) from %s", tg_id, client_ip)
+
+    return await _finish_telegram_login(request, response, tg_id, display_name, client_ip)
+
+
+async def _record_telegram_failure(client_ip: str, username_label: str, reason: str) -> None:
+    """Неудачная попытка Telegram-входа: guard, fail2ban, уведомления."""
+    locked = login_guard.record_failure(client_ip)
+    log_auth_failure(client_ip, username_label, "telegram", reason)
+    if config_service.get("auth_notify_on_failure", True):
+        await notify_login_failed(
+            ip=client_ip,
+            username=username_label,
+            auth_method="telegram",
+            reason=reason,
+        )
+    if locked and config_service.get("auth_notify_on_block", True):
+        await notify_ip_blocked(
+            client_ip,
+            config_service.get("auth_lockout_minutes", 15) * 60,
+            config_service.get("auth_max_attempts", 5),
+        )
+
+
+async def _finish_telegram_login(
+    request: Request,
+    response: Response,
+    tg_id: int,
+    username: str,
+    client_ip: str,
+) -> LoginResponse:
+    """Общий хвост Telegram-входа для Login Widget и Mini App.
+
+    Подпись к этому моменту уже проверена вызывающей стороной; здесь —
+    список админов, политика метода, 2FA и выдача токенов.
+    """
+    settings = get_web_settings()
+
     # Check if user is in admins list
-    if data.id not in settings.admins:
-        logger.warning(f"User {data.id} is not in admins list: {settings.admins}")
-        locked = login_guard.record_failure(client_ip)
-        log_auth_failure(client_ip, f"tg:{data.id}", "telegram", "Not in admins list")
-        if config_service.get("auth_notify_on_failure", True):
-            await notify_login_failed(
-                ip=client_ip,
-                username=f"tg:{data.id} ({data.username or data.first_name})",
-                auth_method="telegram",
-                reason="Not in admins list",
-            )
-        if locked:
-            if config_service.get("auth_notify_on_block", True):
-                await notify_ip_blocked(
-                    client_ip,
-                    config_service.get("auth_lockout_minutes", 15) * 60,
-                    config_service.get("auth_max_attempts", 5),
-                )
+    if tg_id not in settings.admins:
+        logger.warning(f"User {tg_id} is not in admins list: {settings.admins}")
+        await _record_telegram_failure(
+            client_ip, f"tg:{tg_id} ({username})", "Not in admins list")
         raise api_error(403, E.NOT_AN_ADMIN)
 
     # Success — credentials valid
     login_guard.record_success(client_ip)
 
-    username = data.username or data.first_name
-    subject = str(data.id)
+    subject = str(tg_id)
 
-    logger.info("Login successful for user id=%d from %s", data.id, client_ip)
+    logger.info("Login successful for user id=%d from %s", tg_id, client_ip)
 
     # Check 2FA requirement (global toggle)
     totp_required = config_service.get("auth_totp_required", False)

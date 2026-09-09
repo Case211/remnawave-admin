@@ -24,7 +24,8 @@ class TestRegistry:
         from web.backend.core import dns
 
         slugs = {p.slug for p in dns.list_providers()}
-        assert {"cloudflare", "timeweb", "regru", "selectel", "aeza"} <= slugs
+        assert {"cloudflare", "timeweb", "regru", "selectel", "aeza", "route53", "porkbun"} <= slugs
+        assert dns.get_provider("route53").proxyable == []
         assert dns.get_provider("cloudflare").proxyable == ["A", "AAAA", "CNAME"]
         assert dns.get_provider("regru").supports_ttl is False
         assert dns.get_provider("timeweb").proxyable == []
@@ -355,3 +356,245 @@ class TestTimewebPagination:
         zones = await p.list_zones({"token": "t"})
         assert len(zones) == 101
         assert zones[-1].name == "last.com"
+
+
+# ── Amazon Route 53 ──────────────────────────────────────────────
+
+_R53_NS = "https://route53.amazonaws.com/doc/2013-04-01/"
+
+
+def _r53_rrset(name, rtype, ttl, values):
+    rrs = "".join(f"<ResourceRecord><Value>{v}</Value></ResourceRecord>" for v in values)
+    return (f"<ResourceRecordSet><Name>{name}</Name><Type>{rtype}</Type><TTL>{ttl}</TTL>"
+            f"<ResourceRecords>{rrs}</ResourceRecords></ResourceRecordSet>")
+
+
+def _r53_list(sets):
+    return (f'<ListResourceRecordSetsResponse xmlns="{_R53_NS}"><ResourceRecordSets>'
+            f'{"".join(sets)}</ResourceRecordSets><IsTruncated>false</IsTruncated>'
+            "</ListResourceRecordSetsResponse>")
+
+
+_A_SET = _r53_rrset("www.example.com.", "A", 300, ["1.2.3.4", "5.6.7.8"])
+_TXT_SET = _r53_rrset("example.com.", "TXT", 3600, ['"v=spf1 -all"'])
+_MX_SET = _r53_rrset("example.com.", "MX", 3600, ["10 mail.example.com."])
+_ALIAS_SET = ('<ResourceRecordSet><Name>cdn.example.com.</Name><Type>A</Type>'
+              '<AliasTarget><HostedZoneId>Z2</HostedZoneId><DNSName>d1.cloudfront.net.</DNSName>'
+              '</AliasTarget></ResourceRecordSet>')
+
+
+class TestRoute53Dns:
+    CREDS = {"access_key_id": "AKIATEST", "secret_access_key": "secret"}
+
+    def _handler(self, changes):
+        def h(request: httpx.Request) -> httpx.Response:
+            auth = request.headers.get("Authorization", "")
+            assert auth.startswith("AWS4-HMAC-SHA256 Credential=AKIATEST/")
+            assert "/us-east-1/route53/aws4_request" in auth
+            assert request.headers.get("x-amz-date") and request.headers.get("x-amz-content-sha256")
+            p, m, q = request.url.path, request.method, dict(request.url.params)
+            if p == "/2013-04-01/hostedzone" and m == "GET":
+                return httpx.Response(200, text=(
+                    f'<ListHostedZonesResponse xmlns="{_R53_NS}"><HostedZones><HostedZone>'
+                    "<Id>/hostedzone/Z1</Id><Name>example.com.</Name></HostedZone></HostedZones>"
+                    "<IsTruncated>false</IsTruncated></ListHostedZonesResponse>"))
+            if p == "/2013-04-01/hostedzone/Z1" and m == "GET":
+                return httpx.Response(200, text=(
+                    f'<GetHostedZoneResponse xmlns="{_R53_NS}"><HostedZone><Id>/hostedzone/Z1</Id>'
+                    "<Name>example.com.</Name></HostedZone></GetHostedZoneResponse>"))
+            if p == "/2013-04-01/hostedzone/Z1/rrset" and m == "GET":
+                if q.get("name") == "www.example.com." and q.get("type") == "A":
+                    return httpx.Response(200, text=_r53_list([_A_SET]))
+                if q.get("name") == "example.com." and q.get("type") == "TXT":
+                    return httpx.Response(200, text=_r53_list([_TXT_SET]))
+                if q.get("name") == "api.example.com.":
+                    # Листинг начинается со следующего по алфавиту набора — не наш.
+                    return httpx.Response(200, text=_r53_list([_MX_SET]))
+                return httpx.Response(200, text=_r53_list([_A_SET, _TXT_SET, _MX_SET, _ALIAS_SET]))
+            if p == "/2013-04-01/hostedzone/Z1/rrset/" and m == "POST":
+                changes.append(request.content.decode())
+                return httpx.Response(200, text=(
+                    f'<ChangeResourceRecordSetsResponse xmlns="{_R53_NS}"><ChangeInfo>'
+                    "<Id>/change/C1</Id><Status>PENDING</Status></ChangeInfo>"
+                    "</ChangeResourceRecordSetsResponse>"))
+            return httpx.Response(404, text=(
+                f'<ErrorResponse xmlns="{_R53_NS}"><Error><Code>NoSuchHostedZone</Code>'
+                "<Message>nope</Message></Error></ErrorResponse>"))
+        return h
+
+    @pytest.mark.asyncio
+    async def test_zones_and_flattened_records(self):
+        from web.backend.core.dns.route53 import Route53Provider
+
+        prov = Route53Provider()
+        with patch("httpx.AsyncClient", _patched_client(self._handler([]))):
+            assert await prov.verify(self.CREDS) is True
+            zs = await prov.list_zones(self.CREDS)
+            rs = await prov.list_records(self.CREDS, "Z1")
+        assert zs[0].id == "Z1" and zs[0].name == "example.com"
+        a = [r for r in rs if r.type == "A" and not r.content.startswith("ALIAS")]
+        assert [r.content for r in a] == ["1.2.3.4", "5.6.7.8"]
+        assert a[0].name == "www.example.com" and a[0].ttl == 300
+        txt = next(r for r in rs if r.type == "TXT")
+        assert txt.content == "v=spf1 -all"
+        mx = next(r for r in rs if r.type == "MX")
+        assert mx.priority == 10 and mx.content == "mail.example.com."
+        alias = next(r for r in rs if r.content.startswith("ALIAS"))
+        assert alias.id.startswith("alias|") and alias.content == "ALIAS d1.cloudfront.net"
+        assert len({r.id for r in rs}) == len(rs)
+
+    @pytest.mark.asyncio
+    async def test_create_appends_value_to_existing_set(self):
+        from web.backend.core.dns.route53 import Route53Provider
+
+        changes = []
+        with patch("httpx.AsyncClient", _patched_client(self._handler(changes))):
+            rec = await Route53Provider().create_record(
+                self.CREDS, "Z1", {"type": "A", "name": "www", "content": "9.9.9.9"})
+        assert len(changes) == 1
+        assert "<Action>UPSERT</Action>" in changes[0]
+        assert "<Name>www.example.com.</Name>" in changes[0]
+        for v in ("1.2.3.4", "5.6.7.8", "9.9.9.9"):
+            assert f"<Value>{v}</Value>" in changes[0]
+        assert "<TTL>300</TTL>" in changes[0]
+        assert rec.name == "www.example.com" and rec.content == "9.9.9.9"
+
+    @pytest.mark.asyncio
+    async def test_create_new_set_quotes_txt_and_prefixes_mx_priority(self):
+        from web.backend.core.dns.route53 import Route53Provider
+
+        changes = []
+        with patch("httpx.AsyncClient", _patched_client(self._handler(changes))):
+            txt = await Route53Provider().create_record(
+                self.CREDS, "Z1", {"type": "TXT", "name": "api", "content": "hello", "ttl": 60})
+            mx = await Route53Provider().create_record(
+                self.CREDS, "Z1", {"type": "MX", "name": "api", "content": "mx.example.com", "priority": 20})
+        assert '<Value>"hello"</Value>' in changes[0] and "<TTL>60</TTL>" in changes[0]
+        assert "<Value>20 mx.example.com</Value>" in changes[1]
+        assert txt.content == "hello" and mx.priority == 20 and mx.content == "mx.example.com"
+
+    @pytest.mark.asyncio
+    async def test_delete_value_upserts_remaining_and_deletes_last(self):
+        from web.backend.core.dns.route53 import Route53Provider, _mkid
+
+        changes = []
+        with patch("httpx.AsyncClient", _patched_client(self._handler(changes))):
+            prov = Route53Provider()
+            await prov.delete_record(self.CREDS, "Z1", _mkid("www.example.com", "A", "1.2.3.4"))
+            await prov.delete_record(self.CREDS, "Z1", _mkid("example.com", "TXT", '"v=spf1 -all"'))
+        assert "<Action>UPSERT</Action>" in changes[0]
+        assert "<Value>5.6.7.8</Value>" in changes[0] and "1.2.3.4" not in changes[0]
+        assert "<Action>DELETE</Action>" in changes[1]
+        assert '<Value>"v=spf1 -all"</Value>' in changes[1] and "<TTL>3600</TTL>" in changes[1]
+
+    @pytest.mark.asyncio
+    async def test_alias_records_are_read_only(self):
+        from web.backend.core.dns import DnsProviderError
+        from web.backend.core.dns.route53 import Route53Provider
+
+        with pytest.raises(DnsProviderError):
+            await Route53Provider().delete_record(self.CREDS, "Z1", "alias|cdn.example.com|A")
+
+    @pytest.mark.asyncio
+    async def test_verify_false_on_forbidden(self):
+        from web.backend.core.dns.route53 import Route53Provider
+
+        def h(request):
+            return httpx.Response(403, text=(
+                f'<ErrorResponse xmlns="{_R53_NS}"><Error><Code>InvalidClientTokenId</Code>'
+                "<Message>bad</Message></Error></ErrorResponse>"))
+
+        with patch("httpx.AsyncClient", _patched_client(h)):
+            assert await Route53Provider().verify(self.CREDS) is False
+
+    def test_signature_is_deterministic(self):
+        from datetime import datetime, timezone
+        from web.backend.core.dns.route53 import _sign
+
+        now = datetime(2026, 9, 8, 12, 0, 0, tzinfo=timezone.utc)
+        h1 = _sign("GET", "/2013-04-01/hostedzone", "maxitems=1", b"", "AK", "SK", now=now)
+        h2 = _sign("GET", "/2013-04-01/hostedzone", "maxitems=1", b"", "AK", "SK", now=now)
+        assert h1 == h2
+        assert h1["X-Amz-Date"] == "20260908T120000Z"
+        assert "Credential=AK/20260908/us-east-1/route53/aws4_request" in h1["Authorization"]
+        assert "SignedHeaders=host;x-amz-content-sha256;x-amz-date" in h1["Authorization"]
+
+
+# ── Porkbun ──────────────────────────────────────────────────────
+
+
+class TestPorkbunDns:
+    CREDS = {"apikey": "pk1_x", "secretapikey": "sk1_y"}
+
+    def _handler(self, seen):
+        def h(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content.decode())
+            assert body["apikey"] == "pk1_x" and body["secretapikey"] == "sk1_y"
+            p = request.url.path
+            if p == "/api/json/v3/ping":
+                return httpx.Response(200, json={"status": "SUCCESS", "yourIp": "1.1.1.1"})
+            if p == "/api/json/v3/domain/listAll":
+                return httpx.Response(200, json={"status": "SUCCESS", "domains": [
+                    {"domain": "example.com", "status": "ACTIVE"}]})
+            if p == "/api/json/v3/dns/retrieve/example.com":
+                return httpx.Response(200, json={"status": "SUCCESS", "records": [
+                    {"id": "101", "name": "www.example.com", "type": "A", "content": "1.2.3.4",
+                     "ttl": "600", "prio": "0"},
+                    {"id": "102", "name": "example.com", "type": "MX", "content": "mail.example.com",
+                     "ttl": "600", "prio": "10"}]})
+            if p == "/api/json/v3/dns/create/example.com":
+                seen["created"] = body
+                return httpx.Response(200, json={"status": "SUCCESS", "id": 103})
+            if p == "/api/json/v3/dns/edit/example.com/101":
+                seen["edited"] = body
+                return httpx.Response(200, json={"status": "SUCCESS"})
+            if p == "/api/json/v3/dns/delete/example.com/101":
+                seen["deleted"] = True
+                return httpx.Response(200, json={"status": "SUCCESS"})
+            return httpx.Response(400, json={"status": "ERROR",
+                                             "message": "Domain is not opted in to API access."})
+        return h
+
+    @pytest.mark.asyncio
+    async def test_zones_records_create_edit_delete(self):
+        from web.backend.core.dns.porkbun import PorkbunProvider
+
+        seen = {}
+        prov = PorkbunProvider()
+        with patch("httpx.AsyncClient", _patched_client(self._handler(seen))):
+            assert await prov.verify(self.CREDS) is True
+            zs = await prov.list_zones(self.CREDS)
+            rs = await prov.list_records(self.CREDS, "example.com")
+            rec = await prov.create_record(self.CREDS, "example.com", {
+                "type": "A", "name": "api.example.com", "content": "5.6.7.8", "ttl": 60})
+            await prov.update_record(self.CREDS, "example.com", "101", {
+                "type": "A", "name": "@", "content": "7.7.7.7"})
+            await prov.delete_record(self.CREDS, "example.com", "101")
+        assert zs[0].id == "example.com" and zs[0].name == "example.com"
+        assert rs[0].id == "101" and rs[0].ttl == 600 and rs[0].priority is None
+        assert rs[1].type == "MX" and rs[1].priority == 10
+        # Имя относительно зоны, TTL поднят до минимума Porkbun (600)
+        assert seen["created"]["name"] == "api" and seen["created"]["ttl"] == "600"
+        assert rec.id == "103" and rec.name == "api.example.com" and rec.ttl == 600
+        assert seen["edited"]["name"] == "" and seen["edited"]["content"] == "7.7.7.7"
+        assert seen["deleted"] is True
+
+    @pytest.mark.asyncio
+    async def test_api_error_message_surfaces(self):
+        from web.backend.core.dns import DnsProviderError
+        from web.backend.core.dns.porkbun import PorkbunProvider
+
+        with patch("httpx.AsyncClient", _patched_client(self._handler({}))):
+            with pytest.raises(DnsProviderError) as exc:
+                await PorkbunProvider().list_records(self.CREDS, "other.com")
+        assert "opted in" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_verify_false_on_bad_keys(self):
+        from web.backend.core.dns.porkbun import PorkbunProvider
+
+        def h(request):
+            return httpx.Response(400, json={"status": "ERROR", "message": "Invalid API key."})
+
+        with patch("httpx.AsyncClient", _patched_client(h)):
+            assert await PorkbunProvider().verify(self.CREDS) is False

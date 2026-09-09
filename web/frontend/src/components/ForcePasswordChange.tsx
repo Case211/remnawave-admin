@@ -224,7 +224,7 @@ export function ForcePasswordChange() {
 
           <Button
             variant="ghost"
-            onClick={logout}
+            onClick={() => logout()}
             className="w-full text-dark-300 hover:text-dark-100 text-xs"
           >
             {t('common.logout', 'Выйти')}

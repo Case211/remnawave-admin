@@ -79,6 +79,19 @@ async def _lookup_user_by_email(email: str) -> dict:
     return {"response": users[0]} if users else {}
 
 
+async def _lookup_user_by_telegram_id(query: str) -> dict:
+    """Lookup a user by Telegram ID in the synced local table.
+
+    В Panel API поиска по telegram_id нет — берём из локальной таблицы,
+    которая синхронизируется вместе с остальными полями пользователя.
+    """
+    from shared.database import db_service
+    if not db_service.is_connected:
+        return {}
+    user = await db_service.get_user_by_telegram_id(int(query))
+    return {"response": user} if user else {}
+
+
 def _extract_panel_error(exc: Exception) -> Optional[str]:
     """
     Достаёт человекочитаемое описание ошибки из ответа Panel API.
@@ -266,6 +279,35 @@ def _detail_from_panel(user: dict, user_uuid: str) -> UserDetail:
     return UserDetail(**payload)
 
 
+def _internal_squad_uuids(value) -> list:
+    """UUID внутренних сквадов из raw_data панели — там список объектов
+    ``{uuid, name}`` или строк-uuid; наружу отдаём только uuid в нижнем регистре."""
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        uid = item.get('uuid') if isinstance(item, dict) else item
+        if uid:
+            result.append(str(uid).lower())
+    return result
+
+
+def _internal_squad_sort_key(user: dict) -> str:
+    """Ключ сортировки по внутренним сквадам: имена (или uuid) через запятую без
+    регистра — то же, что string_agg в SQL-пути; без сквадов — пустая строка."""
+    value = user.get('active_internal_squads')
+    if value is None:
+        value = user.get('activeInternalSquads')
+    if not isinstance(value, list):
+        return ''
+    names = []
+    for item in value:
+        name = (item.get('name') or item.get('uuid')) if isinstance(item, dict) else item
+        if name:
+            names.append(str(name).lower())
+    return ','.join(sorted(names))
+
+
 def _ensure_snake_case(user: dict) -> dict:
     """Ensure user dict has snake_case keys for pydantic schemas."""
     result = dict(user)
@@ -357,7 +399,7 @@ def _filter_users_in_memory(
     expire_filter=None, online_filter=None, traffic_usage=None,
     sort_by="created_at", sort_order="desc", page=1, per_page=20,
     visible_uuids: Optional[Set[str]] = None,
-    external_squad_uuid=None, tag=None,
+    external_squad_uuid=None, tag=None, internal_squad_uuids=None,
 ) -> tuple:
     """In-memory filtering/sorting/pagination fallback for API path."""
     now = datetime.now(timezone.utc)
@@ -445,6 +487,14 @@ def _filter_users_in_memory(
         esq = str(external_squad_uuid).lower()
         users = [u for u in users if str(_get(u, 'external_squad_uuid', 'externalSquadUuid')).lower() == esq]
 
+    if internal_squad_uuids:
+        wanted = {str(s).lower() for s in internal_squad_uuids}
+        users = [
+            u for u in users
+            if wanted & set(_internal_squad_uuids(
+                _get(u, 'active_internal_squads', 'activeInternalSquads', default=None)))
+        ]
+
     if tag:
         users = [u for u in users if _get(u, 'tag') == tag]
 
@@ -456,6 +506,8 @@ def _filter_users_in_memory(
             val = u.get('traffic_limit_bytes')
             return val if val else float('inf')
         users.sort(key=_tlk, reverse=reverse)
+    elif sort_by == 'active_internal_squads':
+        users.sort(key=_internal_squad_sort_key, reverse=reverse)
     elif sort_by in ('online_at', 'expire_at'):
         def _dsk(u):
             val = _parse_dt(u.get(sort_by))
@@ -484,6 +536,7 @@ async def list_users(
     admin_id: Optional[int] = Query(None, description="Filter by creator admin ID (superadmin only)"),
     external_squad_uuid: Optional[str] = Query(None, description="Filter by external squad UUID"),
     tag: Optional[str] = Query(None, description="Filter by user tag"),
+    internal_squad_uuid: Optional[str] = Query(None, description="Filter by internal squad UUIDs, comma-separated (member of any)"),
     admin: AdminUser = Depends(require_permission("users", "view")),
 ):
     """List users with pagination and filtering."""
@@ -498,6 +551,10 @@ async def list_users(
 
         # Restrict admin_id filter to superadmin and unrestricted admins
         resolved_admin_id = admin_id if (admin.role == "superadmin" or getattr(admin, "unrestricted_user_access", False)) else None
+        # Внутренних сквадов у юзера несколько, фильтр тоже множественный: uuid через запятую
+        internal_squad_uuids = [
+            s.strip().lower() for s in (internal_squad_uuid or "").split(",") if s.strip()
+        ] or None
 
         # Primary path: SQL pagination in database
         try:
@@ -515,6 +572,7 @@ async def list_users(
                     admin_id=resolved_admin_id,
                     external_squad_uuid=external_squad_uuid,
                     tag=tag,
+                    internal_squad_uuids=internal_squad_uuids,
                 )
                 db_available = True
         except Exception as e:
@@ -535,10 +593,13 @@ async def list_users(
                 visible_uuids=visible_uuids,
                 external_squad_uuid=external_squad_uuid,
                 tag=tag,
+                internal_squad_uuids=internal_squad_uuids,
             )
 
         # Normalize to snake_case
         users = [_ensure_snake_case(u) for u in users]
+        for u in users:
+            u['active_internal_squads'] = _internal_squad_uuids(u.get('active_internal_squads'))
 
         # Enrich ONLY current page with hwid_device_count and raw_traffic
         user_uuids = [u.get('uuid') for u in users if u.get('uuid')]
@@ -741,6 +802,10 @@ async def resolve_user(
     lookups = []
     if query.isdigit():
         lookups.append(("id", lambda: api_client.get_user_by_id(int(query))))
+        # Telegram ID выглядит так же, как внутренний id панели, поэтому
+        # пробуем и его: у панели такого поиска нет, но синхронизированная
+        # локальная таблица знает telegram_id каждого пользователя.
+        lookups.append(("telegram_id", lambda: _lookup_user_by_telegram_id(query)))
     elif "@" in query:
         lookups.append(("email", lambda: _lookup_user_by_email(query)))
     else:
@@ -769,16 +834,21 @@ async def resolve_user(
         from shared.database import db_service
         if db_service.is_connected:
             async with db_service.acquire() as conn:
+                # uuid сравниваем как текст: с типизированным параметром asyncpg
+                # падал на любом запросе не в форме uuid («invalid UUID»), и весь
+                # фолбэк — описание, заметка, Telegram ID — молча не работал.
                 row = await conn.fetchrow(
                     """
                     SELECT uuid, username, short_uuid FROM users
-                    WHERE uuid = $1
-                       OR LOWER(raw_data->>'description') LIKE $2
+                    WHERE uuid::text = $1
+                       OR telegram_id::text = $3
+                       OR LOWER(COALESCE(description, raw_data->>'description', '')) LIKE $2
                        OR LOWER(raw_data->>'note') LIKE $2
                     LIMIT 1
                     """,
                     query.lower(),
                     f"%{query.lower()}%",
+                    query,
                 )
                 if row:
                     await _ensure_user_visible(admin, str(row["uuid"]))

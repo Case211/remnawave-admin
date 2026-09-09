@@ -1,4 +1,5 @@
 """Security utilities for web panel."""
+import json
 import hmac
 import hashlib
 import time
@@ -130,6 +131,107 @@ def verify_telegram_auth_simple(auth_data: Dict[str, Any]) -> bool:
     """
     is_valid, _ = verify_telegram_auth(auth_data)
     return is_valid
+
+
+# Telegram Mini App initData: срок годности подписи. Совпадает с окном
+# Login Widget — мини-апп подписывает данные один раз при открытии, а
+# фронт переиспользует их для повторного входа после перезагрузки
+# страницы (в iframe web.telegram.org куки SameSite=Lax не доезжают).
+WEBAPP_INIT_DATA_MAX_AGE = 86400
+
+
+def verify_telegram_webapp_init_data(
+    init_data: str,
+    max_age_seconds: int = WEBAPP_INIT_DATA_MAX_AGE,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """
+    Verify Telegram Mini App (Web App) initData.
+
+    See: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+
+    Отличия от Login Widget (verify_telegram_auth): initData приходит
+    строкой query-string, а секретный ключ — это HMAC(key="WebAppData",
+    msg=bot_token), а не sha256(bot_token). В data-check-string входят
+    ВСЕ пары кроме hash (включая signature и query_id).
+
+    Args:
+        init_data: Raw ``window.Telegram.WebApp.initData`` query string.
+        max_age_seconds: Максимальный возраст подписи.
+
+    Returns:
+        Tuple of (is_valid, error_message, user). ``user`` — распарсенный
+        объект Telegram-пользователя; пустой словарь при ошибке.
+    """
+    from urllib.parse import parse_qsl
+
+    if not init_data or not init_data.strip():
+        return False, "Missing init data", {}
+
+    try:
+        pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=True)
+    except ValueError:
+        return False, "Malformed init data", {}
+
+    data = dict(pairs)
+    # Дубли ключей ломают однозначность data-check-string — отказываем,
+    # чтобы нельзя было протащить второе значение мимо подписи.
+    if len(data) != len(pairs):
+        return False, "Duplicate keys in init data", {}
+
+    check_hash = data.pop("hash", None)
+    if not check_hash:
+        return False, "Missing hash in init data", {}
+
+    if "auth_date" not in data:
+        return False, "Missing auth_date", {}
+
+    # Signature check — до всего остального
+    data_check_string = "\n".join(f"{key}={data[key]}" for key in sorted(data))
+    secret_key = hmac.new(
+        b"WebAppData",
+        get_web_settings().telegram_bot_token.encode(),
+        hashlib.sha256,
+    ).digest()
+    calculated_hash = hmac.new(
+        secret_key,
+        data_check_string.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(calculated_hash, check_hash):
+        logger.warning("Telegram WebApp auth: hash mismatch")
+        return False, "Invalid signature", {}
+
+    # Freshness
+    try:
+        auth_timestamp = int(data["auth_date"])
+    except (ValueError, TypeError):
+        return False, "Invalid auth_date format", {}
+
+    age_seconds = int(time.time()) - auth_timestamp
+    if age_seconds > max_age_seconds:
+        logger.warning("Telegram WebApp auth: data too old (%ss)", age_seconds)
+        return False, f"Init data expired (age: {age_seconds}s, max: {max_age_seconds}s)", {}
+    if age_seconds < -60:  # 1 минута на расхождение часов
+        logger.warning("Telegram WebApp auth: future timestamp (%ss)", age_seconds)
+        return False, "Init data has future timestamp", {}
+
+    # User payload
+    raw_user = data.get("user")
+    if not raw_user:
+        return False, "Missing user in init data", {}
+    try:
+        user = json.loads(raw_user)
+    except (ValueError, TypeError):
+        return False, "Malformed user in init data", {}
+    if not isinstance(user, dict) or not isinstance(user.get("id"), int):
+        return False, "Invalid user in init data", {}
+
+    logger.info(
+        "Telegram WebApp auth: success for user %s (%s)",
+        user.get("id"), user.get("username", "no username"),
+    )
+    return True, "", user
 
 
 def verify_admin_password(username: str, password: str) -> bool:

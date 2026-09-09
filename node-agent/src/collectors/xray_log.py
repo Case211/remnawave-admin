@@ -315,7 +315,11 @@ class XrayLogCollector(_LogClockMixin, _TorrentOracleMixin, BaseCollector):
         self._last_torrent_events = []
 
         if not self._log_path.exists():
-            logger.warning("Log file does not exist: %s", self._log_path)
+            # Без Xray (свой сервер в мониторинге) лога не будет никогда —
+            # предупреждаем один раз, а не каждым циклом.
+            if not getattr(self, "_missing_warned", False):
+                logger.warning("Log file does not exist: %s — collecting metrics only", self._log_path)
+                self._missing_warned = True
             return []
 
         try:
@@ -397,7 +401,9 @@ class XrayLogRealtimeCollector(_LogClockMixin, _TorrentOracleMixin, BaseCollecto
     async def _initialize_position(self) -> None:
         """Инициализирует позицию чтения: читает последние N байт и устанавливает позицию в конец."""
         if not self._log_path.exists():
-            logger.warning("Log file does not exist: %s", self._log_path)
+            if not getattr(self, "_missing_warned", False):
+                logger.warning("Log file does not exist: %s — collecting metrics only", self._log_path)
+                self._missing_warned = True
             self._file_position = 0
             self._file_inode = None
             return

@@ -22,6 +22,7 @@ from typing import Any, Optional
 
 import httpx
 
+from shared import tg_http
 from shared.logger import logger
 
 # Тумблер: возможность мгновенно выключить rich в проде без отката
@@ -198,8 +199,8 @@ async def send_rich_or_html(
     rich-пути (метод не принят, блоки не понравились) тихо уводит в старый
     sendMessage: уведомление доходит всегда.
     """
-    api = f"https://api.telegram.org/bot{token}"
-    async with httpx.AsyncClient(timeout=15) as client:
+    api = f"{tg_http.api_root()}/bot{token}"
+    async with httpx.AsyncClient(**tg_http.client_kwargs(15)) as client:
         if _rich_enabled():
             try:
                 rich_blocks = blocks if blocks is not None else html_to_blocks(html_text)

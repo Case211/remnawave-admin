@@ -15,6 +15,12 @@ class TelegramAuthData(BaseModel):
     hash: str
 
 
+class TelegramWebAppAuthData(BaseModel):
+    """Telegram Mini App initData (raw query string from window.Telegram.WebApp)."""
+
+    init_data: str = Field(..., min_length=1, max_length=8192)
+
+
 class LoginRequest(BaseModel):
     """Username/password login request."""
 

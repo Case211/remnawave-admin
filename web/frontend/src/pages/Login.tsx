@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { BrandLogo } from '@/components/brand/BrandLogo'
+import { getTelegramInitData } from '@/lib/telegramWebApp'
 
 declare global {
   interface Window {
@@ -312,6 +313,7 @@ export default function Login() {
   }, [brand])
   const {
     login,
+    loginWithTelegramWebApp,
     loginWithPassword,
     loginWithPasskey,
     register,
@@ -331,7 +333,15 @@ export default function Login() {
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Auth methods
-  const [authMethods, setAuthMethods] = useState<AuthMethods>({ telegram: true, password: true, totp_required: false })
+  const [authMethods, setAuthMethods] = useState<AuthMethods>({ telegram: true, telegram_webapp: true, password: true, totp_required: false })
+
+  // Telegram Mini App: initData снимаются один раз при загрузке вкладки.
+  // 'pending' — идёт автовход, 'failed'/'off' — показываем обычные методы.
+  const miniAppInitData = useMemo(() => getTelegramInitData(), [])
+  const [miniAppAuth, setMiniAppAuth] = useState<'pending' | 'failed' | 'off'>(
+    miniAppInitData ? 'pending' : 'off'
+  )
+  const miniAppAttempted = useRef(false)
 
   // Setup check
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
@@ -392,6 +402,41 @@ export default function Login() {
     checkSetupStatus()
   }, [isAuthenticated, navigate, checkSetupStatus])
 
+  // Автовход в Telegram Mini App. Пробуем один раз за загрузку вкладки;
+  // при любой ошибке (метод выключен, юзер не админ, протухшие initData)
+  // молча откатываемся на обычный экран входа — виджет, пароль, passkey.
+  useEffect(() => {
+    if (miniAppAuth !== 'pending' || !setupChecked || isAuthenticated) return
+
+    if (apiUnreachable || needsSetup || !authMethods.telegram_webapp || !miniAppInitData) {
+      setMiniAppAuth('off')
+      return
+    }
+
+    if (miniAppAttempted.current) return
+    miniAppAttempted.current = true
+
+    loginWithTelegramWebApp(miniAppInitData)
+      .then(() => {
+        if (useAuthStore.getState().requires2fa) {
+          setMiniAppAuth('off')
+        } else {
+          navigate('/')
+        }
+      })
+      .catch(() => setMiniAppAuth('failed'))
+  }, [
+    miniAppAuth,
+    miniAppInitData,
+    setupChecked,
+    apiUnreachable,
+    needsSetup,
+    authMethods.telegram_webapp,
+    isAuthenticated,
+    loginWithTelegramWebApp,
+    navigate,
+  ])
+
   // Auto-trigger TOTP setup when 2FA is required but not yet configured
   useEffect(() => {
     if (requires2fa && !totpEnabled && !totpSetupData && !isLoading) {
@@ -402,6 +447,7 @@ export default function Login() {
   // Setup Telegram widget
   useEffect(() => {
     if (isAuthenticated || needsSetup || !authMethods.telegram) return
+    if (miniAppAuth === 'pending') return
 
     window.TelegramLoginWidget = {
       dataOnauth: async (user: TelegramUser) => {
@@ -457,7 +503,7 @@ export default function Login() {
         containerRef.current.removeChild(script)
       }
     }
-  }, [isAuthenticated, navigate, login, needsSetup, authMethods.telegram])
+  }, [isAuthenticated, navigate, login, needsSetup, authMethods.telegram, miniAppAuth])
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -685,7 +731,9 @@ export default function Login() {
               >
                 <div className="flex items-start gap-2.5">
                   <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-400 leading-relaxed flex-1">{error}</p>
+                  <p className="text-sm text-red-400 leading-relaxed flex-1">
+                    {miniAppAuth === 'failed' ? `${t('login.miniAppFailed')}: ${error}` : error}
+                  </p>
                   <button
                     onClick={clearError}
                     className="text-red-400/60 hover:text-red-400 transition-colors shrink-0"
@@ -697,7 +745,7 @@ export default function Login() {
             )}
 
             {/* Loading */}
-            {isLoading && (
+            {(isLoading || miniAppAuth === 'pending') && (
               <div className="flex flex-col items-center py-6 animate-fade-in">
                 <div className="relative">
                   <div
@@ -711,12 +759,16 @@ export default function Login() {
                   <Loader2 className="h-8 w-8 animate-spin text-teal-500 relative" />
                 </div>
                 <p className="mt-3 text-sm text-dark-200">
-                  {needsSetup ? t('login.creatingAccount') : t('login.loggingIn')}
+                  {miniAppAuth === 'pending'
+                    ? t('login.miniAppLoggingIn')
+                    : needsSetup
+                      ? t('login.creatingAccount')
+                      : t('login.loggingIn')}
                 </p>
               </div>
             )}
 
-            {!isLoading && (
+            {!isLoading && miniAppAuth !== 'pending' && (
               <>
                 {/* TOTP 2FA flow */}
                 {requires2fa ? (

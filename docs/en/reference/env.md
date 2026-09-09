@@ -15,7 +15,7 @@ The order of precedence is **database → `.env` → defaults**. Once a setting 
 | `DEFAULT_LOCALE` | — | `ru` | interface language: `ru` or `en` |
 | `LOG_LEVEL` | — | `INFO` | logging level |
 | `BOT_API_ROOT` | — | `https://api.telegram.org` | custom Bot API server |
-| `BOT_PROXY_URL` | — | — | proxy to Telegram: `socks5://`, `socks4://`, `http://`, credentials allowed. `socks5h://` and `https://` are not supported |
+| `BOT_PROXY_URL` | — | — | proxy to Telegram: `socks5://`, `socks4://`, `http://`, credentials allowed. `socks5h://` and `https://` are not supported. Notifications and backups sent by the web panel use it too |
 | `PANEL_API_KEY` | — | — | extra key if the panel requires one |
 
 ## Database
@@ -54,6 +54,7 @@ The password inside `DATABASE_URL` must match `POSTGRES_PASSWORD`. This is the m
 | `REDIS_URL` | — | — | shared cache and limits across instances |
 | `INTERNAL_API_SECRET` | — | — | key for internal calls between bot and backend |
 | `INTERNAL_API_BACKEND_URL` | — | `http://web-backend:8081` | backend address for those calls |
+| `MAP_TILES_API_KEY` | no | — | CARTO Basemaps key for the analytics map; without it tiles carry an “API key required” watermark, free key: carto.com/basemaps/apikey |
 
 ## Public API
 
@@ -85,6 +86,7 @@ Details: [Panel webhook](/en/guide/webhook-setup).
 | `NOTIFICATIONS_TOPIC_FINANCE` | finance |
 | `NOTIFICATIONS_TOPIC_ERRORS` | errors |
 | `NOTIFICATIONS_TOPIC_VIOLATIONS` | violations |
+| `NOTIFICATIONS_TOPIC_BACKUPS` | backup files (unset — the service topic) |
 
 ## GeoIP (MaxMind GeoLite2)
 

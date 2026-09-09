@@ -206,6 +206,15 @@ function GeoMapCard() {
     refetchInterval: 60_000,
   })
 
+  // URL тайлов приходит с бэкенда: с ключом CARTO — чистые, без ключа —
+  // старый адрес с водяным знаком; тогда под картой подсказка про ключ.
+  const { data: mapTiles } = useQuery({
+    queryKey: ['map-tiles'],
+    queryFn: advancedAnalyticsApi.mapTiles,
+    staleTime: 5 * 60_000,
+  })
+  const mapTileUrl = mapTiles?.[chart.isLight ? 'light' : 'dark'] || chart.mapTileUrl
+
   const cities = geoData?.cities || []
   const countries = geoData?.countries || []
 
@@ -286,10 +295,13 @@ function GeoMapCard() {
                   maxCount={maxCount}
                   center={center}
                   mapBackground={chart.mapBackground}
-                  mapTileUrl={chart.mapTileUrl}
+                  mapTileUrl={mapTileUrl}
                 />
               </Suspense>
             </div>
+            {mapTiles && !mapTiles.has_key && (
+              <p className="text-xs text-muted-foreground">{t('analytics.geo.noMapKey')}</p>
+            )}
 
             {/* Top countries */}
             {countries.length > 0 && (

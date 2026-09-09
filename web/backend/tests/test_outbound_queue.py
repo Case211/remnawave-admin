@@ -107,3 +107,74 @@ async def test_check_rate_limit_unlimited_skips_count():
     with patch("shared.config_service.config_service", _cfg(0)):
         assert await q._check_rate_limit(conn, 3) is True
     conn.fetchval.assert_not_called()
+
+
+# ── Доставка через Brevo ────────────────────────────────────────
+
+def _db_mock():
+    conn = AsyncMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=conn)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    db = MagicMock()
+    db.acquire = MagicMock(return_value=cm)
+    return db, conn
+
+
+def test_delivery_mode_defaults_to_direct():
+    from web.backend.core.mail import outbound_queue as oq
+
+    cfg = MagicMock()
+    cfg.get.return_value = None
+    with patch("shared.config_service.config_service", cfg):
+        assert oq._delivery_mode() == "direct"
+    cfg.get.return_value = " Brevo "
+    with patch("shared.config_service.config_service", cfg):
+        assert oq._delivery_mode() == "brevo"
+
+
+@pytest.mark.asyncio
+async def test_send_one_via_brevo_skips_mx_and_smtp():
+    """В режиме brevo письмо уходит в API; MX и SMTP не трогаются, статус — sent."""
+    q = OutboundMailQueue()
+    db, conn = _db_mock()
+    row = {**_row("noreply@stijoin.com", body_html="<p>Hi</p>"),
+           "id": 7, "attempts": 0, "max_attempts": 5}
+    settings = {"mailserver_delivery_mode": "brevo", "mailserver_brevo_api_key": "xkeysib-1"}
+    cfg = MagicMock()
+    cfg.get.side_effect = lambda key, default=None: settings.get(key, default)
+
+    with patch("shared.database.db_service", db), \
+         patch("shared.config_service.config_service", cfg), \
+         patch.object(q, "_load_attachments", AsyncMock(return_value=[])), \
+         patch.object(q, "_resolve_mx", AsyncMock(side_effect=AssertionError("MX must not be resolved"))), \
+         patch("web.backend.core.mail.brevo_api.send_email",
+               AsyncMock(return_value="brevo accepted messageId=42")) as send:
+        await q._send_one(row)
+
+    api_key, payload = send.call_args.args
+    assert api_key == "xkeysib-1"
+    assert payload["sender"] == {"email": "noreply@stijoin.com"}
+    assert payload["to"] == [{"email": "user@example.com"}]
+    assert "<p>Hi</p>" in payload["htmlContent"]
+    assert "ответы не доходят" in payload["textContent"]
+    assert "status = 'sent'" in conn.execute.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_send_one_via_brevo_without_key_fails_gracefully():
+    """Нет ключа — письмо помечается failed с понятной причиной, а не падает исключением."""
+    q = OutboundMailQueue()
+    db, conn = _db_mock()
+    row = {**_row("noreply@stijoin.com"), "id": 8, "attempts": 0, "max_attempts": 5}
+    cfg = MagicMock()
+    cfg.get.side_effect = lambda key, default=None: {"mailserver_delivery_mode": "brevo"}.get(key, default)
+
+    with patch("shared.database.db_service", db), \
+         patch("shared.config_service.config_service", cfg), \
+         patch.object(q, "_load_attachments", AsyncMock(return_value=[])):
+        await q._send_one(row)
+
+    args = conn.execute.call_args.args
+    assert "status = $1" in args[0] and args[1] == "failed"
+    assert "Brevo" in args[2]

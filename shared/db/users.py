@@ -416,7 +416,12 @@ class UsersMixin:
         "updated_at": "updated_at",
         "used_traffic_bytes": "COALESCE(used_traffic_bytes, 0)",
         "raw_used_traffic_bytes": "COALESCE(raw_used_traffic_bytes, 0)",
-        "lifetime_used_traffic_bytes": "COALESCE((raw_data->>'lifetimeUsedTrafficBytes')::bigint, 0)",
+        # Панель v3 держит трафик внутри userTraffic, 2.x — на верхнем уровне.
+        # Только верхний уровень давал всем 0, и сортировка «не работала».
+        "lifetime_used_traffic_bytes": (
+            "COALESCE((raw_data->'userTraffic'->>'lifetimeUsedTrafficBytes')::bigint, "
+            "(raw_data->>'lifetimeUsedTrafficBytes')::bigint, 0)"
+        ),
         "traffic_limit_bytes": "COALESCE(traffic_limit_bytes, 0)",
         "hwid_device_limit": "COALESCE(hwid_device_limit, 0)",
         "online_at": "immutable_tstz(raw_data->'userTraffic'->>'onlineAt')",
@@ -427,6 +432,13 @@ class UsersMixin:
         "short_uuid": "short_uuid",
         "description": "description",
         "external_squad_uuid": "external_squad_uuid::text",
+        # Имена внутренних сквадов через запятую; без сквадов — NULL, уходит в конец
+        "active_internal_squads": (
+            "(SELECT string_agg(lower(COALESCE(sq->>'name', sq #>> '{}')), ',' "
+            "ORDER BY lower(COALESCE(sq->>'name', sq #>> '{}'))) "
+            "FROM jsonb_array_elements(CASE WHEN jsonb_typeof(raw_data->'activeInternalSquads') = 'array' "
+            "THEN raw_data->'activeInternalSquads' ELSE '[]'::jsonb END) sq)"
+        ),
         "created_by_admin_username": (
             "(" + select_sql(ADMIN_TABLE, 'username', 'WHERE id = users.created_by_admin_id') + ")"
         ),
@@ -448,6 +460,7 @@ class UsersMixin:
         admin_id: Optional[int] = None,
         external_squad_uuid: Optional[str] = None,
         tag: Optional[str] = None,
+        internal_squad_uuids: Optional[List[str]] = None,
     ) -> tuple:
         """
         Get paginated users with server-side filtering and sorting.
@@ -549,6 +562,22 @@ class UsersMixin:
             param_idx += 1
             args.append(str(external_squad_uuid))
             conditions.append(f"external_squad_uuid::text = ${param_idx}")
+
+        if internal_squad_uuids:
+            # Внутренние сквады лежат только в raw_data панели (колонка JSONB):
+            # activeInternalSquads — список объектов {uuid, name} или строк-uuid.
+            # jsonb_typeof защищает от не-массива и NULL (тогда '[]'). Юзер
+            # проходит, если состоит хотя бы в одном из выбранных сквадов.
+            # ⚠️ Именно jsonb_*: json_typeof(jsonb) в PG нет, запрос падал, и
+            # эндпоинт молча уезжал в фолбэк на API панели, где сквадов нет.
+            param_idx += 1
+            args.append([str(s).lower() for s in internal_squad_uuids])
+            conditions.append(
+                "EXISTS (SELECT 1 FROM jsonb_array_elements("
+                "CASE WHEN jsonb_typeof(raw_data->'activeInternalSquads') = 'array' "
+                "THEN raw_data->'activeInternalSquads' ELSE '[]'::jsonb END) sq "
+                f"WHERE lower(COALESCE(sq->>'uuid', sq #>> '{{}}')) = ANY(${param_idx}::text[]))"
+            )
 
         # Filter: tag (exact match, single tag per user)
         if tag:

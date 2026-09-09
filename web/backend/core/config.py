@@ -91,6 +91,7 @@ class WebSettings(BaseSettings):
     notifications_topic_errors: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_ERRORS")
     notifications_topic_violations: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_VIOLATIONS")
     notifications_topic_finance: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_FINANCE")
+    notifications_topic_backups: Optional[str] = Field(default=None, alias="NOTIFICATIONS_TOPIC_BACKUPS")
 
     def get_topic_for(self, topic_type: str) -> Optional[str]:
         """Get topic ID for a given notification type, falling back to the general topic."""
@@ -103,6 +104,7 @@ class WebSettings(BaseSettings):
             "errors": self.notifications_topic_errors,
             "violations": self.notifications_topic_violations,
             "finance": self.notifications_topic_finance,
+            "backups": self.notifications_topic_backups,
         }
         return mapping.get(topic_type) or self.notifications_topic_id
 

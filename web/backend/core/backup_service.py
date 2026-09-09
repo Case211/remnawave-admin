@@ -438,14 +438,17 @@ async def send_backup_to_telegram(
     file_size = filepath.stat().st_size
     parts_sent = 0
 
+    from shared import tg_http
+    send_document = tg_http.method_url(bot_token, "sendDocument")
+
     if file_size <= TELEGRAM_MAX_PART:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(**tg_http.client_kwargs(120)) as client:
             data = {"chat_id": chat_id}
             if topic_id:
                 data["message_thread_id"] = str(topic_id)
             with open(filepath, "rb") as f:
                 resp = await client.post(
-                    f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                    send_document,
                     data=data,
                     files={"document": (filename, f)},
                 )
@@ -457,7 +460,7 @@ async def send_backup_to_telegram(
         for i in range(total_parts):
             chunk = _read_part(filepath, i * TELEGRAM_MAX_PART, TELEGRAM_MAX_PART)
             part_name = f"{filename}.part{i + 1}of{total_parts}"
-            async with httpx.AsyncClient(timeout=120) as client:
+            async with httpx.AsyncClient(**tg_http.client_kwargs(120)) as client:
                 data = {
                     "chat_id": chat_id,
                     "caption": f"Part {i + 1}/{total_parts} — {filename}" if total_parts > 1 else filename,
@@ -465,7 +468,7 @@ async def send_backup_to_telegram(
                 if topic_id:
                     data["message_thread_id"] = str(topic_id)
                 resp = await client.post(
-                    f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                    send_document,
                     data=data,
                     files={"document": (part_name, chunk)},
                 )
@@ -641,19 +644,24 @@ def resolve_backup_tg_destination() -> tuple:
     from shared.notification_config import (
         resolve_notification_topic,
         resolve_notifications_chat_id,
+        resolve_topic_override,
     )
     from web.backend.core.config import get_web_settings
 
     settings = get_web_settings()
-    # Та же цепочка, что у обычных уведомлений: свой топик из БД → общий
-    # из БД → env. Раньше общий топик, заданный через UI, здесь терялся —
-    # бэкап уходил в корень чата, хотя уведомления шли в топик.
     chat_id = resolve_notifications_chat_id(settings.notifications_chat_id)
-    topic_raw = resolve_notification_topic(
-        "service",
-        type_fallback=settings.get_topic_for("service"),
-        general_fallback=settings.notifications_topic_id,
-    )
+    # Свой топик бэкапов (UI или NOTIFICATIONS_TOPIC_BACKUPS) главнее всего:
+    # файлы дампов удобно держать отдельно от сервисного шума. Не задан —
+    # прежняя цепочка сервисного топика: свой из БД → общий из БД → env.
+    # Раньше общий топик, заданный через UI, здесь терялся — бэкап уходил
+    # в корень чата, хотя уведомления шли в топик.
+    topic_raw = resolve_topic_override("backups", settings.notifications_topic_backups)
+    if topic_raw is None:
+        topic_raw = resolve_notification_topic(
+            "service",
+            type_fallback=settings.get_topic_for("service"),
+            general_fallback=settings.notifications_topic_id,
+        )
     topic_id = None
     if topic_raw:
         try:

@@ -132,6 +132,9 @@ class NodeFleetItem(BaseModel):
     tcp_listen_drop_ps: Optional[int] = None
     under_attack: bool = False
     attack_severity: Optional[str] = None
+    # Свой сервер (не нода панели): без Xray, юзеров и трафика — только метрики агента
+    is_external: bool = False
+    description: Optional[str] = None
 
 
 class NodeFleetResponse(BaseModel):
@@ -1104,6 +1107,8 @@ async def get_node_fleet(
                 upload_speed_bps=int(n.get('upload_speed_bps') or 0),
                 metrics_updated_at=metrics_updated,
                 agent_version=n.get('agent_version'),
+                is_external=bool(n.get('is_external')),
+                description=n.get('description') or None,
             ))
 
         # Sort: offline first (problematic), then online, then disabled

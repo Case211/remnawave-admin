@@ -32,6 +32,19 @@ _UserSnapshot = Tuple[float, int]
 _MAX_SNAPSHOTS = 24
 
 
+def _traffic_rate_keyboard(user_uuid: str) -> Dict:
+    """Кнопки под карточкой «Высокое потребление трафика».
+
+    Тот же набор, что у карточек нарушений и торрентов, включая
+    «🐌 Урезать скорость»: раньше клавиатура собиралась здесь отдельно и
+    кнопки замедления на ней не было, хотя именно её ждут при всплеске
+    трафика. Белый список не предлагаем — превышение порога не анализатор
+    нарушений, и список на него не влияет.
+    """
+    from web.backend.core.violation_notifier import _violation_keyboard
+    return _violation_keyboard(user_uuid, with_whitelist=False)
+
+
 class TrafficRateMonitor:
     """Background monitor for traffic consumption rate per user."""
 
@@ -380,21 +393,7 @@ class TrafficRateMonitor:
             import re
             plain_body = re.sub(r'<[^>]+>', '', body)
 
-            keyboard = {
-                "inline_keyboard": [
-                    [
-                        {"text": "👤 Подробнее", "callback_data": f"vact:info:{user_uuid}"},
-                        {"text": "🔒 Заблокировать", "callback_data": f"vact:block:{user_uuid}"},
-                    ],
-                    [
-                        {"text": "⛔ Откл + разорвать", "callback_data": f"vact:kill:{user_uuid}"},
-                        {"text": "🔄 Сбросить трафик", "callback_data": f"vact:reset:{user_uuid}"},
-                    ],
-                    [
-                        {"text": "🚫 Аннулировать", "callback_data": f"vact:dismiss:{user_uuid}"},
-                    ],
-                ]
-            }
+            keyboard = _traffic_rate_keyboard(user_uuid)
 
             await create_notification(
                 title=title,
