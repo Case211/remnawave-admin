@@ -26,6 +26,7 @@ The basics: language, logs, access to the Remnawave panel, third-party service k
 | **🔗 Public panel URL** | `web_panel_public_url` | empty | https address of the web panel. Used by the bot's "Open panel" button (Telegram Mini App). Empty — falls back to APP_PUBLIC_URL (`APP_PUBLIC_URL`) |
 | **Access token lifetime (minutes)** | `web_session_access_minutes` | `30` | Lifetime of the web panel access token. Applies to new logins and refreshes. Recommended: 30-120 min (`WEB_JWT_EXPIRE_MINUTES`) |
 | **Session lifetime (hours)** | `web_session_refresh_hours` | `6` | Total session lifetime (refresh token). While it is valid the user stays signed in; after that a new login with 2FA is required. Recommended: 12-24h (`WEB_JWT_REFRESH_HOURS`) |
+| **🗺️ CARTO maps key** | `map_tiles_api_key` | empty | CARTO Basemaps key for the analytics map. Without it tiles carry an “API key required” watermark. Free key (5M tiles/month): carto.com/basemaps/apikey (`MAP_TILES_API_KEY`) |
 | **DNS: Cloudflare (encrypted)** | `dns_creds_cloudflare` | empty | Managed on the DNS page, not here (read-only) |
 | **DNS: Timeweb Cloud (encrypted)** | `dns_creds_timeweb` | empty | Managed on the DNS page, not here (read-only) |
 | **DNS: reg.ru (encrypted)** | `dns_creds_regru` | empty | Managed on the DNS page, not here (read-only) |

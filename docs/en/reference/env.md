@@ -54,6 +54,7 @@ The password inside `DATABASE_URL` must match `POSTGRES_PASSWORD`. This is the m
 | `REDIS_URL` | — | — | shared cache and limits across instances |
 | `INTERNAL_API_SECRET` | — | — | key for internal calls between bot and backend |
 | `INTERNAL_API_BACKEND_URL` | — | `http://web-backend:8081` | backend address for those calls |
+| `MAP_TILES_API_KEY` | no | — | CARTO Basemaps key for the analytics map; without it tiles carry an “API key required” watermark, free key: carto.com/basemaps/apikey |
 
 ## Public API
 

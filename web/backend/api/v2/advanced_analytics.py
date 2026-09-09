@@ -3,6 +3,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List, Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Request
 
@@ -44,6 +45,44 @@ def _normalize_city_name(city: str) -> str:
         if normalized.endswith(suffix):
             normalized = normalized[:-len(suffix)].strip()
     return _get_city_aliases().get(normalized, normalized)
+
+
+# Стили растровых тайлов CARTO под тему интерфейса
+_CARTO_STYLES = {"dark": "dark_all", "light": "light_all"}
+
+
+def _map_tile_urls(api_key: str) -> Dict[str, Any]:
+    """URL тайлов карты для аналитики по теме.
+
+    CARTO с августа 2026 без ключа рисует на тайлах водяной знак «API key
+    required» (карта работает). С ключом — новый эндпоинт rastertiles, ключ
+    передаётся параметром ``key``. Без ключа остаётся старый адрес, чтобы
+    карта не пропадала.
+    """
+    key = (api_key or "").strip()
+    if key:
+        encoded = quote(key, safe="")
+        urls = {
+            theme: f"https://basemaps.cartocdn.com/rastertiles/{style}/{{z}}/{{x}}/{{y}}.png?key={encoded}"
+            for theme, style in _CARTO_STYLES.items()
+        }
+    else:
+        urls = {
+            theme: f"https://{{s}}.basemaps.cartocdn.com/{style}/{{z}}/{{x}}/{{y}}{{r}}.png"
+            for theme, style in _CARTO_STYLES.items()
+        }
+    return {**urls, "has_key": bool(key)}
+
+
+@router.get("/map-tiles")
+@limiter.limit(RATE_ANALYTICS)
+async def get_map_tiles(
+    request: Request,
+    admin: AdminUser = Depends(require_permission("analytics", "view")),
+):
+    """Tile URL templates for the analytics map (dark/light) and whether a CARTO key is set."""
+    from shared.config_service import config_service
+    return _map_tile_urls(config_service.get("map_tiles_api_key") or "")
 
 
 @router.get("/geo")

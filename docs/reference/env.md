@@ -54,6 +54,7 @@
 | `REDIS_URL` | — | — | общий кэш и лимиты для нескольких экземпляров |
 | `INTERNAL_API_SECRET` | — | — | ключ внутренних вызовов между ботом и бэкендом |
 | `INTERNAL_API_BACKEND_URL` | — | `http://web-backend:8081` | адрес бэкенда для этих вызовов |
+| `MAP_TILES_API_KEY` | нет | — | ключ CARTO Basemaps для карты в аналитике; без него тайлы с водяным знаком «API key required», ключ бесплатный: carto.com/basemaps/apikey |
 
 ## Внешний API
 

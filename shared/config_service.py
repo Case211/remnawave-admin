@@ -456,6 +456,18 @@ DEFAULT_CONFIG_DEFINITIONS: List[Dict[str, Any]] = [
         "sort_order": 8,
     },
 
+    # === MAP (CARTO) ===
+    # Карта в аналитике рисуется тайлами CARTO; с августа 2026 без ключа они с
+    # водяным знаком «API key required». Ключ бесплатный, живёт в URL тайла.
+    {
+        "key": "map_tiles_api_key",
+        "value_type": "string", "category": "general",
+        "display_name": "Ключ карт CARTO",
+        "description": "Ключ CARTO Basemaps для карты в аналитике. Без ключа тайлы с водяным знаком "
+                       "«API key required». Бесплатный ключ (5 млн тайлов в месяц): carto.com/basemaps/apikey",
+        "default_value": "", "env_var_name": "MAP_TILES_API_KEY", "is_secret": True, "sort_order": 40,
+    },
+
     # === INTEGRATIONS (DNS) ===
     # Креды DNS-провайдеров — зашифрованный JSON, правятся на странице «DNS».
     {

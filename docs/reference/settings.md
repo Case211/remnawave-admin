@@ -26,6 +26,7 @@
 | **🔗 Публичный URL панели** | `web_panel_public_url` | пусто | https-адрес веб-панели. Используется кнопкой «Открыть панель» в боте (Telegram Mini App). Пусто — берётся из APP_PUBLIC_URL (`APP_PUBLIC_URL`) |
 | **Срок access-токена (минут)** | `web_session_access_minutes` | `30` | Время жизни access-токена веб-админки. Применяется к новым логинам и refresh. Рекомендация: 30-120 мин (`WEB_JWT_EXPIRE_MINUTES`) |
 | **Срок сессии (часов)** | `web_session_refresh_hours` | `6` | Общее время жизни сессии (refresh-токен). Пока валиден — юзер не выходит. После истечения нужен повторный вход с 2FA. Рекомендация: 12-24ч (`WEB_JWT_REFRESH_HOURS`) |
+| **🗺️ Ключ карт CARTO** | `map_tiles_api_key` | пусто | Ключ CARTO Basemaps для карты в аналитике. Без ключа тайлы с водяным знаком «API key required». Бесплатный ключ (5 млн тайлов в месяц): carto.com/basemaps/apikey (`MAP_TILES_API_KEY`) |
 | **DNS: Cloudflare (зашифр.)** | `dns_creds_cloudflare` | пусто | Управляется на странице «DNS», не здесь (только чтение) |
 | **DNS: Timeweb Cloud (зашифр.)** | `dns_creds_timeweb` | пусто | Управляется на странице «DNS», не здесь (только чтение) |
 | **DNS: reg.ru (зашифр.)** | `dns_creds_regru` | пусто | Управляется на странице «DNS», не здесь (только чтение) |

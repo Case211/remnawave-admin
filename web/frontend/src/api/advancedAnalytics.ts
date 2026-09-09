@@ -174,7 +174,20 @@ export interface RetentionData {
   total_retained: number
 }
 
+/** URL тайлов карты по теме; has_key=false — CARTO без ключа рисует водяной знак. */
+export interface MapTilesData {
+  dark: string
+  light: string
+  has_key: boolean
+}
+
 export const advancedAnalyticsApi = {
+  /** Tile URL templates for the geo map (with the CARTO key when configured). */
+  mapTiles: async (): Promise<MapTilesData> => {
+    const { data } = await client.get('/analytics/advanced/map-tiles')
+    return data
+  },
+
   /** Fetch provider/ASN analytics. */
   providers: async (period = '7d'): Promise<ProvidersData> => {
     const { data } = await client.get('/analytics/advanced/providers', { params: { period } })
