@@ -613,6 +613,9 @@ async def lifespan(app: FastAPI):
                     from web.backend.core.throttle_sync import throttle_sync_loop
                     _bg("throttle_sync", throttle_sync_loop())
 
+                    from web.backend.core.external_servers import external_servers_sweep_loop
+                    _bg("external_servers_sweep", external_servers_sweep_loop())
+
                     from web.backend.core.finance.rates import rates_update_loop
                     _bg("finance_rates", rates_update_loop())
 

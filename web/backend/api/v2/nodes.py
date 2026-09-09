@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from pydantic import BaseModel, Field
+from uuid import uuid4
 
 # Add src to path for importing bot services
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
@@ -67,12 +69,109 @@ async def agent_meta(admin: AdminUser = Depends(require_permission("nodes", "vie
     return {"latest_agent_version": LATEST_AGENT_VERSION}
 
 
+def _public_base_url(request: Request) -> str:
+    """Адрес панели, каким его видит нода: Origin или X-Forwarded-Host за прокси."""
+    origin = request.headers.get("origin")
+    if origin:
+        return origin
+    forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_host:
+        forwarded_proto = request.headers.get("x-forwarded-proto", "https")
+        return f"{forwarded_proto}://{forwarded_host}"
+    return str(request.base_url).rstrip("/")
+
+
+# ── Свои серверы (не ноды панели) ────────────────────────────────
+
+
+class ExternalServerCreate(BaseModel):
+    """Сервер для Fleet без панели: бот, панель, база — что угодно с Docker."""
+    name: str = Field(..., min_length=1, max_length=100)
+    address: str = Field("", max_length=255)
+    description: Optional[str] = Field(None, max_length=500)
+
+
+@router.post("/external", status_code=201)
+async def create_external_server(
+    body: ExternalServerCreate,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
+):
+    """Добавить свой сервер в мониторинг: строка nodes с is_external,
+    токен агента и готовая команда установки одним ответом."""
+    from shared.database import db_service
+    from shared.agent_tokens import set_node_agent_token
+    from web.backend.core.config import get_web_settings
+
+    if not db_service.is_connected:
+        raise api_error(503, E.DB_UNAVAILABLE)
+
+    node_uuid = str(uuid4())
+    name = body.name.strip()
+    address = (body.address or "").strip()
+    description = (body.description or "").strip() or None
+    if not await db_service.create_external_node(node_uuid, name, address, description):
+        raise api_error(500, E.INTERNAL_ERROR)
+
+    token = await set_node_agent_token(db_service, node_uuid)
+    if not token:
+        await db_service.delete_external_node(node_uuid)
+        raise api_error(500, E.TOKEN_GENERATE_FAILED)
+
+    install_cmd = build_agent_install_command(
+        node_uuid, _public_base_url(request), token, get_web_settings().secret_key,
+    )
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="node.create_external_server",
+        resource="nodes",
+        resource_id=node_uuid,
+        details=json.dumps({"name": name, "address": address}),
+        ip_address=get_client_ip(request),
+    )
+    return {
+        "uuid": node_uuid, "name": name, "address": address,
+        "token": token, "install_command": install_cmd,
+    }
+
+
+@router.delete("/external/{node_uuid}")
+async def delete_external_server(
+    node_uuid: str,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("nodes", "edit")),
+):
+    """Убрать свой сервер из мониторинга. Только строки с is_external —
+    ноду панели этим путём не удалить."""
+    from shared.database import db_service
+
+    if not await check_access(admin, "node", node_uuid, "edit"):
+        raise api_error(403, E.FORBIDDEN)
+    if not db_service.is_connected:
+        raise api_error(503, E.DB_UNAVAILABLE)
+    if not await db_service.delete_external_node(node_uuid):
+        raise api_error(404, E.NODE_NOT_FOUND)
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="node.delete_external_server",
+        resource="nodes",
+        resource_id=node_uuid,
+        details=json.dumps({"node_uuid": node_uuid}),
+        ip_address=get_client_ip(request),
+    )
+    return {"success": True}
+
+
 def _ensure_node_snake_case(node: dict) -> dict:
     """Ensure node dict has snake_case keys for pydantic schemas."""
     result = dict(node)
     mappings = {
         'isDisabled': 'is_disabled',
         'isConnected': 'is_connected',
+        'isExternal': 'is_external',
         'isXrayRunning': 'is_xray_running',
         'xrayVersion': 'xray_version',
         'trafficLimitBytes': 'traffic_limit_bytes',
@@ -171,6 +270,9 @@ async def list_nodes(
     try:
         nodes = await _get_nodes_list()
         nodes = [_ensure_node_snake_case(n) for n in nodes]
+        # Свои серверы — не ноды: без Xray и юзеров, действия панели к ним
+        # не применимы. Их место — Fleet.
+        nodes = [n for n in nodes if not n.get("is_external")]
 
         # Enrich with per-node today traffic from date-range endpoint (persistent)
         try:
@@ -642,15 +744,7 @@ async def get_agent_install_command(
             )
 
         # Build install command
-        base_url = str(request.base_url).rstrip("/")
-        # Use Origin or X-Forwarded-Host for proper public URL
-        origin = request.headers.get("origin")
-        forwarded_host = request.headers.get("x-forwarded-host")
-        forwarded_proto = request.headers.get("x-forwarded-proto", "https")
-        if origin:
-            base_url = origin
-        elif forwarded_host:
-            base_url = f"{forwarded_proto}://{forwarded_host}"
+        base_url = _public_base_url(request)
 
         # Include WS secret key so agent can verify HMAC-signed commands
         from web.backend.core.config import get_web_settings

@@ -56,6 +56,9 @@ export interface FleetNode {
   conntrack_max?: number | null
   under_attack?: boolean
   attack_severity?: string | null
+  // Свой сервер (не нода панели): без Xray, юзеров и трафика — только метрики агента
+  is_external?: boolean
+  description?: string | null
 }
 
 export type NodeStatus = 'online' | 'offline' | 'disabled'
@@ -159,6 +162,11 @@ export default function NodeCard({ node, isExpanded, onToggle, onTerminalConnect
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-white font-semibold truncate text-sm">{node.name}</span>
+            {node.is_external && (
+              <Badge variant="outline" className="shrink-0 h-5 px-1.5 py-0 text-[10px] border-sky-500/40 bg-sky-500/10 text-sky-300">
+                {t('fleet.server.badge')}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {onTerminalConnect && status === 'online' && (

@@ -567,6 +567,9 @@ class SyncService:
                     local_uuid = local_node.get("uuid")
                     if not local_uuid:
                         continue
+                    if local_node.get("isExternal") or local_node.get("is_external"):
+                        # Свои серверы в панели не живут — синк их не удаляет.
+                        continue
                     if str(local_uuid).lower() not in api_node_uuids:
                         stale_uuids.append(str(local_uuid))
 
@@ -1205,6 +1208,8 @@ class SyncService:
                 n for n in nodes
                 if (n.get("isConnected") or n.get("is_connected"))
                 and not (n.get("isDisabled") or n.get("is_disabled"))
+                # У своего сервера нет трафика в панели — запрос вернул бы 404
+                and not (n.get("isExternal") or n.get("is_external"))
             ]
 
             now = datetime.now(timezone.utc)

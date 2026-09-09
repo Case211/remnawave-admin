@@ -145,7 +145,7 @@ class NodesMixin:
                         COUNT(*) FILTER (WHERE NOT is_disabled) as enabled,
                         COUNT(*) FILTER (WHERE is_disabled) as disabled,
                         COUNT(*) FILTER (WHERE is_connected AND NOT is_disabled) as connected
-                    """)
+                    """, "WHERE NOT is_external")
             )
             return dict(row) if row else {"total": 0, "enabled": 0, "disabled": 0, "connected": 0}
     
@@ -253,16 +253,79 @@ class NodesMixin:
         return count
     
     async def delete_node(self, uuid: str) -> bool:
-        """Delete node by UUID."""
+        """Delete node by UUID. Своих серверов (is_external) не касается —
+        их удаляют только руками через delete_external_node, а синк и
+        вебхуки панели про них знать не должны."""
         if not self.is_connected:
             return False
-        
+
         async with self.acquire() as conn:
             result = await conn.execute(
-                delete_sql(NODES_TABLE, "uuid = $1"),
+                delete_sql(NODES_TABLE, "uuid = $1 AND NOT is_external"),
                 uuid
             )
             return result == "DELETE 1"
+
+    # ── Свои серверы (не ноды панели) ────────────────────────────
+
+    async def create_external_node(self, uuid: str, name: str, address: str,
+                                   description: Optional[str] = None) -> bool:
+        """Сервер без панели: та же строка nodes, но is_external = true.
+
+        raw_data пишем один раз — синк его не обновляет, поэтому связь
+        и метрики читаются из столбцов (см. _db_row_to_api_format).
+        """
+        if not self.is_connected:
+            return False
+
+        raw = {
+            "uuid": uuid, "name": name, "address": address, "port": None,
+            "isDisabled": False, "isConnected": False, "isExternal": True,
+            "description": description or "",
+        }
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                insert_sql(
+                    NODES_TABLE,
+                    ["uuid", "name", "address", "is_disabled", "is_connected",
+                     "is_external", "updated_at", "raw_data"],
+                    values="$1, $2, $3, false, false, true, NOW(), $4",
+                    suffix="ON CONFLICT (uuid) DO NOTHING",
+                ),
+                uuid, name, address, json.dumps(raw),
+            )
+            return result == "INSERT 0 1"
+
+    async def delete_external_node(self, uuid: str) -> bool:
+        """Убрать свой сервер из мониторинга. Ноды панели этим не удалить."""
+        if not self.is_connected:
+            return False
+
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                delete_sql(NODES_TABLE, "uuid = $1 AND is_external"),
+                uuid,
+            )
+            return result == "DELETE 1"
+
+    async def mark_stale_external_nodes_offline(self, stale_minutes: int = 5) -> int:
+        """Свой сервер на связи, пока агент шлёт метрики; замолчал — офлайн."""
+        if not self.is_connected:
+            return 0
+
+        async with self.acquire() as conn:
+            result = await conn.execute(
+                update_sql(
+                    NODES_TABLE, "is_connected = false",
+                    "is_external AND is_connected AND (metrics_updated_at IS NULL "
+                    "OR metrics_updated_at < NOW() - make_interval(mins => $1))",
+                ),
+                stale_minutes,
+            )
+        try:
+            return int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            return 0
     
     async def update_node_metrics(
         self,
@@ -318,6 +381,9 @@ class NodesMixin:
                 assignments.append(f"{column} = ${len(params)}")
 
         assignments.append("metrics_updated_at = NOW()")
+        # У ноды панели связь ведёт панель; у своего сервера панели нет —
+        # батч с метриками и есть признак жизни (гасит фоновая проверка).
+        assignments.append("is_connected = CASE WHEN is_external THEN true ELSE is_connected END")
 
         async with self.acquire() as conn:
             result = await conn.execute(

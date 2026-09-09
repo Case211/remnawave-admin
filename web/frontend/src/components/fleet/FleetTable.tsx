@@ -138,7 +138,14 @@ export function FleetTable({
             <TableRow key={node.uuid}>
               <TableCell>
                 <div className="min-w-0">
-                  <div className="font-medium text-white truncate max-w-[200px]">{node.name}</div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="font-medium text-white truncate max-w-[200px]">{node.name}</div>
+                    {node.is_external && (
+                      <span className="shrink-0 rounded border border-sky-500/40 bg-sky-500/10 px-1 text-[10px] leading-4 text-sky-300">
+                        {t('fleet.server.badge')}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-dark-300 font-mono truncate max-w-[200px]">{node.address}:{node.port}</div>
                 </div>
               </TableCell>
@@ -196,7 +203,7 @@ export function FleetTable({
                       <TooltipContent>{t('fleet.terminal.connect', { defaultValue: 'Терминал' })}</TooltipContent>
                     </Tooltip>
                   )}
-                  {canEdit && status === 'online' && (
+                  {canEdit && !node.is_external && status === 'online' && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button size="icon" variant="ghost" aria-label={t('fleet.actions.restart')} className="h-7 w-7 text-dark-200 hover:text-white" disabled={isPending} onClick={() => onRestart(node.uuid)}>
@@ -206,7 +213,7 @@ export function FleetTable({
                       <TooltipContent>{t('fleet.actions.restart')}</TooltipContent>
                     </Tooltip>
                   )}
-                  {canEdit && (
+                  {canEdit && !node.is_external && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button size="icon" variant="ghost" aria-label={node.is_disabled ? t('fleet.actions.enable') : t('fleet.actions.disable')} className={cn('h-7 w-7', node.is_disabled ? 'text-green-400 hover:text-green-300' : 'text-red-400 hover:text-red-300')} disabled={isPending} onClick={() => (node.is_disabled ? onEnable(node.uuid) : onDisable(node.uuid))}>

@@ -613,6 +613,11 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
                 val = row_dict.get(field)
                 if val is not None:
                     result["createdByAdminId"] = val
+            if row_dict.get("is_external"):
+                # Свой сервер живёт без панели: raw_data никто не обновляет,
+                # связь считается по свежести метрик агента и лежит в столбце.
+                result["isExternal"] = True
+                result["isConnected"] = bool(row_dict.get("is_connected"))
             # Panel v3 identifies users by numeric id and sends no uuid —
             # overlay the local uuid column so the API contract (and the
             # frontend's user-scoped routes) keeps working.
@@ -642,6 +647,7 @@ def _db_row_to_api_format(row) -> Dict[str, Any]:
         "port": "port",
         "is_disabled": "isDisabled",
         "is_connected": "isConnected",
+        "is_external": "isExternal",
         "remark": "remark",
         "created_by_admin_id": "createdByAdminId",
     }
