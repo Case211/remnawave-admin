@@ -1094,7 +1094,7 @@ function ScheduledTasksTab({ nodes }: { nodes: FleetNode[] }) {
 
   const tasks = Array.isArray(data?.items) ? data!.items : []
   const nodeOptions = useMemo(
-    () => nodes.map((n) => ({ uuid: n.uuid, name: n.name })),
+    () => nodes.map((n) => ({ uuid: n.uuid, name: n.name, address: n.address })),
     [nodes],
   )
 
