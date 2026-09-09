@@ -323,3 +323,45 @@ class TestLookupUserByTelegramId:
         with patch("shared.database.db_service") as db:
             db.is_connected = False
             assert await _lookup_user_by_telegram_id("1") == {}
+
+
+class TestResolveUserLocalFallback:
+    """Локальный фолбэк resolve: описание/заметка/Telegram ID ищутся по таблице users."""
+
+    @pytest.mark.asyncio
+    async def test_non_uuid_query_reaches_local_search(self, client):
+        """Регрессия: `uuid = $1` с текстом «vip-client» ронял запрос ошибкой
+        asyncpg «invalid UUID», и поиск по описанию никогда не срабатывал."""
+        from unittest.mock import MagicMock
+
+        seen = {}
+
+        async def fetchrow(sql, *args):
+            seen["sql"] = sql
+            seen["args"] = args
+            return {"uuid": "344ddd21-fead-483a-ae23-8c49e6b83ddb",
+                    "username": "by-description", "short_uuid": "6U7X4Pn47FSb7JbumQJk"}
+
+        conn = MagicMock()
+        conn.fetchrow = fetchrow
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=conn)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        db = MagicMock()
+        db.is_connected = True
+        db.acquire = MagicMock(return_value=cm)
+
+        with patch("shared.api_client.api_client.get_user_by_username",
+                   new_callable=AsyncMock, side_effect=Exception("404")), \
+                patch("shared.api_client.api_client.get_user_by_short_uuid",
+                      new_callable=AsyncMock, side_effect=Exception("404")), \
+                patch("shared.database.db_service", db), \
+                patch("web.backend.api.v2.users._ensure_user_visible",
+                      new_callable=AsyncMock, return_value=None):
+            resp = await client.post("/api/v2/users/resolve", json={"query": "VIP-client"})
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["username"] == "by-description"
+        assert "uuid::text = $1" in seen["sql"]
+        assert "WHERE uuid = $1" not in seen["sql"]
+        assert seen["args"] == ("vip-client", "%vip-client%", "VIP-client")

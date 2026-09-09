@@ -811,10 +811,13 @@ async def resolve_user(
         from shared.database import db_service
         if db_service.is_connected:
             async with db_service.acquire() as conn:
+                # uuid сравниваем как текст: с типизированным параметром asyncpg
+                # падал на любом запросе не в форме uuid («invalid UUID»), и весь
+                # фолбэк — описание, заметка, Telegram ID — молча не работал.
                 row = await conn.fetchrow(
                     """
                     SELECT uuid, username, short_uuid FROM users
-                    WHERE uuid = $1
+                    WHERE uuid::text = $1
                        OR telegram_id::text = $3
                        OR LOWER(COALESCE(description, raw_data->>'description', '')) LIKE $2
                        OR LOWER(raw_data->>'note') LIKE $2
