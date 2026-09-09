@@ -552,16 +552,18 @@ class UsersMixin:
             conditions.append(f"external_squad_uuid::text = ${param_idx}")
 
         if internal_squad_uuids:
-            # Внутренние сквады лежат только в raw_data панели (JSON):
+            # Внутренние сквады лежат только в raw_data панели (колонка JSONB):
             # activeInternalSquads — список объектов {uuid, name} или строк-uuid.
-            # json_typeof защищает от не-массива и NULL (тогда '[]'). Юзер
+            # jsonb_typeof защищает от не-массива и NULL (тогда '[]'). Юзер
             # проходит, если состоит хотя бы в одном из выбранных сквадов.
+            # ⚠️ Именно jsonb_*: json_typeof(jsonb) в PG нет, запрос падал, и
+            # эндпоинт молча уезжал в фолбэк на API панели, где сквадов нет.
             param_idx += 1
             args.append([str(s).lower() for s in internal_squad_uuids])
             conditions.append(
-                "EXISTS (SELECT 1 FROM json_array_elements("
-                "CASE WHEN json_typeof(raw_data->'activeInternalSquads') = 'array' "
-                "THEN raw_data->'activeInternalSquads' ELSE '[]'::json END) sq "
+                "EXISTS (SELECT 1 FROM jsonb_array_elements("
+                "CASE WHEN jsonb_typeof(raw_data->'activeInternalSquads') = 'array' "
+                "THEN raw_data->'activeInternalSquads' ELSE '[]'::jsonb END) sq "
                 f"WHERE lower(COALESCE(sq->>'uuid', sq #>> '{{}}')) = ANY(${param_idx}::text[]))"
             )
 

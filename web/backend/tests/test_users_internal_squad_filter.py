@@ -1,4 +1,9 @@
 """Фильтр списка пользователей по внутренним сквадам (API-фолбэк и нормализация)."""
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from shared.db.users import UsersMixin
 from web.backend.api.v2.users import _filter_users_in_memory, _internal_squad_uuids
 
 
@@ -38,3 +43,43 @@ class TestInMemoryFilter:
     def test_no_filter_keeps_everyone(self):
         _, total = _filter_users_in_memory(self.USERS)
         assert total == 4
+
+
+class TestSqlFilter:
+    """SQL-путь: raw_data — JSONB, фильтр обязан звать jsonb_*-функции."""
+
+    @pytest.mark.asyncio
+    async def test_query_uses_jsonb_functions_and_array_param(self):
+        """Регрессия: json_typeof(jsonb) в PG нет — запрос падал, и список молча
+        уезжал в фолбэк на API панели, где сквадов нет: пусто при любом выборе."""
+        seen = {}
+
+        async def fetch(sql, *args):
+            seen["sql"], seen["args"] = sql, args
+            return []
+
+        async def fetchval(sql, *args):
+            return 0
+
+        conn = MagicMock()
+        conn.fetch = fetch
+        conn.fetchval = fetchval
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=conn)
+        cm.__aexit__ = AsyncMock(return_value=False)
+
+        class _Db(UsersMixin):
+            is_connected = True
+
+            def acquire(self):
+                return cm
+
+        users, total = await _Db().get_users_paginated(internal_squad_uuids=["S1", "s2"])
+
+        assert (users, total) == ([], 0)
+        sql = seen["sql"]
+        assert "jsonb_array_elements(" in sql and "jsonb_typeof(raw_data->'activeInternalSquads')" in sql
+        assert "'[]'::jsonb" in sql
+        assert "json_typeof(" not in sql.replace("jsonb_typeof(", "") and "json_array_elements(" not in sql.replace("jsonb_array_elements(", "")
+        assert "= ANY($1::text[])" in sql
+        assert seen["args"][0] == ["s1", "s2"]
