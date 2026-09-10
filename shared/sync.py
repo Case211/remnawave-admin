@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from shared.config import get_shared_settings as get_settings
+from shared.db_schema import TRAFFIC_HISTORY_RETENTION_HOURS
 from shared.api_client import api_client
 from shared.database import db_service
 from shared.logger import logger
@@ -294,7 +295,9 @@ class SyncService:
 
         # Cleanup user-node traffic history (keep 48 hours)
         try:
-            deleted = await db_service.cleanup_old_user_node_traffic_history(keep_hours=48)
+            deleted = await db_service.cleanup_old_user_node_traffic_history(
+                keep_hours=TRAFFIC_HISTORY_RETENTION_HOURS
+            )
             if deleted:
                 logger.debug("Cleaned up %d old user-node traffic history entries", deleted)
         except Exception as e:

@@ -365,3 +365,60 @@ class TestResolveUserLocalFallback:
         assert "uuid::text = $1" in seen["sql"]
         assert "WHERE uuid = $1" not in seen["sql"]
         assert seen["args"] == ("vip-client", "%vip-client%", "VIP-client")
+
+
+class TestUserTrafficHourly:
+    """/users/{uuid}/traffic-hourly — почасовой график по локальным дельтам синка."""
+
+    @staticmethod
+    def _hour(offset_hours: int):
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        return now - timedelta(hours=offset_hours)
+
+    @pytest.mark.asyncio
+    async def test_fills_empty_hours_with_zeros(self, client):
+        """Час без трафика строки в истории не оставляет — сетку добивает бэкенд."""
+        rows = [
+            {"bucket": self._hour(2), "node_uuid": "node-a", "node_name": "Germany", "bytes": 100},
+            {"bucket": self._hour(0), "node_uuid": "node-a", "node_name": "Germany", "bytes": 50},
+            {"bucket": self._hour(0), "node_uuid": "node-bbbbbbbb", "node_name": None, "bytes": 200},
+        ]
+        with patch("shared.database.db_service") as db, \
+                patch("web.backend.api.v2.users._ensure_user_visible",
+                      new_callable=AsyncMock, return_value=None):
+            db.is_connected = True
+            db.get_user_traffic_hourly = AsyncMock(return_value=rows)
+            resp = await client.get("/api/v2/users/aaa-111/traffic-hourly?hours=3")
+
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert [p["total_bytes"] for p in data["points"]] == [100, 0, 250]
+        assert data["total_bytes"] == 350
+        assert data["peak_bytes"] == 250
+        assert data["retention_hours"] == 48
+        # Ноды — по убыванию трафика; у снятой ноды имени нет, остаётся обрезок uuid
+        assert [n["node_uuid"] for n in data["nodes"]] == ["node-bbbbbbbb", "node-a"]
+        assert data["nodes"][0]["node_name"] == "node-bbb"
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_grid_without_db(self, client):
+        with patch("shared.database.db_service") as db, \
+                patch("web.backend.api.v2.users._ensure_user_visible",
+                      new_callable=AsyncMock, return_value=None):
+            db.is_connected = False
+            resp = await client.get("/api/v2/users/aaa-111/traffic-hourly")
+
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert len(data["points"]) == 24
+        assert data["total_bytes"] == 0
+        assert data["nodes"] == []
+
+    @pytest.mark.asyncio
+    async def test_rejects_depth_beyond_retention(self, client):
+        """Глубже ретеншна истории (48 ч) данных нет — просить бессмысленно."""
+        with patch("web.backend.api.v2.users._ensure_user_visible",
+                   new_callable=AsyncMock, return_value=None):
+            resp = await client.get("/api/v2/users/aaa-111/traffic-hourly?hours=49")
+        assert resp.status_code == 422

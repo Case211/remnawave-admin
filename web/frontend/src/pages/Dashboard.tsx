@@ -40,6 +40,7 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
 import { SortableSection } from '@/components/SortableSection'
+import { MiddleTruncate } from '@/components/MiddleTruncate'
 import { useOrderPreference } from '@/lib/useOrderPreference'
 import { useWidgetVisibility } from '@/lib/useWidgetVisibility'
 import { FinanceWidget, BedolagaWidget, ViolationsWidget, BackupWidget, NodeCostsWidget } from '@/components/dashboard/ExtraWidgets'
@@ -1477,7 +1478,7 @@ const NodeLoadCard = memo(function NodeLoadCard({
           <div className="space-y-1.5">
             {sortedNodes.map((node) => (
               <div key={node.uuid} className="flex items-center gap-2">
-                <span className="text-xs text-white truncate w-24 shrink-0">{node.name}</span>
+                <MiddleTruncate text={node.name} className="text-xs text-white w-28 shrink-0" />
                 <div className="flex-1 h-1.5 bg-[var(--glass-bg-hover)] rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-500"
@@ -1597,7 +1598,7 @@ const TrafficAnomalyCard = memo(function TrafficAnomalyCard({
           <div className="space-y-1.5">
             {anomalies.map((a) => (
               <div key={a.nodeUuid} className="flex items-center gap-2 text-xs">
-                <span className="text-white truncate w-24 shrink-0">{a.nodeName}</span>
+                <MiddleTruncate text={a.nodeName} className="text-white w-24 shrink-0" />
                 {a.direction === 'up' ? (
                   <ArrowUpRight className="w-3.5 h-3.5 text-red-400 shrink-0" />
                 ) : (

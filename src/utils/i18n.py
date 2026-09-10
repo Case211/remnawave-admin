@@ -1,3 +1,8 @@
+# Аннотации строками: у JsonI18n есть метод gettext, и в теле класса он
+# затеняет одноимённый модуль — без этого `-> Dict[str, gettext.NullTranslations]`
+# в сигнатуре find_locales падал бы AttributeError ещё на импорте.
+from __future__ import annotations
+
 import gettext
 import json
 from pathlib import Path
@@ -42,6 +47,28 @@ class JsonTranslations(gettext.NullTranslations):
 
 class JsonI18n(I18n):
     """I18n loader that reads locales/<lang>/messages.json (nested keys allowed)."""
+
+    def gettext(  # type: ignore[override]
+        self,
+        singular: str,
+        plural: str | None = None,
+        n: int = 1,
+        locale: str | None = None,
+        default: str | None = None,
+    ) -> str:
+        """Перевод с запасным текстом.
+
+        Хендлеры зовут `_("user.disable_confirm", default="Отключить?")`,
+        а базовый `I18n.gettext()` такого аргумента не знает — вызов падал
+        с TypeError, и кнопки подтверждения в боте не отрисовывались
+        (issue #274). Ключа в JSON может не быть: gettext в таком случае
+        возвращает сам msgid, и пользователь увидел бы «user.disable_confirm»
+        вместо текста, — поэтому запасной текст здесь и нужен.
+        """
+        text = super().gettext(singular, plural, n, locale)
+        if default is not None and text in (singular, plural):
+            return default
+        return text
 
     def find_locales(self) -> Dict[str, gettext.NullTranslations]:  # type: ignore[override]
         translations: Dict[str, gettext.NullTranslations] = {}
