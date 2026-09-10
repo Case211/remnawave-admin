@@ -23,12 +23,19 @@ logger = logging.getLogger(__name__)
 # Расширенный формат: захватывает destination + routing tags
 # 2026/01/28 11:23:18 from 188.170.87.33:20129 accepted tcp:accounts.google.com:443 [Sweden1 >> DIRECT] email: 154
 # Группы: timestamp, client_ip, client_port, destination, inbound_tag, outbound_tag, user_id
+#
+# Стрелка между тегами зависит от того, КАК Xray выбрал аутбаунд
+# (app/dispatcher/default.go): `>>` — аутбаунд по умолчанию, `->` / `==>` —
+# по правилу роутинга, `=>` / `->` — балансером (обозначения менялись между
+# версиями ядра). У ноды, где весь трафик идёт по правилам (каскады, WARP,
+# блокировки), строк с `>>` нет вовсе — такие строки раньше падали в базовый
+# паттерн, и тег инбаунда терялся.
 LOG_PATTERN_EXTENDED = re.compile(
     r"(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+"
     r"(?:\[?([0-9a-fA-F:\.]+)\]?)"       # IPv4 или IPv6
     r":(\d+)\s+accepted\s+"
     r"(?:tcp|udp):(\S+)\s+"               # destination (e.g. tracker.example.com:6881)
-    r"\[([^\]]*?)\s*>>\s*([^\]]*?)\]\s+"  # [inbound_tag >> outbound_tag]
+    r"\[([^\]]*?)\s*(?:>>|==>|=>|->)\s*([^\]]*?)\]\s+"  # [inbound_tag >> outbound_tag] / [in -> out] / [in ==> out]
     r"email:\s*(\d+)",
     re.IGNORECASE,
 )
