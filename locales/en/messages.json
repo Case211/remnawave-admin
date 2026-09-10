@@ -429,7 +429,9 @@
     "invalid_email": "Invalid email format. Try again.",
     "prompt_tag": "Enter tag (or press «Skip»):",
     "prompt_uuid": "Enter UUID (or choose «Auto» / «Skip»):",
-    "uuid_auto": "Auto (generate automatically)"
+    "uuid_auto": "Auto (generate automatically)",
+    "disable_confirm": "Disable this user?",
+    "disable_confirm_button": "Yes, disable"
   },
   "node": {
     "usage": "🛰 Send /node <uuid> to view and manage a node.",
@@ -535,7 +537,10 @@
     "agent_token_warning": "⚠️ Save this token! It will not be shown again. Use it in the AGENT_AUTH_TOKEN variable in Node Agent settings.",
     "agent_token_back": "↩️ Back",
     "agent_token_usage_hint": "📝 Copy the token and set it in the agent .env file:\n\nAGENT_NODE_UUID={node_uuid}\nAGENT_AUTH_TOKEN={token}\nAGENT_COLLECTOR_URL=https://your-admin-bot.com",
-    "agent_token_error": "⚠️ Token operation error"
+    "agent_token_error": "⚠️ Token operation error",
+    "restart_confirm": "Restart the node?",
+    "restart_warning": "All active connections on the node will be dropped.",
+    "reset_confirm": "Reset node traffic?"
   },
   "node_stats": {
     "usage_range_usage": "📅 Use /nodes_range <start_iso> <end_iso> (example: 2024-01-01T00:00:00Z 2024-01-02T00:00:00Z)",
@@ -777,7 +782,8 @@
     "no_active_users": "ℹ️ No active users found.",
     "done": "✅ Bulk action done.",
     "done_extend_active": "✅ Subscriptions extended by {days} days for {count} active users.",
-    "error": "⚠️ Bulk action failed."
+    "error": "⚠️ Bulk action failed.",
+    "confirm_warning": "This action cannot be undone. Are you sure?"
   },
   "system_nodes": {
     "title": "🛰 Nodes management:",
@@ -938,7 +944,8 @@
     "truncated": "\n\n_...truncated_"
   },
   "common": {
-    "cancel": "cancel"
+    "cancel": "cancel",
+    "confirm": "Confirm"
   },
   "reports": {
     "menu_title": "<b>📊 Violation Reports</b>\n\nHere you can:\n• Generate a report for a period\n• View report history\n• Configure automatic report schedules",

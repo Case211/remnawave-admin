@@ -1733,7 +1733,7 @@ async def cb_user_actions(callback: CallbackQuery, admin: BotAdmin) -> None:
                 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="✅ " + _("common.confirm", default="Да, отключить"), callback_data=f"user:{user_uuid}:disable:confirm"),
+                        InlineKeyboardButton(text="✅ " + _("user.disable_confirm_button", default="Да, отключить"), callback_data=f"user:{user_uuid}:disable:confirm"),
                         InlineKeyboardButton(text="❌ " + _("common.cancel", default="Отмена"), callback_data=f"user:{user_uuid}"),
                     ],
                 ])
