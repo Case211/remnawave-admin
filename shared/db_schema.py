@@ -84,6 +84,10 @@ OAUTH_LINKS_TABLE = "oauth_links"
 ADMIN_SESSIONS_TABLE = "admin_sessions"
 ONLINE_USERS_SNAPSHOTS_TABLE = "online_users_snapshots"
 USER_NODE_TRAFFIC_HISTORY_TABLE = "user_node_traffic_history"
+# Сколько держим поюзерные дельты трафика: двух суток хватает на почасовой
+# график «за последние 24 часа» с запасом на пропущенный цикл чистки. Глубже
+# смотреть нечем — панель по юзеру хранит только суточные суммы.
+TRAFFIC_HISTORY_RETENTION_HOURS = 48
 ASN_RUSSIA_TABLE = "asn_russia"
 BOT_CONFIG_TABLE = "bot_config"
 API_KEYS_TABLE = "api_keys"

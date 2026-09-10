@@ -38,6 +38,7 @@ import { toast } from 'sonner'
 import client from '@/api/client'
 import { advancedAnalyticsApi } from '@/api/advancedAnalytics'
 import { InteractiveChart } from '@/components/charts/InteractiveChart'
+import { MiddleTruncate } from '@/components/MiddleTruncate'
 import type { GeoCity, GeoCityUser, TopUser, NodeFleetItem, RetentionCohort, NodeMetricsHistoryItem, NodeMetricsTimeseriesPoint, GeoBalanceNode, GeoBalanceRecommendation, IpExportItem } from '@/api/advancedAnalytics'
 import { ExportDropdown } from '@/components/ExportDropdown'
 import { exportCSV, exportJSON, formatBytesForExport } from '@/lib/export'
@@ -1544,7 +1545,9 @@ function IpExportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     <tr key={i} className="border-t border-[var(--glass-border)]/30 hover:bg-[var(--glass-bg-hover)]">
                       <td className="p-1.5 pl-2 font-mono">{ip.ip}</td>
                       <td className="p-1.5 truncate max-w-[120px]">{ip.username || '—'}</td>
-                      <td className="p-1.5 truncate max-w-[100px]">{ip.node_name || '—'}</td>
+                      <td className="p-1.5 max-w-[100px]">
+                        {ip.node_name ? <MiddleTruncate text={ip.node_name} /> : '—'}
+                      </td>
                       <td className="p-1.5">{ip.country_code || '—'}</td>
                       <td className="p-1.5 truncate max-w-[150px]">{ip.asn_org || '—'}</td>
                     </tr>
@@ -2727,7 +2730,10 @@ function TorrentAnalyticsCard() {
                   <div className="space-y-1.5 max-h-60 overflow-y-auto">
                     {topNodes.map((n, i) => (
                       <div key={i} className="flex items-center justify-between bg-[var(--glass-bg)] rounded px-3 py-1.5 text-xs">
-                        <span className="text-white/80 truncate max-w-[200px]">{n.country_code && <span className="mr-1">{n.country_code}</span>}{n.name}</span>
+                        <span className="flex items-center gap-1 min-w-0 max-w-[200px] text-white/80">
+                          {n.country_code && <span className="shrink-0">{n.country_code}</span>}
+                          <MiddleTruncate text={n.name} />
+                        </span>
                         <Badge variant="secondary" className="text-[10px]">{n.total}</Badge>
                       </div>
                     ))}

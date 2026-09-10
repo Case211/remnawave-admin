@@ -2319,6 +2319,46 @@ class NetworkMixin:
                 )
             return [dict(r) for r in rows]
 
+    async def get_user_traffic_hourly(
+        self, user_uuid: str, since: datetime, until: datetime | None = None,
+    ) -> List[Dict[str, Any]]:
+        """Почасовые дельты трафика юзера с разбивкой по нодам.
+
+        Строка на пару «час × нода». Часы без трафика сюда не попадают —
+        дельта пишется, только когда счётчик вырос, — поэтому сетку часов
+        добивает вызывающий, иначе ось графика будет рваной.
+
+        Глубже ретеншна user_node_traffic_history (48 ч) данных нет: панель
+        по юзеру хранит только суточные суммы, внутри дня история есть
+        только у нас.
+
+        Час режем явным ``AT TIME ZONE 'UTC'``: над timestamptz date_trunc
+        считает по TimeZone сессии, а пул её не пинит — на сервере с чужим
+        поясом бакеты уехали бы на смещение.
+        """
+        if not self.is_connected:
+            return []
+        until = until or datetime.now(timezone.utc)
+        async with self.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                SELECT
+                    date_trunc('hour', h.recorded_at AT TIME ZONE 'UTC') AS bucket,
+                    h.node_uuid::text AS node_uuid,
+                    n.name AS node_name,
+                    SUM(h.delta_bytes) AS bytes
+                FROM {USER_NODE_TRAFFIC_HISTORY_TABLE} h
+                LEFT JOIN {NODES_TABLE} n ON n.uuid = h.node_uuid
+                WHERE h.user_uuid = $1::uuid
+                  AND h.recorded_at >= $2
+                  AND h.recorded_at < $3
+                GROUP BY bucket, h.node_uuid, n.name
+                ORDER BY bucket
+                """,
+                user_uuid, since, until,
+            )
+            return [dict(r) for r in rows]
+
     async def cleanup_stale_user_node_traffic(self, keep_days: int = 7) -> int:
         """Убрать из снимка пары «юзер×нода», которые давно не обновлялись.
 

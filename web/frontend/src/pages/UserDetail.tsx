@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useFormatters, formatDateShortUtil } from '@/lib/useFormatters'
+import { useFormatters, formatDateShortUtil, parseApiDate } from '@/lib/useFormatters'
+import { InteractiveChart, type ChartSeries } from '@/components/charts/InteractiveChart'
 import { translateBackendError } from '@/lib/mutationToast'
 import {
   ArrowLeft,
@@ -216,7 +217,16 @@ interface TrafficStats {
   }[]
 }
 
-type TrafficPeriod = 'current' | 'lifetime' | 'today' | 'week' | 'month' | '3month' | '6month' | 'year' | 'nodes'
+interface HourlyTraffic {
+  hours: number
+  retention_hours: number
+  total_bytes: number
+  peak_bytes: number
+  nodes: { node_uuid: string; node_name: string }[]
+  points: { bucket: string; total_bytes: number; by_node: Record<string, number> }[]
+}
+
+type TrafficPeriod = 'current' | 'lifetime' | '24h' | 'today' | 'week' | 'month' | '3month' | '6month' | 'year' | 'nodes'
 
 // API period keys (sent to backend)
 const API_PERIODS: TrafficPeriod[] = ['today', 'week', 'month', '3month', '6month', 'year']
@@ -281,6 +291,102 @@ function CollapsibleSection({
   )
 }
 
+// ── Почасовой трафик за сутки ─────────────────────────────────
+/**
+ * График «по часам за последние 24 часа». Источник — локальные дельты
+ * синка (user_node_traffic_history): панель по юзеру хранит только
+ * суточные суммы, внутридневную разбивку взять больше неоткуда.
+ * Шаг данных — интервал синка, поэтому час всегда собран из нескольких
+ * замеров; часы без трафика бэкенд отдаёт нулями.
+ */
+function HourlyTrafficChart({ userUuid }: { userUuid: string }) {
+  const { t } = useTranslation()
+  const { formatBytes } = useFormatters()
+
+  const { data, isLoading } = useQuery<HourlyTraffic>({
+    queryKey: ['user-traffic-hourly', userUuid],
+    queryFn: async () => {
+      const response = await client.get(`/users/${userUuid}/traffic-hourly`, { params: { hours: 24 } })
+      return response.data
+    },
+    enabled: !!userUuid,
+    staleTime: 60_000,
+  })
+
+  const nodes = data?.nodes ?? []
+  // Одна нода — рисуем общий итог: серия на ноду тут только мусорит легенду
+  const stacked = nodes.length > 1
+
+  const chartData = useMemo(
+    () =>
+      (data?.points ?? []).map((p) => {
+        const row: Record<string, string | number> = {
+          label: `${String(parseApiDate(p.bucket).getHours()).padStart(2, '0')}:00`,
+          raw: p.bucket,
+          total: p.total_bytes,
+        }
+        if (stacked) {
+          for (const node of nodes) row[node.node_uuid] = p.by_node[node.node_uuid] ?? 0
+        }
+        return row
+      }),
+    [data, nodes, stacked]
+  )
+
+  const series = useMemo<ChartSeries[]>(
+    () =>
+      stacked
+        ? nodes.map((n) => ({ key: n.node_uuid, name: n.node_name }))
+        : [{ key: 'total', name: t('userDetail.traffic.hourly.series') }],
+    [nodes, stacked, t]
+  )
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <RefreshCw className="h-5 w-5 text-primary-500 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!data || data.total_bytes === 0) {
+    return (
+      <div className="text-center py-6 text-dark-300 text-sm">
+        {t('userDetail.traffic.hourly.empty')}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-[var(--glass-bg)] rounded-lg p-3 text-center">
+          <p className="text-base font-bold text-white">{formatBytes(data.total_bytes)}</p>
+          <p className="text-[11px] text-dark-200">{t('userDetail.traffic.hourly.total')}</p>
+        </div>
+        <div className="bg-[var(--glass-bg)] rounded-lg p-3 text-center">
+          <p className="text-base font-bold text-white">{formatBytes(data.peak_bytes)}</p>
+          <p className="text-[11px] text-dark-200">{t('userDetail.traffic.hourly.peak')}</p>
+        </div>
+      </div>
+      <InteractiveChart
+        data={chartData}
+        xKey="label"
+        rawKey="raw"
+        series={series}
+        stacked={stacked}
+        maxSeries={6}
+        height={220}
+        defaultType="bar"
+        yFormatter={formatBytes}
+        tooltipFormatter={(value: number, name: string) => [formatBytes(value), name]}
+        exportName={`user-traffic-hourly-${userUuid}`}
+      />
+      <p className="text-[11px] text-dark-300">{t('userDetail.traffic.hourly.hint')}</p>
+    </div>
+  )
+}
+
 function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficPercent: number }) {
   const { t } = useTranslation()
   const { formatBytes } = useFormatters()
@@ -290,6 +396,7 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
   const TRAFFIC_PERIODS: { key: TrafficPeriod; label: string }[] = [
     { key: 'current', label: t('userDetail.traffic.periods.current') },
     { key: 'lifetime', label: t('userDetail.traffic.periods.lifetime') },
+    { key: '24h', label: t('userDetail.traffic.periods.24h') },
     { key: 'today', label: t('userDetail.traffic.periods.today') },
     { key: 'week', label: t('userDetail.traffic.periods.week') },
     { key: 'month', label: t('userDetail.traffic.periods.month') },
@@ -319,7 +426,9 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
       const response = await client.get(`/users/${user.uuid}/traffic-stats`, { params })
       return response.data
     },
-    enabled: !!user.uuid && (period !== 'current' && period !== 'lifetime'),
+    // Панельные периоды: у «current»/«lifetime» и почасового графика
+    // своих данных из этого эндпоинта нет — незачем дёргать панель
+    enabled: !!user.uuid && apiPeriod !== null,
     staleTime: 30_000,
   })
 
@@ -374,7 +483,10 @@ function TrafficBlock({ user, trafficPercent }: { user: UserDetailData; trafficP
           ))}
         </div>
 
-        {period === 'nodes' ? (
+        {period === '24h' ? (
+          /* Почасовой график по локальным дельтам синка */
+          <HourlyTrafficChart userUuid={user.uuid} />
+        ) : period === 'nodes' ? (
           /* Per-node breakdown */
           <div className="space-y-3">
             {/* Node period sub-filter */}

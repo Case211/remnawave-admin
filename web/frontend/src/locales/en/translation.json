@@ -861,9 +861,17 @@
       "nodeBreakdown": "Breakdown by nodes",
       "nodeTotal": "Total",
       "noNodeData": "No traffic data by nodes for this period",
+      "hourly": {
+        "series": "Traffic",
+        "total": "Last 24 hours",
+        "peak": "Peak hour",
+        "empty": "No traffic in the last 24 hours",
+        "hint": "Built from sync deltas; resolution equals the sync interval. History is kept for two days."
+      },
       "periods": {
         "current": "Current",
         "lifetime": "Lifetime",
+        "24h": "24 hours",
         "today": "Today",
         "week": "Week",
         "month": "Month",

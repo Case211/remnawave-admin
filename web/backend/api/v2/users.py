@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from web.backend.core.errors import api_error, E, ErrorCode
-from shared.db_schema import USERS_TABLE
+from shared.db_schema import USERS_TABLE, TRAFFIC_HISTORY_RETENTION_HOURS
 from shared.db_query import select_sql, update_sql
 from shared.admin_quota import (
     apply_user_delete_quotas,
@@ -1672,6 +1672,74 @@ async def get_user_traffic_stats(
     except Exception as e:
         logger.error("Error getting traffic stats for %s: %s", user_uuid, e)
         raise api_error(500, E.INTERNAL_ERROR)
+
+
+@router.get("/{user_uuid}/traffic-hourly")
+async def get_user_traffic_hourly(
+    user_uuid: str,
+    hours: int = Query(24, ge=1, le=TRAFFIC_HISTORY_RETENTION_HOURS, description="How many last hours to return"),
+    admin: AdminUser = Depends(require_permission("users", "view")),
+):
+    """Почасовой трафик юзера за последние ``hours`` часов.
+
+    Считается по локальным дельтам синка (user_node_traffic_history):
+    панель по юзеру хранит только суточные суммы и почасовую разбивку
+    отдать не может. Отсюда и потолок глубины — ретеншн этой истории.
+    """
+    await _ensure_user_visible(admin, user_uuid)
+
+    now = datetime.now(timezone.utc)
+    # Текущий час включаем целиком, даже если он ещё не закончился
+    buckets = [
+        now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=offset)
+        for offset in range(hours - 1, -1, -1)
+    ]
+    by_bucket: dict[datetime, dict[str, int]] = {b: {} for b in buckets}
+    node_names: dict[str, str] = {}
+    node_totals: dict[str, int] = {}
+
+    try:
+        from shared.database import db_service
+        if db_service.is_connected:
+            rows = await db_service.get_user_traffic_hourly(user_uuid, buckets[0], now)
+            for row in rows:
+                bucket = row["bucket"]
+                if bucket.tzinfo is None:
+                    bucket = bucket.replace(tzinfo=timezone.utc)
+                slot = by_bucket.get(bucket)
+                if slot is None:
+                    continue
+                node_uuid = row["node_uuid"] or ""
+                node_bytes = int(row["bytes"] or 0)
+                slot[node_uuid] = slot.get(node_uuid, 0) + node_bytes
+                node_totals[node_uuid] = node_totals.get(node_uuid, 0) + node_bytes
+                # Ноду могли снять — FK на историю нет, имя тогда пустое
+                node_names[node_uuid] = row["node_name"] or node_uuid[:8]
+    except Exception as e:
+        logger.error("Error getting hourly traffic for %s: %s", user_uuid, e)
+        raise api_error(500, E.INTERNAL_ERROR)
+
+    points = [
+        {
+            "bucket": bucket.isoformat(),
+            "total_bytes": sum(by_bucket[bucket].values()),
+            "by_node": by_bucket[bucket],
+        }
+        for bucket in buckets
+    ]
+
+    return {
+        "hours": hours,
+        "retention_hours": TRAFFIC_HISTORY_RETENTION_HOURS,
+        "total_bytes": sum(p["total_bytes"] for p in points),
+        "peak_bytes": max((p["total_bytes"] for p in points), default=0),
+        # По убыванию трафика: фронт рисует поимённо первые серии, хвост сворачивает
+        "nodes": [
+            {"node_uuid": uuid, "node_name": node_names[uuid]}
+            for uuid, _ in sorted(node_totals.items(), key=lambda kv: kv[1], reverse=True)
+        ],
+        "points": points,
+    }
 
 
 @router.get("/{user_uuid}/ip-history")
