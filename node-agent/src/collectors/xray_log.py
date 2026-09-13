@@ -101,6 +101,34 @@ def _log_time(ts_str: str, utc_offset: timedelta) -> datetime:
         return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _merge_connection(
+    connections_map: dict,
+    key: tuple[str, str],
+    when: datetime,
+    user_identifier: str,
+    inbound_tag: Optional[str],
+    outbounds=(),
+) -> None:
+    """Одна запись на (пользователь, IP) за кусок лога.
+
+    Время и тег инбаунда — по самой поздней строке; ``inbound_tag=None`` —
+    строка без тегов (базовый regex), тогда известный тег не затираем.
+    Аутбаунды копятся множеством: за батч человек уходит в несколько веток
+    сразу (сайт — в DIRECT, заблокированный — в WARP, остальное — каскадом),
+    и последняя строка не должна затирать остальные.
+    """
+    prev = connections_map.get(key)
+    outs = {o for o in outbounds if o}
+    if prev is not None:
+        outs |= prev[3]
+        if when <= prev[0]:
+            connections_map[key] = (prev[0], prev[1], prev[2], outs)
+            return
+    if inbound_tag is None:
+        inbound_tag = prev[2] if prev is not None else ""
+    connections_map[key] = (when, user_identifier, inbound_tag, outs)
+
+
 def _parse_lines(
     lines: list[str],
     node_uuid: str,
@@ -126,7 +154,8 @@ def _parse_lines(
     Returns:
         (connections, torrent_events, lines_count, accepted_lines, matched_lines)
     """
-    connections_map: dict[tuple[str, str], tuple[datetime, str]] = {}
+    # (время последней строки, кто, тег инбаунда, аутбаунды за кусок лога)
+    connections_map: dict[tuple[str, str], tuple[datetime, str, str, set[str]]] = {}
     torrent_events: list[TorrentEvent] = []
     # Кандидаты от nDPI вместе с тем, чем они были бы как обычное
     # подключение: не подтвердится обвинение — вернём их туда.
@@ -191,7 +220,7 @@ def _parse_lines(
                         detected_by="ndpi",
                     ),
                     (user_identifier, client_ip),
-                    (detected_at, user_identifier, inbound_tag.strip()),
+                    (detected_at, user_identifier, inbound_tag.strip(), [outbound_tag.strip()]),
                 ))
                 continue
 
@@ -199,12 +228,10 @@ def _parse_lines(
             # несколькими инбаундами иначе не понять, каким классом
             # (reality/ws/xhttp) человек реально пользовался.
             key = (user_identifier, client_ip)
-            if key not in connections_map:
-                connections_map[key] = (detected_at, user_identifier, inbound_tag.strip())
-            else:
-                existing_time, _, _ = connections_map[key]
-                if detected_at > existing_time:
-                    connections_map[key] = (detected_at, user_identifier, inbound_tag.strip())
+            _merge_connection(
+                connections_map, key, detected_at, user_identifier,
+                inbound_tag.strip(), [outbound_tag.strip()],
+            )
             continue
 
         # Fallback: базовый regex (4 группы, без destination/tags)
@@ -219,12 +246,7 @@ def _parse_lines(
 
         connected_at = _log_time(ts_str, utc_offset)
 
-        if key not in connections_map:
-            connections_map[key] = (connected_at, user_identifier, "")
-        else:
-            existing_time, _, prev_tag = connections_map[key]
-            if connected_at > existing_time:
-                connections_map[key] = (connected_at, user_identifier, prev_tag)
+        _merge_connection(connections_map, key, connected_at, user_identifier, None)
 
     # Вердикт nDPI висит на адресе назначения, а не на человеке. За одним
     # адресом мессенджера или CDN в то же окно сидит пол-ноды: один вердикт
@@ -236,9 +258,7 @@ def _parse_lines(
         if len(users_per_destination.get(candidate.destination, ())) == 1:
             torrent_events.append(candidate)
             continue
-        previous = connections_map.get(key)
-        if previous is None or value[0] > previous[0]:
-            connections_map[key] = value
+        _merge_connection(connections_map, key, *value)
 
     # Преобразуем в список ConnectionReport
     connections = [
@@ -251,8 +271,12 @@ def _parse_lines(
             bytes_sent=0,
             bytes_received=0,
             inbound_tag=inbound_tag,
+            # Отсортированным: коллектор переписывает строку подключения при
+            # любом изменении device_info, и на перестановках делал бы это
+            # каждый батч.
+            outbound_tags=sorted(outbounds),
         )
-        for (user_identifier, client_ip), (connected_at, _, inbound_tag) in connections_map.items()
+        for (user_identifier, client_ip), (connected_at, _, inbound_tag, outbounds) in connections_map.items()
     ]
 
     return connections, torrent_events, lines_count, accepted_lines, matched_lines

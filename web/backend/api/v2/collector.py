@@ -331,6 +331,9 @@ class ConnectionReport(BaseModel):
     # Агенты постарше поля не шлют — тогда транспорт подключения остаётся
     # неизвестным и определяется по ноде целиком, как раньше.
     inbound_tag: str = ""
+    # Аутбаунды, которые Xray выбрал для подключения (вторая половина скобок
+    # [inbound -> outbound] в access.log). Агенты постарше поля не шлют.
+    outbound_tags: list[str] = []
 
 
 class SystemMetricsReport(BaseModel):
@@ -708,6 +711,10 @@ async def receive_connections(
                 "device_info": {
                     "user_email": conn.user_email,
                     "inbound_tag": conn.inbound_tag or None,
+                    # Ключ только когда аутбаунды есть: иначе у всех открытых
+                    # строк от агентов постарше device_info поменялся бы разом
+                    # и первый же батч после обновления переписал бы их все.
+                    **({"outbound_tags": conn.outbound_tags} if conn.outbound_tags else {}),
                 },
                 "connected_at": conn.connected_at,
             })
