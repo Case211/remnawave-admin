@@ -1496,10 +1496,12 @@ async def collector_stats(request: Request):
     """
     # Verify admin auth (collector endpoints skip middleware, so check manually)
     from web.backend.core.security import decode_token
+    from web.backend.core.auth_cookies import ACCESS_COOKIE
     auth_header = request.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else request.cookies.get(ACCESS_COOKIE)
+    if not token:
         return JSONResponse(status_code=401, content={"detail": "Authentication required"})
-    payload = decode_token(auth_header[7:], token_type="access")
+    payload = decode_token(token, token_type="access")
     if not payload:
         return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
     queue_size = len(_pending_violation_users)
