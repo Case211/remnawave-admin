@@ -205,6 +205,31 @@ class TestReceiveBatch:
         assert batch[0]["device_info"] == {"user_email": "alice@example.com", "inbound_tag": "vless-reality"}
 
     @pytest.mark.asyncio
+    async def test_device_info_carries_outbound_tags(self, anon_client):
+        """Выбранные аутбаунды доезжают в device_info; без них ключа нет вовсе —
+        иначе у открытых строк от агентов постарше device_info поменялся бы
+        разом, и первый батч после обновления переписал бы их все."""
+        db = make_db_mock()
+        db.get_email_to_uuid_map = AsyncMock(return_value={
+            "alice@example.com": USER_UUID,
+            "bob@example.com": "bbbbbbbb-0000-4000-8000-000000000002",
+        })
+        with patch.object(collector, "db_service", db),              patch.object(collector, "get_node_by_token", AsyncMock(return_value=NODE_UUID)),              patch.object(collector, "_enqueue_violation_users", MagicMock()):
+            resp = await anon_client.post(
+                "/api/v2/collector/batch",
+                json=make_batch(connections=[
+                    {**make_connection(), "inbound_tag": "cdn", "outbound_tags": ["DIRECT", "casc-fi"]},
+                    {**make_connection("bob@example.com"), "inbound_tag": "cdn"},
+                ]),
+                headers=AGENT_HEADERS,
+            )
+        assert resp.status_code == 200
+        infos = {c["device_info"]["user_email"]: c["device_info"] for c in db.batch_upsert_connections.await_args.args[0]}
+        assert infos["alice@example.com"] == {"user_email": "alice@example.com", "inbound_tag": "cdn",
+                                              "outbound_tags": ["DIRECT", "casc-fi"]}
+        assert infos["bob@example.com"] == {"user_email": "bob@example.com", "inbound_tag": "cdn"}
+
+    @pytest.mark.asyncio
     async def test_unresolved_user_counts_as_error(self, anon_client):
         db = make_db_mock()
         db.get_email_to_uuid_map = AsyncMock(return_value={})
