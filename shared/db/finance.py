@@ -683,9 +683,14 @@ class FinanceMixin:
             else:
                 unassigned += me_rub
 
-        # ноды с трафиком/юзерами, но без расходов — тоже показываем (cost=0)
+        # ноды с трафиком/юзерами, но без расходов — тоже показываем (cost=0),
+        # но только живые: снапшоты трафика и коннекты переживают удалённую
+        # в панели ноду до 31 дня, и без имени она висела бы в таблице
+        # обрезанным UUID. Нода с назначенным расходом остаётся в любом
+        # случае — деньги по ней всё ещё учитываются.
         for node_uuid in set(traffic) | set(users):
-            per_node.setdefault(node_uuid, {"monthly_cost_rub": 0.0})
+            if node_uuid in names:
+                per_node.setdefault(node_uuid, {"monthly_cost_rub": 0.0})
 
         gib = float(1024 ** 3)
         items = []
