@@ -38,10 +38,12 @@ import {
   KeyRound,
   Bot,
   MessageSquare,
+  Gauge,
 } from '@/components/brand/icons'
 import { toast } from 'sonner'
 import client from '../api/client'
 import { useHasPermission } from '../components/PermissionGate'
+import { ThrottleDialog, useActiveThrottle } from '@/components/ThrottleDialog'
 import { usePermissionStore } from '@/store/permissionStore'
 
 import { Button } from '@/components/ui/button'
@@ -1587,6 +1589,9 @@ export default function UserDetail() {
   const qrRef = useRef<HTMLDivElement>(null)
   const canEdit = useHasPermission('users', 'edit')
   const canDelete = useHasPermission('users', 'delete')
+  const canThrottle = useHasPermission('violations', 'resolve')
+  const [throttleOpen, setThrottleOpen] = useState(false)
+  const [liftThrottleConfirm, setLiftThrottleConfirm] = useState(false)
   const role = usePermissionStore((s) => s.role)
   const isSuperadmin = role === 'superadmin'
   const [isEditing, setIsEditing] = useState(searchParams.get('edit') === '1' && canEdit)
@@ -1647,6 +1652,25 @@ export default function UserDetail() {
       queryClient.invalidateQueries({ queryKey: ['violationWhitelist'] })
       toast.success(t('violations.toast.whitelistRemoved'))
       setExclusionDialogOpen(false)
+    },
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      toast.error(err.response?.data?.detail || err.message || t('common.error'))
+    },
+  })
+
+  // Ограничение скорости — та же мера, что на странице «Блокировки», но из карточки
+  const { data: activeThrottle } = useActiveThrottle(uuid, canThrottle)
+  const liftThrottleMutation = useMutation({
+    mutationFn: () => client.delete(`/violations/throttle/${uuid}`),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['throttles'] })
+      queryClient.invalidateQueries({ queryKey: ['violations'] })
+      toast.success(
+        res?.data?.squads_restored
+          ? t('violations.throttles.toast.liftedWithSquad')
+          : t('violations.throttles.toast.lifted'),
+      )
+      setLiftThrottleConfirm(false)
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       toast.error(err.response?.data?.detail || err.message || t('common.error'))
@@ -2125,6 +2149,12 @@ export default function UserDetail() {
                     <span className={cn('h-1.5 w-1.5 rounded-full mr-1.5', statusBadge.dotColor)} />
                     {statusBadge.label}
                   </Badge>
+                  {activeThrottle && (
+                    <Badge variant="outline" className="flex-shrink-0 gap-1 border-amber-500/40 text-amber-300">
+                      <Gauge className="h-3 w-3" />
+                      {t('userDetail.throttleActive', { rate: activeThrottle.rate_kbit })}
+                    </Badge>
+                  )}
                   {user.tag && (
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/20">{user.tag}</span>
                   )}
@@ -2197,6 +2227,30 @@ export default function UserDetail() {
                       <RefreshCw className={cn('h-4 w-4 mr-1.5', resetTrafficMutation.isPending && 'animate-spin')} />
                       {t('userDetail.actions.resetTraffic')}
                     </Button>
+                  )}
+                  {canThrottle && (
+                    activeThrottle ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLiftThrottleConfirm(true)}
+                        disabled={liftThrottleMutation.isPending}
+                        className="text-amber-400 hover:text-amber-300"
+                      >
+                        <Gauge className="h-4 w-4 mr-1.5" />
+                        {t('userDetail.actions.liftThrottle')}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setThrottleOpen(true)}
+                        className="text-amber-400 hover:text-amber-300"
+                      >
+                        <Gauge className="h-4 w-4 mr-1.5" />
+                        {t('userDetail.actions.throttle')}
+                      </Button>
+                    )
                   )}
                   {canDelete && (
                     <Button
@@ -3093,6 +3147,17 @@ export default function UserDetail() {
         confirmLabel={t('userDetail.actions.resetTraffic')}
         variant="destructive"
         onConfirm={() => { resetTrafficMutation.mutate(); setResetTrafficConfirm(false) }}
+      />
+
+      {/* Урезать / снять ограничение скорости */}
+      <ThrottleDialog open={throttleOpen} onOpenChange={setThrottleOpen} userUuid={user.uuid} />
+      <ConfirmDialog
+        open={liftThrottleConfirm}
+        onOpenChange={(o) => { if (!o) setLiftThrottleConfirm(false) }}
+        title={t('violations.throttles.liftTitle')}
+        description={t('violations.throttles.liftDesc')}
+        confirmLabel={t('violations.throttles.lift')}
+        onConfirm={() => liftThrottleMutation.mutate()}
       />
 
       {/* Reassign user to another admin */}

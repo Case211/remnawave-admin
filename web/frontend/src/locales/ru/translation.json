@@ -755,6 +755,7 @@
     }
   },
   "userDetail": {
+    "throttleActive": "Скорость урезана до {{rate}} кбит/с",
     "strategies": {
       "monthly": "Ежемесячно",
       "monthlyRolling": "Месяц (скользящий)",
@@ -1001,6 +1002,8 @@
       "disable": "Отключить",
       "disableUser": "Отключить",
       "resetTraffic": "Сбросить трафик",
+      "throttle": "Урезать скорость",
+      "liftThrottle": "Снять ограничение скорости",
       "delete": "Удалить",
       "deleteUser": "Удалить",
       "deleteConfirmTitle": "Удалить пользователя?",

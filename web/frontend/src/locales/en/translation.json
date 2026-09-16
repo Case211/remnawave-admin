@@ -755,6 +755,7 @@
     }
   },
   "userDetail": {
+    "throttleActive": "Throttled to {{rate}} kbit/s",
     "strategies": {
       "monthly": "Monthly",
       "monthlyRolling": "Monthly (rolling)",
@@ -1001,6 +1002,8 @@
       "disable": "Disable",
       "disableUser": "Disable",
       "resetTraffic": "Reset traffic",
+      "throttle": "Throttle speed",
+      "liftThrottle": "Lift throttle",
       "delete": "Delete",
       "deleteUser": "Delete",
       "deleteConfirmTitle": "Delete user?",
