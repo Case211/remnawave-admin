@@ -464,6 +464,46 @@ class TestReminders:
         assert sent == 1
         assert notify.await_args.kwargs["severity"] == "critical"
 
+    @pytest.mark.asyncio
+    async def test_income_is_expected_not_charged(self):
+        """Регрессия: про ожидаемый доход приходило «Скоро списание» с кнопкой «Оплачено»."""
+        from web.backend.core.finance import reminders as rem
+
+        db = AsyncMock()
+        db.is_connected = True
+        item = _upcoming_item(days_left=1)
+        item["kind"] = "income"
+        item["name"] = "Клиент Иванов"
+        db.upcoming_finance_payments = AsyncMock(return_value=[item])
+        db.update_finance_item = AsyncMock()
+        notify = AsyncMock()
+        with patch("shared.database.db_service", db), \
+             patch("web.backend.core.notification_service.create_notification", notify):
+            assert await rem.check_and_send_reminders() == 1
+        kw = notify.await_args.kwargs
+        assert kw["title"] == "💰 Скоро поступление — Клиент Иванов"
+        assert "списание" not in kw["title"].lower()
+        assert kw["reply_markup"]["inline_keyboard"][0][0]["text"] == "✅ Получено"
+
+    @pytest.mark.asyncio
+    async def test_overdue_income_is_late_not_overdue_payment(self):
+        from web.backend.core.finance import reminders as rem
+
+        db = AsyncMock()
+        db.is_connected = True
+        item = _upcoming_item(days_left=-3, overdue=True)
+        item["kind"] = "income"
+        db.upcoming_finance_payments = AsyncMock(return_value=[item])
+        db.update_finance_item = AsyncMock()
+        notify = AsyncMock()
+        with patch("shared.database.db_service", db), \
+             patch("web.backend.core.notification_service.create_notification", notify):
+            assert await rem.check_and_send_reminders() == 1
+        kw = notify.await_args.kwargs
+        assert kw["title"].startswith("⚠️ Поступление задерживается")
+        assert "ожидалось 3 дн. назад" in kw["telegram_body"]
+        assert kw["severity"] == "critical"
+
 
 # ── Импорт из панельного биллинга ────────────────────────────────
 

@@ -440,7 +440,7 @@ function OverviewTab() {
         </Card>
       )}
 
-      {/* Ближайшие списания */}
+      {/* Ближайшие платежи: списания и ожидаемые поступления */}
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
@@ -467,6 +467,8 @@ function OverviewTab() {
                 >
                   {it.is_overdue ? (
                     <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  ) : it.kind === 'income' ? (
+                    <TrendingUp className="w-4 h-4 text-green-400 shrink-0" />
                   ) : (
                     <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
                   )}
@@ -474,10 +476,13 @@ function OverviewTab() {
                   {it.provider_name && (
                     <Badge variant="outline" className="text-[10px] h-5">{it.provider_name}</Badge>
                   )}
-                  <span className="ml-auto text-xs font-mono text-white">{fmtMoney(it.amount, it.currency)}</span>
+                  {/* Доход — зелёным и с плюсом, иначе ожидаемое поступление читается как списание */}
+                  <span className={cn('ml-auto text-xs font-mono', it.kind === 'income' ? 'text-green-400' : 'text-white')}>
+                    {it.kind === 'income' ? '+' : ''}{fmtMoney(it.amount, it.currency)}
+                  </span>
                   <span className={cn('text-xs w-24 text-right', it.is_overdue ? 'text-red-400' : 'text-muted-foreground')}>
                     {it.is_overdue
-                      ? t('finance.overdueDays', { count: Math.abs(it.days_left ?? 0) })
+                      ? t(it.kind === 'income' ? 'finance.expectedAgo' : 'finance.overdueDays', { count: Math.abs(it.days_left ?? 0) })
                       : it.days_left === 0
                         ? t('finance.dueToday')
                         : t('finance.inDays', { count: it.days_left ?? 0 })}
