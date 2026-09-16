@@ -336,6 +336,11 @@ class TrafficRateMonitor:
             elif auto_action == "throttle" and v["delta_gb"] >= auto_block_gb:
                 await self._throttle_violator(v, auto_block_gb)
 
+        # Cleanup old cooldown entries
+        stale = [uid for uid, ts in self._notified.items() if now - ts > cooldown_seconds * 2]
+        for uid in stale:
+            del self._notified[uid]
+
     @staticmethod
     async def _throttle_violator(v: dict, threshold_gb: float) -> None:
         """Урезать скорость нарушителю по расходу трафика.
@@ -377,11 +382,6 @@ class TrafficRateMonitor:
             await push_throttles()
         except Exception as e:
             logger.warning("Failed to auto-throttle user %s: %s", v["user_uuid"], e)
-
-        # Cleanup old cooldown entries
-        stale = [uid for uid, ts in self._notified.items() if now - ts > cooldown_seconds * 2]
-        for uid in stale:
-            del self._notified[uid]
 
     async def _send_notification(self, violator: dict, cfg: dict):
         """Send traffic rate violation notification."""
