@@ -806,7 +806,7 @@ async def receive_connections(
                     "Torrent events: node=%s count=%d", node_name, torrent_processed
                 )
                 _schedule_background_task(
-                    _process_torrent_violations(torrent_events, user_uuid_cache)
+                    _process_torrent_violations(torrent_events, user_uuid_cache, node_name)
                 )
 
     return JSONResponse(
@@ -821,8 +821,13 @@ async def receive_connections(
 async def _process_torrent_violations(
     events: list[TorrentEventReport],
     user_uuid_cache: dict[str, Optional[str]],
+    node_name: Optional[str] = None,
 ):
-    """Background: create violations and send notifications for torrent events."""
+    """Background: create violations and send notifications for torrent events.
+
+    ``node_name`` — нода, приславшая батч (батч всегда от одной ноды):
+    уходит в уведомление и в причины нарушения.
+    """
     try:
         # Вердикт nDPI висит на адресе назначения, а не на человеке. Если по
         # тому же адресу события есть и у других — за ним стоит не один
@@ -932,6 +937,7 @@ async def _process_torrent_violations(
                     ip_addresses=ips,
                     reasons=[
                         f"Torrent traffic detected ({len(user_events)} events)",
+                        *([f"Node: {node_name}"] if node_name else []),
                         *[f"Destination: {d}" for d in destinations[:5]],
                     ],
                     simultaneous_connections=len(ips),
@@ -963,6 +969,7 @@ async def _process_torrent_violations(
                         torrent_events=user_events,
                         destinations=destinations,
                         ips=ips,
+                        node_name=node_name,
                     )
                 except Exception as e:
                     logger.warning("Failed to send torrent notification: %s", e)

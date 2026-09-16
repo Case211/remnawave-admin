@@ -540,8 +540,13 @@ async def send_torrent_notification(
     torrent_events: Optional[list] = None,
     destinations: Optional[List[str]] = None,
     ips: Optional[List[str]] = None,
+    node_name: Optional[str] = None,
 ) -> None:
-    """Send torrent-specific Telegram notification."""
+    """Send torrent-specific Telegram notification.
+
+    ``node_name`` — нода, с которой пришёл батч: торрент видит агент на
+    конкретной ноде, и админу важно знать, на какой.
+    """
     now = datetime.utcnow()
 
     try:
@@ -597,6 +602,9 @@ async def send_torrent_notification(
 
         if ips:
             lines.append(f"\U0001f4cd IP: {', '.join(f'<code>{ip}</code>' for ip in ips[:5])}")
+
+        if node_name:
+            lines.append(f"🖥 Нода: <code>{_esc(node_name)}</code>")
 
         lines.append("")
         lines.append("\U0001f6d1 \u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435: <b>\u0416\u0451\u0441\u0442\u043a\u0430\u044f \u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430</b>")
