@@ -1363,7 +1363,7 @@ class SyncService:
             response = result.get("response", result) if isinstance(result, dict) else result
             if isinstance(response, list):
                 devices = response
-            elif isinstance(response, dict):
+            elif isinstance(response, dict) and any(k in response for k in ("devices", "hwidDevices", "list")):
                 # Try common nested keys: "devices", "hwidDevices", "list"
                 devices = (
                     response.get("devices")
@@ -1372,7 +1372,14 @@ class SyncService:
                     or []
                 )
             else:
-                devices = []
+                # Пустое тело или незнакомая форма ответа — это не «устройств
+                # нет». Раньше такой ответ отвязывал у человека все устройства
+                # разом, и в карточке они уезжали в «Удалённые» одной минутой.
+                logger.warning(
+                    "HWID devices for %s: unexpected response %s, skipping sync",
+                    user_key, type(response).__name__,
+                )
+                return 0
 
             # DB keyed on local uuid — resolve the panel identifier first.
             user_uuid = await self._resolve_local_user_uuid(user_key)
