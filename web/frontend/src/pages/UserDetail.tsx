@@ -67,7 +67,7 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import { QRCodeSVG } from 'qrcode.react'
-import { classifyUserAgent, uaBadgeTone } from '@/utils/userAgentClassifier'
+import { classifyUserAgent, uaBadgeTone, type UserAgentClass } from '@/utils/userAgentClassifier'
 
 const ANALYZER_KEYS = ['temporal', 'geo', 'asn', 'profile', 'device', 'hwid'] as const
 
@@ -120,6 +120,9 @@ interface HwidDevice {
   // Проставлено — устройство отвязали, но запись оставили: по ней видно,
   // что на этом HWID уже сидел другой аккаунт
   removed_at: string | null
+  // Класс UA с бэкенда: те же правила, что у детектора, плюс regex из настроек.
+  // Старый бэкенд поля не отдаёт — тогда считаем по локальному списку.
+  ua_class?: UserAgentClass | null
 }
 
 interface Violation {
@@ -726,7 +729,7 @@ function PaginatedDeviceList({
                   </div>
                 )}
                 {device.user_agent && (() => {
-                  const cls = classifyUserAgent(device.user_agent)
+                  const cls = device.ua_class ?? classifyUserAgent(device.user_agent)
                   const tone = uaBadgeTone(cls)
                   const badgeText = {
                     link_in_ua: t('userDetail.devices.uaBadge.linkInUa'),

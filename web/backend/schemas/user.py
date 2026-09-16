@@ -146,6 +146,9 @@ class HwidDevice(BaseModel):
     # Когда устройство отвязали. Строка живёт дальше: HWID должен помнить всех,
     # кого на нём видели, иначе повторный триал с того же железа не разглядеть.
     removed_at: Optional[datetime] = None
+    # Класс User-Agent по правилам детектора нарушений, включая пользовательские
+    # regex из настроек. Фронт раньше классифицировал сам и настроек не видел.
+    ua_class: Optional[str] = None
 
 
 class UserConnection(BaseModel):
