@@ -516,7 +516,12 @@
     "customize": "Customize",
     "widgets": "Widgets",
     "widgetData": {
-      "upcomingSoon": "Upcoming payments: {{count}}",
+      "thisMonth": "this month",
+      "expense": "Expenses",
+      "income": "Income",
+      "profit": "Profit",
+      "nextPayment": "Next payment",
+      "noPayments": "No payments due in the next {{count}}d",
       "violationsToday": "today",
       "lastBackup": "Last backup",
       "backupFiles": "Files",

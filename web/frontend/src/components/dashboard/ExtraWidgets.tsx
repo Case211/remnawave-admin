@@ -11,8 +11,11 @@ import { backupApi } from '@/api/backup'
 import client from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Wallet, TrendingUp, ShieldAlert, HardDrive, Server, Maximize2 } from '@/components/brand/icons'
+import {
+  Wallet, TrendingUp, ShieldAlert, HardDrive, Server, Maximize2, CalendarClock, AlertTriangle,
+} from '@/components/brand/icons'
 import { cn } from '@/lib/utils'
+import type { FinanceItem } from '@/api/finance'
 
 function money(v: number, cur = 'RUB'): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(v)) +
@@ -22,17 +25,27 @@ function money(v: number, cur = 'RUB'): string {
 // размер/ресайз прокидываются с дашборда в каждый виджет
 export interface WidgetSizeProps { onResize?: () => void }
 
-function WidgetShell({ title, icon, to, onResize, children }: {
-  title: string; icon: React.ReactNode; to?: string; onResize?: () => void; children: React.ReactNode
+/** Окраска плитки: тонирует акцентную линию, подложку и свечение через переменную glass-card. */
+type ShellTone = 'default' | 'warning' | 'danger'
+const SHELL_TONE: Record<ShellTone, string> = {
+  default: '',
+  warning: 'border-amber-400/35 hover:border-amber-400/50 [--card-accent-rgb:245,158,11]',
+  danger: 'border-red-500/45 hover:border-red-500/60 [--card-accent-rgb:239,68,68]',
+}
+
+function WidgetShell({ title, subtitle, icon, to, onResize, tone = 'default', children }: {
+  title: string; subtitle?: string; icon: React.ReactNode; to?: string; onResize?: () => void
+  tone?: ShellTone; children: React.ReactNode
 }) {
   const head = (
     <div className="flex items-center gap-2 min-w-0">
       {icon}
       <CardTitle className="text-base truncate">{title}</CardTitle>
+      {subtitle && <span className="text-xs text-muted-foreground truncate">{subtitle}</span>}
     </div>
   )
   return (
-    <Card className="h-full">
+    <Card className={cn('h-full', SHELL_TONE[tone])}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           {to ? <Link to={to} className="hover:opacity-80 transition-opacity min-w-0">{head}</Link> : head}
@@ -50,15 +63,55 @@ function WidgetShell({ title, icon, to, onResize, children }: {
   )
 }
 
-function Kpi({ label, value, tone }: { label: string; value: string; tone?: 'green' | 'red' | 'white' }) {
+// Подпись в одну строку и число с валютой мелким шрифтом: три ячейки в ряд
+// остаются одной высоты и не переносятся даже в узкой плитке.
+function Kpi({ label, value, unit, tone }: {
+  label: string; value: string; unit?: string; tone?: 'green' | 'red' | 'white'
+}) {
   return (
-    <div className="bg-[var(--glass-bg)] rounded-lg px-3 py-2.5 border border-[var(--glass-border)]">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn('text-lg font-bold',
-        tone === 'green' ? 'text-green-400' : tone === 'red' ? 'text-red-400' : 'text-white')}>{value}</p>
+    <div className="min-w-0 bg-[var(--glass-bg)] rounded-lg px-3 py-2.5 border border-[var(--glass-border)]">
+      <p className="text-xs text-muted-foreground truncate" title={label}>{label}</p>
+      <p className={cn('flex items-baseline gap-1 whitespace-nowrap font-bold tabular-nums leading-tight',
+        tone === 'green' ? 'text-green-400' : tone === 'red' ? 'text-red-400' : 'text-white')}>
+        <span className="min-w-0 text-lg truncate">{value}</span>
+        {unit && <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{unit}</span>}
+      </p>
     </div>
   )
 }
+
+/** За сколько дней до оплаты плитка желтеет; меньше дня (сегодня или просрочено) — краснеет. */
+export const PAYMENT_SOON_DAYS = 5
+/** Горизонт, в котором ищем ближайший платёж. */
+export const UPCOMING_DAYS = 30
+export type PaymentUrgency = 'none' | 'soon' | 'now'
+
+export function paymentUrgency(daysLeft: number | null | undefined): PaymentUrgency {
+  if (daysLeft == null) return 'none'
+  if (daysLeft < 1) return 'now'
+  if (daysLeft <= PAYMENT_SOON_DAYS) return 'soon'
+  return 'none'
+}
+
+/** Ближайший расход. Доходы ждут, а не платят — на цвет плитки не влияют. */
+export function nextPayment(items: FinanceItem[] | undefined): FinanceItem | null {
+  const expenses = (items ?? []).filter((i) => i.kind === 'expense' && i.days_left != null)
+  if (!expenses.length) return null
+  return expenses.reduce((a, b) => ((b.days_left ?? 0) < (a.days_left ?? 0) ? b : a))
+}
+
+const URGENCY_ROW: Record<PaymentUrgency, string> = {
+  none: 'border-[var(--glass-border)] bg-[var(--glass-bg)]',
+  soon: 'border-amber-400/30 bg-amber-400/[0.08]',
+  now: 'border-red-500/35 bg-red-500/[0.1]',
+}
+const URGENCY_ICON: Record<PaymentUrgency, string> = {
+  none: 'text-primary-400', soon: 'text-amber-400', now: 'text-red-400',
+}
+const URGENCY_DUE: Record<PaymentUrgency, string> = {
+  none: 'text-muted-foreground', soon: 'text-amber-300', now: 'text-red-300',
+}
+const URGENCY_SHELL: Record<PaymentUrgency, ShellTone> = { none: 'default', soon: 'warning', now: 'danger' }
 
 // ── Финансы: KPI месяца + ближайшие списания ─────────────────────
 export function FinanceWidget({ onResize }: WidgetSizeProps) {
@@ -67,23 +120,45 @@ export function FinanceWidget({ onResize }: WidgetSizeProps) {
     queryKey: ['finance-summary'], queryFn: () => financeApi.getSummary(6), staleTime: 60_000,
   })
   const { data: upcoming } = useQuery({
-    queryKey: ['finance-upcoming'], queryFn: () => financeApi.getUpcoming(7), staleTime: 60_000,
+    queryKey: ['finance-upcoming', UPCOMING_DAYS], queryFn: () => financeApi.getUpcoming(UPCOMING_DAYS),
+    staleTime: 60_000,
   })
   const tm = summary?.this_month
   const base = summary?.base_currency || 'RUB'
+  const next = nextPayment(upcoming?.items)
+  const urgency = paymentUrgency(next?.days_left)
+  const NextIcon = urgency === 'now' ? AlertTriangle : CalendarClock
+  const dueLabel = !next ? '' : next.is_overdue
+    ? t('finance.overdueDays', { count: Math.abs(next.days_left ?? 0) })
+    : (next.days_left ?? 0) === 0 ? t('finance.dueToday') : t('finance.inDays', { count: next.days_left ?? 0 })
   return (
-    <WidgetShell title={t('finance.title')} to="/finance" onResize={onResize} icon={<Wallet className="w-5 h-5 text-primary-400" />}>
+    <WidgetShell title={t('finance.title')} subtitle={t('dashboard.widgetData.thisMonth')} to="/finance"
+      onResize={onResize} tone={URGENCY_SHELL[urgency]} icon={<Wallet className="w-5 h-5 text-primary-400" />}>
       {isLoading ? <Skeleton className="h-20 w-full" /> : (
         <>
           <div className="grid grid-cols-3 gap-2">
-            <Kpi label={t('finance.monthExpense')} value={money(tm?.expense ?? 0, base)} tone="red" />
-            <Kpi label={t('finance.monthIncome')} value={money(tm?.income ?? 0, base)} tone="green" />
-            <Kpi label={t('finance.monthProfit')} value={money(tm?.net ?? 0, base)}
+            <Kpi label={t('dashboard.widgetData.expense')} value={money(tm?.expense ?? 0, '')} unit={base} tone="red" />
+            <Kpi label={t('dashboard.widgetData.income')} value={money(tm?.income ?? 0, '')} unit={base} tone="green" />
+            <Kpi label={t('dashboard.widgetData.profit')} value={money(tm?.net ?? 0, '')} unit={base}
               tone={(tm?.net ?? 0) >= 0 ? 'green' : 'red'} />
           </div>
-          {(upcoming?.items.length ?? 0) > 0 && (
+          {/* Ближайший платёж: нода · хостер и сумма со сроком; срок красит и строку, и плитку */}
+          {next ? (
+            <div className={cn('mt-2 flex items-center gap-2 rounded-lg border px-3 py-1.5', URGENCY_ROW[urgency])}
+              title={t('dashboard.widgetData.nextPayment')}>
+              <NextIcon className={cn('h-4 w-4 shrink-0', URGENCY_ICON[urgency])} />
+              <div className="min-w-0 flex-1 truncate text-sm">
+                <span className="text-white/90">{next.node_name || next.name}</span>
+                {next.provider_name && <span className="text-muted-foreground"> · {next.provider_name}</span>}
+              </div>
+              <div className="shrink-0 whitespace-nowrap text-sm tabular-nums">
+                <span className="font-semibold text-white">{money(next.amount, next.currency)}</span>
+                <span className={cn('ml-1.5 text-xs', URGENCY_DUE[urgency])}>{dueLabel}</span>
+              </div>
+            </div>
+          ) : (
             <p className="text-xs text-muted-foreground mt-2">
-              {t('dashboard.widgetData.upcomingSoon', { count: upcoming!.items.length })}
+              {t('dashboard.widgetData.noPayments', { count: UPCOMING_DAYS })}
             </p>
           )}
         </>
@@ -104,9 +179,9 @@ export function BedolagaWidget({ onResize }: WidgetSizeProps) {
     <WidgetShell title={t('finance.bedolagaIncome')} to="/finance" onResize={onResize} icon={<TrendingUp className="w-5 h-5 text-green-400" />}>
       {isLoading ? <Skeleton className="h-20 w-full" /> : (
         <div className="grid grid-cols-3 gap-2">
-          <Kpi label={t('finance.bedolagaSubscription')} value={money(data?.total.subscription_income ?? 0)} tone="green" />
-          <Kpi label={t('finance.bedolagaDeposits')} value={money(data?.total.deposit_income ?? 0)} />
-          <Kpi label={t('finance.bedolagaProfit')} value={money(data?.total.profit ?? 0)}
+          <Kpi label={t('finance.bedolagaSubscription')} value={money(data?.total.subscription_income ?? 0, '')} unit="RUB" tone="green" />
+          <Kpi label={t('finance.bedolagaDeposits')} value={money(data?.total.deposit_income ?? 0, '')} unit="RUB" />
+          <Kpi label={t('finance.bedolagaProfit')} value={money(data?.total.profit ?? 0, '')} unit="RUB"
             tone={(data?.total.profit ?? 0) >= 0 ? 'green' : 'red'} />
         </div>
       )}

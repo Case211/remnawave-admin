@@ -516,7 +516,12 @@
     "customize": "Настроить",
     "widgets": "Виджеты",
     "widgetData": {
-      "upcomingSoon": "Ближайших платежей: {{count}}",
+      "thisMonth": "за месяц",
+      "expense": "Расходы",
+      "income": "Доход",
+      "profit": "Прибыль",
+      "nextPayment": "Ближайший платёж",
+      "noPayments": "Платежей в ближайшие {{count}} дн. нет",
       "violationsToday": "за сегодня",
       "lastBackup": "Последний бэкап",
       "backupFiles": "Файлов",
