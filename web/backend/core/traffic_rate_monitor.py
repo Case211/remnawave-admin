@@ -14,10 +14,71 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Deque, Dict, Optional, Tuple
 
-from shared.db_schema import USERS_TABLE, USER_CONNECTIONS_TABLE, NODES_TABLE
+from shared.db_schema import (
+    USERS_TABLE, USER_CONNECTIONS_TABLE, NODES_TABLE, USER_NODE_TRAFFIC_HISTORY_TABLE,
+)
 from shared.db_query import select_sql
 
 logger = logging.getLogger(__name__)
+
+
+def _sync_lag_minutes() -> int:
+    """На сколько минут дельты синка могут отставать от реального времени.
+
+    Дельта по паре «юзер × нода» пишется в момент синка и покрывает время
+    с прошлого прохода, поэтому за окно всплеска надо смотреть на интервал
+    синка глубже.
+    """
+    try:
+        from shared.config_service import config_service
+        from shared.config import get_shared_settings
+        seconds = int(config_service.get("sync_interval_seconds") or get_shared_settings().sync_interval_seconds)
+    except Exception:
+        seconds = 300
+    return max(1, -(-seconds // 60))
+
+
+async def _nodes_by_traffic(conn, user_uuid: str, window_minutes: int) -> list:
+    """Ноды, через которые ушёл трафик юзера за окно: ``[{name, bytes}]``, больше — первыми."""
+    rows = await conn.fetch(
+        f"SELECT n.name, SUM(h.delta_bytes) AS bytes "
+        f"FROM {USER_NODE_TRAFFIC_HISTORY_TABLE} h "
+        f"JOIN {NODES_TABLE} n ON n.uuid = h.node_uuid "
+        f"WHERE h.user_uuid = $1::uuid "
+        f"AND h.recorded_at >= NOW() - make_interval(mins := $2) "
+        f"GROUP BY n.name HAVING SUM(h.delta_bytes) > 0 "
+        f"ORDER BY bytes DESC LIMIT 5",
+        user_uuid, window_minutes + _sync_lag_minutes(),
+    )
+    return [{"name": r["name"], "bytes": int(r["bytes"])} for r in rows]
+
+
+async def _nodes_by_connections(conn, user_uuid: str, window_minutes: int) -> list:
+    """Ноды, где у юзера есть соединение, захватывающее окно; объём по ним неизвестен.
+
+    Открытое соединение могло начаться задолго до окна — фильтр по времени
+    начала его бы потерял.
+    """
+    rows = await conn.fetch(
+        f"SELECT DISTINCT n.name FROM {USER_CONNECTIONS_TABLE} uc "
+        f"JOIN {NODES_TABLE} n ON uc.node_uuid = n.uuid "
+        f"WHERE uc.user_uuid = $1::uuid "
+        f"AND (uc.disconnected_at IS NULL "
+        f"OR uc.disconnected_at >= NOW() - make_interval(mins := $2)) "
+        f"ORDER BY n.name LIMIT 10",
+        user_uuid, window_minutes,
+    )
+    return [{"name": r["name"], "bytes": None} for r in rows]
+
+
+def _format_nodes(rows: list) -> str:
+    """«Germany W 8.9 GB, Finland 0.3 GB» — или только имена, если объёма нет."""
+    parts = []
+    for row in rows:
+        name = f"<code>{_esc(row['name'])}</code>"
+        size = row.get("bytes")
+        parts.append(f"{name} {max(size / 1024 ** 3, 0.01):.2f} GB" if size else name)
+    return ", ".join(parts)
 
 
 async def _resolve_user_key(user_uuid: str) -> str | int:
@@ -275,6 +336,11 @@ class TrafficRateMonitor:
             elif auto_action == "throttle" and v["delta_gb"] >= auto_block_gb:
                 await self._throttle_violator(v, auto_block_gb)
 
+        # Cleanup old cooldown entries
+        stale = [uid for uid, ts in self._notified.items() if now - ts > cooldown_seconds * 2]
+        for uid in stale:
+            del self._notified[uid]
+
     @staticmethod
     async def _throttle_violator(v: dict, threshold_gb: float) -> None:
         """Урезать скорость нарушителю по расходу трафика.
@@ -317,11 +383,6 @@ class TrafficRateMonitor:
         except Exception as e:
             logger.warning("Failed to auto-throttle user %s: %s", v["user_uuid"], e)
 
-        # Cleanup old cooldown entries
-        stale = [uid for uid, ts in self._notified.items() if now - ts > cooldown_seconds * 2]
-        for uid in stale:
-            del self._notified[uid]
-
     async def _send_notification(self, violator: dict, cfg: dict):
         """Send traffic rate violation notification."""
         try:
@@ -347,16 +408,14 @@ class TrafficRateMonitor:
                             "WHERE uuid = $1"),
                         user_uuid,
                     )
-                    # Only show nodes the user connected to during the violation window
+                    # Через какие ноды ушёл трафик: панель по юзеру знает только
+                    # сумму по всем нодам, разбивку пишет наш синк дельтами.
+                    # Если синк ещё не успел (или нод без учёта) — хотя бы ноды,
+                    # где у человека было соединение, захватывающее окно.
                     window_minutes = cfg["window_minutes"]
-                    node_rows = await conn.fetch(
-                        f"SELECT DISTINCT n.name FROM {USER_CONNECTIONS_TABLE} uc "
-                        f"JOIN {NODES_TABLE} n ON uc.node_uuid = n.uuid "
-                        f"WHERE uc.user_uuid = $1::uuid "
-                        f"AND uc.connected_at >= NOW() - make_interval(mins := $2) "
-                        f"ORDER BY n.name LIMIT 10",
-                        user_uuid, window_minutes,
-                    )
+                    node_rows = await _nodes_by_traffic(conn, user_uuid, window_minutes)
+                    if not node_rows:
+                        node_rows = await _nodes_by_connections(conn, user_uuid, window_minutes)
                 if user_row:
                     status = (user_row["status"] or "unknown").upper()
                     used = user_row["used_traffic_bytes"] or 0
@@ -373,8 +432,7 @@ class TrafficRateMonitor:
                     if user_row["short_uuid"]:
                         extra_lines.append(f"🔑 <code>{_esc(user_row['short_uuid'])}</code>")
                 if node_rows:
-                    nodes = ", ".join(f"<code>{_esc(r['name'])}</code>" for r in node_rows)
-                    extra_lines.append(f"🖥 Ноды: {nodes}")
+                    extra_lines.append(f"🖥 Ноды: {_format_nodes(node_rows)}")
             except Exception:
                 pass
 

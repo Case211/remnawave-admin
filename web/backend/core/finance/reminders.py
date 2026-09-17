@@ -1,4 +1,4 @@
-"""Напоминания о предстоящих и просроченных списаниях.
+"""Напоминания о предстоящих и просроченных платежах: списаниях и ожидаемых поступлениях.
 
 Суточная логика с защитой от дублей через finance_items.last_reminded_at:
 одно напоминание на запись в день, только на порогах finance_reminder_days
@@ -31,7 +31,7 @@ def _reminder_days() -> List[int]:
 
 def _item_keyboard(item: Dict) -> Dict:
     rows = [[
-        {"text": "✅ Оплачено", "callback_data": f"fin:paid:{item['id']}"},
+        {"text": "✅ Получено" if item.get("kind") == "income" else "✅ Оплачено", "callback_data": f"fin:paid:{item['id']}"},
         {"text": "⏭️ Пропустить", "callback_data": f"fin:skip:{item['id']}"},
     ]]
     if item.get("url"):
@@ -90,12 +90,19 @@ async def check_and_send_reminders() -> int:
         if item.get("last_reminded_at") == today.isoformat():
             continue  # уже напоминали сегодня
 
+        # Доход ждут, а не платят: «скоро списание» про ожидаемое поступление
+        # пугало и сбивало с толку — формулировка зависит от вида записи.
+        income = item.get("kind") == "income"
         if overdue:
-            title = f"⚠️ Просрочен платёж — {item['name']}"
-            when = f"просрочен на {abs(days_left)} дн."
+            if income:
+                title = f"⚠️ Поступление задерживается — {item['name']}"
+                when = f"ожидалось {abs(days_left)} дн. назад"
+            else:
+                title = f"⚠️ Просрочен платёж — {item['name']}"
+                when = f"просрочен на {abs(days_left)} дн."
             severity = "critical"
         else:
-            title = f"💸 Скоро списание — {item['name']}"
+            title = f"{'💰 Скоро поступление' if income else '💸 Скоро списание'} — {item['name']}"
             when = (
                 "сегодня" if days_left == 0
                 else "завтра" if days_left == 1

@@ -516,7 +516,12 @@
     "customize": "Customize",
     "widgets": "Widgets",
     "widgetData": {
-      "upcomingSoon": "Upcoming charges: {{count}}",
+      "thisMonth": "this month",
+      "expense": "Expenses",
+      "income": "Income",
+      "profit": "Profit",
+      "nextPayment": "Next payment",
+      "noPayments": "No payments due in the next {{count}}d",
       "violationsToday": "today",
       "lastBackup": "Last backup",
       "backupFiles": "Files",
@@ -755,6 +760,7 @@
     }
   },
   "userDetail": {
+    "throttleActive": "Throttled to {{rate}} kbit/s",
     "strategies": {
       "monthly": "Monthly",
       "monthlyRolling": "Monthly (rolling)",
@@ -1001,6 +1007,8 @@
       "disable": "Disable",
       "disableUser": "Disable",
       "resetTraffic": "Reset traffic",
+      "throttle": "Throttle speed",
+      "liftThrottle": "Lift throttle",
       "delete": "Delete",
       "deleteUser": "Delete",
       "deleteConfirmTitle": "Delete user?",
@@ -5166,6 +5174,7 @@
     "dueToday": "today",
     "inDays": "in {{count}}d",
     "overdueDays": "overdue {{count}}d",
+    "expectedAgo": "expected {{count}}d ago",
     "addItem": "Add item",
     "editItem": "Edit item",
     "noItems": "No items yet",

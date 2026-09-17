@@ -1865,6 +1865,28 @@ async def get_user_deeplinks(
     }
 
 
+_ua_analyzer = None
+
+
+def _ua_class(user_agent: Optional[str]) -> str:
+    """Класс UA устройства по правилам детектора нарушений.
+
+    Пользовательские regex из настроек (whitelist/blacklist) подхватываются
+    здесь же: раньше фронт классифицировал по своей копии списка, и добавленный
+    в настройках клиент всё равно светился «неизвестным».
+    """
+    global _ua_analyzer
+    from shared.analyzers.user_agent import UserAgentAnalyzer
+    from shared.config_service import config_service
+    if _ua_analyzer is None:
+        _ua_analyzer = UserAgentAnalyzer()
+    _ua_analyzer.set_extra_patterns(
+        config_service.get("violation_ua_whitelist_extra", []) or [],
+        config_service.get("violation_ua_blacklist_extra", []) or [],
+    )
+    return _ua_analyzer.classify(user_agent).value
+
+
 @router.get("/{user_uuid}/hwid-devices", response_model=List[HwidDevice])
 async def get_user_hwid_devices(
     user_uuid: str,
@@ -1891,6 +1913,7 @@ async def get_user_hwid_devices(
                 created_at=d.get("createdAt") or d.get("created_at"),
                 updated_at=d.get("updatedAt") or d.get("updated_at"),
                 removed_at=d.get("removed_at"),
+                ua_class=_ua_class(d.get("userAgent") or d.get("user_agent")),
             ))
         return items
 

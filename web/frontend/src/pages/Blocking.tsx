@@ -30,6 +30,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { useFormatters } from '@/lib/useFormatters'
 import { cn } from '@/lib/utils'
 import type { WhitelistItem } from '@/types/violations'
+import { ThrottleDialog, fetchThrottles } from '@/components/ThrottleDialog'
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -115,21 +116,6 @@ const fetchBlockedIPs = async (limit: number, offset: number): Promise<BlockedIP
 
 const fetchWhitelist = async (limit: number, offset: number): Promise<{ items: WhitelistItem[]; total: number }> => {
   const { data } = await client.get('/violations/whitelist', { params: { limit, offset } })
-  return data
-}
-
-interface ThrottleItem {
-  user_uuid: string
-  username: string | null
-  rate_kbit: number
-  reason: string | null
-  created_by_username: string | null
-  created_at: string
-  until: string | null
-}
-
-const fetchThrottles = async (): Promise<{ items: ThrottleItem[]; total: number }> => {
-  const { data } = await client.get('/violations/throttles')
   return data
 }
 
@@ -1256,10 +1242,6 @@ function ThrottlesTab() {
   const queryClient = useQueryClient()
   const canResolve = useHasPermission('violations', 'resolve')
   const [addOpen, setAddOpen] = useState(false)
-  const [uuid, setUuid] = useState('')
-  const [rate, setRate] = useState('')
-  const [hours, setHours] = useState('')
-  const [reason, setReason] = useState('')
   const [confirmLift, setConfirmLift] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -1271,24 +1253,6 @@ function ThrottlesTab() {
     queryClient.invalidateQueries({ queryKey: ['throttles'] })
     queryClient.invalidateQueries({ queryKey: ['violations'] })
   }
-
-  const addMutation = useMutation({
-    mutationFn: (body: { user_uuid: string; rate_kbit?: number; expires_in_hours?: number; reason?: string }) =>
-      client.post('/violations/throttle', body),
-    onSuccess: (res) => {
-      refresh()
-      toast.success(
-        res?.data?.moved_to_squad
-          ? t('violations.throttles.toast.addedWithSquad')
-          : t('violations.throttles.toast.added'),
-      )
-      setAddOpen(false)
-      setUuid(''); setRate(''); setHours(''); setReason('')
-    },
-    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
-      toast.error(err.response?.data?.detail || err.message || t('common.error'))
-    },
-  })
 
   const liftMutation = useMutation({
     mutationFn: (userUuid: string) => client.delete(`/violations/throttle/${userUuid}`),
@@ -1382,56 +1346,7 @@ function ThrottlesTab() {
         </div>
       )}
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('violations.throttles.addTitle')}</DialogTitle>
-            <DialogDescription>{t('violations.throttles.addDesc')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-sm">{t('violations.whitelist.userUuid')}</label>
-              <Input value={uuid} onChange={(e) => setUuid(e.target.value)} placeholder="uuid" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm">{t('violations.throttles.rate')}</label>
-              <Input
-                type="number"
-                value={rate}
-                onChange={(e) => setRate(e.target.value)}
-                placeholder={t('violations.throttles.ratePlaceholder')}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm">{t('violations.throttles.hours')}</label>
-              <Input
-                type="number"
-                value={hours}
-                onChange={(e) => setHours(e.target.value)}
-                placeholder={t('violations.throttles.hoursPlaceholder')}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm">{t('violations.whitelist.reason')}</label>
-              <Input value={reason} onChange={(e) => setReason(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>{t('common.cancel')}</Button>
-            <Button
-              onClick={() => addMutation.mutate({
-                user_uuid: uuid.trim(),
-                rate_kbit: rate ? Number(rate) : undefined,
-                expires_in_hours: hours ? Number(hours) : undefined,
-                reason: reason.trim() || undefined,
-              })}
-              disabled={!uuid.trim() || addMutation.isPending}
-            >
-              {t('violations.throttles.add')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ThrottleDialog open={addOpen} onOpenChange={setAddOpen} />
 
       <ConfirmDialog
         open={!!confirmLift}

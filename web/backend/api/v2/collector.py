@@ -331,6 +331,9 @@ class ConnectionReport(BaseModel):
     # Агенты постарше поля не шлют — тогда транспорт подключения остаётся
     # неизвестным и определяется по ноде целиком, как раньше.
     inbound_tag: str = ""
+    # Аутбаунды, которые Xray выбрал для подключения (вторая половина скобок
+    # [inbound -> outbound] в access.log). Агенты постарше поля не шлют.
+    outbound_tags: list[str] = []
 
 
 class SystemMetricsReport(BaseModel):
@@ -708,6 +711,10 @@ async def receive_connections(
                 "device_info": {
                     "user_email": conn.user_email,
                     "inbound_tag": conn.inbound_tag or None,
+                    # Ключ только когда аутбаунды есть: иначе у всех открытых
+                    # строк от агентов постарше device_info поменялся бы разом
+                    # и первый же батч после обновления переписал бы их все.
+                    **({"outbound_tags": conn.outbound_tags} if conn.outbound_tags else {}),
                 },
                 "connected_at": conn.connected_at,
             })
@@ -799,7 +806,7 @@ async def receive_connections(
                     "Torrent events: node=%s count=%d", node_name, torrent_processed
                 )
                 _schedule_background_task(
-                    _process_torrent_violations(torrent_events, user_uuid_cache)
+                    _process_torrent_violations(torrent_events, user_uuid_cache, node_name)
                 )
 
     return JSONResponse(
@@ -814,8 +821,13 @@ async def receive_connections(
 async def _process_torrent_violations(
     events: list[TorrentEventReport],
     user_uuid_cache: dict[str, Optional[str]],
+    node_name: Optional[str] = None,
 ):
-    """Background: create violations and send notifications for torrent events."""
+    """Background: create violations and send notifications for torrent events.
+
+    ``node_name`` — нода, приславшая батч (батч всегда от одной ноды):
+    уходит в уведомление и в причины нарушения.
+    """
     try:
         # Вердикт nDPI висит на адресе назначения, а не на человеке. Если по
         # тому же адресу события есть и у других — за ним стоит не один
@@ -925,6 +937,7 @@ async def _process_torrent_violations(
                     ip_addresses=ips,
                     reasons=[
                         f"Torrent traffic detected ({len(user_events)} events)",
+                        *([f"Node: {node_name}"] if node_name else []),
                         *[f"Destination: {d}" for d in destinations[:5]],
                     ],
                     simultaneous_connections=len(ips),
@@ -956,6 +969,7 @@ async def _process_torrent_violations(
                         torrent_events=user_events,
                         destinations=destinations,
                         ips=ips,
+                        node_name=node_name,
                     )
                 except Exception as e:
                     logger.warning("Failed to send torrent notification: %s", e)
@@ -1496,10 +1510,12 @@ async def collector_stats(request: Request):
     """
     # Verify admin auth (collector endpoints skip middleware, so check manually)
     from web.backend.core.security import decode_token
+    from web.backend.core.auth_cookies import ACCESS_COOKIE
     auth_header = request.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else request.cookies.get(ACCESS_COOKIE)
+    if not token:
         return JSONResponse(status_code=401, content={"detail": "Authentication required"})
-    payload = decode_token(auth_header[7:], token_type="access")
+    payload = decode_token(token, token_type="access")
     if not payload:
         return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
     queue_size = len(_pending_violation_users)

@@ -510,6 +510,30 @@ class TestNodeCosts:
         # сортировка по расходу: a, b, c
         assert [i["node_uuid"] for i in result["items"]] == ["a", "b", "c"]
 
+    def test_deleted_node_shows_only_while_expense_is_assigned(self):
+        """Регрессия: удалённые в панели ноды висели в таблице обрезанным UUID.
+
+        Снапшоты трафика и коннекты переживают ноду до 31 дня; без расходов
+        такой призрак только мешает. С назначенным расходом нода остаётся —
+        деньги по ней всё ещё учитываются.
+        """
+        from shared.db.finance import FinanceMixin
+
+        gib = 1024 ** 3
+        result = FinanceMixin._build_node_costs(
+            [{"node_uuid": "85839bc0-dead", "amount": 300, "billing_cycle": "monthly",
+              "cycle_days": None, "currency": "RUB"}],
+            {"RUB": 1.0},
+            traffic={"3a5a830b-gone": 514 * gib, "85839bc0-dead": 115 * gib, "live": 10 * gib},
+            users={"a8174d6e-gone": 5, "live": 40},
+            names={"live": "Germany W"},
+            days=30,
+        )
+        by_uuid = {i["node_uuid"]: i for i in result["items"]}
+        assert set(by_uuid) == {"live", "85839bc0-dead"}
+        assert by_uuid["live"]["node_name"] == "Germany W"
+        assert by_uuid["85839bc0-dead"]["monthly_cost_rub"] == 300.0
+
 
 # ── Автосинк ─────────────────────────────────────────────────────
 
