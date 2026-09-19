@@ -6785,6 +6785,10 @@
     "assigned": "Ticket assigned to you",
     "sync": "Sync from bot",
     "synced": "Synced, tickets updated: {{updated}}",
-    "syncFailed": "Could not sync tickets"
+    "syncFailed": "Could not sync tickets",
+    "assignedTo": "Taken by admin #{{id}}",
+    "unassign": "Release",
+    "unassigned": "Ticket released",
+    "alsoViewing": "Also viewing: {{names}}"
   }
 }

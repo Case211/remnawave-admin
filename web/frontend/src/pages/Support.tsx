@@ -12,7 +12,7 @@ import {
   Send,
   Users,
 } from '@/components/brand/icons'
-import { supportApi, type SupportTicket } from '../api/support'
+import { supportApi, type SupportTicket, type SupportWatcher } from '../api/support'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -90,6 +90,29 @@ export default function Support() {
     })
   }, [activeId, detail?.messages, queryClient])
 
+  // Пока тикет открыт, отмечаемся каждые 20 секунд: коллега увидит, что им
+  // уже занимаются, и не ответит вторым.
+  const [watchers, setWatchers] = useState<SupportWatcher[]>([])
+  useEffect(() => {
+    if (activeId == null) {
+      setWatchers([])
+      return
+    }
+    let alive = true
+    const ping = () => {
+      supportApi
+        .presence(activeId)
+        .then((r) => alive && setWatchers(r.watchers))
+        .catch(() => undefined)
+    }
+    ping()
+    const timer = setInterval(ping, 20_000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [activeId])
+
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['support-queues'] })
     queryClient.invalidateQueries({ queryKey: ['support-tickets'] })
@@ -112,6 +135,15 @@ export default function Support() {
     onSuccess: () => {
       invalidateAll()
       toast.success(t('support.assigned'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const unassignMutation = useMutation({
+    mutationFn: () => supportApi.unassign(activeId as number),
+    onSuccess: () => {
+      invalidateAll()
+      toast.success(t('support.unassigned'))
     },
     onError: () => toast.error(t('common.error')),
   })
@@ -239,6 +271,12 @@ export default function Support() {
                   {item.last_message_text && (
                     <div className="mt-0.5 text-[11px] text-dark-400 truncate">{item.last_message_text}</div>
                   )}
+                  {item.assignee_id != null && (
+                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--glass-bg)] px-2 py-0.5 text-[10px] text-dark-300">
+                      <Users className="w-2.5 h-2.5" />
+                      {t('support.assignedTo', { id: item.assignee_id })}
+                    </div>
+                  )}
                 </button>
               ))
             )}
@@ -259,11 +297,24 @@ export default function Support() {
                     {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since)}` : ''}
                   </div>
                 </div>
+                {watchers.length > 0 && (
+                  <span className="flex items-center gap-1.5 rounded-full bg-amber-400/12 px-2.5 py-1 text-[11px] text-amber-300">
+                    <Users className="w-3 h-3" />
+                    {t('support.alsoViewing', { names: watchers.map((w) => w.username).join(', ') })}
+                  </span>
+                )}
                 {canEdit && (
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => assignMutation.mutate()}>
-                    <Check className="w-3.5 h-3.5" />
-                    {t('support.takeIt')}
-                  </Button>
+                  ticket?.assignee_id != null ? (
+                    <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => unassignMutation.mutate()}>
+                      <Users className="w-3.5 h-3.5" />
+                      {t('support.unassign')}
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => assignMutation.mutate()}>
+                      <Check className="w-3.5 h-3.5" />
+                      {t('support.takeIt')}
+                    </Button>
+                  )
                 )}
                 {canEdit && ticket?.status !== 'closed' && (
                   <Button variant="ghost" size="sm" onClick={() => statusMutation.mutate('closed')}>

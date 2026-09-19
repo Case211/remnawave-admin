@@ -608,6 +608,12 @@ async def lifespan(app: FastAPI):
                     from web.backend.core.support_sync import support_sync_loop
                     _bg("support_sync", support_sync_loop())
 
+                    from web.backend.core.support_ws_client import support_ws_loop
+                    _bg("support_ws", support_ws_loop())
+
+                    from web.backend.core.support_alerts import support_alerts_loop
+                    _bg("support_alerts", support_alerts_loop())
+
                     from web.backend.core.bscheck_scheduler import bscheck_scheduler_loop
                     _bg("bscheck_scheduler", bscheck_scheduler_loop())
 

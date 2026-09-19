@@ -19,14 +19,17 @@ from web.backend.api.deps import AdminUser, get_client_ip, require_permission
 from web.backend.api.v2.bedolaga import proxy_request
 from web.backend.core.audit import write_audit_log
 from web.backend.core.errors import E, api_error
+from web.backend.core.support_alerts import sla_minutes
 from web.backend.core.support_sync import sync_ticket, sync_tickets
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Порог «просрочено» для первого ответа. Вынести в настройки имеет смысл вместе
-# с метриками SLA — пока одно число, одинаковое для всех очередей.
-SLA_MINUTES = 30
+# Кто сейчас смотрит тикет: admin_id → время последнего «я здесь». Живёт в
+# памяти процесса — презенс переживать рестарт не обязан, зато не нагружает БД
+# записью на каждый тик.
+PRESENCE_TTL_SECONDS = 45
+_presence: dict[int, dict[int, dict]] = {}
 
 QUEUE_WAIT_US = "wait_us"
 QUEUE_MINE = "mine"
@@ -58,9 +61,34 @@ def _require_db() -> None:
         raise api_error(503, E.DB_UNAVAILABLE, "Database is not available")
 
 
+def _touch_presence(ticket_id: int, admin: AdminUser) -> None:
+    watchers = _presence.setdefault(ticket_id, {})
+    watchers[admin.account_id] = {
+        "admin_id": admin.account_id,
+        "username": admin.username,
+        "seen_at": datetime.now(timezone.utc),
+    }
+
+
+def _watchers(ticket_id: int, exclude_admin_id: int | None = None) -> list[dict]:
+    """Кто ещё открыт на этом тикете прямо сейчас — защита от двух ответов."""
+    fresh_after = datetime.now(timezone.utc) - timedelta(seconds=PRESENCE_TTL_SECONDS)
+    watchers = _presence.get(ticket_id, {})
+    stale = [admin_id for admin_id, data in watchers.items() if data["seen_at"] < fresh_after]
+    for admin_id in stale:
+        watchers.pop(admin_id, None)
+    if not watchers:
+        _presence.pop(ticket_id, None)
+    return [
+        {"admin_id": data["admin_id"], "username": data["username"]}
+        for admin_id, data in watchers.items()
+        if admin_id != exclude_admin_id
+    ]
+
+
 def _queue_condition(queue: str, admin_id: int, params: list) -> str:
     """SQL-условие очереди. Параметры добавляются в ``params`` по ходу."""
-    late_before = datetime.now(timezone.utc) - timedelta(minutes=SLA_MINUTES)
+    late_before = datetime.now(timezone.utc) - timedelta(minutes=sla_minutes())
 
     if queue == QUEUE_MINE:
         params.append(admin_id)
@@ -82,7 +110,7 @@ def _queue_condition(queue: str, admin_id: int, params: list) -> str:
 async def get_queues(admin: AdminUser = Depends(require_permission("bedolaga_support", "view"))):
     """Счётчики очередей — то, что оператор видит слева."""
     _require_db()
-    late_before = datetime.now(timezone.utc) - timedelta(minutes=SLA_MINUTES)
+    late_before = datetime.now(timezone.utc) - timedelta(minutes=sla_minutes())
 
     async with db_service.acquire() as conn:
         row = await conn.fetchrow(
@@ -112,7 +140,7 @@ async def get_queues(admin: AdminUser = Depends(require_permission("bedolaga_sup
         "wait_client": row["wait_client"],
         "snoozed": row["snoozed"],
         "all": row["all"],
-        "sla_minutes": SLA_MINUTES,
+        "sla_minutes": sla_minutes(),
     }
 
 
@@ -201,7 +229,12 @@ async def get_ticket(
             ticket_id,
         )
 
-    return {"ticket": dict(ticket), "messages": [dict(m) for m in messages]}
+    _touch_presence(ticket_id, admin)
+    return {
+        "ticket": dict(ticket),
+        "messages": [dict(m) for m in messages],
+        "watchers": _watchers(ticket_id, exclude_admin_id=admin.account_id),
+    }
 
 
 @router.post("/tickets/{ticket_id}/reply")
@@ -328,3 +361,13 @@ async def run_sync(
 ):
     """Ручной догоняющий синк — на случай, если бот был недоступен."""
     return await sync_tickets(full=full)
+
+
+@router.post("/tickets/{ticket_id}/presence")
+async def heartbeat(
+    ticket_id: int,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "view")),
+):
+    """«Я смотрю этот тикет» — чтобы коллега увидел и не ответил вторым."""
+    _touch_presence(ticket_id, admin)
+    return {"watchers": _watchers(ticket_id, exclude_admin_id=admin.account_id)}

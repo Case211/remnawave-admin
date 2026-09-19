@@ -51,6 +51,11 @@ export interface SupportTicketList {
   offset: number
 }
 
+export interface SupportWatcher {
+  admin_id: number
+  username: string
+}
+
 export const supportApi = {
   getQueues: async (): Promise<SupportQueues> => {
     const { data } = await client.get('/support/queues')
@@ -68,7 +73,7 @@ export const supportApi = {
     return data
   },
 
-  getTicket: async (id: number): Promise<{ ticket: SupportTicket; messages: SupportMessage[] }> => {
+  getTicket: async (id: number): Promise<{ ticket: SupportTicket; messages: SupportMessage[]; watchers: SupportWatcher[] }> => {
     const { data } = await client.get(`/support/tickets/${id}`)
     return data
   },
@@ -99,6 +104,11 @@ export const supportApi = {
 
   markRead: async (id: number, lastMessageId = 0) => {
     await client.post(`/support/tickets/${id}/read`, { last_message_id: lastMessageId })
+  },
+
+  presence: async (id: number): Promise<{ watchers: SupportWatcher[] }> => {
+    const { data } = await client.post(`/support/tickets/${id}/presence`)
+    return data
   },
 
   sync: async (full = false) => {
