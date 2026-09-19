@@ -12,7 +12,14 @@ import {
   Send,
   Users,
 } from '@/components/brand/icons'
-import { supportApi, type SupportTicket, type SupportWatcher } from '../api/support'
+import {
+  supportApi,
+  supportExtraApi,
+  type SupportMacro,
+  type SupportTag,
+  type SupportTicket,
+  type SupportWatcher,
+} from '../api/support'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -56,6 +63,8 @@ export default function Support() {
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
+  // Шаблон, вставленный в черновик: его побочные действия уйдут вместе с ответом.
+  const [pendingMacro, setPendingMacro] = useState<SupportMacro | null>(null)
   const draftRef = useRef<HTMLTextAreaElement>(null)
 
   const { data: queues } = useQuery({
@@ -64,6 +73,26 @@ export default function Support() {
     refetchInterval: 30_000,
   })
   const slaMinutes = queues?.sla_minutes ?? 30
+
+  const { data: macrosData } = useQuery({
+    queryKey: ['support-macros'],
+    queryFn: supportExtraApi.listMacros,
+    staleTime: 300_000,
+  })
+  const macros = macrosData?.items ?? []
+
+  const { data: tagsData } = useQuery({
+    queryKey: ['support-tags'],
+    queryFn: supportExtraApi.listTags,
+    staleTime: 300_000,
+  })
+  const allTags = tagsData?.items ?? []
+
+  const { data: metrics } = useQuery({
+    queryKey: ['support-metrics'],
+    queryFn: () => supportExtraApi.metrics(7),
+    staleTime: 120_000,
+  })
 
   const { data: list, isLoading: listLoading } = useQuery({
     queryKey: ['support-tickets', queue, search],
@@ -121,9 +150,13 @@ export default function Support() {
 
   const replyMutation = useMutation({
     mutationFn: ({ text, close }: { text: string; close: boolean }) =>
-      supportApi.reply(activeId as number, text, close),
+      supportApi.reply(activeId as number, text, close, {
+        set_status: pendingMacro?.set_status ?? null,
+        add_tag_id: pendingMacro?.add_tag_id ?? null,
+      }),
     onSuccess: (_, variables) => {
       setDraft('')
+      setPendingMacro(null)
       invalidateAll()
       toast.success(variables.close ? t('support.repliedAndClosed') : t('support.replied'))
     },
@@ -157,6 +190,23 @@ export default function Support() {
     onError: () => toast.error(t('common.error')),
   })
 
+  const snoozeMutation = useMutation({
+    mutationFn: (minutes: number) => supportExtraApi.snooze(activeId as number, minutes),
+    onSuccess: () => {
+      invalidateAll()
+      toast.success(t('support.snoozed'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const tagMutation = useMutation({
+    mutationFn: (tagId: number) => supportExtraApi.attachTag(activeId as number, tagId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['support-ticket', activeId] })
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
   const syncMutation = useMutation({
     mutationFn: () => supportApi.sync(false),
     onSuccess: (r) => {
@@ -172,6 +222,24 @@ export default function Support() {
     replyMutation.mutate({ text, close })
   }
 
+  /** Подстановки шаблона берём из карточки — руками их набирать бессмысленно. */
+  const applyMacro = (macro: SupportMacro) => {
+    const filled = macro.body
+      .replace(/\{\{\s*name\s*\}\}/g, ticket?.customer_name || t('support.client'))
+      .replace(/\{\{\s*ticket\s*\}\}/g, String(ticket?.id ?? ''))
+    setDraft(filled)
+    setPendingMacro(macro)
+    draftRef.current?.focus()
+  }
+
+  const macroSuggestions = draft.startsWith('/')
+    ? macros.filter((m) => {
+        const query = draft.slice(1).toLowerCase().trim()
+        if (!query) return true
+        return m.title.toLowerCase().includes(query) || (m.shortcut || '').toLowerCase().includes(query)
+      })
+    : []
+
   const onDraftKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
@@ -179,8 +247,42 @@ export default function Support() {
     }
   }
 
+  // Хоткеи: пока курсор не в поле ввода, клавиатура ведёт по очереди.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
+      if (typing) {
+        if (e.key === 'Escape') (target as HTMLElement).blur()
+        return
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+
+      const index = tickets.findIndex((item) => item.id === activeId)
+      if (e.key === 'j' || e.key === 'о') {
+        setSelectedId(tickets[Math.min(index + 1, tickets.length - 1)]?.id ?? activeId)
+      } else if (e.key === 'k' || e.key === 'л') {
+        setSelectedId(tickets[Math.max(index - 1, 0)]?.id ?? activeId)
+      } else if (e.key === 'r' || e.key === 'к') {
+        e.preventDefault()
+        draftRef.current?.focus()
+      } else if (e.key === '/' || e.key === '.') {
+        e.preventDefault()
+        setDraft('/')
+        draftRef.current?.focus()
+      } else if ((e.key === 'a' || e.key === 'ф') && activeId != null && canEdit) {
+        assignMutation.mutate()
+      } else if ((e.key === 'c' || e.key === 'с') && activeId != null && canEdit) {
+        statusMutation.mutate('closed')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [tickets, activeId, canEdit, assignMutation, statusMutation])
+
   const ticket = detail?.ticket
   const messages = detail?.messages ?? []
+  const ticketTags = (detail as any)?.tags as SupportTag[] | undefined
 
   return (
     <PermissionGate resource="bedolaga_support" action="view">
@@ -210,6 +312,28 @@ export default function Support() {
               </button>
             ))}
           </div>
+
+          {metrics && (
+            <div className="rounded-lg border border-[var(--glass-border)] p-2.5 text-[11px] text-dark-300 space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-dark-400">
+                {t('support.metrics.title', { days: metrics.days })}
+              </div>
+              <div className="flex justify-between">
+                <span>{t('support.metrics.created')}</span>
+                <span className="tabular-nums text-dark-100">{metrics.created}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>{t('support.metrics.avgFirstResponse')}</span>
+                <span className="tabular-nums text-emerald-400">{metrics.avg_first_response_minutes} {t('support.metrics.min')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>{t('support.metrics.breached')}</span>
+                <span className={cn('tabular-nums', metrics.breached ? 'text-red-400' : 'text-dark-100')}>
+                  {metrics.breached} ({metrics.breached_percent}%)
+                </span>
+              </div>
+            </div>
+          )}
 
           <Button
             variant="outline"
@@ -281,6 +405,9 @@ export default function Support() {
               ))
             )}
           </div>
+          <div className="border-t border-[var(--glass-border)] px-3 py-2 text-[10px] text-dark-400">
+            {t('support.hotkeys')}
+          </div>
         </section>
 
         {/* Диалог */}
@@ -316,12 +443,41 @@ export default function Support() {
                     </Button>
                   )
                 )}
+                {canEdit && (
+                  <Button variant="ghost" size="sm" onClick={() => snoozeMutation.mutate(180)}>
+                    <Clock className="w-3.5 h-3.5 mr-1.5" />
+                    {t('support.snooze3h')}
+                  </Button>
+                )}
                 {canEdit && ticket?.status !== 'closed' && (
                   <Button variant="ghost" size="sm" onClick={() => statusMutation.mutate('closed')}>
                     {t('support.close')}
                   </Button>
                 )}
               </header>
+
+              {(ticketTags?.length || allTags.length > 0) && canEdit && (
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--glass-border)] px-4 py-2">
+                  {ticketTags?.map((tag) => (
+                    <span key={tag.id} className="rounded-md bg-[var(--glass-bg)] px-2 py-0.5 text-[10px] text-dark-200">
+                      {tag.name}
+                    </span>
+                  ))}
+                  {allTags
+                    .filter((tag) => !ticketTags?.some((x) => x.id === tag.id))
+                    .slice(0, 6)
+                    .map((tag) => (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => tagMutation.mutate(tag.id)}
+                        className="rounded-md border border-dashed border-[var(--glass-border)] px-2 py-0.5 text-[10px] text-dark-400 hover:text-dark-200"
+                      >
+                        + {tag.name}
+                      </button>
+                    ))}
+                </div>
+              )}
 
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
                 {detailLoading && messages.length === 0 ? (
@@ -358,6 +514,31 @@ export default function Support() {
 
               {canReply && (
                 <footer className="border-t border-[var(--glass-border)] p-3">
+                  {macroSuggestions.length > 0 && (
+                    <div className="mb-2 max-h-40 overflow-y-auto rounded-lg border border-cyan-400/25 bg-[var(--glass-bg)]">
+                      {macroSuggestions.map((macro) => (
+                        <button
+                          key={macro.id}
+                          type="button"
+                          onClick={() => applyMacro(macro)}
+                          className="block w-full border-b border-[var(--glass-border)] px-3 py-2 text-left last:border-0 hover:bg-cyan-400/8"
+                        >
+                          <span className="block text-xs font-semibold text-white">{macro.title}</span>
+                          <span className="block truncate text-[11px] text-dark-400">{macro.body}</span>
+                          {macro.set_status && (
+                            <span className="mt-1 inline-block rounded bg-emerald-400/12 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                              {t('support.macroSetsStatus', { status: t(`support.status.${macro.set_status}`) })}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {pendingMacro && (
+                    <div className="mb-2 text-[11px] text-cyan-300">
+                      {t('support.macroApplied', { title: pendingMacro.title })}
+                    </div>
+                  )}
                   <textarea
                     ref={draftRef}
                     value={draft}

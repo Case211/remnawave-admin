@@ -6789,6 +6789,18 @@
     "assignedTo": "Taken by admin #{{id}}",
     "unassign": "Release",
     "unassigned": "Ticket released",
-    "alsoViewing": "Also viewing: {{names}}"
+    "alsoViewing": "Also viewing: {{names}}",
+    "snooze3h": "Snooze 3h",
+    "snoozed": "Ticket snoozed",
+    "macroSetsStatus": "Status → {{status}}",
+    "macroApplied": "Template: {{title}}",
+    "metrics": {
+      "title": "Last {{days}} days",
+      "created": "Received",
+      "avgFirstResponse": "First reply",
+      "min": "min",
+      "breached": "Overdue"
+    },
+    "hotkeys": "J/K to move, R to reply, / for a template, A to take, C to close"
   }
 }

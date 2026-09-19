@@ -78,8 +78,18 @@ export const supportApi = {
     return data
   },
 
-  reply: async (id: number, messageText: string, close = false) => {
-    const { data } = await client.post(`/support/tickets/${id}/reply`, { message_text: messageText, close })
+  reply: async (
+    id: number,
+    messageText: string,
+    close = false,
+    extra?: { set_status?: string | null; add_tag_id?: number | null },
+  ) => {
+    const { data } = await client.post(`/support/tickets/${id}/reply`, {
+      message_text: messageText,
+      close,
+      set_status: extra?.set_status ?? undefined,
+      add_tag_id: extra?.add_tag_id ?? undefined,
+    })
     return data as { success: boolean; closed: boolean }
   },
 
@@ -114,5 +124,68 @@ export const supportApi = {
   sync: async (full = false) => {
     const { data } = await client.post('/support/sync', null, { params: { full } })
     return data as { scanned: number; updated: number; skipped: number }
+  },
+}
+
+export interface SupportMacro {
+  id: number
+  title: string
+  body: string
+  shortcut: string | null
+  set_status: string | null
+  add_tag_id: number | null
+  sort_order: number
+}
+
+export interface SupportTag {
+  id: number
+  name: string
+  color: string
+}
+
+export interface SupportMetrics {
+  days: number
+  sla_minutes: number
+  created: number
+  answered: number
+  still_waiting: number
+  closed: number
+  avg_first_response_minutes: number
+  breached: number
+  breached_percent: number
+  by_admin: Array<{ admin_id: number; tickets: number }>
+}
+
+export const supportExtraApi = {
+  listMacros: async (): Promise<{ items: SupportMacro[] }> => {
+    const { data } = await client.get('/support/macros')
+    return data
+  },
+
+  listTags: async (): Promise<{ items: SupportTag[] }> => {
+    const { data } = await client.get('/support/tags')
+    return data
+  },
+
+  attachTag: async (ticketId: number, tagId: number) => {
+    await client.post(`/support/tickets/${ticketId}/tags/${tagId}`)
+  },
+
+  detachTag: async (ticketId: number, tagId: number) => {
+    await client.delete(`/support/tickets/${ticketId}/tags/${tagId}`)
+  },
+
+  snooze: async (ticketId: number, minutes: number) => {
+    const { data } = await client.post(`/support/tickets/${ticketId}/snooze`, { minutes })
+    return data as { success: boolean; snooze_to: string }
+  },
+
+  unsnooze: async (ticketId: number) => {
+    await client.delete(`/support/tickets/${ticketId}/snooze`)
+  },
+
+  metrics: async (days = 7): Promise<SupportMetrics> => {
+    const { data } = await client.get('/support/metrics', { params: { days } })
+    return data
   },
 }

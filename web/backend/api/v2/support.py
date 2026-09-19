@@ -42,6 +42,10 @@ QUEUE_ALL = "all"
 class ReplyRequest(BaseModel):
     message_text: str = Field(..., min_length=1, max_length=4000)
     close: bool = False
+    # Побочные действия шаблона: ответ, статус и тег одним запросом, чтобы
+    # «ответить макросом» не превращалось в три обращения из интерфейса.
+    set_status: Optional[str] = Field(None, pattern=r"^(open|answered|pending|closed)$")
+    add_tag_id: Optional[int] = None
 
 
 class StatusRequest(BaseModel):
@@ -228,12 +232,23 @@ async def get_ticket(
             "SELECT * FROM support_ticket_messages WHERE ticket_id = $1 ORDER BY created_at ASC",
             ticket_id,
         )
+        tags = await conn.fetch(
+            """
+            SELECT g.id, g.name, g.color
+            FROM support_ticket_tags tt
+            JOIN support_tags g ON g.id = tt.tag_id
+            WHERE tt.ticket_id = $1
+            ORDER BY g.name
+            """,
+            ticket_id,
+        )
 
     _touch_presence(ticket_id, admin)
     return {
         "ticket": dict(ticket),
         "messages": [dict(m) for m in messages],
         "watchers": _watchers(ticket_id, exclude_admin_id=admin.account_id),
+        "tags": [dict(tag) for tag in tags],
     }
 
 
@@ -246,8 +261,17 @@ async def reply(
 ):
     """Ответить клиенту. Пишет бот — он же разошлёт в Telegram или кабинет."""
     await proxy_request(lambda: bedolaga_client.reply_ticket(ticket_id, data.message_text))
-    if data.close:
-        await proxy_request(lambda: bedolaga_client.set_ticket_status(ticket_id, "closed"))
+
+    new_status = "closed" if data.close else data.set_status
+    if new_status:
+        await proxy_request(lambda: bedolaga_client.set_ticket_status(ticket_id, new_status))
+
+    if data.add_tag_id and db_service.is_connected:
+        async with db_service.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO support_ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                ticket_id, data.add_tag_id,
+            )
 
     # Ответ уже ушёл; проекция догонит сама, даже если синк сейчас упадёт.
     await sync_ticket(ticket_id)
@@ -371,3 +395,235 @@ async def heartbeat(
     """«Я смотрю этот тикет» — чтобы коллега увидел и не ответил вторым."""
     _touch_presence(ticket_id, admin)
     return {"watchers": _watchers(ticket_id, exclude_admin_id=admin.account_id)}
+
+
+# ── Шаблоны ответов, теги и отложенные ──
+
+class MacroRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=120)
+    body: str = Field(..., min_length=1, max_length=4000)
+    shortcut: Optional[str] = Field(None, max_length=32)
+    set_status: Optional[str] = Field(None, pattern=r"^(open|answered|pending|closed)$")
+    add_tag_id: Optional[int] = None
+    sort_order: int = 0
+
+
+class TagRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    color: str = Field("slate", max_length=16)
+
+
+class SnoozeRequest(BaseModel):
+    minutes: int = Field(..., ge=5, le=60 * 24 * 14)
+
+
+@router.get("/macros")
+async def list_macros(admin: AdminUser = Depends(require_permission("bedolaga_support", "view"))):
+    """Шаблоны ответов: текст плюс побочное действие, которое он выполняет."""
+    _require_db()
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM support_macros ORDER BY sort_order, id")
+    return {"items": [dict(row) for row in rows]}
+
+
+@router.post("/macros", status_code=201)
+async def create_macro(
+    data: MacroRequest,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    _require_db()
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO support_macros (title, body, shortcut, set_status, add_tag_id, sort_order, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+            """,
+            data.title, data.body, data.shortcut, data.set_status, data.add_tag_id,
+            data.sort_order, admin.account_id,
+        )
+    return dict(row)
+
+
+@router.put("/macros/{macro_id}")
+async def update_macro(
+    macro_id: int,
+    data: MacroRequest,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    _require_db()
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE support_macros
+               SET title = $2, body = $3, shortcut = $4, set_status = $5,
+                   add_tag_id = $6, sort_order = $7, updated_at = NOW()
+             WHERE id = $1
+            RETURNING *
+            """,
+            macro_id, data.title, data.body, data.shortcut, data.set_status,
+            data.add_tag_id, data.sort_order,
+        )
+    if not row:
+        raise api_error(404, E.NOT_FOUND, "Macro not found")
+    return dict(row)
+
+
+@router.delete("/macros/{macro_id}", status_code=204)
+async def delete_macro(
+    macro_id: int,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    _require_db()
+    async with db_service.acquire() as conn:
+        await conn.execute("DELETE FROM support_macros WHERE id = $1", macro_id)
+
+
+@router.get("/tags")
+async def list_tags(admin: AdminUser = Depends(require_permission("bedolaga_support", "view"))):
+    _require_db()
+    async with db_service.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM support_tags ORDER BY name")
+    return {"items": [dict(row) for row in rows]}
+
+
+@router.post("/tags", status_code=201)
+async def create_tag(
+    data: TagRequest,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    _require_db()
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO support_tags (name, color) VALUES ($1, $2)
+            ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color
+            RETURNING *
+            """,
+            data.name, data.color,
+        )
+    return dict(row)
+
+
+@router.post("/tickets/{ticket_id}/tags/{tag_id}", status_code=204)
+async def attach_tag(
+    ticket_id: int,
+    tag_id: int,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    _require_db()
+    async with db_service.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO support_ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            ticket_id, tag_id,
+        )
+
+
+@router.delete("/tickets/{ticket_id}/tags/{tag_id}", status_code=204)
+async def detach_tag(
+    ticket_id: int,
+    tag_id: int,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    _require_db()
+    async with db_service.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM support_ticket_tags WHERE ticket_id = $1 AND tag_id = $2", ticket_id, tag_id
+        )
+
+
+@router.post("/tickets/{ticket_id}/snooze")
+async def snooze(
+    ticket_id: int,
+    data: SnoozeRequest,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    """Отложить обращение: уходит из «ждут нас», пока не истечёт срок."""
+    _require_db()
+    until = datetime.now(timezone.utc) + timedelta(minutes=data.minutes)
+    async with db_service.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO support_snoozes (ticket_id, snooze_to, admin_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (ticket_id) DO UPDATE SET snooze_to = EXCLUDED.snooze_to, admin_id = EXCLUDED.admin_id
+            """,
+            ticket_id, until, admin.account_id,
+        )
+    return {"success": True, "snooze_to": until}
+
+
+@router.delete("/tickets/{ticket_id}/snooze", status_code=204)
+async def unsnooze(
+    ticket_id: int,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    _require_db()
+    async with db_service.acquire() as conn:
+        await conn.execute("DELETE FROM support_snoozes WHERE ticket_id = $1", ticket_id)
+
+
+# ── Метрики ──
+
+@router.get("/metrics")
+async def metrics(
+    days: int = Query(7, ge=1, le=90),
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "view")),
+):
+    """Сводка за период: сколько пришло, как быстро отвечали, где просрочили.
+
+    Время первого ответа считается по проекции: разница между созданием тикета
+    и первым сообщением оператора. Тикеты без ответа в среднее не попадают —
+    иначе один висящий месяцами перекосил бы картину, — но видны отдельным
+    числом.
+    """
+    _require_db()
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    threshold_minutes = sla_minutes()
+
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+                COUNT(*) AS created,
+                COUNT(*) FILTER (WHERE first_response_at IS NOT NULL) AS answered,
+                COUNT(*) FILTER (WHERE first_response_at IS NULL AND status <> 'closed') AS still_waiting,
+                COUNT(*) FILTER (WHERE status = 'closed') AS closed,
+                COALESCE(AVG(EXTRACT(EPOCH FROM (first_response_at - created_at)) / 60)
+                         FILTER (WHERE first_response_at IS NOT NULL), 0) AS avg_first_response_minutes,
+                COUNT(*) FILTER (
+                    WHERE first_response_at IS NOT NULL
+                      AND EXTRACT(EPOCH FROM (first_response_at - created_at)) / 60 > $2
+                ) AS breached
+            FROM support_tickets
+            WHERE created_at >= $1
+            """,
+            since, threshold_minutes,
+        )
+        by_admin = await conn.fetch(
+            """
+            SELECT a.admin_id, COUNT(*) AS tickets
+            FROM support_assignments a
+            JOIN support_tickets t ON t.id = a.ticket_id
+            WHERE t.updated_at >= $1
+            GROUP BY a.admin_id
+            ORDER BY tickets DESC
+            LIMIT 20
+            """,
+            since,
+        )
+
+    created = int(row["created"] or 0)
+    breached = int(row["breached"] or 0)
+    return {
+        "days": days,
+        "sla_minutes": threshold_minutes,
+        "created": created,
+        "answered": int(row["answered"] or 0),
+        "still_waiting": int(row["still_waiting"] or 0),
+        "closed": int(row["closed"] or 0),
+        "avg_first_response_minutes": round(float(row["avg_first_response_minutes"] or 0), 1),
+        "breached": breached,
+        "breached_percent": round(breached * 100 / created, 1) if created else 0.0,
+        "by_admin": [dict(r) for r in by_admin],
+    }

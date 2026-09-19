@@ -6785,6 +6785,18 @@
     "assignedTo": "Взял админ #{{id}}",
     "unassign": "Снять с себя",
     "unassigned": "Обращение снято",
-    "alsoViewing": "Сейчас смотрит: {{names}}"
+    "alsoViewing": "Сейчас смотрит: {{names}}",
+    "snooze3h": "Отложить 3 ч",
+    "snoozed": "Обращение отложено",
+    "macroSetsStatus": "Статус → {{status}}",
+    "macroApplied": "Шаблон: {{title}}",
+    "metrics": {
+      "title": "За {{days}} дн",
+      "created": "Пришло",
+      "avgFirstResponse": "Первый ответ",
+      "min": "мин",
+      "breached": "Просрочено"
+    },
+    "hotkeys": "J/K — по списку, R — ответить, / — шаблон, A — взять, C — закрыть"
   }
 }
