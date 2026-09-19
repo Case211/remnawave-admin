@@ -58,6 +58,7 @@ from web.backend.api.v2 import reports as reports_api
 from web.backend.api.v2 import asn as asn_api
 from web.backend.api.v2 import collector as collector_api
 from web.backend.api.v2 import backup as backup_api
+from web.backend.api.v2 import support as support_api
 from web.backend.api.v2 import api_keys as api_keys_api
 from web.backend.api.v2 import blocked_ips as blocked_ips_api
 from web.backend.api.v2 import webhooks as webhooks_api
@@ -603,6 +604,9 @@ async def lifespan(app: FastAPI):
 
                     from web.backend.core.backup_service import backup_scheduler_loop
                     _bg("backup_scheduler", backup_scheduler_loop())
+
+                    from web.backend.core.support_sync import support_sync_loop
+                    _bg("support_sync", support_sync_loop())
 
                     from web.backend.core.bscheck_scheduler import bscheck_scheduler_loop
                     _bg("bscheck_scheduler", bscheck_scheduler_loop())
@@ -1181,6 +1185,7 @@ def create_app() -> FastAPI:
         app.include_router(reports_api.router, prefix="/api/v2/reports", tags=["reports"])
         app.include_router(asn_api.router, prefix="/api/v2/asn", tags=["asn"])
         app.include_router(backup_api.router, prefix="/api/v2/backups", tags=["backups"])
+        app.include_router(support_api.router, prefix="/api/v2/support", tags=["support"])
         app.include_router(api_keys_api.router, prefix="/api/v2/api-keys", tags=["api-keys"])
         app.include_router(blocked_ips_api.router, prefix="/api/v2/blocked-ips", tags=["blocked-ips"])
 

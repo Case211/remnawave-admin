@@ -162,6 +162,30 @@ class BedolagaClient:
         params.update({k: v for k, v in filters.items() if v is not None})
         return await self._get("/transactions", params=params)
 
+    # ── Support tickets ──
+
+    async def list_tickets(self, limit: int = 50, offset: int = 0, **filters) -> list:
+        params = {"limit": limit, "offset": offset}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return await self._get("/tickets", params=params)
+
+    async def get_ticket(self, ticket_id: int) -> dict:
+        return await self._get(f"/tickets/{ticket_id}")
+
+    async def reply_ticket(self, ticket_id: int, message_text: str) -> dict:
+        return await self._post(f"/tickets/{ticket_id}/reply", json={"message_text": message_text})
+
+    async def set_ticket_status(self, ticket_id: int, status: str) -> dict:
+        return await self._post(f"/tickets/{ticket_id}/status", json={"status": status})
+
+    async def set_ticket_priority(self, ticket_id: int, priority: str) -> dict:
+        return await self._post(f"/tickets/{ticket_id}/priority", json={"priority": priority})
+
+    async def get_ticket_message_media(self, ticket_id: int, message_id: int) -> dict:
+        return await self._get(f"/tickets/{ticket_id}/messages/{message_id}/media")
+
+    # ── Activity ──
+
     async def get_user_activity(self, user_id: int, limit: int = 50, offset: int = 0, types: str | None = None) -> dict:
         """Лента активности пользователя (бот + кабинет).
 
