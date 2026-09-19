@@ -185,7 +185,8 @@
       "tickets": "Support",
       "partners": "Partners",
       "activities": "Activities",
-      "settings": "Bot Settings"
+      "settings": "Bot Settings",
+      "support": "Tickets"
     },
     "sections": {
       "overview": "Overview",
@@ -6748,5 +6749,42 @@
     "legendHint": "Click to hide, Alt-click to isolate",
     "showAll": "Show all",
     "seriesTrimmed": "Showing {{shown}} of {{total}}, the rest are folded"
+  },
+  "support": {
+    "queues": {
+      "wait_us": "Waiting on us",
+      "mine": "Mine",
+      "late": "Overdue",
+      "wait_client": "Waiting on client",
+      "snoozed": "Snoozed",
+      "all": "All"
+    },
+    "status": {
+      "open": "Waiting on us",
+      "answered": "Waiting on client",
+      "pending": "Pending",
+      "closed": "Closed"
+    },
+    "searchPlaceholder": "Search messages, subject, customer",
+    "emptyQueue": "This queue is empty",
+    "pickTicket": "Pick a ticket on the left",
+    "answeredShort": "answered",
+    "waiting": "waiting",
+    "takeIt": "Take it",
+    "close": "Close",
+    "operator": "Operator",
+    "client": "Customer",
+    "hasMedia": "Attachment: {{type}}",
+    "replyPlaceholder": "Reply to the customer…",
+    "sendHint": "Ctrl+Enter to send, Ctrl+Shift+Enter to send and close",
+    "send": "Send",
+    "sendAndClose": "Reply and close",
+    "replied": "Reply sent",
+    "repliedAndClosed": "Reply sent, ticket closed",
+    "replyFailed": "Could not send the reply",
+    "assigned": "Ticket assigned to you",
+    "sync": "Sync from bot",
+    "synced": "Synced, tickets updated: {{updated}}",
+    "syncFailed": "Could not sync tickets"
   }
 }

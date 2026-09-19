@@ -185,7 +185,8 @@
       "tickets": "Поддержка",
       "partners": "Партнёры",
       "activities": "Активности",
-      "settings": "Настройки бота"
+      "settings": "Настройки бота",
+      "support": "Обращения"
     },
     "sections": {
       "overview": "Обзор",
@@ -6744,5 +6745,42 @@
     "legendHint": "Клик — скрыть, Alt+клик — только эта",
     "showAll": "Показать все",
     "seriesTrimmed": "Показано {{shown}} из {{total}}, остальные свёрнуты"
+  },
+  "support": {
+    "queues": {
+      "wait_us": "Ждут нас",
+      "mine": "Мои",
+      "late": "Просрочены",
+      "wait_client": "Ждут клиента",
+      "snoozed": "Отложенные",
+      "all": "Все"
+    },
+    "status": {
+      "open": "Ждёт нас",
+      "answered": "Ждёт клиента",
+      "pending": "В ожидании",
+      "closed": "Закрыт"
+    },
+    "searchPlaceholder": "Поиск по переписке, теме, клиенту",
+    "emptyQueue": "В этой очереди пусто",
+    "pickTicket": "Выберите обращение слева",
+    "answeredShort": "ответ дан",
+    "waiting": "ждёт",
+    "takeIt": "Взять себе",
+    "close": "Закрыть",
+    "operator": "Оператор",
+    "client": "Клиент",
+    "hasMedia": "Вложение: {{type}}",
+    "replyPlaceholder": "Ответ клиенту…",
+    "sendHint": "Ctrl+Enter — отправить, Ctrl+Shift+Enter — отправить и закрыть",
+    "send": "Отправить",
+    "sendAndClose": "Ответить и закрыть",
+    "replied": "Ответ отправлен",
+    "repliedAndClosed": "Ответ отправлен, обращение закрыто",
+    "replyFailed": "Не удалось отправить ответ",
+    "assigned": "Обращение закреплено за вами",
+    "sync": "Обновить из бота",
+    "synced": "Синхронизировано, обновлено обращений: {{updated}}",
+    "syncFailed": "Не удалось синхронизировать обращения"
   }
 }

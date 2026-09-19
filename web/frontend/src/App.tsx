@@ -43,6 +43,7 @@ const Finance = lazy(() => import('./pages/Finance'))
 const Dns = lazy(() => import('./pages/Dns'))
 const BsCheck = lazy(() => import('./pages/BsCheck'))
 const Backup = lazy(() => import('./pages/Backup'))
+const Support = lazy(() => import('./pages/Support'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Resources = lazy(() => import('./pages/Resources'))
@@ -103,6 +104,7 @@ function ProtectedShell() {
             <Route path="/bscheck" element={<BsCheck />} />
             <Route path="/billing" element={<Navigate to="/finance" replace />} />
             <Route path="/backups" element={<Backup />} />
+            <Route path="/support" element={<Support />} />
             <Route path="/api-keys" element={<ApiKeys />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/resources" element={<Resources />} />
