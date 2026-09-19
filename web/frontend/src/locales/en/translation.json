@@ -5861,7 +5861,34 @@
       "refInvited": "Invited",
       "refEarnings": "Earnings",
       "refLevel": "Level",
-      "refList": "Invited users"
+      "refList": "Invited users",
+      "activity": {
+        "title": "Activity",
+        "empty": "No activity yet",
+        "filters": {
+          "all": "All",
+          "subscription": "Subscription",
+          "actions": "Actions",
+          "logins": "Logins"
+        },
+        "types": {
+          "transaction": "Payment",
+          "event": "Subscription event",
+          "promocode": "Promo code",
+          "coupon": "Coupon",
+          "ticket": "Ticket",
+          "wheel_spin": "Wheel spin",
+          "poll": "Poll",
+          "gift_sent": "Gift sent",
+          "gift_received": "Gift received",
+          "referral_earning": "Referral earning",
+          "withdrawal": "Withdrawal",
+          "cabinet_login": "Cabinet login",
+          "button_click": "Button click",
+          "cabinet_action": "Cabinet action",
+          "miniapp_action": "Mini app action"
+        }
+      }
     },
     "trial": "Trial",
     "conversions": "Conversions",

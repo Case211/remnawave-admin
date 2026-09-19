@@ -162,6 +162,17 @@ class BedolagaClient:
         params.update({k: v for k, v in filters.items() if v is not None})
         return await self._get("/transactions", params=params)
 
+    async def get_user_activity(self, user_id: int, limit: int = 50, offset: int = 0, types: str | None = None) -> dict:
+        """Лента активности пользователя (бот + кабинет).
+
+        Появилась в боте отдельной ручкой Web API; на старых версиях её нет —
+        вызывающий обязан быть готов к 404 (см. api/v2/bedolaga/customers.py).
+        """
+        params: dict = {"limit": limit, "offset": offset}
+        if types:
+            params["types"] = types
+        return await self._get(f"/users/{user_id}/activity", params=params)
+
     # ── Subscription Events ──
 
     async def list_subscription_events(self, limit: int = 20, offset: int = 0, **filters) -> dict:

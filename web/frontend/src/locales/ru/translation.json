@@ -5857,7 +5857,34 @@
       "refInvited": "Приглашено",
       "refEarnings": "Заработано",
       "refLevel": "Уровень",
-      "refList": "Приглашённые пользователи"
+      "refList": "Приглашённые пользователи",
+      "activity": {
+        "title": "Активность",
+        "empty": "Активности пока нет",
+        "filters": {
+          "all": "Всё",
+          "subscription": "Подписка",
+          "actions": "Действия",
+          "logins": "Входы"
+        },
+        "types": {
+          "transaction": "Платёж",
+          "event": "Событие подписки",
+          "promocode": "Промокод",
+          "coupon": "Купон",
+          "ticket": "Обращение",
+          "wheel_spin": "Колесо",
+          "poll": "Опрос",
+          "gift_sent": "Подарок отправлен",
+          "gift_received": "Подарок получен",
+          "referral_earning": "Реферальное начисление",
+          "withdrawal": "Вывод средств",
+          "cabinet_login": "Вход в кабинет",
+          "button_click": "Нажатие кнопки",
+          "cabinet_action": "Действие в кабинете",
+          "miniapp_action": "Действие в мини-аппе"
+        }
+      }
     },
     "trial": "Пробных",
     "conversions": "Конверсий",

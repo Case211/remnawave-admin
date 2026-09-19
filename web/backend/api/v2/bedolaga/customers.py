@@ -1,16 +1,18 @@
 """Bedolaga customers — users, subscriptions, transactions, events."""
 import json
 import logging
+import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, Request
+from httpx import ConnectError, HTTPStatusError, TimeoutException
 from pydantic import BaseModel, Field
 
 from web.backend.api.deps import AdminUser, require_permission, get_client_ip
 from web.backend.core.audit import write_audit_log
 from shared.bedolaga_client import bedolaga_client
 
-from web.backend.api.v2.bedolaga import proxy_request
+from web.backend.api.v2.bedolaga import ensure_configured, proxy_request
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -339,3 +341,61 @@ async def deactivate_subscription(
         ip_address=get_client_ip(request),
     )
     return result
+
+
+# ── Activity timeline (мягкая деградация на старых версиях бота) ──
+
+# Лента активности появилась в боте отдельной ручкой Web API (BEDOLAGA-DEV#3266).
+# На старой версии её нет, и запрос возвращает 404 — тогда раздел просто не
+# показывается, вместо ошибки. Флаг кэшируем, чтобы не долбить бота на каждый
+# просмотр карточки, и перепроверяем раз в 5 минут: обновили бота — заработало
+# само, без правок у нас.
+_ACTIVITY_RECHECK_SECONDS = 300
+_activity_support = {"supported": True, "checked_at": 0.0}
+
+
+def _activity_unavailable(limit: int, offset: int) -> dict:
+    return {"items": [], "total": 0, "limit": limit, "offset": offset, "available": False}
+
+
+def _is_user_not_found(response) -> bool:
+    """404 про конкретного пользователя, а не про отсутствующую ручку."""
+    try:
+        detail = response.json().get("detail")
+    except Exception:  # noqa: BLE001 — не JSON, значит и не наш detail
+        return False
+    return isinstance(detail, str) and "user not found" in detail.lower()
+
+
+@router.get("/{user_id}/activity")
+async def user_activity(
+    user_id: int = Path(..., ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    types: Optional[str] = Query(None, description="CSV-фильтр по типам записей"),
+    admin: AdminUser = Depends(require_permission("bedolaga_customers", "view")),
+):
+    """Лента активности клиента: платежи, подписка, действия в кабинете, входы."""
+    ensure_configured()
+
+    now = time.monotonic()
+    if not _activity_support["supported"]:
+        if now - _activity_support["checked_at"] < _ACTIVITY_RECHECK_SECONDS:
+            return _activity_unavailable(limit, offset)
+        _activity_support["supported"] = True
+
+    try:
+        data = await bedolaga_client.get_user_activity(user_id, limit=limit, offset=offset, types=types)
+    except HTTPStatusError as e:
+        if e.response.status_code == 404 and not _is_user_not_found(e.response):
+            logger.info("Bedolaga: ручки активности нет — версия бота без неё, раздел скрыт")
+            _activity_support.update({"supported": False, "checked_at": now})
+            return _activity_unavailable(limit, offset)
+        logger.warning("Bedolaga activity error: %s %s", e.response.status_code, e.response.text[:200])
+        raise HTTPException(status_code=e.response.status_code, detail=f"Bedolaga API error: {e.response.status_code}")
+    except (ConnectError, TimeoutException) as e:
+        logger.warning("Bedolaga activity connection error: %s", e)
+        raise HTTPException(status_code=502, detail="Cannot connect to Bedolaga API")
+
+    _activity_support.update({"supported": True, "checked_at": now})
+    return {**data, "available": True}
