@@ -90,11 +90,19 @@ async def handle_event(event: str, payload: dict) -> bool:
     return synced
 
 
-async def _consume(url: str) -> None:
+def _scrub(text: str) -> str:
+    """Убрать токен из текста ошибки: websockets охотно печатает полный URI."""
+    import re
+
+    return re.sub(r"(token=)[^&\s\'\"]+", r"\1***", str(text))
+
+
+async def _consume(url: str, on_connected) -> None:
     import websockets
 
     async with websockets.connect(url, ping_interval=20, ping_timeout=20) as socket:
         logger.info("Support WS: подключились к событиям бота")
+        on_connected()
         async for raw in socket:
             try:
                 message = json.loads(raw)
@@ -115,13 +123,23 @@ async def support_ws_loop() -> None:
             await asyncio.sleep(RECONNECT_MAX_SECONDS)
             continue
 
+        connected = False
+
+        def _mark_connected() -> None:
+            nonlocal connected
+            connected = True
+
         try:
-            await _consume(url)
-            delay = RECONNECT_MIN_SECONDS
+            await _consume(url, _mark_connected)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — любой обрыв лечится переподключением
-            logger.warning("Support WS: соединение потеряно (%s), повтор через %s с", exc, delay)
+            logger.warning("Support WS: соединение потеряно (%s), повтор через %s с", _scrub(exc), delay)
+
+        # Пауза растёт, только пока подключиться не удаётся. Живший часами сокет
+        # после обрыва не должен ждать пять минут.
+        if connected:
+            delay = RECONNECT_MIN_SECONDS
 
         with contextlib.suppress(asyncio.CancelledError):
             await asyncio.sleep(delay)

@@ -65,6 +65,17 @@ def _require_db() -> None:
         raise api_error(503, E.DB_UNAVAILABLE, "Database is not available")
 
 
+def _require_account(admin: AdminUser) -> int:
+    """id администратора для строк с NOT NULL admin_id.
+
+    У env-админа из фолбэка account_id пустой — такие действия (взять тикет,
+    отметить прочитанным) ему недоступны, но валить их ошибкой базы нельзя.
+    """
+    if admin.account_id is None:
+        raise api_error(400, E.INVALID_INPUT, "This action requires a database admin account")
+    return admin.account_id
+
+
 def _touch_presence(ticket_id: int, admin: AdminUser) -> None:
     watchers = _presence.setdefault(ticket_id, {})
     watchers[admin.account_id] = {
@@ -166,9 +177,15 @@ async def list_tickets(
         params.append(priority)
         where.append(f"t.priority = ${len(params)}")
     if search:
-        params.append(f"%{search.lower()}%")
-        where.append(f"lower(t.search_text) LIKE ${len(params)}")
+        # % и _ в запросе оператора — это символы, а не подстановочные знаки.
+        escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.append(f"%{escaped}%")
+        where.append(f"lower(t.search_text) LIKE ${len(params)} ESCAPE '\\'")
 
+    # account_id у env-админа бывает None: в тексте запроса это дало бы
+    # «r.admin_id = None» и синтаксическую ошибку на весь список.
+    params.append(admin.account_id)
+    reader_param = len(params)
     params.extend([limit, offset])
     sql = f"""
         SELECT t.*, a.admin_id AS assignee_id, s.snooze_to,
@@ -179,7 +196,7 @@ async def list_tickets(
         FROM support_tickets t
         LEFT JOIN support_assignments a ON a.ticket_id = t.id
         LEFT JOIN support_snoozes s ON s.ticket_id = t.id
-        LEFT JOIN support_reads r ON r.ticket_id = t.id AND r.admin_id = {admin.account_id}
+        LEFT JOIN support_reads r ON r.ticket_id = t.id AND r.admin_id = ${reader_param}
         WHERE {' AND '.join(where)}
         ORDER BY t.waiting_since ASC NULLS LAST, t.updated_at DESC
         LIMIT ${len(params) - 1} OFFSET ${len(params)}
@@ -195,7 +212,7 @@ async def list_tickets(
             LEFT JOIN support_snoozes s ON s.ticket_id = t.id
             WHERE {' AND '.join(where)}
             """,
-            *params[:-2],
+            *params[:-3],
         )
 
     return {"items": [dict(row) for row in rows], "total": total or 0, "limit": limit, "offset": offset}
@@ -208,25 +225,29 @@ async def get_ticket(
 ):
     """Карточка тикета с перепиской из проекции."""
     _require_db()
+    card_sql = """
+        SELECT t.*, a.admin_id AS assignee_id, s.snooze_to, n.note AS customer_note
+        FROM support_tickets t
+        LEFT JOIN support_assignments a ON a.ticket_id = t.id
+        LEFT JOIN support_snoozes s ON s.ticket_id = t.id
+        LEFT JOIN support_customer_notes n ON n.bot_user_id = t.bot_user_id
+        WHERE t.id = $1
+    """
+
     async with db_service.acquire() as conn:
-        ticket = await conn.fetchrow(
-            """
-            SELECT t.*, a.admin_id AS assignee_id, s.snooze_to, n.note AS customer_note
-            FROM support_tickets t
-            LEFT JOIN support_assignments a ON a.ticket_id = t.id
-            LEFT JOIN support_snoozes s ON s.ticket_id = t.id
-            LEFT JOIN support_customer_notes n ON n.bot_user_id = t.bot_user_id
-            WHERE t.id = $1
-            """,
-            ticket_id,
-        )
+        ticket = await conn.fetchrow(card_sql, ticket_id)
+
+    if not ticket:
+        # Тикета может не быть просто потому, что синк до него не дошёл. Ходим
+        # в бота вне транзакции: держать коннект на время HTTP-вызова нельзя.
+        if not await sync_ticket(ticket_id):
+            raise api_error(404, E.NOT_FOUND, "Ticket not found")
+        async with db_service.acquire() as conn:
+            ticket = await conn.fetchrow(card_sql, ticket_id)
         if not ticket:
-            # Тикета может не быть просто потому, что синк до него не дошёл.
-            if not await sync_ticket(ticket_id):
-                raise api_error(404, E.NOT_FOUND, "Ticket not found")
-            ticket = await conn.fetchrow("SELECT * FROM support_tickets WHERE id = $1", ticket_id)
-            if not ticket:
-                raise api_error(404, E.NOT_FOUND, "Ticket not found")
+            raise api_error(404, E.NOT_FOUND, "Ticket not found")
+
+    async with db_service.acquire() as conn:
 
         messages = await conn.fetch(
             "SELECT * FROM support_ticket_messages WHERE ticket_id = $1 ORDER BY created_at ASC",
@@ -262,16 +283,29 @@ async def reply(
     """Ответить клиенту. Пишет бот — он же разошлёт в Telegram или кабинет."""
     await proxy_request(lambda: bedolaga_client.reply_ticket(ticket_id, data.message_text))
 
+    # Сообщение клиенту уже ушло. Если побочное действие не удалось, честнее
+    # сказать об этом отдельным флагом, чем вернуть 5xx: оператор увидит ошибку,
+    # нажмёт «отправить» ещё раз и клиент получит ответ дважды.
+    warnings: list[str] = []
+
     new_status = "closed" if data.close else data.set_status
     if new_status:
-        await proxy_request(lambda: bedolaga_client.set_ticket_status(ticket_id, new_status))
+        try:
+            await proxy_request(lambda: bedolaga_client.set_ticket_status(ticket_id, new_status))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Support: ответ ушёл, но статус не сменился (%s): %s", ticket_id, exc)
+            warnings.append("status_not_changed")
 
     if data.add_tag_id and db_service.is_connected:
-        async with db_service.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO support_ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                ticket_id, data.add_tag_id,
-            )
+        try:
+            async with db_service.acquire() as conn:
+                await conn.execute(
+                    "INSERT INTO support_ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                    ticket_id, data.add_tag_id,
+                )
+        except Exception as exc:  # noqa: BLE001 — например, тега уже нет
+            logger.warning("Support: тег %s не повесился на %s: %s", data.add_tag_id, ticket_id, exc)
+            warnings.append("tag_not_added")
 
     # Ответ уже ушёл; проекция догонит сама, даже если синк сейчас упадёт.
     await sync_ticket(ticket_id)
@@ -284,7 +318,7 @@ async def reply(
         resource_id=str(ticket_id),
         ip_address=get_client_ip(request),
     )
-    return {"success": True, "closed": data.close}
+    return {"success": True, "closed": data.close, "warnings": warnings}
 
 
 @router.post("/tickets/{ticket_id}/status")
@@ -334,7 +368,7 @@ async def assign(
             ON CONFLICT (ticket_id) DO UPDATE SET admin_id = EXCLUDED.admin_id, claimed_at = NOW()
             """,
             ticket_id,
-            admin.account_id,
+            _require_account(admin),
         )
     return {"success": True, "assignee_id": admin.account_id}
 
@@ -372,7 +406,7 @@ async def mark_read(
                     read_at = NOW()
             """,
             ticket_id,
-            admin.account_id,
+            _require_account(admin),
             int(last_id or 0),
         )
     return {"success": True, "last_read_message_id": int(last_id or 0)}

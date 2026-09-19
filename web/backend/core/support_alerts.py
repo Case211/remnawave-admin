@@ -88,7 +88,10 @@ async def check_sla_breaches() -> int:
         return 0
 
     threshold = datetime.now(timezone.utc) - timedelta(minutes=sla_minutes())
+    alerted = list(_sla_alerted)
     async with db_service.acquire() as conn:
+        # Уже объявленные отсекаем в SQL: иначе полсотни старых висяков занимали
+        # бы всю страницу, и свежая просрочка не дождалась бы алерта никогда.
         rows = await conn.fetch(
             """
             SELECT t.id, t.title, t.customer_name, t.waiting_since
@@ -98,19 +101,30 @@ async def check_sla_breaches() -> int:
               AND t.waiting_since IS NOT NULL
               AND t.waiting_since < $1
               AND (s.snooze_to IS NULL OR s.snooze_to <= NOW())
+              AND NOT (t.id = ANY($2::bigint[]))
             ORDER BY t.waiting_since ASC
             LIMIT 50
             """,
-            threshold,
+            threshold, alerted,
         )
+        # Отметку снимаем только с тех, кто перестал ждать — по всему списку
+        # объявленных, а не по одной странице выборки.
+        still_waiting = await conn.fetch(
+            """
+            SELECT t.id
+            FROM support_tickets t
+            WHERE t.id = ANY($1::bigint[])
+              AND t.status <> 'closed'
+              AND t.waiting_since IS NOT NULL
+            """,
+            alerted,
+        ) if alerted else []
+
+    _sla_alerted.intersection_update({int(r["id"]) for r in still_waiting})
 
     sent = 0
-    seen: set[int] = set()
     for row in rows:
         ticket_id = int(row["id"])
-        seen.add(ticket_id)
-        if ticket_id in _sla_alerted:
-            continue
         waited = int((datetime.now(timezone.utc) - row["waiting_since"]).total_seconds() // 60)
         await _notify(
             f"Обращение #{ticket_id} без ответа {waited} мин",
@@ -122,9 +136,6 @@ async def check_sla_breaches() -> int:
         _sla_alerted.add(ticket_id)
         sent += 1
 
-    # Ответили или закрыли — снимаем отметку, чтобы следующая просрочка снова
-    # дошла до оператора.
-    _sla_alerted.intersection_update(seen)
     return sent
 
 

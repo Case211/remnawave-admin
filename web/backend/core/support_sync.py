@@ -26,6 +26,58 @@ PAGE_SIZE = 200
 MAX_PAGES = 25
 SEARCH_TEXT_LIMIT = 20_000
 
+# Имена клиентов бот в списке тикетов не отдаёт — их приходится добирать по
+# одному. Меняются они редко, поэтому держим в памяти процесса.
+_name_cache: dict[int, str | None] = {}
+_NAME_CACHE_LIMIT = 5000
+
+
+def _ensure_client() -> bool:
+    """Настроить клиент Bedolaga для фоновой работы.
+
+    ``ensure_configured`` живёт в слое HTTP-ручек и вызывается из
+    ``proxy_request``. Фоновым циклам никто его не дёргал: на свежем процессе
+    клиент оставался без базового URL и токена, синк падал на первом запросе, а
+    очереди оператора оставались пустыми до первого захода в другой раздел.
+    """
+    from web.backend.api.v2.bedolaga import ensure_configured
+
+    try:
+        ensure_configured()
+        return True
+    except Exception as exc:  # noqa: BLE001 — не настроен Bedolaga API: молча ждём
+        logger.debug("Support sync: клиент Bedolaga не настроен (%s)", exc)
+        return False
+
+
+async def _customer_title(user_id: int) -> str | None:
+    """Имя клиента по его id в боте; None — бот не ответил."""
+    if not user_id:
+        return None
+    if user_id in _name_cache:
+        return _name_cache[user_id]
+
+    from shared.bedolaga_client import bedolaga_client
+
+    try:
+        user = await bedolaga_client.get_user(user_id)
+    except Exception:  # noqa: BLE001 — имя не критично, покажем номер
+        return None
+
+    name = None
+    for key in ("username", "first_name", "email"):
+        value = (user or {}).get(key)
+        if value:
+            name = str(value)
+            break
+    if name and (user or {}).get("last_name") and key == "first_name":
+        name = f"{name} {user['last_name']}".strip()
+
+    if len(_name_cache) >= _NAME_CACHE_LIMIT:
+        _name_cache.clear()
+    _name_cache[user_id] = name
+    return name
+
 
 def _parse_dt(value: Any) -> datetime | None:
     if not value:
@@ -78,7 +130,7 @@ def derive_fields(ticket: dict, messages: list[dict]) -> dict:
     }
 
 
-async def _upsert_ticket(conn, ticket: dict, messages: list[dict]) -> None:
+async def _upsert_ticket(conn, ticket: dict, messages: list[dict], customer: dict | None = None) -> None:
     derived = derive_fields(ticket, messages)
     await conn.execute(
         """
@@ -109,8 +161,8 @@ async def _upsert_ticket(conn, ticket: dict, messages: list[dict]) -> None:
         """,
         int(ticket["id"]),
         int(ticket.get("user_id") or 0),
-        ticket.get("telegram_id"),
-        _customer_name(ticket),
+        ticket.get("telegram_id") or (customer or {}).get("telegram_id"),
+        _customer_name(ticket) or (customer or {}).get("name"),
         str(ticket.get("title") or ""),
         str(ticket.get("status") or "open"),
         str(ticket.get("priority") or "normal"),
@@ -154,7 +206,7 @@ async def sync_ticket(ticket_id: int) -> bool:
     from shared.bedolaga_client import bedolaga_client
     from shared.database import db_service
 
-    if not db_service.is_connected:
+    if not db_service.is_connected or not _ensure_client():
         return False
     try:
         ticket = await bedolaga_client.get_ticket(ticket_id)
@@ -163,8 +215,9 @@ async def sync_ticket(ticket_id: int) -> bool:
         return False
 
     messages = list(ticket.get("messages") or [])
+    customer = {"name": await _customer_title(int(ticket.get("user_id") or 0))}
     async with db_service.acquire() as conn:
-        await _upsert_ticket(conn, ticket, messages)
+        await _upsert_ticket(conn, ticket, messages, customer)
     return True
 
 
@@ -182,52 +235,59 @@ async def sync_tickets(*, full: bool = False) -> dict:
     from shared.bedolaga_client import bedolaga_client
     from shared.database import db_service
 
-    if not db_service.is_connected:
+    if not db_service.is_connected or not _ensure_client():
         return {"scanned": 0, "updated": 0, "skipped": 0}
 
     scanned = updated = skipped = 0
-    async with db_service.acquire() as conn:
-        known = {} if full else await _known_updated_at(conn)
+    # Соединение берём точечно: проход по тысяче тикетов — это тысяча HTTP-вызовов
+    # к боту, и держать всё это время занятым коннект из пула нельзя.
+    if full:
+        known: dict[int, datetime] = {}
+    else:
+        async with db_service.acquire() as conn:
+            known = await _known_updated_at(conn)
 
-        for page in range(MAX_PAGES):
-            try:
-                batch = await bedolaga_client.list_tickets(limit=PAGE_SIZE, offset=page * PAGE_SIZE)
-            except Exception as exc:  # noqa: BLE001 — бот недоступен, продолжим в следующий раз
-                logger.warning("Support sync: список тикетов не получен: %s", exc)
-                break
+    for page in range(MAX_PAGES):
+        try:
+            batch = await bedolaga_client.list_tickets(limit=PAGE_SIZE, offset=page * PAGE_SIZE)
+        except Exception as exc:  # noqa: BLE001 — бот недоступен, продолжим в следующий раз
+            logger.warning("Support sync: список тикетов не получен: %s", exc)
+            break
 
-            items: Iterable[dict] = batch if isinstance(batch, list) else (batch or {}).get("items") or []
-            items = list(items)
-            if not items:
-                break
+        items: Iterable[dict] = batch if isinstance(batch, list) else (batch or {}).get("items") or []
+        items = list(items)
+        if not items:
+            break
 
-            for ticket in items:
-                scanned += 1
-                ticket_id = int(ticket.get("id") or 0)
-                if not ticket_id:
+        for ticket in items:
+            scanned += 1
+            ticket_id = int(ticket.get("id") or 0)
+            if not ticket_id:
+                continue
+
+            remote_updated = _parse_dt(ticket.get("updated_at"))
+            local_updated = known.get(ticket_id)
+            if local_updated and remote_updated and remote_updated <= local_updated:
+                skipped += 1
+                continue
+
+            messages = list(ticket.get("messages") or [])
+            if not messages:
+                try:
+                    detailed = await bedolaga_client.get_ticket(ticket_id)
+                    messages = list(detailed.get("messages") or [])
+                    ticket = {**ticket, **detailed}
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Support sync: переписка %s не получена: %s", ticket_id, exc)
                     continue
 
-                remote_updated = _parse_dt(ticket.get("updated_at"))
-                local_updated = known.get(ticket_id)
-                if local_updated and remote_updated and remote_updated <= local_updated:
-                    skipped += 1
-                    continue
+            customer = {"name": await _customer_title(int(ticket.get("user_id") or 0))}
+            async with db_service.acquire() as conn:
+                await _upsert_ticket(conn, ticket, messages, customer)
+            updated += 1
 
-                messages = list(ticket.get("messages") or [])
-                if not messages:
-                    try:
-                        detailed = await bedolaga_client.get_ticket(ticket_id)
-                        messages = list(detailed.get("messages") or [])
-                        ticket = {**ticket, **detailed}
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning("Support sync: переписка %s не получена: %s", ticket_id, exc)
-                        continue
-
-                await _upsert_ticket(conn, ticket, messages)
-                updated += 1
-
-            if len(items) < PAGE_SIZE:
-                break
+        if len(items) < PAGE_SIZE:
+            break
 
     if updated:
         logger.info("Support sync: обновлено %s тикетов из %s просмотренных", updated, scanned)

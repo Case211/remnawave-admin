@@ -61,6 +61,7 @@ export default function Support() {
 
   const [queue, setQueue] = useState<QueueId>('wait_us')
   const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   // Шаблон, вставленный в черновик: его побочные действия уйдут вместе с ответом.
@@ -73,6 +74,11 @@ export default function Support() {
     refetchInterval: 30_000,
   })
   const slaMinutes = queues?.sla_minutes ?? 30
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
   const { data: macrosData } = useQuery({
     queryKey: ['support-macros'],
@@ -271,14 +277,14 @@ export default function Support() {
         setDraft('/')
         draftRef.current?.focus()
       } else if ((e.key === 'a' || e.key === 'ф') && activeId != null && canEdit) {
+        // Закрытие хоткеем не делаем: оно уходит клиенту уведомлением и не
+        // отменяется — случайная «c» на странице стоила бы дороже экономии клика.
         assignMutation.mutate()
-      } else if ((e.key === 'c' || e.key === 'с') && activeId != null && canEdit) {
-        statusMutation.mutate('closed')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [tickets, activeId, canEdit, assignMutation, statusMutation])
+  }, [tickets, activeId, canEdit, assignMutation])
 
   const ticket = detail?.ticket
   const messages = detail?.messages ?? []
@@ -353,8 +359,8 @@ export default function Support() {
             <div className="flex items-center gap-2 rounded-lg bg-[var(--glass-bg)] px-2.5 py-1.5">
               <Search className="w-3.5 h-3.5 text-dark-400" />
               <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder={t('support.searchPlaceholder')}
                 aria-label={t('support.searchPlaceholder')}
                 className="h-6 border-0 bg-transparent p-0 text-xs focus-visible:ring-0"

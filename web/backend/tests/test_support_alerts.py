@@ -13,11 +13,21 @@ from web.backend.core import support_alerts, support_ws_client
 
 
 class _Conn:
+    """Эмулирует два запроса проверки: выборку новых просрочек и «кто ещё ждёт».
+
+    Первый исключает уже объявленные тикеты (это делает SQL, а не Python),
+    второй отвечает, какие из объявленных всё ещё висят без ответа.
+    """
+
     def __init__(self, rows):
         self._rows = rows
 
-    async def fetch(self, *args, **kwargs):
-        return self._rows
+    async def fetch(self, sql, *args, **kwargs):
+        if "waiting_since < $1" in sql:
+            alerted = set(args[1] or [])
+            return [row for row in self._rows if row["id"] not in alerted]
+        known = set(args[0] or [])
+        return [{"id": row["id"]} for row in self._rows if row["id"] in known]
 
     async def fetchrow(self, *args, **kwargs):
         return self._rows[0] if self._rows else None
@@ -184,3 +194,11 @@ def test_ws_url_is_none_without_settings(monkeypatch):
 
     monkeypatch.setattr("web.backend.core.config.get_web_settings", lambda: _Settings())
     assert support_ws_client._ws_url() is None
+
+
+def test_scrub_hides_token_from_logs():
+    """websockets печатает полный URI в ошибках — токен туда попасть не должен."""
+    message = "server rejected WebSocket connection: wss://bot/ws?token=super-secret HTTP 403"
+    scrubbed = support_ws_client._scrub(message)
+    assert "super-secret" not in scrubbed
+    assert "token=***" in scrubbed

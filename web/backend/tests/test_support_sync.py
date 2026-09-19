@@ -97,6 +97,8 @@ async def test_sync_survives_unreachable_bot(monkeypatch):
         raise RuntimeError("bot is down")
 
     monkeypatch.setattr("shared.database.db_service", _DB())
+    # Клиент настроен — проверяем именно обработку недоступного бота.
+    monkeypatch.setattr(support_sync, "_ensure_client", lambda: True)
     monkeypatch.setattr("shared.bedolaga_client.bedolaga_client.list_tickets", boom)
 
     result = await support_sync.sync_tickets()
@@ -137,3 +139,13 @@ def test_queue_all_has_no_filter():
     params: list = []
     assert support._queue_condition(support.QUEUE_ALL, admin_id=1, params=params) == "TRUE"
     assert params == []
+
+
+def test_unconfigured_client_stops_sync_quietly(monkeypatch):
+    """Не настроен Bedolaga API — синк молчит, а не сыплет ошибками в лог."""
+    monkeypatch.setattr("web.backend.api.v2.bedolaga.ensure_configured", _raise_not_configured)
+    assert support_sync._ensure_client() is False
+
+
+def _raise_not_configured():
+    raise RuntimeError("Bedolaga API is not configured")

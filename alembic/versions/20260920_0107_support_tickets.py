@@ -58,10 +58,18 @@ def upgrade() -> None:
     )
     op.execute("CREATE INDEX IF NOT EXISTS ix_support_tickets_user ON support_tickets (bot_user_id)")
     op.execute("CREATE INDEX IF NOT EXISTS ix_support_tickets_updated ON support_tickets (updated_at DESC)")
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_support_tickets_search "
-        "ON support_tickets USING gin (to_tsvector('simple', search_text))"
-    )
+    # Поиск оператора — это подстрока (LIKE '%…%'), а не полнотекстовый запрос,
+    # и tsvector-индекс на нём не работает. Триграммы умеют ровно это; если
+    # расширения нет и прав на него тоже, поиск останется без индекса, но
+    # миграция не должна падать из-за этого.
+    try:
+        op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS ix_support_tickets_search "
+            "ON support_tickets USING gin (lower(search_text) gin_trgm_ops)"
+        )
+    except Exception:  # noqa: BLE001 — без расширения живём с последовательным поиском
+        pass
 
     op.execute(
         """
