@@ -620,6 +620,15 @@ async def _log_and_maybe_send(filename: str, backup_type: str, size_bytes: int, 
     except Exception as exc:
         logger.debug("Scheduled backup log failed: %s", exc)
 
+    # Хранилище независимо от Telegram: файл уезжает с сервера, даже если
+    # отправка в чат выключена или упала.
+    try:
+        from web.backend.core.backup_s3 import upload_if_enabled
+
+        await upload_if_enabled(filename)
+    except Exception as exc:  # noqa: BLE001 — выгрузка не должна валить бэкап
+        logger.warning("Scheduled backup S3 upload failed: %s", exc)
+
     if not send_tg:
         return
     try:

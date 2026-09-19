@@ -310,6 +310,14 @@ Schedule, retention and the dead-man switch that warns when backups have stopped
 | **Backup interval (hours)** | `backup_auto_interval_hours` | `0` | 0 — once a day at the configured time; N&gt;0 — every N hours starting from that time |
 | **Back up the config** | `backup_auto_config` | `false` | Store panel settings alongside the database backup |
 | **Alert if no backup for N hours** | `backup_deadman_hours` | `0` | Send an alert when there has been no successful backup for longer than N hours (0 = off) |
+| **S3: endpoint** | `backup_s3_endpoint` | — | For example `https://s3.timeweb.cloud` or `https://s3.storage.selcloud.ru` |
+| **S3: bucket** | `backup_s3_bucket` | — | Bucket that receives the backup files |
+| **S3: region** | `backup_s3_region` | `us-east-1` | Region used to sign requests: `us-east-1`, `ru-1`, `ru-central1`, etc. |
+| **S3: folder** | `backup_s3_prefix` | — | Key prefix inside the bucket; empty means the bucket root |
+| **S3: path-style addressing** | `backup_s3_path_style` | `true` | Uses `endpoint/bucket/key` — required by MinIO and most regional providers |
+| **S3: upload automatically** | `backup_s3_auto_upload` | `false` | Send every scheduled backup to the storage |
+| **S3: files to keep** | `backup_s3_keep_count` | `0` | How many recent files to keep in the bucket after an automatic upload (0 = keep everything) |
+| **S3: access keys** | `backup_s3_creds` | — | Access Key and Secret Key, encrypted; editable only on the Storage tab |
 
 
 ## 📊 Reports

@@ -39,6 +39,22 @@ A backup that has never been restored is not a backup, it is a hope. Every so of
 
 The dump goes to the same chat as notifications. Convenient as a second copy, but remember: a file with your database sits in a chat, and access to that chat equals access to the data.
 
+## Uploading to S3
+
+The **Storage** tab in the backups section sends a copy to any S3-compatible storage: Amazon S3, MinIO, Selectel, Timeweb Cloud, Backblaze B2.
+
+Fill in the endpoint, bucket, region and access keys, then press **Test connection** — the panel tries to read the bucket and reports why it failed if something does not add up. Keys are stored encrypted and are never returned by the API, not even masked.
+
+From there you have two paths. The disk icon next to a file uploads that backup by hand, while the **Upload automatically** switch sends every backup created on schedule. The **Files to keep in bucket** field prunes older copies after an automatic upload; `0` keeps everything.
+
+::: tip Path-style
+MinIO and most regional providers expect `endpoint/bucket/key` addresses — leave **Path-style** enabled. Turn it off only if your provider requires `bucket.endpoint`.
+:::
+
+::: warning If an upload fails
+The backup is still created and stays on the server, and an alert with the reason goes to notifications. An upload cannot fail silently.
+:::
+
 ## What the dump contains
 
 Everything in the database, which is nearly everything: connections and violations, settings, mail with attachments, DKIM keys, the audit log.

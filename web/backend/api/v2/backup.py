@@ -3,6 +3,7 @@
 Provides database backup/restore, config export/import,
 user import, and backup file management.
 """
+import json
 import logging
 import os
 from typing import List, Optional
@@ -11,7 +12,8 @@ from fastapi import APIRouter, Depends, Request, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from web.backend.api.deps import AdminUser, require_permission, require_superadmin
+from web.backend.api.deps import AdminUser, get_client_ip, require_permission, require_superadmin
+from web.backend.core.audit import write_audit_log
 from web.backend.core.errors import api_error, E
 from shared.db_schema import (
     ADMIN_PERMISSIONS_TABLE,
@@ -764,3 +766,197 @@ async def send_backup_telegram(
     except Exception as e:
         logger.error("Failed to send backup to Telegram: %s", e)
         raise api_error(500, "TELEGRAM_SEND_FAILED", str(e))
+
+
+# ── S3 storage ──────────────────────────────────────────────────
+
+class S3SettingsPayload(BaseModel):
+    endpoint: str = ""
+    bucket: str = ""
+    region: str = "us-east-1"
+    prefix: str = ""
+    path_style: bool = True
+    auto_upload: bool = False
+    keep_count: int = 0
+    # None — ключи не трогаем, пустая строка — стираем, значение — заменяем.
+    access_key: Optional[str] = None
+    secret_key: Optional[str] = None
+
+
+class S3SettingsView(BaseModel):
+    endpoint: str
+    bucket: str
+    region: str
+    prefix: str
+    path_style: bool
+    auto_upload: bool
+    keep_count: int
+    has_credentials: bool
+    access_key_masked: str
+
+
+class S3ObjectItem(BaseModel):
+    key: str
+    filename: str
+    size: int
+    last_modified: str
+
+
+def _mask_key(value: str) -> str:
+    """Хвост ключа, чтобы админ узнал свой, но не прочитал чужой."""
+    if not value:
+        return ""
+    return value[:4] + "…" + value[-4:] if len(value) > 10 else "…" + value[-2:]
+
+
+@router.get("/s3/settings", response_model=S3SettingsView)
+async def get_s3_settings(
+    admin: AdminUser = Depends(require_permission("backups", "view")),
+):
+    """Параметры подключения к хранилищу; секретный ключ наружу не уходит."""
+    from web.backend.core.backup_s3 import load_settings
+
+    s = load_settings()
+    return S3SettingsView(
+        endpoint=s.endpoint,
+        bucket=s.bucket,
+        region=s.region,
+        prefix=s.prefix,
+        path_style=s.path_style,
+        auto_upload=s.auto_upload,
+        keep_count=s.keep_count,
+        has_credentials=bool(s.access_key and s.secret_key),
+        access_key_masked=_mask_key(s.access_key),
+    )
+
+
+@router.put("/s3/settings", response_model=S3SettingsView)
+async def update_s3_settings(
+    data: S3SettingsPayload,
+    request: Request,
+    admin: AdminUser = Depends(require_superadmin()),
+):
+    """Сохранить параметры хранилища и, если переданы, ключи доступа."""
+    from shared.config_service import config_service
+    from web.backend.core.backup_s3 import clear_credentials, save_credentials
+
+    for key, value in (
+        ("backup_s3_endpoint", data.endpoint.strip().rstrip("/")),
+        ("backup_s3_bucket", data.bucket.strip().strip("/")),
+        ("backup_s3_region", data.region.strip() or "us-east-1"),
+        ("backup_s3_prefix", data.prefix.strip().strip("/")),
+        ("backup_s3_path_style", data.path_style),
+        ("backup_s3_auto_upload", data.auto_upload),
+        ("backup_s3_keep_count", max(0, data.keep_count)),
+    ):
+        await config_service.set(key, value)
+
+    creds_changed = False
+    if data.access_key is not None or data.secret_key is not None:
+        access_key = (data.access_key or "").strip()
+        secret_key = (data.secret_key or "").strip()
+        if access_key and secret_key:
+            await save_credentials(access_key, secret_key)
+            creds_changed = True
+        elif not access_key and not secret_key:
+            await clear_credentials()
+            creds_changed = True
+        else:
+            raise api_error(400, E.INVALID_INPUT,
+                            "Access Key и Secret Key задаются вместе")
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="backup.s3_settings_update",
+        resource="backups",
+        details=json.dumps({
+            "endpoint": data.endpoint, "bucket": data.bucket, "region": data.region,
+            "prefix": data.prefix, "path_style": data.path_style,
+            "auto_upload": data.auto_upload, "keep_count": data.keep_count,
+            "credentials_changed": creds_changed,
+        }),
+        ip_address=get_client_ip(request),
+    )
+    return await get_s3_settings(admin=admin)
+
+
+@router.post("/s3/test")
+async def test_s3_connection(
+    admin: AdminUser = Depends(require_permission("backups", "create")),
+):
+    """Проверить доступ к бакету — листинг одного объекта."""
+    from web.backend.core.backup_s3 import S3Error, test_connection
+
+    try:
+        return await test_connection()
+    except S3Error as e:
+        raise api_error(400, E.BACKUP_S3_FAILED, str(e))
+
+
+@router.post("/s3/upload/{filename}")
+async def upload_backup_to_s3(
+    filename: str,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("backups", "create")),
+):
+    """Отправить конкретный файл бэкапа в хранилище."""
+    from web.backend.core.backup_s3 import S3Error, upload_backup
+
+    try:
+        _reject_path_traversal(filename)
+    except ValueError as e:
+        raise api_error(400, E.INVALID_INPUT, str(e))
+
+    try:
+        result = await upload_backup(filename)
+    except S3Error as e:
+        raise api_error(400, E.BACKUP_S3_FAILED, str(e))
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="backup.s3_upload",
+        resource="backups",
+        resource_id=filename,
+        details=json.dumps({"key": result["key"], "size": result["size"]}),
+        ip_address=get_client_ip(request),
+    )
+    return result
+
+
+@router.get("/s3/objects", response_model=List[S3ObjectItem])
+async def list_s3_objects(
+    admin: AdminUser = Depends(require_permission("backups", "view")),
+):
+    """Что уже лежит в бакете под нашим префиксом."""
+    from web.backend.core.backup_s3 import S3Error, list_objects
+
+    try:
+        return await list_objects()
+    except S3Error as e:
+        raise api_error(400, E.BACKUP_S3_FAILED, str(e))
+
+
+@router.delete("/s3/objects/{key:path}", status_code=204)
+async def delete_s3_object(
+    key: str,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("backups", "delete")),
+):
+    """Удалить объект из бакета."""
+    from web.backend.core.backup_s3 import S3Error, delete_object
+
+    try:
+        await delete_object(key)
+    except S3Error as e:
+        raise api_error(400, E.BACKUP_S3_FAILED, str(e))
+
+    await write_audit_log(
+        admin_id=admin.account_id,
+        admin_username=admin.username,
+        action="backup.s3_delete",
+        resource="backups",
+        resource_id=key,
+        ip_address=get_client_ip(request),
+    )

@@ -149,6 +149,7 @@ class ErrorCode(str, Enum):
     BACKUP_CREATE_FAILED = "BACKUP_CREATE_FAILED"
     BACKUP_RESTORE_FAILED = "BACKUP_RESTORE_FAILED"
     BACKUP_DELETE_FAILED = "BACKUP_DELETE_FAILED"
+    BACKUP_S3_FAILED = "BACKUP_S3_FAILED"
     IMPORT_FAILED = "IMPORT_FAILED"
     INVALID_FILENAME = "INVALID_FILENAME"
 
@@ -228,6 +229,7 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     E.BACKUP_CREATE_FAILED: "Failed to create backup",
     E.BACKUP_RESTORE_FAILED: "Failed to restore backup",
     E.BACKUP_DELETE_FAILED: "Failed to delete backup",
+    E.BACKUP_S3_FAILED: "S3 storage operation failed",
     E.IMPORT_FAILED: "Import failed",
     E.INVALID_FILENAME: "Invalid filename",
     E.QUOTA_EXCEEDED: "Resource quota exceeded",
