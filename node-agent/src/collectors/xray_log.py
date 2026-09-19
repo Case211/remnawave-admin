@@ -30,8 +30,15 @@ logger = logging.getLogger(__name__)
 # версиями ядра). У ноды, где весь трафик идёт по правилам (каскады, WARP,
 # блокировки), строк с `>>` нет вовсе — такие строки раньше падали в базовый
 # паттерн, и тег инбаунда терялся.
+#
+# Источник бывает с префиксом сети — `from tcp:1.2.3.4:1334`: для подсоединений
+# внутри mux-сессии Xray кладёт в From не net.Addr, а свой net.Destination
+# (common/mux/server.go), и тот печатается как `tcp:`/`udp:` + адрес. В mux
+# (XUDP) VLESS-клиент заворачивает UDP — с flow Vision весь, — так что на
+# практике это строки с UDP-целями вроде QUIC. В client_ip префикс не попадает.
 LOG_PATTERN_EXTENDED = re.compile(
     r"(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+"
+    r"(?:tcp:|udp:)?"                     # сеть источника (mux/XUDP)
     r"(?:\[?([0-9a-fA-F:\.]+)\]?)"       # IPv4 или IPv6
     r":(\d+)\s+accepted\s+"
     r"(?:tcp|udp):(\S+)\s+"               # destination (e.g. tracker.example.com:6881)
@@ -43,6 +50,7 @@ LOG_PATTERN_EXTENDED = re.compile(
 # Fallback: базовый паттерн для нестандартных строк (без routing brackets и т.п.)
 LOG_PATTERN_BASIC = re.compile(
     r"(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+from\s+"
+    r"(?:tcp:|udp:)?"               # сеть источника (mux/XUDP)
     r"(?:\[?([0-9a-fA-F:\.]+)\]?)"  # IPv4 или IPv6
     r":(\d+)\s+accepted.*?email:\s*(\d+)",
     re.IGNORECASE,
