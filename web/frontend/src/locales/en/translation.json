@@ -6817,7 +6817,13 @@
       "devices": "Devices",
       "traffic": "Traffic",
       "unlimited": "unlimited",
-      "lastSeen": "Last seen"
+      "lastSeen": "Last seen",
+      "note": "Customer note",
+      "notePlaceholder": "Note about the customer — visible to all operators",
+      "noteSaved": "Note saved",
+      "extend3d": "Extend 3 days",
+      "resetDevices": "Reset devices",
+      "actionDone": "Done"
     },
     "downloadFile": "Download",
     "prevMedia": "Previous",

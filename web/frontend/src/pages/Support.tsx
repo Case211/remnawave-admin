@@ -226,6 +226,46 @@ export default function Support() {
     retry: false,
   })
 
+  const { data: noteData } = useQuery({
+    queryKey: ['support-note', detailUserId],
+    queryFn: () => supportApi.getNote(detailUserId as number),
+    enabled: detailUserId != null,
+    staleTime: 60_000,
+    retry: false,
+  })
+  const [noteDraft, setNoteDraft] = useState<string | null>(null)
+  const noteText = noteDraft ?? noteData?.note ?? ''
+
+  const noteMutation = useMutation({
+    mutationFn: (note: string) => supportApi.saveNote(detailUserId as number, note),
+    onSuccess: () => {
+      setNoteDraft(null)
+      queryClient.invalidateQueries({ queryKey: ['support-note', detailUserId] })
+      toast.success(t('support.customer.noteSaved'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  // Продлить и сбросить устройства — две самые частые просьбы в поддержке;
+  // обе ручки уже есть в модуле клиентов.
+  const quickActionMutation = useMutation({
+    mutationFn: async (action: 'extend' | 'reset-devices') => {
+      const subId = customer?.subscription?.id
+      if (!subId) throw new Error('no subscription')
+      if (action === 'extend') {
+        await client.post(`/bedolaga/customers/subscriptions/${subId}/extend`, { days: 3 })
+      } else {
+        await client.post(`/bedolaga/customers/subscriptions/${subId}/reset-devices`)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['support-customer', detailUserId] })
+      toast.success(t('support.customer.actionDone'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+
   // Пока тикет открыт, отмечаемся каждые 20 секунд: коллега увидит, что им
   // уже занимаются, и не ответит вторым.
   const [watchers, setWatchers] = useState<SupportWatcher[]>([])
@@ -834,6 +874,26 @@ export default function Support() {
                       </span>
                     </span>
                   )}
+                  {canEdit && customer.subscription?.id && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => quickActionMutation.mutate('extend')}
+                        disabled={quickActionMutation.isPending}
+                        className="h-8 rounded-lg border border-[var(--glass-border)] px-2.5 text-[11px] text-dark-200 hover:text-white"
+                      >
+                        {t('support.customer.extend3d')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => quickActionMutation.mutate('reset-devices')}
+                        disabled={quickActionMutation.isPending}
+                        className="h-8 rounded-lg border border-[var(--glass-border)] px-2.5 text-[11px] text-dark-200 hover:text-white"
+                      >
+                        {t('support.customer.resetDevices')}
+                      </button>
+                    </>
+                  )}
                   <Link
                     to={`/bedolaga/customers/${customer.id}`}
                     className="ml-auto flex h-8 items-center gap-1 rounded-lg border border-[var(--glass-border)] px-2.5 text-cyan-300"
@@ -841,6 +901,30 @@ export default function Support() {
                     <ExternalLink className="h-3 w-3" />
                     {t('support.customer.openProfile')}
                   </Link>
+                </div>
+              )}
+
+              {detailUserId != null && canEdit && (
+                <div className="flex items-start gap-2 border-b border-[var(--glass-border)] px-3 py-2 md:px-4">
+                  <textarea
+                    value={noteText}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    rows={1}
+                    placeholder={t('support.customer.notePlaceholder')}
+                    aria-label={t('support.customer.note')}
+                    className="min-h-8 flex-1 resize-none rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5 text-[11px] text-dark-100 outline-none focus:border-amber-400/40"
+                  />
+                  {noteDraft !== null && noteDraft !== (noteData?.note ?? '') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() => noteMutation.mutate(noteText)}
+                      disabled={noteMutation.isPending}
+                    >
+                      {t('common.save')}
+                    </Button>
+                  )}
                 </div>
               )}
 

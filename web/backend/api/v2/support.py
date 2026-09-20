@@ -853,3 +853,50 @@ async def message_media(
             "Content-Disposition": f'inline; filename="ticket-{ticket_id}-{message_id}"',
         },
     )
+
+
+# ── Заметка о клиенте ──
+
+class CustomerNoteRequest(BaseModel):
+    note: str = Field("", max_length=2000)
+
+
+@router.get("/customers/{bot_user_id}/note")
+async def get_customer_note(
+    bot_user_id: int,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "view")),
+):
+    """Заметка оператора о клиенте — общая для всех его обращений."""
+    _require_db()
+    async with db_service.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT note, updated_by, updated_at FROM support_customer_notes WHERE bot_user_id = $1",
+            bot_user_id,
+        )
+    return dict(row) if row else {"note": "", "updated_by": None, "updated_at": None}
+
+
+@router.put("/customers/{bot_user_id}/note")
+async def set_customer_note(
+    bot_user_id: int,
+    data: CustomerNoteRequest,
+    admin: AdminUser = Depends(require_permission("bedolaga_support", "edit")),
+):
+    """Сохранить заметку; пустой текст удаляет её, чтобы не копить мусор."""
+    _require_db()
+    note = data.note.strip()
+    async with db_service.acquire() as conn:
+        if not note:
+            await conn.execute("DELETE FROM support_customer_notes WHERE bot_user_id = $1", bot_user_id)
+            return {"note": "", "updated_at": None}
+        row = await conn.fetchrow(
+            """
+            INSERT INTO support_customer_notes (bot_user_id, note, updated_by, updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (bot_user_id) DO UPDATE
+                SET note = EXCLUDED.note, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+            RETURNING note, updated_by, updated_at
+            """,
+            bot_user_id, note, admin.account_id,
+        )
+    return dict(row)

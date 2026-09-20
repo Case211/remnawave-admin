@@ -6813,7 +6813,13 @@
       "devices": "Устройств",
       "traffic": "Трафик",
       "unlimited": "безлимит",
-      "lastSeen": "Был"
+      "lastSeen": "Был",
+      "note": "Заметка о клиенте",
+      "notePlaceholder": "Заметка о клиенте — видят все операторы",
+      "noteSaved": "Заметка сохранена",
+      "extend3d": "Продлить 3 дня",
+      "resetDevices": "Сбросить устройства",
+      "actionDone": "Готово"
     },
     "downloadFile": "Скачать",
     "prevMedia": "Предыдущее",

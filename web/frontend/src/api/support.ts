@@ -145,6 +145,16 @@ export const supportApi = {
     return data
   },
 
+  getNote: async (botUserId: number) => {
+    const { data } = await client.get(`/support/customers/${botUserId}/note`)
+    return data as { note: string; updated_at: string | null }
+  },
+
+  saveNote: async (botUserId: number, note: string) => {
+    const { data } = await client.put(`/support/customers/${botUserId}/note`, { note })
+    return data as { note: string; updated_at: string | null }
+  },
+
   sync: async (full = false) => {
     const { data } = await client.post('/support/sync', null, { params: { full } })
     return data as { scanned: number; updated: number; skipped: number }
