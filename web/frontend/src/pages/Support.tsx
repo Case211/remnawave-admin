@@ -136,9 +136,28 @@ export default function Support() {
   const [queue, setQueueState] = useState<QueueId>(
     queueFromUrl && QUEUES.includes(queueFromUrl) ? queueFromUrl : 'wait_us',
   )
+  // Правку адреса делаем от актуальных параметров, а не от снимка в замыкании:
+  // хоткеи живут внутри эффекта и легко утащили бы устаревшую очередь.
+  const patchParams = (
+    change: (params: URLSearchParams) => void,
+    options?: { replace?: boolean },
+  ) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      change(next)
+      return next
+    }, options)
+  }
   const setQueue = (next: QueueId) => {
     setQueueState(next)
-    setSearchParams(next === 'wait_us' ? {} : { queue: next }, { replace: true })
+    setSelectedId(null)
+    // Раньше смена очереди заменяла весь адрес целиком — заодно теряя всё,
+    // что в нём есть помимо очереди.
+    patchParams((params) => {
+      if (next === 'wait_us') params.delete('queue')
+      else params.set('queue', next)
+      params.delete('ticket')
+    }, { replace: true })
   }
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -159,14 +178,29 @@ export default function Support() {
   // либо переписку. Флаг переключает панели, на десктопе он ни на что не влияет.
   const [mobileChatOpen, setMobileChatOpen] = useState(Boolean(ticketFromUrl))
 
-  // Алерт о просрочке ведёт на /support?ticket=123 — открываем именно его,
-  // даже если тикета нет в текущей очереди.
+  // Адрес — источник правды для открытого обращения: по ссылке из алерта или
+  // от коллеги откроется именно оно, F5 не сбросит выбор, а системная «назад»
+  // на телефоне вернёт к очереди вместо выхода из раздела.
   useEffect(() => {
     if (ticketFromUrl) {
       setSelectedId(ticketFromUrl)
       setMobileChatOpen(true)
+    } else {
+      setMobileChatOpen(false)
     }
   }, [ticketFromUrl])
+
+  // Клик и переход по связанному обращению попадают в историю, хоткеи j/k —
+  // нет: перебор очереди с клавиатуры не должен заваливать кнопку «назад».
+  const selectTicket = (id: number, options?: { replace?: boolean }) => {
+    setSelectedId(id)
+    setMobileChatOpen(true)
+    patchParams((params) => params.set('ticket', String(id)), options)
+  }
+  const backToQueue = () => {
+    setMobileChatOpen(false)
+    patchParams((params) => params.delete('ticket'), { replace: true })
+  }
   // Шаблон, вставленный в черновик: его побочные действия уйдут вместе с ответом.
   const [pendingMacro, setPendingMacro] = useState<SupportMacro | null>(null)
   const clearDraft = () =>
@@ -635,9 +669,11 @@ export default function Support() {
 
       const index = tickets.findIndex((item) => item.id === activeId)
       if (e.key === 'j' || e.key === 'о') {
-        setSelectedId(tickets[Math.min(index + 1, tickets.length - 1)]?.id ?? activeId)
+        const nextId = tickets[Math.min(index + 1, tickets.length - 1)]?.id ?? activeId
+        if (nextId != null) selectTicket(nextId, { replace: true })
       } else if (e.key === 'k' || e.key === 'л') {
-        setSelectedId(tickets[Math.max(index - 1, 0)]?.id ?? activeId)
+        const prevId = tickets[Math.max(index - 1, 0)]?.id ?? activeId
+        if (prevId != null) selectTicket(prevId, { replace: true })
       } else if (e.key === 'r' || e.key === 'к') {
         e.preventDefault()
         draftRef.current?.focus()
@@ -678,10 +714,7 @@ export default function Support() {
             <button
               key={id}
               type="button"
-              onClick={() => {
-                setQueue(id)
-                setSelectedId(null)
-              }}
+              onClick={() => setQueue(id)}
               className={cn(
                 'flex h-11 flex-shrink-0 items-center gap-1.5 rounded-full border px-4 text-xs font-semibold',
                 queue === id
@@ -701,10 +734,7 @@ export default function Support() {
               <button
                 key={id}
                 type="button"
-                onClick={() => {
-                  setQueue(id)
-                  setSelectedId(null)
-                }}
+                onClick={() => setQueue(id)}
                 className={cn(
                   'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
                   queue === id
@@ -898,8 +928,7 @@ export default function Support() {
                       ref={rowVirtualizer.measureElement}
                       data-index={row.index}
                       onClick={() => {
-                        setSelectedId(item.id)
-                        setMobileChatOpen(true)
+                        selectTicket(item.id)
                       }}
                       className={cn(
                         'absolute left-0 top-0 flex w-full gap-2.5 border-b border-[var(--glass-border)] py-2.5 pr-3 text-left transition-colors',
@@ -1054,7 +1083,7 @@ export default function Support() {
               <header className="flex flex-shrink-0 flex-wrap items-center gap-2 border-b border-[var(--glass-border)] px-3 py-2.5 lg:flex-nowrap lg:gap-3 lg:px-4 lg:py-3">
                 <button
                   type="button"
-                  onClick={() => setMobileChatOpen(false)}
+                  onClick={backToQueue}
                   aria-label={t('support.backToQueue')}
                   className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--glass-border)] text-dark-200 lg:hidden"
                 >
@@ -1306,7 +1335,7 @@ export default function Support() {
                     <button
                       key={sibling.id}
                       type="button"
-                      onClick={() => setSelectedId(sibling.id)}
+                      onClick={() => selectTicket(sibling.id)}
                       className={cn('max-w-[220px] truncate px-2 py-1 text-[11px]', ACTION_CLASS)}
                       title={sibling.title}
                     >
