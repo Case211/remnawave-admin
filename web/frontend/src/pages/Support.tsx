@@ -273,7 +273,7 @@ export default function Support() {
   const rowVirtualizer = useVirtualizer({
     count: tickets.length,
     getScrollElement: () => listRef.current,
-    estimateSize: () => 92,
+    estimateSize: () => 118,
     overscan: 8,
   })
   const activeId = selectedId ?? tickets[0]?.id ?? null
@@ -1295,7 +1295,7 @@ export default function Support() {
                     <div key={m.id} className={cn('flex', m.is_from_admin ? 'justify-end' : 'justify-start')}>
                       <div
                         className={cn(
-                          'max-w-[88%] rounded-xl border px-3 py-2 md:max-w-[70%]',
+                          'max-w-[88%] rounded-xl border px-3 py-2 lg:max-w-[70%]',
                           m.is_from_admin
                             ? 'border-emerald-400/20 bg-emerald-400/10'
                             : 'border-[var(--glass-border)] bg-[var(--glass-bg)]',
@@ -1379,7 +1379,7 @@ export default function Support() {
                 )}
                 {sending && sending.ticketId === activeId && (
                   <div className="flex justify-end">
-                    <div className="max-w-[88%] rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 opacity-60 md:max-w-[70%]">
+                    <div className="max-w-[88%] rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 opacity-60 lg:max-w-[70%]">
                       <div className="mb-1 flex items-center gap-2">
                         <span className="text-[11px] font-bold text-emerald-300">{t('support.operator')}</span>
                         <span className="flex items-center gap-1 text-[11px] text-dark-300">
@@ -1442,6 +1442,7 @@ export default function Support() {
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={onDraftKeyDown}
                     rows={3}
+                    style={{ maxHeight: '40vh' }}
                     aria-label={t('support.replyPlaceholder')}
                     placeholder={t('support.replyPlaceholder')}
                     className="w-full resize-none rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 text-xs text-dark-100 outline-none focus:border-cyan-400/40"
@@ -1460,7 +1461,7 @@ export default function Support() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-11 w-11 p-0 md:h-9 md:w-9"
+                      className="h-11 w-11 p-0 lg:h-9 lg:w-9"
                       aria-label={t('support.attach')}
                       onClick={() => fileRef.current?.click()}
                       disabled={attachMutation.isPending}
@@ -1471,8 +1472,8 @@ export default function Support() {
                         <Upload className="h-4 w-4" />
                       )}
                     </Button>
-                    <span className="hidden text-[11px] text-dark-300 md:inline">{t('support.sendHint')}</span>
-                    <span className="hidden flex-1 md:block" />
+                    <span className="hidden text-[11px] text-dark-300 lg:inline">{t('support.sendHint')}</span>
+                    <span className="hidden flex-1 lg:block" />
                     <Button
                       variant="outline"
                       size="sm"
