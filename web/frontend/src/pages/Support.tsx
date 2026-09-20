@@ -169,6 +169,17 @@ function timeOfDay(iso: string | null): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+/** Момент в будущем: «14:30» для сегодняшнего срока и «22.09, 14:30» для
+ *  дальнего — отложка на неделю без даты выглядит как отложка на час. */
+function moment(iso: string | null, now: number): string {
+  if (!iso) return ''
+  const at = new Date(iso)
+  const sameDay = at.toDateString() === new Date(now).toDateString()
+  return sameDay
+    ? timeOfDay(iso)
+    : at.toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 export default function Support() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -1200,7 +1211,9 @@ export default function Support() {
                           STATE_BADGE[cardState],
                         )}
                       >
-                        {t(`support.cardState.${cardState}`)}
+                        {cardState === 'snoozed' && (ticket as any)?.snooze_to
+                          ? t('support.snoozedUntil', { time: moment((ticket as any).snooze_to, now) })
+                          : t(`support.cardState.${cardState}`)}
                       </span>
                     )}
                     {ticket?.waiting_since ? ` · ${t('support.waiting')} ${waitedFor(ticket.waiting_since, now)}` : ''}
@@ -1251,15 +1264,20 @@ export default function Support() {
                     </Button>
                   )
                 )}
+                {/* Раньше здесь были часы и голые «1 ч / 3 ч» — что случится при
+                    нажатии, приходилось выяснять нажатием. */}
                 {canEdit && (
-                  <span className="flex items-center gap-1 rounded-lg border border-[var(--glass-border)] px-1">
+                  <span className="flex items-center gap-1 rounded-lg border border-[var(--glass-border)] px-1.5 py-0.5">
                     <Clock className="h-3.5 w-3.5 text-dark-300" aria-hidden="true" />
+                    <span className="text-[11px] text-dark-300">{t('support.snoozeLabel')}</span>
                     {SNOOZE_OPTIONS.map((option) => (
                       <button
                         key={option.minutes}
                         type="button"
                         onClick={() => snoozeMutation.mutate(option.minutes)}
                         disabled={snoozeMutation.isPending}
+                        title={t('support.snoozeHint', { time: t(`support.snooze.${option.id}`) })}
+                        aria-label={t('support.snoozeHint', { time: t(`support.snooze.${option.id}`) })}
                         className={cn(
                           'h-7 px-2 text-[11px] font-medium',
                           ACTION_CLASS,

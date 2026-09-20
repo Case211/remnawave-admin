@@ -7041,6 +7041,9 @@
       "answered": "Answered, waiting for the client",
       "snoozed": "Snoozed",
       "closed": "Closed"
-    }
+    },
+    "snoozeLabel": "Snooze",
+    "snoozeHint": "Take it out of the queue and bring it back in {{time}}",
+    "snoozedUntil": "Snoozed until {{time}}"
   }
 }
