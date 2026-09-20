@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from html import escape
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,15 @@ def _ticket_button(ticket_id: int) -> dict | None:
     }
 
 
-async def _notify(title: str, body: str, *, severity: str, group_key: str, ticket_id: int) -> None:
+async def _notify(
+    title: str,
+    body: str,
+    *,
+    severity: str,
+    group_key: str,
+    ticket_id: int,
+    telegram_body: str | None = None,
+) -> None:
     try:
         from web.backend.core.notification_service import create_notification
 
@@ -91,25 +100,134 @@ async def _notify(title: str, body: str, *, severity: str, group_key: str, ticke
             group_key=group_key,
             link=f"/support?ticket={ticket_id}",
             reply_markup=_ticket_button(ticket_id),
+            telegram_body=telegram_body,
         )
     except Exception as exc:  # noqa: BLE001 — алерт не должен ронять синк
         logger.warning("Support alert не отправлен (%s): %s", group_key, exc)
 
 
+def escape_line(line: str) -> str:
+    """Строка контекста наполовину наша, наполовину из бота — экранируем целиком."""
+    return escape(line)
+
+
+def _short(text: str, limit: int = 300) -> str:
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+async def _ticket_row(ticket_id: int) -> dict:
+    """Строка проекции: событие бота приносит не все поля, которые нужны в письме."""
+    from shared.database import db_service
+
+    if not db_service.is_connected:
+        return {}
+    try:
+        async with db_service.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT t.*,
+                       (SELECT COUNT(*) FROM support_ticket_messages m
+                         WHERE m.ticket_id = t.id AND m.has_media) AS attachments
+                FROM support_tickets t WHERE t.id = $1
+                """,
+                ticket_id,
+            )
+        return dict(row) if row else {}
+    except Exception as exc:  # noqa: BLE001 — уведомление важнее полноты карточки
+        logger.debug("Support alert: проекция по %s не прочиталась: %s", ticket_id, exc)
+        return {}
+
+
+async def _customer_lines(bot_user_id: int) -> list[str]:
+    """Подписка, баланс, устройства — то, чего в уведомлении бота нет.
+
+    Бот шлёт свою карточку тикета, и повторять её смысла нет: ценность нашего
+    письма в том, что мы знаем про клиента то, что видно в панели.
+    """
+    if not bot_user_id:
+        return []
+    from shared.bedolaga_client import bedolaga_client
+
+    try:
+        user = await bedolaga_client.get_user(bot_user_id)
+    except Exception as exc:  # noqa: BLE001 — бот недоступен: обойдёмся без контекста
+        logger.debug("Support alert: клиент %s не прочитался: %s", bot_user_id, exc)
+        return []
+
+    lines: list[str] = []
+    subscription = (user or {}).get("subscription") or {}
+    if subscription:
+        status = str(subscription.get("actual_status") or subscription.get("status") or "")
+        end = str(subscription.get("end_date") or "")[:10]
+        parts = [SUBSCRIPTION_STATUS.get(status, status or "—")]
+        if end:
+            parts.append(f"до {end}")
+        if subscription.get("is_trial"):
+            parts.append("триал")
+        if subscription.get("device_limit"):
+            parts.append(f"устройств: {subscription['device_limit']}")
+        lines.append("💳 Подписка: " + " · ".join(parts))
+    else:
+        lines.append("💳 Подписки нет")
+
+    balance = (user or {}).get("balance_rubles")
+    if balance is not None:
+        lines.append(f"💰 Баланс: {balance} ₽")
+    return lines
+
+
+SUBSCRIPTION_STATUS = {
+    "active": "активна",
+    "expired": "истекла",
+    "disabled": "отключена",
+    "trial": "триал",
+}
+
+
 async def notify_new_ticket(ticket: dict) -> None:
-    """Клиент создал обращение — сказать сразу, пока он ещё в чате."""
+    """Клиент создал обращение — сказать сразу, пока он ещё в чате.
+
+    В чат уходит карточка: кто написал, о чём, с чем пришёл и что у него с
+    подпиской. Одной строки «имя: тема» оператору не хватало — чтобы понять,
+    срочное ли это, всё равно приходилось открывать панель.
+    """
     if not new_ticket_alerts_enabled():
         return
     ticket_id = int(ticket.get("id") or 0)
     if not ticket_id:
         return
-    customer = ticket.get("customer_name") or ticket.get("user_id") or "клиент"
+
+    row = await _ticket_row(ticket_id)
+    data = {**ticket, **row}
+    customer = str(data.get("customer_name") or "") or f"#{data.get('bot_user_id') or '—'}"
+    title = str(data.get("title") or "без темы")
+
+    lines = [f"👤 <b>{escape(customer)}</b>"]
+    telegram_id = data.get("telegram_id")
+    channel = f"Telegram {telegram_id}" if telegram_id else "кабинет"
+    lines.append(f"🆔 Клиент #{data.get('bot_user_id') or '—'} · {escape(channel)}")
+    lines.append(f"📝 {escape(title)}")
+
+    message = _short(data.get("last_message_text") or "")
+    if message:
+        lines.append(f"💬 {escape(message)}")
+    attachments = int(data.get("attachments") or 0)
+    if attachments:
+        lines.append(f"📎 Вложений: {attachments}")
+
+    context = await _customer_lines(int(data.get("bot_user_id") or 0))
+    if context:
+        lines.append("")
+        lines.extend(escape_line(line) for line in context)
+
     await _notify(
         f"Новое обращение #{ticket_id}",
-        f"{customer}: {ticket.get('title') or 'без темы'}",
+        f"{customer}: {title}",
         severity="info",
         group_key=f"support_new_{ticket_id}",
         ticket_id=ticket_id,
+        telegram_body="\n".join(lines),
     )
 
 

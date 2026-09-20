@@ -73,8 +73,15 @@ def _clean_state(monkeypatch):
 def sent(monkeypatch):
     calls: list[dict] = []
 
-    async def fake_notify(title, body, *, severity, group_key, ticket_id):
-        calls.append({"title": title, "severity": severity, "group_key": group_key, "ticket_id": ticket_id})
+    async def fake_notify(title, body, *, severity, group_key, ticket_id, telegram_body=None):
+        calls.append({
+            "title": title,
+            "body": body,
+            "severity": severity,
+            "group_key": group_key,
+            "ticket_id": ticket_id,
+            "telegram_body": telegram_body,
+        })
 
     monkeypatch.setattr(support_alerts, "_notify", fake_notify)
     return calls
@@ -246,3 +253,64 @@ def test_no_button_for_plain_http(monkeypatch):
     _panel_url(monkeypatch, "http://panel.example.com")
 
     assert support_alerts._ticket_button(42) is None
+
+
+# ── Карточка нового обращения ──
+
+
+@pytest.mark.asyncio
+async def test_new_ticket_alert_carries_the_card(monkeypatch, sent):
+    """В чат уходит не строка «имя: тема», а кто написал, о чём и с чем пришёл."""
+    async def row(ticket_id):
+        return {
+            "id": ticket_id,
+            "title": "Тест тикет-системы",
+            "customer_name": "Илья",
+            "telegram_id": 366945364,
+            "bot_user_id": 667,
+            "last_message_text": "Привет, это тест тикет системы админки и вложения",
+            "attachments": 1,
+        }
+
+    async def context(bot_user_id):
+        return ["💳 Подписка: активна · до 2026-10-19", "💰 Баланс: 100 ₽"]
+
+    monkeypatch.setattr(support_alerts, "_ticket_row", row)
+    monkeypatch.setattr(support_alerts, "_customer_lines", context)
+    monkeypatch.setattr(support_alerts, "new_ticket_alerts_enabled", lambda: True)
+
+    await support_alerts.notify_new_ticket({"id": 65})
+
+    card = sent[0]["telegram_body"]
+    assert "Илья" in card
+    assert "Тест тикет-системы" in card
+    assert "тест тикет системы админки" in card
+    assert "Вложений: 1" in card
+    assert "Баланс: 100 ₽" in card
+    # Колокольчик в панели остаётся коротким — там рядом сама карточка.
+    assert sent[0]["body"] == "Илья: Тест тикет-системы"
+
+
+@pytest.mark.asyncio
+async def test_new_ticket_alert_survives_silent_bot(monkeypatch, sent):
+    """Бот не ответил про клиента — уведомление всё равно уходит."""
+    async def row(ticket_id):
+        return {"id": ticket_id, "title": "Не работает", "customer_name": "Пётр", "bot_user_id": 5}
+
+    async def no_context(bot_user_id):
+        return []
+
+    monkeypatch.setattr(support_alerts, "_ticket_row", row)
+    monkeypatch.setattr(support_alerts, "_customer_lines", no_context)
+    monkeypatch.setattr(support_alerts, "new_ticket_alerts_enabled", lambda: True)
+
+    await support_alerts.notify_new_ticket({"id": 7})
+
+    assert "Пётр" in sent[0]["telegram_body"]
+    assert "кабинет" in sent[0]["telegram_body"]
+
+
+def test_card_escapes_customer_text():
+    """Имя и текст приходят от клиента: разметку в них ломать нельзя."""
+    assert support_alerts._short("  много   пробелов  ") == "много пробелов"
+    assert len(support_alerts._short("x" * 400)) == 300
