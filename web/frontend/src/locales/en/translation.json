@@ -6801,6 +6801,7 @@
       "min": "min",
       "breached": "Overdue"
     },
-    "hotkeys": "J/K to move, R to reply, / for a template, A to take"
+    "hotkeys": "J/K to move, R to reply, / for a template, A to take",
+    "backToQueue": "Back to queue"
   }
 }

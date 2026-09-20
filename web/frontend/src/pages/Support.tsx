@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   Archive,
   Check,
+  ChevronLeft,
   Clock,
   Loader2,
   RefreshCw,
@@ -64,6 +65,9 @@ export default function Support() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  // На узком экране колонки не помещаются рядом: показываем либо очередь,
+  // либо переписку. Флаг переключает панели, на десктопе он ни на что не влияет.
+  const [mobileChatOpen, setMobileChatOpen] = useState(false)
   const [draft, setDraft] = useState('')
   // Шаблон, вставленный в черновик: его побочные действия уйдут вместе с ответом.
   const [pendingMacro, setPendingMacro] = useState<SupportMacro | null>(null)
@@ -297,9 +301,32 @@ export default function Support() {
 
   return (
     <PermissionGate resource="bedolaga_support" action="view">
-      <div className="flex h-[calc(100vh-5rem)] gap-3">
+      <div className="flex h-[calc(100dvh-8rem)] flex-col gap-3 md:h-[calc(100vh-5rem)] md:flex-row">
         {/* Очереди */}
-        <aside className="w-52 flex-shrink-0 flex flex-col gap-4">
+        {/* Телефон: очереди лентой, метрики и синк прячем — там триаж, а не отчёты */}
+        <div className={cn('flex gap-2 overflow-x-auto pb-1 md:hidden', mobileChatOpen && 'hidden')}>
+          {visibleQueues.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setQueue(id)
+                setSelectedId(null)
+              }}
+              className={cn(
+                'flex h-11 flex-shrink-0 items-center gap-1.5 rounded-full border px-4 text-xs font-semibold',
+                queue === id
+                  ? 'border-cyan-400/30 bg-cyan-400/14 text-cyan-300'
+                  : 'border-[var(--glass-border)] text-dark-300',
+              )}
+            >
+              {t(`support.queues.${id}`)}
+              <span className="tabular-nums opacity-70">{queues ? (queues as any)[id] : '—'}</span>
+            </button>
+          ))}
+        </div>
+
+        <aside className="hidden w-52 flex-shrink-0 flex-col gap-4 md:flex">
           <div className="space-y-1">
             {visibleQueues.map((id) => (
               <button
@@ -361,7 +388,12 @@ export default function Support() {
         </aside>
 
         {/* Список */}
-        <section className="w-80 flex-shrink-0 flex flex-col rounded-xl border border-[var(--glass-border)] overflow-hidden">
+        <section
+          className={cn(
+            'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--glass-border)] md:w-80 md:flex-none',
+            mobileChatOpen && 'hidden md:flex',
+          )}
+        >
           <div className="p-3 border-b border-[var(--glass-border)]">
             <div className="flex items-center gap-2 rounded-lg bg-[var(--glass-bg)] px-2.5 py-1.5">
               <Search className="w-3.5 h-3.5 text-dark-400" />
@@ -388,7 +420,10 @@ export default function Support() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setSelectedId(item.id)}
+                  onClick={() => {
+                    setSelectedId(item.id)
+                    setMobileChatOpen(true)
+                  }}
                   className={cn(
                     'w-full border-b border-[var(--glass-border)] px-3 py-2.5 text-left transition-colors',
                     item.id === activeId ? 'bg-cyan-400/8' : 'hover:bg-[var(--glass-bg)]',
@@ -418,19 +453,32 @@ export default function Support() {
               ))
             )}
           </div>
-          <div className="border-t border-[var(--glass-border)] px-3 py-2 text-[10px] text-dark-400">
+          <div className="hidden border-t border-[var(--glass-border)] px-3 py-2 text-[10px] text-dark-400 md:block">
             {t('support.hotkeys')}
           </div>
         </section>
 
         {/* Диалог */}
-        <section className="flex-1 min-w-0 flex flex-col rounded-xl border border-[var(--glass-border)] overflow-hidden">
+        <section
+          className={cn(
+            'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--glass-border)]',
+            !mobileChatOpen && 'hidden md:flex',
+          )}
+        >
           {activeId == null ? (
             <EmptyState icon={Users} title={t('support.pickTicket')} />
           ) : (
             <>
-              <header className="flex items-center gap-3 border-b border-[var(--glass-border)] px-4 py-3">
-                <div className="min-w-0 flex-1">
+              <header className="flex flex-wrap items-center gap-2 border-b border-[var(--glass-border)] px-3 py-2.5 md:flex-nowrap md:gap-3 md:px-4 md:py-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileChatOpen(false)}
+                  aria-label={t('support.backToQueue')}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--glass-border)] text-dark-200 md:hidden"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="min-w-0 flex-1 basis-full md:basis-auto">
                   <div className="text-sm font-semibold text-white truncate">{ticket?.title}</div>
                   <div className="text-[11px] text-dark-400">
                     #{ticket?.id} · {ticket?.customer_name || `#${ticket?.bot_user_id}`} · {t(`support.status.${ticket?.status}`)}
@@ -445,25 +493,25 @@ export default function Support() {
                 )}
                 {canEdit && (
                   ticket?.assignee_id != null ? (
-                    <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => unassignMutation.mutate()}>
+                    <Button variant="ghost" size="sm" className="h-9 gap-1.5" onClick={() => unassignMutation.mutate()}>
                       <Users className="w-3.5 h-3.5" />
                       {t('support.unassign')}
                     </Button>
                   ) : (
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => assignMutation.mutate()}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => assignMutation.mutate()}>
                       <Check className="w-3.5 h-3.5" />
                       {t('support.takeIt')}
                     </Button>
                   )
                 )}
                 {canEdit && (
-                  <Button variant="ghost" size="sm" onClick={() => snoozeMutation.mutate(180)}>
+                  <Button variant="ghost" size="sm" className="h-9" onClick={() => snoozeMutation.mutate(180)}>
                     <Clock className="w-3.5 h-3.5 mr-1.5" />
                     {t('support.snooze3h')}
                   </Button>
                 )}
                 {canEdit && ticket?.status !== 'closed' && (
-                  <Button variant="ghost" size="sm" onClick={() => statusMutation.mutate('closed')}>
+                  <Button variant="ghost" size="sm" className="h-9" onClick={() => statusMutation.mutate('closed')}>
                     {t('support.close')}
                   </Button>
                 )}
@@ -500,7 +548,7 @@ export default function Support() {
                     <div key={m.id} className={cn('flex', m.is_from_admin ? 'justify-end' : 'justify-start')}>
                       <div
                         className={cn(
-                          'max-w-[70%] rounded-xl border px-3 py-2',
+                          'max-w-[88%] rounded-xl border px-3 py-2 md:max-w-[70%]',
                           m.is_from_admin
                             ? 'border-emerald-400/20 bg-emerald-400/10'
                             : 'border-[var(--glass-border)] bg-[var(--glass-bg)]',
@@ -562,19 +610,25 @@ export default function Support() {
                     placeholder={t('support.replyPlaceholder')}
                     className="w-full resize-none rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 text-xs text-dark-100 outline-none focus:border-cyan-400/40"
                   />
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-[10px] text-dark-400">{t('support.sendHint')}</span>
-                    <span className="flex-1" />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="hidden text-[10px] text-dark-400 md:inline">{t('support.sendHint')}</span>
+                    <span className="hidden flex-1 md:block" />
                     <Button
                       variant="outline"
                       size="sm"
+                      className="h-11 flex-1 md:h-9 md:flex-none"
                       onClick={() => send(false)}
                       disabled={!draft.trim() || replyMutation.isPending}
                     >
                       {replyMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                       <span className="ml-1.5">{t('support.send')}</span>
                     </Button>
-                    <Button size="sm" onClick={() => send(true)} disabled={!draft.trim() || replyMutation.isPending}>
+                    <Button
+                      size="sm"
+                      className="h-11 flex-1 md:h-9 md:flex-none"
+                      onClick={() => send(true)}
+                      disabled={!draft.trim() || replyMutation.isPending}
+                    >
                       {t('support.sendAndClose')}
                     </Button>
                   </div>
