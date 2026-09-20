@@ -190,7 +190,7 @@ export default function Support() {
   const [now, setNow] = useState(() => Date.now())
   // Закрытие уходит клиенту уведомлением и не отменяется, перехват тикета
   // забирает работу у коллеги — оба действия спрашивают подтверждение.
-  const [confirming, setConfirming] = useState<null | 'close' | 'replyClose' | 'steal' | 'bulkClose'>(null)
+  const [confirming, setConfirming] = useState<null | 'close' | 'replyClose' | 'steal' | 'bulkSteal' | 'bulkClose'>(null)
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(timer)
@@ -254,7 +254,12 @@ export default function Support() {
     staleTime: 120_000,
   })
 
-  const { data: list, isLoading: listLoading } = useQuery({
+  const {
+    data: list,
+    isLoading: listLoading,
+    isError: listFailed,
+    refetch: refetchList,
+  } = useQuery({
     queryKey: ['support-tickets', queue, search, tagFilter],
     queryFn: () =>
       supportApi.listTickets({
@@ -285,7 +290,12 @@ export default function Support() {
   const setDraft = (value: string) =>
     setDrafts((prev) => (activeId == null ? prev : { ...prev, [activeId]: value }))
 
-  const { data: detail, isFetching: detailLoading } = useQuery({
+  const {
+    data: detail,
+    isFetching: detailLoading,
+    isError: detailFailed,
+    refetch: refetchDetail,
+  } = useQuery({
     queryKey: ['support-ticket', activeId],
     queryFn: () => supportApi.getTicket(activeId as number),
     enabled: activeId != null,
@@ -787,7 +797,11 @@ export default function Support() {
                 size="sm"
                 variant="outline"
                 className="h-8"
-                onClick={() => bulkMutation.mutate('assign')}
+                onClick={() =>
+                  tickets.some((item) => selected.has(item.id) && item.assignee_id != null && !item.assignee_is_me)
+                    ? setConfirming('bulkSteal')
+                    : bulkMutation.mutate('assign')
+                }
                 disabled={bulkMutation.isPending}
               >
                 {t('support.bulk.assign')}
@@ -833,6 +847,19 @@ export default function Support() {
                 <Skeleton className="h-16 w-full" />
                 <Skeleton className="h-16 w-full" />
               </div>
+            ) : listFailed ? (
+              /* Упавший запрос рисовал «обращений нет» — оператор читал это как
+                 разгребённую очередь и уходил. Сбой должен называться сбоем. */
+              <EmptyState
+                icon={AlertTriangle}
+                title={t('support.loadFailed')}
+                description={t('support.loadFailedHint')}
+                action={
+                  <Button variant="outline" size="sm" onClick={() => refetchList()}>
+                    {t('common.retry')}
+                  </Button>
+                }
+              />
             ) : tickets.length === 0 ? (
               search ? (
                 <EmptyState
@@ -1313,7 +1340,17 @@ export default function Support() {
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3" aria-busy={detailLoading}>
-                {detailLoading && messages.length === 0 ? (
+                {detailFailed && messages.length === 0 ? (
+                  <EmptyState
+                    icon={AlertTriangle}
+                    title={t('support.ticketLoadFailed')}
+                    action={
+                      <Button variant="outline" size="sm" onClick={() => refetchDetail()}>
+                        {t('common.retry')}
+                      </Button>
+                    }
+                  />
+                ) : detailLoading && messages.length === 0 ? (
                   <Skeleton className="h-24 w-2/3" />
                 ) : (
                   messages.map((m) => (
@@ -1531,11 +1568,12 @@ export default function Support() {
         title={confirming ? t(`support.confirm.${confirming}.title`) : ''}
         description={confirming ? t(`support.confirm.${confirming}.description`) : undefined}
         confirmLabel={confirming ? t(`support.confirm.${confirming}.action`) : undefined}
-        variant={confirming === 'steal' ? 'default' : 'destructive'}
+        variant={confirming === 'steal' || confirming === 'bulkSteal' ? 'default' : 'destructive'}
         onConfirm={() => {
           if (confirming === 'close') statusMutation.mutate('closed')
           if (confirming === 'replyClose') send(true)
           if (confirming === 'steal') assignMutation.mutate()
+          if (confirming === 'bulkSteal') bulkMutation.mutate('assign')
           if (confirming === 'bulkClose') bulkMutation.mutate('close')
           setConfirming(null)
         }}

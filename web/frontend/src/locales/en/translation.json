@@ -6858,6 +6858,11 @@
         "title": "Release assignment?",
         "description": "The ticket returns to the shared queue and leaves the operator list.",
         "action": "Release"
+      },
+      "bulkSteal": {
+        "title": "Take over assigned tickets?",
+        "description": "Some of the selected tickets belong to other operators — they will leave their queues.",
+        "action": "Take over"
       }
     },
     "channel": {
@@ -6905,6 +6910,9 @@
     "assignedToMe": "Mine",
     "assignedToName": "{{name}}",
     "takeOver": "Take over",
-    "releaseOther": "Release {{name}}"
+    "releaseOther": "Release {{name}}",
+    "loadFailed": "Queue failed to load",
+    "loadFailedHint": "Tickets may still be there — this is a connection failure, not an empty queue.",
+    "ticketLoadFailed": "Conversation failed to load"
   }
 }
